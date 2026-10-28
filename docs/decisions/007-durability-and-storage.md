@@ -1,6 +1,6 @@
 # ADR 007 — SQL persistence and capability-aware recovery
 
-Status: **Accepted.**
+Status: **Accepted**; the storage choice is superseded by [ADR 011](011-sqlite-storage.md).
 
 ## Decision
 
