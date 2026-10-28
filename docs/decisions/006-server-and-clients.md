@@ -1,6 +1,6 @@
 # ADR 006 — One server for browser, Electron and self-hosting
 
-Status: **Accepted.**
+Status: **Accepted**; refined for the MVP by [ADR 010](010-desktop-hub.md).
 
 ## Decision
 
@@ -12,7 +12,7 @@ The same workspace should be accessible locally and remotely without developing 
 
 ## Consequences
 
-Loopback by default; remote access requires authentication and scoped executor authority. Resolve Electron shutdown ownership explicitly.
+Loopback by default; remote access requires authenticated, revocable devices. The server runs as a background service ([ADR 010](010-desktop-hub.md)).
 
 ## Change control
 

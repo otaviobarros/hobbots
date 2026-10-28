@@ -26,7 +26,7 @@ Read the matching contract before changing its area:
 - Keep messages, responsibilities, results, execution attempts, waits, and recovery durable. Fibers, queues, PubSub, and ordinary schedules are in-process mechanisms, not durable storage.
 - Default to Trusted Workspace autonomy. Enforce permissions through actual runtime or environment boundaries; a prompt is not enforcement. Delegation cannot widen authority. Hobbots MCP controls exclude approval grants, credential administration, administrative deletion and computer lifecycle operations; see the permissions contract.
 - Match the Hobbots design: Home landing page, chat workspace with Quest / Inbox / Workshop tabs, the night palette, Atkinson Hyperlegible Next with Pixelify Sans for headings, stepped motion that stops with Reduce motion, and no decorative left-edge accent borders. Call agents "hobs" in the UI.
-- Use one server and durable state model for browser, Electron, local, and self-hosted access. Preserve SQLite/PostgreSQL targets and capability-aware adapters.
+- Use one hub server and durable state model for every client ([ADR 010](docs/decisions/010-desktop-hub.md)); hobs act only on the hub. Keep SQL PostgreSQL-compatible on SQLite ([ADR 011](docs/decisions/011-sqlite-storage.md)) and keep capability-aware adapters.
 
 ## Working rules
 

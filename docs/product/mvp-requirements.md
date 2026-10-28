@@ -61,7 +61,7 @@ Thread forking with context snapshots is an open extension.
 | EX-002 | Validated explicit transitions and typed failures. | An illegal transition or stale state version is rejected without partial status updates. |
 | EX-003 | Reconcile after restart/disconnection. | Unknown live outcomes are shown as unverified until reconciled; unsafe side effects are not blindly replayed. |
 | EX-004 | Bounded retries and timeout handling. | Failures retain evidence and retry history; irreversible uncertain actions require reconciliation. |
-| EX-005 | UI lifecycle independent of execution. | Closing a browser does not stop server work; closing Electron follows its documented server-lifecycle policy. |
+| EX-005 | UI lifecycle independent of execution. | Closing a browser or the desktop window does not stop server work; only quitting the hub's background service does. |
 | EX-006 | Persist result and notify parent reliably. | A crash between completion and notification cannot permanently lose the result or continuation. |
 
 ## Permissions and autonomy
@@ -90,16 +90,16 @@ The onboarding presets are Careful, Balanced (Trusted Workspace, the default) an
 | UX-005 | Supporting screens follow the MVP design. | Welcome, onboarding, Summon, hob profile and Retire, Inbox and approvals, Usage and Settings have the entry points, contents and states listed in the screen inventory. |
 | UX-006 | Preserve navigation and inspection context. | Return to the parent conversation, retain a pinned Quest, and switch Workbench views without losing relevant panel state; thread navigation supports a keyboard path. |
 | RT-001 | Provider adapters for Claude, ChatGPT (Codex), Gemini, Grok, local models and OpenAI-compatible keys; ACP-compatible foundation. | Different providers participate in the same persisted delegation loop; each provider is offered only once its adapter is verified, and an unverified one shows an honest unavailable state. |
-| DP-001 | One local server with browser and Electron clients. | Both observe the same durable records; Electron is not a second state owner. |
-| DP-002 | Local and self-hosted modes with executors. | Executor selection checks runtime, capacity, resources and authorization; remote work does not silently gain host access. |
-| DP-003 | SQLite locally, PostgreSQL remotely. | Required persistence/recovery scenarios pass against both supported backends before claiming support. |
-| DP-004 | Tailscale or authenticated HTTPS access. | Loopback is default; enabling network access preserves application authentication and least necessary authority. |
+| DP-001 | One hub server with browser and desktop clients. | Every client observes the same durable records; no client is a second state owner, and hobs act only on the hub. |
+| DP-002 | Run Hobbots here or connect to another computer. | Onboarding offers both; a connected desktop runs no local server and gets the full experience of the hub. |
+| DP-003 | One SQLite database per installation; PostgreSQL-compatible SQL. | Persistence and recovery scenarios pass on SQLite, and the same suites pass on PostgreSQL in CI. |
+| DP-004 | Remote access over Tailscale with device approval. | Off by default; when on, only the hub and the tailnet can connect, each new device needs Allow on the hub once, and a revoked device is refused. |
 
 ## Release boundaries
 
-P0: persistent hobs (agents) and threads, the provider adapters of RT-001, ACP boundary, durable Quests/inbox/continuations, parallel/nested work, policy and approvals, visibility, terminal/files/diffs and supported browser previews, browser-based server, Electron and self-hosted foundation. Private Tailscale access precedes a polished public HTTPS deployment flow.
+P0: persistent hobs (agents) and threads, the provider adapters of RT-001, ACP boundary, durable Quests/inbox/continuations, parallel/nested work, policy and approvals, visibility, terminal/files/diffs and supported browser previews, browser-based server, Electron and self-hosted foundation. Tailscale is the MVP remote route; other routes follow the MVP.
 
-P1 extensions: broader individually validated ACP/CLI agents, generalized computer observation/takeover and rich replay, polished public HTTPS onboarding. The fourth Workbench surface is decided; universal remote desktop functionality is not a P0 promise.
+P1 extensions: broader individually validated ACP/CLI agents, generalized computer observation/takeover and rich replay, further connection routes (relay, local network with HTTPS, public HTTPS, server install), the mobile app. The fourth Workbench surface is decided; universal remote desktop functionality is not a P0 promise.
 
 Deferred: organizations/RBAC, marketplace publishing, native mobile app, advanced long-term memory, recurring automations, visual workflow builders, billing, independently writable installation synchronization, fully autonomous multi-computer control. A responsive web view does not commit to a native mobile client.
 

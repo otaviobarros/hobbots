@@ -1,21 +1,21 @@
 # Architecture overview
 
-**Decided:** TypeScript monorepo, React web UI, Electron desktop shell, Effect TS v4 application server and HTTP API, Effect Schema, typed errors/services/Layers, explicit transitions, Effect SQL integration, SQLite locally/PostgreSQL remotely, Effect Stream/SSE, existing runtimes and MCP-backed durable coordination.
+**Decided:** TypeScript monorepo, React web UI, Electron desktop shell, Effect TS v4 application server and HTTP API, Effect Schema, typed errors/services/Layers, explicit transitions, Effect SQL integration, SQLite per installation with PostgreSQL-compatible SQL, Effect Stream/SSE, existing runtimes and MCP-backed durable coordination.
 
 ```mermaid
 flowchart TB
   Browser[Browser React client] --> API[Effect v4 server and API]
-  Electron[Electron launcher and client] --> API
+  Electron[Desktop app: hub or connected client] --> API
   API --> Domain[Agent, Thread, Quest and Task services]
   Domain --> Policy[Permission broker]
   Domain --> Durable[Inbox, responsibilities and event journal]
   Durable --> Supervisor[Continuation and recovery supervisor]
   Supervisor --> Scheduler[Execution scheduler]
   Scheduler --> Adapter[Codex, Claude Code and ACP adapters]
-  Adapter --> Engines[Existing runtime engines on authorized executors]
+  Adapter --> Engines[Existing runtime engines on the hub]
   Engines --> MCP[Scoped Hobbots MCP tools]
   MCP --> Domain
-  Durable --> SQL[SQLite or PostgreSQL]
+  Durable --> SQL[SQLite]
   Durable --> Events[SSE projections]
   Events --> Browser
   Events --> Electron
@@ -31,12 +31,12 @@ Effect Workflow or persistent execution services may implement long waits and re
 
 ## Module map
 
-`apps/web` renders the UI described in the [design specification](../design/ui-ux.md). `apps/desktop` owns Electron lifecycle and connection setup. `apps/server` assembles Effect Layers and serves the browser/API. Packages separate domain, API, agents, runtimes, orchestration, inbox, supervision, permissions, execution, workbench and persistence. Packages without code yet contain boundary descriptions only.
+`apps/web` renders the UI described in the [design specification](../design/ui-ux.md). `apps/desktop` owns Electron lifecycle, the background server service and connection setup. `apps/server` assembles Effect Layers and serves the browser/API. Packages separate domain, API, agents, runtimes, orchestration, inbox, supervision, permissions, execution, workbench and persistence. Packages without code yet contain boundary descriptions only.
 
-The exact build system, package manager, package versions and framework wiring remain open. No stale version pin or skeleton application is introduced in this foundation. Fetch current version-specific documentation before implementation and validate compatible Effect v4 packages together.
+The toolchain is recorded in [ADR 009](../decisions/009-toolchain-and-validation-slice.md). Fetch current version-specific documentation before implementation and validate compatible Effect v4 packages together.
 
 ## Consistency requirements
 
 Persist task/result state and the obligation to deliver/schedule together, then dispatch after commit. Use an outbox or equivalent transactional durable mechanism. Claim work with ownership/lease fencing and expected versions. A stale worker cannot close a newer attempt. Consumers deduplicate stable event/message identities. Avoid claiming universal exactly-once external effects.
 
-Secrets stay in executor/provider credential storage, not conversation payloads. Authenticate user clients and executors; agent MCP credentials carry narrower orchestration authority. Treat artifact rendering and tool output as untrusted data.
+Secrets stay in executor/provider credential storage, not conversation payloads. Authenticate every client device with an approved, revocable token; agent MCP credentials carry narrower orchestration authority. Treat artifact rendering and tool output as untrusted data.

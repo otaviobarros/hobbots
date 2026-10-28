@@ -13,8 +13,8 @@ These choices are not decided yet. They do not reopen decided product direction.
 | Remote-to-local routing | Explicit handoff versus configured scoped routes, pairing, execution-grant transport and revocation. No silent privilege expansion. |
 | Policies | Exact matcher/precedence, standing-grant expiry, revocation during running actions, workspace isolation mechanism per runtime/platform; exact policy behind the Careful and Trusting presets. |
 | Lifecycle | Exhaustive task/attempt/approval transition tables, late-result and reassignment rules, partial completion semantics. |
-| Deployment | Electron-close/server ownership behavior, OS/architecture support, app-data paths, port selection, Docker/Compose details, public HTTPS auth strategy. |
-| Persistence | Migration tool, artifact storage backend, backup consistency, retention/redaction, event compaction and cursor expiry. |
+| Deployment | OS/architecture support, app-data paths, per-platform service installation, device token format and storage, routes after Tailscale. |
+| Persistence | Artifact storage backend, backup consistency, retention/redaction, event compaction and cursor expiry. |
 | UI extensions | Narrow-window behavior and a screen-reader and keyboard pass in the real app (the design tokens pass WCAG AA); generalized takeover/replay remains later. |
 | Providers | How API-key providers (Grok, OpenAI-compatible keys, Gemini without its CLI) run tools and delegation, given [ADR 002](../decisions/002-existing-runtimes.md)'s reuse of existing agent runtimes; what usage data each provider reports for the Usage potions. |
 | Home | Exact Home contents beyond the design (what is happening, a summary, usage limits); team grouping for many hobs. |

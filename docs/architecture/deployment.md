@@ -1,38 +1,58 @@
-# Deployment and execution environments
+# Deployment and devices
 
-**Decided:** a browser-accessible local server and Electron client/launcher; the same application can run self-hosted in Docker/on a user server. Optional Tailscale or authenticated HTTPS access. SQLite locally and PostgreSQL remotely. Single-user MVP with one active installation and registered executors.
+**Decided:** the desktop hub ([ADR 010](../decisions/010-desktop-hub.md)). One computer runs the server as a background service with one SQLite database ([ADR 011](../decisions/011-sqlite-storage.md)). Other devices connect to it as clients over Tailscale, each approved once. Hobs act only on the hub. Single user, one installation.
 
-## Local mode
+## Roles
 
-The server owns orchestration, data and runtime connections and serves UI/API at loopback by default. Electron starts/connects to this server and renders the same React experience as a browser. Durable state is not duplicated in Electron. Browser closure does not stop the server. Explicitly resolve whether closing Electron leaves its launched server running, minimizes it or shuts it down; no blanket promise of continued execution after the host process or machine stops.
+| Role | What it is | What it owns |
+|---|---|---|
+| Hub | A computer where Hobbots was installed and set to run here. | The server, the database, artifacts, runtime connections and every hob's execution environment. |
+| Connected desktop | The desktop app set to connect to another computer. | Only the hub address and its device token; no server and no database. |
+| Browser | Any browser on the hub, or on the tailnet once remote access is on. | A device token in the browser session. |
 
-Use installed, authenticated runtimes through supported adapter paths. Runtime login remains a vendor flow; credentials are not pasted into Hobbots conversation history. Choose application-data paths, port discovery, server ownership/single-instance rules and installers before implementation.
+Every client gets the full experience: chat, Quests, Inbox, approvals and the Workbench. The Workbench shows the hub's files, terminals and browsers; connecting a device never gives hobs access to that device.
 
-## Self-hosted mode
+## The hub's server
 
-Run the same core and web client on user-controlled infrastructure. Docker/Compose packaging is planned, not implemented here. The server/scheduler and executors can continue work while the desktop client is closed. PostgreSQL and artifact storage retain authoritative state. Do not ship independently writable installations with real-time sync in the MVP.
+- The desktop app installs the server as a per-user background service that starts at login: a login item on macOS, a systemd user service on Linux and a startup task on Windows.
+- Closing the window leaves the server running. The tray or menu-bar icon shows server state and offers Open, Pause remote access and Quit. Quit stops the server, and running work is recovered on the next start ([execution lifecycle](execution-lifecycle.md)).
+- One server per user account. The app connects to a running server rather than starting a second one and checks the server's identity before it does.
+- The server serves the web client and the API on the same port, 4317 by default, changeable in Settings › Devices.
+- Hobs use installed, authenticated runtimes on the hub through supported adapters ([runtime adapters](runtime-adapters.md)). Runtime login stays a vendor flow; credentials never enter conversation history.
+- Without remote access the server listens only on loopback. Closing a browser never stops work.
 
-## Executors
+## Execution environments
 
-Advertise executor ID, local/remote kind, platform, runtime/version availability, filesystem/terminal/browser/computer capability evidence, capacity and health. Scheduling requires a matching runtime, permitted resources, verified enforcement and free capacity. Heartbeat loss marks observations unverified and triggers reconciliation; it does not prove the process stopped.
+The hub's execution environments are where hob work runs: the hub itself and any sandbox or container the hub starts. Each advertises its platform, runtime versions, filesystem, terminal, browser and computer capability evidence, capacity and health. Scheduling needs a matching runtime, permitted resources, verified enforcement and free capacity. A lost heartbeat marks observations unverified and triggers reconciliation; it does not prove the process stopped.
 
-Authenticate executors and use encrypted transport and scoped short-lived execution grants for remote work. Credentials remain on the executor or in an approved secrets provider. Belonging to the same user does not let a remote task silently access the local computer. Exact pairing, revocation, routing defaults and transport require design/evidence.
+## Remote access over Tailscale
 
-## Access routes
+Tailscale is the MVP route.
 
-| Route | Required behavior |
-|---|---|
-| Loopback | Default binding; validate local client origins and protect privileged operations. |
-| Tailscale | Explicit private route; tailnet membership supplements application authentication. |
-| Public HTTPS | TLS, authenticated/revocable sessions, origin validation, rate limits and CSRF protections when cookie-based; polished onboarding follows private-access validation. |
-| Electron | Same server API, server identity checks and narrow native bridge. |
+- Remote access is off until the user turns it on in onboarding or in Settings › Devices.
+- When it is on and Tailscale is connected, the server also listens on the hub's tailnet address and accepts only loopback and tailnet peers. Its address is `http://<magicdns-name>:4317`.
+- Optionally, `tailscale serve` gives the hub an HTTPS address on the tailnet. Hobbots shows the command or runs it with the user's consent; it never changes Tailscale settings silently.
+- If Tailscale disconnects, the server stops listening on the tailnet and Settings › Devices says why. It never falls back to other interfaces.
+- Tailnet membership is not authentication. Every request still needs an approved device token.
 
-Do not bind publicly merely because the UI supports remote access. Keep user sessions separate from agent MCP credentials and executor credentials. Remote clients receive only authorized capabilities, not arbitrary filesystem or credential access.
+## Device approval
+
+1. A new device opens the hub's address, in a browser or in the desktop app's connect screen.
+2. The device shows "Waiting for approval on <hub name>" with a short matching code.
+3. The hub shows an Allow / Deny prompt with the device's name, platform, Tailscale identity and the same code. The prompt appears in the hub's window, its notification and the Inbox of every client already approved.
+4. Allow issues a device token stored on that device; Deny ends the attempt, and the device can ask again later.
+5. Settings › Devices lists every approved device with its last activity. Revoke removes its token at once: open streams close and the next request is refused.
+
+Every new device asks once, including devices on the same Tailscale account and the hub's own browsers other than the desktop window. Device tokens are separate from agent MCP credentials and runtime credentials, and are never shown again after issue.
+
+## Connection routes
+
+A route decides how a client reaches the hub; device approval and the API are the same on every route. Routes sit behind one interface, so later routes (a relay, local network with HTTPS, public HTTPS, a server install) need no client changes. Each new route must keep explicit opt-in, TLS where traffic leaves the tailnet or loopback, origin validation, rate limits and CSRF protection for cookie sessions.
 
 ## Electron boundary
 
-Keep privileged process/runtime operations in the server/main process; expose a narrow validated preload bridge for necessary native functions. Use context isolation and renderer restrictions appropriate to current Electron guidance. Render tool output and external pages as untrusted content; they must not acquire native privileges. Exact Electron configuration and packaging need current-doc verification at implementation time.
+Keep privileged process and runtime operations in the server and the main process. Expose a narrow, validated preload bridge for necessary native functions, with context isolation and renderer restrictions that follow current Electron guidance. Treat tool output and external pages as untrusted content without native privileges. In connect mode the app holds no server privileges; it is a client of the hub like a browser.
 
 ## Release evidence
 
-Verify browser and Electron observe one installation; runtime detection/auth failures are actionable; disconnect/reconnect and host restart recover records; remote execution returns durable results; revoked sessions/grants fail; backups restore both data and artifact references. Supported OS/architectures and installers remain open until validated.
+Verify that the window closing leaves the server and running work alive; the service starts at login and recovers incomplete work; a connected desktop and a tailnet browser see the same records; an unapproved device is refused; a revoked device is cut off mid-stream; turning off Tailscale removes the tailnet listener; a changed port reaches every client; backups restore data and artifact references. Supported OS and architectures remain open until validated.

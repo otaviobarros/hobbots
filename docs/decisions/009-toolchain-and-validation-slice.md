@@ -12,7 +12,7 @@ Status: **Accepted.** Resolves the toolchain rows of [open questions](../product
 - **Web:** React + Vite, Tailwind CSS + shadcn/ui (latest), TanStack Query for server state, TanStack Router with hash history (works under `file://` in Electron).
 - **Server:** Effect v4 `HttpApi` on `@effect/platform-node`; SSE through `HttpApiSchema.StreamSse`; SQLite via `@effect/sql-sqlite-node` (`node:sqlite`) with the Effect SQL migrator: one file per migration under `packages/persistence/src/migrations`, listed in its `index.ts`, never edited after merge.
 - **Client:** typed `HttpApiClient` derived from the shared `@hobbots/api` definition, called inside Query hooks; SSE events are written into the Query cache.
-- **Desktop:** Electron + electron-vite. The main process connects to a server already listening on the configured port, or launches the bundled server in a `utilityProcess`. A server the app launched stops when the app quits.
+- **Desktop:** Electron + electron-vite. The main process connects to a server already listening on the configured port, or launches the bundled server in a `utilityProcess`. In this slice a server the app launched stops when the app quits; [ADR 010](010-desktop-hub.md) replaces that with a background service that keeps running when the window closes.
 - **Claude runtime:** Claude Agent SDK (`@anthropic-ai/claude-agent-sdk`). The adapter removes `ANTHROPIC_API_KEY` from the runtime environment so Claude Code uses the claude.ai login, and reports billing from the SDK's account fields.
 
 ## First slice scope

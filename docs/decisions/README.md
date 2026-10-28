@@ -11,3 +11,5 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [007 — SQL persistence and capability-aware recovery](007-durability-and-storage.md)
 - [008 — Hobbots design](008-design.md)
 - [009 — Toolchain and first validation slice](009-toolchain-and-validation-slice.md)
+- [010 — The desktop hub](010-desktop-hub.md)
+- [011 — SQLite for every installation](011-sqlite-storage.md)

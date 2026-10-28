@@ -36,7 +36,7 @@ Agents may request authority but cannot manufacture human approval, access user 
 
 Hobbots-managed tools pass through the permission broker. Native runtime tools use verified provider approval/sandbox hooks or an isolated environment. Arbitrary unsandboxed shell execution can escape a nominal workspace; a system prompt is not a filesystem boundary. Each adapter declares what it can enforce, observe or cannot guarantee. Block operations requiring unavailable enforcement rather than showing a reassuring but false Trusted badge.
 
-Credentials remain scoped to the executor or secrets provider and are excluded from messages/events. Remote routing never silently grants access to the local host. Remote user authentication, executor grants and agent tool credentials are separate boundaries.
+Credentials remain scoped to the hub's execution environment or secrets provider and are excluded from messages/events. Hobs act only on the hub; a connected device never exposes its own files or apps. Device tokens, execution grants and agent tool credentials are separate boundaries ([deployment](deployment.md)).
 
 Verify denial, grant scoping/expiry, policy changes during waits, child privilege escalation attempts, duplicate decisions, changed arguments after approval, unsupported enforcement and separate computer opt-in. Full Access does not remove application-level authentication or create administrative agent APIs.
 
