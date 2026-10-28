@@ -6,7 +6,7 @@ import { TestDatabase } from "../src/testing.ts";
 
 describe("migrations", () => {
   // covers DP-003
-  it("[TC-DP-003] apply every migration in order on an empty database and record each one", async () => {
+  it("[TC-DP-003] applies every migration in order on an empty database and records each one", async () => {
     const applied = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       return yield* sql<{ migrationId: number; name: string }>`

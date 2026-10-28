@@ -25,6 +25,8 @@ Commands live in executable configuration; read them there rather than from this
 - Lint/format rules: [`biome.json`](../biome.json) (`docs/` is excluded). Type strictness: [`tsconfig.base.json`](../tsconfig.base.json).
 - Tests: Vitest, under `test/` or beside the source as `*.test.ts`. `packages/api`, `packages/ui` and `apps/desktop` have no tests.
 - Deterministic runtime: `HOBBOTS_RUNTIME=fake` selects the fake adapter in [`packages/runtimes/src/fake.ts`](../packages/runtimes/src/fake.ts) (see [`apps/server/src/config.ts`](../apps/server/src/config.ts)).
+- CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `pnpm check` (SQLite) and, in a second job, the persistence and server suites with `HOBBOTS_TEST_DB=postgres` against a PostgreSQL service container.
+- Test database: suites that need a database use `TestDatabase` from `@hobbots/persistence/testing` so both CI jobs exercise them; see [`packages/persistence/README.md`](../packages/persistence/README.md#test-database). `turbo.json` declares `HOBBOTS_TEST_DB` and `HOBBOTS_TEST_DATABASE_URL`, because Turborepo's strict env mode drops undeclared variables.
 - Real interface: [README › Run it](../README.md#run-it) starts the server and web client or the Electron app.
 
 ### Test case identity
@@ -76,11 +78,10 @@ Workflow selection: **Default for matching tasks** (selected by the maintainer d
 | Worktree isolation (own install, data folder, port) | Accepted | Setup interview; [Environment and worktrees](#environment-and-worktrees) | Keeps agent work off real user data |
 | Glossary | Accepted | [Glossary](product/glossary.md) | Built only from existing docs |
 | Stable rule IDs for AGENTS.md constraints | Proposed | Deferred in setup interview | Revisit when reviews need to cite rules; blocks nothing |
-| CI running `pnpm check` (and the SQLite/PostgreSQL suites ADR 011 describes) | Proposed | [ADR 011](decisions/011-sqlite-storage.md) states CI runs both; `HOBBOTS_TEST_DB` selects the database; no workflow exists yet | Separate implementation issue |
+| CI running `pnpm check` on SQLite and the persistence and server suites on PostgreSQL | Established | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [ADR 011](decisions/011-sqlite-storage.md) | Every pull request and push to `main` |
 | Agent-engineering default routing | Accepted | Setup interview; [AGENTS.md](../AGENTS.md#workflow) | Guidance, not enforcement |
 
 ## Known gaps
 
-- No CI under `.github/workflows`, although ADR 011 and DP-003 describe CI test runs.
 - The desktop app stops a server it launched on quit ([`apps/desktop/src/main/index.ts`](../apps/desktop/src/main/index.ts)), matching the ADR 009 slice; the background-service behavior of [ADR 010](decisions/010-desktop-hub.md) is not built yet.
 - No `.env.example`, `CODEOWNERS` or documented release process.
