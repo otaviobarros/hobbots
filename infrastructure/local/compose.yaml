@@ -4,7 +4,8 @@ name: hobbots-local
 
 services:
   postgres:
-    image: postgres:18-alpine
+    # Debian, not Alpine: its en_US.utf8 collation is not byte order, which the tie-order test needs.
+    image: postgres:18
     environment:
       POSTGRES_DB: hobbots_test
       POSTGRES_HOST_AUTH_METHOD: trust
