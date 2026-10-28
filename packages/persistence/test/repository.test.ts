@@ -1,9 +1,10 @@
 import { Agent, AgentId, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepository, SqliteLive } from "../src/index.ts";
+import { HobbotsRepository } from "../src/index.ts";
+import { TestDatabase } from "../src/testing.ts";
 
-const TestLayer = HobbotsRepository.layer.pipe(Layer.provide(SqliteLive(":memory:")));
+const TestLayer = HobbotsRepository.layer.pipe(Layer.provide(TestDatabase));
 const now = "2026-10-28T00:00:00.000Z";
 const agentId = AgentId.make("aldric");
 const threadId = ThreadId.make("t1");
@@ -20,7 +21,8 @@ const message = (id: string, status: Message["status"] = "complete") =>
   });
 
 describe("HobbotsRepository", () => {
-  it("round-trips agents, threads and ordered messages", async () => {
+  // covers DP-003, CH-002
+  it("[TC-DP-004] round-trips agents, threads and ordered messages", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -78,5 +80,52 @@ describe("HobbotsRepository", () => {
       ["a", "a", "interrupted"],
     ]);
     expect(result.interrupted.map((m) => m.id)).toEqual(["a"]);
+  });
+
+  // covers DP-003, AG-001
+  it("[TC-DP-002] stores the full look seed range and orders ties the same on every database", async () => {
+    const agent = (id: string, lookSeed: number) =>
+      new Agent({
+        id: AgentId.make(id),
+        name: id,
+        role: "Guide",
+        runtime: "claude-code",
+        model: null,
+        instructions: "",
+        lookSeed,
+        lookColor: "violet",
+        createdAt: now,
+      });
+    const thread = (id: string) =>
+      new Thread({ id: ThreadId.make(id), agentId, title: id, runtimeSessionId: null, createdAt: now, updatedAt: now });
+
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      // Inserted out of id order, with equal timestamps and ids whose order depends on collation.
+      for (const [id, seed] of [
+        ["b", 2 ** 32 - 1],
+        ["B", 0],
+        [agentId, 2 ** 31],
+        ["a-c", 7],
+        ["ab", 8],
+      ] as const) {
+        yield* repo.insertAgent(agent(id, seed));
+      }
+      for (const id of ["t-b", "T-a", "t-a", "ta"]) yield* repo.upsertThread(thread(id));
+      return {
+        agents: yield* repo.listAgents,
+        threads: yield* repo.listThreads(agentId),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    // Ties fall back to the id, compared byte by byte (uppercase before lowercase, "-" before letters).
+    expect(result.agents.map((a) => [a.id, a.lookSeed])).toEqual([
+      ["B", 0],
+      ["a-c", 7],
+      ["ab", 8],
+      ["aldric", 2 ** 31],
+      ["b", 2 ** 32 - 1],
+    ]);
+    expect(result.threads.map((t) => t.id)).toEqual(["T-a", "t-a", "t-b", "ta"]);
   });
 });

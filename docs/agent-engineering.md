@@ -76,7 +76,7 @@ Workflow selection: **Default for matching tasks** (selected by the maintainer d
 | Worktree isolation (own install, data folder, port) | Accepted | Setup interview; [Environment and worktrees](#environment-and-worktrees) | Keeps agent work off real user data |
 | Glossary | Accepted | [Glossary](product/glossary.md) | Built only from existing docs |
 | Stable rule IDs for AGENTS.md constraints | Proposed | Deferred in setup interview | Revisit when reviews need to cite rules; blocks nothing |
-| CI running `pnpm check` (and the SQLite/PostgreSQL suites ADR 011 describes) | Proposed | [ADR 011](decisions/011-sqlite-storage.md) states CI runs both; no workflow or `HOBBOTS_TEST_DB` exists yet | Separate implementation issue |
+| CI running `pnpm check` (and the SQLite/PostgreSQL suites ADR 011 describes) | Proposed | [ADR 011](decisions/011-sqlite-storage.md) states CI runs both; `HOBBOTS_TEST_DB` selects the database; no workflow exists yet | Separate implementation issue |
 | Agent-engineering default routing | Accepted | Setup interview; [AGENTS.md](../AGENTS.md#workflow) | Guidance, not enforcement |
 
 ## Known gaps
