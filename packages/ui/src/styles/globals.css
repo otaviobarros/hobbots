@@ -1,0 +1,8 @@
+/* Shared shadcn/ui support styles. Theme tokens live in the consuming app (apps/web/src/styles.css). */
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* shadcn dark: variants follow the `dark` class on <html> (apps/web/index.html). */
+@custom-variant dark (&:is(.dark *));
+
+@source "../**/*.{ts,tsx}";
