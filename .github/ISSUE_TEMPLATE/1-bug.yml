@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in Hobbots does not work as documented.
+labels: ["type: bug", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Search [open issues](https://github.com/otaviobarros/hobbots/issues) first so we can keep one issue per problem.
+        Never paste API keys, device tokens or private file contents.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Hobbots
+        2. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Where it happened
+      multiple: true
+      options:
+        - Desktop app on the hub
+        - Desktop app in connect mode
+        - Browser
+        - Server or background service
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Hobbots version or commit
+      placeholder: 0.1.0 or a commit SHA
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and runtime
+      placeholder: macOS 26.1 on Apple silicon, Claude Code 2.x
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove anything private before pasting.
+      render: text

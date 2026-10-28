@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How issues and the board work
+    url: https://github.com/otaviobarros/hobbots/blob/main/docs/contributing/issues-and-board.md
+    about: Read this before opening an issue.
