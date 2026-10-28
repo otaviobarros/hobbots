@@ -105,7 +105,7 @@ A maintainer does this once:
 ## Working on an issue
 
 1. Comment on the issue before starting so work is not duplicated, then get it assigned.
-2. Move the card to In progress and branch from `main`.
+2. Move the card to In progress and branch from `main` as `<type>/<issue>-<slug>`, using the Conventional Commit type (`feat/42-login-item`, `chore/23-agent-engineering-plugin`). One issue per branch.
 3. Commit with [Conventional Commits](https://www.conventionalcommits.org/) (`feat(desktop): ...`, `fix(server): ...`, `docs: ...`).
 4. Open a pull request using the template, with `Closes #N`. The card moves to In review by hand and to Done when the pull request merges.
 5. Run `pnpm check` before asking for review.

@@ -1,0 +1,18 @@
+{
+  "extraKnownMarketplaces": {
+    "agent-engineering": {
+      "source": {
+        "source": "github",
+        "repo": "otaviobarros/agent-engineering"
+      }
+    }
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "includeCoAuthoredBy": false,
+  "enabledPlugins": {
+    "agent-engineering@agent-engineering": true
+  }
+}

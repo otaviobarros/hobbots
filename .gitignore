@@ -10,3 +10,4 @@ out/
 *.sqlite
 *.sqlite-journal
 .DS_Store
+.claude/settings.local.json

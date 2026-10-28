@@ -35,3 +35,9 @@ Distinguish decided requirements and contracts from open questions. Record delib
 Fetch current library documentation through Context7 before library-specific API or configuration work: resolve the library ID, then query the relevant concept and version. Pin exact compatible Effect v4 versions when dependencies are introduced; isolate unstable APIs. Verify installed runtime capabilities rather than inferring support from a protocol name.
 
 When implementation is authorized, verify state transitions, duplicate delivery, restart recovery, permission enforcement, and proactive closure with deterministic fake adapters, then relevant real-runtime checks. Report verification limits candidly.
+
+## Workflow
+
+For planning, implementation, verification and review, read the [project workflow guide](docs/agent-engineering.md): where each authority lives, check catalogs, test case IDs, worktree isolation, and the [glossary](docs/product/glossary.md).
+
+For development tasks, use the installed agent-engineering skill matching the requested outcome: `deliver-change` for full implementation, the relevant phase skill for narrower requests (routing table in the guide). Explicit task limits and this file govern. Report a missing skill; this reference is not permission to install plugins, commit, push or publish.
