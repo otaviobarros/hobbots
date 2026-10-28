@@ -15,7 +15,7 @@ import { SqliteLive } from "./sqlite.ts";
  */
 export const TestDatabase = Layer.unwrap(
   Effect.sync(() => {
-    const db = process.env.HOBBOTS_TEST_DB ?? "sqlite";
+    const db = process.env.HOBBOTS_TEST_DB || "sqlite";
     if (db === "sqlite") return SqliteLive(":memory:");
     if (db === "postgres") {
       const url = process.env.HOBBOTS_TEST_DATABASE_URL;
