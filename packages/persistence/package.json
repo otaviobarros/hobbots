@@ -3,15 +3,18 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@hobbots/domain": "workspace:*",
+    "@effect/platform-node": "4.0.6",
+    "@effect/sql-pg": "4.0.6",
     "@effect/sql-sqlite-node": "^4.0.6",
+    "@hobbots/domain": "workspace:*",
     "effect": "^4.0.6"
   },
   "devDependencies": {
