@@ -3,6 +3,11 @@ import { Context, Effect, Layer, type Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
 // Rows use snake_case columns; the client transforms them to the camelCase domain fields.
+// Where SQLite and PostgreSQL differ, the query chooses explicitly (ADR 011).
+
+// PostgreSQL reads BIGINT as a bigint and SQLite as a number; every look seed fits a number.
+const agentRows = (rows: ReadonlyArray<{ readonly lookSeed?: unknown }>) =>
+  rows.map((row) => ({ ...row, lookSeed: Number(row.lookSeed) }));
 
 export class HobbotsRepository extends Context.Service<
   HobbotsRepository,
@@ -23,21 +28,30 @@ export class HobbotsRepository extends Context.Service<
     HobbotsRepository,
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
+      // Text sort keys compare byte by byte: SQLite's default, PostgreSQL's "C" collation.
+      // ISO-8601 timestamps sort the same under either collation.
+      const bytewise = (column: string) =>
+        sql.onDialectOrElse({
+          pg: () => sql.literal(`${column} COLLATE "C"`),
+          orElse: () => sql.literal(column),
+        });
+      // Ties break on the id.
+      const byId = bytewise("id");
 
       const listAgents = SqlSchema.findAll({
         Request: Schema.Void,
         Result: Agent,
-        execute: () => sql`SELECT * FROM agents ORDER BY created_at`,
+        execute: () => sql`SELECT * FROM agents ORDER BY created_at, ${byId}`.pipe(Effect.map(agentRows)),
       });
       const findAgent = SqlSchema.findOneOption({
         Request: Schema.String,
         Result: Agent,
-        execute: (id) => sql`SELECT * FROM agents WHERE id = ${id}`,
+        execute: (id) => sql`SELECT * FROM agents WHERE id = ${id}`.pipe(Effect.map(agentRows)),
       });
       const listThreads = SqlSchema.findAll({
         Request: Schema.String,
         Result: Thread,
-        execute: (agentId) => sql`SELECT * FROM threads WHERE agent_id = ${agentId} ORDER BY updated_at DESC`,
+        execute: (agentId) => sql`SELECT * FROM threads WHERE agent_id = ${agentId} ORDER BY updated_at DESC, ${byId}`,
       });
       const findThread = SqlSchema.findOneOption({
         Request: Schema.String,
@@ -52,7 +66,7 @@ export class HobbotsRepository extends Context.Service<
       const staleMessages = SqlSchema.findAll({
         Request: Schema.Void,
         Result: Message,
-        execute: () => sql`SELECT * FROM messages WHERE status = 'streaming'`,
+        execute: () => sql`SELECT * FROM messages WHERE status = 'streaming' ORDER BY ${bytewise("thread_id")}, seq`,
       });
 
       const insertAgent = (agent: Agent) =>
