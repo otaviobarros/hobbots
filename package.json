@@ -8,6 +8,9 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:pg": "node scripts/test-pg.mjs",
+    "pg:up": "docker compose -f infrastructure/local/compose.yaml up --detach --wait",
+    "pg:down": "docker compose -f infrastructure/local/compose.yaml down",
     "lint": "biome check .",
     "format": "biome check --write .",
     "check": "biome check . && turbo run typecheck test"
