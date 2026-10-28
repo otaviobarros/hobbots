@@ -1,16 +1,18 @@
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { migrations, SqliteLive } from "../src/index.ts";
+import { migrations } from "../src/index.ts";
+import { TestDatabase } from "../src/testing.ts";
 
 describe("migrations", () => {
-  it("apply every migration in order on an empty database and record each one", async () => {
+  // covers DP-003
+  it("[TC-DP-003] applies every migration in order on an empty database and records each one", async () => {
     const applied = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       return yield* sql<{ migrationId: number; name: string }>`
         SELECT migration_id, name FROM effect_sql_migrations ORDER BY migration_id
       `;
-    }).pipe(Effect.provide(SqliteLive(":memory:")), Effect.runPromise);
+    }).pipe(Effect.provide(TestDatabase), Effect.runPromise);
 
     const expected = Object.keys(migrations)
       .sort()

@@ -15,6 +15,8 @@ Tests take their database from `TestDatabase` in `@hobbots/persistence/testing`.
 | `sqlite` (default) | In-memory SQLite                                                                                |
 | `postgres`         | A new schema in the database at `HOBBOTS_TEST_DATABASE_URL`, dropped when the layer is released |
 
+CI runs the persistence and server suites both ways. A new variable that changes test behavior must be declared on the `test` task in [`turbo.json`](../../turbo.json); Turborepo drops undeclared variables.
+
 ```sh
 HOBBOTS_TEST_DB=postgres HOBBOTS_TEST_DATABASE_URL=postgres://postgres@localhost:5432/postgres pnpm test
 ```
