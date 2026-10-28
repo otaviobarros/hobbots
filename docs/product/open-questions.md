@@ -1,0 +1,23 @@
+# Open questions and bounded assumptions
+
+These choices are not decided yet. They do not reopen decided product direction. Resolve the relevant ones before implementing affected areas, using current documentation and runtime evidence.
+
+| Area | Open choice / required evidence |
+|---|---|
+| Runtime support | Exact installed Codex/Claude/Gemini CLI/Ollama/ACP versions, integration routes, auth, sandbox/approval hooks, resume/cancel/concurrency/preview capabilities. |
+| Effect v4 | Exact compatible pins, SQL drivers and unstable Workflow/HttpApi integration; evaluate native durable Workflow versus persistent execution services behind the domain interfaces. |
+| Toolchain | Package manager, workspace/build/test tooling, supported Node/Electron versions. Decided for the validation slice in ADR 009. |
+| Configuration | Canonical app database versus portable JSON/YAML definitions versus both; import/export/versioning details. |
+| Delegation default | Explicit collaborator allowlist versus all configured hobs by default; automatic dynamic agent creation is not assumed. |
+| Limits | Final concurrency, depth, timeout, fairness, batching, retry and cost-limit defaults. |
+| Remote-to-local routing | Explicit handoff versus configured scoped routes, pairing, execution-grant transport and revocation. No silent privilege expansion. |
+| Policies | Exact matcher/precedence, standing-grant expiry, revocation during running actions, workspace isolation mechanism per runtime/platform; exact policy behind the Careful and Trusting presets. |
+| Lifecycle | Exhaustive task/attempt/approval transition tables, late-result and reassignment rules, partial completion semantics. |
+| Deployment | Electron-close/server ownership behavior, OS/architecture support, app-data paths, port selection, Docker/Compose details, public HTTPS auth strategy. |
+| Persistence | Migration tool, artifact storage backend, backup consistency, retention/redaction, event compaction and cursor expiry. |
+| UI extensions | Narrow-window behavior and a screen-reader and keyboard pass in the real app (the design tokens pass WCAG AA); generalized takeover/replay remains later. |
+| Providers | How API-key providers (Grok, OpenAI-compatible keys, Gemini without its CLI) run tools and delegation, given [ADR 002](../decisions/002-existing-runtimes.md)'s reuse of existing agent runtimes; what usage data each provider reports for the Usage potions. |
+| Home | Exact Home contents beyond the design (what is happening, a summary, usage limits); team grouping for many hobs. |
+| Optional suggestions | Thread forking/context snapshots and advanced memory are not MVP decisions. |
+
+These documents are concrete enough for requirements review and scoped engineering plans. They are not proof of live runtime capability, a production threat model, or an installed dependency stack. Avoid silently converting this table into defaults.

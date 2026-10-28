@@ -1,0 +1,34 @@
+# Runtime adapters
+
+**Decided:** reuse existing runtimes, starting with Claude Code and Codex, with an ACP-compatible adapter foundation. Hobbots owns orchestration, durable responsibilities and UI; it does not recreate the runtime's reasoning/tool loop.
+
+## Integration targets
+
+| Target | Planned route | Status in this foundation |
+|---|---|---|
+| Codex | Codex App Server adapter | Selected; installed-version contracts and enforcement need live verification. |
+| Claude Code | Supported CLI/SDK integration | Selected; exact route/version needs compatibility validation. |
+| ACP agents | ACP client adapter with capability negotiation | Foundation selected; per-agent interoperability is not yet demonstrated. |
+| Other CLIs/local-model runtimes | Individually validated future adapters | Outside initial support guarantees. |
+
+ACP describes client/agent interactions; it does not supply Hobbots' multi-agent delegation, responsibility ledger or durable inbox. MCP exposes scoped tools; it is not interchangeable with ACP.
+
+## Common internal contract (draft names)
+
+`detect`, `listModels`, `createSession`, `resumeSession`, `sendPrompt`, `subscribeEvents`, `respondToApproval`, `cancel`, `getCapabilities`, `close`. These are Hobbots interface concepts, not claims that vendor APIs expose identical methods. Detect installation/version/authentication availability without reading or logging credentials.
+
+Normalize text/tool/status/approval/result events into Hobbots envelopes while retaining useful runtime provenance. Record terminal outcome and uncertainty. Effect scopes own process/connection cleanup; closing one client must not kill unrelated work.
+
+## Capability matrix to fill with evidence
+
+For each runtime/version/executor, verify native session persistence/resumption versus reconstruction; concurrent sessions versus serialized turns; streaming and cursor semantics; interruption acknowledgement; approval interception; sandbox/filesystem/network restrictions; terminal/artifact/diff visibility; browser screenshots versus live browser control; computer opt-in; model discovery; usage reporting; MCP support and scoped credentials.
+
+Classify each capability as verified supported, unsupported, conditional or unverified, with runtime version, test date and evidence. All live capability entries are currently **unverified**. The selected integration strategy is not proof that a runtime supports every product feature.
+
+Expose unsupported previews and unavailable safe policies honestly. A text URL is not a live browser. A process exit is not necessarily a closed Quest. Cancellation acknowledgement and session resume must be checked rather than inferred.
+
+## Verification strategy
+
+Build a deterministic fake adapter when implementation is authorized. Exercise nested delegation, delayed results, busy recipients, permission denial, crashes, unknown side-effect outcomes and late events without model/API costs. Then test minimal real Codex/Claude sessions and selected ACP peers. Record runtime versions and evidence before claiming cross-runtime support.
+
+Versioned capability contracts isolate protocol differences from domain services. Vendor-specific session identifiers, errors or permission modes must not become the canonical Agent or Quest model.
