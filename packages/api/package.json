@@ -1,0 +1,19 @@
+{
+  "name": "@hobbots/api",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@hobbots/domain": "workspace:*",
+    "effect": "^4.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5"
+  }
+}
