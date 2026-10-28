@@ -15,8 +15,7 @@
     },
     "test": {
       "dependsOn": ["transit"],
-      "env": ["HOBBOTS_TEST_DB"],
-      "passThroughEnv": ["HOBBOTS_TEST_DATABASE_URL"]
+      "env": ["HOBBOTS_TEST_DB", "HOBBOTS_TEST_DATABASE_URL"]
     },
     "dev": {
       "cache": false,

@@ -19,7 +19,7 @@ const TestLayer = ChatService.layer.pipe(
 );
 
 describe("ChatService", () => {
-  // covers CH-001, CH-004, DP-003
+  // covers CH-002, CH-004, DP-003
   it("[TC-CH-001] streams a turn, completes it, stores the session id and resumes it on the next prompt", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;

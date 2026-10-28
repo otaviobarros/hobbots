@@ -45,7 +45,8 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:18-alpine
+        # Debian image: its en_US.utf8 collation is what the tie-order test needs to detect a missing COLLATE "C".
+        image: postgres:18
         env:
           POSTGRES_PASSWORD: postgres
         ports:
