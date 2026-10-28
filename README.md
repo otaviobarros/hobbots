@@ -30,7 +30,7 @@ Set `HOBBOTS_RUNTIME=fake` to run the server with a deterministic fake runtime i
 - `docs/decisions/`: architecture decision records.
 - `docs/design/`: the design specification and the screen inventory.
 
-Contributors and coding agents start with [AGENTS.md](AGENTS.md).
+Contributors start with [CONTRIBUTING.md](CONTRIBUTING.md); coding agents with [AGENTS.md](AGENTS.md).
 
 ## License
 

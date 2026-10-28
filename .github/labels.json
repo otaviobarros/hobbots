@@ -1,0 +1,54 @@
+[
+  {
+    "name": "type: slice",
+    "color": "5319e7",
+    "description": "A vertical slice: an end-to-end outcome with sub-issues"
+  },
+  { "name": "type: task", "color": "1d76db", "description": "One piece of work, usually a sub-issue of a slice" },
+  {
+    "name": "type: bug",
+    "color": "d73a4a",
+    "description": "Something does not work as documented",
+    "aliases": ["bug"]
+  },
+  {
+    "name": "type: feature",
+    "color": "a2eeef",
+    "description": "A proposal for new behavior",
+    "aliases": ["enhancement"]
+  },
+  { "name": "type: docs", "color": "0075ca", "description": "Documentation only", "aliases": ["documentation"] },
+  { "name": "type: chore", "color": "c5def5", "description": "Tooling, dependencies or maintenance" },
+
+  { "name": "area: desktop", "color": "fbca04", "description": "Electron app, packaging, background service" },
+  { "name": "area: server", "color": "fbca04", "description": "HTTP API, events and server process" },
+  { "name": "area: web", "color": "fbca04", "description": "React client and UI components" },
+  { "name": "area: runtime", "color": "fbca04", "description": "Runtime adapters: Claude Code, Codex, ACP" },
+  { "name": "area: persistence", "color": "fbca04", "description": "SQL, migrations and recovery" },
+  { "name": "area: orchestration", "color": "fbca04", "description": "Quests, delegation, inbox and execution" },
+  { "name": "area: permissions", "color": "fbca04", "description": "Policy, approvals and enforcement" },
+  { "name": "area: devices", "color": "fbca04", "description": "Remote access, Tailscale and device approval" },
+  {
+    "name": "area: design",
+    "color": "fbca04",
+    "description": "Visual design, art and accessibility",
+    "aliases": ["accessibility"]
+  },
+  { "name": "area: ci", "color": "fbca04", "description": "Continuous integration and releases" },
+  { "name": "area: docs", "color": "fbca04", "description": "Product, architecture and contributor docs" },
+
+  { "name": "priority: p0", "color": "b60205", "description": "Needed for the current milestone" },
+  { "name": "priority: p1", "color": "d93f0b", "description": "Should follow soon after" },
+  { "name": "priority: p2", "color": "fef2c0", "description": "Nice to have" },
+
+  { "name": "status: triage", "color": "ededed", "description": "New, waiting for a maintainer to triage" },
+  { "name": "status: needs info", "color": "ededed", "description": "Waiting for details from the author" },
+  { "name": "status: blocked", "color": "000000", "description": "Cannot move until something else is resolved" },
+
+  { "name": "good first issue", "color": "7057ff", "description": "Small and well scoped, good for newcomers" },
+  { "name": "help wanted", "color": "008672", "description": "Maintainers welcome a contribution" },
+  { "name": "question", "color": "d876e3", "description": "A question rather than a change" },
+  { "name": "duplicate", "color": "cfd3d7", "description": "Already tracked in another issue" },
+  { "name": "wontfix", "color": "ffffff", "description": "Will not be worked on" },
+  { "name": "invalid", "color": "e4e669", "description": "Not a valid issue" }
+]
