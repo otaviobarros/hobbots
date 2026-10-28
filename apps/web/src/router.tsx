@@ -1,0 +1,104 @@
+import { AgentId, ThreadId } from "@hobbots/domain";
+import type { QueryClient } from "@tanstack/react-query";
+import {
+  createHashHistory,
+  createRootRouteWithContext,
+  createRoute,
+  createRouter,
+  redirect,
+} from "@tanstack/react-router";
+import { agentsQuery, threadsQuery } from "./api/queries.ts";
+import { AppShell } from "./components/app-shell.tsx";
+import { HobsLayout } from "./components/hobs-layout.tsx";
+import { Home } from "./components/home.tsx";
+import { InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
+import { readStored, writeStored } from "./lib/storage.ts";
+
+const lastHobKey = "lastHob";
+const lastThreadKey = (hobId: string) => `lastThread.${hobId}`;
+
+const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  component: AppShell,
+});
+
+// Home is the landing page; the chat is one click away and opens on the last thread.
+const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: Home });
+
+const hobsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "hobs",
+  beforeLoad: async ({ context }) => {
+    const hobs = await context.queryClient.ensureQueryData(agentsQuery);
+    const remembered = readStored<string | null>(lastHobKey, null);
+    const target = hobs.find((h) => h.id === remembered) ?? hobs[0];
+    if (target) throw redirect({ to: "/hobs/$hobId", params: { hobId: target.id } });
+  },
+  component: () => <section className="grid flex-1 place-items-center text-label">No hobs yet.</section>,
+});
+
+// Opening a hob restores its last selected thread, or its most recent one, or a fresh page.
+const hobRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "hobs/$hobId",
+  beforeLoad: async ({ context, params }) => {
+    const hobId = AgentId.make(params.hobId);
+    const threads = await context.queryClient.ensureQueryData(threadsQuery(hobId));
+    const remembered = readStored<string | null>(lastThreadKey(hobId), null);
+    const target = threads.find((t) => t.id === remembered) ?? threads[0];
+    if (target) throw redirect({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: target.id } });
+    throw redirect({ to: "/hobs/$hobId/new", params: { hobId } });
+  },
+});
+
+const newThreadRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "hobs/$hobId/new",
+  beforeLoad: ({ params }) => writeStored(lastHobKey, params.hobId),
+  component: function NewThreadPage() {
+    const params = newThreadRoute.useParams();
+    return <HobsLayout hobId={AgentId.make(params.hobId)} />;
+  },
+});
+
+const threadRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "hobs/$hobId/threads/$threadId",
+  beforeLoad: ({ params }) => {
+    writeStored(lastHobKey, params.hobId);
+    writeStored(lastThreadKey(params.hobId), params.threadId);
+  },
+  component: function ThreadPage() {
+    const params = threadRoute.useParams();
+    return <HobsLayout hobId={AgentId.make(params.hobId)} threadId={ThreadId.make(params.threadId)} />;
+  },
+});
+
+const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: "inbox", component: InboxPage });
+const usageRoute = createRoute({ getParentRoute: () => rootRoute, path: "usage", component: UsagePage });
+const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "settings", component: SettingsPage });
+
+const routeTree = rootRoute.addChildren([
+  homeRoute,
+  hobsRoute,
+  hobRoute,
+  newThreadRoute,
+  threadRoute,
+  inboxRoute,
+  usageRoute,
+  settingsRoute,
+]);
+
+export const createAppRouter = (queryClient: QueryClient) =>
+  createRouter({
+    routeTree,
+    // Hash history keeps deep links working when Electron loads the UI from file://.
+    history: createHashHistory(),
+    context: { queryClient },
+    defaultPreloadStaleTime: 0,
+  });
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: ReturnType<typeof createAppRouter>;
+  }
+}

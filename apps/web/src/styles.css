@@ -1,0 +1,258 @@
+@import "tailwindcss";
+@import "@hobbots/ui/globals.css";
+@import "@fontsource-variable/atkinson-hyperlegible-next";
+@import "@fontsource-variable/pixelify-sans";
+
+/* Hobbots design tokens (docs/design/ui-ux.md). The shadcn/ui names map onto them so
+   generated components pick up the theme; the named tokens are for everything else. */
+@theme {
+  --color-ground: #141228;
+  --color-deep: #0d0c1c;
+  --color-panel: #1b1835;
+  --color-card: #1f1c3e;
+  --color-hover: #25224a;
+  --color-line: #2c2a5a;
+  --color-line-2: #3a3666;
+  --color-control: #7770c4;
+  --color-text: #ece8ff;
+  --color-secondary-text: #c9c3e8;
+  --color-label: #a9a2e0;
+  --color-moonlight: #f3e9b5;
+  --color-lantern: #f2a541;
+  --color-lantern-hover: #ffb75c;
+  --color-lantern-shadow: #9a5f16;
+  --color-mint: #7fd1b9;
+  --color-mint-deep: #3f8a75;
+  --color-rose: #ee9292;
+  --color-star: #cfc8ff;
+  --color-wood: #7a5b3a;
+
+  --color-background: var(--color-ground);
+  --color-foreground: var(--color-text);
+  --color-card-foreground: var(--color-text);
+  --color-popover: var(--color-panel);
+  --color-popover-foreground: var(--color-text);
+  --color-muted: var(--color-line);
+  --color-muted-foreground: var(--color-label);
+  --color-accent: var(--color-line);
+  --color-accent-foreground: var(--color-text);
+  --color-primary: var(--color-lantern);
+  --color-primary-foreground: var(--color-ground);
+  --color-secondary: var(--color-line);
+  --color-secondary-foreground: var(--color-text);
+  --color-destructive: var(--color-rose);
+  --color-border: var(--color-line);
+  --color-input: var(--color-control);
+  --color-ring: var(--color-moonlight);
+
+  --font-sans: "Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --font-pixel: "Pixelify Sans Variable", "Pixelify Sans", system-ui, sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
+
+  /* Motion is stepped, like pixel art. */
+  --animate-hb-bob: hb-bob 1.2s steps(2) infinite;
+  --animate-hb-hop: hb-hop 0.7s steps(6) 1;
+  --animate-hb-shake: hb-shake 0.45s steps(5) 1;
+  --animate-hb-in: hb-in 0.35s steps(4) both;
+  --animate-hb-pop: hb-pop 0.45s steps(4) both;
+  --animate-hb-blink: hb-blink 1.2s steps(2) infinite;
+  --animate-hb-twinkle: hb-twinkle 3s steps(3) infinite;
+  --animate-hb-flicker: hb-flicker 2.4s steps(4) infinite;
+  --animate-hb-float: hb-float 2.4s steps(6) infinite;
+  --animate-hb-caret: hb-caret 1s steps(1) infinite;
+
+  @keyframes hb-bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px);
+    }
+  }
+  @keyframes hb-hop {
+    0%,
+    70%,
+    100% {
+      transform: translateY(0);
+    }
+    35% {
+      transform: translateY(-12px);
+    }
+    85% {
+      transform: translateY(-3px);
+    }
+  }
+  @keyframes hb-shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20% {
+      transform: translateX(-6px);
+    }
+    40% {
+      transform: translateX(6px);
+    }
+    60% {
+      transform: translateX(-4px);
+    }
+    80% {
+      transform: translateX(4px);
+    }
+  }
+  @keyframes hb-in {
+    from {
+      transform: translateY(8px);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+  @keyframes hb-pop {
+    0% {
+      transform: scale(0.4);
+      opacity: 0;
+    }
+    60% {
+      transform: scale(1.08);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes hb-blink {
+    0%,
+    100% {
+      opacity: 0.2;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @keyframes hb-twinkle {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.25;
+    }
+  }
+  @keyframes hb-flicker {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    40% {
+      opacity: 0.75;
+    }
+    70% {
+      opacity: 0.95;
+    }
+  }
+  @keyframes hb-float {
+    0% {
+      transform: translate(0, 0);
+      opacity: 0;
+    }
+    30% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(8px, -18px);
+      opacity: 0;
+    }
+  }
+  @keyframes hb-caret {
+    0%,
+    49% {
+      opacity: 1;
+    }
+    50%,
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ground);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Base layer, so utility classes on a link still win. */
+@layer base {
+  a {
+    color: var(--color-lantern);
+  }
+
+  a:hover {
+    color: #ffc477;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--color-moonlight);
+    outline-offset: 2px;
+  }
+}
+
+/* Pixel corners for cards and buttons. */
+@utility cut {
+  clip-path: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
+}
+
+/* Pixelify Sans is for headings, hob names and labels only, never below 14px. */
+@utility font-pixel {
+  font-family: var(--font-pixel);
+  font-variant-ligatures: none;
+}
+
+@utility lbl {
+  font-family: var(--font-pixel);
+  font-variant-ligatures: none;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Hover a hob and it hops. */
+.hop-on-hover:hover .sprite {
+  animation: var(--animate-hb-hop);
+}
+
+/* Every animation and transition stops with Reduce motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: Reduce motion must win over every animation. */
+    animation: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: Reduce motion must win over every transition. */
+    transition: none !important;
+  }
+}
