@@ -9,7 +9,9 @@
     "typecheck": {
       "dependsOn": ["^typecheck"]
     },
-    "test": {},
+    "test": {
+      "env": ["HOBBOTS_TEST_DB", "HOBBOTS_TEST_DATABASE_URL"]
+    },
     "dev": {
       "cache": false,
       "persistent": true

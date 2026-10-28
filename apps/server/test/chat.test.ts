@@ -1,4 +1,5 @@
-import { HobbotsRepository, SqliteLive } from "@hobbots/persistence";
+import { HobbotsRepository } from "@hobbots/persistence";
+import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Option, Schedule } from "effect";
 import { describe, expect, it } from "vitest";
@@ -6,7 +7,7 @@ import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { ALDRIC_ID, seedAgents } from "../src/seed.ts";
 
-const Persistence = HobbotsRepository.layer.pipe(Layer.provideMerge(SqliteLive(":memory:")));
+const Persistence = HobbotsRepository.layer.pipe(Layer.provideMerge(TestDatabase));
 const TestLayer = ChatService.layer.pipe(
   Layer.provideMerge(
     Layer.mergeAll(
@@ -18,7 +19,8 @@ const TestLayer = ChatService.layer.pipe(
 );
 
 describe("ChatService", () => {
-  it("streams a turn, completes it, stores the session id and resumes it on the next prompt", async () => {
+  // covers CH-002, CH-004, DP-003
+  it("[TC-CH-001] streams a turn, completes it, stores the session id and resumes it on the next prompt", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;

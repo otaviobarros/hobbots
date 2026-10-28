@@ -1,9 +1,10 @@
 import { Agent, AgentId, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepository, SqliteLive } from "../src/index.ts";
+import { HobbotsRepository } from "../src/index.ts";
+import { TestDatabase } from "../src/testing.ts";
 
-const TestLayer = HobbotsRepository.layer.pipe(Layer.provide(SqliteLive(":memory:")));
+const TestLayer = HobbotsRepository.layer.pipe(Layer.provide(TestDatabase));
 const now = "2026-10-28T00:00:00.000Z";
 const agentId = AgentId.make("aldric");
 const threadId = ThreadId.make("t1");
@@ -20,7 +21,8 @@ const message = (id: string, status: Message["status"] = "complete") =>
   });
 
 describe("HobbotsRepository", () => {
-  it("round-trips agents, threads and ordered messages", async () => {
+  // covers CH-001, CH-002, DP-003
+  it("[TC-DP-003] round-trips agents, threads and ordered messages", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
