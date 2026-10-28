@@ -21,6 +21,13 @@ pnpm check         # Biome, typecheck and tests
 
 Set `HOBBOTS_RUNTIME=fake` to run the server with a deterministic fake runtime instead of Claude Code.
 
+The tests use in-memory SQLite. To run the persistence and server suites on PostgreSQL as well, start Docker and run:
+
+```sh
+pnpm test:pg       # starts PostgreSQL on 127.0.0.1:54329 if needed, then runs the suites
+pnpm pg:down       # stops it and discards its data
+```
+
 ## Repository
 
 - `apps/`: `server` (Effect TS v4 HTTP API and SSE), `web` (React client), `desktop` (Electron).

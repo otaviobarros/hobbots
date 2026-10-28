@@ -37,7 +37,7 @@ Integration, end-to-end and regression tests carry a stable case ID at the start
 - The default data folder is the user's real Hobbots data (`~/Library/Application Support/Hobbots` on macOS, `~/.hobbots` elsewhere). For development and agent work, set `HOBBOTS_DATA_DIR` to a folder under the checkout such as `.data/` (git-ignored), and prefer `HOBBOTS_RUNTIME=fake` unless the task needs the real runtime.
 - Worktrees are allowed, one branch per issue. Each worktree runs its own `pnpm install` and uses its own `HOBBOTS_DATA_DIR`. Parallel servers need distinct `HOBBOTS_PORT` values, with the web client pointed at them through `VITE_HOBBOTS_API_URL`. The web dev server uses fixed port 5173 (`strictPort` in [`apps/web/vite.config.ts`](../apps/web/vite.config.ts)), so only one web dev server runs at a time. Running several worktrees in parallel has not been verified.
 - Cleanup: stop dev servers you started and delete the worktree's `.data/` folder with the worktree.
-- `infrastructure/local` and `infrastructure/docker` are placeholders.
+- `pnpm test:pg` runs the persistence and server suites on PostgreSQL from [`infrastructure/local`](../infrastructure/local/README.md); it needs Docker and port 54329. `infrastructure/docker` is a placeholder.
 
 ## Workflow
 

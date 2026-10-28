@@ -4,7 +4,7 @@
 
 The repository holds the documentation foundation plus the first validation slice described in [ADR 009](docs/decisions/009-toolchain-and-validation-slice.md): one Claude Code agent, persistent threads and streaming chat in the browser and Electron. Begin future work from the requested scope; the documents are not standing authorization to implement or publish.
 
-Install dependencies with `pnpm add <pkg>` at the latest stable release (RC allowed, never alpha/beta/nightly) and never hand-type versions. Run `pnpm check` (Biome, typecheck, tests) before handing work back.
+Install dependencies with `pnpm add <pkg>` at the latest stable release (RC allowed, never alpha/beta/nightly) and never hand-type versions. Run `pnpm check` (Biome, typecheck, tests) before handing work back. When a change touches SQL, migrations or repositories, also run `pnpm test:pg`, which needs Docker and runs the persistence and server suites on PostgreSQL ([ADR 011](docs/decisions/011-sqlite-storage.md)).
 
 ## Required context
 
