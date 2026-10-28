@@ -7,7 +7,7 @@ Decided in [ADR 008](../decisions/008-design.md). Each row is one MVP screen. Th
 | # | Screen | Contents | States and outcomes | Requirements |
 |---|---|---|---|---|
 | 1 | Welcome (first launch) | Animated night village; Get started; "I already use Hobbots"; supported providers named. | Intro plays once; idle loop continues quietly. Get started opens Onboarding; the other link opens Home. | OP-001 |
-| 2 | Onboarding (5 steps, Elder Hob) | 1 Providers found on this Mac (Claude Code, Codex, Gemini CLI, Ollama…) or a typed key; 2 first hob (craft, name dice, seeded look, provider · model · effort); 3 safety preset (Careful, Balanced, Trusting); 4 folders; 5 summon. | At least one provider is needed to continue. Keys go to the OS keychain. Balanced is Trusted Workspace. | OP-001, AG-001, AG-005, PE-001 |
+| 2 | Onboarding (Elder Hob) | 0 "Run Hobbots on this computer" or "Connect to Hobbots on another computer" (address field, then waiting for approval with a matching code; ends on Home); then, when running here: 1 Providers found on this Mac (Claude Code, Codex, Gemini CLI, Ollama…) or a typed key; 2 first hob (craft, name dice, seeded look, provider · model · effort); 3 safety preset (Careful, Balanced, Trusting); 4 folders; 5 summon; 6 optional "Use Hobbots from your other devices too?" with Tailscale status, the hub address and a QR code, or Skip. | At least one provider is needed to continue. Keys go to the OS keychain. Balanced is Trusted Workspace. | OP-001, AG-001, AG-005, PE-001 |
 | 3 | Home (landing page) | Animated scene of hobs and their state; Needs you; Quests in progress; a usage potion per provider. | Allow resolves a request in place. With many hobs the scene shows at most six (needs you first, then the busiest); everyone else is in a grouped tile list with count chips, a filter and ⌘K. | UX-001, UX-004 |
 | 4 | Chat, threads and Quest | Rail, hob panel, chat, right panel with Quest / Inbox / Workshop tabs. | Streaming with tool steps; Stop ends only the reply; approval card inline; Quest task detail with Message, Retry, Reassign, Cancel task; Pin; Cancel Quest shows "Cancelling…" until every hob confirms. | CH-001–007, OR-001–007, UX-001, UX-006 |
 | 5 | Workbench | Header with owner, who asked, brain, where it runs; Terminal, Changes, Files, Browser; task-scoped chat drawer with quick nudges. | Live, Screenshot (age), History, Unavailable (why); computer control is Later. Nothing goes live until approved. | UX-002 |
@@ -16,9 +16,13 @@ Decided in [ADR 008](../decisions/008-design.md). Each row is one MVP screen. Th
 | 8 | Summon a hob | Describe chores or start from a kind; seeded look and colors; name dice; thinks with (connected providers, model, effort); where it works; Asks first; runs when asked. | Opens the new hob's chat with a hello. Schedules are post-MVP. | AG-001, AG-004 |
 | 9 | Hob profile and Retire | Brain (provider, model, effort); Pause / Wake; tabs Instructions, Tools, Permissions (allow, ask, never per kind of action); Retire. | Retire hands work off, lets it finish, or stops it; nothing is deleted; the hob goes to Archived hobs. | AG-002, AG-004, AG-006 |
 | 10 | Usage | One potion per connected provider plan; breakdown by hob; 7 or 30 days. | Subscriptions drain and refill, API keys show spend, local models are unlimited. Data depends on what each provider reports. | OP-002 |
-| 11 | Settings | Providers with health and fixes; Devices & access (server, where hobs work, Tailscale / Wi-Fi / HTTPS, devices, pairing); Backup & export; Diagnostics; Archived hobs; Permissions, Appearance (Reduce motion), Notifications, About. | Backups never contain keys. Deleting an archived hob asks first. | AG-005, DP-001–004, OP-002, OP-003 |
+| 11 | Settings | Providers with health and fixes; Devices (Tailscale status, remote access on or off, the hub address and QR code, optional HTTPS, port, approved devices with last activity and Revoke; on a connected desktop: the hub it uses and Disconnect); Backup & export; Diagnostics; Archived hobs; Permissions, Appearance (Reduce motion), Notifications, About. | Backups never contain keys. Deleting an archived hob asks first. | AG-005, DP-001–004, OP-002, OP-003 |
+| 12 | Device approval | On the hub: the device name, platform, Tailscale identity and matching code, with Allow / Deny. On the new device: "Waiting for approval on <hub name>" with the same code. | Asked once per new device; also shown as an Inbox item on approved clients. Deny lets the device ask again later. | DP-004 |
 
 ## Post-MVP (kept from the full-app design)
+
+- **Mobile app:** a client of the hub on the same API, approved like any device.
+- **More connection routes:** relay, local network with HTTPS, public HTTPS and a server install.
 
 - **Routines:** chores on a schedule; returns to the rail when shipped.
 - **Memory:** what each hob remembers, readable and editable; "About you" is shared.
@@ -39,7 +43,9 @@ Decided in [ADR 008](../decisions/008-design.md). Each row is one MVP screen. Th
 6. Disconnect and restart at a controlled point; the reconnecting banner shows, queued messages send, durable history and waits are intact.
 7. Retire a busy hob with each work option; its history remains inspectable.
 8. Turn on Reduce motion; every animation stops.
+9. Turn on remote access, open the hub address in a tailnet browser, Allow it on the hub, then Revoke it; the browser is refused at once.
+10. Close the hub window during a Quest; the work continues and a connected device follows it live.
 
 ## Explicitly excluded
 
-Company fleets, team spaces, employee RBAC, mandatory approval for every action, recurring schedules, long-term memory, marketplace publishing and native mobile apps stay outside the MVP.
+Company fleets, team spaces, employee RBAC, mandatory approval for every action, recurring schedules, long-term memory, marketplace publishing and native mobile apps stay outside the MVP. Hobs never act on the files or apps of a connected device.
