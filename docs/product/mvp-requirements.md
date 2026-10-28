@@ -87,11 +87,11 @@ The onboarding presets are Careful, Balanced (Trusted Workspace, the default) an
 | UX-002 | On-demand Workbench for browser, computer, terminal, files and code. | Task selection opens relevant supported activity; live, screenshot, historical and unavailable states are labeled honestly. |
 | UX-003 | Hobbots visual language. | The tokens, type, pixel corners, stepped motion and components of the design specification are used; all text passes WCAG AA, every animation stops with Reduce motion, and there are no decorative left-edge accent borders. |
 | UX-004 | Durable execution visibility. | Owners, dependencies, acknowledgement, progress, artifacts, blockers and approvals agree with server records. |
-| UX-005 | Supporting screens follow the MVP design. | Welcome, onboarding, Summon, hob profile and Retire, Inbox and approvals, Usage and Settings have the entry points, contents and states listed in the screen inventory. |
+| UX-005 | Supporting screens follow the MVP design. | Welcome, Where Hobbots runs, onboarding, new device approval, Summon, hob profile and Retire, Inbox and approvals, Usage and Settings have the entry points, contents and states listed in the screen inventory. |
 | UX-006 | Preserve navigation and inspection context. | Return to the parent conversation, retain a pinned Quest, and switch Workbench views without losing relevant panel state; thread navigation supports a keyboard path. |
 | RT-001 | Provider adapters for Claude, ChatGPT (Codex), Gemini, Grok, local models and OpenAI-compatible keys; ACP-compatible foundation. | Different providers participate in the same persisted delegation loop; each provider is offered only once its adapter is verified, and an unverified one shows an honest unavailable state. |
 | DP-001 | One hub server with browser and desktop clients. | Every client observes the same durable records; no client is a second state owner, and hobs act only on the hub. |
-| DP-002 | Run Hobbots here or connect to another computer. | Onboarding offers both; a connected desktop runs no local server and gets the full experience of the hub. |
+| DP-002 | Run Hobbots here or connect to another computer. | The first setup step offers both; a connected desktop runs no local server and gets the full experience of the hub. |
 | DP-003 | One SQLite database per installation; PostgreSQL-compatible SQL. | Persistence and recovery scenarios pass on SQLite, and the same suites pass on PostgreSQL in CI. |
 | DP-004 | Remote access over Tailscale with device approval. | Off by default; when on, only the hub and the tailnet can connect, each new device needs Allow on the hub once, and a revoked device is refused. |
 
