@@ -15,6 +15,8 @@ Tests take their database from `TestDatabase` in `@hobbots/persistence/testing`.
 | `sqlite` (default) | In-memory SQLite                                                                                |
 | `postgres`         | A new schema in the database at `HOBBOTS_TEST_DATABASE_URL`, dropped when the layer is released |
 
+The persistence and server suites use it, so both run on either database. Where the dialects differ, the query chooses explicitly: ties sort by `id` byte by byte (`COLLATE "C"` on PostgreSQL), and migration `0003_look_seed_bigint` widens the look seed on PostgreSQL only. The tie-order test detects a missing `COLLATE "C"` only on a PostgreSQL database whose default collation is not C, such as the official image's `en_US.utf8`.
+
 `pnpm test:pg` at the repository root starts the PostgreSQL in [`infrastructure/local`](../../infrastructure/local/README.md) and runs this package's and the server's suites against it. To use another PostgreSQL, set both variables yourself, for example:
 
 ```sh
