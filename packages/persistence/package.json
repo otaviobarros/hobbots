@@ -1,0 +1,21 @@
+{
+  "name": "@hobbots/persistence",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@hobbots/domain": "workspace:*",
+    "@effect/sql-sqlite-node": "^4.0.6",
+    "effect": "^4.0.6"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "vitest": "^5.0.5"
+  }
+}
