@@ -15,6 +15,7 @@ import { Home } from "./components/home.tsx";
 import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
 import { Welcome } from "./components/welcome.tsx";
+import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
 import { readStored, writeStored } from "./lib/storage.ts";
 
 const lastHobKey = "lastHob";
@@ -26,6 +27,11 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
 
 // A new installation opens on Welcome, outside the app shell, until setup is done.
 const welcomeRoute = createRoute({ getParentRoute: () => rootRoute, path: "welcome", component: Welcome });
+const setupWhereRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "setup/where",
+  component: WhereHobbotsRuns,
+});
 
 const providersRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -101,6 +107,7 @@ const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "set
 
 const routeTree = rootRoute.addChildren([
   welcomeRoute,
+  setupWhereRoute,
   providersRoute,
   shellRoute.addChildren([
     homeRoute,
