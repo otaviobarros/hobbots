@@ -78,6 +78,14 @@ jobs:
           hdiutil detach "$RUNNER_TEMP/dmg"
       - name: Launch with the fake runtime, wait for /api/health, quit
         run: apps/desktop/scripts/smoke-test.sh "$RUNNER_TEMP/Hobbots.app"
+      # The end-to-end checks run on Node's test runner, which runs TypeScript from Node 22.18.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+      - name: Close the window mid-reply, launch twice, check the login item, quit
+        env:
+          HOBBOTS_E2E_APP: ${{ runner.temp }}/Hobbots.app
+        run: node --test apps/desktop/scripts/background-service.e2e.ts
 
   release:
     name: Draft GitHub Release
