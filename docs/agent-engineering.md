@@ -84,4 +84,4 @@ Workflow selection: **Default for matching tasks** (selected by the maintainer d
 ## Known gaps
 
 - The desktop app stops a server it launched on quit ([`apps/desktop/src/main/index.ts`](../apps/desktop/src/main/index.ts)), matching the ADR 009 slice; the background-service behavior of [ADR 010](decisions/010-desktop-hub.md) is not built yet.
-- No `.env.example`, `CODEOWNERS` or documented release process.
+- No `.env.example` or `CODEOWNERS`. Releases are built from `v*` tags by [`.github/workflows/release.yml`](../.github/workflows/release.yml), described in the [desktop README](../apps/desktop/README.md).
