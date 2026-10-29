@@ -10,6 +10,8 @@
     "build": "electron-vite build",
     "start": "install-electron && electron-vite preview",
     "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "icon": "node scripts/app-icon.ts",
     "package:mac": "electron-builder --mac --config electron-builder.config.mjs --publish never"
   },
   "devDependencies": {
