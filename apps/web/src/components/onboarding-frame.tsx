@@ -51,7 +51,7 @@ export function OnboardingFrame({
           aria-live="polite"
           className="cut absolute inset-x-7 top-[118px] min-h-[150px] animate-hb-in bg-text px-5 py-[18px] text-[17px] leading-normal text-ground"
         >
-          <span className="mb-1.5 block font-pixel text-[13px] font-bold tracking-[.08em] text-[#5b4f9a] uppercase">
+          <span className="mb-1.5 block font-pixel text-sm font-bold tracking-[.08em] text-[#5b4f9a] uppercase">
             Elder Hob
           </span>
           {guide}
@@ -72,7 +72,7 @@ export function OnboardingFrame({
 
         {sofar.length > 0 && (
           <div className="absolute inset-x-7 bottom-[26px] flex flex-col gap-1.5">
-            <span className="font-pixel text-[13px] font-bold tracking-[.08em] text-label uppercase">So far</span>
+            <span className="font-pixel text-sm font-bold tracking-[.08em] text-label uppercase">So far</span>
             {sofar.map((line) => (
               <span key={line} className="animate-hb-in text-sm text-secondary-text">
                 <span className="font-bold text-mint">✓</span> {line}
@@ -94,7 +94,7 @@ export function OnboardingFrame({
                   className={`flex items-center gap-2 p-1 ${current ? "text-moonlight" : done ? "text-text" : "text-label"}`}
                 >
                   <span
-                    className={`cut grid size-7 place-items-center font-pixel text-[15px] font-bold text-ground ${done ? "bg-mint" : current ? "bg-lantern" : "bg-line-2"}`}
+                    className={`cut grid size-7 place-items-center font-pixel text-[15px] font-bold ${done ? "bg-mint text-ground" : current ? "bg-lantern text-ground" : "bg-line-2 text-text"}`}
                   >
                     {done ? "✓" : i + 1}
                   </span>
