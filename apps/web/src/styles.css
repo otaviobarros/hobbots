@@ -245,6 +245,103 @@ body {
   animation: var(--animate-hb-hop);
 }
 
+/*
+ * The chief looks around once, 3 s: a glance left with a lean, back, a glance right with a lean,
+ * back, and a blink. Frames switch on whole steps, like a sprite sheet.
+ */
+.chief-sway {
+  animation: chief-sway 3s step-end;
+}
+.chief-left {
+  animation: chief-left 3s step-end;
+}
+.chief-right {
+  animation: chief-right 3s step-end;
+}
+.chief-blink {
+  animation: chief-blink 3s step-end;
+}
+/* A hob is working: the lantern burns brighter with a slow flicker. */
+.chief-glow {
+  animation: chief-glow 3.2s steps(4) infinite;
+}
+/* Something needs you: the raised lantern pulses. */
+.chief-beacon {
+  animation: chief-beacon 1.2s step-end infinite;
+}
+@keyframes chief-sway {
+  0%,
+  100% {
+    transform: none;
+  }
+  12% {
+    transform: translateX(-2px);
+  }
+  36% {
+    transform: none;
+  }
+  48% {
+    transform: translateX(2px);
+  }
+  72% {
+    transform: none;
+  }
+}
+@keyframes chief-left {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  36% {
+    opacity: 0;
+  }
+}
+@keyframes chief-right {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  46% {
+    opacity: 1;
+  }
+  72% {
+    opacity: 0;
+  }
+}
+@keyframes chief-blink {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  84% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 0;
+  }
+}
+@keyframes chief-glow {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes chief-beacon {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 /* Every animation and transition stops with Reduce motion. */
 @media (prefers-reduced-motion: reduce) {
   *,
