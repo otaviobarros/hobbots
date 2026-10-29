@@ -12,6 +12,7 @@ import { opensWelcome, readSetup } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
+import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { readStored, writeStored } from "./lib/storage.ts";
@@ -25,6 +26,12 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
 
 // A new installation opens on Welcome, outside the app shell, until setup is done.
 const welcomeRoute = createRoute({ getParentRoute: () => rootRoute, path: "welcome", component: Welcome });
+
+const providersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "setup/providers",
+  component: OnboardingProviders,
+});
 
 // Every page after setup shares the rail.
 const shellRoute = createRoute({ getParentRoute: () => rootRoute, id: "shell", component: AppShell });
@@ -94,6 +101,7 @@ const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "set
 
 const routeTree = rootRoute.addChildren([
   welcomeRoute,
+  providersRoute,
   shellRoute.addChildren([
     homeRoute,
     hobsRoute,
