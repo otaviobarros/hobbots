@@ -66,3 +66,42 @@ export const SMALL_CHIEF = [
   "CtttttttC.n.",
   ".bb...bb..n.",
 ] as const;
+
+/** Where the chief looks in a frame of the rail's idle loop. */
+export type ChiefGaze = "ahead" | "left" | "right" | "blink";
+
+/** Each eye of the full chief, two cells tall: [column, top row]. */
+const EYES = [
+  [4, 6],
+  [11, 6],
+] as const;
+
+/**
+ * The full chief with its eyes moved one cell to a side, or closed to a line for a blink. The skin
+ * fills where the eyes were; every other cell stays as drawn.
+ */
+export const chiefFrame = (gaze: ChiefGaze): ReadonlyArray<string> => {
+  if (gaze === "ahead") return CHIEF;
+  const rows = CHIEF.map((row) => [...row]);
+  const shift = gaze === "left" ? -1 : gaze === "right" ? 1 : 0;
+  for (const [x, y] of EYES) {
+    for (const row of [y, y + 1]) {
+      const cells = rows[row];
+      if (cells) cells[x] = "s";
+    }
+    if (gaze === "blink") {
+      const lid = rows[y + 1];
+      if (lid) lid[x] = "k";
+      continue;
+    }
+    for (const row of [y, y + 1]) {
+      const cells = rows[row];
+      if (cells) cells[x + shift] = "k";
+    }
+  }
+  return rows.map((row) => row.join(""));
+};
+
+/** Only the lantern's light, in a brighter flame, to flicker over the full chief. */
+export const CHIEF_FLAME = CHIEF.map((row) => row.replace(/[^L]/g, "."));
+export const CHIEF_FLAME_PALETTE: Readonly<Record<string, string>> = { L: "#fff4d6" };

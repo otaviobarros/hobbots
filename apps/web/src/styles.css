@@ -245,6 +245,83 @@ body {
   animation: var(--animate-hb-hop);
 }
 
+/*
+ * The chief's idle loop, 9 s: he looks ahead, glances left and leans a step, back, glances right
+ * and leans, back, then blinks twice. Frames switch on whole steps, like a sprite sheet.
+ */
+.chief-sway {
+  animation: chief-sway 9s step-end infinite;
+}
+.chief-left {
+  animation: chief-left 9s step-end infinite;
+}
+.chief-right {
+  animation: chief-right 9s step-end infinite;
+}
+.chief-blink {
+  animation: chief-blink 9s step-end infinite;
+}
+@keyframes chief-sway {
+  0%,
+  100% {
+    transform: none;
+  }
+  30% {
+    transform: translateX(-2px);
+  }
+  44% {
+    transform: none;
+  }
+  54% {
+    transform: translateX(2px);
+  }
+  68% {
+    transform: none;
+  }
+}
+@keyframes chief-left {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  28% {
+    opacity: 1;
+  }
+  44% {
+    opacity: 0;
+  }
+}
+@keyframes chief-right {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  52% {
+    opacity: 1;
+  }
+  68% {
+    opacity: 0;
+  }
+}
+@keyframes chief-blink {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  84% {
+    opacity: 1;
+  }
+  86% {
+    opacity: 0;
+  }
+  89% {
+    opacity: 1;
+  }
+  91% {
+    opacity: 0;
+  }
+}
+
 /* Every animation and transition stops with Reduce motion. */
 @media (prefers-reduced-motion: reduce) {
   *,
