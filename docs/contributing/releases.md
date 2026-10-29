@@ -6,13 +6,13 @@ Hobbots versions itself from its [Conventional Commits](https://www.conventional
 
 - Hobbots uses [Semantic Versioning](https://semver.org/) with `v` tags: `v0.1.0`, `v0.2.0-beta.1`.
 - There is one version for the whole product. It lives in [`apps/desktop/package.json`](../../apps/desktop/package.json), which is the version the app shows in About. Internal packages are not versioned.
-- Hobbots stays on `0.x` until its first stable release. While on `0.x`, a `feat` commit bumps the minor version and so does a breaking change (`feat!:` or a `BREAKING CHANGE:` footer); a `fix` commit bumps the patch version.
+- Hobbots stays on `0.x` until its first stable release. While on `0.x`, a `feat` commit bumps the minor version and so does a breaking change (`feat!:` or a `BREAKING CHANGE:` footer); a `fix`, `perf` or `refactor` commit bumps the patch version.
 - [`.release-please-manifest.json`](../../.release-please-manifest.json) records the last released version and [`release-please-config.json`](../../release-please-config.json) holds the settings. Release-please updates the manifest itself; do not edit it by hand.
 
 ## How a release happens
 
 1. Pull requests merge into `main` with a squash commit whose title is a Conventional Commit, so the pull request title is what release-please reads.
-2. On every push to `main`, the [Release Please workflow](../../.github/workflows/release-please.yml) opens or updates one release pull request titled `chore: release X.Y.Z`. It bumps the version in `apps/desktop/package.json` and adds the `feat`, `fix` and breaking-change entries to [`CHANGELOG.md`](../../CHANGELOG.md). Other commit types (`docs`, `chore`, `ci`, `test`, …) do not trigger a release on their own.
+2. On every push to `main`, the [Release Please workflow](../../.github/workflows/release-please.yml) opens or updates one release pull request titled `chore: release X.Y.Z`. It bumps the version in `apps/desktop/package.json` and adds the `feat`, `fix`, `perf`, `refactor`, `revert` and breaking-change entries to [`CHANGELOG.md`](../../CHANGELOG.md). Other commit types (`docs`, `chore`, `style`, `test`, `build`, `ci`) do not trigger a release on their own; `changelog-sections` in the config decides which types count.
 3. A maintainer reviews the release pull request and merges it when the release is ready. Until then it keeps collecting changes.
 4. The merge makes release-please create the `vX.Y.Z` tag and a draft GitHub Release with the changelog entry as its notes.
 5. The tag starts the release workflow, which builds, smoke-tests and attaches the Apple silicon and Intel `.dmg` files to the release.
