@@ -6,7 +6,7 @@ Hobbots versions itself from its [Conventional Commits](https://www.conventional
 
 - Hobbots uses [Semantic Versioning](https://semver.org/) with `v` tags: `v0.1.0`, `v0.2.0-beta.1`.
 - There is one version for the whole product. It lives in [`apps/desktop/package.json`](../../apps/desktop/package.json), which is the version the app shows in About. Internal packages are not versioned.
-- Hobbots stays on `0.x` until its first stable release. While on `0.x`, a `feat` commit bumps the minor version and so does a breaking change (`feat!:` or a `BREAKING CHANGE:` footer); a `fix`, `perf` or `refactor` commit bumps the patch version.
+- Hobbots stays on `0.x` until its first stable release and keeps version steps small until then. While on `0.x`, `feat`, `fix`, `perf`, `refactor` and `revert` commits all bump the patch version (`0.1.3` → `0.1.4`), and only a breaking change (`feat!:` or a `BREAKING CHANGE:` footer) bumps the minor version (`0.1.4` → `0.2.0`). Nothing reaches `1.0.0` on its own; that release is asked for with a `Release-As: 1.0.0` footer, as for a beta below.
 - [`.release-please-manifest.json`](../../.release-please-manifest.json) records the last released version and [`release-please-config.json`](../../release-please-config.json) holds the settings. Release-please updates the manifest itself; do not edit it by hand.
 
 ## How a release happens
@@ -35,7 +35,7 @@ A beta is a pre-release version such as `v0.2.0-beta.1`. Ask for it with a `Rele
 2. Release-please updates the release pull request to `0.2.0-beta.1`. Merge it as usual.
 3. When publishing the draft release, tick **Set as a pre-release** so it is not marked as the latest release.
 
-Repeat with `0.2.0-beta.2` and so on for each further beta, and finish with `Release-As: 0.2.0` for the stable release so the version does not jump past it.
+Repeat with `0.2.0-beta.2` and so on for each further beta, and finish with `Release-As: 0.2.0` for the stable release so the version does not jump past it. The same footer cuts `1.0.0` when Hobbots is ready.
 
 ## One-time setup
 
