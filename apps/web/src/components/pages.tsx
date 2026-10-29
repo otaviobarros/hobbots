@@ -3,7 +3,7 @@ import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
 import { GeneralSettings } from "./general-settings.tsx";
-import { RuntimeCard } from "./runtime.tsx";
+import { LATER_PROVIDERS, ProviderRow, RuntimeCard } from "./runtime.tsx";
 
 function Page({
   icon,
@@ -72,15 +72,6 @@ export function UsagePage() {
   );
 }
 
-// Providers from the Hobbots design. Only Claude Code is wired in this build.
-const LATER_PROVIDERS = [
-  { name: "ChatGPT (Codex)", mark: "G", color: "#8fd3a8" },
-  { name: "Gemini", mark: "G", color: "#8fb4f0" },
-  { name: "Grok", mark: "X", color: "#c9c3e8" },
-  { name: "Local models (Ollama)", mark: "L", color: "#f3e9b5" },
-  { name: "Any OpenAI-compatible key", mark: "+", color: "#b79be8" },
-];
-
 export function SettingsPage() {
   return (
     <Page icon="Settings" title="Settings" intro="How Hobbots starts, AI providers, devices, backups and diagnostics.">
@@ -98,31 +89,5 @@ export function SettingsPage() {
         </div>
       </Panel>
     </Page>
-  );
-}
-
-function ProviderRow({
-  name,
-  mark,
-  color,
-  children,
-}: {
-  name: string;
-  mark: string;
-  color: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-3.5 border-b-2 border-line py-2.5">
-      <span
-        aria-hidden
-        className="cut grid size-[30px] place-items-center font-bold text-ground"
-        style={{ background: color }}
-      >
-        {mark}
-      </span>
-      <span className="flex-1">{name}</span>
-      {children}
-    </div>
   );
 }

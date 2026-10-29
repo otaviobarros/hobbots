@@ -1,6 +1,6 @@
 import { RuntimeHealth } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { runtimeProblem, runtimeStaleTime } from "./runtime-health.ts";
+import { canContinueSetup, runtimeProblem, runtimeStaleTime } from "./runtime-health.ts";
 
 const health = (availability: RuntimeHealth["availability"], version: string | null) =>
   new RuntimeHealth({
@@ -31,5 +31,17 @@ describe("runtimeStaleTime", () => {
     expect(runtimeStaleTime([health("outdated", "2.1.200")])).toBe(0);
     expect(runtimeStaleTime([health("signedOut", "2.1.301")])).toBe(0);
     expect(runtimeStaleTime(undefined)).toBe(0);
+  });
+});
+
+describe("canContinueSetup", () => {
+  it("continues with a ready provider", () =>
+    expect(canContinueSetup([health("unavailable", null), health("ready", "2.1.301")])).toBe(true));
+  it("waits while no provider is ready or none is known yet", () => {
+    for (const availability of ["outdated", "signedOut", "unavailable", "unverified"] as const) {
+      expect(canContinueSetup([health(availability, "2.1.301")])).toBe(false);
+    }
+    expect(canContinueSetup([])).toBe(false);
+    expect(canContinueSetup(undefined)).toBe(false);
   });
 });

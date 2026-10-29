@@ -5,23 +5,25 @@ import { useQuery } from "@tanstack/react-query";
 import { runtimesQuery } from "../api/queries.ts";
 import { claudeInstallGuide, runtimeProblem } from "../api/runtime-health.ts";
 
-const useClaudeRuntime = () => {
+export const useClaudeRuntime = () => {
   const runtimes = useQuery(runtimesQuery);
   return {
     pending: runtimes.isPending,
     checking: runtimes.isFetching,
+    failed: runtimes.isError,
+    runtimes: runtimes.data,
     claude: runtimes.data?.[0],
     checkAgain: () => void runtimes.refetch(),
   };
 };
 
-const ProviderTile = () => (
+export const ProviderTile = () => (
   <span aria-hidden className="grid size-5 place-items-center bg-[#e39a74] text-xs font-bold text-ground">
     C
   </span>
 );
 
-const availabilityLabel: Record<RuntimeHealth["availability"], string> = {
+export const availabilityLabel: Record<RuntimeHealth["availability"], string> = {
   ready: "Ready",
   outdated: "Outdated",
   signedOut: "Signed out",
@@ -68,48 +70,102 @@ export function RuntimeCard() {
           <dd className="m-0">{claude.version ?? "—"}</dd>
         </dl>
       )}
-      {problem === "outdated" && (
-        <p className="mt-2 mb-0 text-sm text-lantern">
-          This Claude Code is older than Hobbots supports. Update it with <code>claude update</code>.
-        </p>
-      )}
-      {problem === "notFound" && (
-        <p className="mt-2 mb-0 text-sm text-lantern">
-          Claude Code was not found or could not start. Install it and sign in with <code>claude</code>.
-        </p>
-      )}
-      {problem === "signedOut" && (
-        <p className="mt-2 mb-0 text-sm text-lantern">
-          Claude Code is installed but not signed in. Run <code>claude</code> in a terminal and sign in with your
-          claude.ai account.
-        </p>
-      )}
-      {problem === "notStarted" && (
-        <p className="mt-2 mb-0 text-sm text-lantern">
-          Claude Code is installed but did not start. Run <code>claude</code> in a terminal to sign in.
-        </p>
-      )}
-      {problem !== null && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {problem === "notFound" && (
-            <Button asChild variant="outline" size="sm">
-              <a href={claudeInstallGuide} target="_blank" rel="noreferrer">
-                Install guide
-              </a>
-            </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={checkAgain} disabled={checking}>
-            {checking ? "Looking on this Mac…" : "Check again"}
-          </Button>
-          <span className="text-xs text-label">No need to restart Hobbots.</span>
-        </div>
-      )}
+      {problem !== null && <RuntimeFix problem={problem} checking={checking} onCheckAgain={checkAgain} />}
       {warnBilling && (
         <p className="mt-2 mb-0 text-sm text-lantern">
           Not billing your Claude subscription. Unset ANTHROPIC_API_KEY and sign in to Claude Code with your claude.ai
           account.
         </p>
       )}
+    </div>
+  );
+}
+
+const fixMessage: Record<NonNullable<ReturnType<typeof runtimeProblem>>, React.ReactNode> = {
+  outdated: (
+    <>
+      This Claude Code is older than Hobbots supports. Update it with <code>claude update</code>.
+    </>
+  ),
+  notFound: (
+    <>
+      Claude Code was not found or could not start. Install it and sign in with <code>claude</code>.
+    </>
+  ),
+  signedOut: (
+    <>
+      Claude Code is installed but not signed in. Run <code>claude</code> in a terminal and sign in with your claude.ai
+      account.
+    </>
+  ),
+  notStarted: (
+    <>
+      Claude Code is installed but did not start. Run <code>claude</code> in a terminal to sign in.
+    </>
+  ),
+};
+
+/** How to fix a Claude Code problem, with Check again so the fix shows without a restart. */
+export function RuntimeFix({
+  problem,
+  checking,
+  onCheckAgain,
+}: {
+  problem: NonNullable<ReturnType<typeof runtimeProblem>>;
+  checking: boolean;
+  onCheckAgain: () => void;
+}) {
+  return (
+    <>
+      <p className="mt-2 mb-0 text-sm text-lantern">{fixMessage[problem]}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {problem === "notFound" && (
+          <Button asChild variant="outline" size="sm">
+            <a href={claudeInstallGuide} target="_blank" rel="noreferrer">
+              Install guide
+            </a>
+          </Button>
+        )}
+        <Button variant="outline" size="sm" onClick={onCheckAgain} disabled={checking}>
+          {checking ? "Looking on this Mac…" : "Check again"}
+        </Button>
+        <span className="text-xs text-label">No need to restart Hobbots.</span>
+      </div>
+    </>
+  );
+}
+
+// Providers from the Hobbots design. Only Claude Code is wired in this build.
+export const LATER_PROVIDERS = [
+  { name: "ChatGPT (Codex)", mark: "G", color: "#8fd3a8" },
+  { name: "Gemini", mark: "G", color: "#8fb4f0" },
+  { name: "Grok", mark: "X", color: "#c9c3e8" },
+  { name: "Local models (Ollama)", mark: "L", color: "#f3e9b5" },
+  { name: "Any OpenAI-compatible key", mark: "+", color: "#b79be8" },
+];
+
+export function ProviderRow({
+  name,
+  mark,
+  color,
+  children,
+}: {
+  name: string;
+  mark: string;
+  color: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3.5 border-b-2 border-line py-2.5">
+      <span
+        aria-hidden
+        className="cut grid size-[30px] place-items-center font-bold text-ground"
+        style={{ background: color }}
+      >
+        {mark}
+      </span>
+      <span className="flex-1">{name}</span>
+      {children}
     </div>
   );
 }
