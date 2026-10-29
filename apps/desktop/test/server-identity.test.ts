@@ -85,7 +85,8 @@ describe("checking the port", () => {
     expect(() => requireOurs(check, 4317)).toThrow("Another Hobbots is using the port");
   });
 
-  it("finds nothing on a free port, so the app starts its own server", async () => {
+  // covers DP-001
+  it("[TC-DP-023] finds nothing on a free port, so the app starts its own server", async () => {
     expect((await checkServer(await freePort(), dataDir)).kind).toBe("none");
   });
 });
