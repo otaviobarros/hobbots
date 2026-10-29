@@ -4,4 +4,5 @@ export * from "./ids.ts";
 export * from "./look.ts";
 export * from "./message.ts";
 export * from "./runtime.ts";
+export * from "./setup.ts";
 export * from "./thread.ts";

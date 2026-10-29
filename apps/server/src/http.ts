@@ -6,6 +6,7 @@ import { HttpApiBuilder } from "effect/http-api";
 import { ChatService } from "./chat.ts";
 import { EventBus } from "./event-bus.ts";
 import { Installation } from "./installation.ts";
+import { SetupHandlers } from "./setup.ts";
 
 const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
   Effect.gen(function* () {
@@ -85,5 +86,5 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
 );
 
 export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
-  Layer.provide([AgentsHandlers, ThreadsHandlers, SystemHandlers]),
+  Layer.provide([AgentsHandlers, ThreadsHandlers, SystemHandlers, SetupHandlers]),
 );

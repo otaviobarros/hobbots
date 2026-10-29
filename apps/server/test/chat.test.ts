@@ -1,3 +1,4 @@
+import { Agent, AgentId } from "@hobbots/domain";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -5,13 +6,32 @@ import { Effect, Layer, Option, Schedule } from "effect";
 import { describe, expect, it } from "vitest";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
-import { ALDRIC_ID, seedAgents } from "../src/seed.ts";
+
+const HOB_ID = AgentId.make("aldric");
+
+// New installations start without hobs, so each test summons its own.
+const summonHob = Effect.gen(function* () {
+  const repo = yield* HobbotsRepository;
+  yield* repo.insertAgent(
+    new Agent({
+      id: HOB_ID,
+      name: "Aldric",
+      role: "Guide",
+      runtime: "claude-code",
+      model: null,
+      instructions: "You are Aldric.",
+      lookSeed: 4821,
+      lookColor: "violet",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }),
+  );
+});
 
 const Persistence = HobbotsRepository.layer.pipe(Layer.provideMerge(TestDatabase));
 const testLayer = (runtime = FakeRuntimeLayer()) =>
   ChatService.layer.pipe(
     Layer.provideMerge(
-      Layer.mergeAll(Layer.effectDiscard(seedAgents).pipe(Layer.provideMerge(Persistence)), EventBus.layer, runtime),
+      Layer.mergeAll(Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)), EventBus.layer, runtime),
     ),
   );
 const TestLayer = testLayer();
@@ -23,7 +43,7 @@ describe("ChatService", () => {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
 
-      const thread = yield* chat.createThread(ALDRIC_ID);
+      const thread = yield* chat.createThread(HOB_ID);
       // Waits until no assistant message in the thread is still streaming.
       const settled = repo.listMessages(thread.id).pipe(
         Effect.flatMap((messages) =>
@@ -63,7 +83,7 @@ describe("ChatService", () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
-      const thread = yield* chat.createThread(ALDRIC_ID);
+      const thread = yield* chat.createThread(HOB_ID);
 
       yield* chat.sendPrompt(thread.id, "hello");
       const during = yield* chat.activeThreads;
