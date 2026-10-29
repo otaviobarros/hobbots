@@ -2,6 +2,7 @@ import { Badge } from "@hobbots/ui/components/badge";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
+import { GeneralSettings } from "./general-settings.tsx";
 import { RuntimeCard } from "./runtime.tsx";
 
 function Page({
@@ -82,7 +83,10 @@ const LATER_PROVIDERS = [
 
 export function SettingsPage() {
   return (
-    <Page icon="Settings" title="Settings" intro="AI providers, devices, backups and diagnostics.">
+    <Page icon="Settings" title="Settings" intro="How Hobbots starts, AI providers, devices, backups and diagnostics.">
+      <Panel label="General">
+        <GeneralSettings />
+      </Panel>
       <Panel label="AI providers">
         <RuntimeCard />
         <div className="flex flex-col">

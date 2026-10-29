@@ -3,10 +3,25 @@ import { Cause, Effect, Exit } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 
+/** What macOS reports for the desktop app's login item; `unavailable` outside the installed Mac app. */
+export type LoginItemStatus = "enabled" | "requires-approval" | "not-registered" | "not-found" | "unavailable";
+
+export interface LoginItemState {
+  readonly openAtLogin: boolean;
+  readonly status: LoginItemStatus;
+}
+
 declare global {
   interface Window {
     /** Set by the Electron preload script. */
-    readonly hobbots?: { readonly apiUrl: string };
+    readonly hobbots?: {
+      readonly apiUrl: string;
+      readonly loginItem?: {
+        readonly get: () => Promise<LoginItemState>;
+        readonly set: (openAtLogin: boolean) => Promise<LoginItemState>;
+        readonly openSystemSettings: () => Promise<LoginItemState>;
+      };
+    };
   }
 }
 

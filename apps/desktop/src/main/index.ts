@@ -1,6 +1,8 @@
 import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
-import { app, BrowserWindow, shell, type UtilityProcess, utilityProcess } from "electron";
+import { app, BrowserWindow, ipcMain, shell, type UtilityProcess, utilityProcess } from "electron";
+import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
+import { fileSettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
 
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
@@ -23,6 +25,9 @@ const devWebUrl = process.env.HOBBOTS_WEB_URL ?? "http://localhost:5173";
 const webDir = app.isPackaged ? join(process.resourcesPath, "web") : resolve(import.meta.dirname, "../../../web/dist");
 
 let server: UtilityProcess | null = null;
+
+/** The pages the window may show, and the only ones the preload bridge answers. */
+const isAllowedUrl = (url: string) => url.startsWith(`${devWebUrl}/`) || url.startsWith(`${apiUrl}/`);
 
 const isUp = async (url: string) => {
   try {
@@ -93,7 +98,7 @@ const createWindow = async () => {
     return { action: "deny" };
   });
   window.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(`${devWebUrl}/`) && !url.startsWith(`${apiUrl}/`)) event.preventDefault();
+    if (!isAllowedUrl(url)) event.preventDefault();
   });
 
   if (!app.isPackaged && (await isUp(devWebUrl))) {
@@ -104,9 +109,25 @@ const createWindow = async () => {
 };
 
 app.whenReady().then(async () => {
+  // Only the installed app registers, so a checkout never adds Electron itself as a login item.
+  const loginItem = makeLoginItem({
+    supported: app.isPackaged && process.platform === "darwin",
+    items: {
+      read: () => app.getLoginItemSettings(),
+      write: (openAtLogin) => app.setLoginItemSettings({ openAtLogin }),
+    },
+    settings: fileSettingsStore(join(app.getPath("userData"), "desktop-settings.json")),
+  });
+  handleLoginItemIpc({
+    ipcMain,
+    loginItem,
+    isTrusted: (event) => isAllowedUrl(event.senderFrame?.url ?? ""),
+    openSystemSettings: () => shell.openExternal(loginItemsSettingsUrl),
+  });
   try {
     await ensureServer();
-    await createWindow();
+    // Opened at login, Hobbots starts in the background; the Dock or Finder opens the window.
+    if (!loginItem.openedAtLogin) await createWindow();
   } catch (error) {
     console.error(error);
     app.quit();

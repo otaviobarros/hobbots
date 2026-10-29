@@ -66,7 +66,7 @@ The validation slice ([ADR 009](../decisions/009-toolchain-and-validation-slice.
 
 - **Home** is the landing page: the night scene with every hob and its live state, count chips, Needs you (empty until approvals exist), Happening now, Recent threads, a Claude potion under AI plans, and Quests in progress (empty).
 - **Chat workspace:** title strip, rail (Home, Hobs, Inbox, Usage, Settings), hob panel with search over hobs and thread titles, "+ New thread" opening a fresh page with idea chips (the thread is saved on the first message), ⌥↑ / ⌥↓ to switch threads, chat with streaming, thinking, Stop, stopped and failed states, a reconnecting banner, and the right panel with Quest, Inbox and Workshop tabs. Quest and Inbox show empty states; the Workshop scene follows the hob's live state.
-- **Inbox and Usage** are empty pages that explain what arrives with the MVP. **Settings** shows AI providers: Claude Code health, and the other providers tagged Later.
+- **Inbox and Usage** are empty pages that explain what arrives with the MVP. **Settings** shows General, with "Open Hobbots at login" and what macOS reports for it in the desktop app (waiting for approval in System Settings, or refused), and AI providers: Claude Code health, and the other providers tagged Later.
 - Summon, Edit hob and Rooms are disabled or tagged Later. Hobs are seeded avatars stored with each hob (migration `0002_hob_look`).
 
 ## Design verification
