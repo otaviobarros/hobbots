@@ -57,6 +57,7 @@ The component sheet defines: buttons (primary, approve, secondary, deny, quiet, 
 - Workbench labels are honest: Live, Screenshot (with age), History, Unavailable (and why). Computer control is shown as Later.
 - Approvals show the exact action, target, who asked (for example You → Pip → Tinker), why now, risk and expiry. Lifetimes: once, this Quest, always for this site; high-risk actions offer once only and need a check box. Deny takes an optional reason. Expired requests cannot be approved late.
 - Retire asks what happens to a hob's work (hand it off, let it finish, stop it now). Nothing is deleted; the hob moves to Settings › Archived hobs.
+- Closing the window keeps Hobbots in the menu bar by default; Settings › General lets the user change that and turn off Open at login. With it off, closing the last window while hobs work first says that their work will stop.
 - Providers appear only when connected; keys typed by hand go to the OS keychain and never into chat.
 
 ## Implementation status
