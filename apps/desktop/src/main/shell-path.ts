@@ -36,6 +36,14 @@ export const loginShellPath = (timeoutMs = 5_000): Promise<string | undefined> =
       }, timeoutMs);
       child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
         output += chunk;
+        const path = parseShellPath(output);
+        if (path === undefined) return;
+        // Done once the PATH is printed: a background job the startup files left running may keep
+        // the output open long after the shell exits.
+        clearTimeout(timer);
+        child.stdout.destroy();
+        child.unref();
+        done(path);
       });
       child.on("error", () => done(undefined));
       child.on("close", () => {

@@ -21,7 +21,8 @@ describe("the login shell's PATH", () => {
     expect(mergePaths(undefined, "/usr/bin")).toBe("/usr/bin");
   });
 
-  it("gives up on a shell that hangs at startup, as an interactive shell ignoring SIGTERM would", async () => {
+  // covers RT-001: an honest Claude Code state when the app is opened from Finder
+  it("[TC-GEN-001] gives up on a shell that hangs at startup, as an interactive shell ignoring SIGTERM would", async () => {
     const shell = join(temp, "hanging-shell");
     writeFileSync(shell, "#!/bin/sh\ntrap '' TERM\nsleep 30\n", { mode: 0o755 });
     const previous = process.env.SHELL;
@@ -35,7 +36,23 @@ describe("the login shell's PATH", () => {
     }
   });
 
-  it("reads the PATH from a real shell", async () => {
+  // covers RT-001
+  it("[TC-GEN-002] keeps the PATH when a background job started by the shell holds its output open", async () => {
+    const shell = join(temp, "backgrounding-shell");
+    writeFileSync(shell, "#!/bin/sh\nsleep 30 &\nprintf '__HOBBOTS_PATH__/found__HOBBOTS_PATH__'\n", { mode: 0o755 });
+    const previous = process.env.SHELL;
+    process.env.SHELL = shell;
+    try {
+      const started = Date.now();
+      expect(await loginShellPath(3_000)).toBe("/found");
+      expect(Date.now() - started).toBeLessThan(3_000);
+    } finally {
+      process.env.SHELL = previous;
+    }
+  });
+
+  // covers RT-001
+  it("[TC-GEN-003] reads the PATH from a real shell", async () => {
     const previous = process.env.SHELL;
     process.env.SHELL = "/bin/sh";
     try {
