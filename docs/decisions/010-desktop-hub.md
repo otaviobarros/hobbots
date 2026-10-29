@@ -1,6 +1,6 @@
 # ADR 010 — The desktop hub
 
-Status: **Accepted.** Refines [ADR 006](006-server-and-clients.md) for the MVP.
+Status: **Accepted.** Refines [ADR 006](006-server-and-clients.md) for the MVP. [ADR 012](012-macos-hub-service.md) refines how the background service runs on macOS.
 
 ## Decision
 
