@@ -17,7 +17,7 @@ pnpm install
 pnpm dev:desktop   # Electron app with the local server
 pnpm dev           # server and web client, open http://localhost:5173
 pnpm check         # Biome, typecheck and tests
-pnpm package:mac   # unsigned Hobbots.app for this Mac in apps/desktop/release
+pnpm package:mac   # unsigned .dmg installers for Apple silicon and Intel in apps/desktop/release
 ```
 
 Set `HOBBOTS_RUNTIME=fake` to run the server with a deterministic fake runtime instead of Claude Code.
