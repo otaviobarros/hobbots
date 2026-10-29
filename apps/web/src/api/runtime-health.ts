@@ -3,11 +3,15 @@ import type { RuntimeHealth } from "@hobbots/domain";
 export const claudeInstallGuide = "https://code.claude.com/docs/en/setup";
 
 /** What the user has to fix before the provider can run, or null when nothing is wrong. */
-export const runtimeProblem = (health: RuntimeHealth | undefined): "notFound" | "notStarted" | "outdated" | null => {
+export const runtimeProblem = (
+  health: RuntimeHealth | undefined,
+): "notFound" | "notStarted" | "outdated" | "signedOut" | null => {
   if (health === undefined) return null;
   switch (health.availability) {
     case "outdated":
       return "outdated";
+    case "signedOut":
+      return "signedOut";
     case "unavailable":
       return health.version === null ? "notFound" : "notStarted";
     default:

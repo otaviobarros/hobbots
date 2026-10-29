@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
 import { app, BrowserWindow, shell, type UtilityProcess, utilityProcess } from "electron";
+import { loginShellPath, mergePaths } from "./shell-path.ts";
 
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
 app.setName("Hobbots");
@@ -44,11 +45,14 @@ const waitUntilUp = async (url: string, timeoutMs: number) => {
 /** Connects to a running server, or launches one owned by this app. */
 const ensureServer = async () => {
   if (await isUp(`${apiUrl}/api/health`)) return;
+  // A packaged app is opened from Finder or the Dock, without the shell's PATH.
+  const path = app.isPackaged ? mergePaths(await loginShellPath(), process.env.PATH) : process.env.PATH;
   server = utilityProcess.fork(serverPath, [], {
     serviceName: "Hobbots Server",
     stdio: "inherit",
     env: {
       ...process.env,
+      PATH: path,
       HOBBOTS_PORT: String(port),
       HOBBOTS_DATA_DIR: app.getPath("userData"),
     },

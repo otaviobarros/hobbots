@@ -204,7 +204,9 @@ function AiPlans() {
       ? planLabel(claude?.billing ?? null)
       : claude?.availability === "outdated"
         ? "Update needed"
-        : "Not connected";
+        : claude?.availability === "signedOut"
+          ? "Sign-in needed"
+          : "Not connected";
 
   return (
     <Card label="AI plans">

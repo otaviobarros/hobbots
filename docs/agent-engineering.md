@@ -23,7 +23,7 @@ Commands live in executable configuration; read them there rather than from this
 
 - Script catalog: root [`package.json`](../package.json) `scripts` (`check` is the required pre-PR gate per AGENTS.md and CONTRIBUTING.md); per-package scripts in each `package.json`; task graph in [`turbo.json`](../turbo.json).
 - Lint/format rules: [`biome.json`](../biome.json) (`docs/` is excluded). Type strictness: [`tsconfig.base.json`](../tsconfig.base.json).
-- Tests: Vitest, under `test/` or beside the source as `*.test.ts`. `packages/api`, `packages/ui` and `apps/desktop` have no tests.
+- Tests: Vitest, under `test/` or beside the source as `*.test.ts`. `packages/api` and `packages/ui` have no tests; `apps/desktop` tests its main-process helpers and build scripts.
 - Deterministic runtime: `HOBBOTS_RUNTIME=fake` selects the fake adapter in [`packages/runtimes/src/fake.ts`](../packages/runtimes/src/fake.ts) (see [`apps/server/src/config.ts`](../apps/server/src/config.ts)).
 - CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `pnpm check` (SQLite) and, in a second job, the persistence and server suites with `HOBBOTS_TEST_DB=postgres` against a PostgreSQL service container.
 - Test database: suites that need a database use `TestDatabase` from `@hobbots/persistence/testing` so both CI jobs exercise them; see [`packages/persistence/README.md`](../packages/persistence/README.md#test-database). `turbo.json` declares `HOBBOTS_TEST_DB` and `HOBBOTS_TEST_DATABASE_URL`, because Turborepo's strict env mode drops undeclared variables.

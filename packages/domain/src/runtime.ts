@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { RuntimeKind } from "./agent.ts";
 
-export const RuntimeAvailability = Schema.Literals(["ready", "outdated", "unavailable", "unverified"]);
+export const RuntimeAvailability = Schema.Literals(["ready", "outdated", "signedOut", "unavailable", "unverified"]);
 
 export class RuntimeHealth extends Schema.Class<RuntimeHealth>("RuntimeHealth")({
   runtime: RuntimeKind,
