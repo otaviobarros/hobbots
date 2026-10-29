@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { keepRunningChannels } from "../main/keep-running.ts";
 import { loginItemChannels } from "../main/login-item.ts";
 
 const apiUrl = process.argv.find((arg) => arg.startsWith("--hobbots-api="))?.split("=")[1];
@@ -9,5 +10,9 @@ contextBridge.exposeInMainWorld("hobbots", {
     get: () => ipcRenderer.invoke(loginItemChannels.get),
     set: (openAtLogin: boolean) => ipcRenderer.invoke(loginItemChannels.set, openAtLogin),
     openSystemSettings: () => ipcRenderer.invoke(loginItemChannels.openSystemSettings),
+  },
+  keepRunning: {
+    get: () => ipcRenderer.invoke(keepRunningChannels.get),
+    set: (on: boolean) => ipcRenderer.invoke(keepRunningChannels.set, on),
   },
 });
