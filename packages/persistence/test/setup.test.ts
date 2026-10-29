@@ -62,4 +62,24 @@ describe("SetupRepository", () => {
     expect({ ...result.second }).toEqual({ completed: true, safetyPreset: "careful", approvedFolders: ["/b", "/a"] });
     expect({ ...result.stored }).toEqual({ ...result.second });
   });
+
+  // covers OP-001, DP-003
+  it("[TC-OP-007] keeps every field when changes to different fields arrive at once", async () => {
+    const stored = await Effect.gen(function* () {
+      const setup = yield* SetupRepository;
+      yield* Effect.all(
+        [
+          setup.update({ safetyPreset: "careful" }),
+          setup.update({ completed: true }),
+          setup.update({ approvedFolders: ["/a"] }),
+          setup.update({ safetyPreset: "careful" }),
+          setup.update({ approvedFolders: ["/a"] }),
+        ],
+        { concurrency: "unbounded" },
+      );
+      return yield* setup.get;
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect({ ...stored }).toEqual({ completed: true, safetyPreset: "careful", approvedFolders: ["/a"] });
+  });
 });

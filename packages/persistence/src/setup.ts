@@ -2,9 +2,9 @@ import { InstallationSetup, type SafetyPreset } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
-/** A partial change to the setup; missing fields keep their stored value. */
+/** A partial change to the setup; missing fields keep their stored value. Setup cannot be reopened. */
 export interface SetupChange {
-  readonly completed?: boolean;
+  readonly completed?: true;
   readonly safetyPreset?: SafetyPreset;
   readonly approvedFolders?: ReadonlyArray<string>;
 }
@@ -48,16 +48,18 @@ export class SetupRepository extends Context.Service<
       });
       const get = find().pipe(Effect.orDie);
 
+      // Writes only the columns the change names, so concurrent changes to other fields survive,
+      // and reads the row back in the same transaction.
       const update = (change: SetupChange) =>
         Effect.gen(function* () {
-          const current = yield* find();
-          const next = new InstallationSetup({ ...current, ...change });
-          yield* sql`UPDATE installation_setup SET ${sql.update({
-            completed: next.completed ? 1 : 0,
-            safety_preset: next.safetyPreset,
-            approved_folders: JSON.stringify(next.approvedFolders),
-          })} WHERE id = 1`;
-          return next;
+          const columns: Record<string, string | number> = {};
+          if (change.completed) columns.completed = 1;
+          if (change.safetyPreset !== undefined) columns.safety_preset = change.safetyPreset;
+          if (change.approvedFolders !== undefined) columns.approved_folders = JSON.stringify(change.approvedFolders);
+          if (Object.keys(columns).length > 0) {
+            yield* sql`UPDATE installation_setup SET ${sql.update(columns)} WHERE id = 1`;
+          }
+          return yield* find();
         }).pipe(sql.withTransaction, Effect.orDie);
 
       return SetupRepository.of({ get, update });
