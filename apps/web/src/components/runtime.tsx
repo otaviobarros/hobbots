@@ -21,6 +21,14 @@ const ProviderTile = () => (
   </span>
 );
 
+const availabilityLabel: Record<RuntimeHealth["availability"], string> = {
+  ready: "Ready",
+  outdated: "Outdated",
+  signedOut: "Signed out",
+  unavailable: "Unavailable",
+  unverified: "Unverified",
+};
+
 /** The brain chip in the chat header: which provider runs this hob, and whether it is ready. */
 export function RuntimeChip() {
   const { pending, claude } = useClaudeRuntime();
@@ -30,18 +38,11 @@ export function RuntimeChip() {
       <ProviderTile />
       <span className="font-bold">Claude Code</span>
       <span className={ready ? "text-mint" : "text-lantern"}>
-        {pending ? "checking" : ready ? "ready" : (claude?.availability ?? "unknown")}
+        {pending ? "checking" : claude ? availabilityLabel[claude.availability].toLowerCase() : "unknown"}
       </span>
     </span>
   );
 }
-
-const availabilityLabel: Record<RuntimeHealth["availability"], string> = {
-  ready: "Ready",
-  outdated: "Outdated",
-  unavailable: "Unavailable",
-  unverified: "Unverified",
-};
 
 /** Provider health for the Workshop tab. Detail is never shown: it can carry account names. */
 export function RuntimeCard() {
@@ -75,6 +76,12 @@ export function RuntimeCard() {
       {problem === "notFound" && (
         <p className="mt-2 mb-0 text-sm text-lantern">
           Claude Code was not found or could not start. Install it and sign in with <code>claude</code>.
+        </p>
+      )}
+      {problem === "signedOut" && (
+        <p className="mt-2 mb-0 text-sm text-lantern">
+          Claude Code is installed but not signed in. Run <code>claude</code> in a terminal and sign in with your
+          claude.ai account.
         </p>
       )}
       {problem === "notStarted" && (

@@ -3,7 +3,7 @@ import { accessSync, constants, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import { type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { type AccountInfo, type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { RuntimeHealth } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Stream } from "effect";
 import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent } from "./adapter.ts";
@@ -93,6 +93,17 @@ export const billingFrom = (apiKeySource: string | undefined, subscriptionType?:
   if (subscriptionType === "Claude API") return "api (Claude API)";
   return `subscription (${subscriptionType})`;
 };
+
+/**
+ * Whether Claude Code has no Anthropic credentials: no claude.ai login and no API key. Other providers
+ * (Bedrock, Vertex, a gateway) authenticate outside Claude Code, so they never count as signed out.
+ */
+export const isSignedOut = (account: AccountInfo): boolean =>
+  (account.apiProvider ?? "firstParty") === "firstParty" &&
+  (account.apiKeySource ?? "none") === "none" &&
+  account.email === undefined &&
+  account.subscriptionType === undefined &&
+  (account.tokenSource ?? "none") === "none";
 
 // Chat-only until the permission broker exists: no built-in tools, nothing auto-approved,
 // no user/project settings or MCP servers loaded from disk.
@@ -192,6 +203,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
     });
 
     const notStarted = `Claude Code could not be started. ${installGuidance}`;
+    const signedOut =
+      "Claude Code is not signed in. Run `claude` in a terminal and sign in with your claude.ai account.";
     const outdated = `Hobbots needs Claude Code ${minimumClaudeCodeVersion} or later. Run \`claude update\`.`;
 
     const executable = Effect.gen(function* () {
@@ -259,6 +272,9 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const session = query({ prompt: idle, options: baseOptions(config, binary) });
           try {
             const account = await session.accountInfo();
+            if (isSignedOut(account)) {
+              return runtimeHealth({ availability: "signedOut", version, detail: signedOut, checkedAt });
+            }
             return new RuntimeHealth({
               runtime: "claude-code",
               availability: "ready",

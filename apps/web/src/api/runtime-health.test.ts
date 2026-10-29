@@ -15,6 +15,8 @@ const health = (availability: RuntimeHealth["availability"], version: string | n
 describe("runtimeProblem", () => {
   it("is not found without a version", () => expect(runtimeProblem(health("unavailable", null))).toBe("notFound"));
   it("did not start with a version", () => expect(runtimeProblem(health("unavailable", "2.1.301"))).toBe("notStarted"));
+  it("asks for a sign-in when Claude Code is signed out", () =>
+    expect(runtimeProblem(health("signedOut", "2.1.301"))).toBe("signedOut"));
   it("reports an old version", () => expect(runtimeProblem(health("outdated", "2.1.200"))).toBe("outdated"));
   it("has nothing to fix when ready or unknown", () => {
     expect(runtimeProblem(health("ready", "2.1.301"))).toBeNull();
@@ -27,6 +29,7 @@ describe("runtimeStaleTime", () => {
   it("checks a provider that needs fixing every time", () => {
     expect(runtimeStaleTime([health("unavailable", null)])).toBe(0);
     expect(runtimeStaleTime([health("outdated", "2.1.200")])).toBe(0);
+    expect(runtimeStaleTime([health("signedOut", "2.1.301")])).toBe(0);
     expect(runtimeStaleTime(undefined)).toBe(0);
   });
 });
