@@ -8,7 +8,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { agentsQuery, threadsQuery } from "./api/queries.ts";
-import { opensWelcome, readSetup } from "./api/setup.ts";
+import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
@@ -25,17 +25,30 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: AppWindow,
 });
 
-// A new installation opens on Welcome, outside the app shell, until setup is done.
-const welcomeRoute = createRoute({ getParentRoute: () => rootRoute, path: "welcome", component: Welcome });
+// A new installation opens on Welcome, outside the app shell, until setup is done:
+// Welcome → Where Hobbots runs → providers → Home. Once setup is done, each of them opens Home.
+const leaveSetupWhenDone = async ({ context }: { context: { queryClient: QueryClient } }) => {
+  if (setupDone(await readSetup(context.queryClient))) throw redirect({ to: "/" });
+};
+
+const welcomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "welcome",
+  beforeLoad: leaveSetupWhenDone,
+  component: Welcome,
+});
+
 const setupWhereRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "setup/where",
+  beforeLoad: leaveSetupWhenDone,
   component: WhereHobbotsRuns,
 });
 
 const providersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "setup/providers",
+  beforeLoad: leaveSetupWhenDone,
   component: OnboardingProviders,
 });
 

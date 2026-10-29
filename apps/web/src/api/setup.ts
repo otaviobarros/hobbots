@@ -14,6 +14,9 @@ export const setupQuery = queryOptions({
  * Whether opening the app shows Welcome rather than Home. When the setup cannot be read, for
  * example while the server restarts, Home opens and shows that it is reconnecting.
  */
+/** Whether setup is done, so Welcome and the setup steps hand over to Home. Unknown counts as not done. */
+export const setupDone = (setup: InstallationSetup | undefined): boolean => setup?.completed === true;
+
 export const opensWelcome = (setup: InstallationSetup | undefined): boolean => setup !== undefined && !setup.completed;
 
 /**

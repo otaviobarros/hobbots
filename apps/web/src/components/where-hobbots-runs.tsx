@@ -1,4 +1,5 @@
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Stars } from "./scene.tsx";
 
@@ -120,9 +121,8 @@ export function WhereHobbotsRuns() {
             Hobs always work on the hub. Opening it from your other devices is coming soon.
           </p>
           <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-2">
-            {/* Hash history: the link works under Electron's file:// as well as in the browser. */}
-            <a
-              href="#/setup/providers"
+            <Link
+              to="/setup/providers"
               className={`${choiceClass} border-line-2 transition-transform duration-100 ease-[steps(2)] hover:-translate-y-[3px] hover:border-moonlight focus-visible:outline-3 focus-visible:outline-moonlight focus-visible:-outline-offset-3`}
             >
               <ChoiceIcon rows={HOUSE} palette={HOUSE_PALETTE} />
@@ -134,7 +134,7 @@ export function WhereHobbotsRuns() {
               <span className="self-start bg-moonlight px-2 py-0.5 text-[13px] font-bold text-ground">
                 Most people start here
               </span>
-            </a>
+            </Link>
             <button
               type="button"
               disabled
