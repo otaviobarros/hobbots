@@ -1,6 +1,6 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, relative, resolve } from "node:path";
 import { Effect, Exit, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -62,6 +62,12 @@ describe("finding the host's Claude Code", () => {
     expect(findClaudeCode(" ", { PATH: `.${delimiter}${join(home, "missing")}` }, home, [])).toBeUndefined();
   });
 
+  it("resolves a relative override against the server's folder and keeps a bare name as a PATH lookup", () => {
+    const home = newHome();
+    expect(findClaudeCode("./tools/claude", { PATH: "" }, home, [])).toBe(resolve("tools", "claude"));
+    expect(findClaudeCode("claude", { PATH: "" }, home, [])).toBe("claude");
+  });
+
   it("gives Claude Code a PATH with its own folder and the installers' folders", () => {
     expect(runtimePath("/opt/homebrew/bin/claude", { PATH: "/usr/bin" }, "/Users/me").split(delimiter)).toEqual([
       "/opt/homebrew/bin",
@@ -116,6 +122,22 @@ describe("Claude Code health before the runtime starts", () => {
     const health = await Effect.runPromise(adapter.health);
     expect(health.version).toBe("2.1.999");
     expect(health.availability).not.toBe("outdated");
+  }, 40_000);
+
+  it("starts a relative override from the server's folder, not the runtime's workspace", async () => {
+    const home = newHome();
+    const started = join(home, "started");
+    // Prints a current version; any other call is the SDK starting it, which leaves a marker and exits.
+    const binary = executableAt(
+      join(home, "claude"),
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2.1.999 (Claude Code)"; else touch "${started}"; fi\n`,
+    );
+    const adapter = await Effect.runPromise(
+      makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable: relative(process.cwd(), binary) }),
+    );
+    const health = await Effect.runPromise(adapter.health);
+    expect(health.version).toBe("2.1.999");
+    expect(existsSync(started)).toBe(true);
   }, 40_000);
 
   it("reports a configured binary that does not exist as unavailable, not as an error", async () => {

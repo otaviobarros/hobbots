@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { accessSync, constants, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, dirname, isAbsolute, join } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { RuntimeHealth } from "@hobbots/domain";
@@ -56,7 +56,10 @@ const isExecutable = (path: string) => {
   }
 };
 
-/** The configured binary, or the first executable candidate on this machine. */
+/**
+ * The configured binary, or the first executable candidate on this machine. A relative path is
+ * resolved here, because Claude Code is started from the workspace folder; a bare name stays a PATH lookup.
+ */
 export const findClaudeCode = (
   executable: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
@@ -64,7 +67,8 @@ export const findClaudeCode = (
   system = systemDirs,
 ): string | undefined => {
   const configured = executable?.trim();
-  return configured ? configured : claudeCandidates(env, home, system).find(isExecutable);
+  if (configured) return configured.includes(sep) ? resolve(configured) : configured;
+  return claudeCandidates(env, home, system).find(isExecutable);
 };
 
 /** The `major.minor.patch` that `claude --version` starts with. */
