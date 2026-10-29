@@ -16,9 +16,10 @@ export const seedAgents = Effect.gen(function* () {
     new Agent({
       id: ALDRIC_ID,
       name: "Aldric",
-      role: "Guide",
+      craft: "Guide",
       runtime: "claude-code",
       model: null,
+      effort: null,
       instructions: ALDRIC_INSTRUCTIONS,
       lookSeed: 4821,
       lookColor: "violet",

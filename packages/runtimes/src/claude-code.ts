@@ -3,8 +3,8 @@ import { accessSync, constants, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import { type AccountInfo, type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { RuntimeHealth } from "@hobbots/domain";
+import { type AccountInfo, type ModelInfo, type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Stream } from "effect";
 import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent } from "./adapter.ts";
 
@@ -120,6 +120,47 @@ const baseOptions = (config: ClaudeCodeConfig, executable: string): Options => (
   disallowedTools: ["*"],
   permissionMode: "dontAsk",
   settingSources: [],
+});
+
+/** The hob's brain for one turn; a null model or effort leaves Claude Code's own default. */
+export const brainOptions = (request: Pick<PromptRequest, "model" | "effort">): Pick<Options, "model" | "effort"> => ({
+  ...(request.model ? { model: request.model } : {}),
+  ...(request.effort ? { effort: request.effort } : {}),
+});
+
+/** Claude Code's model list in Hobbots' shape. A model without effort support takes no effort level. */
+export const toRuntimeModels = (infos: ReadonlyArray<ModelInfo>): RuntimeModels =>
+  new RuntimeModels({
+    runtime: "claude-code",
+    source: "runtime",
+    models: infos.map(
+      (info) =>
+        new RuntimeModel({
+          id: info.value,
+          displayName: info.displayName,
+          description: info.description,
+          efforts: info.supportsEffort ? (info.supportedEffortLevels ?? []) : [],
+        }),
+    ),
+  });
+
+const allEfforts = ["low", "medium", "high", "xhigh", "max"] as const;
+
+/**
+ * The model aliases Claude Code documents (https://code.claude.com/docs/en/model-config), offered
+ * while the installed Claude Code cannot list its own models, such as before it is installed.
+ * Claude Code lowers an effort a model does not support, so every level is offered.
+ */
+export const fallbackModels = new RuntimeModels({
+  runtime: "claude-code",
+  source: "fallback",
+  models: [
+    { id: "default", displayName: "Default", description: "Claude Code's recommended model for your account" },
+    { id: "opus", displayName: "Opus", description: "Best for everyday, complex tasks" },
+    { id: "fable", displayName: "Fable", description: "Most capable for your hardest and longest-running tasks" },
+    { id: "sonnet", displayName: "Sonnet", description: "Efficient for routine tasks" },
+    { id: "haiku", displayName: "Haiku", description: "Fastest for quick answers" },
+  ].map((model) => new RuntimeModel({ ...model, efforts: allEfforts })),
 });
 
 const toEvents = (message: SDKMessage): ReadonlyArray<RuntimeEvent> => {
@@ -240,7 +281,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                     append: request.instructions,
                   },
                   ...(request.sessionId ? { resume: request.sessionId } : {}),
-                  ...(request.model ? { model: request.model } : {}),
+                  ...brainOptions(request),
                 },
               }),
             ),
@@ -260,17 +301,25 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
     const runtimeHealth = (fields: Pick<RuntimeHealth, "availability" | "version" | "detail" | "checkedAt">) =>
       new RuntimeHealth({ runtime: "claude-code", billing: null, ...fields });
 
-    // Starts Claude Code without sending a prompt, so the check costs no usage.
+    // Starts Claude Code without sending a prompt, so asking it something costs no usage.
+    const withIdleSession = async <A>(binary: string, ask: (session: ReturnType<typeof query>) => Promise<A>) => {
+      const idle: AsyncIterable<never> = {
+        [Symbol.asyncIterator]: () => ({
+          next: () => new Promise(() => {}),
+        }),
+      };
+      const session = query({ prompt: idle, options: baseOptions(config, binary) });
+      try {
+        return await ask(session);
+      } finally {
+        session.close();
+      }
+    };
+
     const probe = (binary: string, version: string, checkedAt: string) =>
       Effect.tryPromise({
-        try: async () => {
-          const idle: AsyncIterable<never> = {
-            [Symbol.asyncIterator]: () => ({
-              next: () => new Promise(() => {}),
-            }),
-          };
-          const session = query({ prompt: idle, options: baseOptions(config, binary) });
-          try {
+        try: () =>
+          withIdleSession(binary, async (session) => {
             const account = await session.accountInfo();
             if (isSignedOut(account)) {
               return runtimeHealth({ availability: "signedOut", version, detail: signedOut, checkedAt });
@@ -283,10 +332,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               detail: account.email ?? null,
               checkedAt,
             });
-          } finally {
-            session.close();
-          }
-        },
+          }),
         catch: errorMessage,
       }).pipe(
         Effect.timeout("30 seconds"),
@@ -323,7 +369,25 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       }
     });
 
-    return RuntimeAdapter.of({ health, sendPrompt });
+    // The list only changes with Claude Code itself, so it is kept per binary and version.
+    const modelLists = new Map<string, RuntimeModels>();
+    const models = Effect.gen(function* () {
+      const located = yield* locate;
+      if (located._tag !== "Found") return fallbackModels;
+      const key = `${located.binary}@${located.version}`;
+      const cached = modelLists.get(key);
+      if (cached !== undefined) return cached;
+      const listed = yield* Effect.tryPromise({
+        try: () => withIdleSession(located.binary, (session) => session.supportedModels()),
+        catch: errorMessage,
+      }).pipe(Effect.timeout("30 seconds"), Effect.option);
+      if (listed._tag === "None" || listed.value.length === 0) return fallbackModels;
+      const reported = toRuntimeModels(listed.value);
+      modelLists.set(key, reported);
+      return reported;
+    });
+
+    return RuntimeAdapter.of({ health, models, sendPrompt });
   });
 
 export const ClaudeCodeLayer = (config: ClaudeCodeConfig) => Layer.effect(RuntimeAdapter, makeClaudeCode(config));

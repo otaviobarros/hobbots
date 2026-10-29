@@ -4,12 +4,15 @@ import { delimiter, join, relative, resolve } from "node:path";
 import { Effect, Exit, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import {
+  brainOptions,
   claudeCandidates,
+  fallbackModels,
   findClaudeCode,
   isAtLeast,
   makeClaudeCode,
   parseVersion,
   runtimePath,
+  toRuntimeModels,
 } from "../src/claude-code.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-claude-"));
@@ -99,12 +102,15 @@ describe("Claude Code health before the runtime starts", () => {
     makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable: executableAt(executable, script) });
   const turn = (adapter: Effect.Success<ReturnType<typeof makeClaudeCode>>) =>
     Effect.runPromiseExit(
-      Stream.runDrain(adapter.sendPrompt({ prompt: "hi", sessionId: null, instructions: "", model: null })),
+      Stream.runDrain(
+        adapter.sendPrompt({ prompt: "hi", sessionId: null, instructions: "", model: null, effort: null }),
+      ),
     );
 
   it("reports an old release as outdated and refuses chat turns with update guidance", async () => {
     const adapter = await Effect.runPromise(adapterFor('#!/bin/sh\necho "2.1.200 (Claude Code)"\n'));
     const health = await Effect.runPromise(adapter.health);
+    expect((await Effect.runPromise(adapter.models)).source).toBe("fallback");
     expect(health.availability).toBe("outdated");
     expect(health.version).toBe("2.1.200");
     const refused = await turn(adapter);
@@ -158,5 +164,34 @@ describe("Claude Code health before the runtime starts", () => {
     expect(health.version).toBeNull();
     const refused = await turn(adapter);
     expect(Exit.isFailure(refused) && String(refused.cause)).toContain("could not be started");
+  });
+});
+
+describe("a hob's brain on Claude Code", () => {
+  it("passes the hob's model and effort, and leaves Claude Code's defaults when they are unset", () => {
+    expect(brainOptions({ model: "sonnet", effort: "high" })).toEqual({ model: "sonnet", effort: "high" });
+    expect(brainOptions({ model: null, effort: null })).toEqual({});
+  });
+
+  it("offers the models Claude Code reports, with no effort for a model that takes none", () => {
+    const models = toRuntimeModels([
+      {
+        value: "sonnet",
+        displayName: "Sonnet",
+        description: "Efficient",
+        supportsEffort: true,
+        supportedEffortLevels: ["low", "high"],
+      },
+      { value: "claude-haiku-4-5", displayName: "Haiku 4.5", description: "Fast", supportedEffortLevels: ["low"] },
+    ]);
+    expect(models.source).toBe("runtime");
+    expect(models.models.map((m) => [m.id, m.efforts])).toEqual([
+      ["sonnet", ["low", "high"]],
+      ["claude-haiku-4-5", []],
+    ]);
+  });
+
+  it("falls back to the documented aliases, starting with Claude Code's default", () => {
+    expect(fallbackModels.models.map((m) => m.id)).toEqual(["default", "opus", "fable", "sonnet", "haiku"]);
   });
 });

@@ -9,6 +9,7 @@ import { HttpRouter } from "effect/http";
 import { ChatService } from "./chat.ts";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
+import { HobService } from "./hobs.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { IPv6Loopback } from "./loopback.ts";
@@ -39,7 +40,9 @@ const ServerLive = Layer.unwrap(
             workspaceDir: join(config.dataDir, "workspaces", "default"),
             executable: Option.getOrUndefined(config.claudeExecutable),
           });
-    const App = ChatService.layer.pipe(Layer.provideMerge(Layer.mergeAll(Seeded, EventBus.layer, Runtime, identity)));
+    const App = Layer.mergeAll(ChatService.layer, HobService.layer).pipe(
+      Layer.provideMerge(Layer.mergeAll(Seeded, EventBus.layer, Runtime, identity)),
+    );
 
     if (!existsSync(join(config.webDir, "index.html"))) {
       yield* Effect.logWarning(

@@ -5,14 +5,18 @@ import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ChatService } from "./chat.ts";
 import { EventBus } from "./event-bus.ts";
+import { HobInputErrorsLayer, HobService } from "./hobs.ts";
 import { Installation } from "./installation.ts";
 
+// The create endpoint's middleware is read when the group is built, so it is provided here.
 const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
+    const hobs = yield* HobService;
     return handlers.handleAll({
       list: () => repo.listAgents,
+      create: ({ payload }) => hobs.create(payload),
       threads: ({ params }) =>
         repo.findAgent(params.agentId).pipe(
           Effect.flatMap(
@@ -25,7 +29,7 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
       createThread: ({ params }) => chat.createThread(params.agentId),
     });
   }),
-);
+).pipe(Layer.provide(HobInputErrorsLayer));
 
 const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =>
   Effect.gen(function* () {
@@ -84,6 +88,14 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
   }),
 );
 
+// Only Claude Code is wired, so every runtime kind is answered by the one adapter.
+const RuntimesHandlers = HttpApiBuilder.group(HobbotsApi, "runtimes", (handlers) =>
+  Effect.gen(function* () {
+    const runtime = yield* RuntimeAdapter;
+    return handlers.handleAll({ models: () => runtime.models });
+  }),
+);
+
 export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
-  Layer.provide([AgentsHandlers, ThreadsHandlers, SystemHandlers]),
+  Layer.provide([AgentsHandlers, ThreadsHandlers, SystemHandlers, RuntimesHandlers]),
 );

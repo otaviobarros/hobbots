@@ -10,8 +10,8 @@ import { migrations } from "./migrations/index.ts";
 export const PgLive = (url: string) => makePgLive({ url: Redacted.make(url) });
 
 /** Builds `PgLive` from a full client config, for callers such as tests that set session defaults. */
-export const makePgLive = (config: PgClient.PgPoolConfig) =>
-  PgMigrator.layer({ loader: PgMigrator.fromRecord(migrations) }).pipe(
+export const makePgLive = (config: PgClient.PgPoolConfig, record = migrations) =>
+  PgMigrator.layer({ loader: PgMigrator.fromRecord(record) }).pipe(
     Layer.provideMerge(
       PgClient.layer({
         ...config,

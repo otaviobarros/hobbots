@@ -141,6 +141,7 @@ export class ChatService extends Context.Service<
               sessionId: thread.runtimeSessionId,
               instructions: agent.instructions,
               model: agent.model,
+              effort: agent.effort,
             })
             .pipe(
               Stream.runForEach(handle),

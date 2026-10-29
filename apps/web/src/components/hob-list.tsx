@@ -86,7 +86,8 @@ function HobEntry({
   const threads = useQuery(threadsQuery(hob.id));
   const activity = useActivity();
   const state = hobStateFrom(threads.data, activity);
-  const matchesHob = query === null || hob.name.toLowerCase().includes(query) || hob.role.toLowerCase().includes(query);
+  const matchesHob =
+    query === null || hob.name.toLowerCase().includes(query) || hob.craft.toLowerCase().includes(query);
   const visible = query === null || matchesHob ? threads.data : threads.data?.filter((t) => matches(t, query));
   if (query !== null && !matchesHob && !visible?.length) return null;
   const count = threads.data?.length ?? 0;
@@ -111,7 +112,7 @@ function HobEntry({
             <span className={cn("text-xs", state === "idle" ? "text-label" : "text-mint")}>{stateLabel[state]}</span>
           </span>
           <span className="text-xs text-label">
-            {hob.role} · {count === 1 ? "1 thread" : `${count} threads`}
+            {hob.craft} · {count === 1 ? "1 thread" : `${count} threads`}
           </span>
         </span>
       </Link>

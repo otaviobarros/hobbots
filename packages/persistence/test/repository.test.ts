@@ -29,9 +29,10 @@ describe("HobbotsRepository", () => {
         new Agent({
           id: agentId,
           name: "Aldric",
-          role: "Guide",
+          craft: "Guide",
           runtime: "claude-code",
           model: null,
+          effort: null,
           instructions: "",
           lookSeed: 1234,
           lookColor: "moss",
@@ -88,9 +89,10 @@ describe("HobbotsRepository", () => {
       new Agent({
         id: AgentId.make(id),
         name: id,
-        role: "Guide",
+        craft: "Guide",
         runtime: "claude-code",
         model: null,
+        effort: null,
         instructions: "",
         lookSeed,
         lookColor: "violet",

@@ -1,4 +1,4 @@
-import { HobbotsEvent, type Message, type Thread } from "@hobbots/domain";
+import { type Agent, HobbotsEvent, type Message, type Thread } from "@hobbots/domain";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useEffect, useState } from "react";
@@ -11,6 +11,11 @@ const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(HobbotsEvent)
 // Lists are only patched once loaded; creating a partial list here would hide the rest of it.
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   switch (event._tag) {
+    case "AgentUpserted":
+      queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.agents, (old) =>
+        old ? upsertById(old, event.agent) : old,
+      );
+      return;
     case "ThreadUpserted":
       queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(event.thread.agentId), (old) =>
         old ? sortThreads(upsertById(old, event.thread)) : old,

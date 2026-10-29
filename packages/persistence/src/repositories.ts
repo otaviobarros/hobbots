@@ -73,9 +73,10 @@ export class HobbotsRepository extends Context.Service<
         sql`INSERT INTO agents ${sql.insert({
           id: agent.id,
           name: agent.name,
-          role: agent.role,
+          craft: agent.craft,
           runtime: agent.runtime,
           model: agent.model,
+          effort: agent.effort,
           instructions: agent.instructions,
           look_seed: agent.lookSeed,
           look_color: agent.lookColor,

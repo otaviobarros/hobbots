@@ -10,6 +10,7 @@ describe("fake runtime", () => {
         sessionId: null,
         instructions: "",
         model: null,
+        effort: null,
       })
       .pipe(Stream.runCollect, Effect.runPromise);
     const tags = Array.from(events, (e) => e._tag);
