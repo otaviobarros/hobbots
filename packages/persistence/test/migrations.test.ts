@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { migrations } from "../src/index.ts";
-import hobBrain from "../src/migrations/0004_hob_brain.ts";
+import hobBrain from "../src/migrations/0005_hob_brain.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 describe("migrations", () => {
@@ -30,10 +30,10 @@ describe("migrations", () => {
   });
 });
 
-describe("0004_hob_brain", () => {
+describe("0005_hob_brain", () => {
   // covers AG-001, DP-003
   it("[TC-AG-001] keeps an existing hob's role as its craft and leaves its effort at the model's default", async () => {
-    const { "0004_hob_brain": _, ...earlier } = migrations;
+    const { "0005_hob_brain": _, ...earlier } = migrations;
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({

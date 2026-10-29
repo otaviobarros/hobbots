@@ -7,6 +7,7 @@ import { ChatService } from "./chat.ts";
 import { EventBus } from "./event-bus.ts";
 import { HobInputErrorsLayer, HobService } from "./hobs.ts";
 import { Installation } from "./installation.ts";
+import { SetupHandlers } from "./setup.ts";
 
 // The create endpoint's middleware is read when the group is built, so it is provided here.
 const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
@@ -97,5 +98,5 @@ const RuntimesHandlers = HttpApiBuilder.group(HobbotsApi, "runtimes", (handlers)
 );
 
 export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
-  Layer.provide([AgentsHandlers, ThreadsHandlers, SystemHandlers, RuntimesHandlers]),
+  Layer.provide([AgentsHandlers, ThreadsHandlers, SystemHandlers, SetupHandlers, RuntimesHandlers]),
 );

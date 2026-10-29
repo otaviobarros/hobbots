@@ -24,7 +24,7 @@ Commands live in executable configuration; read them there rather than from this
 
 - Script catalog: root [`package.json`](../package.json) `scripts` (`check` is the required pre-PR gate per AGENTS.md and CONTRIBUTING.md); per-package scripts in each `package.json`; task graph in [`turbo.json`](../turbo.json).
 - Lint/format rules: [`biome.json`](../biome.json) (`docs/` is excluded). Type strictness: [`tsconfig.base.json`](../tsconfig.base.json).
-- Tests: Vitest, under `test/` or beside the source as `*.test.ts`. `packages/api` and `packages/ui` have no tests; `apps/desktop` tests its main-process helpers and build scripts.
+- Tests: Vitest, under `test/` or beside the source as `*.test.ts`. `packages/api` and `packages/ui` have no tests; `apps/desktop` tests its main-process helpers and build scripts, and drives a packaged app end to end with Node's test runner in `scripts/background-service.e2e.ts`.
 - Deterministic runtime: `HOBBOTS_RUNTIME=fake` selects the fake adapter in [`packages/runtimes/src/fake.ts`](../packages/runtimes/src/fake.ts) (see [`apps/server/src/config.ts`](../apps/server/src/config.ts)).
 - CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `pnpm check` (SQLite) and, in a second job, the persistence and server suites with `HOBBOTS_TEST_DB=postgres` against a PostgreSQL service container.
 - Test database: suites that need a database use `TestDatabase` from `@hobbots/persistence/testing` so both CI jobs exercise them; see [`packages/persistence/README.md`](../packages/persistence/README.md#test-database). `turbo.json` declares `HOBBOTS_TEST_DB` and `HOBBOTS_TEST_DATABASE_URL`, because Turborepo's strict env mode drops undeclared variables.
@@ -84,5 +84,5 @@ Workflow selection: **Default for matching tasks** (selected by the maintainer d
 
 ## Known gaps
 
-- The desktop app stops a server it launched on quit ([`apps/desktop/src/main/index.ts`](../apps/desktop/src/main/index.ts)), matching the ADR 009 slice; the background-service behavior of [ADR 010](decisions/010-desktop-hub.md) is not built yet.
+- The background service of [ADR 012](decisions/012-macos-hub-service.md) is proven end to end only on packaged builds, by the release workflow's smoke test ([`apps/desktop/scripts/background-service.e2e.ts`](../apps/desktop/scripts/background-service.e2e.ts)); pull-request CI does not package the app. Opening at login after logging out and in stays a manual check on a real Mac.
 - No `.env.example` or `CODEOWNERS`. Release Please proposes versions and creates the `v*` tags ([Releases](contributing/releases.md)); releases are built from those tags by [`.github/workflows/release.yml`](../.github/workflows/release.yml), described in the [desktop README](../apps/desktop/README.md).

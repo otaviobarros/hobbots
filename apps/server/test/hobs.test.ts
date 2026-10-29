@@ -1,6 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import { type Agent, RuntimeModel, RuntimeModels } from "@hobbots/domain";
-import { HobbotsRepository } from "@hobbots/persistence";
+import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule } from "effect";
@@ -40,7 +40,7 @@ beforeEach(() => {
   const App = Layer.mergeAll(ChatService.layer, HobService.layer).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        HobbotsRepository.layer.pipe(Layer.provideMerge(TestDatabase)),
+        Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(Layer.provideMerge(TestDatabase)),
         EventBus.layer,
         runtime,
         Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
