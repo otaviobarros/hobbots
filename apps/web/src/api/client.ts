@@ -10,8 +10,12 @@ declare global {
   }
 }
 
+// A build served by the Hobbots server calls the API on its own origin; the Vite dev server runs
+// apart from the API.
 export const API_URL: string =
-  globalThis.window?.hobbots?.apiUrl ?? import.meta.env.VITE_HOBBOTS_API_URL ?? "http://127.0.0.1:4317";
+  globalThis.window?.hobbots?.apiUrl ??
+  import.meta.env.VITE_HOBBOTS_API_URL ??
+  (import.meta.env.DEV ? "http://127.0.0.1:4317" : globalThis.location.origin);
 
 type Client = HttpApiClient.ForApi<typeof HobbotsApi>;
 
