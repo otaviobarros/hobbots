@@ -88,4 +88,4 @@ export const FIREFLIES: ReadonlyArray<Firefly> = (() => {
  * The AI providers Hobbots is built to work with (RT-001). Setup shows which ones are found on
  * this computer and ready to use.
  */
-export const PROVIDERS: ReadonlyArray<string> = ["Claude", "ChatGPT", "Gemini", "Grok", "Local models"];
+export const PROVIDERS: ReadonlyArray<string> = ["Claude", "ChatGPT", "Gemini", "Grok", "Local models", "and more"];
