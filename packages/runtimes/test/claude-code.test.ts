@@ -224,7 +224,8 @@ const until = async (check: () => boolean, ms = 5000) => {
 };
 
 describe("asking Claude Code for its models", () => {
-  it("closes a Claude Code that never answers when the check times out", async () => {
+  // covers AG-005
+  it("[TC-AG-005] closes a Claude Code that never answers when the check times out", async () => {
     const pidFile = join(newHome(), "pid");
     const executable = executableAt(
       join(newHome(), "claude"),
@@ -242,7 +243,8 @@ describe("asking Claude Code for its models", () => {
     expect(await until(() => !isRunning(pid))).toBe(true);
   });
 
-  it("asks again once a list expires, though the binary is unchanged", async () => {
+  // covers AG-005
+  it("[TC-AG-006] asks again once a list expires, though the binary is unchanged", async () => {
     const lists = [
       { ...fallbackModels, source: "runtime" as const, models: fallbackModels.models.slice(0, 2) },
       { ...fallbackModels, source: "runtime" as const, models: fallbackModels.models.slice(0, 1) },
