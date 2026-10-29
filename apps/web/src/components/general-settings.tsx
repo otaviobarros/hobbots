@@ -1,7 +1,7 @@
 import { Button } from "@hobbots/ui/components/button";
 import { Switch } from "@hobbots/ui/components/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useId } from "react";
+import { useEffect, useId } from "react";
 import { loginItemNotice } from "../api/login-item.ts";
 
 const bridge = globalThis.window?.hobbots?.loginItem;
@@ -10,13 +10,23 @@ const loginItemKey = ["desktop", "loginItem"] as const;
 function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) {
   const queryClient = useQueryClient();
   const labelId = useId();
-  // Read again when the window regains focus, so an approval in System Settings shows up here.
-  const state = useQuery({ queryKey: loginItemKey, queryFn: loginItem.get });
-  const change = useMutation({
-    mutationFn: loginItem.set,
-    onSuccess: (next) => queryClient.setQueryData(loginItemKey, next),
+  // Local IPC, so it runs while the browser reports being offline.
+  const state = useQuery({ queryKey: loginItemKey, queryFn: loginItem.get, networkMode: "always" });
+  const update = (next: Awaited<ReturnType<typeof loginItem.get>>) => queryClient.setQueryData(loginItemKey, next);
+  const change = useMutation({ mutationFn: loginItem.set, networkMode: "always", onSuccess: update });
+  const openSettings = useMutation({
+    mutationFn: loginItem.openSystemSettings,
+    networkMode: "always",
+    onSuccess: update,
   });
-  const openSettings = useMutation({ mutationFn: loginItem.openSystemSettings });
+  // Read again whenever the window regains focus, so an approval in System Settings shows up here.
+  // Focus, not visibility: the window stays visible beside System Settings.
+  const { refetch } = state;
+  useEffect(() => {
+    const onFocus = () => void refetch();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refetch]);
   const notice = state.data && loginItemNotice(state.data);
 
   return (
