@@ -4,7 +4,7 @@ Status: **Accepted.** Refines [ADR 010](010-desktop-hub.md) for how the hub's ba
 
 ## Context
 
-[ADR 010](010-desktop-hub.md) makes the server a per-user background service that starts at login, survives a closed window and stops on Quit. Today the server is an Electron `utilityProcess` child of Hobbots.app, and the app quits when its last window closes on every platform but macOS, so the server's life is tied to the window.
+[ADR 010](010-desktop-hub.md) makes the server a per-user background service that starts at login, survives a closed window and stops on Quit. Today the server is an Electron `utilityProcess` child of Hobbots.app and stops when the app quits. On macOS the app already keeps running after its last window closes, but with no menu-bar icon, no login item and the Dock icon as the only way back, so the server lives only as long as an app session the user started; on other platforms the app quits with its last window.
 
 Two shapes were considered:
 
