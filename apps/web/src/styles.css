@@ -65,7 +65,7 @@
   --animate-hb-walk: hb-walk 2.4s steps(18) both;
   --animate-hb-light: hb-light 0.4s steps(2) both;
   --animate-hb-rise: hb-in 0.6s steps(5) both;
-  --animate-hb-shoot: hb-shoot 7s linear 2.5s infinite;
+  --animate-hb-shoot: hb-shoot 7s steps(60) 2.5s infinite;
   --animate-hb-firefly: hb-firefly 5s steps(10) infinite;
   --animate-hb-smoke: hb-smoke 3s steps(8) infinite;
   --animate-hb-say: hb-say 1.4s steps(6) both;
