@@ -2,6 +2,7 @@ import { Agent, AgentId, HobbotsEvent, Message, RuntimeHealth, Thread, ThreadId 
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import { AgentNotFound, ThreadBusy, ThreadNotFound } from "./errors.ts";
+import { SetupGroup } from "./setup.ts";
 
 export const SendPromptPayload = Schema.Struct({
   content: Schema.NonEmptyString,
@@ -85,4 +86,8 @@ export class SystemGroup extends HttpApiGroup.make("system")
   )
   .prefix("/api") {}
 
-export class HobbotsApi extends HttpApi.make("hobbots").add(AgentsGroup).add(ThreadsGroup).add(SystemGroup) {}
+export class HobbotsApi extends HttpApi.make("hobbots")
+  .add(AgentsGroup)
+  .add(ThreadsGroup)
+  .add(SystemGroup)
+  .add(SetupGroup) {}

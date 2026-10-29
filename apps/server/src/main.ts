@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
-import { HobbotsRepository, SqliteLive } from "@hobbots/persistence";
+import { HobbotsRepository, SetupRepository, SqliteLive } from "@hobbots/persistence";
 import { ClaudeCodeLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
@@ -12,7 +12,6 @@ import { EventBus } from "./event-bus.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { IPv6Loopback } from "./loopback.ts";
-import { seedAgents } from "./seed.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
 
 const ServerLive = Layer.unwrap(
@@ -28,10 +27,10 @@ const ServerLive = Layer.unwrap(
       dataDir,
     });
 
-    const Persistence = HobbotsRepository.layer.pipe(
+    // New installations start without hobs; the user summons the first one during setup.
+    const Persistence = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(
       Layer.provideMerge(SqliteLive(join(config.dataDir, "hobbots.sqlite"))),
     );
-    const Seeded = Layer.effectDiscard(seedAgents).pipe(Layer.provideMerge(Persistence));
     const Runtime =
       config.runtime === "fake"
         ? FakeRuntimeLayer({ delay: "40 millis" })
@@ -39,7 +38,9 @@ const ServerLive = Layer.unwrap(
             workspaceDir: join(config.dataDir, "workspaces", "default"),
             executable: Option.getOrUndefined(config.claudeExecutable),
           });
-    const App = ChatService.layer.pipe(Layer.provideMerge(Layer.mergeAll(Seeded, EventBus.layer, Runtime, identity)));
+    const App = ChatService.layer.pipe(
+      Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, Runtime, identity)),
+    );
 
     if (!existsSync(join(config.webDir, "index.html"))) {
       yield* Effect.logWarning(
