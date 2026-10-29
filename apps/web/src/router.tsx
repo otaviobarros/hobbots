@@ -8,24 +8,40 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { agentsQuery, threadsQuery } from "./api/queries.ts";
-import { AppShell } from "./components/app-shell.tsx";
+import { opensWelcome, setupQuery } from "./api/setup.ts";
+import { AppShell, AppWindow } from "./components/app-shell.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
 import { InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
+import { Welcome } from "./components/welcome.tsx";
 import { readStored, writeStored } from "./lib/storage.ts";
 
 const lastHobKey = "lastHob";
 const lastThreadKey = (hobId: string) => `lastThread.${hobId}`;
 
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  component: AppShell,
+  component: AppWindow,
 });
 
+// A new installation opens on Welcome, outside the app shell, until setup is done.
+const welcomeRoute = createRoute({ getParentRoute: () => rootRoute, path: "welcome", component: Welcome });
+
+// Every page after setup shares the rail.
+const shellRoute = createRoute({ getParentRoute: () => rootRoute, id: "shell", component: AppShell });
+
 // Home is the landing page; the chat is one click away and opens on the last thread.
-const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: Home });
+const homeRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/",
+  beforeLoad: async ({ context }) => {
+    const setup = await context.queryClient.ensureQueryData(setupQuery).catch(() => undefined);
+    if (opensWelcome(setup)) throw redirect({ to: "/welcome" });
+  },
+  component: Home,
+});
 
 const hobsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: "hobs",
   beforeLoad: async ({ context }) => {
     const hobs = await context.queryClient.ensureQueryData(agentsQuery);
@@ -38,7 +54,7 @@ const hobsRoute = createRoute({
 
 // Opening a hob restores its last selected thread, or its most recent one, or a fresh page.
 const hobRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: "hobs/$hobId",
   beforeLoad: async ({ context, params }) => {
     const hobId = AgentId.make(params.hobId);
@@ -51,7 +67,7 @@ const hobRoute = createRoute({
 });
 
 const newThreadRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: "hobs/$hobId/new",
   beforeLoad: ({ params }) => writeStored(lastHobKey, params.hobId),
   component: function NewThreadPage() {
@@ -61,7 +77,7 @@ const newThreadRoute = createRoute({
 });
 
 const threadRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => shellRoute,
   path: "hobs/$hobId/threads/$threadId",
   beforeLoad: ({ params }) => {
     writeStored(lastHobKey, params.hobId);
@@ -73,19 +89,22 @@ const threadRoute = createRoute({
   },
 });
 
-const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: "inbox", component: InboxPage });
-const usageRoute = createRoute({ getParentRoute: () => rootRoute, path: "usage", component: UsagePage });
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "settings", component: SettingsPage });
+const inboxRoute = createRoute({ getParentRoute: () => shellRoute, path: "inbox", component: InboxPage });
+const usageRoute = createRoute({ getParentRoute: () => shellRoute, path: "usage", component: UsagePage });
+const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "settings", component: SettingsPage });
 
 const routeTree = rootRoute.addChildren([
-  homeRoute,
-  hobsRoute,
-  hobRoute,
-  newThreadRoute,
-  threadRoute,
-  inboxRoute,
-  usageRoute,
-  settingsRoute,
+  welcomeRoute,
+  shellRoute.addChildren([
+    homeRoute,
+    hobsRoute,
+    hobRoute,
+    newThreadRoute,
+    threadRoute,
+    inboxRoute,
+    usageRoute,
+    settingsRoute,
+  ]),
 ]);
 
 export const createAppRouter = (queryClient: QueryClient) =>
