@@ -12,6 +12,7 @@ import { opensWelcome, readSetup } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
+import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
@@ -30,6 +31,12 @@ const setupWhereRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "setup/where",
   component: WhereHobbotsRuns,
+});
+
+const providersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "setup/providers",
+  component: OnboardingProviders,
 });
 
 // Every page after setup shares the rail.
@@ -101,6 +108,7 @@ const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "set
 const routeTree = rootRoute.addChildren([
   welcomeRoute,
   setupWhereRoute,
+  providersRoute,
   shellRoute.addChildren([
     homeRoute,
     hobsRoute,
