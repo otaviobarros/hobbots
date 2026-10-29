@@ -246,36 +246,44 @@ body {
 }
 
 /*
- * The chief's idle loop, 9 s: he looks ahead, glances left and leans a step, back, glances right
- * and leans, back, then blinks twice. Frames switch on whole steps, like a sprite sheet.
+ * The chief looks around once, 3 s: a glance left with a lean, back, a glance right with a lean,
+ * back, and a blink. Frames switch on whole steps, like a sprite sheet.
  */
 .chief-sway {
-  animation: chief-sway 9s step-end infinite;
+  animation: chief-sway 3s step-end;
 }
 .chief-left {
-  animation: chief-left 9s step-end infinite;
+  animation: chief-left 3s step-end;
 }
 .chief-right {
-  animation: chief-right 9s step-end infinite;
+  animation: chief-right 3s step-end;
 }
 .chief-blink {
-  animation: chief-blink 9s step-end infinite;
+  animation: chief-blink 3s step-end;
+}
+/* A hob is working: the lantern burns brighter with a slow flicker. */
+.chief-glow {
+  animation: chief-glow 3.2s steps(4) infinite;
+}
+/* Something needs you: the raised lantern pulses. */
+.chief-beacon {
+  animation: chief-beacon 1.2s step-end infinite;
 }
 @keyframes chief-sway {
   0%,
   100% {
     transform: none;
   }
-  30% {
+  12% {
     transform: translateX(-2px);
   }
-  44% {
+  36% {
     transform: none;
   }
-  54% {
+  48% {
     transform: translateX(2px);
   }
-  68% {
+  72% {
     transform: none;
   }
 }
@@ -284,10 +292,10 @@ body {
   100% {
     opacity: 0;
   }
-  28% {
+  10% {
     opacity: 1;
   }
-  44% {
+  36% {
     opacity: 0;
   }
 }
@@ -296,10 +304,10 @@ body {
   100% {
     opacity: 0;
   }
-  52% {
+  46% {
     opacity: 1;
   }
-  68% {
+  72% {
     opacity: 0;
   }
 }
@@ -311,14 +319,26 @@ body {
   84% {
     opacity: 1;
   }
-  86% {
+  90% {
     opacity: 0;
   }
-  89% {
+}
+@keyframes chief-glow {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@keyframes chief-beacon {
+  0%,
+  100% {
     opacity: 1;
   }
-  91% {
-    opacity: 0;
+  50% {
+    opacity: 0.35;
   }
 }
 

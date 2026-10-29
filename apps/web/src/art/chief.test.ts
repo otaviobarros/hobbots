@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHIEF, CHIEF_FLAME, CHIEF_PALETTE, chiefFrame } from "./chief.ts";
+import { CHIEF, CHIEF_BEACON, CHIEF_FLAME, CHIEF_PALETTE, CHIEF_STAFF, chiefBody, chiefFrame } from "./chief.ts";
 
 const changedCells = (rows: ReadonlyArray<string>) =>
   rows.flatMap((row, y) => [...row].flatMap((cell, x) => (cell === CHIEF[y]?.[x] ? [] : [`${x},${y}:${cell}`])));
@@ -30,8 +30,20 @@ describe("chiefFrame", () => {
     expect(changedCells(chiefFrame("blink")).sort()).toEqual(["4,6:s", "11,6:s"].sort());
   });
 
-  it("keeps only the lantern light in the flame overlay", () => {
-    const lit = CHIEF_FLAME.join("").replace(/\./g, "");
-    expect(lit).toBe("LLLL");
+  it("splits the chief into a body and a staff that rebuild it", () => {
+    const body = chiefBody(CHIEF);
+    body.forEach((row, y) => {
+      const staff = CHIEF_STAFF[y] ?? "";
+      expect([...row].map((cell, x) => (cell === "." ? staff[x] : cell)).join("")).toBe(CHIEF[y]);
+      expect([...row].every((cell, x) => cell === "." || staff[x] === ".")).toBe(true);
+    });
+    expect(CHIEF_STAFF.join("")).toContain("L");
+    expect(body.join("")).not.toContain("L");
+  });
+
+  it("keeps only the lantern in the flame and beacon overlays", () => {
+    expect(CHIEF_FLAME.join("").replace(/\./g, "")).toBe("LLLL");
+    expect(CHIEF_BEACON.join("").replace(/[.yL]/g, "")).toBe("");
+    expect(CHIEF_BEACON.join("").replace(/[.L]/g, "")).toHaveLength(8);
   });
 });

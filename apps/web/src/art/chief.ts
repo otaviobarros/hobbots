@@ -102,6 +102,20 @@ export const chiefFrame = (gaze: ChiefGaze): ReadonlyArray<string> => {
   return rows.map((row) => row.join(""));
 };
 
-/** Only the lantern's light, in a brighter flame, to flicker over the full chief. */
+/** The staff, lantern and the hand that holds them start at this column of the full chief. */
+const STAFF_COLUMN = 16;
+
+/** The chief without the staff, so the staff can be raised on its own. */
+export const chiefBody = (rows: ReadonlyArray<string>): ReadonlyArray<string> =>
+  rows.map((row) => row.slice(0, STAFF_COLUMN) + ".".repeat(row.length - STAFF_COLUMN));
+
+/** Only the staff, lantern and hand of the full chief. */
+export const CHIEF_STAFF = CHIEF.map((row) => ".".repeat(STAFF_COLUMN) + row.slice(STAFF_COLUMN));
+
+/** The lantern's light in a brighter flame, laid over the chief while a hob works. */
 export const CHIEF_FLAME = CHIEF.map((row) => row.replace(/[^L]/g, "."));
 export const CHIEF_FLAME_PALETTE: Readonly<Record<string, string>> = { L: "#fff4d6" };
+
+/** The whole lantern blazing amber, laid over the chief when something needs you. */
+export const CHIEF_BEACON = CHIEF.map((row) => row.replace(/[^yL]/g, "."));
+export const CHIEF_BEACON_PALETTE: Readonly<Record<string, string>> = { y: "#ffb75c", L: "#fff4d6" };
