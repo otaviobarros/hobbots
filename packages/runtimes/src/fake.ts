@@ -1,6 +1,26 @@
-import { RuntimeHealth } from "@hobbots/domain";
+import { RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { Effect, Layer, Stream } from "effect";
 import { type PromptRequest, RuntimeAdapter, type RuntimeEvent } from "./adapter.ts";
+
+/** The fake runtime's models: one with every effort level and one that takes none. */
+export const fakeModels = new RuntimeModels({
+  runtime: "claude-code",
+  source: "runtime",
+  models: [
+    new RuntimeModel({
+      id: "fake-thinker",
+      displayName: "Fake Thinker",
+      description: "Echoes prompts; accepts every effort level",
+      efforts: ["low", "medium", "high", "xhigh", "max"],
+    }),
+    new RuntimeModel({
+      id: "fake-quick",
+      displayName: "Fake Quick",
+      description: "Echoes prompts; takes no effort setting",
+      efforts: [],
+    }),
+  ],
+});
 
 /** Deterministic adapter for tests and UI work without model usage. */
 export const makeFakeRuntime = (options: { readonly delay?: string } = {}) => {
@@ -28,6 +48,7 @@ export const makeFakeRuntime = (options: { readonly delay?: string } = {}) => {
         checkedAt: null,
       }),
     ),
+    models: Effect.succeed(fakeModels),
     sendPrompt,
   });
 };

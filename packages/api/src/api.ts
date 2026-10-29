@@ -1,8 +1,44 @@
-import { Agent, AgentId, HobbotsEvent, Message, RuntimeHealth, Thread, ThreadId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  Effort,
+  HobbotsEvent,
+  HobColor,
+  LookSeed,
+  Message,
+  RuntimeHealth,
+  RuntimeKind,
+  RuntimeModels,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
 import { Schema } from "effect";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
-import { AgentNotFound, ThreadBusy, ThreadNotFound } from "./errors.ts";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/http-api";
+import { AgentNotFound, InvalidHob, ThreadBusy, ThreadNotFound } from "./errors.ts";
 import { SetupGroup } from "./setup.ts";
+
+// Short enough for a name tag and a tile; trimmed so "  " is not a name.
+const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(40));
+
+/** A new hob: who it is, how it looks and what it thinks with. */
+export const CreateAgentPayload = Schema.Struct({
+  name: Label,
+  craft: Label,
+  lookSeed: LookSeed,
+  lookColor: HobColor,
+  runtime: RuntimeKind,
+  /** A model from the runtime's list, or null for its default. */
+  model: Schema.NullOr(Schema.NonEmptyString),
+  /** An effort the model accepts, or null for its default. */
+  effort: Schema.NullOr(Effort),
+  instructions: Schema.String.check(Schema.isMaxLength(20_000)),
+});
+export type CreateAgentPayload = typeof CreateAgentPayload.Type;
+
+/** Reports a create request that fails the payload schema as an `InvalidHob` naming the field. */
+export class HobInputErrors extends HttpApiMiddleware.Service<HobInputErrors>()("@hobbots/api/HobInputErrors", {
+  error: InvalidHob,
+}) {}
 
 export const SendPromptPayload = Schema.Struct({
   content: Schema.NonEmptyString,
@@ -40,6 +76,11 @@ export const Activity = Schema.Struct({
 export class AgentsGroup extends HttpApiGroup.make("agents")
   .add(
     HttpApiEndpoint.get("list", "/agents", { success: Schema.Array(Agent) }),
+    HttpApiEndpoint.post("create", "/agents", {
+      payload: CreateAgentPayload,
+      success: Agent,
+      error: InvalidHob,
+    }).middleware(HobInputErrors),
     HttpApiEndpoint.get("threads", "/agents/:agentId/threads", {
       params: { agentId: AgentId },
       success: Schema.Array(Thread),
@@ -86,8 +127,19 @@ export class SystemGroup extends HttpApiGroup.make("system")
   )
   .prefix("/api") {}
 
+/** What each runtime offers a hob's brain. */
+export class RuntimesGroup extends HttpApiGroup.make("runtimes")
+  .add(
+    HttpApiEndpoint.get("models", "/runtimes/:runtime/models", {
+      params: { runtime: RuntimeKind },
+      success: RuntimeModels,
+    }),
+  )
+  .prefix("/api") {}
+
 export class HobbotsApi extends HttpApi.make("hobbots")
   .add(AgentsGroup)
   .add(ThreadsGroup)
   .add(SystemGroup)
-  .add(SetupGroup) {}
+  .add(SetupGroup)
+  .add(RuntimesGroup) {}

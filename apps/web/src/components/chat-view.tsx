@@ -93,7 +93,7 @@ export function ChatView({
             <span className="truncate text-secondary-text">{title}</span>
           </span>
           <span className="text-xs text-label">
-            {current.role} · {stateLabel[state]}
+            {current.craft} · {stateLabel[state]}
           </span>
         </div>
         <RuntimeChip />

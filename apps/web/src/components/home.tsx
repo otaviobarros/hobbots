@@ -137,7 +137,7 @@ const summary = (count: number, busy: number, first: Agent | undefined) => {
 };
 
 const sceneTag = (hob: Agent, state: HobState) =>
-  state === "working" ? "Writing…" : state === "thinking" ? "Thinking…" : `${hob.role} · ready`;
+  state === "working" ? "Writing…" : state === "thinking" ? "Thinking…" : `${hob.craft} · ready`;
 
 function Chip({ children, className }: { children: React.ReactNode; className?: string }) {
   return <span className={cn("bg-deep px-2.5 py-1 text-[13px] text-text", className)}>{children}</span>;

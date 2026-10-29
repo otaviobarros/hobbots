@@ -16,9 +16,10 @@ const summonHob = Effect.gen(function* () {
     new Agent({
       id: HOB_ID,
       name: "Aldric",
-      role: "Guide",
+      craft: "Guide",
       runtime: "claude-code",
       model: null,
+      effort: null,
       instructions: "You are Aldric.",
       lookSeed: 4821,
       lookColor: "violet",

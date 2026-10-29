@@ -7,6 +7,7 @@ import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
+import { HobService } from "../src/hobs.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
 
@@ -18,7 +19,7 @@ beforeEach(() => {
   const Persistence = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(
     Layer.provideMerge(TestDatabase),
   );
-  const App = ChatService.layer.pipe(
+  const App = Layer.mergeAll(ChatService.layer, HobService.layer).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         Persistence,

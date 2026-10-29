@@ -1,4 +1,4 @@
-import type { RuntimeHealth } from "@hobbots/domain";
+import type { Effort, RuntimeHealth, RuntimeModels } from "@hobbots/domain";
 import { Context, type Effect, Schema, type Stream } from "effect";
 
 /** Normalized runtime output. Vendor message shapes stay inside each adapter. */
@@ -24,11 +24,16 @@ export interface PromptRequest {
   /** Runtime session to resume, or null to start a new one. */
   readonly sessionId: string | null;
   readonly instructions: string;
+  /** The hob's model, or null for the runtime's default. */
   readonly model: string | null;
+  /** The hob's effort, or null for the model's default. */
+  readonly effort: Effort | null;
 }
 
 export interface RuntimeAdapterShape {
   readonly health: Effect.Effect<RuntimeHealth>;
+  /** Models a hob can choose, from the runtime when it reports them, otherwise a documented list. */
+  readonly models: Effect.Effect<RuntimeModels>;
   /** Runs one turn. Interrupting the stream cancels the turn. */
   readonly sendPrompt: (request: PromptRequest) => Stream.Stream<RuntimeEvent, RuntimeError>;
 }
