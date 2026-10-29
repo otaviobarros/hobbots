@@ -12,6 +12,8 @@ The app identifies as `ai.hobbots.app`, with the version from this package's `pa
 
 Only one copy of the app runs: opening it again, from Finder, the Dock or a second launch, shows the existing window. Before using a server already on its port, the app checks the identity that `/api/health` reports (an installation ID kept in the data folder's `installation-id` file, the version and the data folder) and uses it only when it belongs to the same data folder, so `pnpm dev` and the packaged app still share one server. Anything else on the port, another program or a Hobbots server for a different data folder, gets an error dialog instead of a window.
 
+The installed app opens at login by default ([ADR 012](../../docs/decisions/012-macos-hub-service.md)). On its first start it registers itself with `app.setLoginItemSettings`, and when macOS opens it at login it starts the server without a window; the Dock or Finder opens the window. The "Open Hobbots at login" switch in Settings › General turns it off and on, and the choice is kept in `desktop-settings.json` in the data folder. The switch shows what macOS reports rather than assuming success, because macOS can refuse an ad-hoc signed build or wait for approval in System Settings › General › Login Items. A development checkout never registers, so Electron itself is not added as a login item. Launching a build to test it, including with the smoke test below, registers that copy; turn the switch off before deleting it.
+
 An app opened from Finder does not inherit shell variables. To try it with the fake runtime, quit Hobbots and stop any server on port 4317 first (the app attaches to a running server), then:
 
 ```sh
