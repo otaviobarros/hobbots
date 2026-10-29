@@ -17,7 +17,11 @@ let dispose: () => Promise<void>;
 beforeAll(() => {
   webDir = mkdtempSync(join(tmpdir(), "hobbots-web-"));
   mkdirSync(join(webDir, "assets"));
-  writeFileSync(join(webDir, "index.html"), "<!doctype html><title>Hobbots</title>");
+  // Asset references as the web build emits them (base "/" in apps/web/vite.config.ts).
+  writeFileSync(
+    join(webDir, "index.html"),
+    '<!doctype html><title>Hobbots</title><script type="module" src="/assets/app.js"></script>',
+  );
   writeFileSync(join(webDir, "assets", "app.js"), "console.log('hobs')");
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(
@@ -59,7 +63,13 @@ describe("web client routes", () => {
   it("[TC-DP-006] falls back to index.html for client routes but not for missing files", async () => {
     const route = await get("/agents/aldric", { accept: "text/html" });
     expect(route.status).toBe(200);
-    expect(await route.text()).toContain("<title>Hobbots</title>");
+    const html = await route.text();
+    expect(html).toContain("<title>Hobbots</title>");
+
+    // The page's assets resolve against the nested URL the browser is on, and still load.
+    const src = html.match(/src="([^"]+)"/)?.[1] ?? "";
+    const asset = new URL(src, "http://localhost:4317/agents/aldric");
+    expect((await get(asset.pathname)).status).toBe(200);
 
     expect((await get("/assets/missing.js")).status).toBe(404);
     expect((await get("/../package.json")).status).toBe(404);
