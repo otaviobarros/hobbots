@@ -117,13 +117,13 @@ export function WhereHobbotsRuns() {
           <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">Where should Hobbots run?</h1>
           <p className="m-0 mb-[22px] max-w-[640px] text-secondary-text">
             Your hobs live on one computer, the hub. It keeps working in the background, even with the window closed.
-            Your other devices can open it from anywhere, and hobs always work on the hub.
+            Hobs always work on the hub. Opening it from your other devices is coming soon.
           </p>
           <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-2">
             {/* Hash history: the link works under Electron's file:// as well as in the browser. */}
             <a
               href="#/setup/providers"
-              className={`${choiceClass} border-line-2 transition-transform duration-100 ease-[steps(2)] hover:-translate-y-[3px] hover:border-moonlight focus-visible:outline-3 focus-visible:outline-moonlight focus-visible:outline-offset-2`}
+              className={`${choiceClass} border-line-2 transition-transform duration-100 ease-[steps(2)] hover:-translate-y-[3px] hover:border-moonlight focus-visible:outline-3 focus-visible:outline-moonlight focus-visible:-outline-offset-3`}
             >
               <ChoiceIcon rows={HOUSE} palette={HOUSE_PALETTE} />
               <span className="font-pixel text-2xl font-bold text-moonlight">Run Hobbots on this computer</span>
