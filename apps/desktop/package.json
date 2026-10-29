@@ -10,13 +10,15 @@
     "build": "electron-vite build",
     "start": "install-electron && electron-vite preview",
     "typecheck": "tsc -p tsconfig.json",
-    "package:mac": "electron-builder --mac --config electron-builder.config.mjs --publish never"
+    "package:mac": "electron-builder --mac --config electron-builder.config.mjs --publish never",
+    "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
     "@hobbots/server": "workspace:*",
     "@types/node": "^26.6.5",
     "electron": "^45.0.0",
     "electron-builder": "^26.18.0",
-    "electron-vite": "^6.0.0"
+    "electron-vite": "^6.0.0",
+    "vitest": "^5.0.5"
   }
 }
