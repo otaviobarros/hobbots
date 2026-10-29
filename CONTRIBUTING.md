@@ -5,7 +5,7 @@ Thanks for helping build Hobbots. Start here:
 - **Issues and planning:** [how issues, labels, triage and the project board work](docs/contributing/issues-and-board.md).
 - **Code and architecture:** [AGENTS.md](AGENTS.md) lists the docs to read and the rules every change follows, for people and coding agents alike.
 - **Running it:** see [Run it](README.md#run-it) in the README, and run `pnpm check` before opening a pull request.
-- **Commits:** use [Conventional Commits](https://www.conventionalcommits.org/).
+- **Commits:** use [Conventional Commits](https://www.conventionalcommits.org/); they decide the next version, as [Releases](docs/contributing/releases.md) explains.
 
 Report security vulnerabilities privately through the repository's Security tab, not in a public issue.
 

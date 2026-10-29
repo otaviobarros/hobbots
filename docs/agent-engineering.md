@@ -15,6 +15,7 @@ Scope: this repository. Purpose: tell people and coding agents where each projec
 | Vocabulary | Naming domain concepts, UI copy | [Glossary](product/glossary.md) |
 | Package boundaries | Adding code to a package; README-only packages are planned boundaries with no code yet | Each `apps/*/README.md` and `packages/*/README.md` |
 | Issues, labels, board, commits, branches, PRs | Picking up or publishing work | [Issues and the project board](contributing/issues-and-board.md), [CONTRIBUTING.md](../CONTRIBUTING.md), [PR template](../.github/pull_request_template.md) |
+| Versions, tags, changelog, betas | Changing release configuration or cutting a release | [Releases](contributing/releases.md) |
 | Dependencies | Adding a package | [AGENTS.md](../AGENTS.md) (latest stable via `pnpm add`; exact Effect v4 pins) |
 
 ## Checks
