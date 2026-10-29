@@ -1,6 +1,6 @@
 import type { UpdateSetupPayload } from "@hobbots/api";
 import type { InstallationSetup } from "@hobbots/domain";
-import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 
 export const setupQueryKey = ["setup"] as const;
@@ -8,8 +8,6 @@ export const setupQueryKey = ["setup"] as const;
 export const setupQuery = queryOptions({
   queryKey: setupQueryKey,
   queryFn: () => call((c) => c.setup.get()),
-  // Setup changes only through this client, which updates the cache itself.
-  staleTime: Number.POSITIVE_INFINITY,
 });
 
 /**
@@ -17,6 +15,15 @@ export const setupQuery = queryOptions({
  * example while the server restarts, Home opens and shows that it is reconnecting.
  */
 export const opensWelcome = (setup: InstallationSetup | undefined): boolean => setup !== undefined && !setup.completed;
+
+/**
+ * The setup as the hub stores it now. Another client may have finished setup since this one last
+ * asked, so a cached answer is used only when the hub cannot be reached.
+ */
+export const readSetup = (queryClient: QueryClient, query: typeof setupQuery = setupQuery) =>
+  queryClient
+    .fetchQuery({ ...query, staleTime: 0 })
+    .catch(() => queryClient.getQueryData<InstallationSetup>(query.queryKey));
 
 export const useUpdateSetup = () => {
   const queryClient = useQueryClient();

@@ -8,7 +8,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { agentsQuery, threadsQuery } from "./api/queries.ts";
-import { opensWelcome, setupQuery } from "./api/setup.ts";
+import { opensWelcome, readSetup } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
@@ -34,8 +34,7 @@ const homeRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/",
   beforeLoad: async ({ context }) => {
-    const setup = await context.queryClient.ensureQueryData(setupQuery).catch(() => undefined);
-    if (opensWelcome(setup)) throw redirect({ to: "/welcome" });
+    if (opensWelcome(await readSetup(context.queryClient))) throw redirect({ to: "/welcome" });
   },
   component: Home,
 });

@@ -1,7 +1,11 @@
 import { Button } from "@hobbots/ui/components/button";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useUpdateSetup } from "../api/setup.ts";
+import { useEffect } from "react";
+import { setupQuery, useUpdateSetup } from "../api/setup.ts";
 import { Stars } from "./scene.tsx";
+
+const WATCH_SETUP_MS = 3000;
 
 /**
  * Welcome, the first screen of a new installation. A placeholder until the full screen and the
@@ -10,6 +14,12 @@ import { Stars } from "./scene.tsx";
 export function Welcome() {
   const navigate = useNavigate();
   const update = useUpdateSetup();
+  // Setup may finish in another window or on another device; Home opens once it has.
+  const setup = useQuery({ ...setupQuery, refetchInterval: WATCH_SETUP_MS, refetchOnWindowFocus: true });
+  const completedElsewhere = setup.data?.completed === true;
+  useEffect(() => {
+    if (completedElsewhere) void navigate({ to: "/" });
+  }, [completedElsewhere, navigate]);
 
   const skipSetup = () => update.mutate({ completed: true }, { onSuccess: () => navigate({ to: "/" }) });
 
