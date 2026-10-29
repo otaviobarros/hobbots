@@ -10,6 +10,8 @@ Read the [architecture overview](../../docs/architecture/overview.md) and releva
 
 The app identifies as `ai.hobbots.app`, with the version from this package's `package.json`, the copyright notice from the electron-builder config and the Apache-2.0 `LICENSE` in its resources folder. Its icon is the chief of the hobs (crown, long beard, royal robe and cape, lantern staff) on a starry night tile, drawn cell by cell for every size by [`scripts/app-icon.ts`](scripts/app-icon.ts); run `pnpm --filter @hobbots/desktop icon` (Node 22.18 or later) after changing the art to regenerate `resources/icon.icns` and `resources/icon.png`.
 
+Only one copy of the app runs: opening it again, from Finder, the Dock or a second launch, shows the existing window. Before using a server already on its port, the app checks the identity that `/api/health` reports (an installation ID kept in the data folder's `installation-id` file, the version and the data folder) and uses it only when it belongs to the same data folder, so `pnpm dev` and the packaged app still share one server. Anything else on the port, another program or a Hobbots server for a different data folder, gets an error dialog instead of a window.
+
 An app opened from Finder does not inherit shell variables. To try it with the fake runtime, quit Hobbots and stop any server on port 4317 first (the app attaches to a running server), then:
 
 ```sh

@@ -12,6 +12,18 @@ export const SendPromptResult = Schema.Struct({
   assistantMessage: Message,
 });
 
+/**
+ * What the health endpoint returns: enough for a client to tell this installation's server from
+ * another installation's, or from a program that is not Hobbots at all (ADR 012).
+ */
+export const ServerIdentity = Schema.Struct({
+  app: Schema.Literal("hobbots"),
+  installationId: Schema.NonEmptyString,
+  version: Schema.String,
+  dataDir: Schema.String,
+});
+export type ServerIdentity = typeof ServerIdentity.Type;
+
 export class AgentsGroup extends HttpApiGroup.make("agents")
   .add(
     HttpApiEndpoint.get("list", "/agents", { success: Schema.Array(Agent) }),
@@ -50,7 +62,7 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
 
 export class SystemGroup extends HttpApiGroup.make("system")
   .add(
-    HttpApiEndpoint.get("health", "/health"),
+    HttpApiEndpoint.get("health", "/health", { success: ServerIdentity }),
     HttpApiEndpoint.get("runtimes", "/runtimes", {
       success: Schema.Array(RuntimeHealth),
     }),

@@ -22,6 +22,7 @@
     "vitest": "^5.0.5"
   },
   "exports": {
-    "./main": "./src/main.ts"
+    "./main": "./src/main.ts",
+    "./installation": "./src/installation.ts"
   }
 }
