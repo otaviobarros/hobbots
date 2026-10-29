@@ -26,6 +26,8 @@ export class ChatService extends Context.Service<
       content: string,
     ) => Effect.Effect<{ userMessage: Message; assistantMessage: Message }, ThreadNotFound | ThreadBusy>;
     readonly interrupt: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
+    /** Threads with a turn in progress in this process. */
+    readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
   }
 >()("@hobbots/server/ChatService") {
   static readonly layer = Layer.effect(
@@ -211,7 +213,9 @@ export class ChatService extends Context.Service<
         yield* FiberMap.remove(turns, threadId);
       });
 
-      return ChatService.of({ createThread, sendPrompt, interrupt });
+      const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
+
+      return ChatService.of({ createThread, sendPrompt, interrupt, activeThreads });
     }),
   );
 }
