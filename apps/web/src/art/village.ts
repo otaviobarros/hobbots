@@ -79,7 +79,7 @@ export const FIREFLIES: ReadonlyArray<Firefly> = (() => {
   const next = sequence(13);
   return Array.from({ length: 12 }, (_, i) => ({
     left: Math.round((8 + next() * 84) * 10) / 10,
-    bottom: Math.round(40 + next() * 120),
+    bottom: Math.round(180 + next() * 120),
     delay: (i % 5) * 0.9,
   }));
 })();

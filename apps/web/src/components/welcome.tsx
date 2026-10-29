@@ -53,7 +53,7 @@ export function Welcome() {
       <Stars count={50} height={330} />
       <span
         aria-hidden
-        className="absolute top-[60px] right-[16%] h-[3px] w-14 animate-hb-shoot bg-moonlight opacity-0"
+        className="absolute top-[60px] right-[11%] h-[3px] w-14 animate-hb-shoot bg-moonlight opacity-0"
       />
       <PixelArt
         rows={MOON}
@@ -178,7 +178,7 @@ export function Welcome() {
   );
 }
 
-/** A hob strolling in the village: it walks in with the intro, bobs, and says hi when clicked. */
+/** A hob strolling in the village: it walks in with the intro, bobs, hops on hover and says hi when clicked. */
 function VillageHob({ hob, walkIn }: { hob: SceneHob; walkIn: boolean }) {
   // Counts clicks, so each one restarts the hop and the greeting; 0 when the hob is quiet.
   const [greeted, setGreeted] = useState(0);
@@ -199,7 +199,7 @@ function VillageHob({ hob, walkIn }: { hob: SceneHob; walkIn: boolean }) {
         type="button"
         onClick={greet}
         aria-label={`Say hi to ${hob.name}`}
-        className="relative block cursor-pointer border-0 bg-transparent p-0"
+        className="hop-on-hover relative block cursor-pointer border-0 bg-transparent p-0"
       >
         {greeted > 0 && (
           <span
