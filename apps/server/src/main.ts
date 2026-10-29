@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
@@ -10,6 +10,7 @@ import { ChatService } from "./chat.ts";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
 import { ApiRoutes } from "./http.ts";
+import { ensureInstallationId, Installation } from "./installation.ts";
 import { IPv6Loopback } from "./loopback.ts";
 import { seedAgents } from "./seed.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
@@ -18,6 +19,14 @@ const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig;
     mkdirSync(config.dataDir, { recursive: true });
+    // The canonical path, so clients compare the same spelling of the folder.
+    const dataDir = realpathSync(config.dataDir);
+    const identity = Layer.succeed(Installation, {
+      app: "hobbots",
+      installationId: ensureInstallationId(dataDir),
+      version: config.version,
+      dataDir,
+    });
 
     const Persistence = HobbotsRepository.layer.pipe(
       Layer.provideMerge(SqliteLive(join(config.dataDir, "hobbots.sqlite"))),
@@ -30,7 +39,7 @@ const ServerLive = Layer.unwrap(
             workspaceDir: join(config.dataDir, "workspaces", "default"),
             executable: Option.getOrUndefined(config.claudeExecutable),
           });
-    const App = ChatService.layer.pipe(Layer.provideMerge(Layer.mergeAll(Seeded, EventBus.layer, Runtime)));
+    const App = ChatService.layer.pipe(Layer.provideMerge(Layer.mergeAll(Seeded, EventBus.layer, Runtime, identity)));
 
     if (!existsSync(join(config.webDir, "index.html"))) {
       yield* Effect.logWarning(

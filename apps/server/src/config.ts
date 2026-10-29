@@ -8,6 +8,8 @@ const defaultDataDir = () =>
 export const ServerConfig = Config.all({
   port: Config.Port("HOBBOTS_PORT").pipe(Config.withDefault(4317)),
   dataDir: Config.String("HOBBOTS_DATA_DIR").pipe(Config.withDefault(defaultDataDir())),
+  // Reported by the health endpoint. The desktop app passes its own version; a checkout has none.
+  version: Config.String("HOBBOTS_VERSION").pipe(Config.withDefault("development")),
   // The built web client. A checkout serves the web app's build; the desktop app passes the copy
   // in its resources folder.
   webDir: Config.String("HOBBOTS_WEB_DIR").pipe(Config.withDefault(resolve(import.meta.dirname, "../../web/dist"))),

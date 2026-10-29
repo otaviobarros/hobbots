@@ -5,6 +5,7 @@ import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ChatService } from "./chat.ts";
 import { EventBus } from "./event-bus.ts";
+import { Installation } from "./installation.ts";
 
 const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
   Effect.gen(function* () {
@@ -50,8 +51,9 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
   Effect.gen(function* () {
     const bus = yield* EventBus;
     const runtime = yield* RuntimeAdapter;
+    const installation = yield* Installation;
     return handlers.handleAll({
-      health: () => Effect.void,
+      health: () => Effect.succeed(installation),
       runtimes: () => runtime.health.pipe(Effect.map((health) => [health])),
       events: () => Effect.succeed(bus.stream),
     });

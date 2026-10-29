@@ -1,12 +1,18 @@
 import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
-import { app, BrowserWindow, ipcMain, shell, type UtilityProcess, utilityProcess } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, type UtilityProcess, utilityProcess } from "electron";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
+import { checkServer, requireOurs, ServerProblem, waitForServer } from "./server-identity.ts";
 import { fileSettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
+import { claimSingleInstance, onSecondLaunch, reveal } from "./single-instance.ts";
 
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
 app.setName("Hobbots");
+
+// A second launch quits at once; the running instance shows its window instead.
+const primary = claimSingleInstance();
+if (!primary) app.quit();
 
 // The packaged app's Info.plist supplies the copyright; these keep the name and version right in
 // development too, and add the license notice.
@@ -37,18 +43,11 @@ const isUp = async (url: string) => {
   }
 };
 
-const waitUntilUp = async (url: string, timeoutMs: number) => {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await isUp(url)) return true;
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  return false;
-};
-
-/** Connects to a running server, or launches one owned by this app. */
+/** Connects to this installation's running server, or launches one owned by this app. */
 const ensureServer = async () => {
-  if (await isUp(`${apiUrl}/api/health`)) return;
+  const dataDir = app.getPath("userData");
+  const running = await checkServer(apiUrl, dataDir);
+  if (running.kind !== "none") return requireOurs(running, port);
   // A packaged app is opened from Finder or the Dock, without the shell's PATH.
   const path = app.isPackaged ? mergePaths(await loginShellPath(), process.env.PATH) : process.env.PATH;
   server = utilityProcess.fork(serverPath, [], {
@@ -58,7 +57,8 @@ const ensureServer = async () => {
       ...process.env,
       PATH: path,
       HOBBOTS_PORT: String(port),
-      HOBBOTS_DATA_DIR: app.getPath("userData"),
+      HOBBOTS_DATA_DIR: dataDir,
+      HOBBOTS_VERSION: app.getVersion(),
       HOBBOTS_WEB_DIR: webDir,
     },
   });
@@ -66,9 +66,7 @@ const ensureServer = async () => {
     console.log(`Hobbots server exited with code ${code}`);
     server = null;
   });
-  if (!(await waitUntilUp(`${apiUrl}/api/health`, 20_000))) {
-    throw new Error(`The Hobbots server did not start on ${apiUrl}`);
-  }
+  requireOurs(await waitForServer(apiUrl, dataDir, 20_000), port);
 };
 
 const createWindow = async () => {
@@ -108,7 +106,15 @@ const createWindow = async () => {
   }
 };
 
+/** Shows the existing window, or opens one when there is none. */
+const showWindow = () => {
+  const [existing] = BrowserWindow.getAllWindows();
+  if (existing) reveal(existing);
+  else void createWindow();
+};
+
 app.whenReady().then(async () => {
+  if (!primary) return;
   // Only the installed app registers, so a checkout never adds Electron itself as a login item.
   const loginItem = makeLoginItem({
     supported: app.isPackaged && process.platform === "darwin",
@@ -130,10 +136,16 @@ app.whenReady().then(async () => {
     if (!loginItem.openedAtLogin) await createWindow();
   } catch (error) {
     console.error(error);
+    if (error instanceof ServerProblem) {
+      await dialog.showMessageBox({ type: "error", message: error.message, detail: error.detail, buttons: ["Quit"] });
+    }
     app.quit();
+    return;
   }
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) void createWindow();
+  onSecondLaunch(showWindow);
+  // The Dock icon or opening the app from Finder; macOS already fronts a visible window.
+  app.on("activate", (_event, hasVisibleWindows) => {
+    if (!hasVisibleWindows) showWindow();
   });
 });
 
