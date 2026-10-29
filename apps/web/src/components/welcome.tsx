@@ -2,11 +2,11 @@ import { Button } from "@hobbots/ui/components/button";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { setupQuery, useUpdateSetup } from "../api/setup.ts";
 import { MOON, MOON_PALETTE } from "../art/icons.ts";
-import { FIREFLIES, HOUSES, INTRO_MS, intro, PROVIDERS, SCENE_HOBS, type SceneHob } from "../art/village.ts";
+import { FIREFLIES, HOUSES, intro, PROVIDERS, SCENE_HOBS, type SceneHob } from "../art/village.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { Stars } from "./scene.tsx";
 
@@ -33,12 +33,8 @@ export function Welcome() {
 
   const [playIntro] = useState(() => !introPlayed);
   useEffect(() => {
-    if (!playIntro) return;
-    const done = setTimeout(() => {
-      introPlayed = true;
-    }, INTRO_MS);
-    return () => clearTimeout(done);
-  }, [playIntro]);
+    introPlayed = true;
+  }, []);
   // Intro animations run only on the first visit; the idle loop always runs.
   const introClass = (className: string) => (playIntro ? className : undefined);
   const introDelay = (seconds: number): CSSProperties | undefined =>
@@ -84,8 +80,7 @@ export function Welcome() {
           style={introDelay(intro.actions)}
         >
           <Button asChild className="px-[26px] py-3.5 text-[17px] text-ground no-underline hover:text-ground">
-            {/* A plain hash link until Where Hobbots runs (#66) registers `setup/where`; then a typed Link. */}
-            <a href="#/setup/where">Get started</a>
+            <Link to="/setup/where">Get started</Link>
           </Button>
           <Button
             variant="outline"

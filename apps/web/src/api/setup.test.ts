@@ -1,7 +1,7 @@
 import { InstallationSetup } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import { opensWelcome, readSetup, setupQuery, setupQueryKey } from "./setup.ts";
+import { opensWelcome, readSetup, setupDone, setupQuery, setupQueryKey } from "./setup.ts";
 
 const setup = (completed: boolean) =>
   new InstallationSetup({ completed, safetyPreset: "balanced", approvedFolders: [] });
@@ -14,6 +14,13 @@ describe("opening the app", () => {
 
   it("shows Home when the setup cannot be read", () => {
     expect(opensWelcome(undefined)).toBe(false);
+  });
+
+  // covers OP-001
+  it("[TC-OP-009] keeps Welcome and the setup steps open until setup is done, then hands over to Home", () => {
+    expect(setupDone(setup(false))).toBe(false);
+    expect(setupDone(undefined)).toBe(false);
+    expect(setupDone(setup(true))).toBe(true);
   });
 });
 

@@ -192,7 +192,7 @@ export function OnboardingProviders() {
 
   const guide = ready ? GUIDE.found : nudged ? GUIDE.nudge : state === "checking" ? GUIDE.looking : GUIDE.fix;
 
-  const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/welcome" }));
+  const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/where" }));
   // The first-hob step (#68) takes over from here; until it exists, setup ends on Home.
   const next = () => {
     if (!ready) return setNudged(true);

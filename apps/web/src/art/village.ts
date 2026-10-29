@@ -21,9 +21,6 @@ export const intro: Intro = {
   providers: 2.2,
 };
 
-/** How long the intro lasts, in milliseconds: the last hob has walked in by then. */
-export const INTRO_MS = 3800;
-
 export interface House {
   /** Left edge, in percent of the window width. */
   readonly left: number;
