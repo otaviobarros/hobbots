@@ -15,6 +15,7 @@ Scope: this repository. Purpose: tell people and coding agents where each projec
 | Vocabulary | Naming domain concepts, UI copy | [Glossary](product/glossary.md) |
 | Package boundaries | Adding code to a package; README-only packages are planned boundaries with no code yet | Each `apps/*/README.md` and `packages/*/README.md` |
 | Issues, labels, board, commits, branches, PRs | Picking up or publishing work | [Issues and the project board](contributing/issues-and-board.md), [CONTRIBUTING.md](../CONTRIBUTING.md), [PR template](../.github/pull_request_template.md) |
+| Versions, tags, changelog, betas | Changing release configuration or cutting a release | [Releases](contributing/releases.md) |
 | Dependencies | Adding a package | [AGENTS.md](../AGENTS.md) (latest stable via `pnpm add`; exact Effect v4 pins) |
 
 ## Checks
@@ -84,4 +85,4 @@ Workflow selection: **Default for matching tasks** (selected by the maintainer d
 ## Known gaps
 
 - The desktop app stops a server it launched on quit ([`apps/desktop/src/main/index.ts`](../apps/desktop/src/main/index.ts)), matching the ADR 009 slice; the background-service behavior of [ADR 010](decisions/010-desktop-hub.md) is not built yet.
-- No `.env.example` or `CODEOWNERS`. Releases are built from `v*` tags by [`.github/workflows/release.yml`](../.github/workflows/release.yml), described in the [desktop README](../apps/desktop/README.md).
+- No `.env.example` or `CODEOWNERS`. Release Please proposes versions and creates the `v*` tags ([Releases](contributing/releases.md)); releases are built from those tags by [`.github/workflows/release.yml`](../.github/workflows/release.yml), described in the [desktop README](../apps/desktop/README.md).

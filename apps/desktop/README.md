@@ -18,7 +18,7 @@ open --env HOBBOTS_RUNTIME=fake apps/desktop/release/mac-arm64/Hobbots.app
 
 On Intel, use `release/mac/Hobbots.app`. Packaging for Intel works on Apple silicon, but running that build there needs Rosetta.
 
-Pushing a `v<version>` tag runs the [release workflow](../../.github/workflows/release.yml): it packages both installers on an Apple silicon runner with the tag's version, smoke-tests each one on its own architecture with [`scripts/smoke-test.sh`](scripts/smoke-test.sh) (installed from its `.dmg`, launched with the fake runtime until `/api/health` answers, then quit), and only then attaches both `.dmg` files to the draft GitHub Release for that tag, creating it with generated notes if Release Please has not drafted one. A new tag with a pre-release suffix such as `v0.1.0-rc.1` makes a pre-release. To smoke-test a local build without touching your Hobbots data:
+Release Please creates the `v<version>` tags ([Releases](../../docs/contributing/releases.md)). Pushing one runs the [release workflow](../../.github/workflows/release.yml): it packages both installers on an Apple silicon runner with the tag's version, smoke-tests each one on its own architecture with [`scripts/smoke-test.sh`](scripts/smoke-test.sh) (installed from its `.dmg`, launched with the fake runtime until `/api/health` answers, then quit), and only then attaches both `.dmg` files to the draft GitHub Release for that tag, creating it with generated notes if Release Please has not drafted one. A new tag with a pre-release suffix such as `v0.1.0-rc.1` makes a pre-release. To smoke-test a local build without touching your Hobbots data:
 
 ```sh
 apps/desktop/scripts/smoke-test.sh apps/desktop/release/mac-arm64/Hobbots.app --user-data-dir="$(mktemp -d)"

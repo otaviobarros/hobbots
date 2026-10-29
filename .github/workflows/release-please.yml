@@ -1,0 +1,34 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+# The job acts through the GitHub App token below, not GITHUB_TOKEN.
+permissions: {}
+
+# Runs one at a time so two quick merges cannot race on the release pull request.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Update the release pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Tags and pull requests created with GITHUB_TOKEN start no workflows, so the
+      # release workflow and CI would never run on them. An App token does start them.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      # Reads release-please-config.json and .release-please-manifest.json.
+      - uses: googleapis/release-please-action@v5
+        with:
+          token: ${{ steps.app-token.outputs.token }}
