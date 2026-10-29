@@ -1,7 +1,8 @@
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { CREST, CREST_PALETTE, ICONS, type IconName, iconPalette } from "../art/icons.ts";
+import { CHIEF, CHIEF_PALETTE } from "../art/chief.ts";
+import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
 
 // The MVP rail from the Hobbots design. Routines and Memory return after the MVP.
 const ITEMS = [
@@ -21,7 +22,7 @@ export function Rail() {
       className="flex w-[76px] flex-none flex-col items-center gap-2 border-r-4 border-line bg-deep py-3.5"
     >
       <Link to="/" aria-label="Hobbots home" className="pb-2">
-        <PixelArt rows={CREST} palette={CREST_PALETTE} size={34} />
+        <PixelArt rows={CHIEF} palette={CHIEF_PALETTE} size={40} />
       </Link>
       {ITEMS.map((item) => (
         <RailLink key={item.label} label={item.label} to={item.to} active={isActive(item.to)} />

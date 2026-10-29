@@ -93,28 +93,6 @@ export type IconName = keyof typeof ICONS;
 export const iconPalette = (active: boolean): PixelPalette =>
   active ? { "#": "#f3e9b5", o: "#f2a541" } : { "#": "#a9a2e0", o: "#7770c4" };
 
-/** The Hobbots crest: the classic 10 × 10 hob in moonlight and lantern colors. */
-export const CREST: PixelRows = [
-  "...hhhh...",
-  "..hhhhhh..",
-  ".hhhhhhhh.",
-  "s.ssssss.s",
-  "ssksssskss",
-  ".ssssssss.",
-  "..ssmmss..",
-  "..cccccc..",
-  ".cccccccc.",
-  "..bb..bb..",
-];
-export const CREST_PALETTE: PixelPalette = {
-  h: "#f3e9b5",
-  s: "#f3e9b5",
-  k: "#0d0c1c",
-  m: "#0d0c1c",
-  c: "#f2a541",
-  b: "#f2a541",
-};
-
 export const MOON: PixelRows = [
   "....####....",
   "..###.......",

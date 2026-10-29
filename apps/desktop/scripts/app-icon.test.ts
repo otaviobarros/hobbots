@@ -28,10 +28,17 @@ describe("app icon", () => {
     }
   });
 
-  it("fits the art inside the tile edge", () => {
+  it("fits the art inside the canvas, centered", () => {
     for (const { art, cells, offset } of [SMALL, LARGE]) {
-      expect(offset).toBeGreaterThanOrEqual(1);
-      expect(offset + art.length).toBeLessThanOrEqual(cells - 1);
+      expect(offset * 2 + art.length).toBe(cells);
+    }
+  });
+
+  it("fills the whole canvas with opaque pixels at every size, so macOS adds no plate", () => {
+    for (const size of [16, 32, 64, 128, 256, 512, 1024]) {
+      expect(Number.isInteger(cellSize(size))).toBe(true);
+      const rgba = renderIcon(size);
+      expect(rgba.filter((_, i) => i % 4 === 3).every((alpha) => alpha === 255)).toBe(true);
     }
   });
 
@@ -39,32 +46,27 @@ describe("app icon", () => {
     expect(layoutFor(16)).toBe(SMALL);
     expect(cellSize(16)).toBe(1);
     const rgba = renderIcon(16);
-    // The 14-cell tile sits one pixel in from each edge of the canvas.
     iconGrid(SMALL).forEach((row, y) => {
       row.forEach((color, x) => {
-        const [r, g, b, a] = pixel(rgba, 16, x + 1, y + 1);
-        if (color === null) expect(a).toBe(0);
-        else expect([r, g, b, a]).toEqual([...rgb(color), 255]);
+        expect(pixel(rgba, 16, x, y)).toEqual([...rgb(color), 255]);
       });
     });
     SMALL_CHIEF.forEach((row, y) => {
       [...row].forEach((cell, x) => {
         const color = PALETTE[cell];
-        if (color) expect(pixel(rgba, 16, 1 + SMALL.offset + x, 1 + SMALL.offset + y)).toEqual([...rgb(color), 255]);
+        if (color) expect(pixel(rgba, 16, SMALL.offset + x, SMALL.offset + y)).toEqual([...rgb(color), 255]);
       });
     });
-    expect(pixel(rgba, 16, 0, 0)[3]).toBe(0);
   });
 
   it("draws the full chief at the same share of the canvas from 32 px up", () => {
     for (const size of [32, 64, 128, 256, 512, 1024]) {
       expect(layoutFor(size)).toBe(LARGE);
-      expect(cellSize(size) * LARGE.cells).toBe((size * 26) / 32);
+      expect(cellSize(size) * LARGE.cells).toBe(size);
     }
     // The crown's center gem at 1024 px, 32 pixels per cell.
     const rgba = renderIcon(1024);
-    const tileOffset = (1024 - 32 * LARGE.cells) / 2;
-    const at = (cell: number) => tileOffset + (LARGE.offset + cell) * 32 + 16;
+    const at = (cell: number) => (LARGE.offset + cell) * 32 + 16;
     expect(CHIEF[3]?.[7]).toBe("R");
     expect(pixel(rgba, 1024, at(7), at(3))).toEqual([...rgb(PALETTE.R ?? ""), 255]);
   });

@@ -36,12 +36,12 @@ All text passes WCAG AA; the lowest pair is 5.6:1. Control borders are at least 
 - Focus is a 3px moonlight ring; inside clipped shapes it is drawn inset.
 - Selection uses a fill (`#2c2a5a`), never a colored left edge. **No decorative left-edge accent borders** anywhere.
 - Motion is stepped (pixel timing): hover a hob and it hops; working hobs bob; thinking shows blinking dots; streaming shows a moonlight caret; new messages slide in; approve throws sparkles, deny shakes, forget poofs, sleep shows Zs. **Every animation stops with Reduce motion.**
-- Each hob is a 14×14 pixel avatar generated from a seed (hat, gear, face, ears, beard, outfit, skin) plus one of six colors (Violet, Moss, Amber, Rose, Sky, Ember). The seed and color are saved with the hob, so the same hob looks the same on every device. The 10×10 contact sprite is kept for the crest. The sprite sheet defines nine states: idle, working, thinking, waiting, needs you, asleep, celebrating, failed, sending.
+- Each hob is a 14×14 pixel avatar generated from a seed (hat, gear, face, ears, beard, outfit, skin) plus one of six colors (Violet, Moss, Amber, Rose, Sky, Ember). The seed and color are saved with the hob, so the same hob looks the same on every device. The Hobbots mark, on the rail and the app icon, is the chief of the hobs: a 20×20 elder hob built from the same parts, in a gem crown with a lantern staff. The sprite sheet defines nine states: idle, working, thinking, waiting, needs you, asleep, celebrating, failed, sending.
 
 ## Layout
 
 - **Title strip**, 30px, with the window controls.
-- **Rail**, 76px: crest, Home, Hobs, Inbox (needs-you count), Usage, and Settings at the bottom. Icons are 12×12 pixel art; the active item is moonlight on line.
+- **Rail**, 76px: the chief of the hobs, Home, Hobs, Inbox (needs-you count), Usage, and Settings at the bottom. Icons are 12×12 pixel art; the active item is moonlight on line.
 - **Hob panel**, 256px: search; "Hobs" label; each hob row (sprite, name, role · thread count) opens into its threads; "+ New thread"; a "Rooms: the great hall" card tagged Later; "+ Summon a hob"; key hints. Collapses.
 - **Chat**: header with sprite, name, thread title, role, brain chip (provider · model · effort, and health), Edit hob and the right-panel toggle. My messages are right-aligned on a line-colored bubble (max 460px); a hob's messages show its 26px sprite and name in moonlight. A new thread shows "A fresh page" with idea chips. Composer: input on deep with a control border, Send in lantern, Stop in rose, hint line. Stop ends only the current reply; Cancel lives on the Quest.
 - **Right panel**, 340px, tabs **Quest**, **Inbox**, **Workshop**. Quest: the task tree (who asked whom, owner, state, age, who is waited on); Pin keeps it visible in every thread. Inbox: this Quest's questions, approvals, problems and results with delivery state. Workshop: the live night scene with a link to the Workbench. Collapses.

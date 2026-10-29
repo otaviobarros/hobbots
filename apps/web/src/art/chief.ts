@@ -1,0 +1,68 @@
+/**
+ * The chief of the hobs: an elder hob in a gem crown with a long beard, a royal robe and cape and a
+ * lantern staff, built from the seeded hob generator's parts (`look.ts`) in the Violet hob colors.
+ *
+ * The one source of the Hobbots mark: the rail draws it, and `apps/desktop/scripts/app-icon.ts`
+ * draws the app icon from it. Keep this file free of imports so that script can load it directly.
+ */
+
+/** One palette for both drawings; "." is transparent. */
+export const CHIEF_PALETTE: Readonly<Record<string, string>> = {
+  Y: "#f2a541", // crown and medallion: Lantern
+  o: "#7fd1b9", // gems: Mint
+  R: "#ee9292", // center gem: Rose
+  y: "#f3e9b5", // lantern frame: Moonlight
+  L: "#ffd28a", // lantern light
+  n: "#7a5b3a", // staff
+  s: "#e8b98f", // skin
+  S: "#c98f6a", // nose
+  p: "#ee9292", // blush
+  k: "#141228", // eyes
+  w: "#ece8ff", // beard and brows
+  W: "#c9c3e8", // beard shading
+  M: "#b5523f", // mouth
+  c: "#8a6fd8", // robe: Violet hat
+  C: "#4b5fa8", // cape: Violet coat
+  t: "#b9a5f0", // trim: Violet trim
+  b: "#2a1f18", // boots
+};
+
+/** The full chief, 20 × 20 cells. */
+export const CHIEF = [
+  "...Y...YY...Y....nn.",
+  "...YY.YYYY.YY...nyyn",
+  "...YYYYYYYYYY...yLLy",
+  "...YoYYRRYYoY...yLLy",
+  "..ssssssssssss..nyyn",
+  "ssswwwsssswwwsss.nn.",
+  ".ssskssssssksss..n..",
+  "..spkssSSsskps...n..",
+  "..wwwwwMMwwwww...n..",
+  ".CtwwwwwwwwwwtC..n..",
+  "CCctwwwWWwwwtcCC.n..",
+  "CCcctwwwwwwtccccsss.",
+  "CCccctwwwwtcccCC.n..",
+  "CCcccctwwtccccCC.n..",
+  "CCcccccwwcccccCC.n..",
+  "CCccccYooYccccCC.n..",
+  "CCcccccYYcccccCC.n..",
+  "CCccccccccccccCC.n..",
+  "CCttttttttttttCC.n..",
+  "...bbb....bbb....n..",
+] as const;
+
+/** The same chief in 12 × 12 cells, for one pixel per cell at 16 px. */
+export const SMALL_CHIEF = [
+  ".Y..Y..Y..n.",
+  ".YYYYYYY.yLy",
+  ".YoYRYoY..n.",
+  "sssssssss.n.",
+  ".sksssks..n.",
+  ".swwMwws..n.",
+  "CtwwwwwtC.n.",
+  "Cctwwwtccsn.",
+  "CcctwtccC.n.",
+  "CcccYcccC.n.",
+  "CtttttttC.n.",
+  ".bb...bb..n.",
+] as const;
