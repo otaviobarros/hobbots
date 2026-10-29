@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import { HobbotsRepository, SqliteLive } from "@hobbots/persistence";
 import { ClaudeCodeLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { ChatService } from "./chat.ts";
 import { ServerConfig } from "./config.ts";
@@ -26,6 +26,7 @@ const ServerLive = Layer.unwrap(
         ? FakeRuntimeLayer({ delay: "40 millis" })
         : ClaudeCodeLayer({
             workspaceDir: join(config.dataDir, "workspaces", "default"),
+            executable: Option.getOrUndefined(config.claudeExecutable),
           });
     const App = ChatService.layer.pipe(Layer.provideMerge(Layer.mergeAll(Seeded, EventBus.layer, Runtime)));
 

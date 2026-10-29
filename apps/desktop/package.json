@@ -1,5 +1,7 @@
 {
   "name": "@hobbots/desktop",
+  "version": "0.0.0",
+  "description": "Hobbots desktop app",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
@@ -7,18 +9,15 @@
     "dev": "install-electron && electron-vite dev",
     "build": "electron-vite build",
     "start": "install-electron && electron-vite preview",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "package:mac": "electron-builder --mac --config electron-builder.config.mjs --publish never"
   },
   "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.311",
     "@hobbots/server": "workspace:*",
     "@types/node": "^26.6.5",
     "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0"
-  },
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.311",
-    "@effect/platform-node": "^4.0.6",
-    "@effect/sql-sqlite-node": "^4.0.6",
-    "effect": "^4.0.6"
   }
 }

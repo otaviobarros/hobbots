@@ -7,6 +7,8 @@ import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent } f
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
   readonly workspaceDir: string;
+  /** Claude Code binary to run; the SDK finds its platform package's binary when unset. */
+  readonly executable?: string | undefined;
 }
 
 /**
@@ -25,6 +27,7 @@ export const billingFrom = (apiKeySource: string | undefined, subscriptionType?:
 // ANTHROPIC_API_KEY is removed so Claude Code always uses the claude.ai login (the subscription).
 const baseOptions = (config: ClaudeCodeConfig): Options => ({
   cwd: config.workspaceDir,
+  ...(config.executable === undefined ? {} : { pathToClaudeCodeExecutable: config.executable }),
   env: {
     ...process.env,
     ANTHROPIC_API_KEY: undefined,
