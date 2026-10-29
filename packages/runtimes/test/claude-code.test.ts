@@ -118,6 +118,17 @@ describe("Claude Code health before the runtime starts", () => {
     expect(health.availability).not.toBe("outdated");
   }, 40_000);
 
+  it("reports a configured binary that does not exist as unavailable, not as an error", async () => {
+    const adapter = await Effect.runPromise(
+      makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable: join(newHome(), "missing", "claude") }),
+    );
+    const health = await Effect.runPromise(adapter.health);
+    expect(health.availability).toBe("unavailable");
+    expect(health.version).toBeNull();
+    const refused = await turn(adapter);
+    expect(Exit.isFailure(refused) && String(refused.cause)).toContain("could not be started");
+  });
+
   it("reports a binary that prints no version as unavailable", async () => {
     const adapter = await Effect.runPromise(adapterFor("#!/bin/sh\necho nope\n"));
     const health = await Effect.runPromise(adapter.health);

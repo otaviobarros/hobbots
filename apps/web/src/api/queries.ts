@@ -1,6 +1,7 @@
 import type { AgentId, Message, Thread, ThreadId } from "@hobbots/domain";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
+import { runtimeStaleTime } from "./runtime-health.ts";
 
 export const queryKeys = {
   agents: ["agents"] as const,
@@ -29,7 +30,9 @@ export const messagesQuery = (threadId: ThreadId) =>
 export const runtimesQuery = queryOptions({
   queryKey: queryKeys.runtimes,
   queryFn: () => call((c) => c.system.runtimes()),
-  staleTime: 60_000,
+  // Coming back from installing or updating Claude Code in a terminal checks again.
+  staleTime: (query) => runtimeStaleTime(query.state.data),
+  refetchOnWindowFocus: true,
 });
 
 /** Inserts or replaces by id, keeping the list order stable for existing items. */

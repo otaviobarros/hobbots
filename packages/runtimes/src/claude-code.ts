@@ -163,7 +163,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
     const versions = new Map<string, { readonly modified: number; readonly version: string }>();
     const versionOf = (binary: string) =>
       Effect.gen(function* () {
-        const modified = yield* Effect.sync(() => statSync(binary).mtimeMs).pipe(Effect.orElseSucceed(() => -1));
+        // A configured path may not exist, and an update can remove the binary between lookups.
+        const modified = yield* Effect.try(() => statSync(binary).mtimeMs).pipe(Effect.orElseSucceed(() => -1));
         const cached = versions.get(binary);
         if (cached !== undefined && cached.modified === modified) return cached.version;
         const output = yield* Effect.tryPromise(() =>
