@@ -6,6 +6,14 @@ import { loginShellPath, mergePaths } from "./shell-path.ts";
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
 app.setName("Hobbots");
 
+// The packaged app's Info.plist supplies the copyright; these keep the name and version right in
+// development too, and add the license notice.
+app.setAboutPanelOptions({
+  applicationName: "Hobbots",
+  applicationVersion: app.getVersion(),
+  credits: "Free and open-source software under the Apache License 2.0. See hobbots.ai.",
+});
+
 const port = Number(process.env.HOBBOTS_PORT ?? 4317);
 const apiUrl = `http://127.0.0.1:${port}`;
 const devWebUrl = process.env.HOBBOTS_WEB_URL ?? "http://localhost:5173";
