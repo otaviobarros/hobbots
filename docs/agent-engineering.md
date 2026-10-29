@@ -27,7 +27,7 @@ Commands live in executable configuration; read them there rather than from this
 - Deterministic runtime: `HOBBOTS_RUNTIME=fake` selects the fake adapter in [`packages/runtimes/src/fake.ts`](../packages/runtimes/src/fake.ts) (see [`apps/server/src/config.ts`](../apps/server/src/config.ts)).
 - CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `pnpm check` (SQLite) and, in a second job, the persistence and server suites with `HOBBOTS_TEST_DB=postgres` against a PostgreSQL service container.
 - Test database: suites that need a database use `TestDatabase` from `@hobbots/persistence/testing` so both CI jobs exercise them; see [`packages/persistence/README.md`](../packages/persistence/README.md#test-database). `turbo.json` declares `HOBBOTS_TEST_DB` and `HOBBOTS_TEST_DATABASE_URL`, because Turborepo's strict env mode drops undeclared variables.
-- Real interface: [README › Run it](../README.md#run-it) starts the server and web client or the Electron app.
+- Real interface: [README › Run from source](../README.md#run-from-source) starts the server and web client or the Electron app.
 
 ### Test case identity
 
@@ -35,7 +35,7 @@ Integration, end-to-end and regression tests carry a stable case ID at the start
 
 ## Environment and worktrees
 
-- Requirements and run commands: [README › Run it](../README.md#run-it). Server configuration and defaults: [`apps/server/src/config.ts`](../apps/server/src/config.ts). There is no `.env.example`; `.env*` files are git-ignored.
+- Requirements and run commands: [README › Run from source](../README.md#run-from-source). Server configuration and defaults: [`apps/server/src/config.ts`](../apps/server/src/config.ts). There is no `.env.example`; `.env*` files are git-ignored.
 - The default data folder is the user's real Hobbots data (`~/Library/Application Support/Hobbots` on macOS, `~/.hobbots` elsewhere). For development and agent work, set `HOBBOTS_DATA_DIR` to a folder under the checkout such as `.data/` (git-ignored), and prefer `HOBBOTS_RUNTIME=fake` unless the task needs the real runtime.
 - Worktrees are allowed, one branch per issue. Each worktree runs its own `pnpm install` and uses its own `HOBBOTS_DATA_DIR`. Parallel servers need distinct `HOBBOTS_PORT` values, with the web client pointed at them through `VITE_HOBBOTS_API_URL`. The web dev server uses fixed port 5173 (`strictPort` in [`apps/web/vite.config.ts`](../apps/web/vite.config.ts)), so only one web dev server runs at a time. Running several worktrees in parallel has not been verified.
 - Cleanup: stop dev servers you started and delete the worktree's `.data/` folder with the worktree.
