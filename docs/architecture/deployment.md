@@ -14,10 +14,13 @@ Every client gets the full experience: chat, Quests, Inbox, approvals and the Wo
 
 ## The hub's server
 
-- The desktop app installs the server as a per-user background service that starts at login: a login item on macOS, a systemd user service on Linux and a startup task on Windows.
-- Closing the window leaves the server running. The tray or menu-bar icon shows server state and offers Open, Pause remote access and Quit. Quit stops the server, and running work is recovered on the next start ([execution lifecycle](execution-lifecycle.md)).
-- One server per user account. The app connects to a running server rather than starting a second one and checks the server's identity before it does.
-- The server serves the web client and the API on the same port, 4317 by default, changeable in Settings › Devices.
+- The desktop app is the background service ([ADR 012](../decisions/012-macos-hub-service.md)). It runs the server as a child process and, by default, keeps running when its last window closes, so the server's life follows the app's, not the window's. Settings › General has a switch, "Keep running in the menu bar when the window closes"; turned off, closing the last window quits Hobbots, after asking if hobs are working.
+- On macOS the app is a login item (`SMAppService.mainApp` through Electron's `setLoginItemSettings`), on by default and switchable in Settings › General. Launched at login, it starts the server and the menu-bar icon without opening a window. Settings shows the registration status, including when macOS needs the user's approval.
+- The menu-bar icon shows server state (Starting, Running, Stopped, Error) and offers Open, Pause remote access and Quit. The Dock icon shows only while a window is open.
+- Quit stops the server gracefully, then exits the app; running work is recovered as interrupted on the next start ([execution lifecycle](execution-lifecycle.md)). A server the app did not start, such as a development server, is used but never stopped.
+- Linux and Windows follow the same shape (a tray icon and a login entry for the app) when they are supported; their exact startup mechanism is decided then.
+- One app instance and one server per user account. A second launch shows the existing window. The app connects to a running server rather than starting a second one, and first checks the server's identity (installation ID, version and data folder from the health endpoint); anything else on the port is an error, not a server to use.
+- The server serves the web client and the API on the same port, 4317 by default, changeable in Settings › Devices. The packaged app's window loads the client from the server like any browser on the hub; only development loads it from the Vite dev server.
 - Hobs use installed, authenticated runtimes on the hub through supported adapters ([runtime adapters](runtime-adapters.md)). Runtime login stays a vendor flow; credentials never enter conversation history.
 - Without remote access the server listens only on loopback. Closing a browser never stops work.
 
@@ -55,4 +58,4 @@ Keep privileged process and runtime operations in the server and the main proces
 
 ## Release evidence
 
-Verify that the window closing leaves the server and running work alive; the service starts at login and recovers incomplete work; a connected desktop and a tailnet browser see the same records; an unapproved device is refused; a revoked device is cut off mid-stream; turning off Tailscale removes the tailnet listener; a changed port reaches every client; backups restore data and artifact references. Supported OS and architectures remain open until validated.
+Verify that the window closing leaves (with the default setting) the server and running work alive; Quit leaves no Hobbots process running; the service starts at login without a window, on a signed build, and recovers incomplete work; opening the app twice never starts a second server; another program on the server's port produces an error, not a connection; a connected desktop and a tailnet browser see the same records; an unapproved device is refused; a revoked device is cut off mid-stream; turning off Tailscale removes the tailnet listener; a changed port reaches every client; backups restore data and artifact references. Supported OS and architectures remain open until validated.

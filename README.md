@@ -8,7 +8,22 @@ Hobbots does not build a new model or agent engine. It hosts existing runtimes s
 
 **Early validation build.** The code is a first slice ([ADR 009](docs/decisions/009-toolchain-and-validation-slice.md)): one hob on Claude Code, persistent threads and streaming chat, in the browser and in an Electron app. Delegation, inboxes, Quests, permissions and other providers are MVP work that is not built yet.
 
-## Run it
+## Install the Mac app
+
+Requirements: macOS 13 Ventura or later, on Apple silicon or Intel, and [Claude Code](https://code.claude.com/docs/en/setup) 2.1.301 or later, installed and signed in. The app runs the Claude Code installed on your Mac; it does not ship its own. Workshop tells you when Claude Code is missing, outdated or signed out.
+
+1. Download the `.dmg` for your Mac from the [latest release](https://github.com/otaviobarros/hobbots/releases/latest): `arm64` for Apple silicon, `x64` for Intel. Apple menu › About This Mac shows which one you have.
+2. Open the `.dmg` and drag Hobbots onto the Applications shortcut beside it, then eject the disk image.
+3. Open Hobbots from Applications. The app is not signed by an Apple developer yet, so macOS blocks the first launch: choose **Done** in the dialog.
+4. Open System Settings › Privacy & Security, scroll to Security, choose **Open Anyway** next to the message about Hobbots, confirm with your password or Touch ID, then choose **Open**. macOS remembers this, so later launches open normally.
+
+Hobbots keeps its data, including every thread, in `~/Library/Application Support/Hobbots`, outside the app.
+
+**Update:** quit Hobbots, download the new `.dmg` and drag the app onto Applications again, replacing the old copy. Your data stays where it is. A new version may need Open Anyway once more.
+
+**Remove:** quit Hobbots and drag it from Applications to the Trash. To delete your data as well, remove `~/Library/Application Support/Hobbots` (in Finder, Go › Go to Folder).
+
+## Run from source
 
 Requirements: Node.js 22.12 or later, pnpm, and [Claude Code](https://code.claude.com/docs/en/setup) 2.1.301 or later, installed and signed in. Hobbots runs the host's `claude`; it does not ship its own.
 

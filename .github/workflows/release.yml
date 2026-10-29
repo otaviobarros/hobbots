@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+# One run per tag; a release build is never cancelled halfway.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  package:
+    name: Package Hobbots.app
+    # electron-builder packages both architectures on Apple silicon; each is then tested on its own.
+    runs-on: macos-26
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - id: version
+        name: Read the version from the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not v<semver>."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - run: pnpm install --frozen-lockfile
+      # The tag is the version the app and installers carry.
+      - run: pnpm package:mac -c.extraMetadata.version=${{ steps.version.outputs.version }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers
+          path: apps/desktop/release/*.dmg
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke-test:
+    name: Smoke test (${{ matrix.arch }})
+    needs: package
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-26
+          - arch: x64
+            runner: macos-26-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: apps/desktop/scripts
+      - uses: actions/download-artifact@v8
+        with:
+          name: installers
+          path: installers
+      # Tests the app as users get it: copied out of the installer.
+      - name: Install from the .dmg
+        run: |
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" \
+            "installers/Hobbots-${{ needs.package.outputs.version }}-${{ matrix.arch }}.dmg"
+          ditto "$RUNNER_TEMP/dmg/Hobbots.app" "$RUNNER_TEMP/Hobbots.app"
+          hdiutil detach "$RUNNER_TEMP/dmg"
+      - name: Launch with the fake runtime, wait for /api/health, quit
+        run: apps/desktop/scripts/smoke-test.sh "$RUNNER_TEMP/Hobbots.app"
+
+  release:
+    name: Draft GitHub Release
+    needs: [package, smoke-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: installers
+          path: installers
+      # Release Please drafts the release with its changelog before pushing the tag; the installers
+      # join that draft. A tag pushed by hand gets a new draft with generated notes. Either way a
+      # maintainer reviews the draft before publishing it.
+      - name: Attach the installers to the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.package.outputs.version }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" installers/*.dmg --clobber
+          else
+            flags=(--draft --generate-notes --verify-tag --title "Hobbots $VERSION")
+            if [[ "$VERSION" == *-* ]]; then flags+=(--prerelease); fi
+            gh release create "$GITHUB_REF_NAME" "${flags[@]}" installers/*.dmg
+          fi
