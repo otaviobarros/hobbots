@@ -16,10 +16,13 @@ The [design specification](../design/ui-ux.md) records its style, layout and com
 - **Making a hob** uses seeded pixel avatars, a name dice and an effort picker.
 - **Rooms** (group chats) shows as a "Later" card. **Routines** and **Memory** move to post-MVP.
 - **Visual identity:** a night palette (ground `#141228`, moonlight, lantern, mint, rose), Atkinson Hyperlegible Next for reading text and Pixelify Sans for headings, hob names and labels, pixel corners and stepped motion. No decorative left-edge accent borders.
+- **The Hobbots mark is the chief of the hobs**, an elder hob in a gem crown with a lantern staff, built from the hob generator's parts. One drawing serves the rail and the app icon, and the icon fills its whole canvas so macOS masks it to its shape. On the rail the chief keeps still and its lantern carries status: it glows while a hob works and rises, blazes and pulses with a "!" when a request needs you.
 
 ## Rationale
 
 An animated, character-led identity carries the Hobbots name, while the layout stays close to familiar AI chat apps.
+
+The chief replaced the earlier crest at the user's direction (#41) so the app icon and the window show the same mark. A looping animation in the rail proved distracting in peripheral vision, so motion there is kept for status: the lantern reads as a quiet working light and a clear needs-you signal, in line with motion that shows what hobs are doing.
 
 ## Consequences
 
