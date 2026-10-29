@@ -1,5 +1,5 @@
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
-import { ChiefMark } from "./chief-mark.tsx";
+import { useState } from "react";
 import { Stars } from "./scene.tsx";
 
 const HOUSE = [
@@ -20,15 +20,32 @@ const LINK = [
   "..........",
   ".####.....",
   ".#..#.....",
-  ".#..####..",
-  ".####..#..",
-  "....#..#..",
-  "..####.#..",
-  "..#..####.",
-  "..#..#....",
-  "..####....",
+  ".#..#.....",
+  ".####o....",
+  ".....o####",
+  ".....#..#.",
+  ".....#..#.",
+  ".....####.",
+  "..........",
 ];
-const LINK_PALETTE = { "#": "#a9a2e0" };
+const LINK_PALETTE = HOUSE_PALETTE;
+
+/** The Elder Hob, who guides setup. */
+const ELDER = [
+  "...hhhh...",
+  "..hhhhhh..",
+  ".hhhhhhhh.",
+  "s.ssssss.s",
+  "ssksssskss",
+  ".swwwwwws.",
+  "..wwwwww..",
+  "..cwwwwc..",
+  ".cccwwccc.",
+  "..bb..bb..",
+];
+const ELDER_PALETTE = { h: "#4a3a6a", s: "#e8b98f", k: "#141228", w: "#ece8ff", c: "#6b5aa8", b: "#2a1f18" };
+
+const FIREFLIES = [0, 1, 2, 3, 4, 5].map((i) => ({ x: 30 + i * 64, bottom: 206 - (i % 3) * 30, delay: i * 0.7 }));
 
 const choiceClass = "cut flex flex-col gap-3 border-2 bg-card p-[22px] text-left text-text no-underline";
 
@@ -45,6 +62,8 @@ function ChoiceIcon({ rows, palette }: { rows: ReadonlyArray<string>; palette: R
  * a hub on another computer and the optional remote access question arrive in later slices.
  */
 export function WhereHobbotsRuns() {
+  // Each poke replays the Elder Hob's hop.
+  const [hops, setHops] = useState(0);
   return (
     <div className="flex min-h-0 flex-1">
       <aside className="relative w-[420px] flex-none overflow-hidden border-line border-r-4 bg-panel max-md:hidden">
@@ -66,9 +85,31 @@ export function WhereHobbotsRuns() {
           aria-hidden
           className="absolute top-[232px] left-[150px] border-x-[14px] border-x-transparent border-t-[16px] border-t-text"
         />
-        <div aria-hidden className="absolute bottom-[150px] left-[100px] animate-hb-bob">
-          <ChiefMark size={140} />
-        </div>
+        {FIREFLIES.map((f) => (
+          <span
+            key={f.x}
+            aria-hidden
+            className="absolute size-1 animate-hb-float bg-lantern [animation-duration:4s]"
+            style={{ left: f.x, bottom: f.bottom, animationDelay: `${f.delay}s` }}
+          />
+        ))}
+        <button
+          type="button"
+          aria-label="Elder Hob"
+          onClick={() => setHops((n) => n + 1)}
+          className="absolute bottom-[150px] left-[106px] cursor-pointer border-0 bg-transparent p-0"
+        >
+          <span className="block animate-hb-bob">
+            <span key={hops} className={`block ${hops > 0 ? "animate-hb-hop" : ""}`}>
+              <PixelArt rows={ELDER} palette={ELDER_PALETTE} size={120} />
+            </span>
+          </span>
+        </button>
+        <div aria-hidden className="absolute bottom-[150px] left-[238px] h-28 w-2 bg-wood" />
+        <div
+          aria-hidden
+          className="absolute bottom-[256px] left-[230px] h-[22px] w-6 animate-hb-flicker bg-lantern shadow-[0_0_22px_6px_rgba(242,165,65,0.45)]"
+        />
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-12 pt-10 pb-6">
@@ -76,7 +117,7 @@ export function WhereHobbotsRuns() {
           <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">Where should Hobbots run?</h1>
           <p className="m-0 mb-[22px] max-w-[640px] text-secondary-text">
             Your hobs live on one computer, the hub. It keeps working in the background, even with the window closed.
-            Hobs always work on the hub, with its folders and apps.
+            Your other devices can open it from anywhere, and hobs always work on the hub.
           </p>
           <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-2">
             {/* Hash history: the link works under Electron's file:// as well as in the browser. */}
