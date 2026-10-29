@@ -9,7 +9,7 @@ export const ServerConfig = Config.all({
   host: Config.String("HOBBOTS_HOST").pipe(Config.withDefault("127.0.0.1")),
   port: Config.Port("HOBBOTS_PORT").pipe(Config.withDefault(4317)),
   dataDir: Config.String("HOBBOTS_DATA_DIR").pipe(Config.withDefault(defaultDataDir())),
-  // The packaged desktop app ships the Claude Code binary outside its bundled server code.
+  // Overrides the host Claude Code the runtime finds on its own.
   claudeExecutable: Config.String("HOBBOTS_CLAUDE_EXECUTABLE").pipe(Config.option),
   runtime: Config.Literals(["claude", "fake"], "HOBBOTS_RUNTIME").pipe(Config.withDefault("claude" as const)),
   allowedOrigins: Config.String("HOBBOTS_ALLOWED_ORIGINS").pipe(

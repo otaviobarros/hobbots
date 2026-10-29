@@ -1,3 +1,4 @@
+import type { RuntimeHealth } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { useQuery } from "@tanstack/react-query";
 import { runtimesQuery } from "../api/queries.ts";
@@ -28,6 +29,13 @@ export function RuntimeChip() {
   );
 }
 
+const availabilityLabel: Record<RuntimeHealth["availability"], string> = {
+  ready: "Ready",
+  outdated: "Outdated",
+  unavailable: "Unavailable",
+  unverified: "Unverified",
+};
+
 /** Provider health for the Workshop tab. Detail is never shown: it can carry account names. */
 export function RuntimeCard() {
   const { pending, claude } = useClaudeRuntime();
@@ -40,7 +48,7 @@ export function RuntimeCard() {
         <ProviderTile />
         <span className="font-pixel flex-1 text-base font-semibold">Claude Code</span>
         <Badge variant={claude?.availability === "ready" ? "working" : "waiting"}>
-          {pending ? "Checking" : claude?.availability === "ready" ? "Ready" : "Unavailable"}
+          {pending ? "Checking" : availabilityLabel[claude?.availability ?? "unavailable"]}
         </Badge>
       </div>
       {claude && (
@@ -50,6 +58,21 @@ export function RuntimeCard() {
           <dt className="text-label">Version</dt>
           <dd className="m-0">{claude.version ?? "—"}</dd>
         </dl>
+      )}
+      {claude?.availability === "outdated" && (
+        <p className="mt-2 mb-0 text-sm text-lantern">
+          This Claude Code is older than Hobbots supports. Update it with <code>claude update</code>.
+        </p>
+      )}
+      {claude?.availability === "unavailable" && claude.version === null && (
+        <p className="mt-2 mb-0 text-sm text-lantern">
+          Claude Code was not found or could not start. Install it and sign in with <code>claude</code>.
+        </p>
+      )}
+      {claude?.availability === "unavailable" && claude.version !== null && (
+        <p className="mt-2 mb-0 text-sm text-lantern">
+          Claude Code is installed but did not start. Run <code>claude</code> in a terminal to sign in.
+        </p>
       )}
       {warnBilling && (
         <p className="mt-2 mb-0 text-sm text-lantern">

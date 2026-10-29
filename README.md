@@ -10,7 +10,7 @@ Hobbots does not build a new model or agent engine. It hosts existing runtimes s
 
 ## Run it
 
-Requirements: Node.js 22.12 or later, pnpm, and a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) login.
+Requirements: Node.js 22.12 or later, pnpm, and [Claude Code](https://code.claude.com/docs/en/setup) 2.1.301 or later, installed and signed in. Hobbots runs the host's `claude`; it does not ship its own.
 
 ```sh
 pnpm install

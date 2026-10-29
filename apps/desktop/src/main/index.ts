@@ -1,5 +1,4 @@
-import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
 import { app, BrowserWindow, shell, type UtilityProcess, utilityProcess } from "electron";
 
@@ -10,25 +9,10 @@ const port = Number(process.env.HOBBOTS_PORT ?? 4317);
 const apiUrl = `http://127.0.0.1:${port}`;
 const devWebUrl = process.env.HOBBOTS_WEB_URL ?? "http://localhost:5173";
 
-// A packaged app carries the web client and the Claude Code binary in its resources folder;
-// a checkout uses the web build and the SDK's platform package. The SDK is bundled into out/,
-// where it cannot find that package itself, so the server is given the binary when one is found.
-const claudeBinary = `claude${process.platform === "win32" ? ".exe" : ""}`;
-const checkoutClaude = () => {
-  try {
-    const sdkRequire = createRequire(createRequire(import.meta.url).resolve("@anthropic-ai/claude-agent-sdk"));
-    const platformPackage = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`;
-    return join(dirname(sdkRequire.resolve(`${platformPackage}/package.json`)), claudeBinary);
-  } catch {
-    return undefined;
-  }
-};
+// A packaged app carries the web client in its resources folder; a checkout uses the web build.
 const webIndex = app.isPackaged
   ? join(process.resourcesPath, "web", "index.html")
   : resolve(import.meta.dirname, "../../../web/dist/index.html");
-const claudeExecutable =
-  process.env.HOBBOTS_CLAUDE_EXECUTABLE ??
-  (app.isPackaged ? join(process.resourcesPath, "claude", claudeBinary) : checkoutClaude());
 
 let server: UtilityProcess | null = null;
 
@@ -59,7 +43,6 @@ const ensureServer = async () => {
       ...process.env,
       HOBBOTS_PORT: String(port),
       HOBBOTS_DATA_DIR: app.getPath("userData"),
-      ...(claudeExecutable === undefined ? {} : { HOBBOTS_CLAUDE_EXECUTABLE: claudeExecutable }),
     },
   });
   server.on("exit", (code) => {
