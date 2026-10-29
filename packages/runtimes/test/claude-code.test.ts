@@ -1,15 +1,27 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
-import { Effect, Exit, Stream } from "effect";
+import { Duration, Effect, Exit, Layer, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   brainOptions,
   claudeCandidates,
+  expiringCache,
   fallbackModels,
   findClaudeCode,
   isAtLeast,
   makeClaudeCode,
+  modelListMaxAge,
   parseVersion,
   runtimePath,
   toRuntimeModels,
@@ -193,5 +205,70 @@ describe("a hob's brain on Claude Code", () => {
 
   it("falls back to the documented aliases, starting with Claude Code's default", () => {
     expect(fallbackModels.models.map((m) => m.id)).toEqual(["default", "opus", "fable", "sonnet", "haiku"]);
+  });
+});
+
+const isRunning = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const until = async (check: () => boolean, ms = 5000) => {
+  const deadline = Date.now() + ms;
+  while (!check() && Date.now() < deadline) await new Promise((done) => setTimeout(done, 50));
+  return check();
+};
+
+describe("asking Claude Code for its models", () => {
+  it("closes a Claude Code that never answers when the check times out", async () => {
+    const pidFile = join(newHome(), "pid");
+    const executable = executableAt(
+      join(newHome(), "claude"),
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2.1.400 (Claude Code)"; exit 0; fi\necho $$ > "${pidFile}"\nexec sleep 60\n`,
+    );
+    const adapter = await Effect.runPromise(
+      makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable, checkTimeout: "1 second" }),
+    );
+
+    const listed = await Effect.runPromise(adapter.models);
+
+    expect(listed.source).toBe("fallback");
+    expect(await until(() => existsSync(pidFile))).toBe(true);
+    const pid = Number(readFileSync(pidFile, "utf8").trim());
+    expect(await until(() => !isRunning(pid))).toBe(true);
+  });
+
+  it("asks again once a list expires, though the binary is unchanged", async () => {
+    const lists = [
+      { ...fallbackModels, source: "runtime" as const, models: fallbackModels.models.slice(0, 2) },
+      { ...fallbackModels, source: "runtime" as const, models: fallbackModels.models.slice(0, 1) },
+    ];
+    let asked = 0;
+    const load = Effect.sync(() => lists[Math.min(asked++, lists.length - 1)] ?? fallbackModels);
+    const cached = expiringCache(modelListMaxAge);
+
+    const seen = await Effect.runPromise(
+      Effect.gen(function* () {
+        const first = yield* cached("claude@2.1.400", load);
+        yield* TestClock.adjust(Duration.minutes(4));
+        const kept = yield* cached("claude@2.1.400", load);
+        yield* TestClock.adjust(Duration.minutes(2));
+        const refreshed = yield* cached("claude@2.1.400", load);
+        return [first, kept, refreshed].map((list) => list.models.length);
+      }).pipe(Effect.provide(Layer.fresh(TestClock.layer()))),
+    );
+
+    expect(seen).toEqual([2, 2, 1]);
+    expect(asked).toBe(2);
+  });
+
+  it("keeps a fallback list for a shorter time, so a runtime that did not answer is asked again soon", () => {
+    expect(Duration.toMillis(modelListMaxAge(fallbackModels))).toBeLessThan(
+      Duration.toMillis(modelListMaxAge({ ...fallbackModels, source: "runtime" })),
+    );
   });
 });

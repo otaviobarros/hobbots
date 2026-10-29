@@ -5,7 +5,7 @@ import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { type AccountInfo, type ModelInfo, type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
-import { DateTime, Effect, Layer, Stream } from "effect";
+import { Clock, DateTime, Duration, Effect, Layer, Stream } from "effect";
 import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent } from "./adapter.ts";
 
 export interface ClaudeCodeConfig {
@@ -13,6 +13,8 @@ export interface ClaudeCodeConfig {
   readonly workspaceDir: string;
   /** Claude Code binary to run instead of the one found on this machine. */
   readonly executable?: string | undefined;
+  /** How long a health or model check waits for Claude Code to answer (30 seconds by default). */
+  readonly checkTimeout?: Duration.Input | undefined;
 }
 
 /** Oldest Claude Code release verified with the locked Agent SDK; revisit when the SDK is upgraded. */
@@ -163,6 +165,27 @@ export const fallbackModels = new RuntimeModels({
   ].map((model) => new RuntimeModel({ ...model, efforts: allEfforts })),
 });
 
+/**
+ * How long a model list is trusted: a reported list for five minutes, the fallback for one, so a
+ * Claude Code that did not answer is asked again soon without being started on every request.
+ */
+export const modelListMaxAge = (models: RuntimeModels): Duration.Duration =>
+  models.source === "runtime" ? Duration.minutes(5) : Duration.minutes(1);
+
+/** Keeps each key's value until `maxAge` of that value has passed, then loads it again. */
+export const expiringCache = <A>(maxAge: (value: A) => Duration.Duration) => {
+  const entries = new Map<string, { readonly value: A; readonly expiresAt: number }>();
+  return <E, R>(key: string, load: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const entry = entries.get(key);
+      if (entry !== undefined && now < entry.expiresAt) return entry.value;
+      const value = yield* load;
+      entries.set(key, { value, expiresAt: now + Duration.toMillis(maxAge(value)) });
+      return value;
+    });
+};
+
 const toEvents = (message: SDKMessage): ReadonlyArray<RuntimeEvent> => {
   switch (message.type) {
     case "system":
@@ -301,41 +324,42 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
     const runtimeHealth = (fields: Pick<RuntimeHealth, "availability" | "version" | "detail" | "checkedAt">) =>
       new RuntimeHealth({ runtime: "claude-code", billing: null, ...fields });
 
-    // Starts Claude Code without sending a prompt, so asking it something costs no usage.
-    const withIdleSession = async <A>(binary: string, ask: (session: ReturnType<typeof query>) => Promise<A>) => {
-      const idle: AsyncIterable<never> = {
-        [Symbol.asyncIterator]: () => ({
-          next: () => new Promise(() => {}),
+    const checkTimeout = config.checkTimeout ?? "30 seconds";
+
+    // Starts Claude Code without sending a prompt, so asking it something costs no usage. The
+    // session belongs to a scope, so a check that times out or is interrupted still closes it.
+    const askIdleSession = <A>(binary: string, ask: (session: ReturnType<typeof query>) => Promise<A>) =>
+      Effect.acquireRelease(
+        Effect.sync(() => {
+          const idle: AsyncIterable<never> = {
+            [Symbol.asyncIterator]: () => ({
+              next: () => new Promise(() => {}),
+            }),
+          };
+          return query({ prompt: idle, options: baseOptions(config, binary) });
         }),
-      };
-      const session = query({ prompt: idle, options: baseOptions(config, binary) });
-      try {
-        return await ask(session);
-      } finally {
-        session.close();
-      }
-    };
+        (session) => Effect.sync(() => session.close()),
+      ).pipe(
+        Effect.flatMap((session) => Effect.tryPromise({ try: () => ask(session), catch: errorMessage })),
+        Effect.timeout(checkTimeout),
+        Effect.scoped,
+      );
 
     const probe = (binary: string, version: string, checkedAt: string) =>
-      Effect.tryPromise({
-        try: () =>
-          withIdleSession(binary, async (session) => {
-            const account = await session.accountInfo();
-            if (isSignedOut(account)) {
-              return runtimeHealth({ availability: "signedOut", version, detail: signedOut, checkedAt });
-            }
-            return new RuntimeHealth({
-              runtime: "claude-code",
-              availability: "ready",
-              billing: billingFrom(account.apiKeySource, account.subscriptionType),
-              version,
-              detail: account.email ?? null,
-              checkedAt,
-            });
-          }),
-        catch: errorMessage,
+      askIdleSession(binary, async (session) => {
+        const account = await session.accountInfo();
+        if (isSignedOut(account)) {
+          return runtimeHealth({ availability: "signedOut", version, detail: signedOut, checkedAt });
+        }
+        return new RuntimeHealth({
+          runtime: "claude-code",
+          availability: "ready",
+          billing: billingFrom(account.apiKeySource, account.subscriptionType),
+          version,
+          detail: account.email ?? null,
+          checkedAt,
+        });
       }).pipe(
-        Effect.timeout("30 seconds"),
         Effect.catch((error) =>
           Effect.succeed(
             runtimeHealth({
@@ -369,22 +393,19 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       }
     });
 
-    // The list only changes with Claude Code itself, so it is kept per binary and version.
-    const modelLists = new Map<string, RuntimeModels>();
+    // Starting Claude Code takes seconds, so each binary's list is kept for a while. The account or a
+    // managed model policy can change it without a new binary, so it is fetched again when it expires.
+    const modelCache = expiringCache(modelListMaxAge);
     const models = Effect.gen(function* () {
       const located = yield* locate;
       if (located._tag !== "Found") return fallbackModels;
-      const key = `${located.binary}@${located.version}`;
-      const cached = modelLists.get(key);
-      if (cached !== undefined) return cached;
-      const listed = yield* Effect.tryPromise({
-        try: () => withIdleSession(located.binary, (session) => session.supportedModels()),
-        catch: errorMessage,
-      }).pipe(Effect.timeout("30 seconds"), Effect.option);
-      if (listed._tag === "None" || listed.value.length === 0) return fallbackModels;
-      const reported = toRuntimeModels(listed.value);
-      modelLists.set(key, reported);
-      return reported;
+      return yield* modelCache(
+        `${located.binary}@${located.version}`,
+        askIdleSession(located.binary, (session) => session.supportedModels()).pipe(
+          Effect.map((listed) => (listed.length === 0 ? fallbackModels : toRuntimeModels(listed))),
+          Effect.orElseSucceed(() => fallbackModels),
+        ),
+      );
     });
 
     return RuntimeAdapter.of({ health, models, sendPrompt });
