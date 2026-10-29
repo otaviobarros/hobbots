@@ -24,6 +24,18 @@ export const ServerIdentity = Schema.Struct({
 });
 export type ServerIdentity = typeof ServerIdentity.Type;
 
+/** A hob with a turn in progress. */
+export const WorkingHob = Schema.Struct({
+  agentId: AgentId,
+  name: Schema.String,
+  threadId: ThreadId,
+});
+
+/** What the hub is doing right now; the desktop app asks before closing would stop the work. */
+export const Activity = Schema.Struct({
+  working: Schema.Array(WorkingHob),
+});
+
 export class AgentsGroup extends HttpApiGroup.make("agents")
   .add(
     HttpApiEndpoint.get("list", "/agents", { success: Schema.Array(Agent) }),
@@ -63,6 +75,7 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
 export class SystemGroup extends HttpApiGroup.make("system")
   .add(
     HttpApiEndpoint.get("health", "/health", { success: ServerIdentity }),
+    HttpApiEndpoint.get("activity", "/activity", { success: Activity }),
     HttpApiEndpoint.get("runtimes", "/runtimes", {
       success: Schema.Array(RuntimeHealth),
     }),

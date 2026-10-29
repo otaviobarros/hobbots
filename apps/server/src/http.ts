@@ -52,8 +52,32 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     const bus = yield* EventBus;
     const runtime = yield* RuntimeAdapter;
     const installation = yield* Installation;
+    const repo = yield* HobbotsRepository;
+    const chat = yield* ChatService;
+
+    // A hob is working while one of its threads has a turn in progress.
+    const activity = chat.activeThreads.pipe(
+      Effect.flatMap((threadIds) =>
+        Effect.forEach(threadIds, (threadId) =>
+          repo.findThread(threadId).pipe(
+            Effect.flatMap(
+              Option.match({
+                onNone: () => Effect.succeed(Option.none()),
+                onSome: (thread) =>
+                  repo
+                    .findAgent(thread.agentId)
+                    .pipe(Effect.map(Option.map((agent) => ({ agentId: agent.id, name: agent.name, threadId })))),
+              }),
+            ),
+          ),
+        ),
+      ),
+      Effect.map((hobs) => ({ working: hobs.flatMap(Option.toArray) })),
+    );
+
     return handlers.handleAll({
       health: () => Effect.succeed(installation),
+      activity: () => activity,
       runtimes: () => runtime.health.pipe(Effect.map((health) => [health])),
       events: () => Effect.succeed(bus.stream),
     });

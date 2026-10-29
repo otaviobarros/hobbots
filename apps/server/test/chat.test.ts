@@ -8,15 +8,13 @@ import { EventBus } from "../src/event-bus.ts";
 import { ALDRIC_ID, seedAgents } from "../src/seed.ts";
 
 const Persistence = HobbotsRepository.layer.pipe(Layer.provideMerge(TestDatabase));
-const TestLayer = ChatService.layer.pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(
-      Layer.effectDiscard(seedAgents).pipe(Layer.provideMerge(Persistence)),
-      EventBus.layer,
-      FakeRuntimeLayer(),
+const testLayer = (runtime = FakeRuntimeLayer()) =>
+  ChatService.layer.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(Layer.effectDiscard(seedAgents).pipe(Layer.provideMerge(Persistence)), EventBus.layer, runtime),
     ),
-  ),
-);
+  );
+const TestLayer = testLayer();
 
 describe("ChatService", () => {
   // covers CH-002, CH-004, DP-003
@@ -58,5 +56,32 @@ describe("ChatService", () => {
     expect(firstSession?.title).toBe("hello");
     expect(firstSession?.runtimeSessionId).toMatch(/^fake-/);
     expect(secondSession?.runtimeSessionId).toBe(firstSession?.runtimeSessionId);
+  });
+
+  // covers EX-005
+  it("[TC-EX-001] lists a thread as active while its turn runs and drops it once the turn ends", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const repo = yield* HobbotsRepository;
+      const thread = yield* chat.createThread(ALDRIC_ID);
+
+      yield* chat.sendPrompt(thread.id, "hello");
+      const during = yield* chat.activeThreads;
+      yield* repo.listMessages(thread.id).pipe(
+        Effect.flatMap((messages) =>
+          messages.some((m) => m.status === "streaming") ? Effect.fail("streaming" as const) : Effect.void,
+        ),
+        Effect.retry(Schedule.spaced("5 millis")),
+      );
+      // The turn's fiber leaves the map just after it saves the final message.
+      const after = yield* chat.activeThreads.pipe(
+        Effect.flatMap((ids) => (ids.length > 0 ? Effect.fail("active" as const) : Effect.succeed(ids))),
+        Effect.retry(Schedule.spaced("5 millis")),
+      );
+      return { threadId: thread.id, during, after };
+    }).pipe(Effect.provide(testLayer(FakeRuntimeLayer({ delay: "20 millis" }))), Effect.scoped, Effect.runPromise);
+
+    expect(result.during).toEqual([result.threadId]);
+    expect(result.after).toEqual([]);
   });
 });

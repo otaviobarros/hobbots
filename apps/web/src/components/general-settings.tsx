@@ -6,6 +6,8 @@ import { loginItemNotice } from "../api/login-item.ts";
 
 const bridge = globalThis.window?.hobbots?.loginItem;
 const loginItemKey = ["desktop", "loginItem"] as const;
+const keepRunningBridge = globalThis.window?.hobbots?.keepRunning;
+const keepRunningKey = ["desktop", "keepRunning"] as const;
 
 function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) {
   const queryClient = useQueryClient();
@@ -71,11 +73,64 @@ function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) 
   );
 }
 
-/** Settings › General: how Hobbots starts on this Mac. Only the desktop app can change it. */
+function KeepRunningRow({ keepRunning }: { keepRunning: NonNullable<typeof keepRunningBridge> }) {
+  const queryClient = useQueryClient();
+  const labelId = useId();
+  // Local IPC, so it runs while the browser reports being offline.
+  const state = useQuery({ queryKey: keepRunningKey, queryFn: keepRunning.get, networkMode: "always" });
+  const change = useMutation({
+    mutationFn: keepRunning.set,
+    networkMode: "always",
+    onSuccess: (on) => queryClient.setQueryData(keepRunningKey, on),
+  });
+  const on = change.isPending ? change.variables : (state.data ?? true);
+
+  return (
+    <>
+      <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+        <div className="flex flex-1 flex-col gap-0.5">
+          <span id={labelId} className="font-bold">
+            Keep running in the menu bar when the window closes
+          </span>
+          <span className="text-[13px] text-secondary-text">
+            Hobs keep working after you close the window. Reopen it from the menu-bar icon.
+          </span>
+        </div>
+        <Switch
+          aria-labelledby={labelId}
+          checked={on}
+          disabled={state.data === undefined || change.isPending}
+          onCheckedChange={(next) => change.mutate(next)}
+        />
+      </div>
+      {state.data !== undefined && !on && (
+        <p role="status" className="cut m-0 border-2 border-lantern bg-[#2a2140] px-3 py-2.5 text-sm leading-[1.45]">
+          Closing the window will quit Hobbots. Hobs stop what they are doing, and their work is picked up again as
+          interrupted next time. If hobs are busy, Hobbots asks before quitting.
+        </p>
+      )}
+      {(state.isError || change.isError) && (
+        <p role="alert" className="m-0 text-sm text-rose">
+          Hobbots could not read or change this setting. Try again.
+        </p>
+      )}
+      <p className="m-0 text-[13px] text-label">
+        Quitting Hobbots from the menu-bar icon or with ⌘Q stops the server it started either way.
+      </p>
+    </>
+  );
+}
+
+/** Settings › General: how Hobbots starts and stays running on this Mac. Only the desktop app can change it. */
 export function GeneralSettings() {
-  return bridge ? (
-    <LoginItemRow loginItem={bridge} />
+  return bridge || keepRunningBridge ? (
+    <>
+      {bridge && <LoginItemRow loginItem={bridge} />}
+      {keepRunningBridge && <KeepRunningRow keepRunning={keepRunningBridge} />}
+    </>
   ) : (
-    <p className="m-0 text-secondary-text">Open at login is set in the Hobbots app on the Mac that runs your hub.</p>
+    <p className="m-0 text-secondary-text">
+      Open at login and the menu bar are set in the Hobbots app on the Mac that runs your hub.
+    </p>
   );
 }

@@ -1,11 +1,14 @@
 import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
-import { app, BrowserWindow, dialog, ipcMain, shell, type UtilityProcess, utilityProcess } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell, utilityProcess } from "electron";
+import { handleKeepRunningIpc } from "./keep-running.ts";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
-import { checkServer, requireOurs, ServerProblem, waitForServer } from "./server-identity.ts";
+import { startMenuBar } from "./menu-bar.ts";
+import { ServerSupervisor, StartTimedOut } from "./server.ts";
+import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server-identity.ts";
 import { fileSettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
-import { claimSingleInstance, onSecondLaunch, reveal } from "./single-instance.ts";
+import { claimSingleInstance, onSecondLaunch } from "./single-instance.ts";
 
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
 app.setName("Hobbots");
@@ -30,8 +33,6 @@ const devWebUrl = process.env.HOBBOTS_WEB_URL ?? "http://localhost:5173";
 // The server serves it, and the window loads it from there like any browser on the hub (ADR 012).
 const webDir = app.isPackaged ? join(process.resourcesPath, "web") : resolve(import.meta.dirname, "../../../web/dist");
 
-let server: UtilityProcess | null = null;
-
 /** The pages the window may show, and the only ones the preload bridge answers. */
 const isAllowedUrl = (url: string) => url.startsWith(`${devWebUrl}/`) || url.startsWith(`${apiUrl}/`);
 
@@ -43,31 +44,34 @@ const isUp = async (url: string) => {
   }
 };
 
-/** Connects to this installation's running server, or launches one owned by this app. */
-const ensureServer = async () => {
-  const dataDir = app.getPath("userData");
-  const running = await checkServer(apiUrl, dataDir);
-  if (running.kind !== "none") return requireOurs(running, port);
-  // A packaged app is opened from Finder or the Dock, without the shell's PATH.
-  const path = app.isPackaged ? mergePaths(await loginShellPath(), process.env.PATH) : process.env.PATH;
-  server = utilityProcess.fork(serverPath, [], {
-    serviceName: "Hobbots Server",
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      PATH: path,
-      HOBBOTS_PORT: String(port),
-      HOBBOTS_DATA_DIR: dataDir,
-      HOBBOTS_VERSION: app.getVersion(),
-      HOBBOTS_WEB_DIR: webDir,
-    },
-  });
-  server.on("exit", (code) => {
-    console.log(`Hobbots server exited with code ${code}`);
-    server = null;
-  });
-  requireOurs(await waitForServer(apiUrl, dataDir, 20_000), port);
-};
+/** This installation's server, attached to when it already runs or launched and owned by this app. */
+const supervisor = new ServerSupervisor({
+  apiUrl,
+  probe: async () => {
+    const check = await checkServer(apiUrl, app.getPath("userData"));
+    if (check.kind === "none") return "none";
+    requireOurs(check, port);
+    return "ours";
+  },
+  launch: async () => {
+    // A packaged app is opened from Finder or the Dock, without the shell's PATH.
+    const path = app.isPackaged ? mergePaths(await loginShellPath(), process.env.PATH) : process.env.PATH;
+    const server = utilityProcess.fork(serverPath, [], {
+      serviceName: "Hobbots Server",
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        PATH: path,
+        HOBBOTS_PORT: String(port),
+        HOBBOTS_DATA_DIR: app.getPath("userData"),
+        HOBBOTS_VERSION: app.getVersion(),
+        HOBBOTS_WEB_DIR: webDir,
+      },
+    });
+    server.on("exit", (code) => console.log(`Hobbots server exited with code ${code}`));
+    return server;
+  },
+});
 
 const createWindow = async () => {
   const window = new BrowserWindow({
@@ -104,17 +108,13 @@ const createWindow = async () => {
   } else {
     await window.loadURL(`${apiUrl}/`);
   }
-};
-
-/** Shows the existing window, or opens one when there is none. */
-const showWindow = () => {
-  const [existing] = BrowserWindow.getAllWindows();
-  if (existing) reveal(existing);
-  else void createWindow();
+  return window;
 };
 
 app.whenReady().then(async () => {
   if (!primary) return;
+  const settings = fileSettingsStore(join(app.getPath("userData"), "desktop-settings.json"));
+  const isTrusted = (event: Electron.IpcMainInvokeEvent) => isAllowedUrl(event.senderFrame?.url ?? "");
   // Only the installed app registers, so a checkout never adds Electron itself as a login item.
   const loginItem = makeLoginItem({
     supported: app.isPackaged && process.platform === "darwin",
@@ -122,38 +122,46 @@ app.whenReady().then(async () => {
       read: () => app.getLoginItemSettings(),
       write: (openAtLogin) => app.setLoginItemSettings({ openAtLogin }),
     },
-    settings: fileSettingsStore(join(app.getPath("userData"), "desktop-settings.json")),
+    settings,
   });
   handleLoginItemIpc({
     ipcMain,
     loginItem,
-    isTrusted: (event) => isAllowedUrl(event.senderFrame?.url ?? ""),
+    isTrusted,
     openSystemSettings: () => shell.openExternal(loginItemsSettingsUrl),
   });
+  handleKeepRunningIpc({ ipcMain, settings, isTrusted });
+  const menuBar = startMenuBar({ supervisor, settings, apiUrl, port, createWindow });
   try {
-    await ensureServer();
-    // Opened at login, Hobbots starts in the background; the Dock or Finder opens the window.
-    if (!loginItem.openedAtLogin) await createWindow();
+    await supervisor.start();
   } catch (error) {
     console.error(error);
-    if (error instanceof ServerProblem) {
-      await dialog.showMessageBox({ type: "error", message: error.message, detail: error.detail, buttons: ["Quit"] });
+    const problem =
+      error instanceof ServerProblem
+        ? error
+        : error instanceof StartTimedOut
+          ? serverProblem({ kind: "none" }, port)
+          : undefined;
+    if (problem) {
+      await dialog.showMessageBox({
+        type: "error",
+        message: problem.message,
+        detail: problem.detail,
+        buttons: ["Quit"],
+      });
     }
     app.quit();
     return;
   }
-  onSecondLaunch(showWindow);
+  onSecondLaunch(() => void menuBar.showWindow());
   // The Dock icon or opening the app from Finder; macOS already fronts a visible window.
   app.on("activate", (_event, hasVisibleWindows) => {
-    if (!hasVisibleWindows) showWindow();
+    if (!hasVisibleWindows) void menuBar.showWindow();
   });
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
-
-// A server this app launched stops with it; a server started separately keeps running.
-app.on("before-quit", () => {
-  server?.kill();
+  // Opened at login, Hobbots starts in the menu bar; the menu-bar icon, the Dock or Finder opens the window.
+  if (loginItem.openedAtLogin) {
+    if (process.platform === "darwin") app.setActivationPolicy("accessory");
+  } else {
+    await menuBar.showWindow();
+  }
 });

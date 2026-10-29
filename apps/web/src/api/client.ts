@@ -21,6 +21,11 @@ declare global {
         readonly set: (openAtLogin: boolean) => Promise<LoginItemState>;
         readonly openSystemSettings: () => Promise<LoginItemState>;
       };
+      /** Whether closing the last window keeps Hobbots running in the menu bar. */
+      readonly keepRunning?: {
+        readonly get: () => Promise<boolean>;
+        readonly set: (on: boolean) => Promise<boolean>;
+      };
     };
   }
 }

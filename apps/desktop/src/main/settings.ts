@@ -2,11 +2,14 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 /**
- * Choices that belong to this Mac rather than to the hub, such as whether Hobbots opens at login.
+ * Choices that belong to this Mac rather than to the hub, such as whether Hobbots opens at login
+ * or keeps running in the menu bar.
  * A setting that was never chosen is absent, so each one keeps its own default.
  */
 export interface DesktopSettings {
   readonly openAtLogin?: boolean;
+  /** Closing the last window keeps the app, the server and running work alive (ADR 012). */
+  readonly keepRunningInMenuBar?: boolean;
 }
 
 export interface SettingsStore {
@@ -17,8 +20,11 @@ export interface SettingsStore {
 const parse = (raw: string): DesktopSettings => {
   const value: unknown = JSON.parse(raw);
   if (typeof value !== "object" || value === null) return {};
-  const { openAtLogin } = value as Record<string, unknown>;
-  return typeof openAtLogin === "boolean" ? { openAtLogin } : {};
+  const { openAtLogin, keepRunningInMenuBar } = value as Record<string, unknown>;
+  return {
+    ...(typeof openAtLogin === "boolean" ? { openAtLogin } : {}),
+    ...(typeof keepRunningInMenuBar === "boolean" ? { keepRunningInMenuBar } : {}),
+  };
 };
 
 /** A small JSON file in the app's data folder. A missing or unreadable file reads as no choices made. */
