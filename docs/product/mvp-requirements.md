@@ -61,7 +61,7 @@ Thread forking with context snapshots is an open extension.
 | EX-002 | Validated explicit transitions and typed failures. | An illegal transition or stale state version is rejected without partial status updates. |
 | EX-003 | Reconcile after restart/disconnection. | Unknown live outcomes are shown as unverified until reconciled; unsafe side effects are not blindly replayed. |
 | EX-004 | Bounded retries and timeout handling. | Failures retain evidence and retry history; irreversible uncertain actions require reconciliation. |
-| EX-005 | UI lifecycle independent of execution. | Closing a browser or the desktop window does not stop server work; only quitting the hub's background service does. |
+| EX-005 | UI lifecycle independent of execution. | Closing a browser or the desktop window does not stop server work; only quitting the hub's background service does. A user who turns off "Keep running in the menu bar" makes closing the hub's last window a Quit, after a warning when hobs are working. |
 | EX-006 | Persist result and notify parent reliably. | A crash between completion and notification cannot permanently lose the result or continuation. |
 
 ## Permissions and autonomy

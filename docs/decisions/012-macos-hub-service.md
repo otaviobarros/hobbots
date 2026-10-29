@@ -16,13 +16,16 @@ Two shapes were considered:
 Option A, for the MVP and until there is evidence that B is needed.
 
 - **The app is the service.** Hobbots.app keeps running when its last window closes. The server stays a `utilityProcess` child of the main process, so there is one process tree and one place that starts and stops the server.
+- **Closing the window is the user's choice.** A switch, "Keep running in the menu bar when the window closes", sits in Settings › General and is on by default. When it is on, closing the last window leaves the app, the server and running work alive. When it is off, closing the last window quits Hobbots as Quit does; if hobs are working, the app first asks, saying that their work will stop and be recovered as interrupted. The switch changes only what closing the window does: the login item and Quit behave the same either way.
 - **Menu-bar icon.** A `Tray` with a template image shows the server's state (Starting, Running, Stopped, Error) and offers Open Hobbots, Pause remote access and Quit Hobbots. The Dock icon shows only while a window is open: the app switches between the `regular` and `accessory` activation policies.
 - **Quit stops everything.** Quit in the menu-bar icon, the app menu or ⌘Q asks the server to stop, waits for it to exit (with a timeout, then kills it) and then exits the app. Work in progress is recovered as interrupted on the next start ([execution lifecycle](../architecture/execution-lifecycle.md)). A server the app did not start, such as one from `pnpm dev`, is used but never stopped.
-- **Login item.** The app registers itself with `app.setLoginItemSettings({ openAtLogin })`, which uses `SMAppService.mainApp` on macOS 13 and later. It is on by default and switchable in Settings. Electron 45 removed `openAsHidden`, so the app decides itself: when `getLoginItemSettings().wasOpenedAtLogin` is true it starts the server and the menu-bar icon without a window. Settings shows the registration `status`, including `requires-approval`, which the user resolves in System Settings › General › Login Items.
+- **Login item.** The app registers itself with `app.setLoginItemSettings({ openAtLogin })`, which uses `SMAppService.mainApp` on macOS 13 and later. It is on by default and switchable in Settings › General ("Open Hobbots at login"). Electron 45 removed `openAsHidden`, so the app decides itself: when `getLoginItemSettings().wasOpenedAtLogin` is true it starts the server and the menu-bar icon without a window. Settings shows the registration `status`, including `requires-approval`, which the user resolves in System Settings › General › Login Items.
 - **One instance.** The app takes Electron's single-instance lock; a second launch, or opening the app from Finder or the Dock, shows the existing window. Before using a server already listening on the port, the app checks its identity (installation ID, version and data folder from the health endpoint) and shows an error instead of connecting to anything else.
 - **The window loads the served client.** Once the server is up and its identity checked, the packaged app's window loads `http://127.0.0.1:<port>/`, the same web client every browser on the hub gets from the server. Every client then shares one origin and one build, and CORS is needed only for the Vite dev server, which `pnpm dev` still loads. Navigation stays limited to that origin, and the preload bridge stays narrow.
 
 ## Rationale
+
+Keeping the app alive after the window closes is the default because hobs are meant to keep working ([EX-005](../product/mvp-requirements.md)), but people expect to choose how a menu-bar app behaves, as they do in other apps that live there. The switch makes that choice explicit and warns before it stops work.
 
 A is the smallest change that satisfies ADR 010 on macOS: no extra bundle content, no separate install, update or uninstall step, and no chance of the app and the service running different versions after an update. Quit has one obvious meaning. The menu-bar app is also the familiar shape for an always-on Mac tool.
 
@@ -37,7 +40,7 @@ B's advantage is that the server survives a crash of the app. That matters less 
 
 What changes for the slice 3 issues:
 
-- **#45** removes the `window-all-closed` quit, adds the menu-bar icon and the activation-policy switch, and makes Quit stop the server gracefully before exiting.
+- **#45** keeps the app running when the window closes (unless the switch is off), adds the menu-bar icon, the activation-policy switch and the "Keep running in the menu bar" setting, and makes Quit stop the server gracefully before exiting.
 - **#46** registers the login item, starts hidden when `wasOpenedAtLogin` is true, adds the switch and shows the registration status.
 - **#47** adds the single-instance lock, the `second-instance` and `activate` handling and the identity check.
 - **#48** serves the web client from the server, and the packaged window loads it from the server as described above.
