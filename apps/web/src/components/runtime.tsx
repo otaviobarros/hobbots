@@ -1,10 +1,18 @@
+import type { RuntimeHealth } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
+import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { runtimesQuery } from "../api/queries.ts";
+import { claudeInstallGuide, runtimeProblem } from "../api/runtime-health.ts";
 
 const useClaudeRuntime = () => {
   const runtimes = useQuery(runtimesQuery);
-  return { pending: runtimes.isPending, claude: runtimes.data?.[0] };
+  return {
+    pending: runtimes.isPending,
+    checking: runtimes.isFetching,
+    claude: runtimes.data?.[0],
+    checkAgain: () => void runtimes.refetch(),
+  };
 };
 
 const ProviderTile = () => (
@@ -28,9 +36,17 @@ export function RuntimeChip() {
   );
 }
 
+const availabilityLabel: Record<RuntimeHealth["availability"], string> = {
+  ready: "Ready",
+  outdated: "Outdated",
+  unavailable: "Unavailable",
+  unverified: "Unverified",
+};
+
 /** Provider health for the Workshop tab. Detail is never shown: it can carry account names. */
 export function RuntimeCard() {
-  const { pending, claude } = useClaudeRuntime();
+  const { pending, checking, claude, checkAgain } = useClaudeRuntime();
+  const problem = runtimeProblem(claude);
   const onSubscription = claude?.billing?.startsWith("subscription") ?? false;
   const warnBilling = claude?.availability === "ready" && !onSubscription && claude.billing !== "fake";
 
@@ -40,7 +56,7 @@ export function RuntimeCard() {
         <ProviderTile />
         <span className="font-pixel flex-1 text-base font-semibold">Claude Code</span>
         <Badge variant={claude?.availability === "ready" ? "working" : "waiting"}>
-          {pending ? "Checking" : claude?.availability === "ready" ? "Ready" : "Unavailable"}
+          {pending ? "Checking" : availabilityLabel[claude?.availability ?? "unavailable"]}
         </Badge>
       </div>
       {claude && (
@@ -50,6 +66,36 @@ export function RuntimeCard() {
           <dt className="text-label">Version</dt>
           <dd className="m-0">{claude.version ?? "—"}</dd>
         </dl>
+      )}
+      {problem === "outdated" && (
+        <p className="mt-2 mb-0 text-sm text-lantern">
+          This Claude Code is older than Hobbots supports. Update it with <code>claude update</code>.
+        </p>
+      )}
+      {problem === "notFound" && (
+        <p className="mt-2 mb-0 text-sm text-lantern">
+          Claude Code was not found or could not start. Install it and sign in with <code>claude</code>.
+        </p>
+      )}
+      {problem === "notStarted" && (
+        <p className="mt-2 mb-0 text-sm text-lantern">
+          Claude Code is installed but did not start. Run <code>claude</code> in a terminal to sign in.
+        </p>
+      )}
+      {problem !== null && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {problem === "notFound" && (
+            <Button asChild variant="outline" size="sm">
+              <a href={claudeInstallGuide} target="_blank" rel="noreferrer">
+                Install guide
+              </a>
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={checkAgain} disabled={checking}>
+            {checking ? "Looking on this Mac…" : "Check again"}
+          </Button>
+          <span className="text-xs text-label">No need to restart Hobbots.</span>
+        </div>
       )}
       {warnBilling && (
         <p className="mt-2 mb-0 text-sm text-lantern">

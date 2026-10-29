@@ -6,6 +6,7 @@
     "dev": "turbo run dev --filter=@hobbots/server --filter=@hobbots/web",
     "dev:desktop": "turbo run dev --filter=@hobbots/desktop --filter=@hobbots/web",
     "build": "turbo run build",
+    "package:mac": "turbo run build --filter=@hobbots/web --filter=@hobbots/desktop && pnpm --filter @hobbots/desktop package:mac",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:pg": "node scripts/test-pg.mjs",

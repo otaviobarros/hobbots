@@ -9,6 +9,11 @@ const port = Number(process.env.HOBBOTS_PORT ?? 4317);
 const apiUrl = `http://127.0.0.1:${port}`;
 const devWebUrl = process.env.HOBBOTS_WEB_URL ?? "http://localhost:5173";
 
+// A packaged app carries the web client in its resources folder; a checkout uses the web build.
+const webIndex = app.isPackaged
+  ? join(process.resourcesPath, "web", "index.html")
+  : resolve(import.meta.dirname, "../../../web/dist/index.html");
+
 let server: UtilityProcess | null = null;
 
 const isUp = async (url: string) => {
@@ -82,7 +87,7 @@ const createWindow = async () => {
   if (!app.isPackaged && (await isUp(devWebUrl))) {
     await window.loadURL(devWebUrl);
   } else {
-    await window.loadFile(resolve(import.meta.dirname, "../../../web/dist/index.html"));
+    await window.loadFile(webIndex);
   }
 };
 

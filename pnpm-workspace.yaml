@@ -4,3 +4,5 @@ packages:
 allowBuilds:
   electron: true
   esbuild: true
+  # Windows installer helper pulled in by electron-builder; macOS packaging does not need it.
+  electron-winstaller: false

@@ -198,7 +198,13 @@ function AiPlans() {
   const runtimes = useQuery(runtimesQuery);
   const claude = runtimes.data?.[0];
   const ready = claude?.availability === "ready";
-  const left = runtimes.isPending ? "Checking…" : ready ? planLabel(claude?.billing ?? null) : "Not connected";
+  const left = runtimes.isPending
+    ? "Checking…"
+    : ready
+      ? planLabel(claude?.billing ?? null)
+      : claude?.availability === "outdated"
+        ? "Update needed"
+        : "Not connected";
 
   return (
     <Card label="AI plans">
