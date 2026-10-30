@@ -1,4 +1,4 @@
-import type { Message, ThreadId } from "@hobbots/domain";
+import { isInProgress, type Message, type ThreadId } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
 
 /** What a thread's hob is doing right now, learned from live events. Absent means idle. */
@@ -27,7 +27,7 @@ export const recordActivity = (queryClient: QueryClient, message: Message) =>
   setActivity(
     queryClient,
     message.threadId,
-    message.status === "streaming" ? (message.content.length > 0 ? "working" : "thinking") : null,
+    isInProgress(message.status) ? (message.content.length > 0 ? "working" : "thinking") : null,
   );
 
 export const useActivity = (): ActivityMap => useQuery(activityQuery).data ?? {};

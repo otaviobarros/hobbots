@@ -36,7 +36,7 @@ const ServerLive = Layer.unwrap(
     );
     const Runtime =
       config.runtime === "fake"
-        ? FakeRuntimeLayer({ delay: "40 millis" })
+        ? FakeRuntimeLayer({ delay: "40 millis", stopDelay: "600 millis" })
         : ClaudeCodeLayer({
             workspaceDir: join(config.dataDir, "workspaces", "default"),
             executable: Option.getOrUndefined(config.claudeExecutable),

@@ -14,5 +14,9 @@ export const HobbotsEvent = Schema.Union([
     messageId: MessageId,
     delta: Schema.String,
   }),
+  /** The user asked to stop a reply; it shows as stopping until the runtime confirms. */
+  Schema.TaggedStruct("TurnStopRequested", { threadId: ThreadId, messageId: MessageId }),
+  /** The runtime confirmed the stopped turn ended; the reply is now stopped. */
+  Schema.TaggedStruct("TurnStopped", { threadId: ThreadId, messageId: MessageId }),
 ]);
 export type HobbotsEvent = typeof HobbotsEvent.Type;

@@ -53,7 +53,7 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
           ),
         ),
       sendPrompt: ({ params, payload }) => chat.sendPrompt(params.threadId, payload.content),
-      interrupt: ({ params }) => chat.interrupt(params.threadId),
+      interrupt: ({ params }) => chat.stop(params.threadId),
     });
   }),
 );

@@ -12,6 +12,7 @@ export function Composer({
   draft,
   onDraft,
   busy,
+  stopping,
   sending,
   onSend,
   onStop,
@@ -21,6 +22,8 @@ export function Composer({
   draft: string;
   onDraft: (draft: string) => void;
   busy: boolean;
+  /** Stop was pressed and the reply has not ended yet. */
+  stopping: boolean;
   sending: boolean;
   onSend: (content: string) => void;
   onStop: () => void;
@@ -51,8 +54,8 @@ export function Composer({
           className="field-sizing-content max-h-40 min-h-[47px] flex-1 resize-none border-2 border-control bg-deep px-3.5 py-[11px] text-text placeholder:text-label disabled:cursor-not-allowed disabled:border-line disabled:opacity-70"
         />
         {busy && (
-          <Button variant="deny" onClick={onStop} className="px-4 py-[9px]">
-            ■ Stop
+          <Button variant="deny" onClick={onStop} disabled={stopping} className="px-4 py-[9px]">
+            {stopping ? "Stopping…" : "■ Stop"}
           </Button>
         )}
         {paused ? (
@@ -67,7 +70,9 @@ export function Composer({
       </div>
       <span className="text-xs text-label">
         {busy
-          ? "Stop ends this reply only. What was written so far is kept."
+          ? stopping
+            ? "Stopping this reply. What was written so far is kept."
+            : "Stop ends this reply only. What was written so far is kept."
           : paused
             ? `Paused hobs take no new work. Your draft stays here until you wake ${paused.name}.`
             : "Enter sends · Shift+Enter adds a line · Hobs have no tools in this build yet"}

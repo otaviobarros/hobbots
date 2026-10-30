@@ -4,6 +4,7 @@ import {
   type AgentConfiguration,
   type AgentId,
   DEFAULT_THREAD_TITLE,
+  type HobbotsEvent,
   Message,
   MessageId,
   MessageTransitions,
@@ -13,9 +14,28 @@ import {
 } from "@hobbots/domain";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter, type RuntimeEvent } from "@hobbots/runtimes";
-import { Context, DateTime, Effect, FiberMap, Layer, Option, Ref, Stream } from "effect";
+import { Context, DateTime, Effect, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { EventBus } from "./event-bus.ts";
+
+/** The events a saved message produces: always its upsert, then any stop outcome it records. */
+const messageEvents = (message: Message): ReadonlyArray<HobbotsEvent> => {
+  const ids = { threadId: message.threadId, messageId: message.id };
+  const upserted: HobbotsEvent = { _tag: "MessageUpserted", message };
+  switch (message.status) {
+    case "stopping":
+      return [upserted, { _tag: "TurnStopRequested", ...ids }];
+    case "stopped":
+      return [upserted, { _tag: "TurnStopped", ...ids }];
+    default:
+      return [upserted];
+  }
+};
+
+interface Reply {
+  readonly current: Ref.Ref<Message>;
+  readonly lock: Semaphore.Semaphore;
+}
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
@@ -30,8 +50,13 @@ export class ChatService extends Context.Service<
       { userMessage: Message; assistantMessage: Message },
       ThreadNotFound | ThreadBusy | HobUnavailable
     >;
-    readonly interrupt: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
-    /** Stops every turn the hob has in progress and waits until each is recorded as interrupted. */
+    /**
+     * Asks the thread's current turn to stop and returns once the request is recorded: the reply shows
+     * as stopping, then as stopped when the runtime confirms the turn ended. Asking again, or with no
+     * turn in progress, changes nothing.
+     */
+    readonly stop: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
+    /** Stops every turn the hob has in progress and waits until each has ended (stopped if the user had asked, otherwise interrupted). */
     readonly interruptAgent: (agentId: AgentId) => Effect.Effect<void>;
     /** Threads with a turn in progress in this process. */
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
@@ -45,11 +70,12 @@ export class ChatService extends Context.Service<
       const runtime = yield* RuntimeAdapter;
       const admission = yield* HobAdmission;
       const turns = yield* FiberMap.make<ThreadId>();
+      const scope = yield* Effect.scope;
+      // The reply each running turn is writing, so a stop request can reach it.
+      const replies = new Map<ThreadId, Reply>();
 
-      // A previous process may have died mid-turn; those turns cannot resume.
-      for (const message of yield* repo.interruptStaleMessages) {
-        yield* bus.publish({ _tag: "MessageUpserted", message });
-      }
+      const publishMessage = (message: Message) =>
+        Effect.forEach(messageEvents(message), bus.publish, { discard: true });
 
       const findThread = (threadId: ThreadId) =>
         repo.findThread(threadId).pipe(
@@ -70,8 +96,16 @@ export class ChatService extends Context.Service<
       const saveThread = (thread: Thread) =>
         repo.upsertThread(thread).pipe(Effect.andThen(bus.publish({ _tag: "ThreadUpserted", thread })));
 
+      // Every message write goes through here so its events follow the commit in a fixed order.
       const saveMessage = (message: Message) =>
-        repo.upsertMessage(message).pipe(Effect.andThen(bus.publish({ _tag: "MessageUpserted", message })));
+        repo.upsertMessage(message).pipe(Effect.andThen(publishMessage(message)));
+
+      // A previous process may have died mid-turn; those turns cannot resume. A reply the user had
+      // asked to stop is stopped; any other is interrupted.
+      for (const message of yield* repo.listUnfinishedMessages) {
+        const next = MessageTransitions.interrupt(message);
+        if (next instanceof Message) yield* saveMessage(next);
+      }
 
       // Status is read under the hob's lock, so a pause or retirement cannot slip in before the thread is saved.
       const createThread = Effect.fn("ChatService.createThread")(function* (agentId: AgentId) {
@@ -96,22 +130,29 @@ export class ChatService extends Context.Service<
         );
       });
 
-      // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
-      const runTurn = (config: AgentConfiguration, thread: Thread, prompt: string, assistant: Message) =>
-        Effect.gen(function* () {
-          const current = yield* Ref.make(assistant);
-          const threadRef = yield* Ref.make(thread);
+      // Applies a domain transition to a running reply and runs `after` with the result. The lock keeps
+      // the turn and a stop request from saving out of order. Finished replies reject changes, so late
+      // runtime events and repeated stops are ignored.
+      const transition = <A>(
+        reply: Reply,
+        f: (message: Message) => Message | unknown,
+        after: (next: Message) => Effect.Effect<A>,
+      ) =>
+        Semaphore.withPermit(
+          reply.lock,
+          Effect.gen(function* () {
+            const next = f(yield* Ref.get(reply.current));
+            if (!(next instanceof Message)) return Option.none<A>();
+            yield* Ref.set(reply.current, next);
+            return Option.some(yield* after(next));
+          }),
+        );
 
-          // Domain transitions reject changes to finished messages; ignore late runtime events.
-          const transition = (f: (message: Message) => Message | unknown) =>
-            Ref.get(current).pipe(
-              Effect.map(f),
-              Effect.flatMap((next) =>
-                next instanceof Message
-                  ? Ref.set(current, next).pipe(Effect.as(Option.some(next)))
-                  : Effect.succeed(Option.none<Message>()),
-              ),
-            );
+      // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
+      const runTurn = (config: AgentConfiguration, thread: Thread, prompt: string, reply: Reply) =>
+        Effect.gen(function* () {
+          const threadRef = yield* Ref.make(thread);
+          const update = (f: (message: Message) => Message | unknown) => transition(reply, f, saveMessage);
 
           const handle = (event: RuntimeEvent) => {
             switch (event._tag) {
@@ -131,29 +172,14 @@ export class ChatService extends Context.Service<
                   }
                 });
               case "TextDelta":
-                return transition((m) => MessageTransitions.appendDelta(m, event.text)).pipe(
-                  Effect.flatMap(
-                    Option.match({
-                      onNone: () => Effect.void,
-                      onSome: (m) =>
-                        bus.publish({
-                          _tag: "MessageDelta",
-                          threadId: m.threadId,
-                          messageId: m.id,
-                          delta: event.text,
-                        }),
-                    }),
-                  ),
+                return transition(
+                  reply,
+                  (m) => MessageTransitions.appendDelta(m, event.text),
+                  (m) =>
+                    bus.publish({ _tag: "MessageDelta", threadId: m.threadId, messageId: m.id, delta: event.text }),
                 );
               case "Completed":
-                return transition((m) => MessageTransitions.complete(m, event.text)).pipe(
-                  Effect.flatMap(
-                    Option.match({
-                      onNone: () => Effect.void,
-                      onSome: saveMessage,
-                    }),
-                  ),
-                );
+                return update((m) => MessageTransitions.complete(m, event.text));
             }
           };
 
@@ -167,32 +193,19 @@ export class ChatService extends Context.Service<
             })
             .pipe(
               Stream.runForEach(handle),
-              Effect.catchTag("RuntimeError", (error) =>
-                transition((m) => MessageTransitions.fail(m, error.message)).pipe(
-                  Effect.flatMap(
-                    Option.match({
-                      onNone: () => Effect.void,
-                      onSome: saveMessage,
-                    }),
-                  ),
-                ),
-              ),
-              Effect.onInterrupt(() =>
-                transition(MessageTransitions.interrupt).pipe(
-                  Effect.flatMap(
-                    Option.match({
-                      onNone: () => Effect.void,
-                      onSome: saveMessage,
-                    }),
-                  ),
-                ),
-              ),
+              Effect.catchTag("RuntimeError", (error) => update((m) => MessageTransitions.fail(m, error.message))),
             );
           // The stream ended without a result: treat it as a failure, not a silent success.
-          yield* transition((m) => MessageTransitions.fail(m, "Runtime ended without a result")).pipe(
-            Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: saveMessage })),
-          );
-        });
+          yield* update((m) => MessageTransitions.fail(m, "Runtime ended without a result"));
+        }).pipe(
+          // Runs after the runtime's stream has closed, so "stopped" means the turn really ended.
+          Effect.onInterrupt(() => transition(reply, MessageTransitions.interrupt, saveMessage)),
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (replies.get(thread.id) === reply) replies.delete(thread.id);
+            }),
+          ),
+        );
 
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (threadId: ThreadId, content: string) {
         const { agentId } = yield* findThread(threadId);
@@ -239,15 +252,27 @@ export class ChatService extends Context.Service<
             yield* saveMessage(userMessage);
             yield* saveMessage(assistantMessage);
             yield* saveThread(updated);
-            yield* FiberMap.run(turns, threadId, runTurn(config, updated, content, assistantMessage));
+            // Registered before the turn starts, so a stop sent right away still reaches it.
+            const reply: Reply = { current: yield* Ref.make(assistantMessage), lock: yield* Semaphore.make(1) };
+            replies.set(threadId, reply);
+            yield* FiberMap.run(turns, threadId, runTurn(config, updated, content, reply));
             return { userMessage, assistantMessage };
           }),
         );
       });
 
-      const interrupt = Effect.fn("ChatService.interrupt")(function* (threadId: ThreadId) {
+      const stop = Effect.fn("ChatService.stop")(function* (threadId: ThreadId) {
         yield* findThread(threadId);
-        yield* FiberMap.remove(turns, threadId);
+        const reply = replies.get(threadId);
+        if (!reply) return;
+        // Only the first request moves the reply to stopping and interrupts the turn.
+        const requested = yield* transition(
+          reply,
+          (m) => (m.status === "streaming" ? MessageTransitions.requestStop(m) : undefined),
+          saveMessage,
+        );
+        // The turn records the confirmed outcome itself once the runtime has stopped.
+        if (Option.isSome(requested)) yield* Effect.forkIn(FiberMap.remove(turns, threadId), scope);
       });
 
       const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
@@ -259,7 +284,7 @@ export class ChatService extends Context.Service<
         }
       });
 
-      return ChatService.of({ createThread, sendPrompt, interrupt, interruptAgent, activeThreads });
+      return ChatService.of({ createThread, sendPrompt, stop, interruptAgent, activeThreads });
     }),
   );
 }

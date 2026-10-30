@@ -1,4 +1,4 @@
-import type { AgentId, ThreadId } from "@hobbots/domain";
+import { type AgentId, isInProgress, type ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -54,7 +54,9 @@ export function ChatView({
   const interrupt = useInterrupt(threadId ?? ("" as ThreadId));
   const pause = usePauseHob(hobId);
 
-  const streaming = messages.data?.some((m) => m.status === "streaming") ?? false;
+  const streaming = messages.data?.some((m) => isInProgress(m.status)) ?? false;
+  // Stopping lasts from the hub recording the request until the runtime confirms the turn ended.
+  const stopping = interrupt.isPending || (messages.data?.some((m) => m.status === "stopping") ?? false);
   const busy = streaming || send.isPending;
   const lastContent = messages.data?.at(-1)?.content;
 
@@ -171,6 +173,7 @@ export function ChatView({
         draft={draft}
         onDraft={setDraft}
         busy={busy}
+        stopping={stopping}
         sending={start.isPending}
         onSend={sendDraft}
         onStop={() => interrupt.mutate()}

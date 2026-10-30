@@ -1,4 +1,4 @@
-import type { Agent, Message } from "@hobbots/domain";
+import { type Agent, isInProgress, type Message } from "@hobbots/domain";
 import { formatTime } from "../lib/time.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 
@@ -11,7 +11,8 @@ export function MessageRow({ message, hob }: { message: Message; hob: Agent }) {
     );
   }
 
-  const streaming = message.status === "streaming";
+  const streaming = isInProgress(message.status);
+  const writing = message.status === "streaming";
   return (
     <div className="flex max-w-[640px] animate-hb-in gap-2.5">
       <HobSprite hob={hob} size={26} state={streaming ? "working" : message.status === "failed" ? "failed" : "idle"} />
@@ -19,19 +20,31 @@ export function MessageRow({ message, hob }: { message: Message; hob: Agent }) {
         <span className="text-xs text-label">
           <b className="font-pixel text-sm text-moonlight">{hob.name}</b> {formatTime(message.createdAt)}
         </span>
-        {streaming && message.content.length === 0 ? (
+        {writing && message.content.length === 0 ? (
           <Thinking name={hob.name} />
         ) : (
           <span className="leading-normal whitespace-pre-wrap">
             {message.content}
-            {streaming && (
+            {writing && (
               <span aria-hidden className="ml-0.5 inline-block h-4 w-2 animate-hb-caret bg-moonlight align-[-2px]" />
             )}
           </span>
         )}
+        {message.status === "stopping" && (
+          <span role="status" className="flex items-center gap-2 text-[13px] text-lantern">
+            <span aria-hidden className="size-[5px] animate-hb-blink bg-lantern" />
+            Stopping this reply…
+          </span>
+        )}
+        {message.status === "stopped" && (
+          <span role="status" className="animate-hb-pop origin-left text-[13px] text-lantern">
+            ■ You stopped this reply. {hob.name} kept what it wrote so far.
+          </span>
+        )}
         {message.status === "interrupted" && (
-          <span className="animate-hb-pop origin-left text-[13px] text-lantern">
-            ■ This reply was stopped. {hob.name} kept what it wrote so far.
+          <span className="animate-hb-pop origin-left text-[13px] text-rose">
+            This reply was cut off, not by you: Hobbots restarted or {hob.name} was paused. What it wrote so far is
+            kept.
           </span>
         )}
         {message.status === "failed" && (

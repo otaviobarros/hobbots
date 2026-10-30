@@ -128,4 +128,24 @@ describe("applyEvent", () => {
     applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), delta: "lo" });
     expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]?.content).toBe("Hello");
   });
+
+  it("keeps a stopping reply in progress until it is stopped", () => {
+    const client = new QueryClient();
+    const activity = () => client.getQueryData(activityQuery.queryKey)?.[threadId];
+    client.setQueryData(queryKeys.messages(threadId), [reply("streaming", "Hel")]);
+
+    applyEvent(client, { _tag: "MessageUpserted", message: reply("stopping", "Hel") });
+    applyEvent(client, { _tag: "TurnStopRequested", threadId, messageId: MessageId.make("m1") });
+    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), delta: "lo" });
+    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]).toMatchObject({
+      content: "Hello",
+      status: "stopping",
+    });
+    expect(activity()).toBe("working");
+
+    applyEvent(client, { _tag: "MessageUpserted", message: reply("stopped", "Hello") });
+    applyEvent(client, { _tag: "TurnStopped", threadId, messageId: MessageId.make("m1") });
+    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]?.status).toBe("stopped");
+    expect(activity()).toBeUndefined();
+  });
 });

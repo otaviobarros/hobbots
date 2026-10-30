@@ -34,8 +34,8 @@ export class HobbotsRepository extends Context.Service<
     readonly upsertThread: (thread: Thread) => Effect.Effect<void>;
     readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;
     readonly upsertMessage: (message: Message) => Effect.Effect<void>;
-    /** Marks assistant messages left streaming by a previous process as interrupted. */
-    readonly interruptStaleMessages: Effect.Effect<ReadonlyArray<Message>>;
+    /** Assistant replies whose turn has not ended (streaming or stopping), across every thread. */
+    readonly listUnfinishedMessages: Effect.Effect<ReadonlyArray<Message>>;
   }
 >()("@hobbots/persistence/HobbotsRepository") {
   static readonly layer = Layer.effect(
@@ -93,10 +93,11 @@ export class HobbotsRepository extends Context.Service<
         Result: Message,
         execute: (threadId) => sql`SELECT * FROM messages WHERE thread_id = ${threadId} ORDER BY seq`,
       });
-      const staleMessages = SqlSchema.findAll({
+      const unfinishedMessages = SqlSchema.findAll({
         Request: Schema.Void,
         Result: Message,
-        execute: () => sql`SELECT * FROM messages WHERE status = 'streaming' ORDER BY ${bytewise("thread_id")}, seq`,
+        execute: () =>
+          sql`SELECT * FROM messages WHERE status IN ('streaming', 'stopping') ORDER BY ${bytewise("thread_id")}, seq`,
       });
 
       const insertConfig = (agent: Agent, createdAt: string) =>
@@ -189,12 +190,6 @@ export class HobbotsRepository extends Context.Service<
             status = excluded.status,
             error = excluded.error`;
 
-      const interruptStaleMessages = Effect.gen(function* () {
-        const stale = yield* staleMessages();
-        yield* sql`UPDATE messages SET status = 'interrupted' WHERE status = 'streaming'`;
-        return stale.map((message) => new Message({ ...message, status: "interrupted" }));
-      });
-
       return HobbotsRepository.of({
         listAgents: listAgents().pipe(Effect.orDie),
         listAgentsWithStatus: (statuses) =>
@@ -218,7 +213,7 @@ export class HobbotsRepository extends Context.Service<
         upsertThread: (thread) => upsertThread(thread).pipe(Effect.asVoid, Effect.orDie),
         listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),
         upsertMessage: (message) => upsertMessage(message).pipe(Effect.asVoid, Effect.orDie),
-        interruptStaleMessages: interruptStaleMessages.pipe(Effect.orDie),
+        listUnfinishedMessages: unfinishedMessages().pipe(Effect.orDie),
       });
     }),
   );

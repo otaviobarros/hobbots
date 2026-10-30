@@ -63,13 +63,14 @@ describe("HobbotsRepository", () => {
       );
       yield* repo.upsertMessage(message("b"));
       yield* repo.upsertMessage(message("a", "streaming"));
+      yield* repo.upsertMessage(message("c", "stopping"));
       yield* repo.upsertMessage(new Message({ ...message("b"), content: "b2" }));
-      const interrupted = yield* repo.interruptStaleMessages;
+      const unfinished = yield* repo.listUnfinishedMessages;
       return {
         agents: yield* repo.listAgents,
         thread: yield* repo.findThread(threadId),
         messages: yield* repo.listMessages(threadId),
-        interrupted,
+        unfinished,
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
@@ -80,9 +81,10 @@ describe("HobbotsRepository", () => {
     });
     expect(result.messages.map((m) => [m.id, m.content, m.status])).toEqual([
       ["b", "b2", "complete"],
-      ["a", "a", "interrupted"],
+      ["a", "a", "streaming"],
+      ["c", "c", "stopping"],
     ]);
-    expect(result.interrupted.map((m) => m.id)).toEqual(["a"]);
+    expect(result.unfinished.map((m) => m.id)).toEqual(["a", "c"]);
   });
 
   // covers DP-003, AG-001
