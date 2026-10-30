@@ -12,3 +12,5 @@ out/
 .DS_Store
 .claude/settings.local.json
 release/
+test-results/
+playwright-report/
