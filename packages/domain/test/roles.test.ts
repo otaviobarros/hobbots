@@ -71,10 +71,10 @@ describe("starter roles", () => {
 describe("what the runtime is told", () => {
   it("names the hob and its role, then its instructions", () => {
     expect(systemInstructions("Pip", { role: "writer", roleTitle: "Writer", instructions: "  Be brief.\n" })).toBe(
-      `You are Pip, a hob in Hobbots. Your role is Writer: ${starterRole("writer").note.toLowerCase()}\n\nBe brief.`,
+      `## About you\nYou are Pip, a hob in Hobbots. Your role is Writer: ${starterRole("writer").note.toLowerCase()}\n\n## Your instructions, from the user\nBe brief.`,
     );
     expect(systemInstructions("Pip", { role: null, roleTitle: "Gardener", instructions: " " })).toBe(
-      "You are Pip, a hob in Hobbots. Your role is Gardener.",
+      "## About you\nYou are Pip, a hob in Hobbots. Your role is Gardener.",
     );
   });
 });

@@ -27,7 +27,7 @@ const hob = {
 
 // What the runtime is told on every turn: who the hob is, then its instructions.
 const told = (instructions: string, name = "Wren", role: "writer" | "qa" = "writer") =>
-  `You are ${name}, a hob in Hobbots. Your role is ${starterRole(role).title}: ${starterRole(role).note.toLowerCase()}\n\n${instructions}`;
+  `## About you\nYou are ${name}, a hob in Hobbots. Your role is ${starterRole(role).title}: ${starterRole(role).note.toLowerCase()}\n\n## Your instructions, from the user\n${instructions}`;
 
 let prompts: Array<PromptRequest>;
 // Each turn waits for this before the runtime replies, so a test can act while a reply is running.
@@ -340,7 +340,7 @@ describe("editing hobs", () => {
     expect(prompts.map((p) => p.instructions)).toEqual([
       told("Write short answers."),
       told("Write short answers.", "Wren", "qa"),
-      "You are Wren, a hob in Hobbots. Your role is Gardener.",
+      "## About you\nYou are Wren, a hob in Hobbots. Your role is Gardener.",
     ]);
   });
 });

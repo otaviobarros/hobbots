@@ -1202,12 +1202,16 @@ export const hobIdentity = (name: string, role: RoleId | null, roleTitle: string
     ? `You are ${name}, a hob in Hobbots. Your role is ${roleTitle}.`
     : `You are ${name}, a hob in Hobbots. Your role is ${roleTitle}: ${starterRole(role).note.toLowerCase()}`;
 
-/** What the runtime is told before the user's messages: who the hob is, then its instructions. */
+/**
+ * What the runtime is told before the user's messages, in labeled sections so the model can tell
+ * what Hobbots states about the hob from what the user wrote: who the hob is, then its instructions.
+ */
 export const systemInstructions = (
   name: string,
   config: { readonly role: RoleId | null; readonly roleTitle: string; readonly instructions: string },
 ): string => {
   const identity = hobIdentity(name, config.role, config.roleTitle);
   const instructions = config.instructions.trim();
-  return instructions === "" ? identity : `${identity}\n\n${instructions}`;
+  const about = `## About you\n${identity}`;
+  return instructions === "" ? about : `${about}\n\n## Your instructions, from the user\n${instructions}`;
 };
