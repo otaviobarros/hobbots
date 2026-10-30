@@ -29,10 +29,11 @@ import {
   Choice,
   ChoresField,
   ColorSwatches,
-  CraftChoices,
+  GearPicker,
   HobSummary,
   NameDice,
   NearbyLooks,
+  RolePicker,
 } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { Stars } from "./scene.tsx";
@@ -44,8 +45,8 @@ const ANSWER: Readonly<Record<RuleAnswer, { text: string; className: string }>> 
 };
 
 /**
- * Summon a hob, after onboarding: the chores in the user's words or a kind to start from, a
- * seeded look, a name from the dice and what it thinks with. The summon opens the new hob's chat.
+ * Summon a hob, after onboarding: a role, the chores in the user's words, a seeded look with
+ * the role's hat and tool, a name from the dice and what it thinks with. The summon opens the new hob's chat.
  */
 export function Summon() {
   const navigate = useNavigate();
@@ -156,19 +157,18 @@ export function Summon() {
         <div className="grid min-h-0 flex-1 animate-hb-in grid-cols-[minmax(0,1fr)_430px] gap-7">
           <fieldset disabled={locked} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0 disabled:opacity-85">
             <legend className="sr-only">{locked ? `${name}'s chores, as sent` : "What the hob does"}</legend>
+            <RolePicker
+              draft={draft}
+              onChange={setDraft}
+              legend={<legend className="lbl mb-2 text-moonlight">Role</legend>}
+            />
+
             <ChoresField
               draft={draft}
               onChange={setDraft}
               rows={4}
               label="What should this hob do?"
               className="font-bold"
-            />
-
-            <CraftChoices
-              draft={draft}
-              onChange={setDraft}
-              legend={<legend className="mb-2 text-sm text-secondary-text">Or start from a kind of hob</legend>}
-              showNote
             />
 
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
@@ -233,7 +233,17 @@ export function Summon() {
                   title="Click for a new look"
                   className="absolute bottom-[22px] left-1/2 -ml-[50px] cursor-pointer border-0 bg-transparent p-0 hover:brightness-110"
                 >
-                  <span key={[draft.kind, draft.lookColor, draft.model, draft.effort, nameRolls].join(" ")}>
+                  <span
+                    key={[
+                      draft.role,
+                      draft.hat,
+                      draft.tool,
+                      draft.lookColor,
+                      draft.model,
+                      draft.effort,
+                      nameRolls,
+                    ].join(" ")}
+                  >
                     <span className="block animate-hb-hop">
                       <HobSprite hob={{ ...draft, ...gear }} size={100} state="thinking" />
                     </span>
@@ -299,6 +309,8 @@ export function Summon() {
                     className="flex gap-[5px]"
                   />
                 </fieldset>
+
+                <GearPicker draft={draft} onChange={setDraft} />
 
                 <div className="flex flex-col gap-1.5 border-t-2 border-line pt-[9px]">
                   <span className="text-sm text-label">Thinks with</span>

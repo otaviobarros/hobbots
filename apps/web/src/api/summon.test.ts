@@ -1,6 +1,6 @@
 import { RuntimeHealth } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { firstHobPayload, kindLine, pickCraft, sampleChores, submitDraft } from "./first-hob.ts";
+import { firstHobPayload, kindLine, pickRole, sampleChores, submitDraft } from "./first-hob.ts";
 import { newSummonDraft, openSummonDraft, providerNotice, summonProblem } from "./summon.ts";
 
 const id = "8a1f6c2e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
@@ -19,23 +19,23 @@ describe("a summoned hob's draft", () => {
     expect(openSummonDraft(null, [{ id: "other", name: "Pip" }]).name).not.toBe("Pip");
   });
 
-  it("starts as a helper with sample chores and a name no other hob has", () => {
-    expect(fresh()).toMatchObject({ id, kind: "helper", name: "Pip", chores: sampleChores("helper") });
+  it("starts as an Assistant with sample chores and a name no other hob has", () => {
+    expect(fresh()).toMatchObject({ id, role: "assistant", name: "Pip", chores: sampleChores("assistant") });
     const named = fresh(["Pip", " pip "]);
     expect(named.name).not.toBe("Pip");
     expect(named.name.trim()).not.toBe("");
   });
 
-  it("brings a kind's name and chores until the user writes their own", () => {
-    const scribe = pickCraft(fresh(), "scribe");
-    expect(scribe).toMatchObject({ name: "Quill", chores: sampleChores("scribe") });
+  it("brings a role's chores until the user writes their own, and keeps the name", () => {
+    const writer = pickRole(fresh(), "writer");
+    expect(writer).toMatchObject({ name: "Pip", chores: sampleChores("writer") });
 
-    const edited = pickCraft({ ...fresh(), chores: "Water the plants.", choresEdited: true, named: true }, "coder");
-    expect(edited).toMatchObject({ kind: "coder", name: "Pip", chores: "Water the plants." });
+    const edited = pickRole({ ...fresh(), chores: "Water the plants.", choresEdited: true }, "engineer");
+    expect(edited).toMatchObject({ role: "engineer", name: "Pip", chores: "Water the plants." });
   });
 
   it("adds the chores to the instructions and leaves them out when blank", () => {
-    const payload = firstHobPayload({ ...pickCraft(fresh(), "coder"), chores: "  Run the tests.  " });
+    const payload = firstHobPayload({ ...pickRole(fresh(), "engineer"), name: "Tinker", chores: "  Run the tests.  " });
     expect(payload).toMatchObject({ id, name: "Tinker", roleTitle: "Software engineer", runtime: "claude-code" });
     expect(payload.instructions).toMatch(/^You are Tinker, a hob in Hobbots\. Your role is Software engineer: /);
     expect(payload.instructions.endsWith("Your chores, in the user's words:\nRun the tests.")).toBe(true);
@@ -43,10 +43,10 @@ describe("a summoned hob's draft", () => {
     expect(firstHobPayload({ ...fresh(), chores: " " }).instructions).not.toContain("chores");
   });
 
-  it("names the kind after the hob's name", () => {
-    expect(kindLine(pickCraft(fresh(), "keeper"))).toBe("the Bookkeeper");
-    expect(kindLine({ ...fresh(), kind: "custom", craft: "Gardening" })).toBe("good at gardening");
-    expect(kindLine({ ...fresh(), kind: "custom", craft: " " })).toBe("one of a kind");
+  it("names the role after the hob's name", () => {
+    expect(kindLine(pickRole(fresh(), "bookkeeper"))).toBe("the Bookkeeper");
+    expect(kindLine({ ...pickRole(fresh(), null), ownTitle: "Garden planner" })).toBe("the Garden planner");
+    expect(kindLine({ ...pickRole(fresh(), null), ownTitle: " " })).toBe("one of a kind");
   });
 });
 

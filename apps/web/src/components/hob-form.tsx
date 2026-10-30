@@ -1,19 +1,33 @@
-import type { Effort, HobColor, RuntimeModel } from "@hobbots/domain";
+import {
+  type Effort,
+  type HobColor,
+  PICKER_FIRST,
+  ROLE_HAT_TITLES,
+  ROLE_TOOL_TITLES,
+  type RoleHat,
+  type RoleId,
+  type RoleTool,
+  type RuntimeModel,
+  starterRole,
+} from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
+import { Sigil } from "@hobbots/ui/components/sigil";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useId, useState } from "react";
 import {
+  ALL_ROLES,
   type BrainChoice,
   CHORES_MAX,
-  CRAFTS,
   effortWords,
   type FirstHobDraft,
   gearOf,
   LABEL_MAX,
+  MORE_ROLES,
   nearbySeeds,
-  pickCraft,
   pickModel,
+  pickRole,
+  roleRequestUrl,
   splitModels,
   thinksWith,
 } from "../api/first-hob.ts";
@@ -21,8 +35,8 @@ import { HOB_COLORS } from "../art/look.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 
 /**
- * The hob fields that onboarding's first hob and Summon share: chores, craft, name dice, colors,
- * nearby looks, the model and effort a hob thinks with, and the line that sums it up. Each screen
+ * The hob fields that onboarding's first hob and Summon share: chores, role, name dice, colors,
+ * hat and tool, nearby looks, the model and effort a hob thinks with, and the line that sums it up. Each screen
  * lays them out its own way, but both offer the same choices.
  */
 
@@ -103,7 +117,7 @@ export function Choice({
   );
 }
 
-/** The chores in the user's own words, filled in from the craft until they write their own. */
+/** The chores in the user's own words, filled in from the role until they write their own. */
 export function ChoresField<D extends FirstHobDraft>({
   draft,
   onChange,
@@ -138,58 +152,261 @@ export function ChoresField<D extends FirstHobDraft>({
       <span id="hob-chores-note" className="text-[13px] text-label">
         {draft.choresEdited
           ? "In your words. Hobbots adds them to the hob's instructions."
-          : "Filled in from the craft. Write it in your own words."}
+          : draft.role === null
+            ? "Tell it about the chores in your own words."
+            : "Filled in from the role. Write it in your own words."}
       </span>
     </div>
   );
 }
 
-/** The crafts to pick from, with a field for the user's own when they pick "Your own". */
-export function CraftChoices<D extends FirstHobDraft>({
+/** One role in the picker: its sigil, title and one-line note, over a native radio. */
+function RoleOption({
+  checked,
+  onPick,
+  sigil,
+  title,
+  note,
+  className,
+}: {
+  checked: boolean;
+  onPick: () => void;
+  sigil: ReadonlyArray<string> | null;
+  title: string;
+  note: string;
+  className?: string | undefined;
+}) {
+  return (
+    <label
+      className={cn(
+        "cut flex min-w-0 cursor-pointer items-start gap-2.5 border-2 px-2.5 py-2 text-left",
+        checked ? "border-lantern bg-line" : "border-line hover:bg-hover",
+        focusWithin,
+        className,
+      )}
+    >
+      <input type="radio" name="hob-role" checked={checked} onChange={onPick} className="sr-only" />
+      {sigil ? (
+        <Sigil rows={sigil} size={20} className="mt-0.5 flex-none" />
+      ) : (
+        <span
+          aria-hidden
+          className="mt-0.5 grid size-5 flex-none place-items-center border-2 border-dashed border-control text-xs text-label"
+        >
+          +
+        </span>
+      )}
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className={cn("text-sm font-bold", checked ? "text-moonlight" : "text-text")}>{title}</span>
+        <span className="text-xs leading-snug text-secondary-text">{note}</span>
+      </span>
+    </label>
+  );
+}
+
+const roleOption = (id: RoleId) => {
+  const role = starterRole(id);
+  return { sigil: role.sigil, title: role.title, note: role.note };
+};
+
+/**
+ * The role picker: the first eight roles, then "More roles" under their families, then "Your own",
+ * which takes a title in the user's words and any sigil from the set. One radio group runs through
+ * all of them, so arrow keys move from role to role. A link at the end asks for a missing role.
+ */
+export function RolePicker<D extends FirstHobDraft>({
   draft,
   onChange,
   legend,
-  showNote = false,
+  columns = 3,
 }: {
   draft: D;
   onChange: (update: (draft: D) => D) => void;
   legend: React.ReactNode;
-  /** Shows what the picked craft is good at under the chips, for a screen without that line elsewhere. */
-  showNote?: boolean;
+  /** How many roles sit side by side; the screen picks what fits. */
+  columns?: 2 | 3;
 }) {
+  const inMore = draft.role !== null && !PICKER_FIRST.includes(draft.role);
+  // "More roles" starts open when the hob already has one of them, so the choice stays in view.
+  const [moreShown, setMoreShown] = useState<boolean | null>(null);
+  const moreOpen = moreShown ?? inMore;
+  const moreId = useId();
+  const own = draft.role === null;
+  const grid = columns === 3 ? "grid-cols-3" : "grid-cols-2";
+  const moreCount = MORE_ROLES.reduce((n, group) => n + group.roles.length, 0);
   return (
-    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+    <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
       {legend}
-      <div className="flex flex-wrap gap-2">
-        {CRAFTS.map((c) => (
-          <Choice
-            key={c.kind}
-            name="hob-craft"
-            checked={draft.kind === c.kind}
-            onPick={() => onChange((d) => pickCraft(d, c.kind))}
-            className={c.kind === "custom" && draft.kind !== "custom" ? "border-dashed" : undefined}
-          >
-            {c.kind === "custom" ? `+ ${c.label}` : c.label}
-          </Choice>
+      <div className={cn("grid gap-1.5", grid)}>
+        {PICKER_FIRST.map((id) => (
+          <RoleOption
+            key={id}
+            checked={draft.role === id}
+            onPick={() => onChange((d) => pickRole(d, id))}
+            {...roleOption(id)}
+          />
         ))}
       </div>
-      {draft.kind === "custom" && (
-        <input
-          // biome-ignore lint/a11y/noAutofocus: choosing "Your own" asks for the craft right away.
-          autoFocus
-          value={draft.craft}
-          maxLength={LABEL_MAX}
-          onChange={(e) => {
-            const craft = e.target.value;
-            onChange((d) => ({ ...d, craft }));
-          }}
-          placeholder="What should it be good at? e.g. planning my garden"
-          aria-label="Your own craft"
-          className="animate-hb-in border-2 border-lantern bg-deep px-[11px] py-[9px] text-[15px] text-text"
-        />
+      <button
+        type="button"
+        aria-expanded={moreOpen}
+        aria-controls={moreId}
+        onClick={() => setMoreShown(!moreOpen)}
+        className="flex items-center gap-2 self-start bg-transparent py-1 text-sm text-label hover:text-text"
+      >
+        <span aria-hidden className="w-2.5">
+          {moreOpen ? "▾" : "▸"}
+        </span>
+        More roles
+        <span className="text-[13px]">{moreCount}</span>
+      </button>
+      {moreOpen && (
+        <div id={moreId} className="flex animate-hb-in flex-col gap-3 border-2 border-line p-2.5">
+          {MORE_ROLES.map((group) => (
+            <fieldset key={group.family} className="m-0 flex flex-col gap-1.5 border-0 p-0">
+              <legend className="lbl mb-1.5 text-xs text-label">{group.title}</legend>
+              <div className={cn("grid gap-1.5", grid)}>
+                {group.roles.map((id) => (
+                  <RoleOption
+                    key={id}
+                    checked={draft.role === id}
+                    onPick={() => onChange((d) => pickRole(d, id))}
+                    {...roleOption(id)}
+                  />
+                ))}
+              </div>
+            </fieldset>
+          ))}
+        </div>
       )}
-      {showNote && <span className="text-[13px] text-label">{CRAFTS.find((c) => c.kind === draft.kind)?.note}</span>}
+      <RoleOption
+        checked={own}
+        onPick={() => onChange((d) => pickRole(d, null))}
+        sigil={own ? starterRole(draft.ownSigil).sigil : null}
+        title="Your own"
+        note="Give it a title in your words and pick a sigil."
+        className={cn("self-start", !own && "border-dashed")}
+      />
+      {own && <OwnRole draft={draft} onChange={onChange} />}
+      <a href={roleRequestUrl(draft)} target="_blank" rel="noreferrer" className="self-start text-[13px]">
+        Missing a role? Suggest one
+      </a>
     </fieldset>
+  );
+}
+
+/** A role title in the user's own words, with a sigil borrowed from any starter role. */
+function OwnRole<D extends FirstHobDraft>({
+  draft,
+  onChange,
+}: {
+  draft: D;
+  onChange: (update: (draft: D) => D) => void;
+}) {
+  return (
+    <div className="flex animate-hb-in flex-col gap-2.5 border-2 border-line p-2.5">
+      <input
+        // biome-ignore lint/a11y/noAutofocus: choosing "Your own" asks for the title right away.
+        autoFocus
+        value={draft.ownTitle}
+        maxLength={LABEL_MAX}
+        onChange={(e) => {
+          const ownTitle = e.target.value;
+          onChange((d) => ({ ...d, ownTitle }));
+        }}
+        placeholder="Its role, in your words. e.g. Garden planner"
+        aria-label="Your own role title"
+        className="border-2 border-lantern bg-deep px-[11px] py-[9px] text-[15px] text-text"
+      />
+      <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
+        <legend className="mb-1.5 text-[13px] text-secondary-text">Sigil</legend>
+        <div className="flex flex-wrap gap-1">
+          {ALL_ROLES.map((id) => {
+            const on = draft.ownSigil === id;
+            return (
+              <label
+                key={id}
+                title={starterRole(id).title}
+                className={cn(
+                  "grid size-8 cursor-pointer place-items-center border-2 bg-deep",
+                  on ? "border-lantern" : "border-line hover:border-control",
+                  "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="hob-sigil"
+                  checked={on}
+                  onChange={() => onChange((d) => ({ ...d, ownSigil: id }))}
+                  aria-label={`${starterRole(id).title}'s sigil`}
+                  className="sr-only"
+                />
+                <Sigil rows={starterRole(id).sigil} size={20} />
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+    </div>
+  );
+}
+
+const HATS = Object.keys(ROLE_HAT_TITLES) as Array<RoleHat>;
+const TOOLS = Object.keys(ROLE_TOOL_TITLES) as Array<RoleTool>;
+
+/**
+ * The hat and tool next to the look. Picking a role sets both; the user can still change either,
+ * or leave it to the look seed.
+ */
+export function GearPicker<D extends FirstHobDraft>({
+  draft,
+  onChange,
+  className,
+}: {
+  draft: D;
+  onChange: (update: (draft: D) => D) => void;
+  className?: string | undefined;
+}) {
+  const select = "min-w-0 flex-1 border-2 border-control bg-deep px-2 py-1 text-[13px] text-text";
+  return (
+    <div className={cn("flex gap-2", className)}>
+      <label className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-label">
+        Hat
+        <select
+          value={draft.hat ?? ""}
+          onChange={(e) => {
+            const hat = (e.target.value || null) as RoleHat | null;
+            onChange((d) => ({ ...d, hat }));
+          }}
+          className={select}
+        >
+          <option value="">From the look</option>
+          {HATS.map((hat) => (
+            <option key={hat} value={hat}>
+              {ROLE_HAT_TITLES[hat]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-label">
+        Tool
+        <select
+          value={draft.tool ?? ""}
+          onChange={(e) => {
+            const tool = (e.target.value || null) as RoleTool | null;
+            onChange((d) => ({ ...d, tool }));
+          }}
+          className={select}
+        >
+          <option value="">From the look</option>
+          {TOOLS.map((tool) => (
+            <option key={tool} value={tool}>
+              {ROLE_TOOL_TITLES[tool]}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
   );
 }
 
@@ -281,7 +498,7 @@ export function NearbyLooks({
   );
 }
 
-/** The line that sums up how the hob thinks and what its craft is good at. */
+/** The line that sums up how the hob thinks and what its role does. */
 export function HobSummary({
   draft,
   model,
@@ -291,7 +508,7 @@ export function HobSummary({
   model: RuntimeModel | undefined;
   className?: string | undefined;
 }) {
-  const note = CRAFTS.find((c) => c.kind === draft.kind)?.note;
+  const note = draft.role === null ? undefined : starterRole(draft.role).note;
   return (
     <div className={cn("flex flex-col gap-[3px] text-[13px] text-secondary-text", className)}>
       <span>
