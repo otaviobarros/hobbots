@@ -11,7 +11,9 @@ export default Effect.gen(function* () {
     pg: () =>
       Effect.gen(function* () {
         yield* sql`CREATE INDEX threads_title_search ON threads USING GIN (to_tsvector('simple', title))`;
-        yield* sql`CREATE INDEX messages_content_search ON messages USING GIN (to_tsvector('simple', content))`;
+        // Like SQLite's, the message index leaves out replies that are still streaming.
+        yield* sql`CREATE INDEX messages_content_search ON messages USING GIN (to_tsvector('simple', content))
+          WHERE status <> 'streaming'`;
       }),
     orElse: () =>
       Effect.gen(function* () {

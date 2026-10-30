@@ -1,16 +1,23 @@
 import { Worker } from "node:worker_threads";
-import { type MessageMatch, MessageRole, type SearchHit, searchTerms, snippetOf, Thread } from "@hobbots/domain";
+import {
+  type MessageMatch,
+  MessageRole,
+  type SearchHit,
+  searchTerms,
+  searchWords,
+  snippetOf,
+  Thread,
+} from "@hobbots/domain";
 import { Context, Effect, Layer, Schema, String as Str } from "effect";
 import { SqlClient } from "effect/sql";
 
 // Search over thread titles and finished messages (CH-006), on SQLite FTS5 or PostgreSQL full-text
-// search (migration 0011). Hobs that retired are left out. On a SQLite file the queries run in a
+// search (migration 0011). Hobs that retired are left out. On a SQLite file the query runs in a
 // worker thread with its own read-only connection, so a long search never blocks the server (ADR 011).
 
 /** The most threads one search returns, and the newest matching messages shown for each. */
 export const SEARCH_THREADS = 30;
 export const MATCHES_PER_THREAD = 3;
-const MESSAGE_ROWS = 300;
 
 export class SearchIndex extends Context.Service<
   SearchIndex,
@@ -19,35 +26,22 @@ export class SearchIndex extends Context.Service<
     readonly search: (query: string) => Effect.Effect<ReadonlyArray<SearchHit>>;
   }
 >()("@hobbots/persistence/SearchIndex") {
-  /** Runs the queries on the server's own connection: PostgreSQL, or SQLite in tests. */
+  /** Runs the query on the server's own connection: PostgreSQL, or SQLite in tests. */
   static readonly layer = Layer.effect(
     SearchIndex,
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      const run: Run = (query, terms) =>
+      const run: Run = (terms, words) =>
         sql.onDialectOrElse({
-          pg: () => {
-            // Prefix queries on PostgreSQL's language-neutral configuration; it keeps accents.
-            const tsquery = terms.map((term) => `${term}:*`).join(" & ");
-            return query === "titles"
-              ? sql`SELECT t.* FROM threads t JOIN agents a ON a.id = t.agent_id
-                  WHERE to_tsvector('simple', t.title) @@ to_tsquery('simple', ${tsquery})
-                    AND a.status <> 'retired'
-                  ORDER BY t.updated_at DESC LIMIT ${SEARCH_THREADS}`
-              : sql`SELECT ${sql.literal(MESSAGE_SELECT)} FROM messages m
-                  JOIN threads t ON t.id = m.thread_id JOIN agents a ON a.id = t.agent_id
-                  WHERE to_tsvector('simple', m.content) @@ to_tsquery('simple', ${tsquery})
-                    AND m.status <> 'streaming' AND a.status <> 'retired'
-                  ORDER BY m.created_at DESC, m.seq DESC LIMIT ${MESSAGE_ROWS}`;
-          },
-          orElse: () => sql.unsafe(sqliteQueries[query], [ftsQuery(terms)]),
+          pg: () => sql.unsafe(PG_QUERY, [tsQuery(words)]),
+          orElse: () => sql.unsafe(SQLITE_QUERY, [ftsQuery(terms)]),
         }) as Effect.Effect<ReadonlyArray<Row>, unknown>;
       return makeSearch(run);
     }),
   );
 
   /**
-   * Runs the queries in a worker thread on the SQLite database at `filename`, which the server's
+   * Runs the query in a worker thread on the SQLite database at `filename`, which the server's
    * connection must already have migrated. The worker starts with the first search.
    */
   static readonly sqliteWorker = (filename: string) =>
@@ -58,38 +52,55 @@ export class SearchIndex extends Context.Service<
           Effect.sync(() => new WorkerConnection(filename)),
           (connection) => Effect.promise(() => connection.close()),
         );
-        return makeSearch((query, terms) =>
-          pool.all(sqliteQueries[query], [ftsQuery(terms)]).pipe(Effect.map((rows) => rows.map(camelCaseRow))),
+        return makeSearch((terms) =>
+          pool.all(SQLITE_QUERY, [ftsQuery(terms)]).pipe(Effect.map((rows) => rows.map(camelCaseRow))),
         );
       }),
     );
 }
 
 type Row = Record<string, unknown>;
-type Run = (
-  query: keyof typeof sqliteQueries,
-  terms: ReadonlyArray<string>,
-) => Effect.Effect<ReadonlyArray<Row>, unknown>;
+type Run = (terms: ReadonlyArray<string>, words: ReadonlyArray<string>) => Effect.Effect<ReadonlyArray<Row>, unknown>;
 
-// The message query names its columns, so a thread's and a message's `id` do not collide.
-const MESSAGE_SELECT = `m.id AS message_id, m.role AS message_role, m.content AS message_content,
-  m.created_at AS message_created_at, t.id, t.agent_id, t.title, t.runtime_session_id, t.created_at, t.updated_at`;
+/**
+ * After `titled` (threads whose title matches) and `matched` (finished messages that match), both
+ * dialects pick the threads first and only then their newest matches, so a thread with many
+ * matches never crowds another out and every count is complete.
+ */
+const THREADS_THEN_MATCHES = `
+  counts AS (SELECT thread_id, CAST(COUNT(*) AS INTEGER) AS match_count FROM matched GROUP BY thread_id),
+  found AS (
+    SELECT t.*, t.id IN (SELECT id FROM titled) AS title_match, COALESCE(c.match_count, 0) AS match_count
+    FROM threads t JOIN agents a ON a.id = t.agent_id LEFT JOIN counts c ON c.thread_id = t.id
+    WHERE a.status <> 'retired' AND (c.thread_id IS NOT NULL OR t.id IN (SELECT id FROM titled))
+    ORDER BY t.updated_at DESC LIMIT ${SEARCH_THREADS}),
+  ranked AS (
+    SELECT matched.*, ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY created_at DESC, seq DESC) AS match_rank
+    FROM matched WHERE thread_id IN (SELECT id FROM found))
+SELECT f.*, r.id AS message_id, r.role AS message_role, r.content AS message_content,
+  r.created_at AS message_created_at
+FROM found f LEFT JOIN ranked r ON r.thread_id = f.id AND r.match_rank <= ${MATCHES_PER_THREAD}
+ORDER BY f.updated_at DESC, f.id, r.match_rank`;
 
-/** SQLite's queries, shared by the in-process and worker connections. */
-const sqliteQueries = {
-  titles: `SELECT t.* FROM threads_search s
-    JOIN threads t ON t.rowid = s.rowid JOIN agents a ON a.id = t.agent_id
-    WHERE threads_search MATCH ? AND a.status <> 'retired'
-    ORDER BY t.updated_at DESC LIMIT ${SEARCH_THREADS}`,
-  messages: `SELECT ${MESSAGE_SELECT} FROM messages_search s
-    JOIN messages m ON m.rowid = s.rowid
-    JOIN threads t ON t.id = m.thread_id JOIN agents a ON a.id = t.agent_id
-    WHERE messages_search MATCH ? AND m.status <> 'streaming' AND a.status <> 'retired'
-    ORDER BY m.created_at DESC, m.seq DESC LIMIT ${MESSAGE_ROWS}`,
-} as const;
+const MATCHED_COLUMNS = "m.thread_id, m.id, m.role, m.content, m.created_at, m.seq";
+
+/** SQLite's query, shared by the in-process and worker connections. */
+const SQLITE_QUERY = `WITH
+  titled AS (SELECT t.id FROM threads_search s JOIN threads t ON t.rowid = s.rowid WHERE threads_search MATCH ?1),
+  matched AS (
+    SELECT ${MATCHED_COLUMNS} FROM messages_search s JOIN messages m ON m.rowid = s.rowid
+    WHERE messages_search MATCH ?1 AND m.status <> 'streaming'),${THREADS_THEN_MATCHES}`;
+
+/** PostgreSQL's query, on its language-neutral configuration, which keeps accents. */
+const PG_QUERY = `WITH
+  titled AS (SELECT id FROM threads WHERE to_tsvector('simple', title) @@ to_tsquery('simple', $1)),
+  matched AS (
+    SELECT ${MATCHED_COLUMNS} FROM messages m
+    WHERE to_tsvector('simple', m.content) @@ to_tsquery('simple', $1) AND m.status <> 'streaming'),${THREADS_THEN_MATCHES}`;
 
 /** Every term as a quoted prefix; terms hold only letters and digits, so nothing needs escaping. */
 const ftsQuery = (terms: ReadonlyArray<string>) => terms.map((term) => `"${term}"*`).join(" ");
+const tsQuery = (words: ReadonlyArray<string>) => words.map((word) => `${word}:*`).join(" & ");
 
 const camelCaseRow = (row: Row): Row =>
   Object.fromEntries(Object.entries(row).map(([key, value]) => [Str.snakeToCamel(key), value]));
@@ -102,33 +113,25 @@ const makeSearch = (run: Run) =>
     search: (query) => {
       const terms = searchTerms(query);
       if (terms.length === 0) return Effect.succeed([]);
-      return Effect.all([run("titles", terms), run("messages", terms)], { concurrency: 2 }).pipe(
-        Effect.map(([titles, messages]) => groupHits(titles, messages, terms)),
+      return run(terms, searchWords(query)).pipe(
+        Effect.map((rows) => groupHits(rows, terms)),
         Effect.orDie,
       );
     },
   });
 
-/** One hit per thread, most recently active first, with its newest matching messages. */
-const groupHits = (
-  titleRows: ReadonlyArray<Row>,
-  messageRows: ReadonlyArray<Row>,
-  terms: ReadonlyArray<string>,
-): Array<SearchHit> => {
+/** One hit per thread, in the query's order, with its newest matching messages. */
+const groupHits = (rows: ReadonlyArray<Row>, terms: ReadonlyArray<string>): Array<SearchHit> => {
   const hits = new Map<string, { thread: Thread; titleMatch: boolean; matchCount: number; matches: MessageMatch[] }>();
-  const hitFor = (row: Row) => {
+  for (const row of rows) {
     const thread = decodeThread(row);
-    const existing = hits.get(thread.id);
-    if (existing) return existing;
-    const hit = { thread, titleMatch: false, matchCount: 0, matches: [] as MessageMatch[] };
-    hits.set(thread.id, hit);
-    return hit;
-  };
-  for (const row of titleRows) hitFor(row).titleMatch = true;
-  for (const row of messageRows) {
-    const hit = hitFor(row);
-    hit.matchCount += 1;
-    if (hit.matches.length < MATCHES_PER_THREAD)
+    let hit = hits.get(thread.id);
+    if (!hit) {
+      // SQLite answers 0 or 1 where PostgreSQL answers a boolean.
+      hit = { thread, titleMatch: Boolean(row.titleMatch), matchCount: Number(row.matchCount), matches: [] };
+      hits.set(thread.id, hit);
+    }
+    if (row.messageId != null)
       hit.matches.push({
         messageId: row.messageId as MessageMatch["messageId"],
         role: decodeRole(row.messageRole),
@@ -136,9 +139,7 @@ const groupHits = (
         snippet: snippetOf(String(row.messageContent), terms),
       });
   }
-  return [...hits.values()]
-    .sort((a, b) => b.thread.updatedAt.localeCompare(a.thread.updatedAt))
-    .slice(0, SEARCH_THREADS);
+  return [...hits.values()];
 };
 
 // The worker is plain JavaScript evaluated from this string, so it needs no separate file to find

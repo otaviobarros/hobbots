@@ -39,8 +39,20 @@ export const foldWord = (word: string): string => word.normalize("NFD").replace(
  * The words of a search, folded and without repeats. Every word must appear in a match, each as a
  * word or the start of one, so a search can be typed a letter at a time.
  */
-export const searchTerms = (query: string): ReadonlyArray<string> =>
-  [...new Set((query.match(WORD) ?? []).map(foldWord).filter((term) => term.length > 0))].slice(0, MAX_TERMS);
+export const searchTerms = (query: string): ReadonlyArray<string> => wordsOf(query, foldWord);
+
+/**
+ * The same words in lower case with their accents kept, for an index that keeps accents too
+ * (PostgreSQL's `simple` configuration), so "Café" still finds "Café" there.
+ */
+export const searchWords = (query: string): ReadonlyArray<string> => wordsOf(query, (word) => word.toLowerCase());
+
+// Composed first, so an accent typed as a separate mark stays part of its word.
+const wordsOf = (query: string, normalize: (word: string) => string): ReadonlyArray<string> =>
+  [...new Set((query.normalize("NFC").match(WORD) ?? []).map(normalize).filter((term) => term.length > 0))].slice(
+    0,
+    MAX_TERMS,
+  );
 
 /**
  * The words around the first match in `content`, at most about `width` characters, with matching

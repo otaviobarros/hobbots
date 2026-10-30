@@ -135,6 +135,37 @@ describe("SearchIndex", () => {
     expect(result.newTitle.map((hit) => hit.thread.id)).toEqual(["taxes"]);
   });
 
+  // covers CH-006
+  it("[TC-CH-067] a thread with hundreds of matches leaves room for another thread's old match", async () => {
+    const result = await Effect.gen(function* () {
+      yield* seed;
+      const repo = yield* HobbotsRepository;
+      yield* repo.upsertThread(thread("busy", "pip", "Busy chat", "2026-10-25T00:00:00.000Z"));
+      for (let n = 0; n < 320; n++) yield* repo.upsertMessage(message(`b${n}`, "busy", `Fence note ${n}`));
+      return yield* (yield* SearchIndex).search("fence");
+    }).pipe(Effect.provide(Layers), Effect.runPromise);
+
+    expect(result.map((hit) => [hit.thread.id, hit.matchCount, hit.matches.length])).toEqual([
+      ["busy", 320, 3],
+      ["taxes", 1, 1],
+      ["garden", 1, 1],
+    ]);
+    expect(result[0]?.matches.map((m) => m.messageId)).toEqual(["b319", "b318", "b317"]);
+  });
+
+  // covers CH-006
+  it("[TC-CH-068] the exact accented word finds an accented message", async () => {
+    const result = await Effect.gen(function* () {
+      yield* seed;
+      yield* (yield* HobbotsRepository).upsertMessage(message("t3", "taxes", "Receipts from the Café"));
+      const index = yield* SearchIndex;
+      return { exact: yield* index.search("Café"), prefix: yield* index.search("caf") };
+    }).pipe(Effect.provide(Layers), Effect.runPromise);
+
+    expect(ids(result.exact)).toEqual([["taxes", ["t3"]]]);
+    expect(ids(result.prefix)).toEqual([["taxes", ["t3"]]]);
+  });
+
   // covers CH-006, DP-003
   it("[TC-CH-062] finds threads and messages written before the index existed", async () => {
     const before = Object.fromEntries(Object.entries(migrations).filter(([key]) => key < "0011")) as typeof migrations;

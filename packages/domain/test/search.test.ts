@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { searchTerms, snippetOf } from "../src/index.ts";
+import { searchTerms, searchWords, snippetOf } from "../src/index.ts";
 
 const text = (parts: ReadonlyArray<{ text: string; match: boolean }>) =>
   parts.map((part) => (part.match ? `[${part.text}]` : part.text)).join("");
@@ -12,6 +12,13 @@ describe("searchTerms", () => {
 
   it("keeps at most eight words", () => {
     expect(searchTerms("a b c d e f g h i j")).toHaveLength(8);
+  });
+});
+
+describe("searchWords", () => {
+  it("folds case but keeps accents, in one Unicode form", () => {
+    expect(searchWords("  Café, CAFÉ! cafe\u0301 ")).toEqual(["café"]);
+    expect(searchWords("Café cafe")).toEqual(["café", "cafe"]);
   });
 });
 

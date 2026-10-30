@@ -17,6 +17,6 @@ The [hub model](010-desktop-hub.md) has one server writing one database, which S
 
 ## Consequences
 
-Search matches every word of the query as a prefix. SQLite ignores accents and PostgreSQL's `simple` configuration keeps them, so "cafe" finds "Café" only on SQLite. A separate search engine was not needed at hub scale.
+Search matches every word of the query as a prefix. SQLite ignores accents and PostgreSQL's `simple` configuration keeps them, so "Café" finds "Café" on both but "cafe" finds it only on SQLite. A separate search engine was not needed at hub scale.
 
 Backups use the SQLite online backup API plus the artifact folder. Moving data between installations is an export and import, not replication.
