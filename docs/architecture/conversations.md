@@ -20,6 +20,6 @@ User conversation messages, assistant text, tool events, structured task results
 
 Stopping a turn requests adapter interruption and records acknowledgement/outcome. It does not delete history or silently cancel every delegated child. The user must be able to distinguish stopping the current turn from canceling a task or Quest.
 
-Reconnect from an authorized snapshot plus durable event cursor. Deduplicate messages/deltas, recover missed events, and display stale/unverified activity honestly. Cursor expiry or compaction requires a fresh snapshot, not silent data omission.
+Reconnect from an authorized snapshot plus durable event cursor ([ADR 013](../decisions/013-event-journal.md)). Deduplicate messages/deltas, recover missed events, and display stale/unverified activity honestly. Cursor expiry or compaction requires a fresh snapshot, not silent data omission.
 
-Thread fork/context-snapshot behavior, retention limits, and exact search indexing remain open.
+Thread fork/context-snapshot behavior, message retention limits, and exact search indexing remain open.
