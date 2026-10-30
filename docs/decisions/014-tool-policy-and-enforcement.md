@@ -163,6 +163,6 @@ The preset table follows the contract's reference policy and PE-001 directly, an
 - **#132 Tool steps:** steps show whether an action was decided by policy or blocked by the sandbox, and label Charms.
 - **#133 Ask:** Ask covers file tools, commands, Charms (with exact arguments) and new hosts under Careful; force pushes and pushes to the default branch are once-only.
 - **#134 Approval card:** shows the Charm or the host for network requests.
-- **#135 Profile tabs:** Tools becomes Charms; folders and the sandbox switch move to Permissions; onboarding's Safety step uses the rows and wording above, plus the Trusting sandbox switch.
+- **#135 Profile tabs:** the tabs become Profile, Charms and Permissions (Tools becomes Charms); folders and the sandbox switch move to Permissions; onboarding's Safety step uses the rows and wording above, plus the Trusting sandbox switch.
 - **#136 Unsupported enforcement:** the declaration table above, "Needs the sandbox" on Windows and wherever the sandbox cannot start, and the Unsandboxed label.
 - **#137 End to end:** add cases for symlink and `..` escapes, a command writing outside the folders, a `git push` from a command, and an unsandboxed hob's label.
