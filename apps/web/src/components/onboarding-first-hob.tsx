@@ -25,16 +25,18 @@ import {
   Brain,
   ChoresField,
   ColorSwatches,
-  CraftChoices,
   Die,
+  draftRolePicker,
+  GearPicker,
   HobSummary,
   NameDice,
   NearbyLooks,
+  RolePicker,
 } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 
-const GUIDE = "Now the fun part. Every hob is good at something. Pick a craft, a name and a cloak.";
+const GUIDE = "Now the fun part. Every hob has a role on your team. Pick one, a name and a cloak.";
 
 /** A few stars in the preview's sky, placed once per visit. */
 const previewStars = () =>
@@ -46,21 +48,23 @@ const previewStars = () =>
 
 function LookPreview({
   draft,
-  craftLine,
+  roleLine,
   model,
   lookRolls,
   hops,
   onRoll,
   onPickSeed,
+  onChange,
 }: {
   draft: FirstHobDraft;
-  craftLine: string;
+  roleLine: string;
   model: RuntimeModel | undefined;
   lookRolls: number;
   /** Changes with every choice, so the hob hops each time. */
   hops: string;
   onRoll: () => void;
   onPickSeed: (seed: number) => void;
+  onChange: (update: (draft: FirstHobDraft) => FirstHobDraft) => void;
 }) {
   const gear = gearOf(draft);
   const look = useMemo(
@@ -86,7 +90,7 @@ function LookPreview({
       <div aria-hidden className="absolute inset-x-[54px] top-[268px] h-3.5 bg-line-2" />
       <div className="absolute inset-x-0 top-4 flex flex-col items-center gap-0.5 px-4">
         <span className="max-w-full truncate font-pixel text-[26px] font-bold text-moonlight">{name}</span>
-        <span className="max-w-full truncate text-sm text-secondary-text">{craftLine}</span>
+        <span className="max-w-full truncate text-sm text-secondary-text">{roleLine}</span>
       </div>
       <button
         type="button"
@@ -118,6 +122,7 @@ function LookPreview({
           </Button>
         </div>
         <NearbyLooks draft={draft} onPick={onPickSeed} tile={42} className="flex gap-1.5" />
+        <GearPicker draft={draft} onChange={onChange} className="flex-col" />
         <HobSummary draft={draft} model={model} className="pt-1" />
       </div>
     </section>
@@ -125,7 +130,7 @@ function LookPreview({
 }
 
 /**
- * Onboarding step 2: the user makes their first hob, with a craft, a name from the dice, a seeded
+ * Onboarding step 2: the user makes their first hob, with a role, a name from the dice, a seeded
  * look in one of the hob colors, and Claude Code's model and effort. The summon creates it.
  */
 export function OnboardingFirstHob() {
@@ -159,13 +164,10 @@ export function OnboardingFirstHob() {
     void navigate({ to: "/setup/safety" });
   };
 
-  const craftLine = kindLine(draft);
+  const roleLine = kindLine(draft);
   const hint = locked
     ? `${draft.name.trim()} is on the way. Finish summoning to change it.`
-    : (problem ??
-      (draft.kind === "custom"
-        ? `${draft.name.trim()} is ready`
-        : `${draft.name.trim()} the ${roleTitleOf(draft)} is ready`));
+    : (problem ?? `${draft.name.trim()} the ${roleTitleOf(draft)} is ready`);
 
   return (
     <OnboardingFrame
@@ -202,15 +204,13 @@ export function OnboardingFirstHob() {
         <div className="flex min-w-0 flex-1 flex-col gap-3.5">
           <div>
             <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">Meet your first hob</h1>
-            <p className="m-0 mt-1 text-secondary-text">
-              Pick a craft or describe your own. Every hob looks different.
-            </p>
+            <p className="m-0 mt-1 text-secondary-text">Pick a role or name your own. Every hob looks different.</p>
           </div>
 
-          <CraftChoices
-            draft={draft}
-            onChange={setDraft}
-            legend={<legend className="lbl mb-2 text-label">Good at</legend>}
+          <RolePicker
+            {...draftRolePicker(draft, setDraft)}
+            legend={<legend className="lbl mb-2 text-label">Role</legend>}
+            columns={2}
           />
 
           <ChoresField
@@ -287,10 +287,20 @@ export function OnboardingFirstHob() {
 
         <LookPreview
           draft={draft}
-          craftLine={craftLine}
+          roleLine={roleLine}
           model={model}
           lookRolls={lookRolls}
-          hops={[draft.kind, draft.lookColor, draft.lookSeed, draft.model, draft.effort, nameRolls].join(" ")}
+          onChange={setDraft}
+          hops={[
+            draft.role,
+            draft.hat,
+            draft.tool,
+            draft.lookColor,
+            draft.lookSeed,
+            draft.model,
+            draft.effort,
+            nameRolls,
+          ].join(" ")}
           onRoll={() => {
             setDraft((d) => rollLook(d));
             setLookRolls((n) => n + 1);

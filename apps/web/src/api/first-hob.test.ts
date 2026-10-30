@@ -14,11 +14,12 @@ import {
   keptSummonDraft,
   nearbySeeds,
   newDraft,
-  pickCraft,
   pickLook,
   pickModel,
+  pickRole,
   reopenDraft,
   restoreDraft,
+  roleRequestUrl,
   roleTitleOf,
   rollLook,
   rollName,
@@ -123,9 +124,22 @@ describe("first hob draft", () => {
     expect(restoreDraft(draft({ submitted: firstHobPayload(draft()) })).submitted).toEqual(firstHobPayload(draft()));
   });
 
-  it("gives a draft saved before it had chores its craft's sample ones", () => {
-    const { chores: _, choresEdited: __, ...older } = draft({ kind: "scribe" });
-    expect(restoreDraft(older)).toMatchObject({ chores: sampleChores("scribe"), choresEdited: false });
+  it("gives a draft saved before it had chores its role's sample ones", () => {
+    const { chores: _, choresEdited: __, ...older } = draft({ role: "writer" });
+    expect(restoreDraft(older)).toMatchObject({ chores: sampleChores("writer"), choresEdited: false });
+  });
+
+  // covers AG-001
+  it("[TC-AG-080] moves a draft saved with a craft to the matching role, or to a title of the user's own", () => {
+    const { role: _, ownTitle: __, ownSigil: ___, hat: ____, tool: _____, ...rest } = draft();
+    const saved = (kind: string, craft = "") => ({ ...rest, kind, craft }) as unknown as Partial<FirstHobDraft>;
+    expect(restoreDraft(saved("scribe"))).toMatchObject({ role: "writer", hat: "pointed", tool: "quill" });
+    expect(restoreDraft(saved("keeper"))).toMatchObject({ role: "bookkeeper", hat: "beanie", tool: "quill" });
+    const own = restoreDraft(saved("custom", "Garden plans"));
+    expect(own).toMatchObject({ role: null, ownTitle: "Garden plans", ownSigil: "assistant", hat: null, tool: null });
+    expect(own).not.toHaveProperty("kind");
+    expect(own).not.toHaveProperty("craft");
+    expect(restoreDraft(saved("constructor", "Odd"))).toMatchObject({ role: null, ownTitle: "Odd" });
   });
 
   it("sends the same request on every retry once submitted, and a new id after a rejection", () => {
@@ -138,18 +152,18 @@ describe("first hob draft", () => {
     expect(reopened).toMatchObject({ id: "another", name: "Wren", submitted: null });
   });
 
-  it("renames an unnamed hob after its craft and keeps a name the user chose", () => {
-    expect(pickCraft(draft(), "scribe").name).toBe("Quill");
-    expect(pickCraft(draft({ name: "Wren", named: true }), "scribe").name).toBe("Wren");
-    expect(pickCraft(draft({ name: "Pip" }), "custom").name).toBe("Pip");
+  it("keeps the name when another role is picked", () => {
+    expect(pickRole(draft(), "writer").name).toBe("Pip");
+    expect(pickRole(draft({ name: "Wren", named: true }), null).name).toBe("Wren");
   });
 
-  it("brings a craft's sample chores until the user writes their own", () => {
-    expect(draft().chores).toBe(sampleChores("helper"));
-    expect(pickCraft(draft(), "researcher").chores).toBe(sampleChores("researcher"));
-    expect(pickCraft(draft(), "custom").chores).toBe("");
+  it("brings a role's sample chores until the user writes their own", () => {
+    expect(draft().chores).toBe(sampleChores("assistant"));
+    expect(pickRole(draft(), "researcher").chores).toBe(sampleChores("researcher"));
+    expect(pickRole(draft(), "frontend").chores).toBe(sampleChores("frontend"));
+    expect(pickRole(draft(), null).chores).toBe("");
     const own = draft({ chores: "Water the plants.", choresEdited: true });
-    expect(pickCraft(own, "coder").chores).toBe("Water the plants.");
+    expect(pickRole(own, "engineer").chores).toBe("Water the plants.");
   });
 
   it("adds the chores to the instructions in the user's words, and leaves out blank ones", () => {
@@ -189,15 +203,15 @@ describe("first hob draft", () => {
     expect(splitModels([older]).main).toEqual([older]);
   });
 
-  it("asks for a name and, for its own craft, a description", () => {
+  it("asks for a name and, for a role of its own, a title", () => {
     expect(draftProblem(draft())).toBeUndefined();
     expect(draftProblem(draft({ name: "  " }))).toBe("Give your hob a name");
-    expect(draftProblem(draft({ kind: "custom", craft: " " }))).toMatch(/good at/);
+    expect(draftProblem(draft({ role: null, ownTitle: " " }))).toBe("Give your hob's role a title");
   });
 
   it("builds the create request from what was chosen", () => {
     const payload = firstHobPayload(
-      draft({ kind: "coder", name: " Tinker ", lookSeed: 77, lookColor: "ember", model: "opus", effort: "max" }),
+      pickRole(draft({ name: " Tinker ", lookSeed: 77, lookColor: "ember", model: "opus", effort: "max" }), "engineer"),
     );
     expect(payload).toMatchObject({
       id,
@@ -217,10 +231,33 @@ describe("first hob draft", () => {
   });
 
   it("sends the runtime's default model as no model, and its own role title in the user's words", () => {
-    const payload = firstHobPayload(draft({ kind: "custom", craft: " Garden plans ", model: "default" }));
+    const payload = firstHobPayload({ ...pickRole(draft({ model: "default" }), null), ownTitle: " Garden plans " });
     expect(payload.model).toBeNull();
     expect(payload).toMatchObject({ role: null, roleTitle: "Garden plans", sigil: "assistant", hat: null, tool: null });
-    expect(roleTitleOf(draft({ kind: "keeper" }))).toBe("Bookkeeper");
+    expect(payload.instructions).toMatch(/^You are Pip, a hob in Hobbots\. Your role is Garden plans\./);
+    expect(roleTitleOf(pickRole(draft(), "bookkeeper"))).toBe("Bookkeeper");
+  });
+
+  // covers AG-001
+  it("[TC-AG-081] sends a custom title with its borrowed sigil, and the hat and tool as changed next to the look", () => {
+    const own = { ...pickRole(draft(), null), ownTitle: "Frontend wizard", ownSigil: "frontend" as const };
+    expect(firstHobPayload({ ...own, hat: "crown", tool: "wand" })).toMatchObject({
+      role: null,
+      roleTitle: "Frontend wizard",
+      sigil: "frontend",
+      hat: "crown",
+      tool: "wand",
+    });
+    // A starter role keeps its own title and sigil when its gear changes.
+    const changed = { ...pickRole(draft(), "researcher"), tool: null };
+    expect(firstHobPayload(changed)).toMatchObject({
+      role: "researcher",
+      roleTitle: "Researcher",
+      sigil: "researcher",
+      hat: "hood",
+      tool: null,
+    });
+    expect(() => Schema.encodeSync(CreateAgentPayload)(firstHobPayload(own))).not.toThrow();
   });
 });
 
@@ -230,8 +267,12 @@ describe("the draft's role gear", () => {
       () => 0.5,
       () => "id",
     );
-    expect(gearOf({ ...draft, kind: "researcher" })).toEqual({ hat: "hood", tool: "lantern" });
-    expect(gearOf({ ...draft, kind: "custom", craft: "Gardening" })).toEqual({ hat: null, tool: null });
+    expect(gearOf(pickRole(draft, "researcher"))).toEqual({ hat: "hood", tool: "lantern" });
+    expect(gearOf(pickRole(draft, null))).toEqual({ hat: null, tool: null });
+    // Changed next to the look, the gear stays until another role is picked.
+    const changed = { ...pickRole(draft, "researcher"), hat: "crown" as const };
+    expect(gearOf(changed)).toEqual({ hat: "crown", tool: "lantern" });
+    expect(gearOf(pickRole(changed, "writer"))).toEqual({ hat: "pointed", tool: "quill" });
   });
 });
 
@@ -242,7 +283,21 @@ describe("the hob line", () => {
       () => "id",
     );
     expect(hobLine(draft)).toBe("Pip the Assistant");
-    expect(hobLine({ ...draft, kind: "custom", craft: "Gardening ", name: "Moss" })).toBe("Moss, good at gardening");
+    expect(hobLine({ ...pickRole(draft, null), ownTitle: "Frontend engineer ", name: "Fern" })).toBe(
+      "Fern the Frontend engineer",
+    );
+    expect(hobLine({ ...pickRole(draft, null), name: "Fern" })).toBe("Fern");
+  });
+});
+
+describe("the role request link", () => {
+  it("opens the role request form, with the user's own title filled in", () => {
+    const form = "https://github.com/otaviobarros/hobbots/issues/new?template=5-role-request.yml";
+    expect(roleRequestUrl(" ")).toBe(form);
+    const url = new URL(roleRequestUrl(" Garden & pond planner "));
+    expect(url.searchParams.get("template")).toBe("5-role-request.yml");
+    expect(url.searchParams.get("title")).toBe("Role: Garden & pond planner");
+    expect(url.searchParams.get("role-title")).toBe("Garden & pond planner");
   });
 });
 
