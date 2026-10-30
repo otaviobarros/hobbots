@@ -59,9 +59,9 @@ A maintainer triages new issues at least once a week. For each issue labeled `st
 
 ## Role requests
 
-Every hob has a role: a title, a sigil and the hat and tool its sprite wears. Hobbots ships a starter set of roles, defined with their families and picker order in [#99](https://github.com/otaviobarros/hobbots/issues/99) and kept as data in `@hobbots/domain`. Anyone can give a hob a title in their own words, so the starter set only grows when many people need the same role. Roles are labels only and grant no extra powers.
+Hobs are getting roles: a title, a sigil and the hat and tool the sprite wears. The starter set of roles, with their families and picker order, is planned in [#99](https://github.com/otaviobarros/hobbots/issues/99) and will live as data in `@hobbots/domain`. Anyone will be able to give a hob a title in their own words, so the starter set only grows when many people need the same role. Roles are labels only and grant no extra powers.
 
-To suggest a role, open the [Role request](https://github.com/otaviobarros/hobbots/issues/new?template=5-role-request.yml) form. The role picker's "Missing a role? Suggest one" link opens the same form with the title filled in from what the user typed, using the `title=Role: <title>` and `role-title=<title>` query parameters.
+To suggest a role, open the [Role request](https://github.com/otaviobarros/hobbots/issues/new?template=5-role-request.yml) form. Once the role picker lands ([#100](https://github.com/otaviobarros/hobbots/issues/100)), its "Missing a role? Suggest one" link will open the same form with the title filled in from what the user typed, using the `title=Role: <title>` and `role-title=<title>` query parameters.
 
 How requests are accepted:
 
