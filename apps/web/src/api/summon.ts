@@ -2,6 +2,7 @@ import type { CreateAgentPayload } from "@hobbots/api";
 import type { RuntimeHealth } from "@hobbots/domain";
 import {
   type CraftKind,
+  draftProblem,
   type FirstHobDraft,
   firstHobPayload,
   newDraft,
@@ -82,4 +83,27 @@ export const providerNotice = (health: RuntimeHealth | undefined): string | unde
   if (health.availability === "ready") return undefined;
   const problem = runtimeProblem(health);
   return problem ? NOT_READY[problem] : "Hobbots could not confirm Claude Code is ready yet.";
+};
+
+/** Claude Code's health as the form knows it: still being checked, failed to check, or checked. */
+export interface ProviderCheck {
+  readonly pending: boolean;
+  readonly failed: boolean;
+  readonly health: RuntimeHealth | undefined;
+}
+
+/**
+ * What stops a new summon, or undefined when it can go. A hob needs a provider confirmed ready, so
+ * an unknown health stops it too. Retrying a summon already sent is never stopped: the hub may have
+ * made that hob already, and the retry only asks for it again.
+ */
+export const summonProblem = (draft: SummonDraft, provider: ProviderCheck, modelFound: boolean): string | undefined => {
+  if (draft.submitted !== null) return undefined;
+  const name = draft.name.trim() || "your hob";
+  const problem = draftProblem(draft);
+  if (problem) return problem;
+  if (provider.health === undefined && provider.pending) return "Checking Claude Code";
+  if (provider.health === undefined && provider.failed) return `Check Claude Code again to summon ${name}`;
+  if (providerNotice(provider.health)) return `Fix Claude Code in Settings to summon ${name}`;
+  return modelFound ? undefined : "Waiting for Claude Code's models";
 };

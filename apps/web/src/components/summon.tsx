@@ -24,6 +24,7 @@ import {
   providerNotice,
   type SummonDraft,
   summonPayload,
+  summonProblem,
 } from "../api/summon.ts";
 import { hobLook } from "../art/look.ts";
 import { Brain, Choice, ColorSwatches, CraftChoices, NameDice } from "./hob-form.tsx";
@@ -75,14 +76,11 @@ export function Summon() {
   const locked = draft.submitted !== null;
   const name = draft.name.trim() || "your hob";
   const rejected = create.error instanceof ApiError && create.error.tag === "InvalidHob" ? create.error : undefined;
-  const problem = locked
-    ? undefined
-    : (draftProblem(draft) ??
-      (runtimes.data && !connected
-        ? `Fix Claude Code in Settings to summon ${name}`
-        : model
-          ? undefined
-          : "Waiting for Claude Code's models"));
+  const problem = summonProblem(
+    draft,
+    { pending: runtimes.isPending, failed: runtimes.isError, health: claude },
+    model !== undefined,
+  );
   const hint = create.isPending
     ? `Summoning ${name}… If you leave now, ${name} still joins your hobs.`
     : rejected
@@ -290,7 +288,24 @@ export function Summon() {
                       </Choice>
                     )}
                   </fieldset>
-                  {runtimes.data && !connected ? (
+                  {runtimes.isPending ? (
+                    <span className="py-1 text-sm text-lantern">
+                      Checking Claude Code <span className="animate-hb-blink">•••</span>
+                    </span>
+                  ) : !runtimes.data ? (
+                    <span role="alert" className="flex items-center gap-3 text-sm text-rose">
+                      Hobbots could not check Claude Code.
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        onClick={() => void runtimes.refetch()}
+                        disabled={runtimes.isFetching}
+                      >
+                        {runtimes.isFetching ? "Checking…" : "Check again"}
+                      </Button>
+                    </span>
+                  ) : !connected ? (
                     <span role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-lantern">
                       {notice} <Link to="/settings">Open Settings</Link>
                       <Button

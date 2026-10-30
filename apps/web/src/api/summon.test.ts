@@ -1,7 +1,7 @@
 import { RuntimeHealth } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { kindLine } from "./first-hob.ts";
-import { newSummonDraft, pickKind, providerNotice, sampleChores, summonPayload } from "./summon.ts";
+import { kindLine, submitDraft } from "./first-hob.ts";
+import { newSummonDraft, pickKind, providerNotice, sampleChores, summonPayload, summonProblem } from "./summon.ts";
 
 const id = "8a1f6c2e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
 const fresh = (taken: ReadonlyArray<string> = []) =>
@@ -57,5 +57,37 @@ describe("the provider a summoned hob thinks with", () => {
     expect(providerNotice(health("outdated"))).toMatch(/claude update/);
     expect(providerNotice(health("unavailable", null))).toMatch(/not found/);
     expect(providerNotice(health("unverified"))).toMatch(/could not confirm/);
+  });
+});
+
+describe("what stops a summon", () => {
+  const checked = (availability: RuntimeHealth["availability"]) => ({
+    pending: false,
+    failed: false,
+    health: health(availability),
+  });
+
+  it("goes once Claude Code is confirmed ready and a model is picked", () => {
+    expect(summonProblem(fresh(), checked("ready"), true)).toBeUndefined();
+    expect(summonProblem(fresh(), checked("ready"), false)).toBe("Waiting for Claude Code's models");
+  });
+
+  it("waits for Claude Code's health even when the models already loaded", () => {
+    expect(summonProblem(fresh(), { pending: true, failed: false, health: undefined }, true)).toBe(
+      "Checking Claude Code",
+    );
+    expect(summonProblem(fresh(), { pending: false, failed: true, health: undefined }, true)).toBe(
+      "Check Claude Code again to summon Pip",
+    );
+    expect(summonProblem(fresh(), checked("signedOut"), true)).toBe("Fix Claude Code in Settings to summon Pip");
+  });
+
+  it("keeps the last health it saw when checking again fails", () => {
+    expect(summonProblem(fresh(), { pending: false, failed: true, health: health("ready") }, true)).toBeUndefined();
+  });
+
+  it("lets a sent summon be retried, since the hub may already have made the hob", () => {
+    const sent = submitDraft(fresh(), summonPayload);
+    expect(summonProblem(sent, { pending: false, failed: true, health: undefined }, false)).toBeUndefined();
   });
 });
