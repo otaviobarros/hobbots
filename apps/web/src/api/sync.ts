@@ -56,7 +56,11 @@ export const recordRemovedMessage = (client: QueryClient, messageId: string) =>
 const record = (client: QueryClient, key: string, entry: OverlayEntry) => {
   const overlay = syncState(client).overlay;
   const known = overlay.get(key);
-  if (known === undefined || entry.revision >= known.revision) overlay.set(key, entry);
+  if (known !== undefined && entry.revision < known.revision) return;
+  // Re-inserted so the overlay lists entities in the order they last changed, the order in which
+  // reconcile applies them.
+  overlay.delete(key);
+  overlay.set(key, entry);
 };
 
 /**
@@ -75,40 +79,46 @@ export const newer = <T extends { readonly revision: number }>(known: T | undefi
 };
 
 /**
- * A response's rows with the generation's overlay on top: a newer version replaces its row, a newer
- * tombstone removes it, and an entity that belongs to the query but is missing from the response
- * was created after it was read, so it is added. Everything else missing from the response is gone.
+ * A response's rows with the generation's overlay on top, applied as the events were: a newer
+ * version replaces its row through `upsert` (so a queued message that started moves to the end, as
+ * it does live), a newer tombstone removes it, and an entity that belongs to the query but is
+ * missing from the response was created after it was read, so it is added. Everything else missing
+ * from the response is gone.
  */
 const reconcile = <T extends { readonly id: string; readonly revision: number }>(
   client: QueryClient,
   rows: ReadonlyArray<T>,
   kind: "agent" | "thread" | "message",
   belongs: (value: T) => boolean,
+  upsert: (list: ReadonlyArray<T>, item: T) => Array<T>,
   cached: ReadonlyArray<T> | undefined,
 ): Array<T> => {
   const overlay = syncState(client).overlay;
   const known = new Map((cached ?? []).map((item) => [item.id, item]));
-  const result: Array<T> = [];
-  const seen = new Set<string>();
-  for (const row of rows) {
-    seen.add(row.id);
-    const entry = overlay.get(`${kind}:${row.id}`);
-    if (entry?.kind === "removed" && entry.revision > row.revision) continue;
-    let value = row;
-    if (entry !== undefined && entry.kind === kind) value = newer(value, entry.value as unknown as T);
-    // Text a delta already delivered stays, even when the response read an older checkpoint. Only
-    // for the same revision: other cached versions may be from an earlier generation.
-    const cachedVersion = known.get(row.id);
-    if (cachedVersion?.revision === value.revision) value = newer(cachedVersion, value);
-    if (belongs(value)) result.push(value);
-  }
+  // Text a delta already delivered stays, even when the version at hand holds an older checkpoint.
+  // Only for the same revision: other cached versions may be from an earlier generation.
+  const withCachedText = (value: T) => {
+    const cachedVersion = known.get(value.id);
+    return cachedVersion?.revision === value.revision ? newer(cachedVersion, value) : value;
+  };
+  let result = rows.map(withCachedText);
   for (const [key, entry] of overlay) {
-    if (entry.kind !== kind || !key.startsWith(`${kind}:`)) continue;
-    const value = entry.value as unknown as T;
-    if (!seen.has(value.id) && belongs(value)) result.push(value);
+    if (!key.startsWith(`${kind}:`)) continue;
+    const id = key.slice(kind.length + 1);
+    const row = result.find((item) => item.id === id);
+    if (entry.kind === "removed") {
+      if (row !== undefined && entry.revision > row.revision) result = result.filter((item) => item !== row);
+      continue;
+    }
+    const value = withCachedText(entry.value as unknown as T);
+    if (row === undefined) result = [...result, value];
+    else if (newer(row, value) !== row) result = upsert(result, newer(row, value));
   }
-  return result;
+  return result.filter(belongs);
 };
+
+const replaceById = <T extends { readonly id: string }>(list: ReadonlyArray<T>, item: T) =>
+  list.map((existing) => (existing.id === item.id ? item : existing));
 
 /**
  * Wraps a list query's fetch so its response belongs to the current generation: a response that
@@ -121,6 +131,7 @@ const synced =
     kind: "agent" | "thread" | "message",
     belongs: (value: T) => boolean,
     order: (items: Array<T>) => Array<T> = (items) => items,
+    upsert: (list: ReadonlyArray<T>, item: T) => Array<T> = replaceById,
   ) =>
   async ({ client, queryKey }: QueryFunctionContext): Promise<ReadonlyArray<T>> => {
     const state = syncState(client);
@@ -128,7 +139,7 @@ const synced =
       const generation = state.generation;
       const rows = await fetch();
       if (state.generation !== generation) continue;
-      return order(reconcile(client, rows, kind, belongs, client.getQueryData<ReadonlyArray<T>>(queryKey)));
+      return order(reconcile(client, rows, kind, belongs, upsert, client.getQueryData<ReadonlyArray<T>>(queryKey)));
     }
   };
 
@@ -144,5 +155,8 @@ export const syncedThreads = (
   order: (items: Array<Thread>) => Array<Thread>,
 ) => synced(fetch, "thread", (thread) => thread.agentId === agentId, order);
 
-export const syncedMessages = (threadId: ThreadId, fetch: () => Promise<ReadonlyArray<Message>>) =>
-  synced(fetch, "message", (message) => message.threadId === threadId);
+export const syncedMessages = (
+  threadId: ThreadId,
+  fetch: () => Promise<ReadonlyArray<Message>>,
+  upsert: (list: ReadonlyArray<Message>, message: Message) => Array<Message>,
+) => synced(fetch, "message", (message) => message.threadId === threadId, undefined, upsert);

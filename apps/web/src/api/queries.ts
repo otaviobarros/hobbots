@@ -43,7 +43,7 @@ export const threadsQuery = (agentId: AgentId) =>
 export const messagesQuery = (threadId: ThreadId) =>
   queryOptions({
     queryKey: queryKeys.messages(threadId),
-    queryFn: syncedMessages(threadId, () => call((c) => c.threads.messages({ params: { threadId } }))),
+    queryFn: syncedMessages(threadId, () => call((c) => c.threads.messages({ params: { threadId } })), upsertMessage),
   });
 
 export const runtimesQuery = queryOptions({

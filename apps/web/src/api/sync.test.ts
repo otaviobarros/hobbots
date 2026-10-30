@@ -2,7 +2,7 @@ import { Message, MessageId, ThreadId } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { applyEvent } from "./events.ts";
-import { queryKeys } from "./queries.ts";
+import { queryKeys, upsertMessage } from "./queries.ts";
 import { startGeneration, syncedMessages } from "./sync.ts";
 
 const threadId = ThreadId.make("t1");
@@ -29,7 +29,10 @@ const pendingFetch = () => {
   return { fetch, answer: (rows: ReadonlyArray<Message>) => answers.shift()?.(rows), pending: () => answers.length };
 };
 const load = (client: QueryClient, fetch: () => Promise<ReadonlyArray<Message>>) =>
-  client.fetchQuery({ queryKey: queryKeys.messages(threadId), queryFn: syncedMessages(threadId, fetch) });
+  client.fetchQuery({
+    queryKey: queryKeys.messages(threadId),
+    queryFn: syncedMessages(threadId, fetch, upsertMessage),
+  });
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("reply chunks", () => {
@@ -79,6 +82,45 @@ describe("query responses during a sync generation", () => {
     client.setQueryData(queryKeys.messages(threadId), [message("m1", "streaming", "Hello wor", 5)]);
     await load(client, () => Promise.resolve([message("m1", "streaming", "Hel", 5)]));
     expect(messages(client)?.[0]?.content).toBe("Hello wor");
+  });
+
+  // covers CH-004
+  it("[TC-CH-079] keeps the streamed text of a reply that started after the response was read", async () => {
+    const client = new QueryClient();
+    client.setQueryData(queryKeys.messages(threadId), [message("u1", "complete", "hi", 6)]);
+    const { fetch, answer } = pendingFetch();
+    const loading = load(client, fetch);
+
+    applyEvent(client, { _tag: "MessageUpserted", message: message("m1", "streaming", "", 7) });
+    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), offset: 0, delta: "Hel" });
+    answer([message("u1", "complete", "hi", 6)]);
+    await loading;
+
+    expect(messages(client)?.map((m) => [m.id, m.content])).toEqual([
+      ["u1", "hi"],
+      ["m1", "Hel"],
+    ]);
+  });
+
+  // covers CH-004, CH-008
+  it("[TC-CH-080] a queued message that started after the response was read moves after the reply before it", async () => {
+    const client = new QueryClient();
+    const user = (id: string, status: Message["status"], revision: number) =>
+      new Message({ ...message(id, status, id, revision), role: "user", configVersion: null });
+    const { fetch, answer } = pendingFetch();
+    const loading = load(client, fetch);
+
+    // The reply finishes and the queued prompt starts while the request is in flight.
+    applyEvent(client, { _tag: "MessageUpserted", message: message("m1", "complete", "Hello", 8) });
+    applyEvent(client, { _tag: "MessageUpserted", message: user("q1", "complete", 9) });
+    answer([user("u1", "complete", 2), user("q1", "queued", 3), message("m1", "streaming", "Hel", 4)]);
+    await loading;
+
+    expect(messages(client)?.map((m) => [m.id, m.status])).toEqual([
+      ["u1", "complete"],
+      ["m1", "complete"],
+      ["q1", "complete"],
+    ]);
   });
 
   // covers CH-004
