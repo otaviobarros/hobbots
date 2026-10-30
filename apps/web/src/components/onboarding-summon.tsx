@@ -5,11 +5,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ApiError } from "../api/client.ts";
-import { FIRST_HOB_DRAFT_KEY, type FirstHobDraft, hobLine, reopenDraft, submitDraft } from "../api/first-hob.ts";
+import { type FirstHobDraft, hobLine, keepDraft, reopenDraft, submitDraft } from "../api/first-hob.ts";
 import { modelsQuery, useCreateHob } from "../api/queries.ts";
 import { foldersShared, presetInfo } from "../api/safety.ts";
 import { setupQuery, useUpdateSetup } from "../api/setup.ts";
-import { writeStored } from "../lib/storage.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 import { useFirstHobDraft } from "./onboarding-safety.tsx";
@@ -86,17 +85,17 @@ export function OnboardingReady() {
     // retry repeats the same request; the hub returns the hob it made the first time.
     const sent = submitDraft(draft);
     setDraft(sent);
-    writeStored(FIRST_HOB_DRAFT_KEY, sent);
+    keepDraft(sent);
     try {
       const made = await create.mutateAsync(sent.submitted);
       await update.mutateAsync({ completed: true });
-      writeStored(FIRST_HOB_DRAFT_KEY, null);
+      keepDraft(null);
       setHob(made);
     } catch (error) {
       if (error instanceof ApiError && error.tag === "InvalidHob") {
         const reopened = reopenDraft(sent);
         setDraft(reopened);
-        writeStored(FIRST_HOB_DRAFT_KEY, reopened);
+        keepDraft(reopened);
       }
       setRitual("idle");
       setLit(0);

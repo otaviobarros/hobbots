@@ -2,19 +2,18 @@ import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { FIRST_HOB_DRAFT_KEY, type FirstHobDraft, hobLine, restoreDraft } from "../api/first-hob.ts";
+import { type FirstHobDraft, hobLine, keptDraftOrStored, restoreDraft } from "../api/first-hob.ts";
 import { foldersShared, presetInfo } from "../api/safety.ts";
-import { setupQuery } from "../api/setup.ts";
-import { readStored } from "../lib/storage.ts";
+import { setupQuery, useSavingSetup } from "../api/setup.ts";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
 
 const SAFETY_GUIDE = "A good hob always asks before doing something you cannot undo. How careful should yours be?";
-const FOLDERS_GUIDE = "Hobs only go where you let them. Pick the folders they may open. I will guard the rest.";
+const FOLDERS_GUIDE = "Pick the folders hobs may open once they can work with files. For now they only chat.";
 
 /** The first hob as chosen on the step before, read back from storage. */
 export const useFirstHobDraft = (): FirstHobDraft => {
-  const [draft] = useState(() => restoreDraft(readStored<Partial<FirstHobDraft> | null>(FIRST_HOB_DRAFT_KEY, null)));
+  const [draft] = useState(() => restoreDraft(keptDraftOrStored()));
   return draft;
 };
 
@@ -31,6 +30,7 @@ export function OnboardingSafety() {
   const back = useBack("/setup/hob");
   const draft = useFirstHobDraft();
   const setup = useQuery(setupQuery);
+  const saving = useSavingSetup();
   const [guide, setGuide] = useState(SAFETY_GUIDE);
   const name = draft.name.trim() || "your hob";
 
@@ -41,11 +41,11 @@ export function OnboardingSafety() {
       sofar={["Claude connected", `${hobLine(draft)} on Claude`]}
       footer={
         <>
-          <Button variant="outline" onClick={back}>
+          <Button variant="outline" onClick={back} disabled={saving}>
             Back
           </Button>
           <span className="flex-1" />
-          <Button onClick={() => void navigate({ to: "/setup/folders" })} disabled={!setup.data}>
+          <Button onClick={() => void navigate({ to: "/setup/folders" })} disabled={!setup.data || saving}>
             Continue
           </Button>
         </>
@@ -54,7 +54,8 @@ export function OnboardingSafety() {
       <div className="flex animate-hb-in flex-col gap-1.5">
         <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">How much should {name} ask first?</h1>
         <p className="m-0 mb-3.5 text-secondary-text">
-          Hobs ask before anything you pick as "Ask". Paying for things is always off unless you turn it on yourself.
+          For now hobs only chat: they cannot open files, browse or send anything yet. Hobbots saves this choice and
+          follows it once they can.
         </p>
         {setup.data ? (
           <PresetPicker
@@ -75,12 +76,13 @@ export function OnboardingSafety() {
   );
 }
 
-/** Onboarding step 4: the folders hobs may work in. None is fine; hobs can still browse and chat. */
+/** Onboarding step 4: the folders hobs may work in. None is fine; hobs can still chat. */
 export function OnboardingFolders() {
   const navigate = useNavigate();
   const back = useBack("/setup/safety");
   const draft = useFirstHobDraft();
   const setup = useQuery(setupQuery);
+  const saving = useSavingSetup();
   const folders = setup.data?.approvedFolders ?? [];
 
   return (
@@ -94,15 +96,13 @@ export function OnboardingFolders() {
       ]}
       footer={
         <>
-          <Button variant="outline" onClick={back}>
+          <Button variant="outline" onClick={back} disabled={saving}>
             Back
           </Button>
           <span className="flex-1 text-right text-sm text-secondary-text">
-            {folders.length === 0
-              ? "No folders is fine, hobs can still browse and chat"
-              : foldersShared(folders.length)}
+            {folders.length === 0 ? "No folders is fine, hobs can still chat" : foldersShared(folders.length)}
           </span>
-          <Button onClick={() => void navigate({ to: "/setup/ready" })} disabled={!setup.data}>
+          <Button onClick={() => void navigate({ to: "/setup/ready" })} disabled={!setup.data || saving}>
             Continue
           </Button>
         </>
@@ -111,7 +111,8 @@ export function OnboardingFolders() {
       <div className="flex max-w-[780px] animate-hb-in flex-col gap-1.5">
         <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">Where can hobs work?</h1>
         <p className="m-0 mb-2.5 text-secondary-text">
-          Hobs only see the folders you add. Everything else on this computer stays locked.
+          Hobbots saves these for when hobs can work with files. Today hobs only chat, so they cannot open any folder
+          yet, these included.
         </p>
         {setup.data ? (
           <FolderPicker folders={folders} />

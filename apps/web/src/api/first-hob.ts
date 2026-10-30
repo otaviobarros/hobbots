@@ -1,5 +1,6 @@
 import type { CreateAgentPayload } from "@hobbots/api";
 import { AgentId, type Effort, type HobColor, type RuntimeModel, type RuntimeModels } from "@hobbots/domain";
+import { readStored, writeStored } from "../lib/storage.ts";
 
 /**
  * The first hob as the user shapes it during onboarding, before the hub creates it. Kept apart
@@ -232,6 +233,20 @@ export const reopenDraft = (draft: FirstHobDraft, makeId: () => string = () => c
 
 /** Where onboarding keeps the draft between steps, until the summon creates the hob. */
 export const FIRST_HOB_DRAFT_KEY = "setup.firstHob";
+
+// The draft lives in memory for this window, so onboarding works when browser storage is blocked
+// or full; storage only brings it back after a reload. Undefined means "not set in this window".
+let keptDraft: Partial<FirstHobDraft> | null | undefined;
+
+/** Keeps the draft for the next steps, or forgets it with null once the hob exists. */
+export const keepDraft = (draft: FirstHobDraft | null) => {
+  keptDraft = draft;
+  writeStored(FIRST_HOB_DRAFT_KEY, draft);
+};
+
+/** The draft kept in this window, else the one browser storage remembers, else null. */
+export const keptDraftOrStored = (): Partial<FirstHobDraft> | null =>
+  keptDraft !== undefined ? keptDraft : readStored<Partial<FirstHobDraft> | null>(FIRST_HOB_DRAFT_KEY, null);
 
 /** The hob as the Elder Hob sums it up, such as "Pip the Helper" or "Moss, good at gardening". */
 export const hobLine = (draft: FirstHobDraft): string => {

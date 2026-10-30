@@ -2,7 +2,8 @@ import type { SafetyPreset } from "@hobbots/domain";
 
 /**
  * The onboarding safety presets as the Hobbots design words them. Hobbots stores the choice now;
- * the rules shown are the design's summary, and the hub enforces them once permissions land.
+ * the rules shown are the design's summary of what each preset will allow. Hobs only chat today,
+ * so the UI says so wherever it shows them (see "Enforcement honesty" in permissions.md).
  */
 
 export type RuleAnswer = "Allow" | "Ask" | "Never";
@@ -22,7 +23,7 @@ export const PRESETS: ReadonlyArray<PresetInfo> = [
     id: "careful",
     label: "Careful",
     note: "Asks before almost everything. Good for your first week.",
-    guide: "Careful it is. Your hob will ask about almost everything. Slow, but very safe.",
+    guide: "Careful it is. Once hobs can act, yours will ask about almost everything. Slow, but very safe.",
     recommended: false,
     rules: [
       ["Read your folders", "Ask"],
@@ -36,7 +37,8 @@ export const PRESETS: ReadonlyArray<PresetInfo> = [
     id: "balanced",
     label: "Balanced",
     note: "Reads and browses freely. Anything risky waits for you.",
-    guide: "Balanced is what most people pick. Reading and browsing are fine, anything risky waits for you.",
+    guide:
+      "Balanced is what most people pick. Once hobs can act, reading and browsing are fine and anything risky waits for you.",
     recommended: true,
     rules: [
       ["Read your folders", "Allow"],
@@ -50,7 +52,7 @@ export const PRESETS: ReadonlyArray<PresetInfo> = [
     id: "trusting",
     label: "Trusting",
     note: "Gets on with chores and tells you after. Best for hobs you know well.",
-    guide: "Trusting! Your hob will just get on with it. Paying for things still stays off.",
+    guide: "Trusting! Once hobs can act, yours will just get on with it. Paying for things still stays off.",
     recommended: false,
     rules: [
       ["Read your folders", "Allow"],

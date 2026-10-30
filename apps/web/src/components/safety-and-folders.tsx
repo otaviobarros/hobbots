@@ -73,6 +73,9 @@ export function PresetPicker({
           );
         })}
       </div>
+      <p className="m-0 text-[13px] text-label">
+        These rules apply once hobs can open files, browse and send things. Today hobs only chat.
+      </p>
       {update.isError && (
         <p role="alert" className="m-0 text-sm text-rose">
           Hobbots could not save the safety preset. Try again in a moment.

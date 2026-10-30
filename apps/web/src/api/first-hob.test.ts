@@ -1,11 +1,13 @@
 import { RuntimeModel, RuntimeModels } from "@hobbots/domain";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   craftOf,
   draftProblem,
   type FirstHobDraft,
   firstHobPayload,
   hobLine,
+  keepDraft,
+  keptDraftOrStored,
   nearbySeeds,
   newDraft,
   pickCraft,
@@ -156,5 +158,29 @@ describe("the hob line", () => {
     );
     expect(hobLine(draft)).toBe("Pip the Helper");
     expect(hobLine({ ...draft, kind: "custom", craft: "Gardening ", name: "Moss" })).toBe("Moss, good at gardening");
+  });
+});
+
+describe("the kept first-hob draft", () => {
+  afterEach(() => {
+    keepDraft(null);
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the draft for the next steps when browser storage refuses it", () => {
+    const refusing = {
+      getItem: () => {
+        throw new Error("denied");
+      },
+      setItem: () => {
+        throw new Error("quota");
+      },
+    };
+    vi.stubGlobal("localStorage", refusing);
+    const kept = draft({ name: "Moss" });
+    keepDraft(kept);
+    expect(keptDraftOrStored()).toEqual(kept);
+    keepDraft(null);
+    expect(keptDraftOrStored()).toBeNull();
   });
 });

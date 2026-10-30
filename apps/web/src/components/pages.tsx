@@ -94,14 +94,12 @@ function PermissionSettings() {
   return (
     <>
       <p className="m-0 text-secondary-text">
-        How much hobs ask first, and where they may work. Hobbots keeps your choice; the hub starts enforcing it with
-        permission rules.
+        How much hobs will ask first, and where they will work. Hobbots saves your choice; today hobs only chat, so none
+        of it applies yet.
       </p>
       <PresetPicker label="Safety preset" value={setup.data.safetyPreset} />
       <span className="lbl pt-2 text-label">Folders hobs may open</span>
-      {setup.data.approvedFolders.length === 0 && (
-        <p className="m-0 text-sm text-secondary-text">No folders yet. Hobs can still browse and chat.</p>
-      )}
+      {setup.data.approvedFolders.length === 0 && <p className="m-0 text-sm text-secondary-text">No folders yet.</p>}
       <FolderPicker folders={setup.data.approvedFolders} />
     </>
   );

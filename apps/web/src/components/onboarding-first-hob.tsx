@@ -10,8 +10,9 @@ import {
   craftOf,
   draftProblem,
   effortWords,
-  FIRST_HOB_DRAFT_KEY,
   type FirstHobDraft,
+  keepDraft,
+  keptDraftOrStored,
   LABEL_MAX,
   nearbySeeds,
   pickCraft,
@@ -24,12 +25,10 @@ import {
 } from "../api/first-hob.ts";
 import { modelsQuery } from "../api/queries.ts";
 import { HOB_COLORS, hobLook } from "../art/look.ts";
-import { readStored, writeStored } from "../lib/storage.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 
 const GUIDE = "Now the fun part. Every hob is good at something. Pick a craft, a name and a cloak.";
-const draftKey = FIRST_HOB_DRAFT_KEY;
 
 const DIE = ["owwwo", "wwwww", "wwoww", "wwwww", "owwwo"];
 const DIE_PALETTE = { o: "#141228", w: "#ece8ff" };
@@ -296,16 +295,14 @@ export function OnboardingFirstHob() {
   const router = useRouter();
   const canGoBack = useCanGoBack();
   const models = useQuery(modelsQuery("claude-code"));
-  const [draft, setDraft] = useState<FirstHobDraft>(() =>
-    restoreDraft(readStored<Partial<FirstHobDraft> | null>(draftKey, null)),
-  );
+  const [draft, setDraft] = useState<FirstHobDraft>(() => restoreDraft(keptDraftOrStored()));
   const [nameRolls, setNameRolls] = useState(0);
   const [lookRolls, setLookRolls] = useState(0);
   const [tried, setTried] = useState(false);
 
   // Coming back to this step keeps what was chosen; a model the runtime dropped falls back,
   // unless the hob was already sent with it.
-  useEffect(() => writeStored(draftKey, draft), [draft]);
+  useEffect(() => keepDraft(draft), [draft]);
   useEffect(() => {
     if (models.data) setDraft((d) => (d.submitted ? d : settleBrain(d, models.data)));
   }, [models.data]);

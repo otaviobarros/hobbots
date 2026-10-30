@@ -7,7 +7,7 @@ import {
   createRouter,
   redirect,
 } from "@tanstack/react-router";
-import { FIRST_HOB_DRAFT_KEY } from "./api/first-hob.ts";
+import { keptDraftOrStored } from "./api/first-hob.ts";
 import { agentsQuery, threadsQuery } from "./api/queries.ts";
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
@@ -67,7 +67,7 @@ const firstHobRoute = createRoute({
 // The steps after the first hob build on its draft, so without one they start from that step.
 const afterFirstHob = async (args: { context: { queryClient: QueryClient } }) => {
   await leaveSetupWhenDone(args);
-  if (readStored<unknown>(FIRST_HOB_DRAFT_KEY, null) === null) throw redirect({ to: "/setup/hob" });
+  if (keptDraftOrStored() === null) throw redirect({ to: "/setup/hob" });
 };
 
 const safetyRoute = createRoute({
