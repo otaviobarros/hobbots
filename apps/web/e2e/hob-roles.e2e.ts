@@ -15,15 +15,16 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   page,
 }) => {
   dataDir = emptyDataDir();
-  hub = await startHub(dataDir);
-  const setup = await fetch(`${hub.url}/api/setup`, {
+  const current = await startHub(dataDir);
+  hub = current;
+  const setup = await fetch(`${current.url}/api/setup`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ completed: true, connectedProviders: ["claude-code"] }),
   });
   expect(setup.ok).toBe(true);
 
-  await page.goto(`${hub.url}/#/summon`);
+  await page.goto(`${current.url}/#/summon`);
   await expect(page.getByRole("heading", { name: "Summon a hob" })).toBeVisible();
   await page.getByRole("textbox", { name: "Hob name" }).fill("Fern");
 
@@ -84,7 +85,7 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/#\/hobs\/[^/]+\/new/);
 
-  const hobs = (await (await fetch(`${hub.url}/api/agents`)).json()) as ReadonlyArray<Record<string, unknown>>;
+  const hobs = (await (await fetch(`${current.url}/api/agents`)).json()) as ReadonlyArray<Record<string, unknown>>;
   const fern = hobs.find((h) => h.name === "Fern");
   expect(fern).toMatchObject({
     role: null,
@@ -94,7 +95,7 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
     tool: "wand",
   });
 
-  await page.goto(`${hub.url}/#/hobs/${String(fern?.id)}/profile`);
+  await page.goto(`${current.url}/#/hobs/${String(fern?.id)}/profile`);
   const profile = page.getByRole("main", { name: "Fern's profile" });
   await expect(profile.locator("header")).toContainText("Frontend wizard");
 
@@ -102,11 +103,12 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   const profileRoles = profile.getByRole("group", { name: "Role" });
   await expect(profileRoles.getByRole("radio", { name: /^Your own/ })).toBeChecked();
   await expect(page.getByRole("textbox", { name: "Your own role title" })).toHaveValue("Frontend wizard");
-  await profileRoles.getByRole("radio", { name: /^Writer/ }).check();
+  await profileRoles.getByText("Writer", { exact: true }).click();
+  await expect(profileRoles.getByRole("radio", { name: /^Writer Drafts/ })).toBeChecked();
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect
     .poll(async () => {
-      const after = (await (await fetch(`${hub.url}/api/agents`)).json()) as ReadonlyArray<Record<string, unknown>>;
+      const after = (await (await fetch(`${current.url}/api/agents`)).json()) as ReadonlyArray<Record<string, unknown>>;
       return after.find((h) => h.name === "Fern");
     })
     .toMatchObject({ role: "writer", roleTitle: "Writer", sigil: "writer" });

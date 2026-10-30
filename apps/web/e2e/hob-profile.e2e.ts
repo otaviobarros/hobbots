@@ -150,7 +150,8 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await expect(chip).toHaveText("Writer");
   const roles = profile.getByRole("group", { name: "Role" });
   await roles.getByRole("button", { name: /^More roles/ }).click();
-  await roles.getByRole("radio", { name: /^QA engineer/ }).check();
+  await roles.getByText("QA engineer", { exact: true }).click();
+  await expect(roles.getByRole("radio", { name: /^QA engineer/ })).toBeChecked();
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect(profile.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
   await expect(chip).toHaveText("QA engineer");
@@ -160,7 +161,7 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await page.getByRole("link", { name: "Edit hob" }).click();
 
   // A title in the user's own words keeps the QA sigil, hat and tool.
-  await roles.getByRole("radio", { name: /^Your own/ }).check();
+  await roles.getByText("Your own", { exact: true }).click();
   await profile.getByRole("textbox", { name: "Your own role title" }).fill("Bug hunter");
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect(profile.getByText("Saved as version 3. Pip's next reply uses it.")).toBeVisible();

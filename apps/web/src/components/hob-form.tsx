@@ -181,7 +181,7 @@ function RoleOption({
   return (
     <label
       className={cn(
-        "cut flex min-w-0 cursor-pointer items-start gap-2.5 border-2 px-2.5 py-2 text-left",
+        "cut relative flex min-w-0 cursor-pointer items-start gap-2.5 border-2 px-2.5 py-2 text-left",
         checked ? "border-lantern bg-line" : "border-line hover:bg-hover",
         focusWithin,
         className,
@@ -362,7 +362,7 @@ function OwnRole({
                 key={id}
                 title={starterRole(id).title}
                 className={cn(
-                  "grid size-8 cursor-pointer place-items-center border-2 bg-deep",
+                  "relative grid size-8 cursor-pointer place-items-center border-2 bg-deep",
                   on ? "border-lantern" : "border-line hover:border-control",
                   "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
                 )}
