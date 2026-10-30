@@ -71,7 +71,7 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
   await send(page, "first");
 
   await page.getByRole("link", { name: "Edit hob" }).click();
-  await expect(page.getByRole("heading", { name: "Pip the Writer" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pip", exact: true })).toBeVisible();
   const instructions = page.getByRole("textbox", { name: "Instructions" });
   await expect(instructions).toHaveValue("Write short answers.");
   await instructions.fill("Write long answers.");
@@ -104,7 +104,7 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
-  await expect(page.getByRole("heading", { name: "Pip the Writer" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pip", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Pause Pip" }).click();
   await expect(page.getByRole("listitem").filter({ hasText: /^Paused$/ })).toBeVisible();
@@ -130,4 +130,47 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
   ]);
   await page.getByRole("link", { name: "See archived hobs" }).click();
   await expect(page).toHaveURL(/#\/settings\/archived$/);
+});
+
+// covers AG-002, UX-005
+test("[TC-AG-075] changing the role in the profile updates the hob list, chat header and profile at once", async ({
+  page,
+}) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  const list = page.getByRole("navigation", { name: "Hobs and threads" });
+  const header = page.getByRole("main", { name: "Chat" }).locator("header");
+  await expect(list.getByRole("link", { name: /^Pip/ })).toContainText("Writer");
+  await expect(header).toContainText("Writer");
+
+  await page.getByRole("link", { name: "Edit hob" }).click();
+  const profile = page.getByRole("main", { name: "Pip's profile" });
+  const chip = profile.locator("header").getByText(/^(Writer|QA engineer|Bug hunter)$/);
+  await expect(chip).toHaveText("Writer");
+  await profile.getByRole("combobox", { name: "Role" }).selectOption({ label: "QA engineer" });
+  await profile.getByRole("button", { name: "Save changes" }).click();
+  await expect(profile.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
+  await expect(chip).toHaveText("QA engineer");
+  await page.getByRole("link", { name: "← Back to chat" }).click();
+  await expect(list.getByRole("link", { name: /^Pip/ })).toContainText("QA engineer");
+  await expect(header).toContainText("QA engineer");
+  await page.getByRole("link", { name: "Edit hob" }).click();
+
+  // A title in the user's own words keeps the QA sigil, hat and tool.
+  await profile.getByRole("combobox", { name: "Role" }).selectOption({ label: "Your own title…" });
+  await profile.getByRole("textbox", { name: "Role title" }).fill("Bug hunter");
+  await profile.getByRole("button", { name: "Save changes" }).click();
+  await expect(profile.getByText("Saved as version 3. Pip's next reply uses it.")).toBeVisible();
+  await expect(chip).toHaveText("Bug hunter");
+
+  await page.getByRole("link", { name: "← Back to chat" }).click();
+  await expect(list.getByRole("link", { name: /^Pip/ })).toContainText("Bug hunter");
+  await expect(header).toContainText("Bug hunter");
+  const [saved] = await api<ReadonlyArray<Hob & { role: string | null; roleTitle: string; sigil: string }>>(
+    current,
+    "GET",
+    "/api/agents",
+  );
+  expect(saved).toMatchObject({ role: null, roleTitle: "Bug hunter", sigil: "qa", configVersion: 3 });
 });

@@ -22,6 +22,6 @@ Stopping a turn requests adapter interruption and records acknowledgement/outcom
 
 A reply records the stop in two steps. Stop moves a streaming reply to `stopping` and emits `TurnStopRequested`; the reply still counts as in progress, keeps any text the runtime sends, and may still complete if the turn finishes first. Once the adapter confirms the turn has ended (for Claude Code, once its process has exited, killed if it outlives a grace period), the reply becomes `stopped` with its partial text and `TurnStopped` follows. Repeated stop requests, or a stop with no turn running, change nothing. A turn Hobbots ends itself (a restart, pause or retirement) is `interrupted`, not `stopped`; on restart a reply left `stopping` becomes `stopped` and one left `streaming` becomes `interrupted`. Each event follows the reply's `MessageUpserted`.
 
-Reconnect from an authorized snapshot plus durable event cursor. Deduplicate messages/deltas, recover missed events, and display stale/unverified activity honestly. Cursor expiry or compaction requires a fresh snapshot, not silent data omission.
+Reconnect from an authorized snapshot plus durable event cursor ([ADR 013](../decisions/013-event-journal.md)). Deduplicate messages/deltas, recover missed events, and display stale/unverified activity honestly. Cursor expiry or compaction requires a fresh snapshot, not silent data omission.
 
-Thread fork/context-snapshot behavior, retention limits, and exact search indexing remain open.
+Thread fork/context-snapshot behavior, message retention limits, and exact search indexing remain open.

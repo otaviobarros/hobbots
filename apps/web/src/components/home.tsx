@@ -128,13 +128,17 @@ export function Home() {
               key={hob.id}
               to="/hobs/$hobId"
               params={{ hobId: hob.id }}
-              aria-label={`Open chat with ${hob.name}, ${stateLabel[state]}`}
+              aria-label={`Open chat with ${hob.name}, ${hob.roleTitle}, ${stateLabel[state]}`}
               className="hop-on-hover flex flex-col items-center gap-1.5 text-ground no-underline"
             >
               <span
-                className={cn("bg-text whitespace-nowrap", many ? "px-1.5 py-0.5 text-xs" : "px-2 py-[3px] text-xs")}
+                className={cn(
+                  "flex flex-col items-center bg-text whitespace-nowrap",
+                  many ? "px-1.5 py-0.5 text-xs" : "px-2 py-[3px] text-xs",
+                )}
               >
-                {many ? hob.name : sceneTag(hob, state)}
+                <span>{many ? hob.name : sceneTag(hob, state)}</span>
+                <span className="font-bold">{hob.roleTitle}</span>
               </span>
               {!many && (
                 <span aria-hidden className="block h-1.5 w-16 bg-line-2">
@@ -143,7 +147,7 @@ export function Home() {
                   )}
                 </span>
               )}
-              <HobSprite hob={hob} size={many ? 52 : 64} state={state} />
+              <HobSprite hob={hob} size={many ? 52 : 64} state={state} badge />
             </Link>
           ))}
         </div>
@@ -291,7 +295,7 @@ const groupInfo: Record<CrewGroup, { label: string; dot: string; hint?: string }
 
 const groupHeaderId = (group: CrewGroup) => `crew-${group}`;
 
-/** Every hob as a tile, grouped by state, with a filter by name or craft. */
+/** Every hob as a tile, grouped by state, with a filter by name or role. */
 function AllHobs({
   crew,
   folded,
@@ -324,7 +328,7 @@ function AllHobs({
           value={query}
           onChange={(event) => onQuery(event.target.value)}
           placeholder="Find a hob"
-          aria-label="Find a hob by name or craft"
+          aria-label="Find a hob by name or role"
           className="w-[200px] border-2 border-control bg-deep px-2 py-[5px] text-[13px] text-text placeholder:text-label"
         />
       </div>
@@ -368,10 +372,12 @@ function AllHobs({
                       title={`${hob.name} · ${hob.roleTitle} · ${stateLabel[state]}`}
                       className="cut hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text no-underline hover:bg-line hover:text-text"
                     >
-                      <HobSprite hob={hob} size={28} state={state} className="mr-1.5" />
+                      <HobSprite hob={hob} size={28} state={state} badge className="mr-1.5" />
                       <span className="flex min-w-0 flex-col">
                         <span className="truncate font-pixel text-sm font-semibold">{hob.name}</span>
-                        <span className="truncate text-xs text-label">{hob.roleTitle}</span>
+                        <span className="truncate text-xs text-secondary-text">
+                          {hob.roleTitle} · {stateLabel[state]}
+                        </span>
                       </span>
                     </Link>
                   ))}

@@ -14,3 +14,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [010 — The desktop hub](010-desktop-hub.md)
 - [011 — SQLite for every installation](011-sqlite-storage.md)
 - [012 — The hub service on macOS](012-macos-hub-service.md)
+- [013 — The event journal and resuming the event stream](013-event-journal.md)

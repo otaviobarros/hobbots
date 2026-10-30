@@ -78,7 +78,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
         aria-expanded
         aria-controls="hob-jump-list"
         aria-activedescendant={activeId ? `hob-jump-${activeId}` : undefined}
-        aria-label="Find a hob by name or craft"
+        aria-label="Find a hob by name or role"
         placeholder="Jump to a hob…"
         value={query}
         onChange={(event) => {
@@ -116,7 +116,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
             onMouseMove={() => setActive(index)}
             className={cn("flex cursor-pointer items-center gap-2.5 px-2 py-1.5", index === current && "bg-line")}
           >
-            <HobSprite hob={hob} size={24} state={hob.status === "paused" ? "paused" : "idle"} />
+            <HobSprite hob={hob} size={24} state={hob.status === "paused" ? "paused" : "idle"} badge />
             <span className="font-pixel text-sm font-semibold">{hob.name}</span>
             <span className="min-w-0 flex-1 truncate text-[13px] text-label">{hob.roleTitle}</span>
             {index === current && <span className="text-xs text-label">↵ open</span>}
