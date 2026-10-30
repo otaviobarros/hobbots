@@ -127,3 +127,20 @@ describe("hub shutdown", () => {
     await exited;
   });
 });
+
+describe("event stream", () => {
+  // covers CH-004
+  it("[TC-CH-071] announces the subscription before any event", { timeout: 60_000 }, async () => {
+    const { url } = await startHub();
+    const response = await fetch(`${url}/api/events`, {
+      headers: { accept: "text/event-stream" },
+      signal: AbortSignal.timeout(5000),
+    });
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    // Nothing is published here, so the client could only learn it is subscribed from this frame.
+    const reader = response.body?.getReader();
+    const first = await reader?.read();
+    expect(new TextDecoder().decode(first?.value)).toBe(": subscribed\n\n");
+    await reader?.cancel();
+  });
+});

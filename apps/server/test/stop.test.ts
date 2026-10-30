@@ -58,6 +58,7 @@ const run = <A, E>(
       publish: (entries) => Effect.sync(() => void events.push(...entries.map((entry) => entry.payload))),
       publishTransient: (event) => Effect.sync(() => void events.push(event)),
       stream: Stream.empty,
+      subscribe: Effect.succeed(Stream.empty),
       close: Effect.void,
     });
     const layer = ChatService.layer.pipe(
@@ -222,6 +223,7 @@ describe("Stopping a reply", () => {
                 publish: (entries) => Effect.sync(() => void events.push(...entries.map((entry) => entry.payload))),
                 publishTransient: (event) => Effect.sync(() => void events.push(event)),
                 stream: Stream.empty,
+                subscribe: Effect.succeed(Stream.empty),
                 close: Effect.void,
               }),
               HobAdmission.layer,

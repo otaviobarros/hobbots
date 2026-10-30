@@ -77,11 +77,10 @@ export const useHobbotsEvents = (): ConnectionState => {
 
   useEffect(() => {
     const source = new EventSource(`${API_URL}/api/events`);
-    let opened = false;
     source.onopen = () => {
-      // Events are not replayed yet, so refetch after a reconnect to close any gap.
-      if (opened) void queryClient.invalidateQueries();
-      opened = true;
+      // Events are not replayed yet, so refetch once subscribed: anything published before then,
+      // since the first load or while reconnecting, would otherwise be missed.
+      void queryClient.invalidateQueries();
       setState("live");
     };
     source.onerror = () => setState("reconnecting");

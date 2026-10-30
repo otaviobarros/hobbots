@@ -1,5 +1,5 @@
 import type { EventEnvelope, MessageDelta } from "@hobbots/domain";
-import { Context, Effect, Layer, PubSub, Stream } from "effect";
+import { Context, Effect, Layer, PubSub, type Scope, Stream } from "effect";
 
 /** What the bus carries: a committed journal entry, or a transient reply chunk (ADR 013). */
 export type BusEvent =
@@ -18,6 +18,8 @@ export class EventBus extends Context.Service<
     readonly publishTransient: (event: MessageDelta) => Effect.Effect<void>;
     /** Every event from now on; it ends once the bus closes. */
     readonly stream: Stream.Stream<BusEvent>;
+    /** Subscribes at once, so the stream holds every event published after this returns. */
+    readonly subscribe: Effect.Effect<Stream.Stream<BusEvent>, never, Scope.Scope>;
     /** Ends every stream, so a closing server has no endless response left to wait for. */
     readonly close: Effect.Effect<void>;
   }
@@ -34,6 +36,7 @@ export class EventBus extends Context.Service<
           ).pipe(Effect.asVoid),
         publishTransient: (event) => PubSub.publish(pubsub, { _tag: "Transient", event }).pipe(Effect.asVoid),
         stream: Stream.fromPubSub(pubsub),
+        subscribe: Effect.map(PubSub.subscribe(pubsub), Stream.fromSubscription),
         close: PubSub.shutdown(pubsub),
       });
     }),
