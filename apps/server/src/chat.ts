@@ -1,6 +1,6 @@
 import { AgentNotFound, ThreadBusy, ThreadNotFound } from "@hobbots/api";
 import {
-  type Agent,
+  type AgentConfiguration,
   type AgentId,
   DEFAULT_THREAD_TITLE,
   Message,
@@ -75,7 +75,8 @@ export class ChatService extends Context.Service<
         return thread;
       });
 
-      const runTurn = (agent: Agent, thread: Thread, prompt: string, assistant: Message) =>
+      // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
+      const runTurn = (config: AgentConfiguration, thread: Thread, prompt: string, assistant: Message) =>
         Effect.gen(function* () {
           const current = yield* Ref.make(assistant);
           const threadRef = yield* Ref.make(thread);
@@ -139,9 +140,9 @@ export class ChatService extends Context.Service<
             .sendPrompt({
               prompt,
               sessionId: thread.runtimeSessionId,
-              instructions: agent.instructions,
-              model: agent.model,
-              effort: agent.effort,
+              instructions: config.instructions,
+              model: config.model,
+              effort: config.effort,
             })
             .pipe(
               Stream.runForEach(handle),
@@ -176,6 +177,7 @@ export class ChatService extends Context.Service<
         const thread = yield* findThread(threadId);
         if (yield* FiberMap.has(turns, threadId)) return yield* new ThreadBusy({ threadId });
         const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
+        const config = yield* repo.findAgentConfig(agent.id, agent.configVersion).pipe(Effect.map(Option.getOrThrow));
         const now = yield* nowIso;
 
         const userMessage = new Message({
@@ -185,6 +187,7 @@ export class ChatService extends Context.Service<
           content,
           status: "complete",
           error: null,
+          configVersion: null,
           createdAt: now,
         });
         const assistantMessage = new Message({
@@ -194,6 +197,7 @@ export class ChatService extends Context.Service<
           content: "",
           status: "streaming",
           error: null,
+          configVersion: config.version,
           createdAt: now,
         });
         const updated = new Thread({
@@ -205,7 +209,7 @@ export class ChatService extends Context.Service<
         yield* saveMessage(userMessage);
         yield* saveMessage(assistantMessage);
         yield* saveThread(updated);
-        yield* FiberMap.run(turns, threadId, runTurn(agent, updated, content, assistantMessage));
+        yield* FiberMap.run(turns, threadId, runTurn(config, updated, content, assistantMessage));
         return { userMessage, assistantMessage };
       });
 

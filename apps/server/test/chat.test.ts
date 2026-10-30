@@ -23,6 +23,7 @@ const summonHob = Effect.gen(function* () {
       instructions: "You are Aldric.",
       lookSeed: 4821,
       lookColor: "violet",
+      configVersion: 1,
       createdAt: "2026-01-01T00:00:00.000Z",
     }),
   );

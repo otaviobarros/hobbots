@@ -17,6 +17,7 @@ const message = (id: string, status: Message["status"] = "complete") =>
     content: id,
     status,
     error: null,
+    configVersion: 1,
     createdAt: now,
   });
 
@@ -36,6 +37,7 @@ describe("HobbotsRepository", () => {
           instructions: "",
           lookSeed: 1234,
           lookColor: "moss",
+          configVersion: 1,
           createdAt: now,
         }),
       );
@@ -96,6 +98,7 @@ describe("HobbotsRepository", () => {
         instructions: "",
         lookSeed,
         lookColor: "violet",
+        configVersion: 1,
         createdAt: now,
       });
     const thread = (id: string) =>
@@ -133,5 +136,51 @@ describe("HobbotsRepository", () => {
       ["b", 2 ** 32 - 1],
     ]);
     expect(result.threads.map((t) => t.id)).toEqual(["T-a", "t-a", "t-b", "ta"]);
+  });
+
+  // covers AG-002, DP-003
+  it("[TC-AG-021] keeps every configuration version and stores an edit only on top of the current one", async () => {
+    const first = new Agent({
+      id: agentId,
+      name: "Aldric",
+      craft: "Guide",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "Be brief.",
+      lookSeed: 2 ** 32 - 1,
+      lookColor: "violet",
+      configVersion: 1,
+      createdAt: now,
+    });
+    const second = new Agent({ ...first, instructions: "Be thorough.", effort: "high", configVersion: 2 });
+
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(first);
+      const updated = yield* repo.updateAgentConfig(second);
+      // Another edit also based on version 1 arrives after version 2 is stored.
+      const stale = yield* repo.updateAgentConfig(new Agent({ ...first, craft: "Scribe", configVersion: 2 }));
+      return {
+        updated,
+        stale,
+        agent: yield* repo.findAgent(agentId),
+        v1: yield* repo.findAgentConfig(agentId, 1),
+        v2: yield* repo.findAgentConfig(agentId, 2),
+        v3: yield* repo.findAgentConfig(agentId, 3),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect([result.updated, result.stale]).toEqual([true, false]);
+    expect(Option.getOrThrow(result.agent)).toEqual(second);
+    expect(Option.getOrThrow(result.v1)).toMatchObject({
+      version: 1,
+      craft: "Guide",
+      instructions: "Be brief.",
+      effort: null,
+      lookSeed: 2 ** 32 - 1,
+    });
+    expect(Option.getOrThrow(result.v2)).toMatchObject({ version: 2, craft: "Guide", instructions: "Be thorough." });
+    expect(Option.isNone(result.v3)).toBe(true);
   });
 });

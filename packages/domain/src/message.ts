@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { ConfigVersion } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
 
 export const MessageRole = Schema.Literals(["user", "assistant"]);
@@ -14,6 +15,8 @@ export class Message extends Schema.Class<Message>("Message")({
   content: Schema.String,
   status: MessageStatus,
   error: Schema.NullOr(Schema.String),
+  /** For an assistant message, the hob configuration version that produced it; null for the user's. */
+  configVersion: Schema.NullOr(ConfigVersion),
   createdAt: Schema.String,
 }) {}
 

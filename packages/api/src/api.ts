@@ -40,7 +40,21 @@ export const CreateAgentPayload = Schema.Struct({
 });
 export type CreateAgentPayload = typeof CreateAgentPayload.Type;
 
-/** Reports a create request that fails the payload schema as an `InvalidHob` naming the field. */
+/**
+ * An edit of a hob's configuration: only the fields it names change. Each edit that changes
+ * something becomes the hob's next configuration version (AG-002).
+ */
+export const UpdateAgentPayload = Schema.Struct({
+  craft: Schema.optionalKey(Label),
+  lookSeed: Schema.optionalKey(LookSeed),
+  lookColor: Schema.optionalKey(HobColor),
+  model: Schema.optionalKey(Schema.NullOr(Schema.NonEmptyString)),
+  effort: Schema.optionalKey(Schema.NullOr(Effort)),
+  instructions: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(20_000))),
+});
+export type UpdateAgentPayload = typeof UpdateAgentPayload.Type;
+
+/** Reports a create or edit request that fails the payload schema as an `InvalidHob` naming the field. */
 export class HobInputErrors extends HttpApiMiddleware.Service<HobInputErrors>()("@hobbots/api/HobInputErrors", {
   error: InvalidHob,
 }) {}
@@ -85,6 +99,12 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       payload: CreateAgentPayload,
       success: Agent,
       error: InvalidHob,
+    }).middleware(HobInputErrors),
+    HttpApiEndpoint.patch("update", "/agents/:agentId", {
+      params: { agentId: AgentId },
+      payload: UpdateAgentPayload,
+      success: Agent,
+      error: [InvalidHob, AgentNotFound],
     }).middleware(HobInputErrors),
     HttpApiEndpoint.get("threads", "/agents/:agentId/threads", {
       params: { agentId: AgentId },

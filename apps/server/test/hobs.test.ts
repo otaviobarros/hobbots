@@ -1,9 +1,9 @@
 import { NodeHttpServer } from "@effect/platform-node";
-import { type Agent, RuntimeModel, RuntimeModels } from "@hobbots/domain";
+import { type Agent, type Message, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/runtimes";
-import { Effect, Layer, Schedule } from "effect";
+import { Effect, Layer, Schedule, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ChatService } from "../src/chat.ts";
@@ -24,17 +24,21 @@ const hob = {
 };
 
 let prompts: Array<PromptRequest>;
+// Each turn waits for this before the runtime replies, so a test can act while a reply is running.
+let replyGate: Promise<void>;
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
 beforeEach(() => {
   prompts = [];
+  replyGate = Promise.resolve();
   const fake = makeFakeRuntime();
   const runtime = Layer.succeed(RuntimeAdapter, {
     ...fake,
     sendPrompt: (request) => {
       prompts.push(request);
-      return fake.sendPrompt(request);
+      const gate = replyGate;
+      return Stream.fromEffect(Effect.promise(() => gate)).pipe(Stream.drain, Stream.concat(fake.sendPrompt(request)));
     },
   });
   const App = Layer.mergeAll(ChatService.layer, HobService.layer).pipe(
@@ -147,6 +151,77 @@ describe("creating hobs", () => {
       ["fake-thinker", 5],
       ["fake-quick", 0],
     ]);
+  });
+});
+
+const waitFor = (ready: () => Promise<boolean>) =>
+  Effect.runPromise(
+    Effect.tryPromise(ready).pipe(
+      Effect.flatMap((done) => (done ? Effect.void : Effect.fail("waiting"))),
+      Effect.retry(Schedule.spaced("5 millis")),
+    ),
+  );
+
+describe("editing hobs", () => {
+  // covers AG-002
+  it("[TC-AG-022] runs a reply with the configuration it started with and the next reply with the edit", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    expect(agent.configVersion).toBe(1);
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const settled = () => waitFor(async () => (await messages()).every((m) => m.status !== "streaming"));
+
+    let release = () => {};
+    replyGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await request("POST", `/api/threads/${thread.id}/messages`, { content: "first" });
+    await waitFor(async () => prompts.length === 1);
+
+    // The edit lands while the first reply is still running.
+    const edited = await request("PATCH", `/api/agents/${agent.id}`, { instructions: "Write long answers." });
+    expect(edited).toMatchObject({
+      status: 200,
+      body: { ...hob, id: agent.id, instructions: "Write long answers.", configVersion: 2 },
+    });
+    expect((await messages()).map((m) => m.status)).toEqual(["complete", "streaming"]);
+    release();
+    await settled();
+
+    await request("POST", `/api/threads/${thread.id}/messages`, { content: "second" });
+    await settled();
+
+    expect(prompts.map((p) => p.instructions)).toEqual(["Write short answers.", "Write long answers."]);
+    expect((await messages()).map((m) => [m.role, m.content, m.configVersion])).toEqual([
+      ["user", "first", null],
+      ["assistant", "Echo: first", 1],
+      ["user", "second", null],
+      ["assistant", "Echo: second", 2],
+    ]);
+    expect((await request("GET", "/api/agents")).body).toEqual([edited.body]);
+  });
+
+  // covers AG-002
+  it("[TC-AG-023] validates an edit, keeps the hob unchanged when it fails and adds no version for a no-op", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+
+    const unknownModel = await request("PATCH", `/api/agents/${agent.id}`, { model: "gpt-9" });
+    expect(unknownModel).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "model" } });
+    // The effort is checked against the model the hob keeps.
+    const noEffort = await request("PATCH", `/api/agents/${agent.id}`, { model: "fake-quick" });
+    expect(noEffort).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "effort" } });
+    const blankCraft = await request("PATCH", `/api/agents/${agent.id}`, { craft: " " });
+    expect(blankCraft).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "craft" } });
+
+    const missing = await request("PATCH", `/api/agents/${crypto.randomUUID()}`, { instructions: "" });
+    expect(missing).toMatchObject({ status: 404, body: { _tag: "AgentNotFound" } });
+
+    const same = await request("PATCH", `/api/agents/${agent.id}`, { instructions: hob.instructions });
+    expect(same).toEqual({ status: 200, body: agent });
+
+    const quick = await request("PATCH", `/api/agents/${agent.id}`, { model: "fake-quick", effort: null });
+    expect(quick.body).toMatchObject({ model: "fake-quick", effort: null, configVersion: 2 });
+    expect((await request("GET", "/api/agents")).body).toEqual([quick.body]);
   });
 });
 

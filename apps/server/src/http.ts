@@ -9,7 +9,7 @@ import { HobInputErrorsLayer, HobService } from "./hobs.ts";
 import { Installation } from "./installation.ts";
 import { SetupHandlers } from "./setup.ts";
 
-// The create endpoint's middleware is read when the group is built, so it is provided here.
+// The create and update endpoints' middleware is read when the group is built, so it is provided here.
 const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
@@ -18,6 +18,7 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
     return handlers.handleAll({
       list: () => repo.listAgents,
       create: ({ payload }) => hobs.create(payload),
+      update: ({ params, payload }) => hobs.update(params.agentId, payload),
       threads: ({ params }) =>
         repo.findAgent(params.agentId).pipe(
           Effect.flatMap(

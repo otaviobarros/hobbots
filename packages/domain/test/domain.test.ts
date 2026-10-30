@@ -15,6 +15,7 @@ const streaming = new Message({
   content: "",
   status: "streaming",
   error: null,
+  configVersion: 1,
   createdAt: "2026-10-28T00:00:00.000Z",
 });
 
