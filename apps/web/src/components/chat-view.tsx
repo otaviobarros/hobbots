@@ -199,7 +199,11 @@ export function ChatView({
         sending={start.isPending || send.isPending}
         onSend={sendDraft}
         onStop={() => interrupt.mutate()}
-        paused={paused ? { name: current.name, waking: pause.isPending, onWake: wake } : undefined}
+        paused={
+          paused
+            ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: threadId !== undefined }
+            : undefined
+        }
       />
     </main>
   );

@@ -349,10 +349,12 @@ export class ChatService extends Context.Service<
           Effect.gen(function* () {
             const thread = yield* findThread(threadId);
             const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
-            yield* requireActive(agent);
-            // A message waits while a reply runs, and behind any message already waiting, so the
-            // thread's messages start in the order they were sent (CH-008).
-            const waits = busy.has(threadId) || Option.isSome(yield* repo.nextQueuedMessage(threadId));
+            // A retired hob takes nothing; a paused one keeps messages queued until it wakes.
+            if (agent.status === "retired") yield* requireActive(agent);
+            // A message waits while its hob is paused, while a reply runs, and behind any message
+            // already waiting, so the thread's messages start in the order they were sent (CH-008).
+            const waits =
+              agent.status === "paused" || busy.has(threadId) || Option.isSome(yield* repo.nextQueuedMessage(threadId));
             const userMessage = new Message({
               id: MessageId.make(crypto.randomUUID()),
               threadId,

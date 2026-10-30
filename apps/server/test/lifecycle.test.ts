@@ -73,18 +73,20 @@ const summon = async () => {
 const messages = async (threadId: string): Promise<ReadonlyArray<Message>> =>
   (await request("GET", `/api/threads/${threadId}/messages`)).body;
 
-// Waits until no reply in the thread is still streaming.
+// Waits until no reply in the thread is still streaming and no message is queued.
 const settled = (threadId: string) =>
   Effect.runPromise(
     Effect.promise(() => messages(threadId)).pipe(
-      Effect.flatMap((list) => (list.some((m) => m.status === "streaming") ? Effect.fail("streaming") : Effect.void)),
+      Effect.flatMap((list) =>
+        list.some((m) => m.status === "streaming" || m.status === "queued") ? Effect.fail("busy") : Effect.void,
+      ),
       Effect.retry(Schedule.spaced("10 millis")),
     ),
   );
 
 describe("pausing and waking hobs", () => {
   // covers AG-006
-  it("[TC-AG-030] refuses new messages while paused, keeps the threads readable and chats again once woken", async () => {
+  it("[TC-AG-030] queues messages while paused, refuses new threads, keeps the threads readable and runs the queue once woken", async () => {
     const { agent, thread } = await summon();
 
     const paused = await request("POST", `/api/agents/${agent.id}/pause`);
@@ -92,21 +94,18 @@ describe("pausing and waking hobs", () => {
     // Pausing twice changes nothing.
     expect((await request("POST", `/api/agents/${agent.id}/pause`)).body.status).toBe("paused");
 
-    const refused = await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
-    expect(refused).toMatchObject({
-      status: 409,
-      body: { _tag: "HobUnavailable", agentId: agent.id, status: "paused" },
-    });
+    // A message waits for the hob instead of being refused (CH-008).
+    const queued = await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
+    expect(queued).toMatchObject({ status: 200, body: { userMessage: { status: "queued" }, assistantMessage: null } });
     const noThread = await request("POST", `/api/agents/${agent.id}/threads`);
     expect(noThread).toMatchObject({ status: 409, body: { _tag: "HobUnavailable" } });
-    expect(await messages(thread.id)).toEqual([]);
+    expect((await messages(thread.id)).map((m) => [m.role, m.status])).toEqual([["user", "queued"]]);
     expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toHaveLength(1);
     // A paused hob is still listed, with its state.
     expect((await request("GET", "/api/agents")).body).toMatchObject([{ id: agent.id, status: "paused" }]);
 
     const woken = await request("POST", `/api/agents/${agent.id}/wake`);
     expect(woken).toMatchObject({ status: 200, body: { status: "active" } });
-    expect((await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" })).status).toBe(200);
     await settled(thread.id);
     expect((await messages(thread.id)).map((m) => [m.role, m.status])).toEqual([
       ["user", "complete"],

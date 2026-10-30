@@ -259,7 +259,7 @@ describe("message queue", () => {
   });
 
   // covers AG-006, CH-008
-  it("[TC-CH-010] holds a paused hob's queued messages until it wakes", async () => {
+  it("[TC-CH-010] queues messages for a paused hob, also ones sent while paused, and runs them in order once it wakes", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const lifecycle = yield* HobLifecycle;
@@ -275,19 +275,27 @@ describe("message queue", () => {
         ),
         Effect.retry(Schedule.spaced("5 millis")),
       );
+      const sentWhilePaused = yield* chat.sendPrompt(thread.id, "and this");
       yield* Effect.sleep("50 millis");
       const whilePaused = yield* transcript(thread.id);
       const woke = yield* Effect.forkChild(lifecycle.wake(HOB_ID));
       yield* Fiber.join(woke);
       yield* settled(thread.id);
-      return { whilePaused, afterWake: yield* transcript(thread.id) };
+      return { sentWhilePaused, whilePaused, afterWake: yield* transcript(thread.id) };
     }).pipe(Effect.provide(testLayer()), Effect.scoped, Effect.runPromise);
 
     expect(result.whilePaused).toEqual([
       ["user", "now", "complete"],
       ["assistant", "Echo: now", "complete"],
       ["user", "after the nap", "queued"],
+      ["user", "and this", "queued"],
     ]);
-    expect(result.afterWake.at(-1)).toEqual(["assistant", "Echo: after the nap", "complete"]);
+    expect(result.sentWhilePaused.assistantMessage).toBeNull();
+    expect(result.afterWake.slice(2)).toEqual([
+      ["user", "after the nap", "complete"],
+      ["assistant", "Echo: after the nap", "complete"],
+      ["user", "and this", "complete"],
+      ["assistant", "Echo: and this", "complete"],
+    ]);
   });
 });

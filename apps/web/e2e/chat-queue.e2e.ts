@@ -101,3 +101,24 @@ test("[TC-CH-012] a queued message can be removed, and Send now stops the reply 
   await expectReplies(page, ["Echo: urgent", "Echo: later"]);
   await expect(page.getByText("Echo: three")).toHaveCount(0);
 });
+
+// covers AG-006, CH-008
+test("[TC-CH-014] messages sent to a paused hob queue and run once it wakes", async ({ page }) => {
+  const { current, pipId } = await hubWithPip();
+  hub = current;
+  await page.goto(`${current.url}/#/hobs/${pipId}/new`);
+  await type(page, "two");
+  await expectReplies(page, ["Echo: two"]);
+
+  await api(current, "POST", `/api/agents/${pipId}/pause`);
+  await expect(page.getByRole("button", { name: "Wake Pip" })).toBeVisible();
+  await composer(page).fill("three");
+  await page.getByRole("button", { name: "Queue" }).click();
+  await expect(composer(page)).toHaveValue("");
+  await expect(queued(page, "three")).toContainText("Queued. Waits until you wake Pip.");
+  await expect(queued(page, "three").getByRole("button", { name: /Send now/ })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Wake Pip" }).click();
+  await expectReplies(page, ["Echo: two", "Echo: three"]);
+  await expect(page.getByRole("region", { name: "Queued message" })).toHaveCount(0);
+});
