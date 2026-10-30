@@ -2,8 +2,10 @@ import { Badge } from "@hobbots/ui/components/badge";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { setupQuery } from "../api/setup.ts";
 import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
+import { ArchivedHobs } from "./archived-hobs.tsx";
 import { GeneralSettings } from "./general-settings.tsx";
 import { RuntimeCard } from "./runtime.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
@@ -123,6 +125,23 @@ export function SettingsPage() {
             </ProviderRow>
           ))}
         </div>
+      </Panel>
+      <Panel label="Archived hobs">
+        <ArchivedHobs />
+      </Panel>
+    </Page>
+  );
+}
+
+/** Settings › Archived hobs on its own, where a retired hob's profile and its chats lead back to. */
+export function ArchivedHobsPage() {
+  return (
+    <Page icon="Settings" title="Archived hobs" intro="Retired hobs and the chats they leave behind.">
+      <Link to="/settings" className="text-sm text-lantern no-underline hover:underline">
+        ‹ All settings
+      </Link>
+      <Panel label="Archived hobs">
+        <ArchivedHobs />
       </Panel>
     </Page>
   );

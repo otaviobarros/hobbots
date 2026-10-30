@@ -6,6 +6,7 @@ import { runtimeStaleTime } from "./runtime-health.ts";
 
 export const queryKeys = {
   agents: ["agents"] as const,
+  archivedAgents: ["archivedAgents"] as const,
   threads: (agentId: AgentId) => ["agents", agentId, "threads"] as const,
   messages: (threadId: ThreadId) => ["threads", threadId, "messages"] as const,
   runtimes: ["runtimes"] as const,
@@ -17,6 +18,16 @@ export const agentsQuery = queryOptions({
   queryKey: queryKeys.agents,
   queryFn: () => call((c) => c.agents.list({ query: {} })),
 });
+
+/** Archived hobs: the retired ones, most recently retired first. */
+export const archivedAgentsQuery = queryOptions({
+  queryKey: queryKeys.archivedAgents,
+  queryFn: () => call((c) => c.agents.list({ query: { status: "retired" } })).then(sortArchived),
+});
+
+/** Most recently retired first; hobs retired before the time was recorded go last. */
+export const sortArchived = (hobs: ReadonlyArray<Agent>): Array<Agent> =>
+  [...hobs].sort((a, b) => (b.retiredAt ?? "").localeCompare(a.retiredAt ?? ""));
 
 export const threadsQuery = (agentId: AgentId) =>
   queryOptions({
