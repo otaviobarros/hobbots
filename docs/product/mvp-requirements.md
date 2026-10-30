@@ -26,6 +26,7 @@ In the UI agents are called **hobs** ([ADR 008](../decisions/008-design.md)); th
 | CH-005 | Link threads to Quests, tasks and results. | A Quest can be inspected independent of its initiating thread. |
 | CH-006 | Search thread titles and persisted messages. | Results link back to their owning agent/thread. |
 | CH-007 | Stop a turn without deleting its thread. | Cancellation request and confirmed outcome are distinguishable. |
+| CH-008 | Messages sent while a thread's reply runs wait in a durable per-thread queue. | Queued messages start one turn at a time in the order sent, also after a restart; each can be removed before it starts or sent now, which stops the running reply. |
 
 Thread forking with context snapshots is an open extension.
 

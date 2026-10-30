@@ -148,4 +148,24 @@ describe("applyEvent", () => {
     expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]?.status).toBe("stopped");
     expect(activity()).toBeUndefined();
   });
+
+  it("moves a queued message that starts to the end and drops one that was removed", () => {
+    const client = new QueryClient();
+    const user = (id: string, status: Message["status"]) =>
+      new Message({ ...reply(status, id), id: MessageId.make(id), role: "user", configVersion: null });
+    client.setQueryData(queryKeys.messages(threadId), [
+      user("first", "complete"),
+      user("q1", "queued"),
+      user("q2", "queued"),
+      reply("streaming", ""),
+    ]);
+    applyEvent(client, { _tag: "MessageUpserted", message: user("q2", "complete") });
+    applyEvent(client, { _tag: "MessageDequeued", threadId, messageId: MessageId.make("q2"), reason: "started" });
+    applyEvent(client, { _tag: "MessageDequeued", threadId, messageId: MessageId.make("q1"), reason: "removed" });
+    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.map((m) => m.id)).toEqual([
+      "first",
+      "m1",
+      "q2",
+    ]);
+  });
 });

@@ -4,7 +4,7 @@ import { Schema } from "effect";
 import { useEffect, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
 import { API_URL } from "./client.ts";
-import { queryKeys, sortArchived, sortThreads, upsertById } from "./queries.ts";
+import { queryKeys, sortArchived, sortThreads, upsertById, upsertMessage } from "./queries.ts";
 
 const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(HobbotsEvent));
 
@@ -34,9 +34,19 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       return;
     case "MessageUpserted":
       queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.message.threadId), (old) =>
-        old ? upsertById(old, event.message) : old,
+        old ? upsertMessage(old, event.message) : old,
       );
       if (event.message.role === "assistant") recordActivity(queryClient, event.message);
+      return;
+    // The message itself arrives as MessageUpserted just before.
+    case "MessageQueued":
+      return;
+    case "MessageDequeued":
+      if (event.reason === "removed") {
+        queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.threadId), (old) =>
+          old?.filter((message) => message.id !== event.messageId),
+        );
+      }
       return;
     case "MessageDelta":
       queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.threadId), (old) =>

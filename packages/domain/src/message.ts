@@ -80,3 +80,12 @@ export const MessageTransitions = {
     requireInProgress(message, "interrupt") ??
     new Message({ ...message, status: message.status === "stopping" ? "stopped" : "interrupted" }),
 };
+
+/** Pure transitions for a user message waiting in its thread's queue (CH-008). */
+export const QueuedMessageTransitions = {
+  /** The message's turn starts: it leaves the queue and joins the transcript. */
+  start: (message: Message): Message | InvalidMessageTransition =>
+    message.role === "user" && message.status === "queued"
+      ? new Message({ ...message, status: "complete" })
+      : new InvalidMessageTransition({ messageId: message.id, from: message.status, action: "start" }),
+};

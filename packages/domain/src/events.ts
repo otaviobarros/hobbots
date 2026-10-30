@@ -9,6 +9,14 @@ export const HobbotsEvent = Schema.Union([
   Schema.TaggedStruct("AgentUpserted", { agent: Agent }),
   Schema.TaggedStruct("ThreadUpserted", { thread: Thread }),
   Schema.TaggedStruct("MessageUpserted", { message: Message }),
+  /** A user message joined its thread's queue because a reply was running. */
+  Schema.TaggedStruct("MessageQueued", { message: Message }),
+  /** A queued message left the queue: its turn started (after its MessageUpserted), or the user removed it. */
+  Schema.TaggedStruct("MessageDequeued", {
+    threadId: ThreadId,
+    messageId: MessageId,
+    reason: Schema.Literals(["started", "removed"]),
+  }),
   Schema.TaggedStruct("MessageDelta", {
     threadId: ThreadId,
     messageId: MessageId,

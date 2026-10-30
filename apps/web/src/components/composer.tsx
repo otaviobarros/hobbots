@@ -1,6 +1,9 @@
 import { Button } from "@hobbots/ui/components/button";
 
-/** A paused hob takes no new work: the composer keeps the draft and offers Wake instead of Send. */
+/**
+ * A paused hob takes no new work: the composer keeps the draft and offers Wake instead of Send.
+ * While a reply runs, Send queues the message behind it (CH-008).
+ */
 export interface PausedHob {
   readonly name: string;
   readonly waking: boolean;
@@ -31,7 +34,7 @@ export function Composer({
 }) {
   const submit = () => {
     const content = draft.trim();
-    if (!content || busy || sending || paused) return;
+    if (!content || sending || paused) return;
     onSend(content);
   };
 
@@ -63,7 +66,7 @@ export function Composer({
             Wake {paused.name}
           </Button>
         ) : (
-          <Button onClick={submit} disabled={!draft.trim() || busy || sending}>
+          <Button onClick={submit} disabled={!draft.trim() || sending}>
             Send
           </Button>
         )}
@@ -72,7 +75,7 @@ export function Composer({
         {busy
           ? stopping
             ? "Stopping this reply. What was written so far is kept."
-            : "Stop ends this reply only. What was written so far is kept."
+            : "Stop ends this reply only. Messages you send now wait their turn."
           : paused
             ? `Paused hobs take no new work. Your draft stays here until you wake ${paused.name}.`
             : "Enter sends · Shift+Enter adds a line · Hobs have no tools in this build yet"}

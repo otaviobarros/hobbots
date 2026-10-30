@@ -132,7 +132,7 @@ describe("lifecycle changes that overlap other requests", () => {
         yield* Fiber.join(retire);
         return {
           statusWhileAdmitting,
-          sent: sent.assistantMessage.id,
+          sent: sent.assistantMessage?.id,
           messages: yield* repo.listMessages(thread.id),
           running: yield* chat.activeThreads,
           status: yield* status,

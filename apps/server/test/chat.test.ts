@@ -52,10 +52,14 @@ describe("ChatService", () => {
       const repo = yield* HobbotsRepository;
 
       const thread = yield* chat.createThread(HOB_ID);
-      // Waits until no assistant message in the thread is still streaming.
+      // Waits until no message in the thread is still streaming or queued.
       const settled = repo.listMessages(thread.id).pipe(
         Effect.flatMap((messages) =>
-          messages.some((m) => m.status === "streaming") ? Effect.fail("streaming" as const) : Effect.void,
+          // A started message is saved a moment before its reply, so wait for the reply too.
+          messages.some((m) => m.status === "streaming" || m.status === "queued") ||
+          messages.at(-1)?.role !== "assistant"
+            ? Effect.fail("busy" as const)
+            : Effect.void,
         ),
         Effect.retry(Schedule.spaced("5 millis")),
       );
