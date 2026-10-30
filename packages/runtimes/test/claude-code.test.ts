@@ -26,6 +26,7 @@ import {
   modelListMaxAge,
   parseVersion,
   runtimePath,
+  stderrTail,
   toRuntimeModels,
 } from "../src/claude-code.ts";
 
@@ -324,5 +325,35 @@ describe("stopping a Claude Code turn", () => {
     await Effect.runPromise(exited(child, "200 millis"));
 
     expect(child.signalCode).toBe("SIGKILL");
+  });
+});
+
+describe("a Claude Code turn that fails", () => {
+  // covers CH-004
+  it("[TC-CH-022] shows what Claude Code wrote to stderr when its process fails", async () => {
+    const executable = executableAt(
+      join(newHome(), "claude"),
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2.1.400 (Claude Code)"; exit 0; fi\necho "Error: model not available" >&2\nexit 1\n`,
+    );
+    const adapter = await Effect.runPromise(makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable }));
+
+    const exit = await Effect.runPromiseExit(
+      Stream.runDrain(
+        adapter.sendPrompt({ prompt: "hi", sessionId: null, instructions: "", model: null, effort: null }),
+      ),
+    );
+
+    expect(Exit.isFailure(exit)).toBe(true);
+    expect(JSON.stringify(exit)).toContain("Error: model not available");
+  });
+
+  it("keeps only the end of a long error output", async () => {
+    const child = spawn("/bin/sh", ["-c", "head -c 5000 /dev/zero | tr '\\0' x >&2; echo >&2; echo the end >&2"], {
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const tail = await Effect.runPromise(stderrTail(child.stderr, 100).read);
+
+    expect(tail.length).toBeLessThanOrEqual(100);
+    expect(tail.endsWith("x\nthe end")).toBe(true);
   });
 });
