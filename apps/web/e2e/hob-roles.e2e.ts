@@ -99,17 +99,39 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   const profile = page.getByRole("main", { name: "Fern's profile" });
   await expect(profile.locator("header")).toContainText("Frontend wizard");
 
-  // The profile changes the role on the same picker.
-  const profileRoles = profile.getByRole("group", { name: "Role" });
-  await expect(profileRoles.getByRole("radio", { name: /^Your own/ })).toBeChecked();
-  await expect(page.getByRole("textbox", { name: "Your own role title" })).toHaveValue("Frontend wizard");
-  await profileRoles.getByText("Writer", { exact: true }).click();
-  await expect(profileRoles.getByRole("radio", { name: /^Writer Drafts/ })).toBeChecked();
+  // The profile changes the role from a sheet with every role, a search and a filter per family.
+  await profile.getByRole("button", { name: "Change role" }).click();
+  const sheet = page.getByRole("dialog", { name: "Choose Fern's role" });
+  await expect(sheet.getByRole("radio", { name: /^Your own/ })).toBeChecked();
+  await expect(sheet.getByRole("textbox", { name: "Your own role title" })).toHaveValue("Frontend wizard");
+  await sheet.getByRole("radio", { name: "Leadership" }).check({ force: true });
+  await expect(sheet.getByRole("region", { name: "Leadership" })).toBeVisible();
+  await expect(sheet.getByRole("region", { name: "Everyday helpers" })).toBeHidden();
+  await sheet.getByRole("radio", { name: "All roles" }).check({ force: true });
+  await sheet.getByRole("searchbox", { name: "Find a role" }).fill("drafts emails");
+  await expect(sheet.getByRole("radio", { name: /^Writer Drafts/ })).toBeVisible();
+  await expect(sheet.getByRole("radio", { name: /^Assistant Handles/ })).toBeHidden();
+  await sheet.getByText("Writer", { exact: true }).click();
+  await expect(sheet.getByRole("radio", { name: /^Writer Drafts/ })).toBeChecked();
+  await sheet.getByRole("button", { name: "Use Writer" }).click();
+  await expect(sheet).toBeHidden();
+
+  // The instructions Summon wrote still name the old role, so the profile offers to rewrite their first line.
+  const instructions = profile.getByRole("textbox", { name: "Instructions" });
+  await expect(instructions).toHaveValue(/^You are Fern, a hob in Hobbots\. Your role is Frontend wizard\./);
+  await profile.getByRole("button", { name: "Rewrite first line" }).click();
+  await expect(instructions).toHaveValue(/^You are Fern, a hob in Hobbots\. Your role is Writer: drafts emails/);
+  await expect(profile.getByRole("button", { name: "Rewrite first line" })).toBeHidden();
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect
     .poll(async () => {
       const after = (await (await fetch(`${current.url}/api/agents`)).json()) as ReadonlyArray<Record<string, unknown>>;
       return after.find((h) => h.name === "Fern");
     })
-    .toMatchObject({ role: "writer", roleTitle: "Writer", sigil: "writer" });
+    .toMatchObject({
+      role: "writer",
+      roleTitle: "Writer",
+      sigil: "writer",
+      instructions: expect.stringMatching(/^You are Fern, a hob in Hobbots\. Your role is Writer: /),
+    });
 });

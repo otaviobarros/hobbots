@@ -1,8 +1,8 @@
-import { Agent, AgentId, RuntimeModel, RuntimeModels } from "@hobbots/domain";
+import { Agent, AgentId, RuntimeModel, RuntimeModels, starterRole } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { firstHobPayload, newDraft } from "./first-hob.ts";
 import {
-  brainLine,
+  aboutLine,
   goodAt,
   isDirty,
   pickRole,
@@ -11,6 +11,7 @@ import {
   rebaseDraft,
   retiredSummary,
   roleProblem,
+  roleRewrite,
 } from "./profile.ts";
 
 const model = (id: string, displayName: string, efforts: RuntimeModel["efforts"]) =>
@@ -114,10 +115,68 @@ describe("hob profile", () => {
     expect(isDirty(saved, afterAnswer)).toBe(true);
   });
 
-  it("names the brain by the runtime's display names", () => {
-    expect(brainLine(hob({ model: "opus", effort: "high" }), offered)).toBe("Claude · Opus · High effort");
-    expect(brainLine(hob({ effort: null }), offered)).toBe("Claude · Default");
-    expect(brainLine(hob({ model: "opus", effort: null }))).toBe("Claude · opus");
+  it("rewrites the opening Hobbots wrote when the role changes, and keeps the rest", () => {
+    const writer = (instructions: string) => profileDraft(hob({ role: "writer", instructions }));
+    const saved = writer(
+      `You are Pip, a hob in Hobbots. Your role is Writer: ${starterRole("writer").note.toLowerCase()}\n\nBe brief.`,
+    );
+    const qaLine = `You are Pip, a hob in Hobbots. Your role is QA engineer: ${starterRole("qa").note.toLowerCase()}`;
+    expect(roleRewrite("Pip", saved)).toBeUndefined();
+    expect(roleRewrite("Pip", pickRole(saved, "qa"))).toBe(`${qaLine}\n\nBe brief.`);
+    // A title in the user's own words, there and back.
+    const own = { ...pickRole(saved, null), roleTitle: "Bug hunter " };
+    expect(roleRewrite("Pip", own)).toBe("You are Pip, a hob in Hobbots. Your role is Bug hunter.\n\nBe brief.");
+    const ownSaved = { ...own, instructions: roleRewrite("Pip", own) ?? "" };
+    expect(roleRewrite("Pip", ownSaved)).toBeUndefined();
+    expect(roleRewrite("Pip", pickRole(ownSaved, "qa"))).toBe(`${qaLine}\n\nBe brief.`);
+    // No offer while the title is empty.
+    expect(roleRewrite("Pip", { ...pickRole(saved, null), roleTitle: " " })).toBeUndefined();
+  });
+
+  it("keeps what the user wrote on the opening line", () => {
+    // Text added after the opening stays.
+    const added = profileDraft(
+      hob({
+        role: "writer",
+        instructions: `You are Pip, a hob in Hobbots. Your role is Writer: ${starterRole("writer").note.toLowerCase()} Always ask before deleting files.`,
+      }),
+    );
+    expect(roleRewrite("Pip", pickRole(added, "qa"))).toBe(
+      `You are Pip, a hob in Hobbots. Your role is QA engineer: ${starterRole("qa").note.toLowerCase()} Always ask before deleting files.`,
+    );
+    const ownAdded = profileDraft(
+      hob({
+        role: null,
+        roleTitle: "Bug hunter",
+        instructions: "You are Pip, a hob in Hobbots. Your role is Bug hunter. Be kind.",
+      }),
+    );
+    expect(roleRewrite("Pip", pickRole(ownAdded, "qa"))).toBe(
+      `You are Pip, a hob in Hobbots. Your role is QA engineer: ${starterRole("qa").note.toLowerCase()} Be kind.`,
+    );
+    // An opening the user rewrote, or instructions of their own, get no offer.
+    for (const instructions of [
+      "You are Pip, a hob in Hobbots. Always ask before deleting files.",
+      `You are Pip, a hob in Hobbots. Your role is Writer: ${starterRole("writer").note.toLowerCase().slice(0, -1)}, mostly emails.`,
+      "Write short answers.",
+    ]) {
+      expect(roleRewrite("Pip", pickRole(profileDraft(hob({ role: "writer", instructions })), "qa"))).toBeUndefined();
+    }
+  });
+
+  it("offers the rewrite whenever the opening names another role, even the saved one's way back", () => {
+    // Assistant, then Writer with the rewrite taken, then back to Assistant before saving.
+    const assistantLine = `You are Pip, a hob in Hobbots. Your role is Assistant: ${starterRole("assistant").note.toLowerCase()}`;
+    const saved = profileDraft(hob({ role: "assistant", roleTitle: "Assistant", instructions: assistantLine }));
+    const writer = pickRole(saved, "writer");
+    const rewritten = { ...writer, instructions: roleRewrite("Pip", writer) ?? "" };
+    expect(rewritten.instructions).toMatch(/^You are Pip, a hob in Hobbots\. Your role is Writer: /);
+    const back = pickRole(rewritten, "assistant");
+    expect(roleRewrite("Pip", back)).toBe(assistantLine);
+  });
+
+  it("sums up where the hob works, when it was summoned and its version", () => {
+    expect(aboutLine(hob({ configVersion: 3 }))).toMatch(/^Works on the hub · Summoned Oct \d+ · Version 3$/);
   });
 
   it("says what retiring did with the hob's work", () => {

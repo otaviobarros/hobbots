@@ -1,5 +1,5 @@
 import { CreateAgentPayload } from "@hobbots/api";
-import { RuntimeModel, RuntimeModels } from "@hobbots/domain";
+import { RuntimeModel, RuntimeModels, STARTER_ROLES, starterRole } from "@hobbots/domain";
 import { Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -19,6 +19,7 @@ import {
   pickRole,
   reopenDraft,
   restoreDraft,
+  roleGroups,
   roleRequestUrl,
   roleTitleOf,
   rollLook,
@@ -150,6 +151,19 @@ describe("first hob draft", () => {
 
     const reopened = reopenDraft(sent, () => "another");
     expect(reopened).toMatchObject({ id: "another", name: "Wren", submitted: null });
+  });
+
+  it("finds roles by every word of the search, in title or note, within a family", () => {
+    const all = roleGroups("");
+    expect(all.flatMap((group) => group.roles)).toHaveLength(STARTER_ROLES.length);
+    expect(roleGroups("", "leadership").map((group) => group.family)).toEqual(["leadership"]);
+    const code = roleGroups("CODE").flatMap((group) => group.roles);
+    expect(code).toContain("engineer");
+    expect(code.every((id) => `${starterRole(id).title} ${starterRole(id).note}`.toLowerCase().includes("code"))).toBe(
+      true,
+    );
+    expect(roleGroups("code", "life")).toEqual([]);
+    expect(roleGroups("no such role")).toEqual([]);
   });
 
   it("keeps the name when another role is picked", () => {

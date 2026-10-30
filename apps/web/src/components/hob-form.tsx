@@ -161,7 +161,7 @@ export function ChoresField<D extends FirstHobDraft>({
 }
 
 /** One role in the picker: its sigil, title and one-line note, over a native radio. */
-function RoleOption({
+export function RoleOption({
   checked,
   onPick,
   sigil,
@@ -328,7 +328,7 @@ export const draftRolePicker = <D extends FirstHobDraft>(draft: D, onChange: (up
 });
 
 /** A role title in the user's own words, with a sigil borrowed from any starter role. */
-function OwnRole({
+export function OwnRole({
   value,
   onTitle,
   onSigil,

@@ -1,4 +1,4 @@
-import type { Agent, AgentId, RetireWork } from "@hobbots/domain";
+import { type Agent, type AgentId, type RetireWork, starterRole } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -7,7 +7,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { ApiError } from "../api/client.ts";
 import {
-  brainLine,
+  aboutLine,
   goodAt,
   INSTRUCTIONS_MAX,
   isDirty,
@@ -19,24 +19,26 @@ import {
   rebaseDraft,
   retiredSummary,
   roleProblem,
-  summonedLine,
+  roleRewrite,
 } from "../api/profile.ts";
 import { agentsQuery, modelsQuery, threadsQuery, usePauseHob, useRetireHob, useUpdateHob } from "../api/queries.ts";
 import { presetInfo, type RuleAnswer } from "../api/safety.ts";
 import { setupQuery } from "../api/setup.ts";
 import { hobState, stateLabel } from "../lib/hob-state.ts";
-import { Brain, Choice, RolePicker } from "./hob-form.tsx";
+import { Brain, Choice } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
+import { RoleSheet } from "./role-sheet.tsx";
+import { RoleSigil } from "./role-sigil.tsx";
 
-type Tab = "instructions" | "tools" | "permissions";
+type Tab = "profile" | "tools" | "permissions";
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
-  ["instructions", "Instructions"],
+  ["profile", "Profile"],
   ["tools", "Tools"],
   ["permissions", "Permissions"],
 ];
 
 /**
- * A hob's profile (screen 11): who it is and how it thinks. Instructions and brain are edited
+ * A hob's profile (screen 11): who it is and how it thinks. Role, instructions and brain are edited
  * together and saved as the hob's next configuration version; Pause / Wake and Retire act at once.
  */
 export function HobProfile({ hobId }: { hobId: AgentId }) {
@@ -90,13 +92,12 @@ function Profile({
   onRetiring: (hob: Agent) => void;
   onRetired: (retired: Retired) => void;
 }) {
-  const models = useQuery(modelsQuery(hob.runtime));
   const threads = useQuery(threadsQuery(hob.id));
   const activity = useActivity();
   const state = hobState(hob, threads.data, activity);
   const running = (threads.data ?? []).filter((t) => activity[t.id] !== undefined);
   const pause = usePauseHob(hob.id);
-  const [tab, setTab] = useState<Tab>("instructions");
+  const [tab, setTab] = useState<Tab>("profile");
   const [retireOpen, setRetireOpen] = useState(false);
   const [hops, setHops] = useState(0);
   const paused = hob.status === "paused";
@@ -109,38 +110,45 @@ function Profile({
 
   return (
     <main aria-label={`${hob.name}'s profile`} className="relative flex min-w-0 flex-1 flex-col">
-      <header className="flex items-center gap-5 border-b-4 border-line bg-panel px-8 pt-[22px] pb-[18px]">
+      <header className="flex items-center gap-5 border-b-4 border-line bg-panel px-8 pt-[18px] pb-4">
         <div className="hop-on-hover bg-line p-2">
           <span key={hops} className={cn("block", hops > 0 && "animate-hb-hop")}>
-            <HobSprite hob={hob} size={72} state={state} badge />
+            <HobSprite hob={hob} size={64} state={state} badge />
           </span>
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <Link to="/hobs/$hobId" params={{ hobId: hob.id }} className="text-sm text-lantern hover:text-lantern-hover">
             ← Back to chat
           </Link>
-          <h1 className="m-0 truncate font-pixel text-[32px] font-bold">{hob.name}</h1>
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="cut flex-none bg-line px-2 py-0.5 text-[13px] font-bold text-moonlight">
-              {hob.roleTitle}
-            </span>
-            {good && <span className="truncate text-[13px] text-secondary-text">Good at: {good}</span>}
-          </div>
-          <ul aria-label="About" className="m-0 flex list-none flex-wrap gap-2 p-0">
-            <li className={cn("bg-deep px-2.5 py-1 text-[13px]", paused ? "text-lantern" : "text-mint")}>
+          <div className="flex min-w-0 items-center gap-3">
+            <h1 className="m-0 truncate font-pixel text-[30px] font-bold">{hob.name}</h1>
+            <span
+              role="status"
+              className={cn(
+                "flex flex-none items-center gap-1.5 bg-deep px-2.5 py-[3px] text-[13px]",
+                paused ? "text-lantern" : "text-mint",
+              )}
+            >
+              <span aria-hidden className={cn("size-2", paused ? "bg-lantern" : "bg-mint")} />
               {paused
                 ? "Paused"
                 : state === "idle"
                   ? "Ready"
                   : stateLabel[state][0]?.toUpperCase() + stateLabel[state].slice(1)}
-            </li>
-            <li className="bg-deep px-2.5 py-1 text-[13px] text-secondary-text">{summonedLine(hob.createdAt)}</li>
-            <li className="bg-deep px-2.5 py-1 text-[13px] text-secondary-text">{brainLine(hob, models.data)}</li>
-            <li className="bg-deep px-2.5 py-1 text-[13px] text-secondary-text">Version {hob.configVersion}</li>
-          </ul>
+            </span>
+          </div>
+          <p className="m-0 flex min-w-0 items-center gap-2 text-sm text-secondary-text">
+            <span className="flex-none font-bold text-moonlight">{hob.roleTitle}</span>
+            {good && (
+              <>
+                <span aria-hidden>·</span>
+                <span className="truncate">{good}</span>
+              </>
+            )}
+          </p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <div className="flex gap-2.5">
+          <div className="flex items-center gap-2.5">
             <Button
               variant="outline"
               onClick={togglePause}
@@ -149,9 +157,7 @@ function Profile({
             >
               {paused ? `Wake ${hob.name}` : `Pause ${hob.name}`}
             </Button>
-            <Button variant="deny" onClick={() => setRetireOpen(true)} disabled={retired !== null}>
-              {retired ? "Retired" : "Retire hob"}
-            </Button>
+            <MoreActions name={hob.name} disabled={retired !== null} onRetire={() => setRetireOpen(true)} />
           </div>
           {pause.isError && (
             <span id="pause-error" role="alert" className="text-[13px] text-rose">
@@ -163,15 +169,22 @@ function Profile({
 
       <Tabs tab={tab} onTab={setTab} />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
-        <div role="tabpanel" id="profile-panel" aria-labelledby={`profile-tab-${tab}`}>
-          {/* Kept mounted, so looking at another tab never drops unsaved edits. */}
-          <div hidden={tab !== "instructions"}>
-            <InstructionsTab hob={hob} />
-          </div>
-          {tab === "tools" && <ToolsTab name={hob.name} />}
-          {tab === "permissions" && <PermissionsTab name={hob.name} />}
+      <div
+        role="tabpanel"
+        id="profile-panel"
+        aria-labelledby={`profile-tab-${tab}`}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        {/* Kept mounted, so looking at another tab never drops unsaved edits. */}
+        <div hidden={tab !== "profile"} className="flex min-h-0 flex-1 flex-col">
+          <ProfileTab hob={hob} />
         </div>
+        {tab !== "profile" && (
+          <div className="min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
+            {tab === "tools" && <ToolsTab name={hob.name} />}
+            {tab === "permissions" && <PermissionsTab name={hob.name} />}
+          </div>
+        )}
       </div>
 
       {(retireOpen || retired) && (
@@ -233,13 +246,19 @@ function Tabs({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
   );
 }
 
-/** Instructions and brain, saved together as one new configuration version. */
-function InstructionsTab({ hob }: { hob: Agent }) {
+/**
+ * The hob's role, instructions and brain on one page, saved together as one new configuration
+ * version from the bar at the bottom.
+ */
+function ProfileTab({ hob }: { hob: Agent }) {
   const models = useQuery(modelsQuery(hob.runtime));
   const update = useUpdateHob(hob.id);
   const [base, setBase] = useState(() => profileDraft(hob, models.data));
   const [draft, setDraft] = useState<ProfileDraft>(base);
   const [saved, setSaved] = useState<number | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // The role the user chose to keep their own instructions for, so the offer stays away for it.
+  const [keptFor, setKeptFor] = useState<string | null>(null);
   const dirty = isDirty(base, draft);
   const baseRef = useRef(base);
   baseRef.current = base;
@@ -259,6 +278,8 @@ function InstructionsTab({ hob }: { hob: Agent }) {
   const problem = roleProblem(draft);
   const changes = Object.keys(edit).length > 0 && problem === undefined;
   const rejected = update.error instanceof ApiError && update.error.tag === "InvalidHob" ? update.error : undefined;
+  const roleKey = `${draft.role}:${draft.roleTitle.trim()}`;
+  const rewrite = keptFor === roleKey ? undefined : roleRewrite(hob.name, draft);
 
   const save = (event: React.FormEvent) => {
     event.preventDefault();
@@ -294,122 +315,226 @@ function InstructionsTab({ hob }: { hob: Agent }) {
               : "";
 
   return (
-    <form onSubmit={save} className="grid grid-cols-[minmax(0,1fr)_340px] gap-7">
-      <div className="flex flex-col gap-2">
-        <label htmlFor="hob-instructions" className="font-bold">
-          Instructions
-        </label>
-        <span id="hob-instructions-note" className="text-sm text-secondary-text">
-          Written by Hobbots from your description. Edit freely; {hob.name} reads this before every reply.
-        </span>
-        <textarea
-          id="hob-instructions"
-          aria-describedby="hob-instructions-note"
-          value={draft.instructions}
-          maxLength={INSTRUCTIONS_MAX}
-          onChange={(e) => {
-            const instructions = e.target.value;
-            setDraft((d) => ({ ...d, instructions }));
-          }}
-          className="h-[330px] resize-y border-2 border-control bg-deep px-4 py-3.5 leading-[1.55] text-text"
-        />
-        <div className="flex items-center gap-3">
-          <Button type="submit" disabled={!changes || update.isPending}>
-            Save changes
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!dirty || update.isPending}
-            onClick={() => {
-              setDraft(base);
-              update.reset();
-            }}
-          >
-            Discard
-          </Button>
-          <span
-            role={update.isError ? "alert" : "status"}
-            className={cn("text-sm", update.isError ? "text-rose" : dirty ? "text-lantern" : "text-secondary-text")}
-          >
-            {status}
-          </span>
+    <form onSubmit={save} className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
+        <div className="flex max-w-[880px] flex-col gap-6">
+          <section aria-labelledby="hob-role" className="flex flex-col gap-2">
+            <h2 id="hob-role" className="lbl m-0 text-moonlight">
+              Role
+            </h2>
+            <RoleCard name={hob.name} draft={draft} disabled={update.isPending} onChange={() => setSheetOpen(true)} />
+            {rewrite !== undefined && (
+              <div className="cut flex flex-wrap items-center gap-3 border-2 border-lantern bg-card px-3.5 py-2.5 text-sm">
+                <span className="min-w-[240px] flex-1">
+                  The instructions still name {hob.name}'s old role. Rewrite their first line for{" "}
+                  {draft.roleTitle.trim()}?
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  disabled={update.isPending}
+                  onClick={() => setDraft((d) => ({ ...d, instructions: rewrite }))}
+                >
+                  Rewrite first line
+                </Button>
+                <Button type="button" variant="outline" size="xs" onClick={() => setKeptFor(roleKey)}>
+                  Keep mine
+                </Button>
+              </div>
+            )}
+          </section>
+
+          <section className="flex flex-col gap-2">
+            <label htmlFor="hob-instructions" className="lbl text-moonlight">
+              Instructions
+            </label>
+            <span id="hob-instructions-note" className="text-sm text-secondary-text">
+              {hob.name} reads this before every reply. Written by Hobbots from your description; edit freely.
+            </span>
+            <textarea
+              id="hob-instructions"
+              aria-describedby="hob-instructions-note"
+              value={draft.instructions}
+              maxLength={INSTRUCTIONS_MAX}
+              onChange={(e) => {
+                const instructions = e.target.value;
+                setDraft((d) => ({ ...d, instructions }));
+              }}
+              className="h-[220px] resize-y border-2 border-control bg-deep px-4 py-3.5 leading-[1.55] text-text"
+            />
+          </section>
+
+          <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-2.5 border-0 p-0">
+            <legend className="lbl mb-2 text-moonlight">Brain</legend>
+            <div className="flex flex-wrap gap-1.5">
+              <Choice name="hob-provider" checked onPick={() => {}} label="Claude" className="px-2.5 py-[5px]">
+                <span
+                  aria-hidden
+                  className="grid size-[18px] place-items-center bg-[#e39a74] text-xs font-bold text-ground"
+                >
+                  C
+                </span>
+                Claude
+              </Choice>
+            </div>
+            {models.isPending ? (
+              <span className="py-1 text-sm text-lantern">
+                Asking Claude Code for its models <span className="animate-hb-blink">•••</span>
+              </span>
+            ) : models.isError ? (
+              <span role="alert" className="flex items-center gap-3 text-sm text-rose">
+                Hobbots could not get Claude Code's models.
+                <Button type="button" variant="outline" size="xs" onClick={() => void models.refetch()}>
+                  Try again
+                </Button>
+              </span>
+            ) : (
+              <Brain models={models.data.models} draft={draft} onChange={setDraft} />
+            )}
+            <span className="text-[13px] text-label">Other providers arrive later.</span>
+          </fieldset>
+
+          <p className="m-0 text-[13px] text-label">{aboutLine(hob)}</p>
         </div>
       </div>
 
-      <div className="flex flex-col gap-5">
-        <RoleField name={hob.name} draft={draft} onChange={setDraft} disabled={update.isPending} />
-
-        <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-2.5 border-0 p-0">
-          <legend className="lbl mb-2.5 text-moonlight">Brain</legend>
-          <div className="flex flex-wrap gap-1.5">
-            <Choice name="hob-provider" checked onPick={() => {}} label="Claude" className="px-2.5 py-[5px]">
-              <span
-                aria-hidden
-                className="grid size-[18px] place-items-center bg-[#e39a74] text-xs font-bold text-ground"
-              >
-                C
-              </span>
-              Claude
-            </Choice>
-          </div>
-          {models.isPending ? (
-            <span className="py-1 text-sm text-lantern">
-              Asking Claude Code for its models <span className="animate-hb-blink">•••</span>
-            </span>
-          ) : models.isError ? (
-            <span role="alert" className="flex items-center gap-3 text-sm text-rose">
-              Hobbots could not get Claude Code's models.
-              <Button type="button" variant="outline" size="xs" onClick={() => void models.refetch()}>
-                Try again
-              </Button>
-            </span>
-          ) : (
-            <Brain models={models.data.models} draft={draft} onChange={setDraft} />
+      <div className="flex flex-none items-center gap-3 border-t-4 border-line bg-panel px-8 py-3">
+        <span
+          role={update.isError ? "alert" : "status"}
+          className={cn(
+            "flex-1 text-sm",
+            update.isError ? "text-rose" : dirty ? "text-lantern" : "text-secondary-text",
           )}
-          <span className="text-[13px] text-label">Other providers arrive later.</span>
-        </fieldset>
-
-        <section aria-label="Works on" className="flex flex-col gap-1.5">
-          <span className="lbl text-moonlight">Works on</span>
-          <span>The hub</span>
-          <span className="text-[13px] text-secondary-text">
-            {hob.name} chats on the computer running Hobbots. Sandboxes come later.
-          </span>
-        </section>
+        >
+          {status}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!dirty || update.isPending}
+          onClick={() => {
+            setDraft(base);
+            update.reset();
+          }}
+        >
+          Discard
+        </Button>
+        <Button type="submit" disabled={!changes || update.isPending}>
+          Save changes
+        </Button>
       </div>
+
+      {sheetOpen && (
+        <RoleSheet
+          name={hob.name}
+          value={{ role: draft.role, ownTitle: draft.roleTitle, ownSigil: draft.sigil }}
+          onPick={(role) => setDraft((d) => pickRole(d, role))}
+          onOwnTitle={(roleTitle) => setDraft((d) => ({ ...d, roleTitle }))}
+          onOwnSigil={(sigil) => setDraft((d) => ({ ...d, sigil }))}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
     </form>
   );
 }
 
-/**
- * The hob's role, on the same picker as Summon: a starter role, or a title in the user's own words
- * with any sigil. Saved with the rest of the tab as the next configuration version.
- */
-function RoleField({
+/** The role the draft has: its sigil, title and note, with the button that opens the role sheet. */
+function RoleCard({
   name,
   draft,
-  onChange,
   disabled,
+  onChange,
 }: {
   name: string;
   draft: ProfileDraft;
-  onChange: (update: (draft: ProfileDraft) => ProfileDraft) => void;
   disabled: boolean;
+  onChange: () => void;
 }) {
+  const title = draft.roleTitle.trim();
   return (
-    <div className="flex flex-col gap-2">
-      <RolePicker
-        value={{ role: draft.role, ownTitle: draft.roleTitle, ownSigil: draft.sigil }}
-        onPick={(role) => onChange((d) => pickRole(d, role))}
-        onOwnTitle={(roleTitle) => onChange((d) => ({ ...d, roleTitle }))}
-        onOwnSigil={(sigil) => onChange((d) => ({ ...d, sigil }))}
-        legend={<legend className="lbl mb-2.5 text-moonlight">Role</legend>}
-        disabled={disabled}
-      />
-      <span className="text-[13px] text-label">
-        A role is a label. It changes how {name} looks, not what {name} may do.
+    <div className="cut flex items-center gap-4 border-2 border-line bg-panel px-4 py-3.5">
+      <span className="grid flex-none place-items-center bg-deep p-2">
+        <RoleSigil sigil={draft.sigil} size={36} />
       </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className={cn("font-pixel text-xl font-bold", title ? "text-text" : "text-label")}>
+          {title || "No title yet"}
+        </span>
+        <span className="text-sm text-secondary-text">
+          {draft.role === null ? "A title in your own words." : starterRole(draft.role).note}
+        </span>
+        <span className="text-[13px] text-label">
+          A role is a label. It changes how {name} looks, not what {name} may do.
+        </span>
+      </span>
+      <Button type="button" variant="outline" disabled={disabled} onClick={onChange}>
+        Change role
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * The actions kept out of the way: Retire, for now. The list closes on Escape, on a click outside
+ * or when focus leaves it.
+ */
+function MoreActions({ name, disabled, onRetire }: { name: string; disabled: boolean; onRetire: () => void }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const listId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: Event) => {
+      if (!wrap.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      toggle.current?.focus();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("focusin", outside);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", outside);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={wrap} className="relative">
+      <Button
+        ref={toggle}
+        variant="outline"
+        aria-label={`More actions for ${name}`}
+        aria-expanded={open}
+        aria-controls={listId}
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+      >
+        <span aria-hidden>•••</span>
+      </Button>
+      {open && (
+        <div
+          id={listId}
+          className="cut absolute top-full right-0 z-10 mt-1.5 flex min-w-[180px] animate-hb-in flex-col border-2 border-control bg-panel p-1"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onRetire();
+            }}
+            className="cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-sm text-rose hover:bg-hover"
+          >
+            Retire hob
+          </button>
+        </div>
+      )}
     </div>
   );
 }
