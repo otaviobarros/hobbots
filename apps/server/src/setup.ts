@@ -8,13 +8,13 @@ export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers
     const setup = yield* SetupRepository;
     return handlers.handleAll({
       get: () => setup.get,
-      // A folder added twice is kept once, where it was first added.
+      // A folder or provider added twice is kept once, where it was first added.
       update: ({ payload }) =>
-        setup.update(
-          payload.approvedFolders === undefined
-            ? payload
-            : { ...payload, approvedFolders: [...new Set(payload.approvedFolders)] },
-        ),
+        setup.update({
+          ...payload,
+          ...(payload.approvedFolders && { approvedFolders: [...new Set(payload.approvedFolders)] }),
+          ...(payload.connectedProviders && { connectedProviders: [...new Set(payload.connectedProviders)] }),
+        }),
     });
   }),
 );

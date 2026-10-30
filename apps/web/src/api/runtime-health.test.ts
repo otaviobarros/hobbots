@@ -35,13 +35,17 @@ describe("runtimeStaleTime", () => {
 });
 
 describe("canContinueSetup", () => {
-  it("continues with a ready provider", () =>
-    expect(canContinueSetup([health("unavailable", null), health("ready", "2.1.301")])).toBe(true));
-  it("waits while no provider is ready or none is known yet", () => {
+  it("continues with a ready provider the user connected", () =>
+    expect(canContinueSetup([health("ready", "2.1.301")], ["claude-code"])).toBe(true));
+  it("waits until the user connects a ready provider", () => {
+    expect(canContinueSetup([health("ready", "2.1.301")], [])).toBe(false);
+    expect(canContinueSetup([health("ready", "2.1.301")], undefined)).toBe(false);
+  });
+  it("waits while the connected provider is not ready or none is known yet", () => {
     for (const availability of ["outdated", "signedOut", "unavailable", "unverified"] as const) {
-      expect(canContinueSetup([health(availability, "2.1.301")])).toBe(false);
+      expect(canContinueSetup([health(availability, "2.1.301")], ["claude-code"])).toBe(false);
     }
-    expect(canContinueSetup([])).toBe(false);
-    expect(canContinueSetup(undefined)).toBe(false);
+    expect(canContinueSetup([], ["claude-code"])).toBe(false);
+    expect(canContinueSetup(undefined, ["claude-code"])).toBe(false);
   });
 });

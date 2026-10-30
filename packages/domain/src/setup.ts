@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { RuntimeKind } from "./agent.ts";
 
 /** The onboarding safety presets (ADR 008). Balanced is Trusted Workspace and the default (ADR 003). */
 export const SafetyPreset = Schema.Literals(["careful", "balanced", "trusting"]);
@@ -10,4 +11,6 @@ export class InstallationSetup extends Schema.Class<InstallationSetup>("Installa
   safetyPreset: SafetyPreset,
   /** Folders the hobs may work in, in the order the user added them. */
   approvedFolders: Schema.Array(Schema.String),
+  /** Providers the user chose to connect, in the order they connected them. */
+  connectedProviders: Schema.Array(RuntimeKind),
 }) {}

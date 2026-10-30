@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { opensWelcome, readSetup, setupDone, setupQuery, setupQueryKey } from "./setup.ts";
 
 const setup = (completed: boolean) =>
-  new InstallationSetup({ completed, safetyPreset: "balanced", approvedFolders: [] });
+  new InstallationSetup({ completed, safetyPreset: "balanced", approvedFolders: [], connectedProviders: [] });
 
 describe("opening the app", () => {
   it("shows Welcome until setup is done, then Home", () => {
