@@ -11,7 +11,7 @@ test.afterEach(async () => {
 });
 
 // covers AG-001
-test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom title with a borrowed sigil is saved", async ({
+test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom title with a borrowed sigil is saved and changed from the profile", async ({
   page,
 }) => {
   dataDir = emptyDataDir();
@@ -95,5 +95,19 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   });
 
   await page.goto(`${hub.url}/#/hobs/${String(fern?.id)}/profile`);
-  await expect(page.getByRole("heading", { name: /Fern\s+the Frontend wizard/ })).toBeVisible();
+  const profile = page.getByRole("main", { name: "Fern's profile" });
+  await expect(profile.locator("header")).toContainText("Frontend wizard");
+
+  // The profile changes the role on the same picker.
+  const profileRoles = profile.getByRole("group", { name: "Role" });
+  await expect(profileRoles.getByRole("radio", { name: /^Your own/ })).toBeChecked();
+  await expect(page.getByRole("textbox", { name: "Your own role title" })).toHaveValue("Frontend wizard");
+  await profileRoles.getByRole("radio", { name: /^Writer/ }).check();
+  await profile.getByRole("button", { name: "Save changes" }).click();
+  await expect
+    .poll(async () => {
+      const after = (await (await fetch(`${hub.url}/api/agents`)).json()) as ReadonlyArray<Record<string, unknown>>;
+      return after.find((h) => h.name === "Fern");
+    })
+    .toMatchObject({ role: "writer", roleTitle: "Writer", sigil: "writer" });
 });

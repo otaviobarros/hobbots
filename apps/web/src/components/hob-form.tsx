@@ -12,7 +12,6 @@ import {
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
-import { Sigil } from "@hobbots/ui/components/sigil";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useId, useState } from "react";
 import {
@@ -33,6 +32,7 @@ import {
 } from "../api/first-hob.ts";
 import { HOB_COLORS } from "../art/look.ts";
 import { HobSprite } from "./hob-sprite.tsx";
+import { RoleSigil } from "./role-sigil.tsx";
 
 /**
  * The hob fields that onboarding's first hob and Summon share: chores, role, name dice, colors,
@@ -173,7 +173,7 @@ function RoleOption({
   checked: boolean;
   name: string;
   onPick: () => void;
-  sigil: ReadonlyArray<string> | null;
+  sigil: RoleId | null;
   title: string;
   note: string;
   className?: string | undefined;
@@ -189,7 +189,7 @@ function RoleOption({
     >
       <input type="radio" name={name} checked={checked} onChange={onPick} className="sr-only" />
       {sigil ? (
-        <Sigil rows={sigil} size={20} className="mt-0.5 flex-none" />
+        <RoleSigil sigil={sigil} size={20} className="mt-0.5 flex-none" />
       ) : (
         <span
           aria-hidden
@@ -208,7 +208,7 @@ function RoleOption({
 
 const roleOption = (id: RoleId) => {
   const role = starterRole(id);
-  return { sigil: role.sigil, title: role.title, note: role.note };
+  return { sigil: id, title: role.title, note: role.note };
 };
 
 /**
@@ -225,7 +225,7 @@ export function RolePicker({
   columns = 3,
   disabled = false,
 }: {
-  value: RoleChoice;
+  value: RolePick;
   onPick: (role: RoleId | null) => void;
   onOwnTitle: (title: string) => void;
   onOwnSigil: (sigil: RoleId) => void;
@@ -242,6 +242,8 @@ export function RolePicker({
   const moreId = useId();
   const name = useId();
   const own = draft.role === null;
+  // Picking "Your own" asks for the title right away; a hob that already has one keeps the focus where it is.
+  const [ownPicked, setOwnPicked] = useState(false);
   const grid = columns === 3 ? "grid-cols-3" : "grid-cols-2";
   const moreCount = MORE_ROLES.reduce((n, group) => n + group.roles.length, 0);
   return (
@@ -287,14 +289,17 @@ export function RolePicker({
       )}
       <RoleOption
         checked={own}
-        onPick={() => onPick(null)}
+        onPick={() => {
+          setOwnPicked(true);
+          onPick(null);
+        }}
         name={name}
-        sigil={own ? starterRole(draft.ownSigil).sigil : null}
+        sigil={own ? draft.ownSigil : null}
         title="Your own"
         note="Give it a title in your words and pick a sigil."
         className={cn("self-start", !own && "border-dashed")}
       />
-      {own && <OwnRole value={draft} onTitle={onOwnTitle} onSigil={onOwnSigil} />}
+      {own && <OwnRole value={draft} onTitle={onOwnTitle} onSigil={onOwnSigil} autoFocus={ownPicked} />}
       <a
         href={roleRequestUrl(own ? draft.ownTitle : "")}
         target="_blank"
@@ -308,7 +313,7 @@ export function RolePicker({
 }
 
 /** What the role picker shows: a starter role, or a title in the user's words with a borrowed sigil. */
-export interface RoleChoice {
+export interface RolePick {
   readonly role: RoleId | null;
   readonly ownTitle: string;
   readonly ownSigil: RoleId;
@@ -327,8 +332,10 @@ function OwnRole({
   value,
   onTitle,
   onSigil,
+  autoFocus,
 }: {
-  value: RoleChoice;
+  value: RolePick;
+  autoFocus: boolean;
   onTitle: (title: string) => void;
   onSigil: (sigil: RoleId) => void;
 }) {
@@ -337,7 +344,7 @@ function OwnRole({
     <div className="flex animate-hb-in flex-col gap-2.5 border-2 border-line p-2.5">
       <input
         // biome-ignore lint/a11y/noAutofocus: choosing "Your own" asks for the title right away.
-        autoFocus
+        autoFocus={autoFocus}
         value={value.ownTitle}
         maxLength={LABEL_MAX}
         onChange={(e) => onTitle(e.target.value)}
@@ -368,7 +375,7 @@ function OwnRole({
                   aria-label={`${starterRole(id).title}'s sigil`}
                   className="sr-only"
                 />
-                <Sigil rows={starterRole(id).sigil} size={20} />
+                <RoleSigil sigil={id} size={20} />
               </label>
             );
           })}

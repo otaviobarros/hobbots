@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, type RetireWork, ROLE_FAMILIES, type RoleId, STARTER_ROLES } from "@hobbots/domain";
+import type { Agent, AgentId, RetireWork } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -16,7 +16,6 @@ import {
   profileDraft,
   profileEdit,
   RETIRE_OPTIONS,
-  ROLE_TITLE_MAX,
   rebaseDraft,
   retiredSummary,
   roleProblem,
@@ -26,9 +25,8 @@ import { agentsQuery, modelsQuery, threadsQuery, usePauseHob, useRetireHob, useU
 import { presetInfo, type RuleAnswer } from "../api/safety.ts";
 import { setupQuery } from "../api/setup.ts";
 import { hobState, stateLabel } from "../lib/hob-state.ts";
-import { Brain, Choice } from "./hob-form.tsx";
+import { Brain, Choice, RolePicker } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
-import { RoleSigil } from "./role-sigil.tsx";
 
 type Tab = "instructions" | "tools" | "permissions";
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
@@ -384,11 +382,9 @@ function InstructionsTab({ hob }: { hob: Agent }) {
   );
 }
 
-const OWN_TITLE = "own";
-
 /**
- * The hob's role: a starter role, or a title in the user's own words that keeps the sigil it has.
- * Saved with the rest of the tab as the next configuration version.
+ * The hob's role, on the same picker as Summon: a starter role, or a title in the user's own words
+ * with any sigil. Saved with the rest of the tab as the next configuration version.
  */
 function RoleField({
   name,
@@ -401,59 +397,20 @@ function RoleField({
   onChange: (update: (draft: ProfileDraft) => ProfileDraft) => void;
   disabled: boolean;
 }) {
-  const id = useId();
   return (
-    <fieldset disabled={disabled} className="m-0 flex flex-col gap-2 border-0 p-0">
-      <legend className="lbl mb-2.5 text-moonlight">Role</legend>
-      <div className="flex items-center gap-2.5">
-        <span className="grid size-9 flex-none place-items-center bg-deep">
-          <RoleSigil sigil={draft.sigil} size={24} />
-        </span>
-        <label htmlFor={`${id}-role`} className="sr-only">
-          Role
-        </label>
-        <select
-          id={`${id}-role`}
-          value={draft.role ?? OWN_TITLE}
-          onChange={(e) => {
-            const value = e.target.value;
-            onChange((d) => pickRole(d, value === OWN_TITLE ? null : (value as RoleId)));
-          }}
-          className="min-w-0 flex-1 border-2 border-control bg-deep px-2.5 py-[7px] text-text"
-        >
-          {ROLE_FAMILIES.map((family) => (
-            <optgroup key={family.id} label={family.title}>
-              {STARTER_ROLES.filter((role) => role.family === family.id).map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.title}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-          <option value={OWN_TITLE}>Your own title…</option>
-        </select>
-      </div>
-      {draft.role === null && (
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`${id}-title`} className="text-sm text-secondary-text">
-            Role title
-          </label>
-          <input
-            id={`${id}-title`}
-            value={draft.roleTitle}
-            maxLength={ROLE_TITLE_MAX}
-            onChange={(e) => {
-              const roleTitle = e.target.value;
-              onChange((d) => ({ ...d, roleTitle }));
-            }}
-            className="border-2 border-control bg-deep px-2.5 py-[7px] text-text"
-          />
-        </div>
-      )}
+    <div className="flex flex-col gap-2">
+      <RolePicker
+        value={{ role: draft.role, ownTitle: draft.roleTitle, ownSigil: draft.sigil }}
+        onPick={(role) => onChange((d) => pickRole(d, role))}
+        onOwnTitle={(roleTitle) => onChange((d) => ({ ...d, roleTitle }))}
+        onOwnSigil={(sigil) => onChange((d) => ({ ...d, sigil }))}
+        legend={<legend className="lbl mb-2.5 text-moonlight">Role</legend>}
+        disabled={disabled}
+      />
       <span className="text-[13px] text-label">
         A role is a label. It changes how {name} looks, not what {name} may do.
       </span>
-    </fieldset>
+    </div>
   );
 }
 
