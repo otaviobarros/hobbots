@@ -5,29 +5,34 @@ import { Link, useCanGoBack, useNavigate, useRouter } from "@tanstack/react-rout
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client.ts";
 import {
-  draftProblem,
+  type FirstHobDraft,
+  keepSummonDraft,
+  keptSummonDraft,
   kindLine,
   LABEL_MAX,
+  pickLook,
   reopenDraft,
   rollLook,
   rollName,
   settleBrain,
+  settleSummonDraft,
   submitDraft,
 } from "../api/first-hob.ts";
 import { agentsQuery, modelsQuery, runtimesQuery, useCreateHob } from "../api/queries.ts";
 import { presetInfo, type RuleAnswer } from "../api/safety.ts";
 import { setupQuery } from "../api/setup.ts";
-import {
-  CHORES_MAX,
-  newSummonDraft,
-  pickKind,
-  providerNotice,
-  type SummonDraft,
-  summonPayload,
-  summonProblem,
-} from "../api/summon.ts";
+import { openSummonDraft, providerNotice, summonProblem } from "../api/summon.ts";
 import { hobLook } from "../art/look.ts";
-import { Brain, Choice, ColorSwatches, CraftChoices, NameDice } from "./hob-form.tsx";
+import {
+  Brain,
+  Choice,
+  ChoresField,
+  ColorSwatches,
+  CraftChoices,
+  HobSummary,
+  NameDice,
+  NearbyLooks,
+} from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { Stars } from "./scene.tsx";
 
@@ -50,8 +55,9 @@ export function Summon() {
   const models = useQuery(modelsQuery("claude-code"));
   const setup = useQuery(setupQuery);
   const create = useCreateHob();
-  // The route loads the hob list first, so the first name avoids the hobs the user already has.
-  const [draft, setDraft] = useState<SummonDraft>(() => newSummonDraft(hobs.data?.map((h) => h.name) ?? []));
+  // The route loads the hob list first, so a fresh name avoids the hobs the user already has and a
+  // draft whose hob already joined is not brought back.
+  const [draft, setDraft] = useState<FirstHobDraft>(() => openSummonDraft(keptSummonDraft(), hobs.data ?? []));
   const [nameRolls, setNameRolls] = useState(0);
   const [lookRolls, setLookRolls] = useState(0);
   const [tried, setTried] = useState(false);
@@ -64,6 +70,8 @@ export function Summon() {
     };
   }, []);
 
+  // Leaving and coming back keeps what was chosen, until the hob exists.
+  useEffect(() => keepSummonDraft(draft), [draft]);
   useEffect(() => {
     if (models.data) setDraft((d) => (d.submitted ? d : settleBrain(d, models.data)));
   }, [models.data]);
@@ -89,8 +97,10 @@ export function Summon() {
         ? `Hobbots could not finish summoning ${name}. Try again in a moment.`
         : problem;
 
+  // Cancel drops the draft; leaving any other way keeps it for next time.
   const cancel = () => {
     left.current = true;
+    if (!locked) keepSummonDraft(null);
     if (canGoBack) router.history.back();
     else void navigate({ to: "/hobs" });
   };
@@ -100,13 +110,20 @@ export function Summon() {
     if (problem || create.isPending) return;
     // Once sent, the hob may exist even when no answer comes back, so the choices lock and a
     // retry repeats the same request; the hub returns the hob it made the first time.
-    const sent = submitDraft(draft, summonPayload);
+    const sent = submitDraft(draft);
     setDraft(sent);
     try {
       const made = await create.mutateAsync(sent.submitted);
+      // The hob exists, so the next Summon starts fresh, even when the user already left. A newer
+      // draft started meanwhile belongs to another hob and stays.
+      settleSummonDraft(sent.id, null);
       if (!left.current) void navigate({ to: "/hobs/$hobId/new", params: { hobId: made.id }, replace: true });
     } catch (error) {
-      if (error instanceof ApiError && error.tag === "InvalidHob") setDraft(reopenDraft(sent));
+      if (error instanceof ApiError && error.tag === "InvalidHob") {
+        const reopened = reopenDraft(sent);
+        setDraft(reopened);
+        settleSummonDraft(sent.id, reopened);
+      }
     }
   };
   const newLook = () => {
@@ -134,32 +151,19 @@ export function Summon() {
         <div className="grid min-h-0 flex-1 animate-hb-in grid-cols-[minmax(0,1fr)_430px] gap-7">
           <fieldset disabled={locked} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0 disabled:opacity-85">
             <legend className="sr-only">{locked ? `${name}'s chores, as sent` : "What the hob does"}</legend>
-            <div className="flex flex-col gap-2">
-              <label htmlFor="hob-chores" className="font-bold">
-                What should this hob do?
-              </label>
-              <textarea
-                id="hob-chores"
-                value={draft.chores}
-                maxLength={CHORES_MAX}
-                onChange={(e) => {
-                  const chores = e.target.value;
-                  setDraft((d) => ({ ...d, chores, choresEdited: true }));
-                }}
-                placeholder="Tell it about the chores, like you would tell a friend who is helping out."
-                className="h-[110px] resize-none border-2 border-control bg-deep px-3.5 py-3 leading-normal text-text placeholder:text-label"
-              />
-            </div>
+            <ChoresField
+              draft={draft}
+              onChange={setDraft}
+              rows={4}
+              label="What should this hob do?"
+              className="font-bold"
+            />
 
             <CraftChoices
               draft={draft}
-              onChange={(update) =>
-                setDraft((d) => {
-                  const next = update(d);
-                  return next.kind === d.kind ? next : pickKind(d, next.kind);
-                })
-              }
+              onChange={setDraft}
               legend={<legend className="mb-2 text-sm text-secondary-text">Or start from a kind of hob</legend>}
+              showNote
             />
 
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
@@ -183,7 +187,12 @@ export function Summon() {
               aria-label={`${name} asks you first`}
               className="cut flex flex-col gap-2.5 border-2 border-line bg-card px-4 py-3.5"
             >
-              <span className="lbl text-moonlight">{name} asks you first before</span>
+              <div className="flex items-baseline gap-2.5">
+                <span className="lbl flex-1 text-moonlight">{name} asks you first before</span>
+                {setup.data && (
+                  <span className="text-[13px] text-label">{presetInfo(setup.data.safetyPreset).label} safety</span>
+                )}
+              </div>
               {setup.data &&
                 presetInfo(setup.data.safetyPreset).rules.map(([rule, answer]) => (
                   <div key={rule} className="flex items-center gap-3 text-sm">
@@ -191,14 +200,14 @@ export function Summon() {
                     <span className={cn("text-[13px]", ANSWER[answer].className)}>{ANSWER[answer].text}</span>
                   </div>
                 ))}
-              <span className="text-[13px] text-label">
-                {setup.data ? `From your ${presetInfo(setup.data.safetyPreset).label} safety. ` : ""}Hobs only chat
-                today, so these apply once they can act.
+              <span className="text-[13px] text-secondary-text">
+                Safety is the same for every hob, and applies once hobs can act.{" "}
+                <Link to="/settings">Change it in Settings</Link>
               </span>
             </section>
           </fieldset>
 
-          <section aria-label="Preview" className="flex flex-col self-start border-[3px] border-text bg-card">
+          <section aria-label="Preview" className="flex min-w-0 flex-col self-start border-[3px] border-text bg-card">
             <fieldset disabled={locked} className="m-0 flex flex-col border-0 p-0 disabled:opacity-85">
               <legend className="sr-only">{locked ? `${name}, as sent` : "Who the hob is"}</legend>
               <div className="relative h-[170px] flex-none overflow-hidden border-b-[3px] border-line-2 bg-panel">
@@ -229,20 +238,22 @@ export function Summon() {
                   <Button type="button" variant="outline" size="xs" onClick={newLook} className="bg-ground">
                     New look
                   </Button>
-                  <span aria-live="polite" title={look.recipe} className="text-[11px] text-label">
-                    Look #{draft.lookSeed}
-                    <span className="sr-only">, {look.recipe}</span>
+                  <span aria-live="polite" className="max-w-[230px] text-[11px] text-label">
+                    Look <b className="text-text tabular-nums">#{draft.lookSeed}</b> · {look.recipe}
                   </span>
                 </div>
-                <fieldset className="absolute top-3 right-3 m-0 border-0 p-0">
-                  <legend className="sr-only">Colors</legend>
-                  <ColorSwatches
-                    value={draft.lookColor}
-                    onPick={(lookColor) => setDraft((d) => ({ ...d, lookColor }))}
-                    size="small"
-                    className="grid grid-cols-2 gap-1.5"
+                <div className="absolute top-3 right-3">
+                  <NearbyLooks
+                    draft={draft}
+                    onPick={(seed) => {
+                      setDraft((d) => pickLook(d, seed));
+                      setLookRolls((n) => n + 1);
+                    }}
+                    count={4}
+                    tile={34}
+                    className="grid grid-cols-2 gap-[5px]"
                   />
-                </fieldset>
+                </div>
               </div>
 
               <div className="flex flex-col gap-2.5 px-4 py-3.5">
@@ -271,6 +282,18 @@ export function Summon() {
                   />
                   <span className="min-w-0 truncate text-secondary-text">{kindLine(draft)}</span>
                 </div>
+
+                <fieldset className="m-0 flex items-center gap-2.5 border-0 p-0">
+                  <legend className="sr-only">Colors</legend>
+                  <span aria-hidden className="w-[50px] text-sm text-label">
+                    Colors
+                  </span>
+                  <ColorSwatches
+                    value={draft.lookColor}
+                    onPick={(lookColor) => setDraft((d) => ({ ...d, lookColor }))}
+                    className="flex gap-[5px]"
+                  />
+                </fieldset>
 
                 <div className="flex flex-col gap-1.5 border-t-2 border-line pt-[9px]">
                   <span className="text-sm text-label">Thinks with</span>
@@ -330,7 +353,7 @@ export function Summon() {
                       </Button>
                     </span>
                   ) : (
-                    <Brain models={models.data.models} draft={draft} onChange={setDraft} compact />
+                    <Brain models={models.data.models} draft={draft} onChange={setDraft} />
                   )}
                 </div>
 
@@ -342,6 +365,7 @@ export function Summon() {
             </fieldset>
 
             <div className="mt-auto flex flex-col gap-2 px-4 pb-4">
+              <HobSummary draft={draft} model={model} className="pb-1" />
               <Button
                 type="submit"
                 aria-disabled={problem !== undefined || create.isPending}

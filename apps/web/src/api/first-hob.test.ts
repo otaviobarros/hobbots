@@ -7,7 +7,9 @@ import {
   firstHobPayload,
   hobLine,
   keepDraft,
+  keepSummonDraft,
   keptDraftOrStored,
+  keptSummonDraft,
   nearbySeeds,
   newDraft,
   pickCraft,
@@ -18,7 +20,9 @@ import {
   rollLook,
   rollName,
   rollSeed,
+  sampleChores,
   settleBrain,
+  settleSummonDraft,
   submitDraft,
 } from "./first-hob.ts";
 
@@ -80,6 +84,11 @@ describe("first hob draft", () => {
     expect(restoreDraft(draft({ lookSeed: 77, lookBase: 12 }))).toMatchObject({ id, lookSeed: 77, lookBase: 12 });
   });
 
+  it("gives a draft saved before it had chores its craft's sample ones", () => {
+    const { chores: _, choresEdited: __, ...older } = draft({ kind: "scribe" });
+    expect(restoreDraft(older)).toMatchObject({ chores: sampleChores("scribe"), choresEdited: false });
+  });
+
   it("sends the same request on every retry once submitted, and a new id after a rejection", () => {
     const sent = submitDraft(draft({ name: "Wren" }));
     expect(sent.submitted).toMatchObject({ id, name: "Wren" });
@@ -94,6 +103,20 @@ describe("first hob draft", () => {
     expect(pickCraft(draft(), "scribe").name).toBe("Quill");
     expect(pickCraft(draft({ name: "Wren", named: true }), "scribe").name).toBe("Wren");
     expect(pickCraft(draft({ name: "Pip" }), "custom").name).toBe("Pip");
+  });
+
+  it("brings a craft's sample chores until the user writes their own", () => {
+    expect(draft().chores).toBe(sampleChores("helper"));
+    expect(pickCraft(draft(), "researcher").chores).toBe(sampleChores("researcher"));
+    expect(pickCraft(draft(), "custom").chores).toBe("");
+    const own = draft({ chores: "Water the plants.", choresEdited: true });
+    expect(pickCraft(own, "coder").chores).toBe("Water the plants.");
+  });
+
+  it("adds the chores to the instructions in the user's words, and leaves out blank ones", () => {
+    const payload = firstHobPayload(draft({ name: "Moss", chores: "  Water the plants.  " }));
+    expect(payload.instructions.endsWith("Your chores, in the user's words:\nWater the plants.")).toBe(true);
+    expect(firstHobPayload(draft({ chores: " " })).instructions).not.toContain("chores");
   });
 
   it("starts on the runtime's default model and medium effort", () => {
@@ -164,6 +187,7 @@ describe("the hob line", () => {
 describe("the kept first-hob draft", () => {
   afterEach(() => {
     keepDraft(null);
+    keepSummonDraft(null);
     vi.unstubAllGlobals();
   });
 
@@ -182,5 +206,34 @@ describe("the kept first-hob draft", () => {
     expect(keptDraftOrStored()).toEqual(kept);
     keepDraft(null);
     expect(keptDraftOrStored()).toBeNull();
+  });
+
+  it("keeps Summon's draft apart from the first hob's", () => {
+    keepDraft(draft({ name: "Pip" }));
+    keepSummonDraft(draft({ name: "Moss" }));
+    expect(keptDraftOrStored()).toMatchObject({ name: "Pip" });
+    expect(keptSummonDraft()).toMatchObject({ name: "Moss" });
+    keepSummonDraft(null);
+    expect(keptSummonDraft()).toBeNull();
+    expect(keptDraftOrStored()).toMatchObject({ name: "Pip" });
+  });
+
+  it("forgets the summoned hob's draft once its request settles", () => {
+    const sent = submitDraft(draft({ name: "Moss" }));
+    keepSummonDraft(sent);
+    settleSummonDraft(sent.id, null);
+    expect(keptSummonDraft()).toBeNull();
+  });
+
+  it("leaves a newer draft alone when an earlier summon settles late", () => {
+    const sent = submitDraft(draft({ name: "Moss" }));
+    keepSummonDraft(sent);
+    // The user reopened Summon after Moss joined the list and started on the next hob.
+    const next = draft({ id: "00000000-0000-4000-8000-000000000002", name: "Quill" });
+    keepSummonDraft(next);
+    settleSummonDraft(sent.id, null);
+    expect(keptSummonDraft()).toMatchObject({ id: next.id, name: "Quill" });
+    settleSummonDraft(sent.id, reopenDraft(sent));
+    expect(keptSummonDraft()).toMatchObject({ id: next.id, name: "Quill" });
   });
 });

@@ -1,7 +1,7 @@
 import { RuntimeHealth } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { kindLine, submitDraft } from "./first-hob.ts";
-import { newSummonDraft, pickKind, providerNotice, sampleChores, summonPayload, summonProblem } from "./summon.ts";
+import { firstHobPayload, kindLine, pickCraft, sampleChores, submitDraft } from "./first-hob.ts";
+import { newSummonDraft, openSummonDraft, providerNotice, summonProblem } from "./summon.ts";
 
 const id = "8a1f6c2e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
 const fresh = (taken: ReadonlyArray<string> = []) =>
@@ -12,6 +12,13 @@ const fresh = (taken: ReadonlyArray<string> = []) =>
   );
 
 describe("a summoned hob's draft", () => {
+  it("comes back as the user left it, unless its hob already joined", () => {
+    const left = { ...fresh(), name: "Moss", chores: "Water the plants.", choresEdited: true };
+    expect(openSummonDraft(left, [{ id: "other", name: "Pip" }])).toEqual(left);
+    expect(openSummonDraft(left, [{ id, name: "Moss" }]).id).not.toBe(id);
+    expect(openSummonDraft(null, [{ id: "other", name: "Pip" }]).name).not.toBe("Pip");
+  });
+
   it("starts as a helper with sample chores and a name no other hob has", () => {
     expect(fresh()).toMatchObject({ id, kind: "helper", name: "Pip", chores: sampleChores("helper") });
     const named = fresh(["Pip", " pip "]);
@@ -20,24 +27,24 @@ describe("a summoned hob's draft", () => {
   });
 
   it("brings a kind's name and chores until the user writes their own", () => {
-    const scribe = pickKind(fresh(), "scribe");
+    const scribe = pickCraft(fresh(), "scribe");
     expect(scribe).toMatchObject({ name: "Quill", chores: sampleChores("scribe") });
 
-    const edited = pickKind({ ...fresh(), chores: "Water the plants.", choresEdited: true, named: true }, "coder");
+    const edited = pickCraft({ ...fresh(), chores: "Water the plants.", choresEdited: true, named: true }, "coder");
     expect(edited).toMatchObject({ kind: "coder", name: "Pip", chores: "Water the plants." });
   });
 
   it("adds the chores to the instructions and leaves them out when blank", () => {
-    const payload = summonPayload({ ...pickKind(fresh(), "coder"), chores: "  Run the tests.  " });
+    const payload = firstHobPayload({ ...pickCraft(fresh(), "coder"), chores: "  Run the tests.  " });
     expect(payload).toMatchObject({ id, name: "Tinker", craft: "Coder", runtime: "claude-code" });
     expect(payload.instructions).toMatch(/^You are Tinker, a hob in Hobbots\. Your craft is Coder: /);
     expect(payload.instructions.endsWith("Your chores, in the user's words:\nRun the tests.")).toBe(true);
 
-    expect(summonPayload({ ...fresh(), chores: " " }).instructions).not.toContain("chores");
+    expect(firstHobPayload({ ...fresh(), chores: " " }).instructions).not.toContain("chores");
   });
 
   it("names the kind after the hob's name", () => {
-    expect(kindLine(pickKind(fresh(), "keeper"))).toBe("the Bookkeeper");
+    expect(kindLine(pickCraft(fresh(), "keeper"))).toBe("the Bookkeeper");
     expect(kindLine({ ...fresh(), kind: "custom", craft: "Gardening" })).toBe("good at gardening");
     expect(kindLine({ ...fresh(), kind: "custom", craft: " " })).toBe("one of a kind");
   });
@@ -87,7 +94,7 @@ describe("what stops a summon", () => {
   });
 
   it("lets a sent summon be retried, since the hub may already have made the hob", () => {
-    const sent = submitDraft(fresh(), summonPayload);
+    const sent = submitDraft(fresh());
     expect(summonProblem(sent, { pending: false, failed: true, health: undefined }, false)).toBeUndefined();
   });
 });

@@ -27,6 +27,22 @@ export const CRAFTS: ReadonlyArray<{
 /** Names and crafts are short enough for a name tag (the API's limit). */
 export const LABEL_MAX = 40;
 
+/** Long enough for a few paragraphs of chores, well inside the API's instructions limit. */
+export const CHORES_MAX = 4000;
+
+/** What a hob of each craft might do, as a starting point the user edits. */
+const SAMPLE_CHORES: Readonly<Record<CraftKind, string>> = {
+  helper: "Help me with everyday questions and small chores. Keep answers short and ask when something is unclear.",
+  scribe:
+    "Draft emails and notes from my bullet points. Keep my tone friendly and brief, and show me before anything goes out.",
+  researcher: "Look things up for me and answer with a short summary. Link every source you used.",
+  coder: "Help me build and fix code in my projects. Explain the cause of a bug before you change anything.",
+  keeper: "Help me sort receipts and bills, and list anything that does not add up.",
+  custom: "",
+};
+
+export const sampleChores = (kind: CraftKind): string => SAMPLE_CHORES[kind];
+
 const HOB_NAMES = [
   "Pip",
   "Bramble",
@@ -92,6 +108,10 @@ export interface FirstHobDraft {
   readonly kind: CraftKind;
   /** The user's own craft, used when the kind is custom. */
   readonly craft: string;
+  /** The chores in the user's own words, which Hobbots folds into the hob's instructions. */
+  readonly chores: string;
+  /** Whether the user typed the chores, so picking another craft keeps them. */
+  readonly choresEdited: boolean;
   readonly name: string;
   /** Whether the user typed or rolled the name, so picking another craft keeps it. */
   readonly named: boolean;
@@ -118,6 +138,8 @@ export const newDraft = (
     id: makeId(),
     kind: "helper",
     craft: "",
+    chores: sampleChores("helper"),
+    choresEdited: false,
     name: "Pip",
     named: false,
     lookSeed,
@@ -134,7 +156,9 @@ export const restoreDraft = (stored: Partial<FirstHobDraft> | null, random: Rand
   if (stored === null) return newDraft(random);
   const fresh = newDraft(random);
   const lookSeed = stored.lookSeed ?? fresh.lookSeed;
-  return { ...fresh, lookBase: lookSeed, ...stored, lookSeed };
+  // A draft saved before it had chores gets its craft's sample ones.
+  const chores = sampleChores(stored.kind ?? fresh.kind);
+  return { ...fresh, lookBase: lookSeed, chores, ...stored, lookSeed };
 };
 
 /** A new look from the dice, which also brings a new set of nearby looks. */
@@ -146,10 +170,15 @@ export const rollLook = <D extends FirstHobDraft>(draft: D, random: Random = Mat
 /** Picking one of the nearby looks keeps the set it was picked from. */
 export const pickLook = <D extends FirstHobDraft>(draft: D, lookSeed: number): D => ({ ...draft, lookSeed });
 
-/** Picking a craft renames an unnamed hob to that craft's usual name. */
+/** Picking a craft brings its usual name and sample chores, unless the user wrote their own. */
 export const pickCraft = <D extends FirstHobDraft>(draft: D, kind: CraftKind): D => {
   const craft = CRAFTS.find((c) => c.kind === kind);
-  return { ...draft, kind, name: draft.named || kind === "custom" || !craft ? draft.name : craft.name };
+  return {
+    ...draft,
+    kind,
+    name: draft.named || kind === "custom" || !craft ? draft.name : craft.name,
+    chores: draft.choresEdited ? draft.chores : sampleChores(kind),
+  };
 };
 
 /** The effort a model starts on: medium where it takes one, else its lowest, or none. */
@@ -198,10 +227,15 @@ const instructionsFor = (name: string, kind: CraftKind, craft: string): string =
     : `You are ${name}, a hob in Hobbots. Your craft is ${craft}: ${note.toLowerCase()}`;
 };
 
-/** The create request for the draft. The runtime's "default" entry is sent as no model. */
+/**
+ * The create request for the draft, with the chores added to the instructions when there are any.
+ * The runtime's "default" entry is sent as no model.
+ */
 export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
   const name = draft.name.trim();
   const craft = craftOf(draft);
+  const chores = draft.chores.trim();
+  const instructions = instructionsFor(name, draft.kind, craft);
   return {
     id: AgentId.make(draft.id),
     name,
@@ -211,17 +245,14 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
     runtime: "claude-code",
     model: draft.model === null || draft.model === "default" ? null : draft.model,
     effort: draft.effort,
-    instructions: instructionsFor(name, draft.kind, craft),
+    instructions: chores ? `${instructions}\n\nYour chores, in the user's words:\n${chores}` : instructions,
   };
 };
 
 /** Locks the draft to its create request; a draft already sent keeps the request it sent. */
-export const submitDraft = <D extends FirstHobDraft>(
-  draft: D,
-  toPayload: (draft: D) => CreateAgentPayload = firstHobPayload,
-): D & { readonly submitted: CreateAgentPayload } => ({
+export const submitDraft = <D extends FirstHobDraft>(draft: D): D & { readonly submitted: CreateAgentPayload } => ({
   ...draft,
-  submitted: draft.submitted ?? toPayload(draft),
+  submitted: draft.submitted ?? firstHobPayload(draft),
 });
 
 /**
@@ -237,22 +268,52 @@ export const reopenDraft = <D extends FirstHobDraft>(
   submitted: null,
 });
 
+/**
+ * A draft kept for this window under a storage key. It lives in memory, so the form works when
+ * browser storage is blocked or full; storage only brings it back after a reload.
+ */
+const draftKeeper = (key: string) => {
+  // Undefined means "not set in this window".
+  let kept: Partial<FirstHobDraft> | null | undefined;
+  const read = (): Partial<FirstHobDraft> | null =>
+    kept !== undefined ? kept : readStored<Partial<FirstHobDraft> | null>(key, null);
+  const keep = (draft: FirstHobDraft | null) => {
+    kept = draft;
+    writeStored(key, draft);
+  };
+  return {
+    /** Keeps the draft, or forgets it with null once the hob exists. */
+    keep,
+    /** The draft kept in this window, else the one browser storage remembers, else null. */
+    kept: read,
+    /**
+     * Replaces the draft only while it is still the one sent under `id`. A request that settles
+     * after the user started another draft leaves that newer draft alone.
+     */
+    settle: (id: string, next: FirstHobDraft | null) => {
+      if (read()?.id === id) keep(next);
+    },
+  };
+};
+
 /** Where onboarding keeps the draft between steps, until the summon creates the hob. */
 export const FIRST_HOB_DRAFT_KEY = "setup.firstHob";
 
-// The draft lives in memory for this window, so onboarding works when browser storage is blocked
-// or full; storage only brings it back after a reload. Undefined means "not set in this window".
-let keptDraft: Partial<FirstHobDraft> | null | undefined;
+const firstHob = draftKeeper(FIRST_HOB_DRAFT_KEY);
+export const keepDraft = firstHob.keep;
+export const keptDraftOrStored = firstHob.kept;
 
-/** Keeps the draft for the next steps, or forgets it with null once the hob exists. */
-export const keepDraft = (draft: FirstHobDraft | null) => {
-  keptDraft = draft;
-  writeStored(FIRST_HOB_DRAFT_KEY, draft);
-};
+/** Where Summon keeps its draft while the user looks elsewhere, until the hob exists. */
+export const SUMMON_DRAFT_KEY = "summon.draft";
 
-/** The draft kept in this window, else the one browser storage remembers, else null. */
-export const keptDraftOrStored = (): Partial<FirstHobDraft> | null =>
-  keptDraft !== undefined ? keptDraft : readStored<Partial<FirstHobDraft> | null>(FIRST_HOB_DRAFT_KEY, null);
+const summoning = draftKeeper(SUMMON_DRAFT_KEY);
+export const keepSummonDraft = summoning.keep;
+export const keptSummonDraft = summoning.kept;
+export const settleSummonDraft = summoning.settle;
+
+/** The model and effort the hob thinks with, such as "Claude · Sonnet · medium effort". */
+export const thinksWith = (draft: FirstHobDraft, model: RuntimeModel | undefined): string =>
+  `Claude · ${model?.displayName ?? "…"}${draft.effort ? ` · ${effortWords(draft.effort).label.toLowerCase()} effort` : ""}`;
 
 /** What the hob's line says after its name, such as "the Scribe" or "good at gardening". */
 export const kindLine = (draft: FirstHobDraft): string => {
