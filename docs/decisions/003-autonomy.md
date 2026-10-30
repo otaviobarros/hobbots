@@ -4,7 +4,7 @@ Status: **Accepted.**
 
 ## Decision
 
-Use Trusted Workspace as the default with routine autonomous authorized work, scoped authority and exceptional approvals. Careful and Trusting presets sit on either side of it; their exact policies remain open.
+Use Trusted Workspace as the default with routine autonomous authorized work, scoped authority and exceptional approvals. Careful and Trusting presets sit on either side of it; [ADR 014](014-tool-policy-and-enforcement.md) maps all three onto the MVP operations.
 
 ## Rationale
 

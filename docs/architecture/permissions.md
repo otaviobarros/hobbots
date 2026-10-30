@@ -1,24 +1,38 @@
 # Permissions and autonomy
 
-**Decided:** autonomy-first Trusted Workspace default, enforced boundaries, exceptional approvals, narrowing delegation, separate computer permission and human approval authority.
+**Decided:** autonomy-first Trusted Workspace default, enforced boundaries, exceptional approvals, narrowing delegation, separate computer permission and human approval authority. The preset mapping, folders, sandbox and Charms are decided in [ADR 014](../decisions/014-tool-policy-and-enforcement.md).
 
 Autonomy is how often an agent proceeds without interruption. Authority is which resources/actions it may use. High autonomy inside a narrow workspace is the default objective. Repeated confirmation for routine authorized edits/tests would violate the product direction.
 
-## Policy presets and their decision status
+## Policy presets
 
-Trusted Workspace is the default. The [design](../decisions/008-design.md) names the onboarding presets **Careful**, **Balanced** (Trusted Workspace, the default) and **Trusting**. Their exact policy mapping is still open.
+Trusted Workspace is the default. The [design](../decisions/008-design.md) names the onboarding presets **Careful**, **Balanced** (Trusted Workspace, the default) and **Trusting**. [ADR 014](../decisions/014-tool-policy-and-enforcement.md) maps them onto the MVP operations; it owns the table and the onboarding wording.
 
-| Mode | Intended behavior |
-|---|---|
-| Balanced: Trusted Workspace (default) | Autonomous work in approved directories/environments and authorized integrations; exceptional/high-impact operations require additional authority. |
-| Careful | Automatic permitted investigation; modifications and consequential work request approval according to policy. |
-| Trusting | Deliberately selected broad access within an explicitly chosen environment, with clear disclosure of actual runtime privileges. It never grants self-approval or Hobbots administration. |
+| Operation | Careful | Balanced (Trusted Workspace) | Trusting |
+|---|---|---|---|
+| Read files | Allow | Allow | Allow |
+| Create and edit files | Ask | Allow | Allow |
+| Delete files (checked) | Ask | Ask | Allow |
+| Run commands | Ask | Allow | Allow |
+| Local Git | Ask | Allow | Allow |
+| Push (a Charm) | Ask | Ask | Allow |
+| Push with force, or to the default branch | Ask, once only | Ask, once only | Ask, once only |
+| Use the web | Ask, per host | Allow | Allow |
+| Anything outside the hob's folders | Deny | Deny | Deny |
+
+Careful keeps investigation automatic and asks before modifications and consequential work. Trusting is deliberately broad inside the hob's folders and the sandbox, with clear disclosure of actual runtime privileges; it never grants self-approval or Hobbots administration. Per-hob overrides only narrow the table; a widening needs a separately recorded user grant. The UI says **Never** for Deny.
+
+A rule is **enforced** when a runtime or OS boundary holds it whatever the hob does, and **checked** when Hobbots recognizes and decides the operation but a permitted command could perform it another way. Delete files is checked; the Permissions tab says so.
+
+## Folders
+
+The folders approved in setup are shared by every hob, and each hob can have its own folders on top, added only by the user. Paths are compared canonically: absolute, with `..` and symlinks resolved, a not-yet-existing path through its nearest existing parent, following the volume's case sensitivity. A symlink inside a folder that points outside it is outside. `.git/hooks` and `.git/config` inside a folder are read-only for hobs, and the Hobbots data folder is never reachable from the sandbox.
 
 ## Effective policy
 
 Evaluate the applicable user, executor/environment, receiving agent, thread/Quest/task and specific-action constraints as an intersection. Delegation adds task restrictions; it never unions unrelated privileges. Permission to invoke an agent is distinct from permission to access that agent's resources. Thread overrides normally narrow scope; an expansion requires a separately recorded user grant.
 
-Resource categories include filesystem, terminal, network, Git, GitHub/external apps, browser, computer, delegation and Hobbots APIs. Keep concurrency/cost/time budgets distinct from security permissions. Evaluate Allow / Ask / Deny for a normalized operation and concrete resource, not for the model's description of intent.
+Resource categories include filesystem, terminal, network, Git, GitHub/external apps, browser, computer, delegation and Hobbots APIs; the MVP operations and their normalization are in [ADR 014](../decisions/014-tool-policy-and-enforcement.md). Keep concurrency/cost/time budgets distinct from security permissions. Evaluate Allow / Ask / Deny for a normalized operation and concrete resource, not for the model's description of intent.
 
 ## Trusted engineering example
 
@@ -35,6 +49,19 @@ Agents may request authority but cannot manufacture human approval, access user 
 ## Enforcement honesty
 
 Hobbots-managed tools pass through the permission broker. Native runtime tools use verified provider approval/sandbox hooks or an isolated environment. Arbitrary unsandboxed shell execution can escape a nominal workspace; a system prompt is not a filesystem boundary. Each adapter declares what it can enforce, observe or cannot guarantee. Block operations requiring unavailable enforcement rather than showing a reassuring but false Trusted badge.
+
+[ADR 014](../decisions/014-tool-policy-and-enforcement.md) sets the mechanism. Two layers are both required before a hob gets tools:
+
+- **The runtime's permission hooks** decide every tool call through the policy engine (for Claude Code, `canUseTool` with nothing loaded from settings on disk and no tool approved ahead of the callback).
+- **One OS sandbox around the whole runtime process**, Anthropic's sandbox-runtime (Seatbelt on macOS, bubblewrap on Linux), generated per turn from the effective policy. It denies reads of the user's data outside the hob's folders, allows writes only in the hob's folders and a private temporary folder, and sends all network traffic through a proxy that asks the policy engine about each new host. Child processes inherit it. The runtime's own sandbox stays off inside it.
+
+A sandbox that cannot start fails the turn; it never falls back silently. Where the sandbox is unavailable (Windows until sandbox-runtime's backend there matures, or a hub missing its prerequisites), commands, local Git and the web are blocked and labeled "Needs the sandbox"; file tools still work through the permission hooks.
+
+The sandbox is on by default for every hob. The user can turn it off for one hob, as a recorded grant with a confirmation check box, or let new hobs start without it when picking Trusting. An unsandboxed hob is labeled **Unsandboxed** wherever it appears, and its folder and network rules become checked rather than enforced.
+
+## Charms
+
+Capabilities that act beyond the hob's folders (Push in the MVP; later web search, computer use, purchases, phone calls, sending messages) are **Charms**. A Charm runs in the hub process outside the runtime sandbox, is offered to the runtime over its control channel rather than the network, and goes through the policy engine with Allow / Ask / Never on its exact arguments. Credentials a Charm needs stay on the hub and never enter the sandbox, so the Charm is the only route to that effect. The sandbox never blocks a Charm the user granted. Hobbots' coordination tools (delegation, messages between hobs, results) are not Charms and keep the control-plane exclusions below.
 
 Credentials remain scoped to the hub's execution environment or secrets provider and are excluded from messages/events. Hobs act only on the hub; a connected device never exposes its own files or apps. Device tokens, execution grants and agent tool credentials are separate boundaries ([deployment](deployment.md)).
 
