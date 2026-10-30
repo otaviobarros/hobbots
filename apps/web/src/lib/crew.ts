@@ -30,10 +30,10 @@ export const splitScene = <T>(ordered: ReadonlyArray<T>): { stage: Array<T>; hal
   hall: Math.max(0, ordered.length - SCENE_LIMIT),
 });
 
-/** Whether a hob matches a filter by name or craft; an empty filter matches every hob. */
-export const matchesHob = (hob: { readonly name: string; readonly craft: string }, query: string): boolean => {
+/** Whether a hob matches a filter by name or role title; an empty filter matches every hob. */
+export const matchesHob = (hob: { readonly name: string; readonly roleTitle: string }, query: string): boolean => {
   const q = query.trim().toLowerCase();
-  return q === "" || hob.name.toLowerCase().includes(q) || hob.craft.toLowerCase().includes(q);
+  return q === "" || hob.name.toLowerCase().includes(q) || hob.roleTitle.toLowerCase().includes(q);
 };
 
 /** Hobs grouped by state, in list order, leaving out empty groups; members keep their order. */

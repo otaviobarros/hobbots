@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client.ts";
 import {
   type FirstHobDraft,
+  gearOf,
   keepSummonDraft,
   keptSummonDraft,
   kindLine,
@@ -76,7 +77,11 @@ export function Summon() {
     if (models.data) setDraft((d) => (d.submitted ? d : settleBrain(d, models.data)));
   }, [models.data]);
 
-  const look = useMemo(() => hobLook(draft.lookSeed, draft.lookColor), [draft.lookSeed, draft.lookColor]);
+  const gear = gearOf(draft);
+  const look = useMemo(
+    () => hobLook(draft.lookSeed, draft.lookColor, { hat: gear.hat, tool: gear.tool }),
+    [draft.lookSeed, draft.lookColor, gear.hat, gear.tool],
+  );
   const claude = runtimes.data?.find((r) => r.runtime === "claude-code");
   const notice = providerNotice(claude);
   const connected = notice === undefined;
@@ -230,7 +235,7 @@ export function Summon() {
                 >
                   <span key={[draft.kind, draft.lookColor, draft.model, draft.effort, nameRolls].join(" ")}>
                     <span className="block animate-hb-hop">
-                      <HobSprite hob={draft} size={100} state="thinking" />
+                      <HobSprite hob={{ ...draft, ...gear }} size={100} state="thinking" />
                     </span>
                   </span>
                 </button>

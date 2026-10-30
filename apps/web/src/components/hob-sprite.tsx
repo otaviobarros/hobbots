@@ -26,7 +26,7 @@ const marks: Partial<Record<HobState, { text: string; className: string }>> = {
 };
 
 /**
- * A hob's seeded avatar with its state motion. Wrap a parent in `hop-on-hover` to make it hop
+ * A hob's seeded avatar, in its role's hat and tool, with its state motion. Wrap a parent in `hop-on-hover` to make it hop
  * on hover; `.sprite` is the element that hops.
  */
 export function HobSprite({
@@ -35,12 +35,16 @@ export function HobSprite({
   state = "idle",
   className,
 }: {
-  hob: Pick<Agent, "lookSeed" | "lookColor">;
+  /** A hob without a role hat or tool wears what its seed picks. */
+  hob: Pick<Agent, "lookSeed" | "lookColor"> & Partial<Pick<Agent, "hat" | "tool">>;
   size: number;
   state?: HobState;
   className?: string;
 }) {
-  const look = useMemo(() => hobLook(hob.lookSeed, hob.lookColor), [hob.lookSeed, hob.lookColor]);
+  const look = useMemo(
+    () => hobLook(hob.lookSeed, hob.lookColor, { hat: hob.hat, tool: hob.tool }),
+    [hob.lookSeed, hob.lookColor, hob.hat, hob.tool],
+  );
   const mark = marks[state];
   return (
     <span className={cn("relative inline-block shrink-0", className)}>

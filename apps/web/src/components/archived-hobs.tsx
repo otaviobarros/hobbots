@@ -41,7 +41,7 @@ export function ArchivedHobs() {
 
 function ArchivedHobRow({ hob }: { hob: Agent }) {
   const threads = useQuery(threadsQuery(hob.id));
-  const meta = [hob.craft, retiredLabel(hob), threads.data && chatsLabel(threads.data.length)].filter(Boolean);
+  const meta = [hob.roleTitle, retiredLabel(hob), threads.data && chatsLabel(threads.data.length)].filter(Boolean);
   return (
     <li className="flex items-center gap-4 border-b-2 border-line py-3.5">
       <HobSprite hob={hob} size={40} state="asleep" className="grayscale-60 brightness-80" />
@@ -90,7 +90,7 @@ export function ArchivedHobView({ hobId, threadId }: { hobId: AgentId; threadId?
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="font-pixel text-base font-semibold">{hob.name}</span>
             <span className="text-xs text-label">
-              {hob.craft} · {retiredLabel(hob)}
+              {hob.roleTitle} · {retiredLabel(hob)}
             </span>
           </span>
         </div>
@@ -142,7 +142,7 @@ function ArchivedThread({ hob, threadId, title }: { hob: Agent; threadId: Thread
             <span className="truncate text-secondary-text">{title}</span>
           </span>
           <span className="text-xs text-label">
-            {hob.craft} · {retiredLabel(hob)}
+            {hob.roleTitle} · {retiredLabel(hob)}
           </span>
         </div>
       </header>

@@ -116,7 +116,7 @@ function Profile({
             ← Back to chat
           </Link>
           <h1 className="m-0 truncate font-pixel text-[32px] font-bold">
-            {hob.name} <span className="font-medium text-secondary-text">the {hob.craft}</span>
+            {hob.name} <span className="font-medium text-secondary-text">the {hob.roleTitle}</span>
           </h1>
           <ul aria-label="About" className="m-0 flex list-none flex-wrap gap-2 p-0">
             <li className={cn("bg-deep px-2.5 py-1 text-[13px]", paused ? "text-lantern" : "text-mint")}>

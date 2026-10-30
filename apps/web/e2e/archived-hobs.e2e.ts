@@ -33,7 +33,11 @@ test("[TC-AG-061] a retired hob's threads open read-only from Settings › Archi
   await api(current, "PATCH", "/setup", { completed: true });
   const hob = await api<{ id: string }>(current, "POST", "/agents", {
     name: "Pip",
-    craft: "Guide",
+    role: null,
+    roleTitle: "Guide",
+    sigil: "assistant",
+    hat: null,
+    tool: null,
     lookSeed: 7,
     lookColor: "moss",
     runtime: "claude-code",

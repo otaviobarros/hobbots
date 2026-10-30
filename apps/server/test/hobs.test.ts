@@ -1,5 +1,5 @@
 import { NodeHttpServer } from "@effect/platform-node";
-import { type Agent, type Message, RuntimeModel, RuntimeModels } from "@hobbots/domain";
+import { type Agent, type Message, RuntimeModel, RuntimeModels, roleFields } from "@hobbots/domain";
 import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/runtimes";
@@ -16,7 +16,7 @@ import { HobLifecycle } from "../src/lifecycle.ts";
 
 const hob = {
   name: "Wren",
-  craft: "Scribe",
+  ...roleFields("writer"),
   lookSeed: 2 ** 32 - 1,
   lookColor: "moss",
   runtime: "claude-code",
@@ -261,8 +261,8 @@ describe("editing hobs", () => {
     // The effort is checked against the model the hob keeps.
     const noEffort = await request("PATCH", `/api/agents/${agent.id}`, { model: "fake-quick" });
     expect(noEffort).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "effort" } });
-    const blankCraft = await request("PATCH", `/api/agents/${agent.id}`, { craft: " " });
-    expect(blankCraft).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "craft" } });
+    const blankTitle = await request("PATCH", `/api/agents/${agent.id}`, { roleTitle: " " });
+    expect(blankTitle).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "roleTitle" } });
 
     const missing = await request("PATCH", `/api/agents/${crypto.randomUUID()}`, { instructions: "" });
     expect(missing).toMatchObject({ status: 404, body: { _tag: "AgentNotFound" } });
@@ -273,6 +273,46 @@ describe("editing hobs", () => {
     const quick = await request("PATCH", `/api/agents/${agent.id}`, { model: "fake-quick", effort: null });
     expect(quick.body).toMatchObject({ model: "fake-quick", effort: null, configVersion: 2 });
     expect((await request("GET", "/api/agents")).body).toEqual([quick.body]);
+  });
+
+  // covers AG-001, AG-002
+  it("[TC-AG-073] stores a role change as a new version, with a starter role's own title or a custom title and borrowed sigil", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    expect(agent).toMatchObject({
+      role: "writer",
+      roleTitle: "Writer",
+      sigil: "writer",
+      hat: "pointed",
+      tool: "quill",
+    });
+
+    // A starter role brings its title; its hat and tool are the user's to change.
+    const qa = await request("PATCH", `/api/agents/${agent.id}`, {
+      role: "qa",
+      sigil: "qa",
+      hat: "horned",
+      tool: null,
+    });
+    expect(qa.body).toMatchObject({ role: "qa", roleTitle: "QA engineer", sigil: "qa", hat: "horned", tool: null });
+    expect(qa.body.configVersion).toBe(2);
+
+    const custom = await request("PATCH", `/api/agents/${agent.id}`, {
+      role: null,
+      roleTitle: "Gardener",
+      sigil: "chef",
+    });
+    expect(custom.body).toMatchObject({ role: null, roleTitle: "Gardener", sigil: "chef", configVersion: 3 });
+
+    const renamed = await request("PATCH", `/api/agents/${agent.id}`, { role: "ceo", roleTitle: "Big boss" });
+    expect(renamed).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "roleTitle" } });
+    const unknown = await request("PATCH", `/api/agents/${agent.id}`, { role: "doctor" });
+    expect(unknown).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "role" } });
+    const borrowed = await request("POST", "/api/agents", { ...hob, role: null, roleTitle: "Bard", sigil: "fiction" });
+    expect(borrowed.body).toMatchObject({ role: null, roleTitle: "Bard", sigil: "fiction" });
+    const mismatched = await request("POST", "/api/agents", { ...hob, roleTitle: "Poet" });
+    expect(mismatched).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "roleTitle" } });
+
+    expect((await request("GET", "/api/agents")).body).toEqual([custom.body, borrowed.body]);
   });
 });
 

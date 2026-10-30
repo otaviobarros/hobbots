@@ -5,15 +5,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  craftOf,
   draftProblem,
   type FirstHobDraft,
+  gearOf,
   keepDraft,
   keptDraftOrStored,
   kindLine,
   LABEL_MAX,
   pickLook,
   restoreDraft,
+  roleTitleOf,
   rollLook,
   rollName,
   settleBrain,
@@ -61,7 +62,11 @@ function LookPreview({
   onRoll: () => void;
   onPickSeed: (seed: number) => void;
 }) {
-  const look = useMemo(() => hobLook(draft.lookSeed, draft.lookColor), [draft.lookSeed, draft.lookColor]);
+  const gear = gearOf(draft);
+  const look = useMemo(
+    () => hobLook(draft.lookSeed, draft.lookColor, { hat: gear.hat, tool: gear.tool }),
+    [draft.lookSeed, draft.lookColor, gear.hat, gear.tool],
+  );
   const [stars] = useState(previewStars);
   const name = draft.name.trim() || "your hob";
   return (
@@ -91,7 +96,7 @@ function LookPreview({
         className="absolute top-[128px] left-[62px] cursor-pointer border-0 bg-transparent p-0 hover:brightness-110"
       >
         <span key={hops} className="block animate-hb-hop">
-          <HobSprite hob={draft} size={140} state="thinking" />
+          <HobSprite hob={{ ...draft, ...gear }} size={140} state="thinking" />
         </span>
       </button>
       {lookRolls > 0 && (
@@ -160,7 +165,7 @@ export function OnboardingFirstHob() {
     : (problem ??
       (draft.kind === "custom"
         ? `${draft.name.trim()} is ready`
-        : `${draft.name.trim()} the ${craftOf(draft)} is ready`));
+        : `${draft.name.trim()} the ${roleTitleOf(draft)} is ready`));
 
   return (
     <OnboardingFrame

@@ -17,7 +17,7 @@ const summonHob = Effect.gen(function* () {
     new Agent({
       id: HOB_ID,
       name: "Aldric",
-      craft: "Guide",
+      roleTitle: "Guide",
       runtime: "claude-code",
       model: null,
       effort: null,

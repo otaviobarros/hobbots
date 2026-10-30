@@ -118,7 +118,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
           >
             <HobSprite hob={hob} size={24} state={hob.status === "paused" ? "paused" : "idle"} />
             <span className="font-pixel text-sm font-semibold">{hob.name}</span>
-            <span className="min-w-0 flex-1 truncate text-[13px] text-label">{hob.craft}</span>
+            <span className="min-w-0 flex-1 truncate text-[13px] text-label">{hob.roleTitle}</span>
             {index === current && <span className="text-xs text-label">↵ open</span>}
           </div>
         ))}

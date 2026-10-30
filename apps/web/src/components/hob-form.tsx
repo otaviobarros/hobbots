@@ -9,6 +9,7 @@ import {
   CRAFTS,
   effortWords,
   type FirstHobDraft,
+  gearOf,
   LABEL_MAX,
   nearbySeeds,
   pickCraft,
@@ -272,7 +273,7 @@ export function NearbyLooks({
                 aria-label={`Look ${seed}`}
                 className="sr-only"
               />
-              <HobSprite hob={{ lookSeed: seed, lookColor: draft.lookColor }} size={tile - 8} />
+              <HobSprite hob={{ lookSeed: seed, lookColor: draft.lookColor, ...gearOf(draft) }} size={tile - 8} />
             </label>
           ))}
       </div>

@@ -31,7 +31,9 @@ const hubWithTwentyHobs = async () => {
     const hob = await api("POST", "/agents", {
       id: randomUUID(),
       name,
-      craft: i === 13 ? "Cartographer" : "Helper",
+      ...(i === 13
+        ? { role: null, roleTitle: "Cartographer", sigil: "assistant", hat: null, tool: null }
+        : { role: "assistant", roleTitle: "Assistant", sigil: "assistant", hat: "pointed", tool: "none" }),
       lookSeed: 1000 + i * 337,
       lookColor: "violet",
       runtime: "claude-code",
@@ -45,7 +47,7 @@ const hubWithTwentyHobs = async () => {
 };
 
 // covers UX-001
-test("[TC-UX-001] with 20 hobs the scene shows six, the hall holds 14 and the filter finds a hob by craft", async ({
+test("[TC-UX-001] with 20 hobs the scene shows six, the hall holds 14 and the filter finds a hob by role title", async ({
   page,
 }) => {
   const { url } = await hubWithTwentyHobs();

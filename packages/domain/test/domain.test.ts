@@ -50,7 +50,7 @@ describe("AgentTransitions", () => {
   const hob = new Agent({
     id: AgentId.make("wren"),
     name: "Wren",
-    craft: "Scribe",
+    roleTitle: "Writer",
     runtime: "claude-code",
     model: null,
     effort: null,

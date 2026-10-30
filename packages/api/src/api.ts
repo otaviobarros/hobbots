@@ -8,6 +8,9 @@ import {
   LookSeed,
   Message,
   RetireWork,
+  RoleHat,
+  RoleId,
+  RoleTool,
   RuntimeHealth,
   RuntimeKind,
   RuntimeModels,
@@ -30,7 +33,15 @@ export const CreateAgentPayload = Schema.Struct({
    */
   id: Schema.optionalKey(AgentId.check(Schema.isUUID())),
   name: Label,
-  craft: Label,
+  /** A starter role, or null when the title is the user's own words. */
+  role: Schema.NullOr(RoleId),
+  /** The starter role's title, or the user's own words. */
+  roleTitle: Label,
+  /** The starter role whose sigil the hob shows; a custom title can borrow any of them. */
+  sigil: RoleId,
+  /** The hat and tool the sprite wears, or null to leave them to the look seed. */
+  hat: Schema.NullOr(RoleHat),
+  tool: Schema.NullOr(RoleTool),
   lookSeed: LookSeed,
   lookColor: HobColor,
   runtime: RuntimeKind,
@@ -47,7 +58,12 @@ export type CreateAgentPayload = typeof CreateAgentPayload.Type;
  * something becomes the hob's next configuration version (AG-002).
  */
 export const UpdateAgentPayload = Schema.Struct({
-  craft: Schema.optionalKey(Label),
+  /** A starter role brings its title unless the edit names one. */
+  role: Schema.optionalKey(Schema.NullOr(RoleId)),
+  roleTitle: Schema.optionalKey(Label),
+  sigil: Schema.optionalKey(RoleId),
+  hat: Schema.optionalKey(Schema.NullOr(RoleHat)),
+  tool: Schema.optionalKey(Schema.NullOr(RoleTool)),
   lookSeed: Schema.optionalKey(LookSeed),
   lookColor: Schema.optionalKey(HobColor),
   model: Schema.optionalKey(Schema.NullOr(Schema.NonEmptyString)),

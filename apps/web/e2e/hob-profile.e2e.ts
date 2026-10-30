@@ -41,7 +41,11 @@ const hubWithPip = async (): Promise<{ current: Hub; pip: Hob }> => {
   await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
   const pip = await api<Hob>(current, "POST", "/api/agents", {
     name: "Pip",
-    craft: "Scribe",
+    role: "writer",
+    roleTitle: "Writer",
+    sigil: "writer",
+    hat: "pointed",
+    tool: "quill",
     lookSeed: 4821,
     lookColor: "violet",
     runtime: "claude-code",
@@ -67,7 +71,7 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
   await send(page, "first");
 
   await page.getByRole("link", { name: "Edit hob" }).click();
-  await expect(page.getByRole("heading", { name: "Pip the Scribe" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pip the Writer" })).toBeVisible();
   const instructions = page.getByRole("textbox", { name: "Instructions" });
   await expect(instructions).toHaveValue("Write short answers.");
   await instructions.fill("Write long answers.");
@@ -100,7 +104,7 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
-  await expect(page.getByRole("heading", { name: "Pip the Scribe" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pip the Writer" })).toBeVisible();
 
   await page.getByRole("button", { name: "Pause Pip" }).click();
   await expect(page.getByRole("listitem").filter({ hasText: /^Paused$/ })).toBeVisible();
