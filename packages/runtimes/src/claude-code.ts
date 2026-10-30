@@ -2,6 +2,7 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { accessSync, constants, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import type { Readable } from "node:stream";
 import { promisify } from "node:util";
 import {
   type AccountInfo,
@@ -142,6 +143,38 @@ const waitForExit = (child: ChildProcess) =>
     if (hasExited(child)) done();
     return Effect.sync(() => child.off("exit", done));
   });
+
+const stderrTailLimit = 4096;
+
+/**
+ * Keeps the end of Claude Code's error output. `read` waits briefly for the output to close, since the
+ * process can report its exit before its last lines arrive.
+ */
+export const stderrTail = (stderr: Readable, limit = stderrTailLimit) => {
+  let tail = "";
+  stderr.setEncoding("utf8");
+  stderr.on("data", (chunk: string) => {
+    tail = (tail + chunk).slice(-limit);
+  });
+  const closed = Effect.callback<void>((resume) => {
+    const done = () => resume(Effect.void);
+    stderr.once("close", done);
+    if (stderr.closed) done();
+    return Effect.sync(() => stderr.off("close", done));
+  });
+  return {
+    read: closed.pipe(
+      Effect.timeoutOption("1 second"),
+      Effect.map(() => tail.trim()),
+    ),
+  };
+};
+
+/** A failed turn's error, with what Claude Code wrote to stderr when the process itself failed. */
+const withStderr = (error: RuntimeError, child: ChildProcess | undefined, tail: string) =>
+  child && tail !== "" && ((child.exitCode !== null && child.exitCode !== 0) || child.signalCode !== null)
+    ? new RuntimeError({ message: `${error.message}\n${tail}` })
+    : error;
 
 /** Waits until a Claude Code process has exited, killing it if it is still running after the grace period. */
 export const exited = (child: ChildProcess, grace: Duration.Input = shutdownGrace) =>
@@ -325,15 +358,17 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const abortController = new AbortController();
           // Hobbots starts the process itself so it can tell when it has really exited.
           let child: ChildProcess | undefined;
+          let stderr: ReturnType<typeof stderrTail> | undefined;
           const spawnClaudeCodeProcess = ({ command, args, cwd, env, signal }: SpawnOptions) => {
             const spawned = spawn(command, args, {
               cwd,
               env,
               signal,
-              stdio: ["pipe", "pipe", "ignore"],
+              stdio: ["pipe", "pipe", "pipe"],
               windowsHide: true,
             });
             child = spawned;
+            stderr = stderrTail(spawned.stderr);
             return spawned;
           };
           const turn = yield* Effect.acquireRelease(
@@ -366,6 +401,13 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           return Stream.fromAsyncIterable(turn, errorMessage).pipe(
             Stream.mapEffect((message) => Effect.try({ try: () => toEvents(message), catch: errorMessage })),
             Stream.flattenIterable,
+            Stream.catch((error) =>
+              Stream.unwrap(
+                (stderr ? stderr.read : Effect.succeed("")).pipe(
+                  Effect.map((tail) => Stream.fail(withStderr(error, child, tail))),
+                ),
+              ),
+            ),
           );
         }),
       );
