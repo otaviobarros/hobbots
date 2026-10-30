@@ -8,8 +8,9 @@ const server = resolve(web, "../server");
 /** Where test hubs keep their data: under the checkout and git-ignored, never the user's Hobbots data. */
 const dataRoot = resolve(web, "../../.data/e2e");
 
-// One port for every hub; the tests run one at a time. Set HOBBOTS_E2E_PORT beside another server.
-const port = Number(process.env.HOBBOTS_E2E_PORT ?? 4380);
+// One port per Playwright worker, counted up from HOBBOTS_E2E_PORT (set it beside another server):
+// a worker runs one test at a time, so its hubs never overlap.
+const port = Number(process.env.HOBBOTS_E2E_PORT ?? 4380) + Number(process.env.TEST_PARALLEL_INDEX ?? 0);
 
 export interface Hub {
   /** The served web client, as the desktop app loads it. */

@@ -25,13 +25,13 @@ const api = async <T>(current: Hub, method: string, path: string, body?: unknown
   return (await response.json()) as T;
 };
 
-/** Sends a prompt and waits for the fake runtime's echo to finish. */
-const chat = async (current: Hub, threadId: string, content: string) => {
-  await api(current, "POST", `/threads/${threadId}/messages`, { content });
+/** Sends prompts, which queue and run in order, and waits for the fake runtime's echoes to finish. */
+const chat = async (current: Hub, threadId: string, ...contents: ReadonlyArray<string>) => {
+  for (const content of contents) await api(current, "POST", `/threads/${threadId}/messages`, { content });
   await expect
     .poll(async () => {
       const messages = await api<Array<{ status: string }>>(current, "GET", `/threads/${threadId}/messages`);
-      return messages.every((m) => m.status === "complete");
+      return messages.length === contents.length * 2 && messages.every((m) => m.status === "complete");
     })
     .toBe(true);
 };
@@ -56,10 +56,10 @@ const hubWithHistory = async () => {
     instructions: "",
   });
   const old = await api<{ id: string }>(current, "POST", `/agents/${hob.id}/threads`);
-  await chat(current, old.id, "Where did I put the lanterns?");
-  // Enough later talk in the same thread that the lantern message starts out of sight.
-  for (let turn = 1; turn <= 12; turn++)
-    await chat(current, old.id, `Note ${turn}: ${"water the plants. ".repeat(12)}`);
+  // Enough later talk in the same thread that the lantern message starts out of sight. The notes
+  // are tall but have few spaces, since the fake runtime streams its echo a word every 40 ms.
+  const notes = Array.from({ length: 12 }, (_, turn) => `Note ${turn + 1}:\n${"Water-the-plants.\n".repeat(12)}`);
+  await chat(current, old.id, "Where did I put the lanterns?", ...notes);
   const recent = await api<{ id: string }>(current, "POST", `/agents/${hob.id}/threads`);
   await chat(current, recent.id, "Plan my week");
   return { current, hob, old, recent };
