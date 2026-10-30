@@ -249,7 +249,6 @@ export function OnboardingProviders() {
   const navigate = useNavigate();
   const router = useRouter();
   const canGoBack = useCanGoBack();
-  const finish = useUpdateSetup();
   const providers = useUpdateSetup();
   const runtimes = useQuery(runtimesQuery);
   // Another window or device may connect or disconnect a provider while this step is open.
@@ -287,13 +286,12 @@ export function OnboardingProviders() {
           : GUIDE.fix;
 
   const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/where" }));
-  // The first-hob step (#68) takes over from here; until it exists, setup ends on Home.
   const next = () => {
     if (!ready) return setNudged(true);
-    finish.mutate({ completed: true }, { onSuccess: () => navigate({ to: "/" }) });
+    void navigate({ to: "/setup/hob" });
   };
 
-  const failed = finish.isError || providers.isError;
+  const failed = providers.isError;
 
   return (
     <OnboardingFrame
@@ -320,7 +318,7 @@ export function OnboardingProviders() {
             onClick={next}
             aria-disabled={!ready}
             aria-describedby="providers-hint"
-            disabled={finish.isPending || providers.isPending}
+            disabled={providers.isPending}
             className={
               ready ? undefined : "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_#22203f] hover:bg-line-2"
             }

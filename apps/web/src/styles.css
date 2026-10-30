@@ -69,6 +69,8 @@
   --animate-hb-firefly: hb-firefly 5s steps(10) infinite;
   --animate-hb-smoke: hb-smoke 3s steps(8) infinite;
   --animate-hb-say: hb-say 1.4s steps(6) both;
+  /* The name and look dice turn a quarter at a time. */
+  --animate-hb-roll: hb-roll 0.5s steps(4) 1;
 
   @keyframes hb-bob {
     0%,
@@ -131,6 +133,11 @@
     }
     100% {
       transform: scale(1);
+    }
+  }
+  @keyframes hb-roll {
+    to {
+      transform: rotate(360deg);
     }
   }
   @keyframes hb-blink {

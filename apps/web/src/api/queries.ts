@@ -1,4 +1,5 @@
-import type { AgentId, Message, Thread, ThreadId } from "@hobbots/domain";
+import type { CreateAgentPayload } from "@hobbots/api";
+import type { Agent, AgentId, Message, RuntimeKind, Thread, ThreadId } from "@hobbots/domain";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { runtimeStaleTime } from "./runtime-health.ts";
@@ -8,6 +9,7 @@ export const queryKeys = {
   threads: (agentId: AgentId) => ["agents", agentId, "threads"] as const,
   messages: (threadId: ThreadId) => ["threads", threadId, "messages"] as const,
   runtimes: ["runtimes"] as const,
+  models: (runtime: RuntimeKind) => ["runtimes", runtime, "models"] as const,
 };
 
 export const agentsQuery = queryOptions({
@@ -34,6 +36,23 @@ export const runtimesQuery = queryOptions({
   staleTime: (query) => runtimeStaleTime(query.state.data),
   refetchOnWindowFocus: true,
 });
+
+/** The models a runtime offers a hob's brain. */
+export const modelsQuery = (runtime: RuntimeKind) =>
+  queryOptions({
+    queryKey: queryKeys.models(runtime),
+    queryFn: () => call((c) => c.runtimes.models({ params: { runtime } })),
+    staleTime: 60_000,
+  });
+
+/** Creates a hob; the hob list gains it now rather than waiting for the live event. */
+export const useCreateHob = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateAgentPayload) => call((c) => c.agents.create({ payload })),
+    onSuccess: (hob) => queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.agents, (old) => upsertById(old, hob)),
+  });
+};
 
 /** Inserts or replaces by id, keeping the list order stable for existing items. */
 export const upsertById = <T extends { readonly id: string }>(
