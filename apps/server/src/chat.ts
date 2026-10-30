@@ -8,6 +8,7 @@ import {
   MessageId,
   MessageTransitions,
   QueuedMessageTransitions,
+  systemInstructions,
   Thread,
   ThreadId,
   titleFromPrompt,
@@ -164,7 +165,7 @@ export class ChatService extends Context.Service<
         );
 
       // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
-      const runTurn = (config: AgentConfiguration, thread: Thread, prompt: string, reply: Reply) =>
+      const runTurn = (name: string, config: AgentConfiguration, thread: Thread, prompt: string, reply: Reply) =>
         Effect.gen(function* () {
           const threadRef = yield* Ref.make(thread);
           // Saves the streamed text about once a second without journaling it, so a crash keeps
@@ -220,7 +221,7 @@ export class ChatService extends Context.Service<
             .sendPrompt({
               prompt,
               sessionId: thread.runtimeSessionId,
-              instructions: config.instructions,
+              instructions: systemInstructions(name, config),
               model: config.model,
               effort: config.effort,
             })
@@ -281,7 +282,9 @@ export class ChatService extends Context.Service<
           yield* FiberMap.run(
             turns,
             thread.id,
-            runTurn(config, updated, prompt, reply).pipe(Effect.ensuring(Effect.forkIn(drain(thread.id), scope))),
+            runTurn(agent.name, config, updated, prompt, reply).pipe(
+              Effect.ensuring(Effect.forkIn(drain(thread.id), scope)),
+            ),
           );
           return saved;
         });

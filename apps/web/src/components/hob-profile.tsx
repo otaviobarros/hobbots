@@ -19,7 +19,6 @@ import {
   rebaseDraft,
   retiredSummary,
   roleProblem,
-  roleRewrite,
 } from "../api/profile.ts";
 import { agentsQuery, modelsQuery, threadsQuery, usePauseHob, useRetireHob, useUpdateHob } from "../api/queries.ts";
 import { presetInfo, type RuleAnswer } from "../api/safety.ts";
@@ -257,8 +256,6 @@ function ProfileTab({ hob }: { hob: Agent }) {
   const [draft, setDraft] = useState<ProfileDraft>(base);
   const [saved, setSaved] = useState<number | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  // The role the user chose to keep their own instructions for, so the offer stays away for it.
-  const [keptFor, setKeptFor] = useState<string | null>(null);
   const dirty = isDirty(base, draft);
   const baseRef = useRef(base);
   baseRef.current = base;
@@ -278,8 +275,6 @@ function ProfileTab({ hob }: { hob: Agent }) {
   const problem = roleProblem(draft);
   const changes = Object.keys(edit).length > 0 && problem === undefined;
   const rejected = update.error instanceof ApiError && update.error.tag === "InvalidHob" ? update.error : undefined;
-  const roleKey = `${draft.role}:${draft.roleTitle.trim()}`;
-  const rewrite = keptFor === roleKey ? undefined : roleRewrite(hob.name, draft);
 
   const save = (event: React.FormEvent) => {
     event.preventDefault();
@@ -323,26 +318,6 @@ function ProfileTab({ hob }: { hob: Agent }) {
               Role
             </h2>
             <RoleCard name={hob.name} draft={draft} disabled={update.isPending} onChange={() => setSheetOpen(true)} />
-            {rewrite !== undefined && (
-              <div className="cut flex flex-wrap items-center gap-3 border-2 border-lantern bg-card px-3.5 py-2.5 text-sm">
-                <span className="min-w-[240px] flex-1">
-                  The instructions still name {hob.name}'s old role. Rewrite their first line for{" "}
-                  {draft.roleTitle.trim()}?
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  disabled={update.isPending}
-                  onClick={() => setDraft((d) => ({ ...d, instructions: rewrite }))}
-                >
-                  Rewrite first line
-                </Button>
-                <Button type="button" variant="outline" size="xs" onClick={() => setKeptFor(roleKey)}>
-                  Keep mine
-                </Button>
-              </div>
-            )}
           </section>
 
           <section className="flex flex-col gap-2">
@@ -350,7 +325,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
               Instructions
             </label>
             <span id="hob-instructions-note" className="text-sm text-secondary-text">
-              {hob.name} reads this before every reply. Written by Hobbots from your description; edit freely.
+              {hob.name} reads this before every reply, after its name and role. Add anything else it should know.
             </span>
             <textarea
               id="hob-instructions"
@@ -465,7 +440,8 @@ function RoleCard({
           {draft.role === null ? "A title in your own words." : starterRole(draft.role).note}
         </span>
         <span className="text-[13px] text-label">
-          A role is a label. It changes how {name} looks, not what {name} may do.
+          {name} is told its role before every reply. A role changes how {name} looks and works, never what {name} may
+          do.
         </span>
       </span>
       <Button type="button" variant="outline" disabled={disabled} onClick={onChange}>

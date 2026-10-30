@@ -1191,3 +1191,27 @@ export const roleFields = (id: RoleId) => {
   const role = starterRole(id);
   return { role: id, roleTitle: role.title, sigil: id, hat: role.hat, tool: role.tool } as const;
 };
+
+/**
+ * Who the hob is, as the hub tells its runtime at the start of every turn: its name and its role,
+ * with the starter role's note. The role is never written into the instructions, so a role change
+ * applies from the next turn.
+ */
+export const hobIdentity = (name: string, role: RoleId | null, roleTitle: string): string =>
+  role === null
+    ? `You are ${name}, a hob in Hobbots. Your role is ${roleTitle}.`
+    : `You are ${name}, a hob in Hobbots. Your role is ${roleTitle}: ${starterRole(role).note.toLowerCase()}`;
+
+/**
+ * What the runtime is told before the user's messages, in labeled sections so the model can tell
+ * what Hobbots states about the hob from what the user wrote: who the hob is, then its instructions.
+ */
+export const systemInstructions = (
+  name: string,
+  config: { readonly role: RoleId | null; readonly roleTitle: string; readonly instructions: string },
+): string => {
+  const identity = hobIdentity(name, config.role, config.roleTitle);
+  const instructions = config.instructions.trim();
+  const about = `## About you\n${identity}`;
+  return instructions === "" ? about : `${about}\n\n## Your instructions, from the user\n${instructions}`;
+};

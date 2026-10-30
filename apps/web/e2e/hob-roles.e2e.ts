@@ -116,12 +116,8 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   await sheet.getByRole("button", { name: "Use Writer" }).click();
   await expect(sheet).toBeHidden();
 
-  // The instructions Summon wrote still name the old role, so the profile offers to rewrite their first line.
-  const instructions = profile.getByRole("textbox", { name: "Instructions" });
-  await expect(instructions).toHaveValue(/^You are Fern, a hob in Hobbots\. Your role is Frontend wizard\./);
-  await profile.getByRole("button", { name: "Rewrite first line" }).click();
-  await expect(instructions).toHaveValue(/^You are Fern, a hob in Hobbots\. Your role is Writer: drafts emails/);
-  await expect(profile.getByRole("button", { name: "Rewrite first line" })).toBeHidden();
+  // The hub tells the hob its role on every turn, so the instructions never name it.
+  await expect(profile.getByRole("textbox", { name: "Instructions" })).not.toHaveValue(/a hob in Hobbots/);
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect
     .poll(async () => {
@@ -132,6 +128,6 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
       role: "writer",
       roleTitle: "Writer",
       sigil: "writer",
-      instructions: expect.stringMatching(/^You are Fern, a hob in Hobbots\. Your role is Writer: /),
+      instructions: expect.not.stringContaining("a hob in Hobbots"),
     });
 });

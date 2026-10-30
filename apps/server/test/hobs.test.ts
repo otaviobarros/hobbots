@@ -1,5 +1,5 @@
 import { NodeHttpServer } from "@effect/platform-node";
-import { type Agent, type Message, RuntimeModel, RuntimeModels, roleFields } from "@hobbots/domain";
+import { type Agent, type Message, RuntimeModel, RuntimeModels, roleFields, starterRole } from "@hobbots/domain";
 import { HobbotsRepository, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/runtimes";
@@ -24,6 +24,10 @@ const hob = {
   effort: "high",
   instructions: "Write short answers.",
 };
+
+// What the runtime is told on every turn: who the hob is, then its instructions.
+const told = (instructions: string, name = "Wren", role: "writer" | "qa" = "writer") =>
+  `## About you\nYou are ${name}, a hob in Hobbots. Your role is ${starterRole(role).title}: ${starterRole(role).note.toLowerCase()}\n\n## Your instructions, from the user\n${instructions}`;
 
 let prompts: Array<PromptRequest>;
 // Each turn waits for this before the runtime replies, so a test can act while a reply is running.
@@ -100,7 +104,7 @@ describe("creating hobs", () => {
       ),
     );
     expect(prompts.map((p) => [p.model, p.effort, p.instructions])).toEqual([
-      ["fake-thinker", "high", "Write short answers."],
+      ["fake-thinker", "high", told("Write short answers.")],
     ]);
   });
 
@@ -131,8 +135,8 @@ describe("creating hobs", () => {
     // Each turn runs with its own hob's brain and instructions.
     expect(new Set(prompts.map((p) => JSON.stringify([p.model, p.effort, p.instructions])))).toEqual(
       new Set([
-        JSON.stringify(["fake-thinker", "high", "Write short answers."]),
-        JSON.stringify(["fake-quick", null, "Tidy files."]),
+        JSON.stringify(["fake-thinker", "high", told("Write short answers.")]),
+        JSON.stringify(["fake-quick", null, told("Tidy files.", "Moss")]),
       ]),
     );
     // Each hob sees only its own thread, and each thread only its own messages.
@@ -244,7 +248,7 @@ describe("editing hobs", () => {
     await request("POST", `/api/threads/${thread.id}/messages`, { content: "second" });
     await settled();
 
-    expect(prompts.map((p) => p.instructions)).toEqual(["Write short answers.", "Write long answers."]);
+    expect(prompts.map((p) => p.instructions)).toEqual([told("Write short answers."), told("Write long answers.")]);
     expect((await messages()).map((m) => [m.role, m.content, m.configVersion])).toEqual([
       ["user", "first", null],
       ["assistant", "Echo: first", 1],
@@ -315,6 +319,29 @@ describe("editing hobs", () => {
     expect(mismatched).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "roleTitle" } });
 
     expect((await request("GET", "/api/agents")).body).toEqual([custom.body, borrowed.body]);
+  });
+
+  // covers AG-002
+  it("[TC-AG-083] tells the runtime the hob's current role on the next turn, ahead of its instructions", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const send = async (content: string, count: number) => {
+      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === count);
+    };
+
+    await send("first", 2);
+    await request("PATCH", `/api/agents/${agent.id}`, { role: "qa", sigil: "qa" });
+    await send("second", 4);
+    await request("PATCH", `/api/agents/${agent.id}`, { role: null, roleTitle: "Gardener", instructions: "" });
+    await send("third", 6);
+
+    expect(prompts.map((p) => p.instructions)).toEqual([
+      told("Write short answers."),
+      told("Write short answers.", "Wren", "qa"),
+      "## About you\nYou are Wren, a hob in Hobbots. Your role is Gardener.",
+    ]);
   });
 });
 

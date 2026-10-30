@@ -136,7 +136,8 @@ export function RoleSheet({
 
       <div className="flex items-center gap-3 border-t-2 border-line px-5 py-3.5">
         <span className="flex-1 text-sm text-secondary-text">
-          A role is a label. It changes how {name} looks, not what {name} may do.
+          {name} is told its role before every reply. A role changes how {name} looks and works, never what {name} may
+          do.
         </span>
         <Button type="button" onClick={onClose}>
           Use {picked}
