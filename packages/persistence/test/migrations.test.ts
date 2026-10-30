@@ -309,4 +309,57 @@ describe("0013_hob_identity", () => {
     expect(result.agents).toEqual(expected);
     expect(result.versions).toEqual(expected.flatMap((instructions) => [instructions, instructions]));
   });
+
+  // covers AG-002, DP-003
+  it("[TC-AG-085] removes an opening written for a title the hob had before its role changed", async () => {
+    // Each hob: name, its titles from version 1 on (the last is current), and the instructions it kept.
+    const hobs = [
+      // Created with its own title, then given a starter role without rewriting the instructions.
+      ["Fern", ["Gardener", "Writer"], "You are Fern, a hob in Hobbots. Your role is Gardener.\n\nWater the plants."],
+      // An own title in the old wording, then another own title.
+      ["Moss", ["Guide", "Mentor"], "You are Moss, a hob in Hobbots. You are good at guide.\n\nBe gentle."],
+      // A title this hob never had stays: the user may have written it.
+      ["Bram", ["Writer", "Editor"], "You are Bram, a hob in Hobbots. Your role is Baker.\n\nBake."],
+    ] as const;
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      for (const [index, [name, titles, instructions]] of hobs.entries()) {
+        yield* sql`INSERT INTO agents ${sql.insert({
+          id: `hob${index}`,
+          name,
+          roleTitle: titles[titles.length - 1] ?? "",
+          runtime: "claude-code",
+          instructions,
+          lookSeed: index,
+          lookColor: "moss",
+          configVersion: titles.length,
+          createdAt: "2026-10-30T00:00:00.000Z",
+        })}`;
+        for (const [at, roleTitle] of titles.entries()) {
+          yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+            agentId: `hob${index}`,
+            version: at + 1,
+            roleTitle,
+            instructions,
+            lookSeed: index,
+            lookColor: "moss",
+            createdAt: "2026-10-30T00:00:00.000Z",
+          })}`;
+        }
+      }
+      yield* hobIdentity;
+      return {
+        agents: (yield* sql<{ instructions: string }>`SELECT instructions FROM agents ORDER BY id`).map(
+          (row) => row.instructions,
+        ),
+        versions: (yield* sql<{ instructions: string }>`
+          SELECT instructions FROM agent_config_versions ORDER BY agent_id, version
+        `).map((row) => row.instructions),
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0013"))), Effect.runPromise);
+
+    const expected = ["Water the plants.", "Be gentle.", hobs[2][2]];
+    expect(result.agents).toEqual(expected);
+    expect(result.versions).toEqual(expected.flatMap((instructions) => [instructions, instructions]));
+  });
 });

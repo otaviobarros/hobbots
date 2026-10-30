@@ -75,20 +75,23 @@ const crafts: ReadonlyArray<readonly [string, string]> = [
   ["Bookkeeper", "receipts, bills and spreadsheets."],
 ];
 
-/** Every opening Hobbots could have written for a hob with this name and role title. */
-const openings = (name: string, title: string): ReadonlyArray<string> => {
+/**
+ * Every opening Hobbots could have written for a hob with this name, given every role title it has
+ * had: a title in the user's own words was written into the opening as it was then, and a later
+ * role change left that opening in place.
+ */
+const openings = (name: string, titles: ReadonlyArray<string>): ReadonlyArray<string> => {
   const you = `You are ${name}, a hob in Hobbots.`;
   return [
     ...roles.map(([role, note]) => `${you} Your role is ${role}: ${note}`),
     ...crafts.map(([craft, note]) => `${you} Your craft is ${craft}: ${note}`),
-    `${you} Your role is ${title}.`,
-    `${you} You are good at ${title.toLowerCase()}.`,
+    ...titles.flatMap((title) => [`${you} Your role is ${title}.`, `${you} You are good at ${title.toLowerCase()}.`]),
   ];
 };
 
 /** The instructions without the opening Hobbots wrote, or unchanged when they start any other way. */
-export const withoutOpening = (name: string, title: string, instructions: string): string => {
-  for (const opening of openings(name, title)) {
+export const withoutOpening = (name: string, titles: ReadonlyArray<string>, instructions: string): string => {
+  for (const opening of openings(name, titles)) {
     if (instructions === opening) return "";
     if (instructions.startsWith(`${opening}\n`)) return instructions.slice(opening.length).replace(/^\n+/, "");
   }
@@ -100,23 +103,23 @@ export default Effect.gen(function* () {
   const agents = yield* sql<{ id: string; name: string; roleTitle: string; instructions: string }>`
     SELECT id, name, role_title, instructions FROM agents
   `;
+  const versions = yield* sql<{ agentId: string; version: number; roleTitle: string; instructions: string }>`
+    SELECT agent_id, version, role_title, instructions FROM agent_config_versions
+  `;
+  // Every title each hob has had, current and in any saved version.
+  const titles = new Map<string, Set<string>>(agents.map((agent) => [agent.id, new Set([agent.roleTitle])]));
+  for (const v of versions) titles.get(v.agentId)?.add(v.roleTitle);
+  const names = new Map(agents.map((agent) => [agent.id, agent.name]));
+
   for (const agent of agents) {
-    const instructions = withoutOpening(agent.name, agent.roleTitle, agent.instructions);
+    const instructions = withoutOpening(agent.name, [...(titles.get(agent.id) ?? [])], agent.instructions);
     if (instructions !== agent.instructions)
       yield* sql`UPDATE agents SET instructions = ${instructions} WHERE id = ${agent.id}`;
   }
-  const versions = yield* sql<{
-    agentId: string;
-    version: number;
-    name: string;
-    roleTitle: string;
-    instructions: string;
-  }>`
-    SELECT v.agent_id, v.version, a.name, v.role_title, v.instructions
-    FROM agent_config_versions v JOIN agents a ON a.id = v.agent_id
-  `;
   for (const v of versions) {
-    const instructions = withoutOpening(v.name, v.roleTitle, v.instructions);
+    const name = names.get(v.agentId);
+    if (name === undefined) continue;
+    const instructions = withoutOpening(name, [...(titles.get(v.agentId) ?? [])], v.instructions);
     if (instructions !== v.instructions) {
       yield* sql`UPDATE agent_config_versions SET instructions = ${instructions}
         WHERE agent_id = ${v.agentId} AND version = ${v.version}`;
