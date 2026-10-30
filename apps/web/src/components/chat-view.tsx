@@ -1,7 +1,7 @@
 import type { AgentId, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import {
@@ -100,8 +100,10 @@ export function ChatView({
           </span>
         </div>
         <RuntimeChip />
-        <Button variant="outline" disabled title="Editing hobs arrives with the MVP">
-          Edit hob
+        <Button asChild variant="outline">
+          <Link to="/hobs/$hobId/profile" params={{ hobId }}>
+            Edit hob
+          </Link>
         </Button>
         <Button
           variant="icon"

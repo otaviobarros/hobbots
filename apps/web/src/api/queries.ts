@@ -1,5 +1,5 @@
-import type { CreateAgentPayload } from "@hobbots/api";
-import type { Agent, AgentId, Message, RuntimeKind, Thread, ThreadId } from "@hobbots/domain";
+import type { CreateAgentPayload, UpdateAgentPayload } from "@hobbots/api";
+import type { Agent, AgentId, Message, RetireWork, RuntimeKind, Thread, ThreadId } from "@hobbots/domain";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { runtimeStaleTime } from "./runtime-health.ts";
@@ -65,6 +65,37 @@ export const useCreateHob = () => {
     onSuccess: (hob) => queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.agents, (old) => upsertById(old, hob)),
   });
 };
+
+/**
+ * Writes a hob the hub returned into the hob list now rather than waiting for the live event. A
+ * retired hob leaves the list, as the server's list leaves it out.
+ */
+const useHobChange = <V>(change: (variables: V) => Promise<Agent>) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: change,
+    onSuccess: (hob) =>
+      queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.agents, (old) =>
+        hob.status === "retired" ? old?.filter((h) => h.id !== hob.id) : upsertById(old, hob),
+      ),
+  });
+};
+
+/** Edits a hob's configuration; each edit that changes something is its next version. */
+export const useUpdateHob = (agentId: AgentId) =>
+  useHobChange((payload: UpdateAgentPayload) => call((c) => c.agents.update({ params: { agentId }, payload })));
+
+/** Pauses or wakes a hob. */
+export const usePauseHob = (agentId: AgentId) =>
+  useHobChange((pause: boolean) =>
+    call((c) => (pause ? c.agents.pause({ params: { agentId } }) : c.agents.wake({ params: { agentId } }))),
+  );
+
+/** Retires a hob; its replies finish or stop, and nothing is deleted. */
+export const useRetireHob = (agentId: AgentId) =>
+  useHobChange((activeWork: RetireWork) =>
+    call((c) => c.agents.retire({ params: { agentId }, payload: { activeWork } })),
+  );
 
 /** Inserts or replaces by id, keeping the list order stable for existing items. */
 export const upsertById = <T extends { readonly id: string }>(

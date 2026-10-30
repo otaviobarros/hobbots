@@ -102,7 +102,14 @@ export const rollSeed = (current: number, random: Random = Math.random): number 
 export const nearbySeeds = (seed: number): ReadonlyArray<number> =>
   [1, 2, 3, 4, 5].map((k) => ((seed * 31 + k * 7919) % 9998) + 1);
 
-export interface FirstHobDraft {
+/** The model and effort a hob thinks with, as a form holds them. */
+export interface BrainChoice {
+  /** A model id from the runtime's list; null until the list arrives. */
+  readonly model: string | null;
+  readonly effort: Effort | null;
+}
+
+export interface FirstHobDraft extends BrainChoice {
   /** The hob's id, chosen up front so a retried create returns the hob made the first time. */
   readonly id: string;
   readonly kind: CraftKind;
@@ -119,9 +126,6 @@ export interface FirstHobDraft {
   /** The look "More like this" is drawn from; only a new look moves it, so picking one keeps the set. */
   readonly lookBase: number;
   readonly lookColor: HobColor;
-  /** A model id from the runtime's list; null until the list arrives. */
-  readonly model: string | null;
-  readonly effort: Effort | null;
   /**
    * The create request once Continue sent it. From then on the hob may exist, so the choices stay
    * locked and every retry sends this same request; only a rejected request unlocks them.
@@ -195,7 +199,7 @@ export const startingModel = (models: RuntimeModels): RuntimeModel | undefined =
  * The draft's model and effort, settled against what the runtime offers now: a model it no
  * longer lists falls back to its default, and an effort the model does not take to its own.
  */
-export const settleBrain = <D extends FirstHobDraft>(draft: D, models: RuntimeModels): D => {
+export const settleBrain = <D extends BrainChoice>(draft: D, models: RuntimeModels): D => {
   const model = models.models.find((m) => m.id === draft.model) ?? startingModel(models);
   const effort = draft.effort !== null && model?.efforts.includes(draft.effort) ? draft.effort : startingEffort(model);
   const settled = model?.id ?? null;
@@ -203,7 +207,7 @@ export const settleBrain = <D extends FirstHobDraft>(draft: D, models: RuntimeMo
 };
 
 /** Picking a model keeps the effort when the new model takes it. */
-export const pickModel = <D extends FirstHobDraft>(draft: D, model: RuntimeModel): D => ({
+export const pickModel = <D extends BrainChoice>(draft: D, model: RuntimeModel): D => ({
   ...draft,
   model: model.id,
   effort: draft.effort !== null && model.efforts.includes(draft.effort) ? draft.effort : startingEffort(model),

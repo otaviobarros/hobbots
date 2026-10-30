@@ -12,6 +12,7 @@ import { agentsQuery, archivedAgentsQuery, threadsQuery } from "./api/queries.ts
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
 import { ArchivedHobView } from "./components/archived-hobs.tsx";
+import { HobProfile } from "./components/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
 import { OnboardingFirstHob } from "./components/onboarding-first-hob.tsx";
@@ -155,6 +156,16 @@ const threadRoute = createRoute({
   },
 });
 
+// The hob's profile: its instructions, brain, Pause / Wake and Retire.
+const profileRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "hobs/$hobId/profile",
+  component: function ProfilePage() {
+    const params = profileRoute.useParams();
+    return <HobProfile key={params.hobId} hobId={AgentId.make(params.hobId)} />;
+  },
+});
+
 // Summon names the new hob apart from the hobs already there, so it loads them first.
 const summonRoute = createRoute({
   getParentRoute: () => shellRoute,
@@ -166,7 +177,6 @@ const summonRoute = createRoute({
 const inboxRoute = createRoute({ getParentRoute: () => shellRoute, path: "inbox", component: InboxPage });
 const usageRoute = createRoute({ getParentRoute: () => shellRoute, path: "usage", component: UsagePage });
 const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "settings", component: SettingsPage });
-
 // Settings › Archived hobs: retired hobs, whose threads open read-only (AG-006).
 const archivedRoute = createRoute({
   getParentRoute: () => shellRoute,
@@ -220,6 +230,7 @@ const routeTree = rootRoute.addChildren([
     hobRoute,
     newThreadRoute,
     threadRoute,
+    profileRoute,
     summonRoute,
     inboxRoute,
     usageRoute,
