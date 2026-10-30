@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
 import { app, BrowserWindow, dialog, ipcMain, shell, utilityProcess } from "electron";
+import { handleFolderDialogIpc } from "./folder-dialog.ts";
 import { handleKeepRunningIpc } from "./keep-running.ts";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
 import { startMenuBar } from "./menu-bar.ts";
@@ -131,6 +132,13 @@ app.whenReady().then(async () => {
     openSystemSettings: () => shell.openExternal(loginItemsSettingsUrl),
   });
   handleKeepRunningIpc({ ipcMain, settings, isTrusted });
+  handleFolderDialogIpc({
+    ipcMain,
+    isTrusted,
+    windowOf: (event) => BrowserWindow.fromWebContents(event.sender),
+    showOpenDialog: (window, options) =>
+      window ? dialog.showOpenDialog(window, options) : dialog.showOpenDialog(options),
+  });
   const menuBar = startMenuBar({ supervisor, settings, apiUrl, port, createWindow });
   try {
     await supervisor.start();
