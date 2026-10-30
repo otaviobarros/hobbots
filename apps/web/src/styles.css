@@ -71,6 +71,7 @@
   --animate-hb-say: hb-say 1.4s steps(6) both;
   /* The name and look dice turn a quarter at a time. */
   --animate-hb-roll: hb-roll 0.5s steps(4) 1;
+  --animate-hb-poof: hb-poof 0.7s steps(6) both;
 
   @keyframes hb-bob {
     0%,
@@ -138,6 +139,20 @@
   @keyframes hb-roll {
     to {
       transform: rotate(360deg);
+    }
+  }
+  @keyframes hb-poof {
+    0% {
+      transform: scale(0.3);
+      opacity: 0;
+    }
+    40% {
+      transform: scale(1.25);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1.7);
+      opacity: 0;
     }
   }
   @keyframes hb-blink {

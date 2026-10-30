@@ -126,13 +126,17 @@ function Brain({
             className="flex-col items-start gap-px py-[5px]"
           >
             <span className="font-bold">{m.displayName}</span>
-            <span className="max-w-[220px] truncate text-xs opacity-85">{m.description}</span>
+            <span className="max-w-[220px] text-xs opacity-85">{m.description}</span>
           </Choice>
         ))}
       </fieldset>
       {efforts.length > 0 ? (
         <fieldset className="m-0 flex flex-wrap items-center gap-3 border-0 p-0">
-          <legend className="float-left mr-3 text-sm font-bold">Effort</legend>
+          <legend className="sr-only">Effort</legend>
+          {/* A legend cannot sit inline with the row, so the visible label is a plain span. */}
+          <span aria-hidden className="text-sm font-bold">
+            Effort
+          </span>
           <div className="flex border-2 border-control">
             {efforts.map((effort: Effort, i) => {
               const on = effort === draft.effort;
@@ -171,12 +175,21 @@ function Brain({
   );
 }
 
+/** A few stars in the preview's sky, placed once per visit. */
+const previewStars = () =>
+  Array.from({ length: 9 }, () => ({
+    left: 12 + Math.floor(Math.random() * 236),
+    top: 70 + Math.floor(Math.random() * 180),
+    delay: Math.random() * 3,
+  }));
+
 function LookPreview({
   draft,
   craftLine,
   craftNote,
   brainLine,
   lookRolls,
+  hops,
   onRoll,
   onPickSeed,
 }: {
@@ -185,16 +198,27 @@ function LookPreview({
   craftNote: string;
   brainLine: string;
   lookRolls: number;
+  /** Changes with every choice, so the hob hops each time. */
+  hops: string;
   onRoll: () => void;
   onPickSeed: (seed: number) => void;
 }) {
   const look = useMemo(() => hobLook(draft.lookSeed, draft.lookColor), [draft.lookSeed, draft.lookColor]);
+  const [stars] = useState(previewStars);
   const name = draft.name.trim() || "your hob";
   return (
     <section
       aria-label="Preview"
       className="cut relative h-[520px] w-[268px] flex-none overflow-hidden border-2 border-line bg-panel"
     >
+      {stars.map((star) => (
+        <span
+          key={`${star.left}-${star.top}`}
+          aria-hidden
+          className="absolute size-[3px] animate-hb-twinkle bg-[#cfc8ff]"
+          style={{ left: star.left, top: star.top, animationDelay: `${star.delay}s` }}
+        />
+      ))}
       <div aria-hidden className="absolute inset-x-0 top-[280px] h-[240px] bg-[#221d44]" />
       <div aria-hidden className="absolute inset-x-[54px] top-[268px] h-3.5 bg-line-2" />
       <div className="absolute inset-x-0 top-4 flex flex-col items-center gap-0.5 px-4">
@@ -208,10 +232,18 @@ function LookPreview({
         title="Click for a new look"
         className="absolute top-[128px] left-[62px] cursor-pointer border-0 bg-transparent p-0 hover:brightness-110"
       >
-        <span key={lookRolls} className="block animate-hb-pop">
+        <span key={hops} className="block animate-hb-hop">
           <HobSprite hob={draft} size={140} state="thinking" />
         </span>
       </button>
+      {lookRolls > 0 && (
+        // A puff as the hob changes its look; it fades by itself and never shows under Reduce motion.
+        <span
+          key={lookRolls}
+          aria-hidden
+          className="pointer-events-none absolute top-[120px] left-16 size-[140px] animate-hb-poof rounded-full bg-text motion-reduce:hidden"
+        />
+      )}
       <div className="absolute inset-x-4 top-[296px] flex flex-col gap-2.5">
         <div className="flex items-center gap-2">
           <span aria-live="polite" className="min-w-0 flex-1 text-[13px] text-secondary-text">
@@ -330,9 +362,10 @@ export function OnboardingFirstHob() {
       ? `Hobbots could not finish making ${draft.name.trim()}. Try again in a moment.`
       : busy
         ? `Making ${draft.name.trim()}…`
-        : problem && (tried || !model)
-          ? problem
-          : `${draft.name.trim()} the ${craftOf(draft) || "hob"} is ready`;
+        : (problem ??
+          (draft.kind === "custom"
+            ? `${draft.name.trim()} is ready`
+            : `${draft.name.trim()} the ${craftOf(draft)} is ready`));
 
   return (
     <OnboardingFrame
@@ -349,7 +382,7 @@ export function OnboardingFirstHob() {
             role={failed ? "alert" : undefined}
             className={cn(
               "flex-1 text-right text-sm",
-              failed ? "text-rose" : problem && (tried || !model) ? "text-lantern" : "text-secondary-text",
+              failed ? "text-rose" : problem && tried ? "text-lantern" : "text-secondary-text",
             )}
           >
             {hint}
@@ -503,6 +536,7 @@ export function OnboardingFirstHob() {
           craftNote={craft?.note ?? ""}
           brainLine={brainLine}
           lookRolls={lookRolls}
+          hops={[draft.kind, draft.lookColor, draft.lookSeed, draft.model, draft.effort, nameRolls].join(" ")}
           onRoll={() => {
             setDraft((d) => rollLook(d));
             setLookRolls((n) => n + 1);
