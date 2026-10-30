@@ -13,6 +13,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { HobService } from "../src/hobs.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { HobLifecycle } from "../src/lifecycle.ts";
 
 // Folders are checked on the hub, so the tests make real ones.
 const temp = mkdtempSync(join(tmpdir(), "hobbots-setup-"));
@@ -31,16 +32,18 @@ beforeEach(() => {
   const Persistence = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(
     Layer.provideMerge(TestDatabase),
   );
-  const App = Layer.mergeAll(ChatService.layer, HobService.layer).pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        Persistence,
-        EventBus.layer,
-        FakeRuntimeLayer(),
-        Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/data" }),
+  const App = HobLifecycle.layer
+    .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)))
+    .pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Persistence,
+          EventBus.layer,
+          FakeRuntimeLayer(),
+          Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/data" }),
+        ),
       ),
-    ),
-  );
+    );
   const web = HttpRouter.toWebHandler(
     ApiRoutes.pipe(Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
     { disableLogger: true },

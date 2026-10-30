@@ -1,10 +1,20 @@
-import { AgentId, ThreadId } from "@hobbots/domain";
+import { AgentId, AgentStatus, ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 
 export class AgentNotFound extends Schema.TaggedError<AgentNotFound>()(
   "AgentNotFound",
   { agentId: AgentId },
   { httpApiStatus: 404 },
+) {}
+
+/**
+ * A hob that is not active refuses new work: a paused hob until it is woken, a retired hob for
+ * good. Also returned when pausing or waking a retired hob.
+ */
+export class HobUnavailable extends Schema.TaggedError<HobUnavailable>()(
+  "HobUnavailable",
+  { agentId: AgentId, status: AgentStatus },
+  { httpApiStatus: 409 },
 ) {}
 
 export class ThreadNotFound extends Schema.TaggedError<ThreadNotFound>()(

@@ -1,11 +1,13 @@
 import {
   Agent,
   AgentId,
+  AgentStatus,
   Effort,
   HobbotsEvent,
   HobColor,
   LookSeed,
   Message,
+  RetireWork,
   RuntimeHealth,
   RuntimeKind,
   RuntimeModels,
@@ -14,7 +16,7 @@ import {
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/http-api";
-import { AgentNotFound, InvalidHob, ThreadBusy, ThreadNotFound } from "./errors.ts";
+import { AgentNotFound, HobUnavailable, InvalidHob, ThreadBusy, ThreadNotFound } from "./errors.ts";
 import { SetupGroup } from "./setup.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
@@ -59,6 +61,12 @@ export class HobInputErrors extends HttpApiMiddleware.Service<HobInputErrors>()(
   error: InvalidHob,
 }) {}
 
+/** Retiring asks what happens to the hob's running replies; handing them to another hob comes later. */
+export const RetireAgentPayload = Schema.Struct({
+  activeWork: RetireWork,
+});
+export type RetireAgentPayload = typeof RetireAgentPayload.Type;
+
 export const SendPromptPayload = Schema.Struct({
   content: Schema.NonEmptyString,
 });
@@ -94,7 +102,11 @@ export const Activity = Schema.Struct({
 
 export class AgentsGroup extends HttpApiGroup.make("agents")
   .add(
-    HttpApiEndpoint.get("list", "/agents", { success: Schema.Array(Agent) }),
+    // Without a status, lists the hobs that are not retired; `?status=retired` lists Archived hobs.
+    HttpApiEndpoint.get("list", "/agents", {
+      query: { status: Schema.optionalKey(AgentStatus) },
+      success: Schema.Array(Agent),
+    }),
     HttpApiEndpoint.post("create", "/agents", {
       payload: CreateAgentPayload,
       success: Agent,
@@ -106,6 +118,22 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       success: Agent,
       error: [InvalidHob, AgentNotFound],
     }).middleware(HobInputErrors),
+    HttpApiEndpoint.post("pause", "/agents/:agentId/pause", {
+      params: { agentId: AgentId },
+      success: Agent,
+      error: [AgentNotFound, HobUnavailable],
+    }),
+    HttpApiEndpoint.post("wake", "/agents/:agentId/wake", {
+      params: { agentId: AgentId },
+      success: Agent,
+      error: [AgentNotFound, HobUnavailable],
+    }),
+    HttpApiEndpoint.post("retire", "/agents/:agentId/retire", {
+      params: { agentId: AgentId },
+      payload: RetireAgentPayload,
+      success: Agent,
+      error: AgentNotFound,
+    }),
     HttpApiEndpoint.get("threads", "/agents/:agentId/threads", {
       params: { agentId: AgentId },
       success: Schema.Array(Thread),
@@ -114,7 +142,7 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
     HttpApiEndpoint.post("createThread", "/agents/:agentId/threads", {
       params: { agentId: AgentId },
       success: Thread,
-      error: AgentNotFound,
+      error: [AgentNotFound, HobUnavailable],
     }),
   )
   .prefix("/api") {}
@@ -130,7 +158,7 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       payload: SendPromptPayload,
       success: SendPromptResult,
-      error: [ThreadNotFound, ThreadBusy],
+      error: [ThreadNotFound, ThreadBusy, HobUnavailable],
     }),
     HttpApiEndpoint.post("interrupt", "/threads/:threadId/interrupt", {
       params: { threadId: ThreadId },

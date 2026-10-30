@@ -1,5 +1,6 @@
-import { AgentNotFound, ThreadBusy, ThreadNotFound } from "@hobbots/api";
+import { AgentNotFound, HobUnavailable, ThreadBusy, ThreadNotFound } from "@hobbots/api";
 import {
+  type Agent,
   type AgentConfiguration,
   type AgentId,
   DEFAULT_THREAD_TITLE,
@@ -20,12 +21,17 @@ const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 export class ChatService extends Context.Service<
   ChatService,
   {
-    readonly createThread: (agentId: AgentId) => Effect.Effect<Thread, AgentNotFound>;
+    readonly createThread: (agentId: AgentId) => Effect.Effect<Thread, AgentNotFound | HobUnavailable>;
     readonly sendPrompt: (
       threadId: ThreadId,
       content: string,
-    ) => Effect.Effect<{ userMessage: Message; assistantMessage: Message }, ThreadNotFound | ThreadBusy>;
+    ) => Effect.Effect<
+      { userMessage: Message; assistantMessage: Message },
+      ThreadNotFound | ThreadBusy | HobUnavailable
+    >;
     readonly interrupt: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
+    /** Stops every turn the hob has in progress and waits until each is recorded as interrupted. */
+    readonly interruptAgent: (agentId: AgentId) => Effect.Effect<void>;
     /** Threads with a turn in progress in this process. */
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
   }
@@ -53,6 +59,12 @@ export class ChatService extends Context.Service<
           ),
         );
 
+      // Only an active hob takes new work; a paused or retired hob's threads stay readable.
+      const requireActive = (agent: Agent) =>
+        agent.status === "active"
+          ? Effect.void
+          : Effect.fail(new HobUnavailable({ agentId: agent.id, status: agent.status }));
+
       const saveThread = (thread: Thread) =>
         repo.upsertThread(thread).pipe(Effect.andThen(bus.publish({ _tag: "ThreadUpserted", thread })));
 
@@ -62,6 +74,7 @@ export class ChatService extends Context.Service<
       const createThread = Effect.fn("ChatService.createThread")(function* (agentId: AgentId) {
         const agent = yield* repo.findAgent(agentId);
         if (Option.isNone(agent)) return yield* new AgentNotFound({ agentId });
+        yield* requireActive(agent.value);
         const now = yield* nowIso;
         const thread = new Thread({
           id: ThreadId.make(crypto.randomUUID()),
@@ -178,6 +191,7 @@ export class ChatService extends Context.Service<
         if (yield* FiberMap.has(turns, threadId)) return yield* new ThreadBusy({ threadId });
         const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
         const config = yield* repo.findAgentConfig(agent.id, agent.configVersion).pipe(Effect.map(Option.getOrThrow));
+        yield* requireActive(agent);
         const now = yield* nowIso;
 
         const userMessage = new Message({
@@ -220,7 +234,14 @@ export class ChatService extends Context.Service<
 
       const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
 
-      return ChatService.of({ createThread, sendPrompt, interrupt, activeThreads });
+      const interruptAgent = Effect.fn("ChatService.interruptAgent")(function* (agentId: AgentId) {
+        for (const threadId of yield* activeThreads) {
+          const thread = yield* repo.findThread(threadId);
+          if (Option.isSome(thread) && thread.value.agentId === agentId) yield* FiberMap.remove(turns, threadId);
+        }
+      });
+
+      return ChatService.of({ createThread, sendPrompt, interrupt, interruptAgent, activeThreads });
     }),
   );
 }

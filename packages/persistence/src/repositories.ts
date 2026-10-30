@@ -1,4 +1,4 @@
-import { Agent, AgentConfiguration, type AgentId, Message, Thread, type ThreadId } from "@hobbots/domain";
+import { Agent, AgentConfiguration, type AgentId, AgentStatus, Message, Thread, type ThreadId } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, type Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -13,7 +13,10 @@ export class HobbotsRepository extends Context.Service<
   HobbotsRepository,
   {
     readonly listAgents: Effect.Effect<ReadonlyArray<Agent>>;
+    /** Hobs in any of the given lifecycle states, oldest first. */
+    readonly listAgentsWithStatus: (statuses: ReadonlyArray<AgentStatus>) => Effect.Effect<ReadonlyArray<Agent>>;
     readonly findAgent: (id: AgentId) => Effect.Effect<Option.Option<Agent>>;
+    readonly setAgentStatus: (id: AgentId, status: AgentStatus) => Effect.Effect<void>;
     /** Inserts the hob and its first configuration unless one with its id exists; true when it was inserted. */
     readonly insertAgent: (agent: Agent) => Effect.Effect<boolean>;
     readonly findAgentConfig: (id: AgentId, version: number) => Effect.Effect<Option.Option<AgentConfiguration>>;
@@ -49,6 +52,14 @@ export class HobbotsRepository extends Context.Service<
         Request: Schema.Void,
         Result: Agent,
         execute: () => sql`SELECT * FROM agents ORDER BY created_at, ${byId}`.pipe(Effect.map(agentRows)),
+      });
+      const listAgentsWithStatus = SqlSchema.findAll({
+        Request: Schema.Array(AgentStatus),
+        Result: Agent,
+        execute: (statuses) =>
+          sql`SELECT * FROM agents WHERE ${sql.in("status", statuses)} ORDER BY created_at, ${byId}`.pipe(
+            Effect.map(agentRows),
+          ),
       });
       const findAgent = SqlSchema.findOneOption({
         Request: Schema.String,
@@ -110,6 +121,7 @@ export class HobbotsRepository extends Context.Service<
             look_seed: agent.lookSeed,
             look_color: agent.lookColor,
             config_version: agent.configVersion,
+            status: agent.status,
             created_at: agent.createdAt,
           })} ON CONFLICT (id) DO NOTHING RETURNING id`;
           if (inserted.length === 0) return false;
@@ -168,7 +180,11 @@ export class HobbotsRepository extends Context.Service<
 
       return HobbotsRepository.of({
         listAgents: listAgents().pipe(Effect.orDie),
+        listAgentsWithStatus: (statuses) =>
+          statuses.length === 0 ? Effect.succeed([]) : listAgentsWithStatus(statuses).pipe(Effect.orDie),
         findAgent: (id) => findAgent(id).pipe(Effect.orDie),
+        setAgentStatus: (id, status) =>
+          sql`UPDATE agents SET status = ${status} WHERE id = ${id}`.pipe(Effect.asVoid, Effect.orDie),
         insertAgent: (agent) => insertAgent(agent).pipe(Effect.orDie),
         findAgentConfig: (agentId, version) => findAgentConfig({ agentId, version }).pipe(Effect.orDie),
         updateAgentConfig: (agent) =>

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  Agent,
+  AgentId,
+  AgentTransitions,
+  InvalidAgentTransition,
   InvalidMessageTransition,
   Message,
   MessageId,
@@ -39,5 +43,41 @@ describe("titleFromPrompt", () => {
     expect(titleFromPrompt("  hi\n there ")).toBe("hi there");
     expect(titleFromPrompt("x".repeat(80))).toHaveLength(60);
     expect(titleFromPrompt("   ")).toBe("New thread");
+  });
+});
+
+describe("AgentTransitions", () => {
+  const hob = new Agent({
+    id: AgentId.make("wren"),
+    name: "Wren",
+    craft: "Scribe",
+    runtime: "claude-code",
+    model: null,
+    effort: null,
+    instructions: "",
+    lookSeed: 7,
+    lookColor: "moss",
+    configVersion: 1,
+    createdAt: "2026-10-28T00:00:00.000Z",
+  });
+
+  it("starts a new hob active, pauses, wakes and retires it", () => {
+    expect(hob.status).toBe("active");
+    const paused = AgentTransitions.pause(hob) as Agent;
+    expect(paused.status).toBe("paused");
+    expect((AgentTransitions.wake(paused) as Agent).status).toBe("active");
+    expect((AgentTransitions.retire(paused) as Agent).status).toBe("retired");
+  });
+
+  it("returns the hob unchanged when it is already in the requested state", () => {
+    expect(AgentTransitions.wake(hob)).toBe(hob);
+    const retired = AgentTransitions.retire(hob) as Agent;
+    expect(AgentTransitions.retire(retired)).toBe(retired);
+  });
+
+  it("keeps a retired hob retired", () => {
+    const retired = AgentTransitions.retire(hob) as Agent;
+    expect(AgentTransitions.pause(retired)).toMatchObject({ _tag: "InvalidAgentTransition", from: "retired" });
+    expect(AgentTransitions.wake(retired)).toBeInstanceOf(InvalidAgentTransition);
   });
 });

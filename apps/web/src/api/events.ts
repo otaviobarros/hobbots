@@ -12,8 +12,13 @@ const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(HobbotsEvent)
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   switch (event._tag) {
     case "AgentUpserted":
+      // The hob list leaves retired hobs out, as the server's list does.
       queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.agents, (old) =>
-        old ? upsertById(old, event.agent) : old,
+        old === undefined
+          ? old
+          : event.agent.status === "retired"
+            ? old.filter((agent) => agent.id !== event.agent.id)
+            : upsertById(old, event.agent),
       );
       return;
     case "ThreadUpserted":
