@@ -13,3 +13,7 @@ Runtime tool side effects are not inside a SQL transaction. Record intent and re
 Back up relational state and artifact storage consistently. Define migration, retention, redaction and restore policy before release. Each installation has one database; there are no replicas to synchronize. Test duplicate handling, crash boundaries, leases, migrations and restore against SQLite, and against PostgreSQL before offering it.
 
 The journal keeps 7 days and at least the latest 10,000 entries; an older cursor gets an explicit snapshot refresh. It serves client resume only: durable work keeps its own records, so compaction never discards what open responsibilities need. Exclude secrets from payloads and restrict artifact access through executor/workspace policy.
+
+## Search
+
+Thread titles and finished messages are searchable (CH-006). Migration `0011_search_index` adds the index: FTS5 tables with triggers on SQLite, GIN expression indexes on PostgreSQL ([ADR 011](../decisions/011-sqlite-storage.md)). The index changes in the same write as the thread or message, a reply joins it once it stops streaming, and the migration indexes what was already stored. Threads of retired hobs are left out. `GET /api/search?q=` returns one hit per thread, most recently active first, with its newest matching messages as snippets; it emits no events.

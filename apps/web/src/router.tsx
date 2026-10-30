@@ -143,16 +143,27 @@ const newThreadRoute = createRoute({
   },
 });
 
+// `?message=` names a message to scroll to, as a search result does.
 const threadRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId/threads/$threadId",
+  validateSearch: (search: Record<string, unknown>): { message?: string | undefined } => ({
+    message: typeof search.message === "string" ? search.message : undefined,
+  }),
   beforeLoad: ({ params }) => {
     writeStored(lastHobKey, params.hobId);
     writeStored(lastThreadKey(params.hobId), params.threadId);
   },
   component: function ThreadPage() {
     const params = threadRoute.useParams();
-    return <HobsLayout hobId={AgentId.make(params.hobId)} threadId={ThreadId.make(params.threadId)} />;
+    const { message } = threadRoute.useSearch();
+    return (
+      <HobsLayout
+        hobId={AgentId.make(params.hobId)}
+        threadId={ThreadId.make(params.threadId)}
+        focusMessageId={message}
+      />
+    );
   },
 });
 

@@ -1,13 +1,12 @@
-import type { Agent } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { agentsQuery } from "../api/queries.ts";
-import { matchesHob } from "../lib/crew.ts";
 import { HobSprite } from "./hob-sprite.tsx";
+import { ResultDetail, resultLink, type SearchResult, useSearchResults } from "./search-results.tsx";
 
-/** ⌘K (Ctrl+K elsewhere) from any page opens a finder that jumps to a hob's chat. */
+/** ⌘K (Ctrl+K elsewhere) from any page opens a finder that jumps to a hob, or to a thread by its title or messages. */
 export function HobJump() {
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -35,7 +34,7 @@ export function HobJump() {
     // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard closes the dialog with Escape; the click is for the backdrop.
     <dialog
       ref={dialog}
-      aria-label="Jump to a hob"
+      aria-label="Jump anywhere"
       onClose={() => setOpen(false)}
       onClick={(event) => {
         // A click on the backdrop lands on the dialog itself; inside it lands on its content.
@@ -49,23 +48,28 @@ export function HobJump() {
 }
 
 function JumpList({ onDone }: { onDone: () => void }) {
-  const agents = useQuery(agentsQuery);
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const matches = (agents.data ?? []).filter((hob) => matchesHob(hob, query));
-  const current = Math.min(active, Math.max(0, matches.length - 1));
-  const activeId = matches[current]?.id;
+  // An empty finder lists every hob; typing also finds threads by their title or messages.
+  const agents = useQuery(agentsQuery);
+  const found = useSearchResults(query);
+  const options: ReadonlyArray<SearchResult> =
+    query.trim() === ""
+      ? (agents.data ?? []).map((hob) => ({ kind: "hob", key: `hob-${hob.id}`, hob }))
+      : found.results;
+  const current = Math.min(active, Math.max(0, options.length - 1));
+  const activeKey = options[current]?.key;
 
-  // Focus stays in the input, so the list scrolls itself to keep the active hob in sight.
+  // Focus stays in the input, so the list scrolls itself to keep the active option in sight.
   useEffect(() => {
-    if (activeId) document.getElementById(`hob-jump-${activeId}`)?.scrollIntoView({ block: "nearest" });
-  }, [activeId]);
+    if (activeKey) document.getElementById(`hob-jump-${activeKey}`)?.scrollIntoView({ block: "nearest" });
+  }, [activeKey]);
 
-  const go = (hob: Agent | undefined) => {
-    if (!hob) return;
+  const go = (option: SearchResult | undefined) => {
+    if (!option) return;
     onDone();
-    void navigate({ to: "/hobs/$hobId", params: { hobId: hob.id } });
+    void navigate(resultLink(option));
   };
 
   return (
@@ -77,9 +81,9 @@ function JumpList({ onDone }: { onDone: () => void }) {
         role="combobox"
         aria-expanded
         aria-controls="hob-jump-list"
-        aria-activedescendant={activeId ? `hob-jump-${activeId}` : undefined}
-        aria-label="Find a hob by name or role"
-        placeholder="Jump to a hob…"
+        aria-activedescendant={activeKey ? `hob-jump-${activeKey}` : undefined}
+        aria-label="Find a hob, thread or message"
+        placeholder="Jump to a hob or thread…"
         value={query}
         onChange={(event) => {
           setQuery(event.target.value);
@@ -88,12 +92,12 @@ function JumpList({ onDone }: { onDone: () => void }) {
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault();
-            if (matches.length === 0) return;
+            if (options.length === 0) return;
             const step = event.key === "ArrowDown" ? 1 : -1;
-            setActive((current + step + matches.length) % matches.length);
+            setActive((current + step + options.length) % options.length);
           } else if (event.key === "Enter") {
             event.preventDefault();
-            go(matches[current]);
+            go(options[current]);
           }
         }}
         className="border-2 border-control bg-deep px-2.5 py-2 text-[15px] text-text placeholder:text-label"
@@ -101,29 +105,40 @@ function JumpList({ onDone }: { onDone: () => void }) {
       <div
         id="hob-jump-list"
         role="listbox"
-        aria-label="Hobs"
+        aria-label="Hobs and threads"
         className="flex max-h-[320px] flex-col overflow-y-auto p-0"
       >
-        {matches.map((hob, index) => (
+        {options.map((option, index) => (
           // biome-ignore lint/a11y/useKeyWithClickEvents: the combobox input moves through the options and opens one with Enter.
           <div
-            key={hob.id}
+            key={option.key}
             tabIndex={-1}
-            id={`hob-jump-${hob.id}`}
+            id={`hob-jump-${option.key}`}
             role="option"
             aria-selected={index === current}
-            onClick={() => go(hob)}
+            onClick={() => go(option)}
             onMouseMove={() => setActive(index)}
             className={cn("flex cursor-pointer items-center gap-2.5 px-2 py-1.5", index === current && "bg-line")}
           >
-            <HobSprite hob={hob} size={24} state={hob.status === "paused" ? "paused" : "idle"} badge />
-            <span className="font-pixel text-sm font-semibold">{hob.name}</span>
-            <span className="min-w-0 flex-1 truncate text-[13px] text-label">{hob.roleTitle}</span>
+            <HobSprite hob={option.hob} size={24} state={option.hob.status === "paused" ? "paused" : "idle"} badge />
+            {option.kind === "hob" ? (
+              <>
+                <span className="font-pixel text-sm font-semibold">{option.hob.name}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px] text-label">{option.hob.roleTitle}</span>
+              </>
+            ) : (
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm font-bold">{option.hit.thread.title}</span>
+                <span className="truncate text-[13px] text-secondary-text">
+                  <ResultDetail result={option} />
+                </span>
+              </span>
+            )}
             {index === current && <span className="text-xs text-label">↵ open</span>}
           </div>
         ))}
-        {agents.isSuccess && matches.length === 0 && (
-          <p className="m-0 px-2 py-1.5 text-sm text-secondary-text">No hob matches “{query.trim()}”.</p>
+        {query.trim() !== "" && !found.pending && options.length === 0 && (
+          <p className="m-0 px-2 py-1.5 text-sm text-secondary-text">Nothing matches “{query.trim()}”.</p>
         )}
       </div>
     </div>

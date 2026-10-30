@@ -18,7 +18,7 @@ import {
 import { sendErrorText } from "../lib/send-error.ts";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
-import { MessageRow, QueuedRow } from "./message-row.tsx";
+import { MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
 import { RuntimeChip } from "./runtime.tsx";
 
 const IDEAS = ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"];
@@ -27,6 +27,7 @@ const IDEAS = ["Summarize an article I paste", "Help me plan my week", "Explain 
 export function ChatView({
   hobId,
   threadId,
+  focusMessageId,
   navOpen,
   panelOpen,
   onShowNav,
@@ -34,6 +35,7 @@ export function ChatView({
 }: {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
+  focusMessageId?: string | undefined;
   navOpen: boolean;
   panelOpen: boolean;
   onShowNav: () => void;
@@ -69,6 +71,13 @@ export function ChatView({
   useEffect(() => {
     if (lastContent !== undefined) bottom.current?.scrollIntoView({ block: "end" });
   }, [lastContent]);
+
+  // A search match opens with its message in view; this runs after the scroll to the bottom.
+  const focusLoaded = messages.data?.some((m) => m.id === focusMessageId) ?? false;
+  useEffect(() => {
+    if (focusLoaded && focusMessageId)
+      document.getElementById(messageElementId(focusMessageId))?.scrollIntoView({ block: "center" });
+  }, [focusLoaded, focusMessageId]);
 
   const current = hob.data;
   if (!current) return <main className="flex-1" />;
@@ -159,7 +168,7 @@ export function ChatView({
           </div>
         )}
         {transcript?.map((message) => (
-          <MessageRow key={message.id} message={message} hob={current} />
+          <MessageRow key={message.id} message={message} hob={current} focused={message.id === focusMessageId} />
         ))}
         {queued.map((message) => (
           <QueuedRow

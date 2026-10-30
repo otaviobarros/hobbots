@@ -8,6 +8,7 @@ import { EventBus } from "./event-bus.ts";
 import { HobInputErrorsLayer, HobService } from "./hobs.ts";
 import { Installation } from "./installation.ts";
 import { HobLifecycle } from "./lifecycle.ts";
+import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
@@ -106,5 +107,5 @@ const RuntimesHandlers = HttpApiBuilder.group(HobbotsApi, "runtimes", (handlers)
 );
 
 export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
-  Layer.provide([AgentsHandlers, ThreadsHandlers, SystemHandlers, SetupHandlers, RuntimesHandlers]),
+  Layer.provide([AgentsHandlers, ThreadsHandlers, SystemHandlers, SetupHandlers, RuntimesHandlers, SearchHandlers]),
 );

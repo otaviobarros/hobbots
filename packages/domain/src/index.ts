@@ -5,5 +5,6 @@ export * from "./look.ts";
 export * from "./message.ts";
 export * from "./roles.ts";
 export * from "./runtime.ts";
+export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./thread.ts";

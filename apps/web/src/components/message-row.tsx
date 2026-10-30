@@ -1,12 +1,27 @@
 import { type Agent, isInProgress, type Message } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { formatTime } from "../lib/time.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 
-export function MessageRow({ message, hob }: { message: Message; hob: Agent }) {
+/** The element id of a message's row, for scrolling to it. */
+export const messageElementId = (id: string) => `message-${id}`;
+
+// A message opened from search wears a lantern outline, so the eye finds it.
+const focusRing = "outline-2 outline-offset-4 outline-lantern";
+
+/** One message; `focused` marks the one a search result opened. */
+export function MessageRow({ message, hob, focused = false }: { message: Message; hob: Agent; focused?: boolean }) {
+  const id = messageElementId(message.id);
   if (message.role === "user") {
     return (
-      <div className="max-w-[460px] animate-hb-in self-end bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap">
+      <div
+        id={id}
+        className={cn(
+          "max-w-[460px] animate-hb-in self-end bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap",
+          focused && focusRing,
+        )}
+      >
         {message.content}
       </div>
     );
@@ -15,7 +30,7 @@ export function MessageRow({ message, hob }: { message: Message; hob: Agent }) {
   const streaming = isInProgress(message.status);
   const writing = message.status === "streaming";
   return (
-    <div className="flex max-w-[640px] animate-hb-in gap-2.5">
+    <div id={id} className={cn("flex max-w-[640px] animate-hb-in gap-2.5", focused && focusRing)}>
       <HobSprite hob={hob} size={26} state={streaming ? "working" : message.status === "failed" ? "failed" : "idle"} />
       <div className="flex min-w-0 flex-col gap-[3px]">
         <span className="text-xs text-label">
