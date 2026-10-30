@@ -120,13 +120,14 @@ export class HobService extends Context.Service<
           configVersion: 1,
           createdAt: DateTime.formatIso(yield* DateTime.now),
         });
-        if (!(yield* repo.insertAgent(agent))) {
+        const inserted = yield* repo.insertAgent(agent);
+        if (Option.isNone(inserted)) {
           // A concurrent request with the same id inserted first.
           const raced = yield* repo.findAgent(id).pipe(Effect.map(Option.getOrThrow));
           return yield* retried(raced, payload);
         }
-        yield* bus.publish({ _tag: "AgentUpserted", agent });
-        return agent;
+        yield* bus.publish(inserted.value.entries);
+        return inserted.value.value;
       });
 
       const update = Effect.fn("HobService.update")(function* (id: AgentId, edit: UpdateAgentPayload) {
@@ -160,9 +161,10 @@ export class HobService extends Context.Service<
               const next = new Agent({ ...agent, ...payload, configVersion: agent.configVersion + 1 });
               const invalidRole = checkRole(next);
               if (invalidRole !== undefined) return yield* invalidRole;
-              if (yield* repo.updateAgentConfig(next)) {
-                yield* bus.publish({ _tag: "AgentUpserted", agent: next });
-                return next;
+              const updated = yield* repo.updateAgentConfig(next);
+              if (Option.isSome(updated)) {
+                yield* bus.publish(updated.value.entries);
+                return updated.value.value;
               }
             }
           }),

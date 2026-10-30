@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
-import { HobbotsRepository, SearchIndex, SetupRepository, SqliteLive } from "@hobbots/persistence";
+import { EventJournal, HobbotsRepository, SearchIndex, SetupRepository, SqliteLive } from "@hobbots/persistence";
 import { ClaudeCodeLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
@@ -13,6 +13,7 @@ import { EventBus } from "./event-bus.ts";
 import { HobService } from "./hobs.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
+import { JournalCompaction } from "./journal-compaction.ts";
 import { HobLifecycle } from "./lifecycle.ts";
 import { IPv6Loopback } from "./loopback.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
@@ -35,6 +36,7 @@ const ServerLive = Layer.unwrap(
     // Search reads the same file from a worker thread, so a long search never blocks the server.
     const Persistence = Layer.mergeAll(
       HobbotsRepository.layer,
+      EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
     ).pipe(Layer.provideMerge(SqliteLive(database)));
@@ -46,7 +48,7 @@ const ServerLive = Layer.unwrap(
             executable: Option.getOrUndefined(config.claudeExecutable),
           });
     const App = HobLifecycle.layer
-      .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)))
+      .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer, JournalCompaction)))
       .pipe(Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, HobAdmission.layer, Runtime, identity)));
 
     if (!existsSync(join(config.webDir, "index.html"))) {

@@ -206,7 +206,9 @@ describe("SearchIndex", () => {
 
   // covers CH-006, DP-003
   it("[TC-CH-062] finds threads and messages written before the index existed", async () => {
-    const before = Object.fromEntries(Object.entries(migrations).filter(([key]) => key < "0011")) as typeof migrations;
+    const before = Object.fromEntries(
+      Object.entries(migrations).filter(([key]) => key !== "0011_search_index"),
+    ) as typeof migrations;
     const result = await Effect.gen(function* () {
       yield* seed;
       yield* searchIndex;

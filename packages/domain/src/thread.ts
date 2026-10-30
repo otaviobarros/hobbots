@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { AgentId, ThreadId } from "./ids.ts";
+import { Revision } from "./revision.ts";
 
 export class Thread extends Schema.Class<Thread>("Thread")({
   id: ThreadId,
@@ -9,6 +10,7 @@ export class Thread extends Schema.Class<Thread>("Thread")({
   runtimeSessionId: Schema.NullOr(Schema.String),
   createdAt: Schema.String,
   updatedAt: Schema.String,
+  revision: Revision,
 }) {}
 
 export const DEFAULT_THREAD_TITLE = "New thread";
