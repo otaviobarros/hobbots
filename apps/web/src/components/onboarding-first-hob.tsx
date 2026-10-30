@@ -1,19 +1,17 @@
+import type { RuntimeModel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
-  CRAFTS,
   craftOf,
   draftProblem,
-  effortWords,
   type FirstHobDraft,
   keepDraft,
   keptDraftOrStored,
   kindLine,
   LABEL_MAX,
-  nearbySeeds,
   pickLook,
   restoreDraft,
   rollLook,
@@ -22,7 +20,16 @@ import {
 } from "../api/first-hob.ts";
 import { modelsQuery } from "../api/queries.ts";
 import { hobLook } from "../art/look.ts";
-import { Brain, ColorSwatches, CraftChoices, Die, NameDice } from "./hob-form.tsx";
+import {
+  Brain,
+  ChoresField,
+  ColorSwatches,
+  CraftChoices,
+  Die,
+  HobSummary,
+  NameDice,
+  NearbyLooks,
+} from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 
@@ -39,8 +46,7 @@ const previewStars = () =>
 function LookPreview({
   draft,
   craftLine,
-  craftNote,
-  brainLine,
+  model,
   lookRolls,
   hops,
   onRoll,
@@ -48,8 +54,7 @@ function LookPreview({
 }: {
   draft: FirstHobDraft;
   craftLine: string;
-  craftNote: string;
-  brainLine: string;
+  model: RuntimeModel | undefined;
   lookRolls: number;
   /** Changes with every choice, so the hob hops each time. */
   hops: string;
@@ -107,37 +112,8 @@ function LookPreview({
             New look
           </Button>
         </div>
-        <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-          <legend className="lbl mb-1.5 text-xs text-label">More like this</legend>
-          <div className="flex gap-1.5">
-            {nearbySeeds(draft.lookBase).map((seed) => (
-              <label
-                key={seed}
-                className={cn(
-                  "hop-on-hover grid size-[42px] cursor-pointer place-items-center border-2 bg-line hover:border-moonlight",
-                  seed === draft.lookSeed ? "border-moonlight" : "border-line-2",
-                  "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="hob-look"
-                  checked={seed === draft.lookSeed}
-                  onChange={() => onPickSeed(seed)}
-                  aria-label={`Look ${seed}`}
-                  className="sr-only"
-                />
-                <HobSprite hob={{ lookSeed: seed, lookColor: draft.lookColor }} size={34} />
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <div className="flex flex-col gap-[3px] pt-1 text-[13px] text-secondary-text">
-          <span>
-            Thinks with <b className="text-text">{brainLine}</b>
-          </span>
-          <span>{craftNote}</span>
-        </div>
+        <NearbyLooks draft={draft} onPick={onPickSeed} tile={42} className="flex gap-1.5" />
+        <HobSummary draft={draft} model={model} className="pt-1" />
       </div>
     </section>
   );
@@ -164,7 +140,6 @@ export function OnboardingFirstHob() {
     if (models.data) setDraft((d) => (d.submitted ? d : settleBrain(d, models.data)));
   }, [models.data]);
 
-  const craft = CRAFTS.find((c) => c.kind === draft.kind) ?? CRAFTS[0];
   const model = models.data?.models.find((m) => m.id === draft.model);
   const locked = draft.submitted !== null;
   const problem = locked
@@ -180,7 +155,6 @@ export function OnboardingFirstHob() {
   };
 
   const craftLine = kindLine(draft);
-  const brainLine = `Claude · ${model?.displayName ?? "…"}${draft.effort ? ` · ${effortWords(draft.effort).label.toLowerCase()} effort` : ""}`;
   const hint = locked
     ? `${draft.name.trim()} is on the way. Finish summoning to change it.`
     : (problem ??
@@ -234,6 +208,14 @@ export function OnboardingFirstHob() {
             legend={<legend className="lbl mb-2 text-label">Good at</legend>}
           />
 
+          <ChoresField
+            draft={draft}
+            onChange={setDraft}
+            rows={2}
+            label={`What should ${draft.name.trim() || "your hob"} do?`}
+            className="lbl text-label"
+          />
+
           <div className="flex flex-wrap items-end gap-6">
             <div className="flex flex-col gap-2">
               <label htmlFor="hob-name" className="lbl text-label">
@@ -263,7 +245,6 @@ export function OnboardingFirstHob() {
               <ColorSwatches
                 value={draft.lookColor}
                 onPick={(lookColor) => setDraft((d) => ({ ...d, lookColor }))}
-                size="large"
                 className="flex gap-[5px]"
               />
             </fieldset>
@@ -302,8 +283,7 @@ export function OnboardingFirstHob() {
         <LookPreview
           draft={draft}
           craftLine={craftLine}
-          craftNote={craft?.note ?? ""}
-          brainLine={brainLine}
+          model={model}
           lookRolls={lookRolls}
           hops={[draft.kind, draft.lookColor, draft.lookSeed, draft.model, draft.effort, nameRolls].join(" ")}
           onRoll={() => {
