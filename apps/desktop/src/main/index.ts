@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
-import { app, BrowserWindow, dialog, ipcMain, shell, utilityProcess } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, screen, shell, utilityProcess } from "electron";
 import { handleFolderDialogIpc } from "./folder-dialog.ts";
 import { handleKeepRunningIpc } from "./keep-running.ts";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
@@ -10,6 +10,7 @@ import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server
 import { fileSettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
 import { claimSingleInstance, onSecondLaunch } from "./single-instance.ts";
+import { initialWindowBounds, minWindowSize } from "./window-size.ts";
 
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
 app.setName("Hobbots");
@@ -75,11 +76,12 @@ const supervisor = new ServerSupervisor({
 });
 
 const createWindow = async () => {
+  // Opens on the display the pointer is on, where the user is looking.
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const window = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 960,
-    minHeight: 610,
+    ...initialWindowBounds(display.workArea),
+    minWidth: minWindowSize.width,
+    minHeight: minWindowSize.height,
     title: "Hobbots",
     backgroundColor: "#141228",
     // The traffic lights sit inside the 30px title strip of the Hobbots design.
