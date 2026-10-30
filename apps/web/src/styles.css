@@ -374,6 +374,12 @@ body {
   background-color: var(--color-label);
 }
 
+/* Scrolling panels keep the gutter even before they overflow, so content never shifts or rewraps. */
+.overflow-auto,
+.overflow-y-auto {
+  scrollbar-gutter: stable;
+}
+
 @supports not selector(::-webkit-scrollbar) {
   * {
     scrollbar-color: var(--color-line-2) transparent;
