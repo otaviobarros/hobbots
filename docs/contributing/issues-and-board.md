@@ -23,6 +23,7 @@ Open a new issue and pick a form. Blank issues are turned off so every issue sta
 | Feature request | New behavior you would like to see. | `type: feature`, `status: triage` |
 | Vertical slice | Maintainers planning a milestone. | `type: slice`, `status: triage` |
 | Task | One step of a slice, or a small standalone change. | `type: task`, `status: triage` |
+| Role request | A hob role missing from the starter set. See [Role requests](#role-requests). | `type: feature`, `area: design`, `status: triage` |
 
 Search existing issues first, write one problem per issue, and never paste API keys, device tokens or private files. Report security vulnerabilities privately through the repository's Security tab, not in a public issue.
 
@@ -55,6 +56,23 @@ A maintainer triages new issues at least once a week. For each issue labeled `st
 3. Otherwise confirm the `type:` label, add `area:` and `priority:` labels, and set the milestone if it belongs to a release.
 4. Attach tasks to their slice as sub-issues.
 5. Add `good first issue` or `help wanted` where it fits, then remove `status: triage`.
+
+## Role requests
+
+Every hob has a role: a title, a sigil and the hat and tool its sprite wears. Hobbots ships a starter set of roles, defined with their families and picker order in [#99](https://github.com/otaviobarros/hobbots/issues/99) and kept as data in `@hobbots/domain`. Anyone can give a hob a title in their own words, so the starter set only grows when many people need the same role. Roles are labels only and grant no extra powers.
+
+To suggest a role, open the [Role request](https://github.com/otaviobarros/hobbots/issues/new?template=5-role-request.yml) form. The role picker's "Missing a role? Suggest one" link opens the same form with the title filled in from what the user typed, using the `title=Role: <title>` and `role-title=<title>` query parameters.
+
+How requests are accepted:
+
+1. **One issue per role.** A request that names several roles is closed and asked to be split.
+2. **Vote with 👍.** React to the request rather than commenting "+1". A duplicate is closed with `duplicate` in favour of the first request for that role.
+3. **Reviewed once per release.** Before each milestone closes, maintainers review open role requests, weighing votes, the examples given and how far the closest existing role falls short.
+4. **At most four new roles per release.** The rest stay open for the next review, or close with `wontfix` and a reason.
+5. **The set is capped at 60 roles.** Past that, a new role has to replace one that is rarely used.
+6. **Maintainers draw every sigil.** The sigil idea in a request is a starting point; maintainers draw the final 10 × 10 sigil and pick the hat and tool so the whole set keeps one style.
+
+Requests for brands or logos, or for religious, political or violent imagery, are closed with `invalid`.
 
 ## The project board
 

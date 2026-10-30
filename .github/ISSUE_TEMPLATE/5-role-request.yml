@@ -1,0 +1,51 @@
+name: Role request
+description: Suggest a hob role that is missing from the starter set.
+title: "Role: "
+labels: ["type: feature", "area: design", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Roles give a hob a title, a sigil and the hat and tool it wears. They are labels only and grant no extra powers. Read [how role requests are reviewed](https://github.com/otaviobarros/hobbots/blob/main/docs/contributing/issues-and-board.md#role-requests) and search [existing requests](https://github.com/otaviobarros/hobbots/issues?q=is%3Aissue+%22Role%3A%22+label%3A%22area%3A+design%22) first. If yours is already there, add a 👍 to it instead.
+  - type: input
+    id: role-title
+    attributes:
+      label: Role title
+      description: What the role is called in the picker, in a few words.
+      placeholder: Travel planner
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: What would a hob in this role do?
+      description: Give two real examples of work you would hand it.
+      value: |
+        1.
+        2.
+    validations:
+      required: true
+  - type: textarea
+    id: closest
+    attributes:
+      label: Closest existing role
+      description: Which starter role comes closest, and why is it not enough?
+    validations:
+      required: true
+  - type: textarea
+    id: sigil
+    attributes:
+      label: Sigil idea
+      description: A simple object or symbol that could stand for the role. Maintainers draw every sigil, so a sentence is enough.
+      placeholder: A folded map with a pin.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched existing role requests and this one is not there yet.
+          required: true
+        - label: This request is for one role only.
+          required: true
+        - label: The role and sigil idea use no brands, logos, or religious, political or violent imagery.
+          required: true
