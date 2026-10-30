@@ -1,7 +1,7 @@
 import type { CreateAgentPayload, UpdateAgentPayload } from "@hobbots/api";
 import type { Agent, AgentId, Message, RetireWork, RuntimeKind, Thread, ThreadId } from "@hobbots/domain";
-import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
-import { call } from "./client.ts";
+import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ApiError, call } from "./client.ts";
 import { runtimeStaleTime } from "./runtime-health.ts";
 
 export const queryKeys = {
@@ -115,10 +115,20 @@ export const insertIfMissing = <T extends { readonly id: string }>(list: Readonl
 
 export const sortThreads = (threads: Array<Thread>) => threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
+/**
+ * A hob that refused a message was paused or retired where this client has not heard yet, so the
+ * hob list is fetched again and the chat shows why.
+ */
+const refreshIfUnavailable = (queryClient: QueryClient) => (error: Error) => {
+  if (error instanceof ApiError && error.tag === "HobUnavailable")
+    void queryClient.invalidateQueries({ queryKey: queryKeys.agents, exact: true });
+};
+
 export const useSendPrompt = (threadId: ThreadId) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (content: string) => call((c) => c.threads.sendPrompt({ params: { threadId }, payload: { content } })),
+    onError: refreshIfUnavailable(queryClient),
     onSuccess: ({ userMessage, assistantMessage }) => {
       queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId), (old) =>
         insertIfMissing(insertIfMissing(old, userMessage), assistantMessage),
@@ -143,6 +153,7 @@ export const useStartThread = (agentId: AgentId) => {
       const sent = await call((c) => c.threads.sendPrompt({ params: { threadId: thread.id }, payload: { content } }));
       return { thread, ...sent };
     },
+    onError: refreshIfUnavailable(queryClient),
     onSuccess: ({ thread, userMessage, assistantMessage }) => {
       queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId), (old) =>
         sortThreads(insertIfMissing(old, thread)),

@@ -60,5 +60,7 @@ export const call = async <A, E>(f: (client: Client) => Effect.Effect<A, E>): Pr
   if (Exit.isSuccess(exit)) return exit.value;
   const error = Cause.squash(exit.cause);
   const tag = typeof error === "object" && error !== null && "_tag" in error ? String(error._tag) : undefined;
-  throw new ApiError(error instanceof Error ? error.message : (tag ?? "Request failed"), tag);
+  // Tagged API errors carry their fields but no message, so the tag stands in for an empty one.
+  const message = error instanceof Error && error.message !== "" ? error.message : (tag ?? "Request failed");
+  throw new ApiError(message, tag);
 };

@@ -9,11 +9,13 @@ import {
   messagesQuery,
   threadsQuery,
   useInterrupt,
+  usePauseHob,
   useSendPrompt,
   useStartThread,
 } from "../api/queries.ts";
+import { sendErrorText } from "../lib/send-error.ts";
 import { Composer } from "./composer.tsx";
-import { HobSprite, stateLabel } from "./hob-sprite.tsx";
+import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
 import { MessageRow } from "./message-row.tsx";
 import { RuntimeChip } from "./runtime.tsx";
 
@@ -50,10 +52,10 @@ export function ChatView({
   const send = useSendPrompt(threadId ?? ("" as ThreadId));
   const start = useStartThread(hobId);
   const interrupt = useInterrupt(threadId ?? ("" as ThreadId));
+  const pause = usePauseHob(hobId);
 
   const streaming = messages.data?.some((m) => m.status === "streaming") ?? false;
   const busy = streaming || send.isPending;
-  const state = threadId ? (activity[threadId] ?? (streaming ? "working" : "idle")) : "idle";
   const lastContent = messages.data?.at(-1)?.content;
 
   useEffect(() => {
@@ -63,6 +65,8 @@ export function ChatView({
   const current = hob.data;
   if (!current) return <main className="flex-1" />;
 
+  const state = threadState(current, threadId ? activity[threadId] : undefined, streaming);
+  const paused = current.status === "paused";
   const title = thread.data?.title ?? "New thread";
   const sendDraft = (content: string) => {
     if (threadId) {
@@ -77,6 +81,14 @@ export function ChatView({
     });
   };
   const error = send.error ?? start.error;
+  // Waking clears a send the paused hob refused, so the draft can simply be sent again.
+  const wake = () =>
+    pause.mutate(false, {
+      onSuccess: () => {
+        send.reset();
+        start.reset();
+      },
+    });
   // A hob with no threads yet has just arrived, so its first page says hello.
   const newHob = threadId === undefined && threadCount.data === 0;
   const empty = threadId === undefined || messages.data?.length === 0;
@@ -141,7 +153,16 @@ export function ChatView({
         {messages.data?.map((message) => (
           <MessageRow key={message.id} message={message} hob={current} />
         ))}
-        {error && <p className="text-sm text-rose">Could not send: {error.message}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-rose">
+            {sendErrorText(error, current)}
+          </p>
+        )}
+        {pause.isError && (
+          <p role="alert" className="text-sm text-rose">
+            Hobbots could not wake {current.name}. Try again.
+          </p>
+        )}
         <div ref={bottom} />
       </div>
 
@@ -153,6 +174,7 @@ export function ChatView({
         sending={start.isPending}
         onSend={sendDraft}
         onStop={() => interrupt.mutate()}
+        paused={paused ? { name: current.name, waking: pause.isPending, onWake: wake } : undefined}
       />
     </main>
   );

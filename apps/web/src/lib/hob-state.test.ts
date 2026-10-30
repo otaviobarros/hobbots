@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hobState, sceneOrder } from "./hob-state.ts";
+import { hobState, sceneOrder, threadState } from "./hob-state.ts";
 
 describe("hobState", () => {
   const hob = { status: "active" } as const;
@@ -13,6 +13,17 @@ describe("hobState", () => {
   it("shows paused over activity", () =>
     expect(hobState({ ...hob, status: "paused" }, threads, { t1: "working" })).toBe("paused"));
   it("rests before its threads load", () => expect(hobState(hob, undefined, {})).toBe("idle"));
+});
+
+describe("threadState", () => {
+  const hob = { status: "active" } as const;
+
+  it("follows the thread's activity", () => expect(threadState(hob, "thinking", false)).toBe("thinking"));
+  it("works while a reply streams without live activity", () =>
+    expect(threadState(hob, undefined, true)).toBe("working"));
+  it("rests when nothing happens", () => expect(threadState(hob, undefined, false)).toBe("idle"));
+  it("shows paused over a reply still streaming", () =>
+    expect(threadState({ status: "paused" }, "working", true)).toBe("paused"));
 });
 
 describe("sceneOrder", () => {
