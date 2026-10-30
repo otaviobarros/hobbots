@@ -7,6 +7,7 @@ import {
   createRouter,
   redirect,
 } from "@tanstack/react-router";
+import { FIRST_HOB_DRAFT_KEY } from "./api/first-hob.ts";
 import { agentsQuery, threadsQuery } from "./api/queries.ts";
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
@@ -14,6 +15,8 @@ import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
 import { OnboardingFirstHob } from "./components/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding-providers.tsx";
+import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
+import { OnboardingReady } from "./components/onboarding-summon.tsx";
 import { InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
@@ -27,7 +30,8 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
 });
 
 // A new installation opens on Welcome, outside the app shell, until setup is done:
-// Welcome → Where Hobbots runs → providers → first hob → Home. Once setup is done, each of them opens Home.
+// Welcome → Where Hobbots runs → providers → first hob → safety → folders → summon → Home.
+// Once setup is done, each of them opens Home.
 const leaveSetupWhenDone = async ({ context }: { context: { queryClient: QueryClient } }) => {
   if (setupDone(await readSetup(context.queryClient))) throw redirect({ to: "/" });
 };
@@ -58,6 +62,33 @@ const firstHobRoute = createRoute({
   path: "setup/hob",
   beforeLoad: leaveSetupWhenDone,
   component: OnboardingFirstHob,
+});
+
+// The steps after the first hob build on its draft, so without one they start from that step.
+const afterFirstHob = async (args: { context: { queryClient: QueryClient } }) => {
+  await leaveSetupWhenDone(args);
+  if (readStored<unknown>(FIRST_HOB_DRAFT_KEY, null) === null) throw redirect({ to: "/setup/hob" });
+};
+
+const safetyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "setup/safety",
+  beforeLoad: afterFirstHob,
+  component: OnboardingSafety,
+});
+
+const foldersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "setup/folders",
+  beforeLoad: afterFirstHob,
+  component: OnboardingFolders,
+});
+
+const readyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "setup/ready",
+  beforeLoad: afterFirstHob,
+  component: OnboardingReady,
 });
 
 // Every page after setup shares the rail.
@@ -131,6 +162,9 @@ const routeTree = rootRoute.addChildren([
   setupWhereRoute,
   providersRoute,
   firstHobRoute,
+  safetyRoute,
+  foldersRoute,
+  readyRoute,
   shellRoute.addChildren([
     homeRoute,
     hobsRoute,

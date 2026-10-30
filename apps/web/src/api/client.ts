@@ -26,6 +26,8 @@ declare global {
         readonly get: () => Promise<boolean>;
         readonly set: (on: boolean) => Promise<boolean>;
       };
+      /** Opens the system folder picker; resolves with the chosen folder, or null when cancelled. */
+      readonly chooseFolder?: () => Promise<string | null>;
     };
   }
 }

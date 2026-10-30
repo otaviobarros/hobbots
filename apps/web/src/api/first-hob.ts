@@ -229,3 +229,13 @@ export const reopenDraft = (draft: FirstHobDraft, makeId: () => string = () => c
   id: makeId(),
   submitted: null,
 });
+
+/** Where onboarding keeps the draft between steps, until the summon creates the hob. */
+export const FIRST_HOB_DRAFT_KEY = "setup.firstHob";
+
+/** The hob as the Elder Hob sums it up, such as "Pip the Helper" or "Moss, good at gardening". */
+export const hobLine = (draft: FirstHobDraft): string => {
+  const name = draft.name.trim() || "Your hob";
+  const craft = craftOf(draft);
+  return draft.kind === "custom" ? `${name}, good at ${craft.toLowerCase()}` : `${name} the ${craft}`;
+};

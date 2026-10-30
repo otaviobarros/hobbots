@@ -5,6 +5,7 @@ import {
   draftProblem,
   type FirstHobDraft,
   firstHobPayload,
+  hobLine,
   nearbySeeds,
   newDraft,
   pickCraft,
@@ -144,5 +145,16 @@ describe("first hob draft", () => {
     expect(payload.model).toBeNull();
     expect(payload.craft).toBe("Garden plans");
     expect(craftOf(draft({ kind: "keeper" }))).toBe("Bookkeeper");
+  });
+});
+
+describe("the hob line", () => {
+  it("names the hob with its craft, or the user's own words", () => {
+    const draft = newDraft(
+      () => 0.5,
+      () => "id",
+    );
+    expect(hobLine(draft)).toBe("Pip the Helper");
+    expect(hobLine({ ...draft, kind: "custom", craft: "Gardening ", name: "Moss" })).toBe("Moss, good at gardening");
   });
 });
