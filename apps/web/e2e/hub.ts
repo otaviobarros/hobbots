@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const web = resolve(import.meta.dirname, "..");
@@ -30,6 +30,7 @@ export const removeDataDir = (dataDir: string) => rmSync(dataDir, { recursive: t
 /**
  * Starts the hub from source on `dataDir`, serving the web client's build, and waits until it
  * answers. The fake runtime is the default; `env` picks another runtime or Claude Code binary.
+ * Fails when another hub answers on the port, so a test never acts on someone else's data.
  */
 export const startHub = async (dataDir: string, env: Record<string, string> = {}): Promise<Hub> => {
   const child = spawn(join(server, "node_modules", ".bin", "tsx"), ["src/main.ts"], {
@@ -49,18 +50,26 @@ export const startHub = async (dataDir: string, env: Record<string, string> = {}
   child.stderr?.on("data", (chunk) => (output += chunk));
 
   const url = `http://127.0.0.1:${port}`;
+  // The health endpoint reports the canonical data folder of the hub that answered.
+  const ours = realpathSync(dataDir);
+  const fail = async (problem: string) => {
+    await stopProcess(child);
+    throw new Error(`${problem}\n${output}`);
+  };
   const deadline = Date.now() + 30_000;
   for (;;) {
     if (child.exitCode !== null) throw new Error(`The hub exited with ${child.exitCode}:\n${output}`);
-    const answered = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1000) }).then(
-      (response) => response.ok,
-      () => false,
+    const identity = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1000) }).then(
+      (response) => (response.ok ? (response.json() as Promise<{ readonly dataDir?: unknown }>) : undefined),
+      () => undefined,
     );
-    if (answered) break;
-    if (Date.now() > deadline) {
-      await stopProcess(child);
-      throw new Error(`The hub did not answer on ${url} within 30s:\n${output}`);
+    if (identity !== undefined) {
+      if (identity.dataDir === ours) break;
+      return fail(
+        `Another hub (data: ${String(identity.dataDir)}) answers on ${url}; stop it or set HOBBOTS_E2E_PORT.`,
+      );
     }
+    if (Date.now() > deadline) return fail(`The hub did not answer on ${url} within 30s:`);
     await new Promise((done) => setTimeout(done, 200));
   }
   return { url, dataDir, stop: () => stopProcess(child) };
