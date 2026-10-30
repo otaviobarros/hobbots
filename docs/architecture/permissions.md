@@ -22,7 +22,7 @@ Trusted Workspace is the default. The [design](../decisions/008-design.md) names
 
 Careful keeps investigation automatic and asks before modifications and consequential work. Trusting is deliberately broad inside the hob's folders and the sandbox, with clear disclosure of actual runtime privileges; it never grants self-approval or Hobbots administration. Per-hob overrides only narrow the table; a widening needs a separately recorded user grant. The UI says **Never** for Deny.
 
-A rule is **enforced** when a runtime or OS boundary holds it whatever the hob does, and **checked** when Hobbots recognizes and decides the operation but a permitted command could perform it another way. Delete files is checked; the Permissions tab says so.
+A rule is **enforced** when a runtime or OS boundary holds it whatever the hob does, and **checked** when Hobbots recognizes and decides the operation but a permitted command could perform it another way. Delete files is checked, and so is a push to a remote that accepts pushes without credentials when commands and the web are both allowed; pushes needing credentials are enforced. The Permissions tab says so.
 
 ## Folders
 
@@ -52,7 +52,7 @@ Hobbots-managed tools pass through the permission broker. Native runtime tools u
 
 [ADR 014](../decisions/014-tool-policy-and-enforcement.md) sets the mechanism. Two layers are both required before a hob gets tools:
 
-- **The runtime's permission hooks** decide every tool call through the policy engine (for Claude Code, `canUseTool` with nothing loaded from settings on disk and no tool approved ahead of the callback).
+- **The runtime's permission hooks** decide every tool call through the policy engine (for Claude Code, a `PreToolUse` hook that sees every call before the SDK approves any on its own, with `canUseTool` only waiting for approvals and nothing loaded from settings on disk).
 - **One OS sandbox around the whole runtime process**, Anthropic's sandbox-runtime (Seatbelt on macOS, bubblewrap on Linux), generated per turn from the effective policy. It denies reads of the user's data outside the hob's folders, allows writes only in the hob's folders and a private temporary folder, and sends all network traffic through a proxy that asks the policy engine about each new host. Child processes inherit it. The runtime's own sandbox stays off inside it.
 
 A sandbox that cannot start fails the turn; it never falls back silently. Where the sandbox is unavailable (Windows until sandbox-runtime's backend there matures, or a hub missing its prerequisites), commands, local Git and the web are blocked and labeled "Needs the sandbox"; file tools still work through the permission hooks.
@@ -61,7 +61,7 @@ The sandbox is on by default for every hob. The user can turn it off for one hob
 
 ## Charms
 
-A **Charm** is a connection that gives a hob abilities beyond its runtime's own tools: an integration with another app or service such as GitHub, Slack, Google Drive or any MCP server. The user connects a Charm on the hub once and grants it per hob; each of its actions is Allow, Ask or Never per hob. The MVP ships the built-in GitHub Charm with Push. A Charm runs in the hub process outside the runtime sandbox, is offered to the runtime over its control channel rather than the network, and goes through the policy engine with Allow / Ask / Never on its exact arguments. Credentials a Charm needs stay on the hub and never enter the sandbox, so the Charm is the only route to that effect. The sandbox never blocks a Charm the user granted. Hobbots' coordination tools (delegation, messages between hobs, results) are not Charms and keep the control-plane exclusions below.
+A **Charm** is a connection that gives a hob abilities beyond its runtime's own tools: an integration with another app or service such as GitHub, Slack, Google Drive or any MCP server. The user connects a Charm on the hub once and grants it per hob; each of its actions is Allow, Ask or Never per hob. The MVP ships the built-in GitHub Charm with Push. A Charm runs in the hub process outside the runtime sandbox, is offered to the runtime over its control channel rather than the network, and goes through the policy engine with Allow / Ask / Never on its exact arguments. Credentials a Charm needs stay on the hub and never enter the sandbox, so the Charm is the only route to effects that need them; a push to a remote that accepts pushes without credentials is a checked rule. A Charm never runs workspace code: Push runs no repository hooks or configured programs. The sandbox never blocks a Charm the user granted. Hobbots' coordination tools (delegation, messages between hobs, results) are not Charms and keep the control-plane exclusions below.
 
 Credentials remain scoped to the hub's execution environment or secrets provider and are excluded from messages/events. Hobs act only on the hub; a connected device never exposes its own files or apps. Device tokens, execution grants and agent tool credentials are separate boundaries ([deployment](deployment.md)).
 
