@@ -44,13 +44,24 @@ export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload
  * Moves a draft onto a newer baseline, such as a version saved from another window or the answer
  * to a save. Each part the user left as it was in the old baseline takes the new value; each part
  * they changed keeps their edit. The model and effort move together, as the form picks them.
+ *
+ * While a save is on its way, the parts it sends stay as the user has them now, even when that is
+ * back to the old baseline: the update for the save itself can arrive before the save's answer.
  */
-export const rebaseDraft = (from: ProfileDraft, to: ProfileDraft, draft: ProfileDraft): ProfileDraft => {
-  const brainEdited = draft.model !== from.model || draft.effort !== from.effort;
+export const rebaseDraft = (
+  from: ProfileDraft,
+  to: ProfileDraft,
+  draft: ProfileDraft,
+  sending?: ProfileDraft,
+): ProfileDraft => {
+  const brainChanged = (d: ProfileDraft) => d.model !== from.model || d.effort !== from.effort;
+  const keepInstructions =
+    draft.instructions !== from.instructions || (sending !== undefined && sending.instructions !== from.instructions);
+  const keepBrain = brainChanged(draft) || (sending !== undefined && brainChanged(sending));
   return {
-    instructions: draft.instructions === from.instructions ? to.instructions : draft.instructions,
-    model: brainEdited ? draft.model : to.model,
-    effort: brainEdited ? draft.effort : to.effort,
+    instructions: keepInstructions ? draft.instructions : to.instructions,
+    model: keepBrain ? draft.model : to.model,
+    effort: keepBrain ? draft.effort : to.effort,
   };
 };
 

@@ -235,6 +235,8 @@ function InstructionsTab({ hob }: { hob: Agent }) {
   const dirty = isDirty(base, draft);
   const baseRef = useRef(base);
   baseRef.current = base;
+  // The draft a save sent, until that save answers.
+  const sendingRef = useRef<ProfileDraft | undefined>(undefined);
 
   // A new version saved elsewhere, or the model list arriving, refreshes what the user left alone
   // and keeps what they edited, so saving never undoes a change made in another window.
@@ -242,7 +244,7 @@ function InstructionsTab({ hob }: { hob: Agent }) {
     const from = baseRef.current;
     const fresh = profileDraft(hob, models.data);
     setBase(fresh);
-    setDraft((d) => rebaseDraft(from, fresh, d));
+    setDraft((d) => rebaseDraft(from, fresh, d, sendingRef.current));
   }, [hob, models.data]);
 
   const edit = profileEdit(hob, draft);
@@ -253,7 +255,11 @@ function InstructionsTab({ hob }: { hob: Agent }) {
     event.preventDefault();
     if (!changes || update.isPending) return;
     const sent = draft;
+    sendingRef.current = sent;
     update.mutate(edit, {
+      onSettled: () => {
+        sendingRef.current = undefined;
+      },
       onSuccess: (next) => {
         // Anything typed while the save was on its way stays, still marked unsaved.
         const fresh = profileDraft(next, models.data);

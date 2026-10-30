@@ -84,6 +84,20 @@ describe("hob profile", () => {
     expect(rebaseDraft(sent, fresh, sent)).toEqual(fresh);
   });
 
+  it("keeps an edit back to the old text when the save's own update arrives before its answer", () => {
+    const before = hob();
+    const base = profileDraft(before, offered);
+    const sent = { ...base, instructions: "Write long answers." };
+    // While the save is on its way, the user puts the old text back.
+    const restored = base;
+    const saved = profileDraft(hob({ instructions: "Write long answers.", configVersion: 2 }), offered);
+    const afterUpdate = rebaseDraft(base, saved, restored, sent);
+    expect(afterUpdate.instructions).toBe("Write short answers.");
+    const afterAnswer = rebaseDraft(sent, saved, afterUpdate);
+    expect(afterAnswer.instructions).toBe("Write short answers.");
+    expect(isDirty(saved, afterAnswer)).toBe(true);
+  });
+
   it("names the brain by the runtime's display names", () => {
     expect(brainLine(hob({ model: "opus", effort: "high" }), offered)).toBe("Claude · Opus · High effort");
     expect(brainLine(hob({ effort: null }), offered)).toBe("Claude · Default");
