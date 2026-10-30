@@ -102,6 +102,7 @@ describe("Stopping a reply", () => {
         const chat = yield* ChatService;
         const thread = yield* chat.createThread(HOB_ID);
         const { assistantMessage } = yield* chat.sendPrompt(thread.id, "write a poem");
+        if (assistantMessage === null) return yield* Effect.die("the first message did not start");
         // The partial text is on the reply before Stop is pressed.
         yield* Effect.retry(
           Effect.suspend(() =>
@@ -117,10 +118,18 @@ describe("Stopping a reply", () => {
         yield* Deferred.succeed(confirm, undefined);
         const stopped = yield* waitFor(thread.id, assistantMessage.id, "stopped");
 
-        // The thread and hob take the next message as usual.
-        const next = yield* chat
-          .sendPrompt(thread.id, "again")
-          .pipe(Effect.retry({ while: (e) => e._tag === "ThreadBusy", schedule: Schedule.spaced("5 millis") }));
+        // The thread and hob take the next message as usual: it starts right away, or just after
+        // the stopped turn has left the thread.
+        yield* chat.sendPrompt(thread.id, "again");
+        const next = yield* HobbotsRepository.use((repo) => repo.listMessages(thread.id)).pipe(
+          Effect.flatMap((messages) => {
+            const last = messages.at(-1);
+            return last?.role === "assistant" && last.status === "streaming"
+              ? Effect.succeed(last)
+              : Effect.fail("not yet" as const);
+          }),
+          Effect.retry(Schedule.spaced("5 millis")),
+        );
         return { requested, busyWhileStopping, stopped, events: stopEvents(events), next, threadId: thread.id };
       }),
     );
@@ -136,7 +145,7 @@ describe("Stopping a reply", () => {
       "TurnStopped",
       "MessageUpserted:streaming",
     ]);
-    expect(result.next.assistantMessage.status).toBe("streaming");
+    expect(result.next.status).toBe("streaming");
   });
 
   // covers CH-007
@@ -149,6 +158,7 @@ describe("Stopping a reply", () => {
 
         const thread = yield* chat.createThread(HOB_ID);
         const { assistantMessage } = yield* chat.sendPrompt(thread.id, "write a poem");
+        if (assistantMessage === null) return yield* Effect.die("the first message did not start");
         yield* Effect.all([chat.stop(thread.id), chat.stop(thread.id), chat.stop(thread.id)], {
           concurrency: "unbounded",
         });

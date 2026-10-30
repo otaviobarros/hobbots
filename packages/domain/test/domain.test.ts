@@ -9,6 +9,7 @@ import {
   Message,
   MessageId,
   MessageTransitions,
+  QueuedMessageTransitions,
   ThreadId,
   titleFromPrompt,
 } from "../src/index.ts";
@@ -53,6 +54,22 @@ describe("MessageTransitions", () => {
     const stopped = MessageTransitions.interrupt(MessageTransitions.requestStop(streaming) as Message) as Message;
     expect(isInProgress(stopped.status)).toBe(false);
     expect(MessageTransitions.requestStop(stopped)).toBeInstanceOf(InvalidMessageTransition);
+  });
+});
+
+describe("QueuedMessageTransitions", () => {
+  const queued = new Message({ ...streaming, role: "user", status: "queued", configVersion: null });
+
+  it("starts a queued user message", () => {
+    expect(QueuedMessageTransitions.start(queued)).toMatchObject({ status: "complete" });
+  });
+
+  it("starts nothing that is not a queued user message", () => {
+    const started = QueuedMessageTransitions.start(queued) as Message;
+    expect(QueuedMessageTransitions.start(started)).toBeInstanceOf(InvalidMessageTransition);
+    expect(QueuedMessageTransitions.start(new Message({ ...queued, role: "assistant" }))).toBeInstanceOf(
+      InvalidMessageTransition,
+    );
   });
 });
 

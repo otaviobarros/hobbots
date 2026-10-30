@@ -7,6 +7,7 @@ import {
   HobColor,
   LookSeed,
   Message,
+  MessageId,
   RetireWork,
   RoleHat,
   RoleId,
@@ -19,7 +20,7 @@ import {
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/http-api";
-import { AgentNotFound, HobUnavailable, InvalidHob, ThreadBusy, ThreadNotFound } from "./errors.ts";
+import { AgentNotFound, HobUnavailable, InvalidHob, MessageNotQueued, ThreadNotFound } from "./errors.ts";
 import { SetupGroup } from "./setup.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
@@ -87,9 +88,10 @@ export const SendPromptPayload = Schema.Struct({
   content: Schema.NonEmptyString,
 });
 
+/** A message sent while the thread's reply runs is queued: it has no reply yet (CH-008). */
 export const SendPromptResult = Schema.Struct({
   userMessage: Message,
-  assistantMessage: Message,
+  assistantMessage: Schema.NullOr(Message),
 });
 
 /**
@@ -174,7 +176,16 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       payload: SendPromptPayload,
       success: SendPromptResult,
-      error: [ThreadNotFound, ThreadBusy, HobUnavailable],
+      error: [ThreadNotFound, HobUnavailable],
+    }),
+    HttpApiEndpoint.delete("removeQueued", "/threads/:threadId/messages/:messageId", {
+      params: { threadId: ThreadId, messageId: MessageId },
+      error: [ThreadNotFound, MessageNotQueued],
+    }),
+    // Stops the running reply, if any, and starts this queued message next.
+    HttpApiEndpoint.post("sendNow", "/threads/:threadId/messages/:messageId/send-now", {
+      params: { threadId: ThreadId, messageId: MessageId },
+      error: [ThreadNotFound, MessageNotQueued],
     }),
     HttpApiEndpoint.post("interrupt", "/threads/:threadId/interrupt", {
       params: { threadId: ThreadId },

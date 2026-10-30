@@ -1,5 +1,5 @@
 import type { CreateAgentPayload, UpdateAgentPayload } from "@hobbots/api";
-import type { Agent, AgentId, Message, RetireWork, RuntimeKind, Thread, ThreadId } from "@hobbots/domain";
+import type { Agent, AgentId, Message, MessageId, RetireWork, RuntimeKind, Thread, ThreadId } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
 import { runtimeStaleTime } from "./runtime-health.ts";
@@ -109,9 +109,22 @@ export const upsertById = <T extends { readonly id: string }>(
   return items;
 };
 
-/** Adds an item unless a live event already delivered it (possibly newer). */
-export const insertIfMissing = <T extends { readonly id: string }>(list: ReadonlyArray<T> | undefined, item: T) =>
-  list?.some((existing) => existing.id === item.id) ? [...list] : upsertById(list, item);
+/** Adds an item unless a live event already delivered it (possibly newer); null adds nothing. */
+export const insertIfMissing = <T extends { readonly id: string }>(
+  list: ReadonlyArray<T> | undefined,
+  item: T | null,
+) => (item === null || list?.some((existing) => existing.id === item.id) ? [...(list ?? [])] : upsertById(list, item));
+
+/**
+ * Applies a stored message. A queued message that starts moves to the end, where its turn begins,
+ * so the transcript reads in the order turns ran (CH-008).
+ */
+export const upsertMessage = (list: ReadonlyArray<Message>, message: Message): Array<Message> => {
+  const old = list.find((existing) => existing.id === message.id);
+  return old?.status === "queued" && message.status !== "queued"
+    ? [...list.filter((existing) => existing.id !== message.id), message]
+    : upsertById(list, message);
+};
 
 export const sortThreads = (threads: Array<Thread>) => threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
@@ -136,6 +149,25 @@ export const useSendPrompt = (threadId: ThreadId) => {
     },
   });
 };
+
+/** Takes a queued message out of the thread before it starts. */
+export const useRemoveQueued = (threadId: ThreadId) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: MessageId) => call((c) => c.threads.removeQueued({ params: { threadId, messageId } })),
+    onSuccess: (_, messageId) => {
+      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId), (old) =>
+        old?.filter((message) => message.id !== messageId),
+      );
+    },
+  });
+};
+
+/** Stops the running reply and starts this queued message next. */
+export const useSendNow = (threadId: ThreadId) =>
+  useMutation({
+    mutationFn: (messageId: MessageId) => call((c) => c.threads.sendNow({ params: { threadId, messageId } })),
+  });
 
 export const useInterrupt = (threadId: ThreadId) =>
   useMutation({

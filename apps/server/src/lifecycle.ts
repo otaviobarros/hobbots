@@ -55,7 +55,11 @@ export class HobLifecycle extends Context.Service<
       });
 
       const pause = (agentId: AgentId) => admission.withHob(agentId, apply(agentId, AgentTransitions.pause));
-      const wake = (agentId: AgentId) => admission.withHob(agentId, apply(agentId, AgentTransitions.wake));
+      // Messages that queued while the hob slept start once it is awake (CH-008).
+      const wake = (agentId: AgentId) =>
+        admission
+          .withHob(agentId, apply(agentId, AgentTransitions.wake))
+          .pipe(Effect.tap(() => chat.drainAgent(agentId)));
 
       // Under the hob's lock, every turn admitted before the retirement is already registered and
       // none can be admitted until the hob is retired, so "stop" reaches all of its running replies.

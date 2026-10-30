@@ -1,10 +1,16 @@
 import { Button } from "@hobbots/ui/components/button";
 
-/** A paused hob takes no new work: the composer keeps the draft and offers Wake instead of Send. */
+/**
+ * A paused hob takes no new work. In a thread the composer queues messages until the hob wakes,
+ * with Wake beside it; a new thread waits for Wake. While a reply runs, Send queues the message
+ * behind it (CH-008).
+ */
 export interface PausedHob {
   readonly name: string;
   readonly waking: boolean;
   readonly onWake: () => void;
+  /** False before the thread exists: a paused hob starts no new thread. */
+  readonly canQueue: boolean;
 }
 
 export function Composer({
@@ -31,7 +37,7 @@ export function Composer({
 }) {
   const submit = () => {
     const content = draft.trim();
-    if (!content || busy || sending || paused) return;
+    if (!content || sending || (paused && !paused.canQueue)) return;
     onSend(content);
   };
 
@@ -42,8 +48,12 @@ export function Composer({
           aria-label={placeholder}
           value={draft}
           rows={1}
-          disabled={paused !== undefined}
-          placeholder={paused ? `${paused.name} is paused. Wake ${paused.name} to send a message.` : placeholder}
+          disabled={paused !== undefined && !paused.canQueue}
+          placeholder={
+            paused && !paused.canQueue
+              ? `${paused.name} is paused. Wake ${paused.name} to start a thread.`
+              : placeholder
+          }
           onChange={(event) => onDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -58,13 +68,14 @@ export function Composer({
             {stopping ? "Stopping…" : "■ Stop"}
           </Button>
         )}
-        {paused ? (
-          <Button onClick={paused.onWake} disabled={paused.waking}>
+        {paused && (
+          <Button variant={paused.canQueue ? "outline" : "default"} onClick={paused.onWake} disabled={paused.waking}>
             Wake {paused.name}
           </Button>
-        ) : (
-          <Button onClick={submit} disabled={!draft.trim() || busy || sending}>
-            Send
+        )}
+        {(!paused || paused.canQueue) && (
+          <Button onClick={submit} disabled={!draft.trim() || sending}>
+            {paused ? "Queue" : "Send"}
           </Button>
         )}
       </div>
@@ -72,9 +83,11 @@ export function Composer({
         {busy
           ? stopping
             ? "Stopping this reply. What was written so far is kept."
-            : "Stop ends this reply only. What was written so far is kept."
+            : "Stop ends this reply only. Messages you send now wait their turn."
           : paused
-            ? `Paused hobs take no new work. Your draft stays here until you wake ${paused.name}.`
+            ? paused.canQueue
+              ? `${paused.name} is paused. Messages you queue wait until you wake ${paused.name}.`
+              : `Paused hobs take no new work. Your draft stays here until you wake ${paused.name}.`
             : "Enter sends · Shift+Enter adds a line · Hobs have no tools in this build yet"}
       </span>
     </div>

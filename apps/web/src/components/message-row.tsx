@@ -1,4 +1,5 @@
 import { type Agent, isInProgress, type Message } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { formatTime } from "../lib/time.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 
@@ -54,6 +55,49 @@ export function MessageRow({ message, hob }: { message: Message; hob: Agent }) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A message waiting for the thread's running reply (CH-008). It can be taken back before it
+ * starts, or sent now, which stops the running reply.
+ */
+export function QueuedRow({
+  message,
+  hob,
+  replying,
+  pending,
+  onRemove,
+  onSendNow,
+}: {
+  message: Message;
+  hob: Agent;
+  replying: boolean;
+  pending: boolean;
+  onRemove: () => void;
+  onSendNow: () => void;
+}) {
+  const paused = hob.status !== "active";
+  return (
+    <section
+      aria-label="Queued message"
+      className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end"
+    >
+      <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
+      <span className="text-xs text-label">
+        {paused ? `◷ Queued. Waits until you wake ${hob.name}.` : `◷ Queued. ${hob.name} reads it after this reply.`}
+      </span>
+      <span className="flex gap-2">
+        <Button variant="outline" size="xs" onClick={onRemove} disabled={pending}>
+          Remove
+        </Button>
+        {!paused && (
+          <Button variant="outline" size="xs" onClick={onSendNow} disabled={pending}>
+            {replying ? "Send now and interrupt" : "Send now"}
+          </Button>
+        )}
+      </span>
+    </section>
   );
 }
 

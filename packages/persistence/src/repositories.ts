@@ -1,4 +1,13 @@
-import { Agent, AgentConfiguration, type AgentId, AgentStatus, Message, Thread, type ThreadId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentConfiguration,
+  type AgentId,
+  AgentStatus,
+  Message,
+  type MessageId,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, type Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -36,6 +45,19 @@ export class HobbotsRepository extends Context.Service<
     readonly upsertMessage: (message: Message) => Effect.Effect<void>;
     /** Assistant replies whose turn has not ended (streaming or stopping), across every thread. */
     readonly listUnfinishedMessages: Effect.Effect<ReadonlyArray<Message>>;
+    /** The thread's queued message that has waited longest, if any (CH-008). */
+    readonly nextQueuedMessage: (threadId: ThreadId) => Effect.Effect<Option.Option<Message>>;
+    /** Threads with at least one queued message. */
+    readonly threadsWithQueuedMessages: Effect.Effect<ReadonlyArray<ThreadId>>;
+    /**
+     * Saves a queued message that started and its streaming reply in one transaction: the message
+     * moves after every message in the thread and the reply follows it, so a crash leaves either a
+     * queued message or a reply that recovery marks interrupted. False, and nothing changed, when
+     * the message is no longer queued.
+     */
+    readonly startQueuedMessage: (message: Message, reply: Message) => Effect.Effect<boolean>;
+    /** Deletes a message that is still queued in the thread; false, and nothing deleted, when it is not. */
+    readonly removeQueuedMessage: (threadId: ThreadId, id: MessageId) => Effect.Effect<boolean>;
   }
 >()("@hobbots/persistence/HobbotsRepository") {
   static readonly layer = Layer.effect(
@@ -92,6 +114,18 @@ export class HobbotsRepository extends Context.Service<
         Request: Schema.String,
         Result: Message,
         execute: (threadId) => sql`SELECT * FROM messages WHERE thread_id = ${threadId} ORDER BY seq`,
+      });
+      const nextQueuedMessage = SqlSchema.findOneOption({
+        Request: Schema.String,
+        Result: Message,
+        execute: (threadId) =>
+          sql`SELECT * FROM messages WHERE thread_id = ${threadId} AND status = 'queued' ORDER BY seq LIMIT 1`,
+      });
+      const threadsWithQueuedMessages = SqlSchema.findAll({
+        Request: Schema.Void,
+        Result: Schema.Struct({ threadId: ThreadId }),
+        execute: () =>
+          sql`SELECT thread_id FROM messages WHERE status = 'queued' GROUP BY thread_id ORDER BY ${bytewise("thread_id")}`,
       });
       const unfinishedMessages = SqlSchema.findAll({
         Request: Schema.Void,
@@ -190,6 +224,19 @@ export class HobbotsRepository extends Context.Service<
             status = excluded.status,
             error = excluded.error`;
 
+      // The new sequence is read in the same statement, as an insert's is.
+      const startQueuedMessage = (message: Message, reply: Message) =>
+        Effect.gen(function* () {
+          const started = yield* sql`UPDATE messages SET
+              status = ${message.status},
+              seq = (SELECT MAX(seq) + 1 FROM messages WHERE thread_id = ${message.threadId})
+            WHERE id = ${message.id} AND status = 'queued'
+            RETURNING id`;
+          if (started.length === 0) return false;
+          yield* upsertMessage(reply);
+          return true;
+        }).pipe(sql.withTransaction);
+
       return HobbotsRepository.of({
         listAgents: listAgents().pipe(Effect.orDie),
         listAgentsWithStatus: (statuses) =>
@@ -214,6 +261,17 @@ export class HobbotsRepository extends Context.Service<
         listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),
         upsertMessage: (message) => upsertMessage(message).pipe(Effect.asVoid, Effect.orDie),
         listUnfinishedMessages: unfinishedMessages().pipe(Effect.orDie),
+        nextQueuedMessage: (threadId) => nextQueuedMessage(threadId).pipe(Effect.orDie),
+        threadsWithQueuedMessages: threadsWithQueuedMessages().pipe(
+          Effect.map((rows) => rows.map((row) => row.threadId)),
+          Effect.orDie,
+        ),
+        startQueuedMessage: (message, reply) => startQueuedMessage(message, reply).pipe(Effect.orDie),
+        removeQueuedMessage: (threadId, id) =>
+          sql`DELETE FROM messages WHERE id = ${id} AND thread_id = ${threadId} AND status = 'queued' RETURNING id`.pipe(
+            Effect.map((rows) => rows.length > 0),
+            Effect.orDie,
+          ),
       });
     }),
   );

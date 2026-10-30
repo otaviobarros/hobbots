@@ -10,13 +10,15 @@ import {
   threadsQuery,
   useInterrupt,
   usePauseHob,
+  useRemoveQueued,
+  useSendNow,
   useSendPrompt,
   useStartThread,
 } from "../api/queries.ts";
 import { sendErrorText } from "../lib/send-error.ts";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
-import { MessageRow } from "./message-row.tsx";
+import { MessageRow, QueuedRow } from "./message-row.tsx";
 import { RuntimeChip } from "./runtime.tsx";
 
 const IDEAS = ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"];
@@ -53,11 +55,15 @@ export function ChatView({
   const start = useStartThread(hobId);
   const interrupt = useInterrupt(threadId ?? ("" as ThreadId));
   const pause = usePauseHob(hobId);
+  const remove = useRemoveQueued(threadId ?? ("" as ThreadId));
+  const sendNow = useSendNow(threadId ?? ("" as ThreadId));
 
   const streaming = messages.data?.some((m) => isInProgress(m.status)) ?? false;
   // Stopping lasts from the hub recording the request until the runtime confirms the turn ended.
   const stopping = interrupt.isPending || (messages.data?.some((m) => m.status === "stopping") ?? false);
-  const busy = streaming || send.isPending;
+  // Queued messages wait below the transcript, in the order they will start.
+  const transcript = messages.data?.filter((m) => m.status !== "queued");
+  const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
 
   useEffect(() => {
@@ -83,6 +89,7 @@ export function ChatView({
     });
   };
   const error = send.error ?? start.error;
+  const queueError = remove.error ?? sendNow.error;
   // Waking clears a send the paused hob refused, so the draft can simply be sent again.
   const wake = () =>
     pause.mutate(false, {
@@ -151,9 +158,25 @@ export function ChatView({
             </div>
           </div>
         )}
-        {messages.data?.map((message) => (
+        {transcript?.map((message) => (
           <MessageRow key={message.id} message={message} hob={current} />
         ))}
+        {queued.map((message) => (
+          <QueuedRow
+            key={message.id}
+            message={message}
+            hob={current}
+            replying={streaming}
+            pending={remove.isPending || sendNow.isPending}
+            onRemove={() => remove.mutate(message.id)}
+            onSendNow={() => sendNow.mutate(message.id)}
+          />
+        ))}
+        {queueError && (
+          <p role="alert" className="text-sm text-rose">
+            That message already started or was removed.
+          </p>
+        )}
         {error && (
           <p role="alert" className="text-sm text-rose">
             {sendErrorText(error, current)}
@@ -171,12 +194,16 @@ export function ChatView({
         placeholder={`Message ${current.name} in “${title}”…`}
         draft={draft}
         onDraft={setDraft}
-        busy={busy}
+        busy={streaming}
         stopping={stopping}
-        sending={start.isPending}
+        sending={start.isPending || send.isPending}
         onSend={sendDraft}
         onStop={() => interrupt.mutate()}
-        paused={paused ? { name: current.name, waking: pause.isPending, onWake: wake } : undefined}
+        paused={
+          paused
+            ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: threadId !== undefined }
+            : undefined
+        }
       />
     </main>
   );

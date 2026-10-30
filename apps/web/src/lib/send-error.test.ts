@@ -13,8 +13,6 @@ describe("sendErrorText", () => {
     expect(sendErrorText({ message: "HobUnavailable", tag: "HobUnavailable" }, active)).toBe(
       "Moss cannot take new work right now, so this message was not sent.",
     ));
-  it("explains a thread that is still replying", () =>
-    expect(sendErrorText({ message: "ThreadBusy", tag: "ThreadBusy" }, active)).toContain("still replying"));
   it("keeps other errors' words", () =>
     expect(sendErrorText({ message: "Failed to fetch" }, active)).toBe("Could not send: Failed to fetch"));
   it("never shows an empty error", () =>

@@ -255,4 +255,59 @@ describe("HobbotsRepository", () => {
     expect([result.retiredAt, result.activeRetiredAt]).toEqual(["2026-10-30T12:00:00.000Z", null]);
     expect(result.none).toEqual([]);
   });
+
+  // covers DP-003, CH-008
+  it("[TC-DP-010] keeps queued messages in order, starts one with its reply after the thread's messages and removes only queued ones", async () => {
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(
+        new Agent({
+          id: agentId,
+          name: "Aldric",
+          roleTitle: "Guide",
+          runtime: "claude-code",
+          model: null,
+          effort: null,
+          instructions: "",
+          lookSeed: 1,
+          lookColor: "moss",
+          configVersion: 1,
+          createdAt: now,
+        }),
+      );
+      yield* repo.upsertThread(
+        new Thread({ id: threadId, agentId, title: "Queue", runtimeSessionId: null, createdAt: now, updatedAt: now }),
+      );
+      const user = (id: string, status: Message["status"]) =>
+        new Message({ ...message(id, status), role: "user", configVersion: null });
+      yield* repo.upsertMessage(user("q1", "queued"));
+      yield* repo.upsertMessage(message("reply", "streaming"));
+      yield* repo.upsertMessage(user("q2", "queued"));
+      const next = yield* repo.nextQueuedMessage(threadId);
+      const threads = yield* repo.threadsWithQueuedMessages;
+      const startQ1 = new Message({ ...user("q1", "queued"), status: "complete" });
+      const started = yield* repo.startQueuedMessage(startQ1, message("q1-reply", "streaming"));
+      const startedTwice = yield* repo.startQueuedMessage(startQ1, message("q1-again", "streaming"));
+      const removedStarted = yield* repo.removeQueuedMessage(threadId, MessageId.make("q1"));
+      const removedElsewhere = yield* repo.removeQueuedMessage(ThreadId.make("other"), MessageId.make("q2"));
+      const removed = yield* repo.removeQueuedMessage(threadId, MessageId.make("q2"));
+      return {
+        next: Option.map(next, (m) => m.id),
+        threads,
+        flags: [started, startedTwice, removedStarted, removedElsewhere, removed],
+        messages: (yield* repo.listMessages(threadId)).map((m) => [m.id, m.status]),
+        empty: yield* repo.threadsWithQueuedMessages,
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result.next).toEqual(Option.some("q1"));
+    expect(result.threads).toEqual([threadId]);
+    expect(result.flags).toEqual([true, false, false, false, true]);
+    expect(result.messages).toEqual([
+      ["reply", "streaming"],
+      ["q1", "complete"],
+      ["q1-reply", "streaming"],
+    ]);
+    expect(result.empty).toEqual([]);
+  });
 });

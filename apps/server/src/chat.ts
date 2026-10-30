@@ -1,4 +1,4 @@
-import { AgentNotFound, HobUnavailable, ThreadBusy, ThreadNotFound } from "@hobbots/api";
+import { AgentNotFound, HobUnavailable, MessageNotQueued, ThreadNotFound } from "@hobbots/api";
 import {
   type Agent,
   type AgentConfiguration,
@@ -8,21 +8,24 @@ import {
   Message,
   MessageId,
   MessageTransitions,
+  QueuedMessageTransitions,
   Thread,
   ThreadId,
   titleFromPrompt,
 } from "@hobbots/domain";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter, type RuntimeEvent } from "@hobbots/runtimes";
-import { Context, DateTime, Effect, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
+import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { EventBus } from "./event-bus.ts";
 
-/** The events a saved message produces: always its upsert, then any stop outcome it records. */
+/** The events a saved message produces: always its upsert, then that it queued or any stop outcome it records. */
 const messageEvents = (message: Message): ReadonlyArray<HobbotsEvent> => {
   const ids = { threadId: message.threadId, messageId: message.id };
   const upserted: HobbotsEvent = { _tag: "MessageUpserted", message };
   switch (message.status) {
+    case "queued":
+      return [upserted, { _tag: "MessageQueued", message }];
     case "stopping":
       return [upserted, { _tag: "TurnStopRequested", ...ids }];
     case "stopped":
@@ -43,13 +46,20 @@ export class ChatService extends Context.Service<
   ChatService,
   {
     readonly createThread: (agentId: AgentId) => Effect.Effect<Thread, AgentNotFound | HobUnavailable>;
+    /** Starts a turn, or queues the message while the thread's reply runs (assistantMessage is then null). */
     readonly sendPrompt: (
       threadId: ThreadId,
       content: string,
-    ) => Effect.Effect<
-      { userMessage: Message; assistantMessage: Message },
-      ThreadNotFound | ThreadBusy | HobUnavailable
-    >;
+    ) => Effect.Effect<{ userMessage: Message; assistantMessage: Message | null }, ThreadNotFound | HobUnavailable>;
+    readonly removeQueued: (
+      threadId: ThreadId,
+      messageId: MessageId,
+    ) => Effect.Effect<void, ThreadNotFound | MessageNotQueued>;
+    /** Stops the thread's running reply, if any, and starts this queued message once the turn has ended. */
+    readonly sendNow: (
+      threadId: ThreadId,
+      messageId: MessageId,
+    ) => Effect.Effect<void, ThreadNotFound | MessageNotQueued>;
     /**
      * Asks the thread's current turn to stop and returns once the request is recorded: the reply shows
      * as stopping, then as stopped when the runtime confirms the turn ended. Asking again, or with no
@@ -58,6 +68,8 @@ export class ChatService extends Context.Service<
     readonly stop: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
     /** Stops every turn the hob has in progress and waits until each has ended (stopped if the user had asked, otherwise interrupted). */
     readonly interruptAgent: (agentId: AgentId) => Effect.Effect<void>;
+    /** Starts the hob's queued messages in threads with no turn running, as when it wakes. */
+    readonly drainAgent: (agentId: AgentId) => Effect.Effect<void>;
     /** Threads with a turn in progress in this process. */
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
   }
@@ -73,6 +85,11 @@ export class ChatService extends Context.Service<
       const scope = yield* Effect.scope;
       // The reply each running turn is writing, so a stop request can reach it.
       const replies = new Map<ThreadId, Reply>();
+      // Threads with a turn running or just ended and not yet drained. In-process, as turns are;
+      // the queue itself is the stored queued messages.
+      const busy = new Set<ThreadId>();
+      // The queued message Send now picked to start next in each thread.
+      const chosen = new Map<ThreadId, MessageId>();
 
       const publishMessage = (message: Message) =>
         Effect.forEach(messageEvents(message), bus.publish, { discard: true });
@@ -106,6 +123,27 @@ export class ChatService extends Context.Service<
         const next = MessageTransitions.interrupt(message);
         if (next instanceof Message) yield* saveMessage(next);
       }
+
+      // A queued message's start and removal write, then announce the change once it is committed (CH-008).
+      const saveStarted = (message: Message, reply: Message) =>
+        Effect.gen(function* () {
+          if (!(yield* repo.startQueuedMessage(message, reply))) return false;
+          yield* publishMessage(message);
+          yield* bus.publish({
+            _tag: "MessageDequeued",
+            threadId: message.threadId,
+            messageId: message.id,
+            reason: "started",
+          });
+          yield* publishMessage(reply);
+          return true;
+        });
+      const saveRemoved = (threadId: ThreadId, messageId: MessageId) =>
+        Effect.gen(function* () {
+          if (!(yield* repo.removeQueuedMessage(threadId, messageId))) return false;
+          yield* bus.publish({ _tag: "MessageDequeued", threadId, messageId, reason: "removed" });
+          return true;
+        });
 
       // Status is read under the hob's lock, so a pause or retirement cannot slip in before the thread is saved.
       const createThread = Effect.fn("ChatService.createThread")(function* (agentId: AgentId) {
@@ -207,6 +245,101 @@ export class ChatService extends Context.Service<
           ),
         );
 
+      // Starts a turn for a prompt that is already stored. Runs under the hob's lock; the thread is
+      // busy from here until the turn's drain releases it, so later prompts queue behind it.
+      // `saveReply` stores the new streaming reply; the turn starts only once it is saved.
+      const beginTurn = (
+        thread: Thread,
+        agent: Agent,
+        prompt: string,
+        saveReply: (reply: Message) => Effect.Effect<boolean> = (reply) => Effect.as(saveMessage(reply), true),
+      ) =>
+        Effect.gen(function* () {
+          const config = yield* repo.findAgentConfig(agent.id, agent.configVersion).pipe(Effect.map(Option.getOrThrow));
+          const now = yield* nowIso;
+          const assistantMessage = new Message({
+            id: MessageId.make(crypto.randomUUID()),
+            threadId: thread.id,
+            role: "assistant",
+            content: "",
+            status: "streaming",
+            error: null,
+            configVersion: config.version,
+            createdAt: now,
+          });
+          const updated = new Thread({
+            ...thread,
+            title: thread.title === DEFAULT_THREAD_TITLE ? titleFromPrompt(prompt) : thread.title,
+            updatedAt: now,
+          });
+          if (!(yield* saveReply(assistantMessage))) return null;
+          yield* saveThread(updated);
+          busy.add(thread.id);
+          // Registered before the turn starts, so a stop sent right away still reaches it.
+          const reply: Reply = { current: yield* Ref.make(assistantMessage), lock: yield* Semaphore.make(1) };
+          replies.set(thread.id, reply);
+          // The drain is forked outside the turn: it waits for the hob's lock, which a retirement
+          // may hold while it waits for this very turn to stop.
+          yield* FiberMap.run(
+            turns,
+            thread.id,
+            runTurn(config, updated, prompt, reply).pipe(Effect.ensuring(Effect.forkIn(drain(thread.id), scope))),
+          );
+          return assistantMessage;
+        });
+
+      // Starts the thread's next queued message, if its hob takes work: the one chosen with Send now,
+      // else the one that has waited longest. Runs under the hob's lock while the thread is not busy.
+      const startNext = (threadId: ThreadId): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          const thread = yield* repo.findThread(threadId);
+          if (Option.isNone(thread)) return;
+          const agent = yield* repo.findAgent(thread.value.agentId);
+          if (Option.isNone(agent) || agent.value.status !== "active") return;
+          const queued = (yield* repo.listMessages(threadId)).filter((m) => m.status === "queued");
+          const next = queued.find((m) => m.id === chosen.get(threadId)) ?? queued[0];
+          chosen.delete(threadId);
+          if (next === undefined) return;
+          const started = QueuedMessageTransitions.start(next);
+          if (!(started instanceof Message)) return;
+          // The message starts together with its reply, so a crash cannot leave it started but unanswered.
+          yield* beginTurn(thread.value, agent.value, started.content, (reply) => saveStarted(started, reply));
+        });
+
+      // After a turn ends, frees its thread and starts what queued behind it.
+      const drain = (threadId: ThreadId) =>
+        Effect.gen(function* () {
+          // The ended turn may still be leaving the map; a new turn must not replace it there.
+          const ended = yield* FiberMap.get(turns, threadId);
+          if (Option.isSome(ended)) yield* Fiber.await(ended.value);
+          const thread = yield* repo.findThread(threadId);
+          if (Option.isNone(thread)) return busy.delete(threadId);
+          yield* admission.withHob(
+            thread.value.agentId,
+            Effect.suspend(() => {
+              busy.delete(threadId);
+              return startNext(threadId);
+            }),
+          );
+        });
+
+      // Starts each idle thread's queued messages: after a restart, or when a paused hob wakes.
+      const drainThreads = (threadIds: ReadonlyArray<ThreadId>) =>
+        Effect.forEach(threadIds, (threadId) =>
+          repo.findThread(threadId).pipe(
+            Effect.flatMap(
+              Option.match({
+                onNone: () => Effect.void,
+                onSome: (thread) =>
+                  admission.withHob(
+                    thread.agentId,
+                    Effect.suspend(() => (busy.has(threadId) ? Effect.void : startNext(threadId))),
+                  ),
+              }),
+            ),
+          ),
+        );
+
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (threadId: ThreadId, content: string) {
         const { agentId } = yield* findThread(threadId);
         // The status check and the turn's registration happen under the hob's lock, so a turn is
@@ -215,48 +348,56 @@ export class ChatService extends Context.Service<
           agentId,
           Effect.gen(function* () {
             const thread = yield* findThread(threadId);
-            if (yield* FiberMap.has(turns, threadId)) return yield* new ThreadBusy({ threadId });
             const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
-            const config = yield* repo
-              .findAgentConfig(agent.id, agent.configVersion)
-              .pipe(Effect.map(Option.getOrThrow));
-            yield* requireActive(agent);
-            const now = yield* nowIso;
-
+            // A retired hob takes nothing; a paused one keeps messages queued until it wakes.
+            if (agent.status === "retired") yield* requireActive(agent);
+            // A message waits while its hob is paused, while a reply runs, and behind any message
+            // already waiting, so the thread's messages start in the order they were sent (CH-008).
+            const waits =
+              agent.status === "paused" || busy.has(threadId) || Option.isSome(yield* repo.nextQueuedMessage(threadId));
             const userMessage = new Message({
               id: MessageId.make(crypto.randomUUID()),
               threadId,
               role: "user",
               content,
-              status: "complete",
+              status: waits ? "queued" : "complete",
               error: null,
               configVersion: null,
-              createdAt: now,
+              createdAt: yield* nowIso,
             });
-            const assistantMessage = new Message({
-              id: MessageId.make(crypto.randomUUID()),
-              threadId,
-              role: "assistant",
-              content: "",
-              status: "streaming",
-              error: null,
-              configVersion: config.version,
-              createdAt: now,
-            });
-            const updated = new Thread({
-              ...thread,
-              title: thread.title === DEFAULT_THREAD_TITLE ? titleFromPrompt(content) : thread.title,
-              updatedAt: now,
-            });
-
             yield* saveMessage(userMessage);
-            yield* saveMessage(assistantMessage);
-            yield* saveThread(updated);
-            // Registered before the turn starts, so a stop sent right away still reaches it.
-            const reply: Reply = { current: yield* Ref.make(assistantMessage), lock: yield* Semaphore.make(1) };
-            replies.set(threadId, reply);
-            yield* FiberMap.run(turns, threadId, runTurn(config, updated, content, reply));
+            if (waits) return { userMessage, assistantMessage: null };
+            const assistantMessage = yield* beginTurn(thread, agent, content);
             return { userMessage, assistantMessage };
+          }),
+        );
+      });
+
+      const removeQueued = Effect.fn("ChatService.removeQueued")(function* (threadId: ThreadId, messageId: MessageId) {
+        const { agentId } = yield* findThread(threadId);
+        yield* admission.withHob(
+          agentId,
+          Effect.gen(function* () {
+            if (!(yield* saveRemoved(threadId, messageId))) return yield* new MessageNotQueued({ messageId });
+            if (chosen.get(threadId) === messageId) chosen.delete(threadId);
+          }),
+        );
+      });
+
+      // The choice is held in memory: after a restart the queue simply keeps its order.
+      const sendNow = Effect.fn("ChatService.sendNow")(function* (threadId: ThreadId, messageId: MessageId) {
+        const { agentId } = yield* findThread(threadId);
+        yield* admission.withHob(
+          agentId,
+          Effect.gen(function* () {
+            const messages = yield* repo.listMessages(threadId);
+            if (!messages.some((m) => m.id === messageId && m.status === "queued")) {
+              return yield* new MessageNotQueued({ messageId });
+            }
+            chosen.set(threadId, messageId);
+            // The chosen message starts in the drain once the stopped turn has ended.
+            if (busy.has(threadId)) yield* stop(threadId);
+            else yield* startNext(threadId);
           }),
         );
       });
@@ -284,7 +425,27 @@ export class ChatService extends Context.Service<
         }
       });
 
-      return ChatService.of({ createThread, sendPrompt, stop, interruptAgent, activeThreads });
+      const drainAgent = Effect.fn("ChatService.drainAgent")(function* (agentId: AgentId) {
+        const threads = yield* repo.threadsWithQueuedMessages;
+        const own = yield* Effect.filter(threads, (threadId) =>
+          repo.findThread(threadId).pipe(Effect.map((t) => Option.isSome(t) && t.value.agentId === agentId)),
+        );
+        yield* drainThreads(own);
+      });
+
+      // Messages queued before a restart start again, through the same path as any other.
+      yield* drainThreads(yield* repo.threadsWithQueuedMessages);
+
+      return ChatService.of({
+        createThread,
+        sendPrompt,
+        removeQueued,
+        sendNow,
+        stop,
+        interruptAgent,
+        drainAgent,
+        activeThreads,
+      });
     }),
   );
 }

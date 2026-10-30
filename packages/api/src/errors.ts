@@ -1,4 +1,4 @@
-import { AgentId, AgentStatus, ThreadId } from "@hobbots/domain";
+import { AgentId, AgentStatus, MessageId, ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 
 export class AgentNotFound extends Schema.TaggedError<AgentNotFound>()(
@@ -23,9 +23,10 @@ export class ThreadNotFound extends Schema.TaggedError<ThreadNotFound>()(
   { httpApiStatus: 404 },
 ) {}
 
-export class ThreadBusy extends Schema.TaggedError<ThreadBusy>()(
-  "ThreadBusy",
-  { threadId: ThreadId },
+/** A message that is not waiting in the thread's queue: it already started, was removed, or is elsewhere. */
+export class MessageNotQueued extends Schema.TaggedError<MessageNotQueued>()(
+  "MessageNotQueued",
+  { messageId: MessageId },
   { httpApiStatus: 409 },
 ) {}
 
