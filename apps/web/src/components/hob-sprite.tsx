@@ -4,6 +4,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useMemo } from "react";
 import { hobLook } from "../art/look.ts";
 import type { HobState } from "../lib/hob-state.ts";
+import { SigilBadge } from "./role-sigil.tsx";
 
 export { type HobState, hobState, stateLabel, threadState } from "../lib/hob-state.ts";
 
@@ -26,19 +27,23 @@ const marks: Partial<Record<HobState, { text: string; className: string }>> = {
 };
 
 /**
- * A hob's seeded avatar, in its role's hat and tool, with its state motion. Wrap a parent in `hop-on-hover` to make it hop
- * on hover; `.sprite` is the element that hops.
+ * A hob's seeded avatar, in its role's hat and tool, with its state motion. With `badge`, its role's
+ * sigil sits on the bottom-left corner. Wrap a parent in `hop-on-hover` to make it hop on hover;
+ * `.sprite` is the element that hops, and the sigil stays put.
  */
 export function HobSprite({
   hob,
   size,
   state = "idle",
+  badge = false,
   className,
 }: {
   /** A hob without a role hat or tool wears what its seed picks. */
-  hob: Pick<Agent, "lookSeed" | "lookColor"> & Partial<Pick<Agent, "hat" | "tool">>;
+  hob: Pick<Agent, "lookSeed" | "lookColor"> & Partial<Pick<Agent, "hat" | "tool" | "sigil">>;
   size: number;
   state?: HobState;
+  /** Shows the role's sigil, which is decorative: say the role's title in words beside it. */
+  badge?: boolean;
   className?: string;
 }) {
   const look = useMemo(
@@ -51,6 +56,7 @@ export function HobSprite({
       <span className="sprite block">
         <PixelArt rows={look.rows} palette={look.palette} size={size} className={motion[state]} />
       </span>
+      {badge && hob.sigil && <SigilBadge sigil={hob.sigil} avatar={size} />}
       {mark && (
         <span
           aria-hidden

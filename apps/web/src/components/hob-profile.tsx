@@ -1,4 +1,4 @@
-import type { Agent, AgentId, RetireWork } from "@hobbots/domain";
+import { type Agent, type AgentId, type RetireWork, ROLE_FAMILIES, type RoleId, STARTER_ROLES } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -8,14 +8,18 @@ import { useActivity } from "../api/activity.ts";
 import { ApiError } from "../api/client.ts";
 import {
   brainLine,
+  goodAt,
   INSTRUCTIONS_MAX,
   isDirty,
   type ProfileDraft,
+  pickRole,
   profileDraft,
   profileEdit,
   RETIRE_OPTIONS,
+  ROLE_TITLE_MAX,
   rebaseDraft,
   retiredSummary,
+  roleProblem,
   summonedLine,
 } from "../api/profile.ts";
 import { agentsQuery, modelsQuery, threadsQuery, usePauseHob, useRetireHob, useUpdateHob } from "../api/queries.ts";
@@ -24,6 +28,7 @@ import { setupQuery } from "../api/setup.ts";
 import { hobState, stateLabel } from "../lib/hob-state.ts";
 import { Brain, Choice } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
+import { RoleSigil } from "./role-sigil.tsx";
 
 type Tab = "instructions" | "tools" | "permissions";
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
@@ -97,6 +102,7 @@ function Profile({
   const [retireOpen, setRetireOpen] = useState(false);
   const [hops, setHops] = useState(0);
   const paused = hob.status === "paused";
+  const good = goodAt(hob);
 
   const togglePause = () =>
     pause.mutate(!paused, {
@@ -108,16 +114,20 @@ function Profile({
       <header className="flex items-center gap-5 border-b-4 border-line bg-panel px-8 pt-[22px] pb-[18px]">
         <div className="hop-on-hover bg-line p-2">
           <span key={hops} className={cn("block", hops > 0 && "animate-hb-hop")}>
-            <HobSprite hob={hob} size={72} state={state} />
+            <HobSprite hob={hob} size={72} state={state} badge />
           </span>
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <Link to="/hobs/$hobId" params={{ hobId: hob.id }} className="text-sm text-lantern hover:text-lantern-hover">
             ← Back to chat
           </Link>
-          <h1 className="m-0 truncate font-pixel text-[32px] font-bold">
-            {hob.name} <span className="font-medium text-secondary-text">the {hob.roleTitle}</span>
-          </h1>
+          <h1 className="m-0 truncate font-pixel text-[32px] font-bold">{hob.name}</h1>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="cut flex-none bg-line px-2 py-0.5 text-[13px] font-bold text-moonlight">
+              {hob.roleTitle}
+            </span>
+            {good && <span className="truncate text-[13px] text-secondary-text">Good at: {good}</span>}
+          </div>
           <ul aria-label="About" className="m-0 flex list-none flex-wrap gap-2 p-0">
             <li className={cn("bg-deep px-2.5 py-1 text-[13px]", paused ? "text-lantern" : "text-mint")}>
               {paused
@@ -248,7 +258,8 @@ function InstructionsTab({ hob }: { hob: Agent }) {
   }, [hob, models.data]);
 
   const edit = profileEdit(hob, draft);
-  const changes = Object.keys(edit).length > 0;
+  const problem = roleProblem(draft);
+  const changes = Object.keys(edit).length > 0 && problem === undefined;
   const rejected = update.error instanceof ApiError && update.error.tag === "InvalidHob" ? update.error : undefined;
 
   const save = (event: React.FormEvent) => {
@@ -272,15 +283,17 @@ function InstructionsTab({ hob }: { hob: Agent }) {
 
   const status = update.isPending
     ? "Saving…"
-    : rejected
-      ? `Hobbots could not save: ${rejected.message}.`
-      : update.isError
-        ? "Hobbots could not save the changes. Try again."
-        : dirty
-          ? `Unsaved changes. ${hob.name}'s next reply uses them once saved.`
-          : saved === hob.configVersion
-            ? `Saved as version ${saved}. ${hob.name}'s next reply uses it.`
-            : "";
+    : problem
+      ? problem
+      : rejected
+        ? `Hobbots could not save: ${rejected.message}.`
+        : update.isError
+          ? "Hobbots could not save the changes. Try again."
+          : dirty
+            ? `Unsaved changes. ${hob.name}'s next reply uses them once saved.`
+            : saved === hob.configVersion
+              ? `Saved as version ${saved}. ${hob.name}'s next reply uses it.`
+              : "";
 
   return (
     <form onSubmit={save} className="grid grid-cols-[minmax(0,1fr)_340px] gap-7">
@@ -327,6 +340,8 @@ function InstructionsTab({ hob }: { hob: Agent }) {
       </div>
 
       <div className="flex flex-col gap-5">
+        <RoleField name={hob.name} draft={draft} onChange={setDraft} disabled={update.isPending} />
+
         <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-2.5 border-0 p-0">
           <legend className="lbl mb-2.5 text-moonlight">Brain</legend>
           <div className="flex flex-wrap gap-1.5">
@@ -366,6 +381,79 @@ function InstructionsTab({ hob }: { hob: Agent }) {
         </section>
       </div>
     </form>
+  );
+}
+
+const OWN_TITLE = "own";
+
+/**
+ * The hob's role: a starter role, or a title in the user's own words that keeps the sigil it has.
+ * Saved with the rest of the tab as the next configuration version.
+ */
+function RoleField({
+  name,
+  draft,
+  onChange,
+  disabled,
+}: {
+  name: string;
+  draft: ProfileDraft;
+  onChange: (update: (draft: ProfileDraft) => ProfileDraft) => void;
+  disabled: boolean;
+}) {
+  const id = useId();
+  return (
+    <fieldset disabled={disabled} className="m-0 flex flex-col gap-2 border-0 p-0">
+      <legend className="lbl mb-2.5 text-moonlight">Role</legend>
+      <div className="flex items-center gap-2.5">
+        <span className="grid size-9 flex-none place-items-center bg-deep">
+          <RoleSigil sigil={draft.sigil} size={24} />
+        </span>
+        <label htmlFor={`${id}-role`} className="sr-only">
+          Role
+        </label>
+        <select
+          id={`${id}-role`}
+          value={draft.role ?? OWN_TITLE}
+          onChange={(e) => {
+            const value = e.target.value;
+            onChange((d) => pickRole(d, value === OWN_TITLE ? null : (value as RoleId)));
+          }}
+          className="min-w-0 flex-1 border-2 border-control bg-deep px-2.5 py-[7px] text-text"
+        >
+          {ROLE_FAMILIES.map((family) => (
+            <optgroup key={family.id} label={family.title}>
+              {STARTER_ROLES.filter((role) => role.family === family.id).map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.title}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+          <option value={OWN_TITLE}>Your own title…</option>
+        </select>
+      </div>
+      {draft.role === null && (
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`${id}-title`} className="text-sm text-secondary-text">
+            Role title
+          </label>
+          <input
+            id={`${id}-title`}
+            value={draft.roleTitle}
+            maxLength={ROLE_TITLE_MAX}
+            onChange={(e) => {
+              const roleTitle = e.target.value;
+              onChange((d) => ({ ...d, roleTitle }));
+            }}
+            className="border-2 border-control bg-deep px-2.5 py-[7px] text-text"
+          />
+        </div>
+      )}
+      <span className="text-[13px] text-label">
+        A role is a label. It changes how {name} looks, not what {name} may do.
+      </span>
+    </fieldset>
   );
 }
 

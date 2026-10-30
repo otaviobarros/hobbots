@@ -101,15 +101,14 @@ export function ChatView({
             »
           </Button>
         )}
-        <HobSprite hob={current} size={36} state={state} />
+        <HobSprite hob={current} size={36} state={state} badge />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-baseline gap-2">
             <span className="font-pixel text-xl font-semibold whitespace-nowrap">{current.name}</span>
+            <span className="text-sm font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
             <span className="truncate text-secondary-text">{title}</span>
           </span>
-          <span className="text-xs text-label">
-            {current.roleTitle} · {stateLabel[state]}
-          </span>
+          <span className="text-xs text-label">{stateLabel[state]}</span>
         </div>
         <RuntimeChip />
         <Button asChild variant="outline">

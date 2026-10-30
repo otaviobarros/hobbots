@@ -104,7 +104,7 @@ function HobEntry({
         )}
       >
         <span className="bg-line p-0.5">
-          <HobSprite hob={hob} size={28} state={state} />
+          <HobSprite hob={hob} size={28} state={state} badge />
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex justify-between gap-1.5">
@@ -113,8 +113,9 @@ function HobEntry({
               {stateLabel[state]}
             </span>
           </span>
-          <span className="text-xs text-label">
-            {hob.roleTitle} · {count === 1 ? "1 thread" : `${count} threads`}
+          <span className="flex min-w-0 gap-1.5 text-xs text-label">
+            <span className="truncate font-bold text-moonlight">{hob.roleTitle}</span>
+            <span className="whitespace-nowrap">· {count === 1 ? "1 thread" : `${count} threads`}</span>
           </span>
         </span>
       </Link>
