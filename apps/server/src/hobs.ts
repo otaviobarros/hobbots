@@ -2,7 +2,7 @@ import { type CreateAgentPayload, HobInputErrors, InvalidHob } from "@hobbots/ap
 import { Agent, AgentId, type Effort, type RuntimeModels } from "@hobbots/domain";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter } from "@hobbots/runtimes";
-import { Context, DateTime, Effect, Layer, SchemaIssue } from "effect";
+import { Context, DateTime, Effect, Layer, Option, SchemaIssue } from "effect";
 import { HttpApiMiddleware } from "effect/http-api";
 import { EventBus } from "./event-bus.ts";
 
@@ -44,6 +44,17 @@ export const HobInputErrorsLayer = HttpApiMiddleware.layerSchemaErrorTransform(H
   );
 });
 
+const createdFields = [
+  "name",
+  "craft",
+  "lookSeed",
+  "lookColor",
+  "runtime",
+  "model",
+  "effort",
+  "instructions",
+] as const satisfies ReadonlyArray<keyof CreateAgentPayload & keyof Agent>;
+
 export class HobService extends Context.Service<
   HobService,
   { readonly create: (payload: CreateAgentPayload) => Effect.Effect<Agent, InvalidHob> }
@@ -55,15 +66,25 @@ export class HobService extends Context.Service<
       const bus = yield* EventBus;
       const runtime = yield* RuntimeAdapter;
 
+      // A retry carries the same id and fields; the same id with other fields is another hob.
+      const retried = (existing: Agent, payload: CreateAgentPayload) =>
+        createdFields.every((field) => existing[field] === payload[field])
+          ? Effect.succeed(existing)
+          : Effect.fail(new InvalidHob({ field: "id", message: "Another hob already has this id" }));
+
       const create = Effect.fn("HobService.create")(function* (payload: CreateAgentPayload) {
+        const { id = AgentId.make(crypto.randomUUID()), ...fields } = payload;
+        // Reconcile first, so a retry succeeds even if the runtime's model list changed since.
+        const earlier = Option.getOrUndefined(yield* repo.findAgent(id));
+        if (earlier !== undefined) return yield* retried(earlier, payload);
         const invalid = checkBrain(yield* runtime.models, payload);
         if (invalid !== undefined) return yield* invalid;
-        const agent = new Agent({
-          ...payload,
-          id: AgentId.make(crypto.randomUUID()),
-          createdAt: DateTime.formatIso(yield* DateTime.now),
-        });
-        yield* repo.insertAgent(agent);
+        const agent = new Agent({ ...fields, id, createdAt: DateTime.formatIso(yield* DateTime.now) });
+        if (!(yield* repo.insertAgent(agent))) {
+          // A concurrent request with the same id inserted first.
+          const raced = yield* repo.findAgent(id).pipe(Effect.map(Option.getOrThrow));
+          return yield* retried(raced, payload);
+        }
         yield* bus.publish({ _tag: "AgentUpserted", agent });
         return agent;
       });

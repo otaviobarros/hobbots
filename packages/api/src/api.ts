@@ -22,6 +22,11 @@ const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schem
 
 /** A new hob: who it is, how it looks and what it thinks with. */
 export const CreateAgentPayload = Schema.Struct({
+  /**
+   * An id the client chose, so a retry after a lost response returns the hob created the first
+   * time instead of a second one. The server picks one when it is left out.
+   */
+  id: Schema.optionalKey(AgentId.check(Schema.isUUID())),
   name: Label,
   craft: Label,
   lookSeed: LookSeed,

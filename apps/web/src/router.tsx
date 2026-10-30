@@ -12,6 +12,7 @@ import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
+import { OnboardingFirstHob } from "./components/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
 import { Welcome } from "./components/welcome.tsx";
@@ -26,7 +27,7 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
 });
 
 // A new installation opens on Welcome, outside the app shell, until setup is done:
-// Welcome → Where Hobbots runs → providers → Home. Once setup is done, each of them opens Home.
+// Welcome → Where Hobbots runs → providers → first hob → Home. Once setup is done, each of them opens Home.
 const leaveSetupWhenDone = async ({ context }: { context: { queryClient: QueryClient } }) => {
   if (setupDone(await readSetup(context.queryClient))) throw redirect({ to: "/" });
 };
@@ -50,6 +51,13 @@ const providersRoute = createRoute({
   path: "setup/providers",
   beforeLoad: leaveSetupWhenDone,
   component: OnboardingProviders,
+});
+
+const firstHobRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "setup/hob",
+  beforeLoad: leaveSetupWhenDone,
+  component: OnboardingFirstHob,
 });
 
 // Every page after setup shares the rail.
@@ -122,6 +130,7 @@ const routeTree = rootRoute.addChildren([
   welcomeRoute,
   setupWhereRoute,
   providersRoute,
+  firstHobRoute,
   shellRoute.addChildren([
     homeRoute,
     hobsRoute,

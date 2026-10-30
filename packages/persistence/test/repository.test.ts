@@ -113,13 +113,17 @@ describe("HobbotsRepository", () => {
       ] as const) {
         yield* repo.insertAgent(agent(id, seed));
       }
+      // A second insert with a taken id changes nothing.
+      const reinserted = yield* repo.insertAgent(agent("b", 5));
       for (const id of ["t-b", "T-a", "t-a", "ta"]) yield* repo.upsertThread(thread(id));
       return {
+        reinserted,
         agents: yield* repo.listAgents,
         threads: yield* repo.listThreads(agentId),
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
+    expect(result.reinserted).toBe(false);
     // Ties fall back to the id, compared byte by byte (uppercase before lowercase, "-" before letters).
     expect(result.agents.map((a) => [a.id, a.lookSeed])).toEqual([
       ["B", 0],
