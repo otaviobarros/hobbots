@@ -119,14 +119,19 @@ A sandbox that cannot start never falls back silently to running without it: the
 
 ### Charms
 
-Capabilities that act beyond the hob's folders are **Charms**: web search, computer use, purchases, phone calls, sending messages, and in the MVP, Push.
+A **Charm** is a connection that gives a hob abilities beyond its runtime's own tools: an integration with another app or service that lets it reach tools, do additional work and create things there. GitHub, Slack, Google Drive, Notion, Figma, any MCP server, and later web search, computer use, purchases or phone calls are all Charms.
+
+- **Connect once, grant per hob.** The user connects a Charm on the hub once (signing in or adding a key), then grants it to each hob from that hob's Charms tab. A hob without the grant cannot see the Charm.
+- **Each action has its own answer.** A Charm lists its actions, and each is Allow, Ask or Never per hob (for Slack, reading channels can be Allow while sending a message is Ask).
+- **Where Charms come from.** A few are built in, and any MCP server the user adds becomes one; a catalog can come later. The MVP ships the built-in GitHub Charm with one action, Push.
+- The runtime's own tools (files, commands, Git, web) are not Charms; the profile lists them as Built in.
 
 - A Charm runs on the hub, in the Hobbots server process, **outside the runtime sandbox**. The adapter exposes it to the runtime as a tool over the runtime's own control channel (for Claude Code, an in-process MCP server from the SDK), never over the network, so the sandbox's network rules neither reach nor block it.
 - Every Charm call goes through the policy engine with Allow / Ask / Never, with its exact arguments in the approval (the remote, branch and commits for Push). The sandbox confines only what the runtime does on its own; it never blocks a Charm the user granted.
-- Credentials a Charm needs (Git credentials, payment details) stay on the hub and never enter the sandbox, which is what makes a Charm the only route to that effect: a `git push` typed as a command fails for lack of credentials.
+- Credentials a Charm needs (Git credentials, service sign-ins and keys, payment details) stay on the hub and never enter the sandbox, which is what makes a Charm the only route to that effect: a `git push` typed as a command fails for lack of credentials.
 - Hobbots' coordination tools (delegate, message a hob, report a result) are not Charms. Every hob has them within its policy ([ADR 005](005-agent-parity.md)), and they keep the agent control-plane exclusions of the permissions contract.
 
-**The profile's Tools tab becomes Charms.** The hob profile's tabs are Profile, Charms and Permissions. Charms lists what the hob can do: its runtime's own tools (files, commands, Git, web) with how each is enforced, then its Charms with their answer. Permissions holds what it may touch: its folders (shared and its own, with add and remove for its own), the sandbox switch and the rules per operation.
+**The profile's Tools tab becomes Charms.** The hob profile's tabs are Profile, Charms and Permissions. Charms lists what the hob can do: its runtime's own tools (files, commands, Git, web) with how each is enforced, then its granted Charms with each action's answer. Permissions holds what it may touch: its folders (shared and its own, with add and remove for its own), the sandbox switch and the rules per operation.
 
 ### Turning the sandbox off
 

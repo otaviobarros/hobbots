@@ -59,7 +59,7 @@ The component sheet defines: buttons (primary, approve, secondary, deny, quiet, 
 - Retire asks what happens to a hob's work (hand it off, let it finish, stop it now). Nothing is deleted; the hob moves to Settings › Archived hobs.
 - Closing the window keeps Hobbots in the menu bar by default; Settings › General lets the user change that and turn off Open at login. With it off, closing the last window while hobs work first says that their work will stop.
 - Providers appear only when connected; keys typed by hand go to the OS keychain and never into chat.
-- Capabilities that act beyond a hob's folders are called **Charms** (Push first; later web search, computer use, purchases, phone calls). The hob profile's tabs are Profile, Charms and Permissions. Rules show Allow, Ask or Never; a rule Hobbots can only check, not enforce, says so.
+- Connections that give a hob abilities beyond its runtime's own tools are called **Charms**: integrations with other apps and services (GitHub first, with Push; later Slack, Google Drive, any MCP server). They are connected once and granted per hob. The hob profile's tabs are Profile, Charms and Permissions. Rules show Allow, Ask or Never; a rule Hobbots can only check, not enforce, says so.
 - A hob running without the sandbox shows the Unsandboxed tag on its profile, chat header, Workbench header and Home tile. Turning the sandbox off asks for a confirmation check box.
 
 ## Implementation status
