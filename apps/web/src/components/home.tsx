@@ -132,9 +132,13 @@ export function Home() {
               className="hop-on-hover flex flex-col items-center gap-1.5 text-ground no-underline"
             >
               <span
-                className={cn("bg-text whitespace-nowrap", many ? "px-1.5 py-0.5 text-xs" : "px-2 py-[3px] text-xs")}
+                className={cn(
+                  "flex flex-col items-center bg-text whitespace-nowrap",
+                  many ? "px-1.5 py-0.5 text-xs" : "px-2 py-[3px] text-xs",
+                )}
               >
-                {many ? hob.name : sceneTag(hob, state)}
+                <span>{many ? hob.name : sceneTag(hob, state)}</span>
+                <span className="font-bold">{hob.roleTitle}</span>
               </span>
               {!many && (
                 <span aria-hidden className="block h-1.5 w-16 bg-line-2">
@@ -143,7 +147,7 @@ export function Home() {
                   )}
                 </span>
               )}
-              <HobSprite hob={hob} size={many ? 52 : 64} state={state} />
+              <HobSprite hob={hob} size={many ? 52 : 64} state={state} badge />
             </Link>
           ))}
         </div>

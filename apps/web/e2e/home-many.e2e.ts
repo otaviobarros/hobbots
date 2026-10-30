@@ -12,7 +12,7 @@ test.afterEach(async () => {
 });
 
 /** A hub past setup with 20 resting hobs; Wick is the only Cartographer. */
-const hubWithTwentyHobs = async () => {
+const hubWithHobs = async (count: number) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
   const api = async (method: string, path: string, body: unknown) => {
@@ -26,7 +26,7 @@ const hubWithTwentyHobs = async () => {
   };
   await api("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
   const ids: Record<string, string> = {};
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < count; i++) {
     const name = i === 13 ? "Wick" : `Hob ${i + 1}`;
     const hob = await api("POST", "/agents", {
       id: randomUUID(),
@@ -52,7 +52,7 @@ const hubWithTwentyHobs = async () => {
 test("[TC-UX-001] with 20 hobs the scene shows six, the hall holds 14 and the filter finds a hob by role title", async ({
   page,
 }) => {
-  const { url } = await hubWithTwentyHobs();
+  const { url } = await hubWithHobs(20);
   await page.goto(url);
 
   const scene = page.getByRole("region", { name: "Your hobs right now" });
@@ -75,7 +75,7 @@ test("[TC-UX-001] with 20 hobs the scene shows six, the hall holds 14 and the fi
 
 // covers UX-001
 test("[TC-UX-004] Home tiles show each hob's sigil and role, and the filter finds hobs by role", async ({ page }) => {
-  const { url } = await hubWithTwentyHobs();
+  const { url } = await hubWithHobs(20);
   await page.goto(url);
   const all = page.getByRole("region", { name: "All hobs" });
   await page.getByRole("region", { name: "Your hobs right now" }).getByRole("button", { name: "20 resting" }).click();
@@ -92,8 +92,22 @@ test("[TC-UX-004] Home tiles show each hob's sigil and role, and the filter find
 });
 
 // covers UX-001
+test("[TC-UX-005] with six or fewer hobs the Home scene shows each hob's sigil and role", async ({ page }) => {
+  const { url } = await hubWithHobs(5);
+  await page.goto(url);
+  const scene = page.getByRole("region", { name: "Your hobs right now" });
+  await expect(scene.getByRole("link", { name: /^Open chat with/ })).toHaveCount(5);
+  await expect(page.getByRole("region", { name: "All hobs" })).toHaveCount(0);
+
+  const qa = scene.getByRole("link", { name: "Open chat with Hob 5, QA engineer, ready" });
+  await expect(qa).toContainText("QA engineer");
+  await expect(qa.locator('[data-slot="sigil-badge"]')).toHaveAttribute("aria-hidden", "true");
+  await expect(scene.getByRole("link", { name: /^Open chat with Hob 1,/ })).toContainText("Assistant");
+});
+
+// covers UX-001
 test("[TC-UX-002] ⌘K opens a hob's chat from any page", async ({ page }) => {
-  const { url, ids } = await hubWithTwentyHobs();
+  const { url, ids } = await hubWithHobs(20);
   await page.goto(`${url}/#/usage`);
   await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
 
@@ -109,7 +123,7 @@ test("[TC-UX-002] ⌘K opens a hob's chat from any page", async ({ page }) => {
 
 // covers UX-001
 test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", async ({ page }) => {
-  const { url } = await hubWithTwentyHobs();
+  const { url } = await hubWithHobs(20);
   await page.goto(url);
   await expect(page.getByRole("region", { name: "All hobs" })).toBeVisible();
 
