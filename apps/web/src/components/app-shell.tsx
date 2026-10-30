@@ -1,5 +1,6 @@
 import { Outlet } from "@tanstack/react-router";
 import { useHobbotsEvents } from "../api/events.ts";
+import { HobJump } from "./hob-jump.tsx";
 import { Rail } from "./rail.tsx";
 
 /** The window: its title bar and whichever page fills it, with or without the rail. */
@@ -36,6 +37,7 @@ export function AppShell() {
         <Rail />
         <Outlet />
       </div>
+      <HobJump />
     </>
   );
 }
