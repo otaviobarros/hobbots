@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent, AgentId, type AgentStatus, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
+import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { HobbotsRepository, migrations, SearchIndex, SqliteLive } from "../src/index.ts";
 import searchIndex from "../src/migrations/0011_search_index.ts";
@@ -164,6 +165,43 @@ describe("SearchIndex", () => {
 
     expect(ids(result.exact)).toEqual([["taxes", ["t3"]]]);
     expect(ids(result.prefix)).toEqual([["taxes", ["t3"]]]);
+  });
+
+  // covers CH-006, CH-008
+  it("[TC-CH-070] a queued message joins the index when its turn starts, and a stopped reply when it stops", async () => {
+    const queued = (id: string, content: string) =>
+      new Message({ ...message(id, "taxes", content, "queued"), role: "user" });
+    const result = await Effect.gen(function* () {
+      yield* seed;
+      const repo = yield* HobbotsRepository;
+      const index = yield* SearchIndex;
+      yield* repo.upsertMessage(queued("q1", "Ask about walnuts"));
+      yield* repo.upsertMessage(queued("q2", "Ask about walnuts again"));
+      const whileQueued = yield* index.search("walnuts");
+      // Starting the first saves it and its streaming reply in one transaction; removing the second deletes it.
+      yield* repo.startQueuedMessage(
+        new Message({ ...queued("q1", "Ask about walnuts"), status: "complete" }),
+        message("r1", "taxes", "Walnuts keep", "streaming"),
+      );
+      yield* repo.removeQueuedMessage(ThreadId.make("taxes"), MessageId.make("q2"));
+      const started = yield* index.search("walnuts");
+      yield* repo.upsertMessage(message("r1", "taxes", "Walnuts keep for months", "stopping"));
+      const stopping = yield* index.search("months");
+      yield* repo.upsertMessage(message("r1", "taxes", "Walnuts keep for months", "stopped"));
+      // Removing a message the index never held must not touch the index; SQLite's check fails if it did.
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql.onDialectOrElse({
+        pg: () => Effect.void,
+        orElse: () => sql`INSERT INTO messages_search (messages_search, rank) VALUES ('integrity-check', 1)`,
+      });
+      return { whileQueued, started, stopping, stopped: yield* index.search("walnuts") };
+    }).pipe(Effect.provide(Layers), Effect.runPromise);
+
+    expect(result.whileQueued).toEqual([]);
+    expect(ids(result.started)).toEqual([["taxes", ["q1"]]]);
+    expect(result.stopping).toEqual([]);
+    expect(result.stopped[0]?.matches.map((m) => m.messageId).sort()).toEqual(["q1", "r1"]);
+    expect(result.stopped[0]?.matchCount).toBe(2);
   });
 
   // covers CH-006, DP-003

@@ -11,7 +11,7 @@ import {
 import { Context, Effect, Layer, Schema, String as Str } from "effect";
 import { SqlClient } from "effect/sql";
 
-// Search over thread titles and finished messages (CH-006), on SQLite FTS5 or PostgreSQL full-text
+// Search over thread titles and settled messages (CH-006), on SQLite FTS5 or PostgreSQL full-text
 // search (migration 0011). Hobs that retired are left out. On a SQLite file the query runs in a
 // worker thread with its own read-only connection, so a long search never blocks the server (ADR 011).
 
@@ -82,6 +82,8 @@ SELECT f.*, r.id AS message_id, r.role AS message_role, r.content AS message_con
 FROM found f LEFT JOIN ranked r ON r.thread_id = f.id AND r.match_rank <= ${MATCHES_PER_THREAD}
 ORDER BY f.updated_at DESC, f.id, r.match_rank`;
 
+/** Messages the index leaves out: still queued, or a reply still streaming or stopping. */
+const UNSETTLED = "NOT IN ('queued', 'streaming', 'stopping')";
 const MATCHED_COLUMNS = "m.thread_id, m.id, m.role, m.content, m.created_at, m.seq";
 
 /** SQLite's query, shared by the in-process and worker connections. */
@@ -89,14 +91,14 @@ const SQLITE_QUERY = `WITH
   titled AS (SELECT t.id FROM threads_search s JOIN threads t ON t.rowid = s.rowid WHERE threads_search MATCH ?1),
   matched AS (
     SELECT ${MATCHED_COLUMNS} FROM messages_search s JOIN messages m ON m.rowid = s.rowid
-    WHERE messages_search MATCH ?1 AND m.status <> 'streaming'),${THREADS_THEN_MATCHES}`;
+    WHERE messages_search MATCH ?1 AND m.status ${UNSETTLED}),${THREADS_THEN_MATCHES}`;
 
 /** PostgreSQL's query, on its language-neutral configuration, which keeps accents. */
 const PG_QUERY = `WITH
   titled AS (SELECT id FROM threads WHERE to_tsvector('simple', title) @@ to_tsquery('simple', $1)),
   matched AS (
     SELECT ${MATCHED_COLUMNS} FROM messages m
-    WHERE to_tsvector('simple', m.content) @@ to_tsquery('simple', $1) AND m.status <> 'streaming'),${THREADS_THEN_MATCHES}`;
+    WHERE to_tsvector('simple', m.content) @@ to_tsquery('simple', $1) AND m.status ${UNSETTLED}),${THREADS_THEN_MATCHES}`;
 
 /** Every term as a quoted prefix; terms hold only letters and digits, so nothing needs escaping. */
 const ftsQuery = (terms: ReadonlyArray<string>) => terms.map((term) => `"${term}"*`).join(" ");
