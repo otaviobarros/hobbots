@@ -1,4 +1,4 @@
-import type { RuntimeHealth } from "@hobbots/domain";
+import type { RuntimeHealth, RuntimeKind } from "@hobbots/domain";
 
 export const claudeInstallGuide = "https://code.claude.com/docs/en/setup";
 
@@ -19,9 +19,16 @@ export const runtimeProblem = (
   }
 };
 
-/** Setup continues once at least one provider is ready to think for the first hob. */
-export const canContinueSetup = (runtimes: ReadonlyArray<RuntimeHealth> | undefined): boolean =>
-  runtimes?.some((health) => health.availability === "ready") ?? false;
+/**
+ * Setup continues once the user has connected at least one provider that is ready to think for
+ * the first hob. A ready provider the user has not connected does not count.
+ */
+export const canContinueSetup = (
+  runtimes: ReadonlyArray<RuntimeHealth> | undefined,
+  connected: ReadonlyArray<RuntimeKind> | undefined,
+): boolean =>
+  runtimes?.some((health) => health.availability === "ready" && (connected?.includes(health.runtime) ?? false)) ??
+  false;
 
 /** A ready provider is checked once a minute; one that needs fixing again on every focus or mount. */
 export const runtimeStaleTime = (runtimes: ReadonlyArray<RuntimeHealth> | undefined): number =>

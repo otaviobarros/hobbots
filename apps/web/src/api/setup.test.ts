@@ -1,10 +1,10 @@
 import { InstallationSetup } from "@hobbots/domain";
-import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
-import { opensWelcome, readSetup, setupDone, setupQuery, setupQueryKey } from "./setup.ts";
+import { focusManager, QueryClient, QueryObserver } from "@tanstack/react-query";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { opensWelcome, readSetup, setupDone, setupQuery, setupQueryKey, watchedSetupQuery } from "./setup.ts";
 
 const setup = (completed: boolean) =>
-  new InstallationSetup({ completed, safetyPreset: "balanced", approvedFolders: [] });
+  new InstallationSetup({ completed, safetyPreset: "balanced", approvedFolders: [], connectedProviders: [] });
 
 describe("opening the app", () => {
   it("shows Welcome until setup is done, then Home", () => {
@@ -52,4 +52,45 @@ describe("readSetup", () => {
     };
     expect(await readSetup(client, unreachable)).toEqual(setup(true));
   });
+});
+
+describe("watchedSetupQuery", () => {
+  afterEach(() => focusManager.setFocused(undefined));
+
+  const providers = (connectedProviders: InstallationSetup["connectedProviders"]) =>
+    new InstallationSetup({ completed: false, safetyPreset: "balanced", approvedFolders: [], connectedProviders });
+
+  // covers OP-001, DP-001
+  it("[TC-OP-013] shows a provider another client connected or disconnected once this window is back", async () => {
+    // The hub's stored setup, changed by another client while this window is in the background.
+    let stored = providers(["claude-code"]);
+    // The app's defaults: no refetch on focus, data fresh for 30 seconds.
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } } });
+    const observer = new QueryObserver(client, {
+      ...watchedSetupQuery,
+      queryFn: async () => stored,
+      refetchInterval: false,
+    });
+    // Mounted as QueryClientProvider mounts it, so it follows window focus.
+    client.mount();
+    const unsubscribe = observer.subscribe(() => {});
+    const connected = () => observer.getCurrentResult().data?.connectedProviders;
+    const comeBack = () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    };
+
+    await vi.waitFor(() => expect(connected()).toEqual(["claude-code"]));
+    stored = providers([]);
+    comeBack();
+    await vi.waitFor(() => expect(connected()).toEqual([]));
+    stored = providers(["claude-code"]);
+    comeBack();
+    await vi.waitFor(() => expect(connected()).toEqual(["claude-code"]));
+    unsubscribe();
+    client.unmount();
+  });
+
+  it("checks the hub again every few seconds while the screen is open", () =>
+    expect(watchedSetupQuery.refetchInterval).toBe(3000));
 });

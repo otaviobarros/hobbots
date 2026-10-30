@@ -5,6 +5,7 @@ import hobLook from "./0002_hob_look.ts";
 import lookSeedBigint from "./0003_look_seed_bigint.ts";
 import installationSetup from "./0004_installation_setup.ts";
 import hobBrain from "./0005_hob_brain.ts";
+import connectedProviders from "./0006_connected_providers.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -17,4 +18,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0003_look_seed_bigint": lookSeedBigint,
   "0004_installation_setup": installationSetup,
   "0005_hob_brain": hobBrain,
+  "0006_connected_providers": connectedProviders,
 };

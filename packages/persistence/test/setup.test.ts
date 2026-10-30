@@ -4,6 +4,7 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { HobbotsRepository, SetupRepository } from "../src/index.ts";
 import installationSetup from "../src/migrations/0004_installation_setup.ts";
+import connectedProviders from "../src/migrations/0006_connected_providers.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 const TestLayer = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(Layer.provideMerge(TestDatabase));
@@ -28,7 +29,12 @@ describe("SetupRepository", () => {
       return yield* (yield* SetupRepository).get;
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect({ ...setup }).toEqual({ completed: false, safetyPreset: "balanced", approvedFolders: [] });
+    expect({ ...setup }).toEqual({
+      completed: false,
+      safetyPreset: "balanced",
+      approvedFolders: [],
+      connectedProviders: [],
+    });
   });
 
   // covers OP-001, DP-003
@@ -37,16 +43,22 @@ describe("SetupRepository", () => {
       const sql = yield* SqlClient.SqlClient;
       // Back to the schema before migration 0004, with the hob earlier versions seeded.
       yield* sql`DROP TABLE installation_setup`;
-      yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 4`;
+      yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id IN (4, 6)`;
       yield* (yield* HobbotsRepository).insertAgent(aldric);
       yield* installationSetup;
+      yield* connectedProviders;
       return {
         setup: yield* (yield* SetupRepository).get,
         hobs: yield* (yield* HobbotsRepository).listAgents,
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect({ ...result.setup }).toEqual({ completed: true, safetyPreset: "balanced", approvedFolders: [] });
+    expect({ ...result.setup }).toEqual({
+      completed: true,
+      safetyPreset: "balanced",
+      approvedFolders: [],
+      connectedProviders: ["claude-code"],
+    });
     expect(result.hobs.map((hob) => hob.name)).toEqual(["Aldric"]);
   });
 
@@ -59,8 +71,18 @@ describe("SetupRepository", () => {
       return { first, second, stored: yield* setup.get };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect({ ...result.first }).toEqual({ completed: false, safetyPreset: "careful", approvedFolders: ["/b", "/a"] });
-    expect({ ...result.second }).toEqual({ completed: true, safetyPreset: "careful", approvedFolders: ["/b", "/a"] });
+    expect({ ...result.first }).toEqual({
+      completed: false,
+      safetyPreset: "careful",
+      approvedFolders: ["/b", "/a"],
+      connectedProviders: [],
+    });
+    expect({ ...result.second }).toEqual({
+      completed: true,
+      safetyPreset: "careful",
+      approvedFolders: ["/b", "/a"],
+      connectedProviders: [],
+    });
     expect({ ...result.stored }).toEqual({ ...result.second });
   });
 
@@ -81,6 +103,29 @@ describe("SetupRepository", () => {
       return yield* setup.get;
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect({ ...stored }).toEqual({ completed: true, safetyPreset: "careful", approvedFolders: ["/a"] });
+    expect({ ...stored }).toEqual({
+      completed: true,
+      safetyPreset: "careful",
+      approvedFolders: ["/a"],
+      connectedProviders: [],
+    });
+  });
+
+  // covers OP-001, DP-003
+  it("[TC-OP-012] keeps an unfinished setup's providers empty when it migrates, then stores the user's choice", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      // Back to the schema before migration 0006, with setup still to do.
+      yield* sql`ALTER TABLE installation_setup DROP COLUMN connected_providers`;
+      yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id = 6`;
+      yield* connectedProviders;
+      const setup = yield* SetupRepository;
+      const migrated = yield* setup.get;
+      yield* setup.update({ connectedProviders: ["claude-code"] });
+      return { migrated, stored: yield* setup.get };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result.migrated.connectedProviders).toEqual([]);
+    expect(result.stored.connectedProviders).toEqual(["claude-code"]);
   });
 });

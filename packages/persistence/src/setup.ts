@@ -1,4 +1,4 @@
-import { InstallationSetup, type SafetyPreset } from "@hobbots/domain";
+import { InstallationSetup, type RuntimeKind, type SafetyPreset } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -7,17 +7,20 @@ export interface SetupChange {
   readonly completed?: true;
   readonly safetyPreset?: SafetyPreset;
   readonly approvedFolders?: ReadonlyArray<string>;
+  readonly connectedProviders?: ReadonlyArray<RuntimeKind>;
 }
 
-// `completed` is stored as 0 or 1 and the folders as a JSON array (see migration 0004).
+// `completed` is stored as 0 or 1, the folders and providers as JSON arrays (migrations 0004, 0006).
 const fromRow = (row: {
   readonly completed: unknown;
   readonly safetyPreset: unknown;
   readonly approvedFolders: unknown;
+  readonly connectedProviders: unknown;
 }) => ({
   completed: Number(row.completed) === 1,
   safetyPreset: row.safetyPreset,
   approvedFolders: JSON.parse(String(row.approvedFolders)),
+  connectedProviders: JSON.parse(String(row.connectedProviders)),
 });
 
 /** The installation's setup state; migration 0004 creates its single row. */
@@ -42,7 +45,8 @@ export class SetupRepository extends Context.Service<
             completed: unknown;
             safetyPreset: unknown;
             approvedFolders: unknown;
-          }>`SELECT completed, safety_preset, approved_folders FROM installation_setup WHERE id = 1`.pipe(
+            connectedProviders: unknown;
+          }>`SELECT completed, safety_preset, approved_folders, connected_providers FROM installation_setup WHERE id = 1`.pipe(
             Effect.map((rows) => rows.map(fromRow)),
           ),
       });
@@ -56,6 +60,9 @@ export class SetupRepository extends Context.Service<
           if (change.completed) columns.completed = 1;
           if (change.safetyPreset !== undefined) columns.safety_preset = change.safetyPreset;
           if (change.approvedFolders !== undefined) columns.approved_folders = JSON.stringify(change.approvedFolders);
+          if (change.connectedProviders !== undefined) {
+            columns.connected_providers = JSON.stringify(change.connectedProviders);
+          }
           if (Object.keys(columns).length > 0) {
             yield* sql`UPDATE installation_setup SET ${sql.update(columns)} WHERE id = 1`;
           }

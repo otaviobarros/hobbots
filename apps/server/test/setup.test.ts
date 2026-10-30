@@ -48,12 +48,20 @@ const request = (method: string, path: string, body?: unknown) =>
     ),
   );
 
+const connectedProviders = async (response: Response) =>
+  ((await response.json()) as { connectedProviders: unknown }).connectedProviders;
+
 describe("the setup API", () => {
   // covers OP-001, PE-001
   it("[TC-OP-004] reports a new installation's setup as not done, with no hobs", async () => {
     const setup = await request("GET", "/api/setup");
     expect(setup.status).toBe(200);
-    expect(await setup.json()).toEqual({ completed: false, safetyPreset: "balanced", approvedFolders: [] });
+    expect(await setup.json()).toEqual({
+      completed: false,
+      safetyPreset: "balanced",
+      approvedFolders: [],
+      connectedProviders: [],
+    });
 
     const hobs = await request("GET", "/api/agents");
     expect(await hobs.json()).toEqual([]);
@@ -70,12 +78,14 @@ describe("the setup API", () => {
       completed: false,
       safetyPreset: "trusting",
       approvedFolders: ["/Users/me/code", "/Users/me/notes"],
+      connectedProviders: [],
     });
 
     const finished = {
       completed: true,
       safetyPreset: "trusting",
       approvedFolders: ["/Users/me/code", "/Users/me/notes"],
+      connectedProviders: [],
     };
     const done = await request("PATCH", "/api/setup", { completed: true });
     expect(await done.json()).toEqual(finished);
@@ -92,6 +102,26 @@ describe("the setup API", () => {
       completed: false,
       safetyPreset: "balanced",
       approvedFolders: [],
+      connectedProviders: [],
     });
+  });
+
+  // covers OP-001, DP-001
+  it("[TC-OP-010] connects and disconnects a provider and keeps the choice", async () => {
+    const connected = await request("PATCH", "/api/setup", { connectedProviders: ["claude-code", "claude-code"] });
+    expect(connected.status).toBe(200);
+    expect(await connectedProviders(connected)).toEqual(["claude-code"]);
+    expect(await connectedProviders(await request("GET", "/api/setup"))).toEqual(["claude-code"]);
+
+    const disconnected = await request("PATCH", "/api/setup", { connectedProviders: [] });
+    expect(await connectedProviders(disconnected)).toEqual([]);
+    expect(await connectedProviders(await request("GET", "/api/setup"))).toEqual([]);
+  });
+
+  // covers OP-001
+  it("[TC-OP-011] rejects a provider Hobbots does not know", async () => {
+    const response = await request("PATCH", "/api/setup", { connectedProviders: ["gemini"] });
+    expect(response.status).toBe(400);
+    expect(await connectedProviders(await request("GET", "/api/setup"))).toEqual([]);
   });
 });
