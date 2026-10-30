@@ -6,6 +6,7 @@ import { HobbotsRepository, SetupRepository, SqliteLive } from "@hobbots/persist
 import { ClaudeCodeLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
+import { HobAdmission } from "./admission.ts";
 import { ChatService } from "./chat.ts";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
@@ -42,7 +43,7 @@ const ServerLive = Layer.unwrap(
           });
     const App = HobLifecycle.layer
       .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)))
-      .pipe(Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, Runtime, identity)));
+      .pipe(Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, HobAdmission.layer, Runtime, identity)));
 
     if (!existsSync(join(config.webDir, "index.html"))) {
       yield* Effect.logWarning(

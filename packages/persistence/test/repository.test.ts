@@ -185,7 +185,7 @@ describe("HobbotsRepository", () => {
   });
 
   // covers AG-006, DP-003
-  it("[TC-AG-035] stores a hob's lifecycle status and lists hobs by status", async () => {
+  it("[TC-AG-035] stores a hob's lifecycle status, refuses a change from a stale status and lists hobs by status", async () => {
     const agent = (id: string, status?: "active" | "paused" | "retired") =>
       new Agent({
         id: AgentId.make(id),
@@ -207,21 +207,26 @@ describe("HobbotsRepository", () => {
       yield* repo.insertAgent(agent("a"));
       yield* repo.insertAgent(agent("b", "paused"));
       yield* repo.insertAgent(agent("c"));
-      yield* repo.setAgentStatus(AgentId.make("c"), "retired");
+      const retired = yield* repo.setAgentStatus(AgentId.make("c"), "active", "retired");
+      // A wake computed from an earlier read of "paused" must not undo the retirement.
+      const staleWake = yield* repo.setAgentStatus(AgentId.make("c"), "paused", "active");
       const ids = (statuses: ReadonlyArray<"active" | "paused" | "retired">) =>
         repo.listAgentsWithStatus(statuses).pipe(Effect.map((agents) => agents.map((a) => [a.id, a.status])));
       return {
+        retired,
+        staleWake,
         current: yield* ids(["active", "paused"]),
-        retired: yield* ids(["retired"]),
+        archived: yield* ids(["retired"]),
         none: yield* ids([]),
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
+    expect([result.retired, result.staleWake]).toEqual([true, false]);
     expect(result.current).toEqual([
       ["a", "active"],
       ["b", "paused"],
     ]);
-    expect(result.retired).toEqual([["c", "retired"]]);
+    expect(result.archived).toEqual([["c", "retired"]]);
     expect(result.none).toEqual([]);
   });
 });

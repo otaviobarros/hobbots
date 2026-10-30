@@ -8,6 +8,7 @@ import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { HobService } from "../src/hobs.ts";
@@ -39,6 +40,7 @@ beforeEach(() => {
         Layer.mergeAll(
           Persistence,
           EventBus.layer,
+          HobAdmission.layer,
           FakeRuntimeLayer(),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/data" }),
         ),

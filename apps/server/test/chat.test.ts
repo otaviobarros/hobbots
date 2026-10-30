@@ -4,6 +4,7 @@ import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Option, Schedule } from "effect";
 import { describe, expect, it } from "vitest";
+import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
 
@@ -33,7 +34,12 @@ const Persistence = HobbotsRepository.layer.pipe(Layer.provideMerge(TestDatabase
 const testLayer = (runtime = FakeRuntimeLayer()) =>
   ChatService.layer.pipe(
     Layer.provideMerge(
-      Layer.mergeAll(Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)), EventBus.layer, runtime),
+      Layer.mergeAll(
+        Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)),
+        EventBus.layer,
+        HobAdmission.layer,
+        runtime,
+      ),
     ),
   );
 const TestLayer = testLayer();

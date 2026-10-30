@@ -6,6 +6,7 @@ import { makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/ru
 import { Effect, Layer, Schedule, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { checkBrain, HobService } from "../src/hobs.ts";
@@ -49,6 +50,7 @@ beforeEach(() => {
         Layer.mergeAll(
           Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(Layer.provideMerge(TestDatabase)),
           EventBus.layer,
+          HobAdmission.layer,
           runtime,
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
         ),

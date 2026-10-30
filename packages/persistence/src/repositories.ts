@@ -16,7 +16,11 @@ export class HobbotsRepository extends Context.Service<
     /** Hobs in any of the given lifecycle states, oldest first. */
     readonly listAgentsWithStatus: (statuses: ReadonlyArray<AgentStatus>) => Effect.Effect<ReadonlyArray<Agent>>;
     readonly findAgent: (id: AgentId) => Effect.Effect<Option.Option<Agent>>;
-    readonly setAgentStatus: (id: AgentId, status: AgentStatus) => Effect.Effect<void>;
+    /**
+     * Moves the hob from one status to another. False, and nothing changed, when its status is no
+     * longer `from` (another change landed first).
+     */
+    readonly setAgentStatus: (id: AgentId, from: AgentStatus, to: AgentStatus) => Effect.Effect<boolean>;
     /** Inserts the hob and its first configuration unless one with its id exists; true when it was inserted. */
     readonly insertAgent: (agent: Agent) => Effect.Effect<boolean>;
     readonly findAgentConfig: (id: AgentId, version: number) => Effect.Effect<Option.Option<AgentConfiguration>>;
@@ -183,8 +187,11 @@ export class HobbotsRepository extends Context.Service<
         listAgentsWithStatus: (statuses) =>
           statuses.length === 0 ? Effect.succeed([]) : listAgentsWithStatus(statuses).pipe(Effect.orDie),
         findAgent: (id) => findAgent(id).pipe(Effect.orDie),
-        setAgentStatus: (id, status) =>
-          sql`UPDATE agents SET status = ${status} WHERE id = ${id}`.pipe(Effect.asVoid, Effect.orDie),
+        setAgentStatus: (id, from, to) =>
+          sql`UPDATE agents SET status = ${to} WHERE id = ${id} AND status = ${from} RETURNING id`.pipe(
+            Effect.map((rows) => rows.length > 0),
+            Effect.orDie,
+          ),
         insertAgent: (agent) => insertAgent(agent).pipe(Effect.orDie),
         findAgentConfig: (agentId, version) => findAgentConfig({ agentId, version }).pipe(Effect.orDie),
         updateAgentConfig: (agent) =>
