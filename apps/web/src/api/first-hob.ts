@@ -138,16 +138,16 @@ export const restoreDraft = (stored: Partial<FirstHobDraft> | null, random: Rand
 };
 
 /** A new look from the dice, which also brings a new set of nearby looks. */
-export const rollLook = (draft: FirstHobDraft, random: Random = Math.random): FirstHobDraft => {
+export const rollLook = <D extends FirstHobDraft>(draft: D, random: Random = Math.random): D => {
   const lookSeed = rollSeed(draft.lookSeed, random);
   return { ...draft, lookSeed, lookBase: lookSeed };
 };
 
 /** Picking one of the nearby looks keeps the set it was picked from. */
-export const pickLook = (draft: FirstHobDraft, lookSeed: number): FirstHobDraft => ({ ...draft, lookSeed });
+export const pickLook = <D extends FirstHobDraft>(draft: D, lookSeed: number): D => ({ ...draft, lookSeed });
 
 /** Picking a craft renames an unnamed hob to that craft's usual name. */
-export const pickCraft = (draft: FirstHobDraft, kind: CraftKind): FirstHobDraft => {
+export const pickCraft = <D extends FirstHobDraft>(draft: D, kind: CraftKind): D => {
   const craft = CRAFTS.find((c) => c.kind === kind);
   return { ...draft, kind, name: draft.named || kind === "custom" || !craft ? draft.name : craft.name };
 };
@@ -166,7 +166,7 @@ export const startingModel = (models: RuntimeModels): RuntimeModel | undefined =
  * The draft's model and effort, settled against what the runtime offers now: a model it no
  * longer lists falls back to its default, and an effort the model does not take to its own.
  */
-export const settleBrain = (draft: FirstHobDraft, models: RuntimeModels): FirstHobDraft => {
+export const settleBrain = <D extends FirstHobDraft>(draft: D, models: RuntimeModels): D => {
   const model = models.models.find((m) => m.id === draft.model) ?? startingModel(models);
   const effort = draft.effort !== null && model?.efforts.includes(draft.effort) ? draft.effort : startingEffort(model);
   const settled = model?.id ?? null;
@@ -174,7 +174,7 @@ export const settleBrain = (draft: FirstHobDraft, models: RuntimeModels): FirstH
 };
 
 /** Picking a model keeps the effort when the new model takes it. */
-export const pickModel = (draft: FirstHobDraft, model: RuntimeModel): FirstHobDraft => ({
+export const pickModel = <D extends FirstHobDraft>(draft: D, model: RuntimeModel): D => ({
   ...draft,
   model: model.id,
   effort: draft.effort !== null && model.efforts.includes(draft.effort) ? draft.effort : startingEffort(model),
@@ -216,16 +216,22 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
 };
 
 /** Locks the draft to its create request; a draft already sent keeps the request it sent. */
-export const submitDraft = (draft: FirstHobDraft): FirstHobDraft & { readonly submitted: CreateAgentPayload } => ({
+export const submitDraft = <D extends FirstHobDraft>(
+  draft: D,
+  toPayload: (draft: D) => CreateAgentPayload = firstHobPayload,
+): D & { readonly submitted: CreateAgentPayload } => ({
   ...draft,
-  submitted: draft.submitted ?? firstHobPayload(draft),
+  submitted: draft.submitted ?? toPayload(draft),
 });
 
 /**
  * Unlocks a draft whose request the hub rejected. Nothing was created under its id, but a fresh one
  * keeps an edited request from ever meeting an earlier hob.
  */
-export const reopenDraft = (draft: FirstHobDraft, makeId: () => string = () => crypto.randomUUID()): FirstHobDraft => ({
+export const reopenDraft = <D extends FirstHobDraft>(
+  draft: D,
+  makeId: () => string = () => crypto.randomUUID(),
+): D => ({
   ...draft,
   id: makeId(),
   submitted: null,
@@ -247,6 +253,13 @@ export const keepDraft = (draft: FirstHobDraft | null) => {
 /** The draft kept in this window, else the one browser storage remembers, else null. */
 export const keptDraftOrStored = (): Partial<FirstHobDraft> | null =>
   keptDraft !== undefined ? keptDraft : readStored<Partial<FirstHobDraft> | null>(FIRST_HOB_DRAFT_KEY, null);
+
+/** What the hob's line says after its name, such as "the Scribe" or "good at gardening". */
+export const kindLine = (draft: FirstHobDraft): string => {
+  if (draft.kind !== "custom") return `the ${CRAFTS.find((c) => c.kind === draft.kind)?.label ?? ""}`;
+  const craft = draft.craft.trim();
+  return craft ? `good at ${craft.toLowerCase()}` : "one of a kind";
+};
 
 /** The hob as the Elder Hob sums it up, such as "Pip the Helper" or "Moss, good at gardening". */
 export const hobLine = (draft: FirstHobDraft): string => {
