@@ -6,8 +6,9 @@ import { Link } from "@tanstack/react-router";
 import { type ActivityMap, useActivity } from "../api/activity.ts";
 import { agentsQuery, runtimesQuery, threadsQuery } from "../api/queries.ts";
 import { MOON, MOON_PALETTE, potion, potionPalette } from "../art/icons.ts";
+import { sceneOrder } from "../lib/hob-state.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
-import { HobSprite, type HobState, hobStateFrom, stateLabel } from "./hob-sprite.tsx";
+import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
 import { Stars } from "./scene.tsx";
 
 // The scene shows at most six hobs: those who need you first, then the busiest.
@@ -20,14 +21,18 @@ export function Home() {
   const threadLists = useQueries({ queries: hobs.map((hob) => threadsQuery(hob.id)) });
   const activity = useActivity();
 
-  const crew = hobs.map((hob, index) => {
-    const threads = threadLists[index]?.data ?? [];
-    return { hob, threads, state: hobStateFrom(threads, activity) };
-  });
-  const busy = crew.filter((c) => c.state !== "idle");
+  const crew = sceneOrder(
+    hobs.map((hob, index) => {
+      const threads = threadLists[index]?.data ?? [];
+      return { hob, threads, state: hobState(hob, threads, activity) };
+    }),
+  );
+  const busy = crew.filter((c) => c.state === "working" || c.state === "thinking");
+  const paused = crew.filter((c) => c.state === "paused");
   const recent = crew
     .flatMap((c) => c.threads.map((thread) => ({ hob: c.hob, thread })))
     .sort((a, b) => b.thread.updatedAt.localeCompare(a.thread.updatedAt));
+  const live = recent.filter(({ thread }) => activity[thread.id]);
 
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
@@ -46,11 +51,14 @@ export function Home() {
 
         <div className="absolute top-[34px] left-9 flex max-w-[470px] flex-col gap-2.5">
           <h1 className="m-0 font-pixel text-[34px] font-bold text-moonlight">{greeting()}</h1>
-          <p className="m-0 text-[17px] leading-normal">{summary(crew.length, busy.length, hobs[0])}</p>
+          <p className="m-0 text-[17px] leading-normal">
+            {summary(crew.length, busy.length, paused.length, crew[0]?.hob)}
+          </p>
           <div className="flex gap-2 pt-1">
-            <Chip>{hobs.length === 1 ? "1 hob" : `${hobs.length} hobs`}</Chip>
             <Chip className={busy.length > 0 ? "text-mint" : ""}>{busy.length} working</Chip>
-            <Chip>0 need you</Chip>
+            <Chip className="text-lantern">0 need you</Chip>
+            <Chip className="text-secondary-text">{crew.length - busy.length - paused.length} resting</Chip>
+            {paused.length > 0 && <Chip className="text-secondary-text">{paused.length} paused</Chip>}
           </div>
         </div>
 
@@ -64,6 +72,11 @@ export function Home() {
               className="hop-on-hover flex flex-col items-center gap-1.5 text-ground no-underline"
             >
               <span className="bg-text px-2 py-[3px] text-xs whitespace-nowrap">{sceneTag(hob, state)}</span>
+              <span aria-hidden className="block h-1.5 w-16 bg-line-2">
+                {(state === "working" || state === "thinking") && (
+                  <span className="block h-full w-full animate-hb-tick bg-mint" />
+                )}
+              </span>
               <HobSprite hob={hob} size={64} state={state} />
             </Link>
           ))}
@@ -82,7 +95,7 @@ export function Home() {
           <Card
             label="Happening now"
             extra={
-              busy.length > 0 && (
+              live.length > 0 && (
                 <>
                   <span aria-hidden className="size-2 animate-hb-blink bg-rose" />
                   <span className="text-xs text-secondary-text">live</span>
@@ -90,10 +103,10 @@ export function Home() {
               )
             }
           >
-            {busy.length === 0 ? (
-              <p className="m-0 text-sm text-secondary-text">All quiet. Your hobs are resting.</p>
+            {live.length === 0 ? (
+              <p className="m-0 text-sm text-secondary-text">All quiet. No hob is replying right now.</p>
             ) : (
-              <HappeningNow recent={recent} activity={activity} />
+              <HappeningNow live={live} activity={activity} />
             )}
           </Card>
           <Card label="Recent threads" className="flex-1">
@@ -117,8 +130,7 @@ export function Home() {
           <AiPlans />
           <Card label="Quests in progress" className="flex-1">
             <p className="m-0 text-sm leading-normal text-secondary-text">
-              When hobs share work, each Quest shows here with who is on it and how far it got. Quests arrive with the
-              MVP.
+              No quests yet. When hobs share work, each Quest shows here with who is on it and how far it got.
             </p>
           </Card>
         </div>
@@ -127,17 +139,28 @@ export function Home() {
   );
 }
 
-const summary = (count: number, busy: number, first: Agent | undefined) => {
+const summary = (count: number, busy: number, paused: number, first: Agent | undefined) => {
   if (count === 0 || !first) return "No hobs yet.";
-  if (count === 1)
-    return busy > 0 ? `${first.name} is working on a reply for you.` : `${first.name} is ready when you are.`;
-  return busy > 0
-    ? `${busy} of your ${count} hobs are working right now.`
-    : `Your ${count} hobs are ready when you are.`;
+  if (count === 1) {
+    if (busy > 0) return `${first.name} is working on a reply for you.`;
+    return paused > 0 ? `${first.name} is paused until you wake them.` : `${first.name} is ready when you are.`;
+  }
+  const working =
+    busy === 0
+      ? "None of your hobs are working right now"
+      : `${busy} of your ${count} hobs ${busy === 1 ? "is" : "are"} working`;
+  if (paused > 0) return `${working}, and ${paused} ${paused === 1 ? "is" : "are"} paused.`;
+  return busy > 0 ? `${working} right now.` : `Your ${count} hobs are ready when you are.`;
 };
 
-const sceneTag = (hob: Agent, state: HobState) =>
-  state === "working" ? "Writing…" : state === "thinking" ? "Thinking…" : `${hob.craft} · ready`;
+const sceneTagWords: Partial<Record<HobState, string>> = {
+  working: "writing…",
+  thinking: "thinking…",
+  idle: "resting",
+  paused: "paused",
+};
+
+const sceneTag = (hob: Agent, state: HobState) => `${hob.name} · ${sceneTagWords[state] ?? stateLabel[state]}`;
 
 function Chip({ children, className }: { children: React.ReactNode; className?: string }) {
   return <span className={cn("bg-deep px-2.5 py-1 text-[13px] text-text", className)}>{children}</span>;
@@ -170,28 +193,27 @@ function Card({
   );
 }
 
+/** Every reply streaming right now; each opens its thread. */
 function HappeningNow({
-  recent,
+  live,
   activity,
 }: {
-  recent: ReadonlyArray<{ hob: Agent; thread: Thread }>;
+  live: ReadonlyArray<{ hob: Agent; thread: Thread }>;
   activity: ActivityMap;
 }) {
-  return recent
-    .filter(({ thread }) => activity[thread.id])
-    .map(({ hob, thread }) => (
-      <Link
-        key={thread.id}
-        to="/hobs/$hobId/threads/$threadId"
-        params={{ hobId: hob.id, threadId: thread.id }}
-        className="flex animate-hb-in items-center gap-2.5 text-text no-underline"
-      >
-        <HobSprite hob={hob} size={26} state="working" />
-        <span className="min-w-0 flex-1 text-sm leading-snug">
-          <b>{hob.name}</b> is {activity[thread.id] === "thinking" ? "thinking about" : "writing"} “{thread.title}”
-        </span>
-      </Link>
-    ));
+  return live.map(({ hob, thread }) => (
+    <Link
+      key={thread.id}
+      to="/hobs/$hobId/threads/$threadId"
+      params={{ hobId: hob.id, threadId: thread.id }}
+      className="flex animate-hb-in items-center gap-2.5 text-text no-underline"
+    >
+      <HobSprite hob={hob} size={26} state={activity[thread.id] ?? "working"} />
+      <span className="min-w-0 flex-1 text-sm leading-snug">
+        <b>{hob.name}</b> is {activity[thread.id] === "thinking" ? "thinking about" : "writing"} “{thread.title}”
+      </span>
+    </Link>
+  ));
 }
 
 function AiPlans() {
