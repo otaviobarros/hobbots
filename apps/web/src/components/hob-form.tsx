@@ -2,6 +2,7 @@ import type { Effort, HobColor, RuntimeModel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
+import { useId, useState } from "react";
 import {
   type BrainChoice,
   CHORES_MAX,
@@ -12,6 +13,7 @@ import {
   nearbySeeds,
   pickCraft,
   pickModel,
+  splitModels,
   thinksWith,
 } from "../api/first-hob.ts";
 import { HOB_COLORS } from "../art/look.ts";
@@ -332,11 +334,16 @@ export function Brain<D extends BrainChoice>({
 }) {
   const model = models.find((m) => m.id === draft.model);
   const efforts = model?.efforts ?? [];
+  const { main, more } = splitModels(models);
+  // The other models start open when the hob already thinks with one, so the choice stays in view.
+  const [moreShown, setMoreShown] = useState<boolean | null>(null);
+  const moreOpen = moreShown ?? more.some((m) => m.id === draft.model);
+  const moreId = useId();
   return (
     <>
       <fieldset className="m-0 flex flex-wrap gap-2 border-0 p-0">
         <legend className="sr-only">Model</legend>
-        {models.map((m) => (
+        {main.map((m) => (
           <Choice
             key={m.id}
             name="hob-model"
@@ -349,6 +356,57 @@ export function Brain<D extends BrainChoice>({
           </Choice>
         ))}
       </fieldset>
+      {more.length > 0 && (
+        <div className="flex min-w-0 flex-col gap-1">
+          <button
+            type="button"
+            aria-expanded={moreOpen}
+            aria-controls={moreId}
+            onClick={() => setMoreShown(!moreOpen)}
+            className="flex items-center gap-2 self-start bg-transparent py-1 text-sm text-label hover:text-text"
+          >
+            <span aria-hidden className="w-2.5">
+              {moreOpen ? "▾" : "▸"}
+            </span>
+            More models
+            <span className="text-[13px]">{more.length}</span>
+          </button>
+          {moreOpen && (
+            <fieldset id={moreId} className="m-0 flex min-w-0 animate-hb-in flex-col border-2 border-line p-1">
+              <legend className="sr-only">More models</legend>
+              {more.map((m) => {
+                const on = m.id === draft.model;
+                return (
+                  <label
+                    key={m.id}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-2.5 px-2.5 py-1.5 text-sm",
+                      on ? "bg-line" : "hover:bg-hover",
+                      "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight has-[:focus-visible]:-outline-offset-3",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="hob-model"
+                      checked={on}
+                      onChange={() => onChange(pickModel(draft, m))}
+                      className="sr-only"
+                    />
+                    <span
+                      aria-hidden
+                      className={cn("size-2.5 border-2", on ? "border-lantern bg-lantern" : "border-control")}
+                    />
+                    <span className={cn("w-24 shrink-0 font-bold", on ? "text-moonlight" : "text-text")}>
+                      {m.displayName}
+                    </span>
+                    <span className="min-w-0 text-xs text-label">{m.description}</span>
+                  </label>
+                );
+              })}
+            </fieldset>
+          )}
+        </div>
+      )}
       {efforts.length > 0 ? (
         <fieldset className="m-0 flex flex-wrap items-center gap-3 border-0 p-0">
           <legend className="sr-only">Effort</legend>

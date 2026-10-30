@@ -23,11 +23,12 @@ import {
   sampleChores,
   settleBrain,
   settleSummonDraft,
+  splitModels,
   submitDraft,
 } from "./first-hob.ts";
 
 const model = (id: string, efforts: RuntimeModel["efforts"]) =>
-  new RuntimeModel({ id, displayName: id, description: "", efforts });
+  new RuntimeModel({ id, displayName: id, description: "", efforts, main: true });
 
 const offered = new RuntimeModels({
   runtime: "claude-code",
@@ -140,6 +141,14 @@ describe("first hob draft", () => {
     expect(pickModel(draft({ model: "default", effort: "high" }), opus).effort).toBe("high");
     expect(pickModel(draft({ model: "default", effort: "medium" }), opus).effort).toBe("low");
     expect(pickModel(draft({ effort: "high" }), quick).effort).toBeNull();
+  });
+
+  it("shows the main models first and keeps the rest for More models", () => {
+    const older = new RuntimeModel({ ...model("claude-opus-4-8", []), main: false });
+    const { main, more } = splitModels([...offered.models, older]);
+    expect(main.map((m) => m.id)).toEqual(["default", "opus", "quick"]);
+    expect(more.map((m) => m.id)).toEqual(["claude-opus-4-8"]);
+    expect(splitModels([older]).main).toEqual([older]);
   });
 
   it("asks for a name and, for its own craft, a description", () => {

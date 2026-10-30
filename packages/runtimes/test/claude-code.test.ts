@@ -203,6 +203,19 @@ describe("a hob's brain on Claude Code", () => {
     ]);
   });
 
+  it("counts Claude Code's aliases as main models and pinned ids as older versions", () => {
+    const models = toRuntimeModels([
+      { value: "default", displayName: "Default", description: "" },
+      { value: "opus", displayName: "Opus", description: "" },
+      { value: "claude-opus-4-8", displayName: "Opus 4.8", description: "" },
+    ]);
+    expect(models.models.map((m) => [m.id, m.main])).toEqual([
+      ["default", true],
+      ["opus", true],
+      ["claude-opus-4-8", false],
+    ]);
+  });
+
   it("falls back to the documented aliases, starting with Claude Code's default", () => {
     expect(fallbackModels.models.map((m) => m.id)).toEqual(["default", "opus", "fable", "sonnet", "haiku"]);
   });

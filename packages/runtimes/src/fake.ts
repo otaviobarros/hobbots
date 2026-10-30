@@ -2,7 +2,10 @@ import { RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { Effect, Layer, Stream } from "effect";
 import { type PromptRequest, RuntimeAdapter, type RuntimeEvent } from "./adapter.ts";
 
-/** The fake runtime's models: one with every effort level and one that takes none. */
+/**
+ * The fake runtime's models: a main one with every effort level, and one behind "More models"
+ * that takes none.
+ */
 export const fakeModels = new RuntimeModels({
   runtime: "claude-code",
   source: "runtime",
@@ -12,12 +15,14 @@ export const fakeModels = new RuntimeModels({
       displayName: "Fake Thinker",
       description: "Echoes prompts; accepts every effort level",
       efforts: ["low", "medium", "high", "xhigh", "max"],
+      main: true,
     }),
     new RuntimeModel({
       id: "fake-quick",
       displayName: "Fake Quick",
       description: "Echoes prompts; takes no effort setting",
       efforts: [],
+      main: false,
     }),
   ],
 });
