@@ -4,13 +4,12 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { setupQuery, useUpdateSetup } from "../api/setup.ts";
+import { useUpdateSetup, watchedSetupQuery } from "../api/setup.ts";
 import { MOON, MOON_PALETTE } from "../art/icons.ts";
 import { FIREFLIES, HOUSES, intro, PROVIDERS, SCENE_HOBS, type SceneHob } from "../art/village.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { Stars } from "./scene.tsx";
 
-const WATCH_SETUP_MS = 3000;
 const GREETING_MS = 1400;
 
 // The intro plays once per launch; coming back to Welcome from setup shows the village at rest.
@@ -25,7 +24,7 @@ export function Welcome() {
   const navigate = useNavigate();
   const update = useUpdateSetup();
   // Setup may finish in another window or on another device; Home opens once it has.
-  const setup = useQuery({ ...setupQuery, refetchInterval: WATCH_SETUP_MS, refetchOnWindowFocus: true });
+  const setup = useQuery(watchedSetupQuery);
   const completedElsewhere = setup.data?.completed === true;
   useEffect(() => {
     if (completedElsewhere) void navigate({ to: "/" });

@@ -11,6 +11,18 @@ export const setupQuery = queryOptions({
 });
 
 /**
+ * The setup for screens that act on it while another window or device may change it, such as
+ * finishing setup or connecting a provider: always fresh, checked again on focus and every few
+ * seconds while the screen is open.
+ */
+export const watchedSetupQuery = queryOptions({
+  ...setupQuery,
+  staleTime: 0,
+  refetchOnWindowFocus: true,
+  refetchInterval: 3000,
+});
+
+/**
  * Whether opening the app shows Welcome rather than Home. When the setup cannot be read, for
  * example while the server restarts, Home opens and shows that it is reconnecting.
  */

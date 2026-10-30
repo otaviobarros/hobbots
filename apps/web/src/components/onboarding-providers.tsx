@@ -5,7 +5,7 @@ import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { runtimesQuery } from "../api/queries.ts";
 import { canContinueSetup, claudeInstallGuide, runtimeProblem } from "../api/runtime-health.ts";
-import { setupQuery, useUpdateSetup } from "../api/setup.ts";
+import { useUpdateSetup, watchedSetupQuery } from "../api/setup.ts";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 
 const GUIDE = {
@@ -252,7 +252,8 @@ export function OnboardingProviders() {
   const finish = useUpdateSetup();
   const providers = useUpdateSetup();
   const runtimes = useQuery(runtimesQuery);
-  const setup = useQuery(setupQuery);
+  // Another window or device may connect or disconnect a provider while this step is open.
+  const setup = useQuery(watchedSetupQuery);
   const connected = setup.data?.connectedProviders ?? [];
   const claude = runtimes.data?.find((health) => health.runtime === CLAUDE);
   const state = claudeState(
