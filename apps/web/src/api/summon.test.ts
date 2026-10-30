@@ -1,6 +1,7 @@
+import { RuntimeHealth } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { kindLine } from "./first-hob.ts";
-import { newSummonDraft, pickKind, sampleChores, summonPayload } from "./summon.ts";
+import { newSummonDraft, pickKind, providerNotice, sampleChores, summonPayload } from "./summon.ts";
 
 const id = "8a1f6c2e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
 const fresh = (taken: ReadonlyArray<string> = []) =>
@@ -39,5 +40,22 @@ describe("a summoned hob's draft", () => {
     expect(kindLine(pickKind(fresh(), "keeper"))).toBe("the Bookkeeper");
     expect(kindLine({ ...fresh(), kind: "custom", craft: "Gardening" })).toBe("good at gardening");
     expect(kindLine({ ...fresh(), kind: "custom", craft: " " })).toBe("one of a kind");
+  });
+});
+
+const health = (availability: RuntimeHealth["availability"], version: string | null = "2.1.301") =>
+  new RuntimeHealth({ runtime: "claude-code", availability, billing: null, version, detail: null, checkedAt: null });
+
+describe("the provider a summoned hob thinks with", () => {
+  it("is offered only when Claude Code is ready", () => {
+    expect(providerNotice(health("ready"))).toBeUndefined();
+    expect(providerNotice(undefined)).toBe("Claude Code is not connected.");
+  });
+
+  it("says how to fix a provider that lists models but cannot run a chat", () => {
+    expect(providerNotice(health("signedOut"))).toMatch(/not signed in/);
+    expect(providerNotice(health("outdated"))).toMatch(/claude update/);
+    expect(providerNotice(health("unavailable", null))).toMatch(/not found/);
+    expect(providerNotice(health("unverified"))).toMatch(/could not confirm/);
   });
 });

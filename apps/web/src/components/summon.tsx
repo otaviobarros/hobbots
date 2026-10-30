@@ -2,7 +2,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client.ts";
 import {
   draftProblem,
@@ -17,7 +17,14 @@ import {
 import { agentsQuery, modelsQuery, runtimesQuery, useCreateHob } from "../api/queries.ts";
 import { presetInfo, type RuleAnswer } from "../api/safety.ts";
 import { setupQuery } from "../api/setup.ts";
-import { CHORES_MAX, newSummonDraft, pickKind, type SummonDraft, summonPayload } from "../api/summon.ts";
+import {
+  CHORES_MAX,
+  newSummonDraft,
+  pickKind,
+  providerNotice,
+  type SummonDraft,
+  summonPayload,
+} from "../api/summon.ts";
 import { hobLook } from "../art/look.ts";
 import { Brain, Choice, ColorSwatches, CraftChoices, NameDice } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
@@ -47,6 +54,14 @@ export function Summon() {
   const [nameRolls, setNameRolls] = useState(0);
   const [lookRolls, setLookRolls] = useState(0);
   const [tried, setTried] = useState(false);
+  // A summon that finishes after the user left only joins the hob list; it does not pull them back.
+  const left = useRef(false);
+  useEffect(() => {
+    left.current = false;
+    return () => {
+      left.current = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (models.data) setDraft((d) => (d.submitted ? d : settleBrain(d, models.data)));
@@ -54,7 +69,8 @@ export function Summon() {
 
   const look = useMemo(() => hobLook(draft.lookSeed, draft.lookColor), [draft.lookSeed, draft.lookColor]);
   const claude = runtimes.data?.find((r) => r.runtime === "claude-code");
-  const connected = claude !== undefined && claude.availability !== "unavailable";
+  const notice = providerNotice(claude);
+  const connected = notice === undefined;
   const model = models.data?.models.find((m) => m.id === draft.model);
   const locked = draft.submitted !== null;
   const name = draft.name.trim() || "your hob";
@@ -63,19 +79,23 @@ export function Summon() {
     ? undefined
     : (draftProblem(draft) ??
       (runtimes.data && !connected
-        ? "Connect Claude in Settings to summon a hob"
+        ? `Fix Claude Code in Settings to summon ${name}`
         : model
           ? undefined
           : "Waiting for Claude Code's models"));
   const hint = create.isPending
-    ? `Summoning ${name}…`
+    ? `Summoning ${name}… If you leave now, ${name} still joins your hobs.`
     : rejected
       ? `Hobbots could not create ${name}: ${rejected.message}.`
       : create.isError
         ? `Hobbots could not finish summoning ${name}. Try again in a moment.`
         : problem;
 
-  const cancel = () => (canGoBack ? router.history.back() : void navigate({ to: "/hobs" }));
+  const cancel = () => {
+    left.current = true;
+    if (canGoBack) router.history.back();
+    else void navigate({ to: "/hobs" });
+  };
   const summon = async (event: React.FormEvent) => {
     event.preventDefault();
     setTried(true);
@@ -86,7 +106,7 @@ export function Summon() {
     setDraft(sent);
     try {
       const made = await create.mutateAsync(sent.submitted);
-      void navigate({ to: "/hobs/$hobId/new", params: { hobId: made.id }, replace: true });
+      if (!left.current) void navigate({ to: "/hobs/$hobId/new", params: { hobId: made.id }, replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.tag === "InvalidHob") setDraft(reopenDraft(sent));
     }
@@ -271,8 +291,17 @@ export function Summon() {
                     )}
                   </fieldset>
                   {runtimes.data && !connected ? (
-                    <span className="text-sm text-lantern">
-                      Claude is not connected. <Link to="/settings">Open Settings</Link>
+                    <span role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-lantern">
+                      {notice} <Link to="/settings">Open Settings</Link>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        onClick={() => void runtimes.refetch()}
+                        disabled={runtimes.isFetching}
+                      >
+                        {runtimes.isFetching ? "Checking…" : "Check again"}
+                      </Button>
                     </span>
                   ) : models.isPending ? (
                     <span className="py-1 text-sm text-lantern">

@@ -1,4 +1,5 @@
 import type { CreateAgentPayload } from "@hobbots/api";
+import type { RuntimeHealth } from "@hobbots/domain";
 import {
   type CraftKind,
   type FirstHobDraft,
@@ -8,6 +9,7 @@ import {
   type Random,
   rollName,
 } from "./first-hob.ts";
+import { runtimeProblem } from "./runtime-health.ts";
 
 /**
  * A hob summoned after onboarding: the first hob's draft plus the chores the user describes in
@@ -62,4 +64,22 @@ export const summonPayload = (draft: SummonDraft): CreateAgentPayload => {
   return chores
     ? { ...payload, instructions: `${payload.instructions}\n\nYour chores, in the user's words:\n${chores}` }
     : payload;
+};
+
+const NOT_READY: Readonly<Record<NonNullable<ReturnType<typeof runtimeProblem>>, string>> = {
+  notFound: "Claude Code was not found on this computer.",
+  notStarted: "Claude Code is installed but did not start.",
+  outdated: "This Claude Code is older than Hobbots supports. Update it with claude update.",
+  signedOut: "Claude Code is not signed in. Run claude in a terminal and sign in.",
+};
+
+/**
+ * Why Claude cannot think for a new hob yet, or undefined when it is ready. Claude Code may still
+ * list models when it is signed out or outdated, but only a ready provider can run the first chat.
+ */
+export const providerNotice = (health: RuntimeHealth | undefined): string | undefined => {
+  if (health === undefined) return "Claude Code is not connected.";
+  if (health.availability === "ready") return undefined;
+  const problem = runtimeProblem(health);
+  return problem ? NOT_READY[problem] : "Hobbots could not confirm Claude Code is ready yet.";
 };
