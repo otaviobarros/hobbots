@@ -292,13 +292,9 @@ describe("the hob line", () => {
 
 describe("the role request link", () => {
   it("opens the role request form, with the user's own title filled in", () => {
-    const draft = newDraft(
-      () => 0.5,
-      () => "id",
-    );
     const form = "https://github.com/otaviobarros/hobbots/issues/new?template=5-role-request.yml";
-    expect(roleRequestUrl(draft)).toBe(form);
-    const url = new URL(roleRequestUrl({ ...pickRole(draft, null), ownTitle: " Garden & pond planner " }));
+    expect(roleRequestUrl(" ")).toBe(form);
+    const url = new URL(roleRequestUrl(" Garden & pond planner "));
     expect(url.searchParams.get("template")).toBe("5-role-request.yml");
     expect(url.searchParams.get("title")).toBe("Role: Garden & pond planner");
     expect(url.searchParams.get("role-title")).toBe("Garden & pond planner");

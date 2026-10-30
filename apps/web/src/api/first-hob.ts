@@ -485,8 +485,8 @@ export const hobLine = (draft: FirstHobDraft): string => {
 const ROLE_REQUEST_FORM = "https://github.com/otaviobarros/hobbots/issues/new?template=5-role-request.yml";
 
 /** The role request form, with the title filled in from what the user typed as their own. */
-export const roleRequestUrl = (draft: FirstHobDraft): string => {
-  const title = draft.role === null ? draft.ownTitle.trim() : "";
+export const roleRequestUrl = (ownTitle: string): string => {
+  const title = ownTitle.trim();
   if (!title) return ROLE_REQUEST_FORM;
   const query = new URLSearchParams({ title: `Role: ${title}`, "role-title": title });
   return `${ROLE_REQUEST_FORM}&${query.toString()}`;

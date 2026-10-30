@@ -29,6 +29,7 @@ import {
   Choice,
   ChoresField,
   ColorSwatches,
+  draftRolePicker,
   GearPicker,
   HobSummary,
   NameDice,
@@ -158,8 +159,7 @@ export function Summon() {
           <fieldset disabled={locked} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0 disabled:opacity-85">
             <legend className="sr-only">{locked ? `${name}'s chores, as sent` : "What the hob does"}</legend>
             <RolePicker
-              draft={draft}
-              onChange={setDraft}
+              {...draftRolePicker(draft, setDraft)}
               legend={<legend className="lbl mb-2 text-moonlight">Role</legend>}
             />
 

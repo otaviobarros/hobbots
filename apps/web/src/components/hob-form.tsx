@@ -167,9 +167,11 @@ function RoleOption({
   sigil,
   title,
   note,
+  name,
   className,
 }: {
   checked: boolean;
+  name: string;
   onPick: () => void;
   sigil: ReadonlyArray<string> | null;
   title: string;
@@ -185,7 +187,7 @@ function RoleOption({
         className,
       )}
     >
-      <input type="radio" name="hob-role" checked={checked} onChange={onPick} className="sr-only" />
+      <input type="radio" name={name} checked={checked} onChange={onPick} className="sr-only" />
       {sigil ? (
         <Sigil rows={sigil} size={20} className="mt-0.5 flex-none" />
       ) : (
@@ -214,37 +216,40 @@ const roleOption = (id: RoleId) => {
  * which takes a title in the user's words and any sigil from the set. One radio group runs through
  * all of them, so arrow keys move from role to role. A link at the end asks for a missing role.
  */
-export function RolePicker<D extends FirstHobDraft>({
-  draft,
-  onChange,
+export function RolePicker({
+  value,
+  onPick,
+  onOwnTitle,
+  onOwnSigil,
   legend,
   columns = 3,
+  disabled = false,
 }: {
-  draft: D;
-  onChange: (update: (draft: D) => D) => void;
+  value: RoleChoice;
+  onPick: (role: RoleId | null) => void;
+  onOwnTitle: (title: string) => void;
+  onOwnSigil: (sigil: RoleId) => void;
   legend: React.ReactNode;
   /** How many roles sit side by side; the screen picks what fits. */
   columns?: 2 | 3;
+  disabled?: boolean;
 }) {
+  const draft = value;
   const inMore = draft.role !== null && !PICKER_FIRST.includes(draft.role);
   // "More roles" starts open when the hob already has one of them, so the choice stays in view.
   const [moreShown, setMoreShown] = useState<boolean | null>(null);
   const moreOpen = moreShown ?? inMore;
   const moreId = useId();
+  const name = useId();
   const own = draft.role === null;
   const grid = columns === 3 ? "grid-cols-3" : "grid-cols-2";
   const moreCount = MORE_ROLES.reduce((n, group) => n + group.roles.length, 0);
   return (
-    <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+    <fieldset disabled={disabled} className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
       {legend}
       <div className={cn("grid gap-1.5", grid)}>
         {PICKER_FIRST.map((id) => (
-          <RoleOption
-            key={id}
-            checked={draft.role === id}
-            onPick={() => onChange((d) => pickRole(d, id))}
-            {...roleOption(id)}
-          />
+          <RoleOption key={id} checked={draft.role === id} onPick={() => onPick(id)} name={name} {...roleOption(id)} />
         ))}
       </div>
       <button
@@ -270,7 +275,8 @@ export function RolePicker<D extends FirstHobDraft>({
                   <RoleOption
                     key={id}
                     checked={draft.role === id}
-                    onPick={() => onChange((d) => pickRole(d, id))}
+                    onPick={() => onPick(id)}
+                    name={name}
                     {...roleOption(id)}
                   />
                 ))}
@@ -281,39 +287,60 @@ export function RolePicker<D extends FirstHobDraft>({
       )}
       <RoleOption
         checked={own}
-        onPick={() => onChange((d) => pickRole(d, null))}
+        onPick={() => onPick(null)}
+        name={name}
         sigil={own ? starterRole(draft.ownSigil).sigil : null}
         title="Your own"
         note="Give it a title in your words and pick a sigil."
         className={cn("self-start", !own && "border-dashed")}
       />
-      {own && <OwnRole draft={draft} onChange={onChange} />}
-      <a href={roleRequestUrl(draft)} target="_blank" rel="noreferrer" className="self-start text-[13px]">
+      {own && <OwnRole value={draft} onTitle={onOwnTitle} onSigil={onOwnSigil} />}
+      <a
+        href={roleRequestUrl(own ? draft.ownTitle : "")}
+        target="_blank"
+        rel="noreferrer"
+        className="self-start text-[13px]"
+      >
         Missing a role? Suggest one
       </a>
     </fieldset>
   );
 }
 
+/** What the role picker shows: a starter role, or a title in the user's words with a borrowed sigil. */
+export interface RoleChoice {
+  readonly role: RoleId | null;
+  readonly ownTitle: string;
+  readonly ownSigil: RoleId;
+}
+
+/** Wires the role picker to a hob form draft. */
+export const draftRolePicker = <D extends FirstHobDraft>(draft: D, onChange: (update: (draft: D) => D) => void) => ({
+  value: draft,
+  onPick: (role: RoleId | null) => onChange((d) => pickRole(d, role)),
+  onOwnTitle: (ownTitle: string) => onChange((d) => ({ ...d, ownTitle })),
+  onOwnSigil: (ownSigil: RoleId) => onChange((d) => ({ ...d, ownSigil })),
+});
+
 /** A role title in the user's own words, with a sigil borrowed from any starter role. */
-function OwnRole<D extends FirstHobDraft>({
-  draft,
-  onChange,
+function OwnRole({
+  value,
+  onTitle,
+  onSigil,
 }: {
-  draft: D;
-  onChange: (update: (draft: D) => D) => void;
+  value: RoleChoice;
+  onTitle: (title: string) => void;
+  onSigil: (sigil: RoleId) => void;
 }) {
+  const name = useId();
   return (
     <div className="flex animate-hb-in flex-col gap-2.5 border-2 border-line p-2.5">
       <input
         // biome-ignore lint/a11y/noAutofocus: choosing "Your own" asks for the title right away.
         autoFocus
-        value={draft.ownTitle}
+        value={value.ownTitle}
         maxLength={LABEL_MAX}
-        onChange={(e) => {
-          const ownTitle = e.target.value;
-          onChange((d) => ({ ...d, ownTitle }));
-        }}
+        onChange={(e) => onTitle(e.target.value)}
         placeholder="Its role, in your words. e.g. Garden planner"
         aria-label="Your own role title"
         className="border-2 border-lantern bg-deep px-[11px] py-[9px] text-[15px] text-text"
@@ -322,7 +349,7 @@ function OwnRole<D extends FirstHobDraft>({
         <legend className="mb-1.5 text-[13px] text-secondary-text">Sigil</legend>
         <div className="flex flex-wrap gap-1">
           {ALL_ROLES.map((id) => {
-            const on = draft.ownSigil === id;
+            const on = value.ownSigil === id;
             return (
               <label
                 key={id}
@@ -335,9 +362,9 @@ function OwnRole<D extends FirstHobDraft>({
               >
                 <input
                   type="radio"
-                  name="hob-sigil"
+                  name={name}
                   checked={on}
-                  onChange={() => onChange((d) => ({ ...d, ownSigil: id }))}
+                  onChange={() => onSigil(id)}
                   aria-label={`${starterRole(id).title}'s sigil`}
                   className="sr-only"
                 />

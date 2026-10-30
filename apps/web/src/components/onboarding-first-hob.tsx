@@ -26,6 +26,7 @@ import {
   ChoresField,
   ColorSwatches,
   Die,
+  draftRolePicker,
   GearPicker,
   HobSummary,
   NameDice,
@@ -207,8 +208,7 @@ export function OnboardingFirstHob() {
           </div>
 
           <RolePicker
-            draft={draft}
-            onChange={setDraft}
+            {...draftRolePicker(draft, setDraft)}
             legend={<legend className="lbl mb-2 text-label">Role</legend>}
             columns={2}
           />
