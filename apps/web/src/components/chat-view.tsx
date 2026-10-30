@@ -40,6 +40,7 @@ export function ChatView({
     ...threadsQuery(hobId),
     select: (threads) => threads.find((t) => t.id === threadId),
   });
+  const threadCount = useQuery({ ...threadsQuery(hobId), select: (threads) => threads.length });
   const messages = useQuery({ ...messagesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
   const activity = useActivity();
   const navigate = useNavigate();
@@ -76,6 +77,8 @@ export function ChatView({
     });
   };
   const error = send.error ?? start.error;
+  // A hob with no threads yet has just arrived, so its first page says hello.
+  const newHob = threadId === undefined && threadCount.data === 0;
   const empty = threadId === undefined || messages.data?.length === 0;
 
   return (
@@ -113,12 +116,16 @@ export function ChatView({
 
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-[18px]">
         {threadId && messages.isPending && <p className="text-label">Loading messages…</p>}
-        {empty && !messages.isPending && (
+        {empty && !messages.isLoading && (
           <div className="m-auto flex max-w-[420px] animate-hb-in flex-col items-center gap-3 text-center">
             <HobSprite hob={current} size={72} state="working" />
-            <span className="font-pixel text-[22px] font-bold text-moonlight">A fresh page</span>
+            <span className="font-pixel text-[22px] font-bold text-moonlight">
+              {newHob ? `Hello, I'm ${current.name}!` : "A fresh page"}
+            </span>
             <span className="text-secondary-text">
-              Tell {current.name} what you need. It keeps working even if you switch to another thread.
+              {newHob
+                ? "Tell me my first chore. I keep working even if you switch to another thread."
+                : `Tell ${current.name} what you need. It keeps working even if you switch to another thread.`}
             </span>
             <div className="flex flex-wrap justify-center gap-1.5">
               {IDEAS.map((idea) => (

@@ -63,8 +63,8 @@ export function HobList({
           <span className="flex-1 font-pixel text-sm font-semibold text-moonlight">Rooms: the great hall</span>
           <Badge variant="later">Later</Badge>
         </div>
-        <Button disabled title="Summoning new hobs arrives with the MVP">
-          + Summon a hob
+        <Button asChild>
+          <Link to="/summon">+ Summon a hob</Link>
         </Button>
         <span className="text-center text-xs text-label">⌥↑ ⌥↓ switch threads</span>
       </div>

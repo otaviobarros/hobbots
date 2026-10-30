@@ -18,6 +18,7 @@ import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
 import { InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
+import { Summon } from "./components/summon.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
 import { readStored, writeStored } from "./lib/storage.ts";
@@ -153,6 +154,14 @@ const threadRoute = createRoute({
   },
 });
 
+// Summon names the new hob apart from the hobs already there, so it loads them first.
+const summonRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "summon",
+  beforeLoad: ({ context }) => context.queryClient.ensureQueryData(agentsQuery),
+  component: Summon,
+});
+
 const inboxRoute = createRoute({ getParentRoute: () => shellRoute, path: "inbox", component: InboxPage });
 const usageRoute = createRoute({ getParentRoute: () => shellRoute, path: "usage", component: UsagePage });
 const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "settings", component: SettingsPage });
@@ -171,6 +180,7 @@ const routeTree = rootRoute.addChildren([
     hobRoute,
     newThreadRoute,
     threadRoute,
+    summonRoute,
     inboxRoute,
     usageRoute,
     settingsRoute,

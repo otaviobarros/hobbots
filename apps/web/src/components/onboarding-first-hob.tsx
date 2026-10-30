@@ -1,6 +1,4 @@
-import type { Effort, HobColor, RuntimeModel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
@@ -13,163 +11,22 @@ import {
   type FirstHobDraft,
   keepDraft,
   keptDraftOrStored,
+  kindLine,
   LABEL_MAX,
   nearbySeeds,
-  pickCraft,
   pickLook,
-  pickModel,
   restoreDraft,
   rollLook,
   rollName,
   settleBrain,
 } from "../api/first-hob.ts";
 import { modelsQuery } from "../api/queries.ts";
-import { HOB_COLORS, hobLook } from "../art/look.ts";
+import { hobLook } from "../art/look.ts";
+import { Brain, ColorSwatches, CraftChoices, Die, NameDice } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 
 const GUIDE = "Now the fun part. Every hob is good at something. Pick a craft, a name and a cloak.";
-
-const DIE = ["owwwo", "wwwww", "wwoww", "wwwww", "owwwo"];
-const DIE_PALETTE = { o: "#141228", w: "#ece8ff" };
-
-/** A die that turns a quarter at a time each time it is rolled. */
-function Die({ size, rolls }: { size: number; rolls: number }) {
-  return (
-    <span key={rolls} className={cn("block", rolls > 0 && "animate-hb-roll")}>
-      <PixelArt rows={DIE} palette={DIE_PALETTE} size={size} />
-    </span>
-  );
-}
-
-/** A focus ring drawn inside the pixel corners, which would clip one drawn outside. */
-const focusWithin =
-  "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight has-[:focus-visible]:-outline-offset-4";
-
-/**
- * One option of a radio group, drawn as a chip. A native radio underneath gives arrow keys,
- * Space and screen readers the group's real behavior.
- */
-function Choice({
-  name,
-  checked,
-  onPick,
-  label,
-  className,
-  children,
-}: {
-  name: string;
-  checked: boolean;
-  onPick: () => void;
-  label?: string | undefined;
-  className?: string | undefined;
-  children: React.ReactNode;
-}) {
-  return (
-    <label
-      className={cn(
-        "cut flex cursor-pointer items-center gap-2 border-2 px-3 py-[7px] text-sm",
-        checked ? "border-lantern bg-lantern text-ground" : "border-control text-text hover:bg-line",
-        focusWithin,
-        className,
-      )}
-    >
-      <input type="radio" name={name} checked={checked} onChange={onPick} aria-label={label} className="sr-only" />
-      {children}
-    </label>
-  );
-}
-
-function EffortBars({ index, count, on }: { index: number; count: number; on: boolean }) {
-  return (
-    <span aria-hidden className="flex items-end gap-0.5">
-      {Array.from({ length: count }, (_, j) => (
-        <span
-          // biome-ignore lint/suspicious/noArrayIndexKey: the bars are a fixed row of identical marks.
-          key={j}
-          className="w-[3px]"
-          style={{
-            height: 4 + j * 3,
-            background: j <= index ? (on ? "#141228" : "#ece8ff") : on ? "rgba(20,18,40,.25)" : "#3a3666",
-          }}
-        />
-      ))}
-    </span>
-  );
-}
-
-function Brain({
-  models,
-  draft,
-  onChange,
-}: {
-  models: ReadonlyArray<RuntimeModel>;
-  draft: FirstHobDraft;
-  onChange: (draft: FirstHobDraft) => void;
-}) {
-  const model = models.find((m) => m.id === draft.model);
-  const efforts = model?.efforts ?? [];
-  return (
-    <>
-      <fieldset className="m-0 flex flex-wrap gap-2 border-0 p-0">
-        <legend className="sr-only">Model</legend>
-        {models.map((m) => (
-          <Choice
-            key={m.id}
-            name="hob-model"
-            checked={m.id === draft.model}
-            onPick={() => onChange(pickModel(draft, m))}
-            className="flex-col items-start gap-px py-[5px]"
-          >
-            <span className="font-bold">{m.displayName}</span>
-            <span className="max-w-[220px] text-xs opacity-85">{m.description}</span>
-          </Choice>
-        ))}
-      </fieldset>
-      {efforts.length > 0 ? (
-        <fieldset className="m-0 flex flex-wrap items-center gap-3 border-0 p-0">
-          <legend className="sr-only">Effort</legend>
-          {/* A legend cannot sit inline with the row, so the visible label is a plain span. */}
-          <span aria-hidden className="text-sm font-bold">
-            Effort
-          </span>
-          <div className="flex border-2 border-control">
-            {efforts.map((effort: Effort, i) => {
-              const on = effort === draft.effort;
-              return (
-                <label
-                  key={effort}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-1.5 px-[11px] py-1.5 text-sm",
-                    on ? "bg-lantern text-ground" : "text-text hover:bg-line",
-                    "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight has-[:focus-visible]:-outline-offset-3",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="hob-effort"
-                    checked={on}
-                    onChange={() => onChange({ ...draft, effort })}
-                    className="sr-only"
-                  />
-                  <EffortBars index={i} count={efforts.length} on={on} />
-                  {effortWords(effort).label}
-                </label>
-              );
-            })}
-          </div>
-          {draft.effort && (
-            <span key={draft.effort} className="animate-hb-in text-[13px] text-secondary-text">
-              {effortWords(draft.effort).note}
-            </span>
-          )}
-        </fieldset>
-      ) : (
-        model && <span className="text-[13px] text-label">{model.displayName} takes no effort setting.</span>
-      )}
-    </>
-  );
-}
 
 /** A few stars in the preview's sky, placed once per visit. */
 const previewStars = () =>
@@ -322,12 +179,7 @@ export function OnboardingFirstHob() {
     void navigate({ to: "/setup/safety" });
   };
 
-  const craftLine =
-    draft.kind === "custom"
-      ? draft.craft.trim()
-        ? `good at ${draft.craft.trim().toLowerCase()}`
-        : "one of a kind"
-      : `the ${craft?.label}`;
+  const craftLine = kindLine(draft);
   const brainLine = `Claude · ${model?.displayName ?? "…"}${draft.effort ? ` · ${effortWords(draft.effort).label.toLowerCase()} effort` : ""}`;
   const hint = locked
     ? `${draft.name.trim()} is on the way. Finish summoning to change it.`
@@ -376,34 +228,11 @@ export function OnboardingFirstHob() {
             </p>
           </div>
 
-          <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-            <legend className="lbl mb-2 text-label">Good at</legend>
-            <div className="flex flex-wrap gap-2">
-              {CRAFTS.map((c) => (
-                <Choice
-                  key={c.kind}
-                  name="hob-craft"
-                  checked={draft.kind === c.kind}
-                  onPick={() => setDraft((d) => pickCraft(d, c.kind))}
-                  className={c.kind === "custom" && draft.kind !== "custom" ? "border-dashed" : undefined}
-                >
-                  {c.kind === "custom" ? `+ ${c.label}` : c.label}
-                </Choice>
-              ))}
-            </div>
-            {draft.kind === "custom" && (
-              <input
-                // biome-ignore lint/a11y/noAutofocus: choosing "Your own" asks for the craft right away.
-                autoFocus
-                value={draft.craft}
-                maxLength={LABEL_MAX}
-                onChange={(e) => setDraft((d) => ({ ...d, craft: e.target.value }))}
-                placeholder="What should it be good at? e.g. planning my garden"
-                aria-label="Your own craft"
-                className="animate-hb-in border-2 border-lantern bg-deep px-[11px] py-[9px] text-[15px] text-text"
-              />
-            )}
-          </fieldset>
+          <CraftChoices
+            draft={draft}
+            onChange={setDraft}
+            legend={<legend className="lbl mb-2 text-label">Good at</legend>}
+          />
 
           <div className="flex flex-wrap items-end gap-6">
             <div className="flex flex-col gap-2">
@@ -418,49 +247,25 @@ export function OnboardingFirstHob() {
                   onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value, named: true }))}
                   className="w-[150px] border-2 border-control bg-deep px-2.5 py-[7px] font-pixel text-xl font-bold text-text"
                 />
-                <Button
-                  variant="icon"
-                  onClick={() => {
+                <NameDice
+                  size={22}
+                  rolls={nameRolls}
+                  onRoll={() => {
                     setDraft((d) => ({ ...d, name: rollName(d.name), named: true }));
                     setNameRolls((n) => n + 1);
                   }}
-                  aria-label="Random name"
-                  title="Random name"
-                  className="cut size-11 border-control bg-line hover:bg-line-2"
-                >
-                  <Die size={22} rolls={nameRolls} />
-                </Button>
+                  className="size-11"
+                />
               </div>
             </div>
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
               <legend className="lbl mb-2 text-label">Colors</legend>
-              <div className="flex gap-[5px]">
-                {(Object.keys(HOB_COLORS) as Array<HobColor>).map((id) => {
-                  const color = HOB_COLORS[id];
-                  const on = draft.lookColor === id;
-                  return (
-                    <label
-                      key={id}
-                      title={color.label}
-                      className={cn(
-                        "size-8 cursor-pointer border-[3px]",
-                        on ? "border-moonlight" : "border-line",
-                        "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
-                      )}
-                      style={{ background: color.hat, boxShadow: `inset 0 -11px 0 ${color.coat}` }}
-                    >
-                      <input
-                        type="radio"
-                        name="hob-color"
-                        checked={on}
-                        onChange={() => setDraft((d) => ({ ...d, lookColor: id }))}
-                        aria-label={color.label}
-                        className="sr-only"
-                      />
-                    </label>
-                  );
-                })}
-              </div>
+              <ColorSwatches
+                value={draft.lookColor}
+                onPick={(lookColor) => setDraft((d) => ({ ...d, lookColor }))}
+                size="large"
+                className="flex gap-[5px]"
+              />
             </fieldset>
           </div>
 
