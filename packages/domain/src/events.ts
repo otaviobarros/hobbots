@@ -19,10 +19,15 @@ const MessageDequeued = Schema.TaggedStruct("MessageDequeued", {
 const TurnStopRequested = Schema.TaggedStruct("TurnStopRequested", { threadId: ThreadId, messageId: MessageId });
 /** The runtime confirmed the stopped turn ended; the reply is now stopped. */
 const TurnStopped = Schema.TaggedStruct("TurnStopped", { threadId: ThreadId, messageId: MessageId });
-/** A piece of a streaming reply. Transient: its text reaches durable state through the message (ADR 013). */
-const MessageDelta = Schema.TaggedStruct("MessageDelta", {
+/**
+ * A piece of a streaming reply. Transient: its text reaches durable state through the message (ADR 013).
+ * `offset` is where the piece starts in the message's text, in UTF-16 code units, so a client
+ * applies it idempotently: it skips text it already has.
+ */
+export const MessageDelta = Schema.TaggedStruct("MessageDelta", {
   threadId: ThreadId,
   messageId: MessageId,
+  offset: Schema.Int,
   delta: Schema.String,
 });
 
@@ -93,3 +98,14 @@ export const messageEvents = (message: Message): ReadonlyArray<JournaledEvent> =
       return [upserted];
   }
 };
+
+/**
+ * The first frame of every event stream connection (ADR 013). `cursor` is where the connection
+ * starts. `resumed` is false when the client's cursor was missing, from another journal epoch or past
+ * retention: nothing was replayed, and the client refetches its queries as the snapshot.
+ */
+export const StreamReady = Schema.Struct({ cursor: Schema.String, resumed: Schema.Boolean });
+export type StreamReady = typeof StreamReady.Type;
+
+/** The SSE event names on the event stream; a journaled entry is a plain `message` frame (ADR 013). */
+export const STREAM_FRAME = { ready: "ready", delta: "delta" } as const;

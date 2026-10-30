@@ -4,6 +4,7 @@ import {
   type AgentConfiguration,
   type AgentId,
   DEFAULT_THREAD_TITLE,
+  isInProgress,
   Message,
   MessageId,
   MessageTransitions,
@@ -56,6 +57,8 @@ export class ChatService extends Context.Service<
     readonly drainAgent: (agentId: AgentId) => Effect.Effect<void>;
     /** Threads with a turn in progress in this process. */
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
+    /** The replies still streaming or stopping, with all the text held in memory so far. */
+    readonly streamingReplies: Effect.Effect<ReadonlyArray<Message>>;
   }
 >()("@hobbots/server/ChatService") {
   static readonly layer = Layer.effect(
@@ -209,6 +212,7 @@ export class ChatService extends Context.Service<
                       _tag: "MessageDelta",
                       threadId: m.threadId,
                       messageId: m.id,
+                      offset: m.content.length - event.text.length,
                       delta: event.text,
                     }),
                 );
@@ -418,6 +422,9 @@ export class ChatService extends Context.Service<
       });
 
       const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
+      const streamingReplies = Effect.suspend(() =>
+        Effect.forEach(Array.from(replies.values()), (reply) => Ref.get(reply.current)),
+      ).pipe(Effect.map((messages) => messages.filter((message) => isInProgress(message.status))));
 
       const interruptAgent = Effect.fn("ChatService.interruptAgent")(function* (agentId: AgentId) {
         for (const threadId of yield* activeThreads) {
@@ -446,6 +453,7 @@ export class ChatService extends Context.Service<
         interruptAgent,
         drainAgent,
         activeThreads,
+        streamingReplies,
       });
     }),
   );

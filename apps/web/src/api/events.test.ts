@@ -116,7 +116,7 @@ describe("applyEvent", () => {
 
     applyEvent(client, { _tag: "MessageUpserted", message: reply("streaming", "") });
     expect(activity()).toBe("thinking");
-    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), delta: "Hel" });
+    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), offset: 0, delta: "Hel" });
     expect(activity()).toBe("working");
     applyEvent(client, { _tag: "MessageUpserted", message: reply("complete", "Hello") });
     expect(activity()).toBeUndefined();
@@ -125,7 +125,7 @@ describe("applyEvent", () => {
   it("appends deltas to a loaded, streaming reply", () => {
     const client = new QueryClient();
     client.setQueryData(queryKeys.messages(threadId), [reply("streaming", "Hel")]);
-    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), delta: "lo" });
+    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), offset: 3, delta: "lo" });
     expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]?.content).toBe("Hello");
   });
 
@@ -136,7 +136,7 @@ describe("applyEvent", () => {
 
     applyEvent(client, { _tag: "MessageUpserted", message: reply("stopping", "Hel") });
     applyEvent(client, { _tag: "TurnStopRequested", threadId, messageId: MessageId.make("m1") });
-    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), delta: "lo" });
+    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), offset: 3, delta: "lo" });
     expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]).toMatchObject({
       content: "Hello",
       status: "stopping",
