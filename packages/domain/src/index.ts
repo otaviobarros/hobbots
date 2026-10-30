@@ -3,6 +3,7 @@ export * from "./events.ts";
 export * from "./ids.ts";
 export * from "./look.ts";
 export * from "./message.ts";
+export * from "./policy.ts";
 export * from "./revision.ts";
 export * from "./roles.ts";
 export * from "./runtime.ts";

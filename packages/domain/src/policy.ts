@@ -1,0 +1,100 @@
+import { Schema } from "effect";
+import type { SafetyPreset } from "./setup.ts";
+
+/**
+ * The tool policy of ADR 014: the operations a hob's tool calls are normalized into, the answer a
+ * preset gives each, and the per-hob configuration that can only narrow it. The policy engine in
+ * `@hobbots/permissions` decides calls with these; this module holds only the shared shapes.
+ */
+
+/** The MVP operations. Every runtime tool call and sandbox network request becomes one of these. */
+export const PolicyOperation = Schema.Literals([
+  "read-files",
+  "edit-files",
+  "delete-files",
+  "run-commands",
+  "local-git",
+  "push",
+  "use-web",
+  "outside-folders",
+]);
+export type PolicyOperation = typeof PolicyOperation.Type;
+
+export const POLICY_OPERATIONS: ReadonlyArray<PolicyOperation> = PolicyOperation.literals;
+
+/** Allow proceeds, Ask pauses the turn for an approval, Deny refuses (the UI says Never). */
+export const PolicyDecision = Schema.Literals(["allow", "ask", "deny"]);
+export type PolicyDecision = typeof PolicyDecision.Type;
+
+const NARROWNESS: Record<PolicyDecision, number> = { allow: 0, ask: 1, deny: 2 };
+
+/** Whether `override` is at least as narrow as `preset`, so applying it cannot widen authority. */
+export const isNarrowerOrEqual = (override: PolicyDecision, preset: PolicyDecision): boolean =>
+  NARROWNESS[override] >= NARROWNESS[preset];
+
+/** The narrowest of the answers: the intersection of every layer that has a say. */
+export const narrowest = (first: PolicyDecision, ...rest: ReadonlyArray<PolicyDecision>): PolicyDecision =>
+  rest.reduce((current, next) => (NARROWNESS[next] > NARROWNESS[current] ? next : current), first);
+
+/** The preset table of ADR 014. */
+export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, PolicyDecision>> = {
+  careful: {
+    "read-files": "allow",
+    "edit-files": "ask",
+    "delete-files": "ask",
+    "run-commands": "ask",
+    "local-git": "ask",
+    push: "ask",
+    "use-web": "ask",
+    "outside-folders": "deny",
+  },
+  balanced: {
+    "read-files": "allow",
+    "edit-files": "allow",
+    "delete-files": "ask",
+    "run-commands": "allow",
+    "local-git": "allow",
+    push: "ask",
+    "use-web": "allow",
+    "outside-folders": "deny",
+  },
+  trusting: {
+    "read-files": "allow",
+    "edit-files": "allow",
+    "delete-files": "allow",
+    "run-commands": "allow",
+    "local-git": "allow",
+    push: "allow",
+    "use-web": "allow",
+    "outside-folders": "deny",
+  },
+};
+
+/** Rules Hobbots recognizes and decides but a permitted command could perform another way (ADR 014). */
+export const CHECKED_OPERATIONS: ReadonlyArray<PolicyOperation> = ["delete-files"];
+
+/** Per-hob answers. Each may only narrow the preset; a widening needs a separately recorded user grant. */
+export const PolicyOverrides = Schema.Struct({
+  "read-files": Schema.optionalKey(PolicyDecision),
+  "edit-files": Schema.optionalKey(PolicyDecision),
+  "delete-files": Schema.optionalKey(PolicyDecision),
+  "run-commands": Schema.optionalKey(PolicyDecision),
+  "local-git": Schema.optionalKey(PolicyDecision),
+  push: Schema.optionalKey(PolicyDecision),
+  "use-web": Schema.optionalKey(PolicyDecision),
+  "outside-folders": Schema.optionalKey(PolicyDecision),
+});
+export type PolicyOverrides = typeof PolicyOverrides.Type;
+
+/**
+ * A hob's own policy configuration. Folders are stored canonical. `hiddenSharedFolders` hides
+ * shared folders from this hob only; a hob cannot add a folder to itself.
+ */
+export const HobPolicy = Schema.Struct({
+  ownFolders: Schema.Array(Schema.String),
+  hiddenSharedFolders: Schema.Array(Schema.String),
+  overrides: PolicyOverrides,
+});
+export type HobPolicy = typeof HobPolicy.Type;
+
+export const EMPTY_HOB_POLICY: HobPolicy = { ownFolders: [], hiddenSharedFolders: [], overrides: {} };
