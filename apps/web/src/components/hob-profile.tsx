@@ -279,7 +279,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
   const changes = Object.keys(edit).length > 0 && problem === undefined;
   const rejected = update.error instanceof ApiError && update.error.tag === "InvalidHob" ? update.error : undefined;
   const roleKey = `${draft.role}:${draft.roleTitle.trim()}`;
-  const rewrite = keptFor === roleKey ? undefined : roleRewrite(hob.name, base, draft);
+  const rewrite = keptFor === roleKey ? undefined : roleRewrite(hob.name, draft);
 
   const save = (event: React.FormEvent) => {
     event.preventDefault();

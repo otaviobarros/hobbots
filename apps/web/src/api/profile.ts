@@ -9,7 +9,7 @@ import {
   roleFields,
   starterRole,
 } from "@hobbots/domain";
-import { type BrainChoice, openingLine, settleBrain } from "./first-hob.ts";
+import { ALL_ROLES, type BrainChoice, openingLine, settleBrain } from "./first-hob.ts";
 
 /** A hob's role as the profile edits it: a starter role, or a title in the user's own words. */
 export interface RoleChoice {
@@ -44,19 +44,37 @@ export const ROLE_TITLE_MAX = 40;
 export const roleProblem = (draft: RoleChoice): string | undefined =>
   draft.roleTitle.trim() === "" ? "Give the role a title." : undefined;
 
-// The first line Summon and onboarding write, such as "You are Pip, a hob in Hobbots. Your role is Writer: …".
-const OPENING = /^You are [^\n]*, a hob in Hobbots\.[^\n]*/;
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
- * The instructions with their first line rewritten for the draft's role, when the role changed from
- * the saved one and the first line is still the one Hobbots wrote for another role. Undefined when
- * there is nothing to offer: the role is unchanged, the user wrote their own first line, or it
- * already names this role.
+ * The opening Hobbots wrote at the start of the instructions, such as "You are Pip, a hob in
+ * Hobbots. Your role is Writer: drafts emails, posts and documents with you.", for any starter role
+ * or for a title in the user's own words. Only that sentence counts: anything the user wrote after
+ * it is theirs, and a first line they changed matches nothing.
  */
-export const roleRewrite = (name: string, saved: RoleChoice, draft: ProfileDraft): string | undefined => {
+const generatedOpening = (name: string, instructions: string): string | undefined => {
+  const ends = (opening: string) =>
+    instructions.startsWith(opening) &&
+    (instructions.length === opening.length || /\s/.test(instructions[opening.length] ?? ""));
+  const starter = ALL_ROLES.map((role) => openingLine(name, role, starterRole(role).title)).find(ends);
+  if (starter !== undefined) return starter;
+  // A title in the user's own words: up to the API's limit, without the period that ends it.
+  const own = new RegExp(
+    `^You are ${escapeRegExp(name)}, a hob in Hobbots\\. Your role is [^.:\\n]{1,${ROLE_TITLE_MAX}}\\.`,
+  );
+  const match = own.exec(instructions)?.[0];
+  return match !== undefined && ends(match) ? match : undefined;
+};
+
+/**
+ * The instructions with the opening Hobbots wrote rewritten for the draft's role, keeping everything
+ * after it. Undefined when there is nothing to offer: the role has no title yet, the instructions do
+ * not start with an opening Hobbots wrote, or it already names this role.
+ */
+export const roleRewrite = (name: string, draft: ProfileDraft): string | undefined => {
   const title = draft.roleTitle.trim();
-  if (title === "" || (draft.role === saved.role && title === saved.roleTitle)) return undefined;
-  const opening = OPENING.exec(draft.instructions)?.[0];
+  if (title === "") return undefined;
+  const opening = generatedOpening(name, draft.instructions);
   const line = openingLine(name, draft.role, title);
   if (opening === undefined || opening === line) return undefined;
   return line + draft.instructions.slice(opening.length);
