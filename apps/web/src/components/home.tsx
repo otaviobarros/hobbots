@@ -59,6 +59,9 @@ export function Home() {
             <Chip className="text-lantern">0 need you</Chip>
             <Chip className="text-secondary-text">{crew.length - busy.length - paused.length} resting</Chip>
             {paused.length > 0 && <Chip className="text-secondary-text">{paused.length} paused</Chip>}
+            <Link to="/summon" className="bg-deep px-2.5 py-1 text-[13px] text-lantern no-underline hover:bg-line">
+              + Summon a hob
+            </Link>
           </div>
         </div>
 

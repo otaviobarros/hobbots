@@ -102,6 +102,52 @@ describe("creating hobs", () => {
     ]);
   });
 
+  // covers AG-001, AG-004
+  it("[TC-AG-009] a second hob with another model chats on its own threads, apart from the first", async () => {
+    const first: Agent = (await request("POST", "/api/agents", hob)).body;
+    const second: Agent = (
+      await request("POST", "/api/agents", {
+        ...hob,
+        name: "Moss",
+        model: "fake-quick",
+        effort: null,
+        instructions: "Tidy files.",
+      })
+    ).body;
+    expect((await request("GET", "/api/agents")).body.map((a: Agent) => a.name).sort()).toEqual(["Moss", "Wren"]);
+
+    const firstThread = (await request("POST", `/api/agents/${first.id}/threads`)).body;
+    const secondThread = (await request("POST", `/api/agents/${second.id}/threads`)).body;
+    await request("POST", `/api/threads/${firstThread.id}/messages`, { content: "hello Wren" });
+    await request("POST", `/api/threads/${secondThread.id}/messages`, { content: "hello Moss" });
+    await Effect.runPromise(
+      Effect.suspend(() => (prompts.length > 1 ? Effect.void : Effect.fail("waiting"))).pipe(
+        Effect.retry(Schedule.spaced("5 millis")),
+      ),
+    );
+
+    // Each turn runs with its own hob's brain and instructions.
+    expect(new Set(prompts.map((p) => JSON.stringify([p.model, p.effort, p.instructions])))).toEqual(
+      new Set([
+        JSON.stringify(["fake-thinker", "high", "Write short answers."]),
+        JSON.stringify(["fake-quick", null, "Tidy files."]),
+      ]),
+    );
+    // Each hob sees only its own thread, and each thread only its own messages.
+    expect((await request("GET", `/api/agents/${first.id}/threads`)).body.map((t: { id: string }) => t.id)).toEqual([
+      firstThread.id,
+    ]);
+    expect((await request("GET", `/api/agents/${second.id}/threads`)).body.map((t: { id: string }) => t.id)).toEqual([
+      secondThread.id,
+    ]);
+    const said = async (threadId: string) =>
+      (await request("GET", `/api/threads/${threadId}/messages`)).body
+        .filter((m: { role: string }) => m.role === "user")
+        .map((m: { content: string }) => m.content);
+    expect(await said(firstThread.id)).toEqual(["hello Wren"]);
+    expect(await said(secondThread.id)).toEqual(["hello Moss"]);
+  });
+
   // covers AG-001
   it("[TC-AG-003] rejects invalid input with a typed error and creates nothing", async () => {
     const blankName = await request("POST", "/api/agents", { ...hob, name: "  " });
