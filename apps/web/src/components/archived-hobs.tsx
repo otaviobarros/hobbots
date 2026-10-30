@@ -72,6 +72,7 @@ export function ArchivedHobView({ hobId, threadId }: { hobId: AgentId; threadId?
     return <ArchivedNotice>Hobbots could not read this hob's chats. Try again in a moment.</ArchivedNotice>;
   }
   if (!hob || !threads.data) return <ArchivedNotice>Loading chats…</ArchivedNotice>;
+  const thread = threads.data.find((t) => t.id === threadId);
 
   return (
     <div className="flex min-w-0 flex-1">
@@ -111,12 +112,11 @@ export function ArchivedHobView({ hobId, threadId }: { hobId: AgentId; threadId?
           ))}
         </div>
       </nav>
-      {threadId ? (
-        <ArchivedThread
-          hob={hob}
-          threadId={threadId}
-          title={threads.data.find((t) => t.id === threadId)?.title ?? "Chat"}
-        />
+      {thread ? (
+        <ArchivedThread hob={hob} threadId={thread.id} title={thread.title} />
+      ) : threadId ? (
+        // Messages load by thread id alone, so another hob's thread must not show under this hob.
+        <ArchivedNotice>This chat is not one of {hob.name}'s.</ArchivedNotice>
       ) : (
         <ArchivedNotice>{hob.name} left no chats.</ArchivedNotice>
       )}

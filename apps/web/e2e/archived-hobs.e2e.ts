@@ -73,6 +73,11 @@ test("[TC-AG-061] a retired hob's threads open read-only from Settings › Archi
   await page.getByRole("link", { name: "‹ All settings" }).click();
   await expect(page.getByRole("region", { name: "Archived hobs" }).getByText("Pip", { exact: true })).toBeVisible();
   expect(await api(current, "GET", "/agents")).toEqual([]);
+
+  // A link that pairs Pip with a thread Pip never had shows no transcript.
+  await page.goto(`${current.url}/#/settings/archived/${hob.id}/threads/thread_not_pips`);
+  await expect(page.getByText("This chat is not one of Pip's.")).toBeVisible();
+  await expect(page.getByText("Echo: Plan my week", { exact: true })).toHaveCount(0);
 });
 
 // covers AG-006
