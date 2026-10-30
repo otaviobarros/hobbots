@@ -55,6 +55,12 @@ function JumpList({ onDone }: { onDone: () => void }) {
   const [active, setActive] = useState(0);
   const matches = (agents.data ?? []).filter((hob) => matchesHob(hob, query));
   const current = Math.min(active, Math.max(0, matches.length - 1));
+  const activeId = matches[current]?.id;
+
+  // Focus stays in the input, so the list scrolls itself to keep the active hob in sight.
+  useEffect(() => {
+    if (activeId) document.getElementById(`hob-jump-${activeId}`)?.scrollIntoView({ block: "nearest" });
+  }, [activeId]);
 
   const go = (hob: Agent | undefined) => {
     if (!hob) return;
@@ -71,7 +77,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
         role="combobox"
         aria-expanded
         aria-controls="hob-jump-list"
-        aria-activedescendant={matches[current] ? `hob-jump-${matches[current].id}` : undefined}
+        aria-activedescendant={activeId ? `hob-jump-${activeId}` : undefined}
         aria-label="Find a hob by name or craft"
         placeholder="Jump to a hob…"
         value={query}

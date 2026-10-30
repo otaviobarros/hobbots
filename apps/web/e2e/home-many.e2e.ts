@@ -84,3 +84,31 @@ test("[TC-UX-002] ⌘K opens a hob's chat from any page", async ({ page }) => {
   await expect(finder).toBeHidden();
   await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Wick}/new$`));
 });
+
+// covers UX-001
+test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", async ({ page }) => {
+  const { url } = await hubWithTwentyHobs();
+  await page.goto(url);
+  await expect(page.getByRole("region", { name: "All hobs" })).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+k");
+  const finder = page.getByRole("dialog", { name: "Jump to a hob" });
+  await expect(finder.getByRole("option")).toHaveCount(20);
+  const chosen = finder.getByRole("option", { selected: true });
+  await expect(chosen).toBeInViewport();
+
+  // Up from the first hob wraps to the last one, below the fold of the list.
+  await page.keyboard.press("ArrowUp");
+  await expect(finder.getByRole("option").last()).toHaveAttribute("aria-selected", "true");
+  await expect(chosen).toBeInViewport();
+
+  // Down wraps back to the first hob, scrolled back into sight.
+  await page.keyboard.press("ArrowDown");
+  await expect(finder.getByRole("option").first()).toHaveAttribute("aria-selected", "true");
+  await expect(chosen).toBeInViewport();
+
+  await page.keyboard.press("ArrowUp");
+  const hobId = (await chosen.getAttribute("id"))?.replace("hob-jump-", "");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${hobId}/new$`));
+});
