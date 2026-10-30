@@ -111,6 +111,10 @@ describe("first hob draft", () => {
       hat: null,
       tool: null,
     });
+    // A custom title that names an object property is still the user's own words.
+    for (const title of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      expect(restoreDraft(legacy(title)).submitted).toMatchObject({ role: null, roleTitle: title, sigil: "assistant" });
+    }
     // Every retry repeats the upgraded request, which the API client can encode.
     const retried = submitDraft(scribe).submitted;
     expect(retried).toBe(scribe.submitted);

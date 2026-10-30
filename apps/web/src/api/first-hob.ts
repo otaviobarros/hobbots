@@ -173,13 +173,13 @@ export const newDraft = (
 };
 
 /** The starter roles the first crafts became, as the hub's migration 0010 moved them. */
-const CRAFT_ROLES: Readonly<Record<string, RoleId>> = {
-  Helper: "assistant",
-  Scribe: "writer",
-  Coder: "engineer",
-  Researcher: "researcher",
-  Bookkeeper: "bookkeeper",
-};
+const CRAFT_ROLES: ReadonlyMap<string, RoleId> = new Map([
+  ["Helper", "assistant"],
+  ["Scribe", "writer"],
+  ["Coder", "engineer"],
+  ["Researcher", "researcher"],
+  ["Bookkeeper", "bookkeeper"],
+]);
 
 /**
  * A create request sent before hobs had roles, which named a craft. It moves to a role the way the
@@ -191,7 +191,7 @@ const upgradeSubmitted = (submitted: CreateAgentPayload | null): CreateAgentPayl
   const { craft, ...rest } = submitted as Omit<CreateAgentPayload, keyof ReturnType<typeof roleFields>> & {
     readonly craft: string;
   };
-  const role = CRAFT_ROLES[craft];
+  const role = CRAFT_ROLES.get(craft);
   return role === undefined
     ? { ...rest, role: null, roleTitle: craft, sigil: DEFAULT_SIGIL, hat: null, tool: null }
     : { ...rest, ...roleFields(role), hat: null, tool: null };
