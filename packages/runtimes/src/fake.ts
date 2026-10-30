@@ -1,5 +1,5 @@
 import { RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Exit, Layer, Stream } from "effect";
 import { type PromptRequest, RuntimeAdapter, type RuntimeEvent } from "./adapter.ts";
 
 /**
@@ -27,8 +27,15 @@ export const fakeModels = new RuntimeModels({
   ],
 });
 
+export interface FakeRuntimeOptions {
+  /** Pause before each event, so a reply streams visibly. */
+  readonly delay?: string;
+  /** How long a cancelled turn takes to end, like a real runtime shutting a turn down. */
+  readonly stopDelay?: string;
+}
+
 /** Deterministic adapter for tests and UI work without model usage. */
-export const makeFakeRuntime = (options: { readonly delay?: string } = {}) => {
+export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   const sendPrompt = (request: PromptRequest) => {
     const sessionId = request.sessionId ?? `fake-${crypto.randomUUID()}`;
     const reply = `Echo: ${request.prompt}`;
@@ -39,7 +46,14 @@ export const makeFakeRuntime = (options: { readonly delay?: string } = {}) => {
       { _tag: "Completed", sessionId, text: reply },
     ];
     const stream = Stream.fromIterable(events);
-    return options.delay ? stream.pipe(Stream.tap(() => Effect.sleep(options.delay as "10 millis"))) : stream;
+    const paced = options.delay ? stream.pipe(Stream.tap(() => Effect.sleep(options.delay as "10 millis"))) : stream;
+    return options.stopDelay
+      ? paced.pipe(
+          Stream.onExit((exit) =>
+            Exit.hasInterrupts(exit) ? Effect.sleep(options.stopDelay as "10 millis") : Effect.void,
+          ),
+        )
+      : paced;
   };
 
   return RuntimeAdapter.of({
@@ -58,5 +72,5 @@ export const makeFakeRuntime = (options: { readonly delay?: string } = {}) => {
   });
 };
 
-export const FakeRuntimeLayer = (options?: { readonly delay?: string }) =>
+export const FakeRuntimeLayer = (options?: FakeRuntimeOptions) =>
   Layer.succeed(RuntimeAdapter, makeFakeRuntime(options));

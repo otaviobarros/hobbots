@@ -1,4 +1,4 @@
-import { type Agent, HobbotsEvent, type Message, type Thread } from "@hobbots/domain";
+import { type Agent, HobbotsEvent, isInProgress, type Message, type Thread } from "@hobbots/domain";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useEffect, useState } from "react";
@@ -41,7 +41,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "MessageDelta":
       queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.threadId), (old) =>
         old?.map((message) =>
-          message.id === event.messageId && message.status === "streaming"
+          message.id === event.messageId && isInProgress(message.status)
             ? ({
                 ...message,
                 content: message.content + event.delta,
@@ -50,6 +50,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
         ),
       );
       setActivity(queryClient, event.threadId, "working");
+      return;
+    // The reply's own upsert, sent just before, already carries its stopping or stopped status.
+    case "TurnStopRequested":
+    case "TurnStopped":
       return;
   }
 };

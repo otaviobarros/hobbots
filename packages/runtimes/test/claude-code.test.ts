@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -10,12 +11,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
-import { Duration, Effect, Exit, Layer, Stream } from "effect";
+import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   brainOptions,
   claudeCandidates,
+  exited,
   expiringCache,
   fallbackModels,
   findClaudeCode,
@@ -285,5 +287,42 @@ describe("asking Claude Code for its models", () => {
     expect(Duration.toMillis(modelListMaxAge(fallbackModels))).toBeLessThan(
       Duration.toMillis(modelListMaxAge({ ...fallbackModels, source: "runtime" })),
     );
+  });
+});
+
+describe("stopping a Claude Code turn", () => {
+  // covers CH-007
+  it("[TC-CH-020] ends a cancelled turn only once Claude Code has exited, even while a read is pending", async () => {
+    const pidFile = join(newHome(), "pid");
+    // Never answers, ignores the end of its input and takes a moment to exit once asked to stop.
+    const executable = executableAt(
+      join(newHome(), "claude"),
+      `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2.1.400 (Claude Code)"; exit 0; fi\necho $$ > "${pidFile}"\ntrap 'sleep 1; exit 0' TERM\nwhile :; do sleep 0.1; done\n`,
+    );
+    const adapter = await Effect.runPromise(makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable }));
+    const turn = Effect.runFork(
+      Stream.runDrain(
+        adapter.sendPrompt({ prompt: "hi", sessionId: null, instructions: "", model: null, effort: null }),
+      ),
+    );
+    expect(await until(() => existsSync(pidFile))).toBe(true);
+    const pid = Number(readFileSync(pidFile, "utf8").trim());
+
+    await Effect.runPromise(Fiber.interrupt(turn));
+
+    expect(isRunning(pid)).toBe(false);
+  }, 20_000);
+
+  // covers CH-007
+  it("[TC-CH-021] kills a Claude Code that is still running after the grace period", async () => {
+    const child = spawn("/bin/sh", ["-c", "trap '' TERM; echo ready; while :; do sleep 0.1; done"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    await new Promise((ready) => child.stdout.once("data", ready));
+    child.kill("SIGTERM");
+
+    await Effect.runPromise(exited(child, "200 millis"));
+
+    expect(child.signalCode).toBe("SIGKILL");
   });
 });

@@ -5,6 +5,7 @@ import {
   AgentTransitions,
   InvalidAgentTransition,
   InvalidMessageTransition,
+  isInProgress,
   Message,
   MessageId,
   MessageTransitions,
@@ -35,6 +36,23 @@ describe("MessageTransitions", () => {
     const done = MessageTransitions.complete(streaming, "final") as Message;
     expect(MessageTransitions.appendDelta(done, "x")).toBeInstanceOf(InvalidMessageTransition);
     expect(MessageTransitions.fail(done, "boom")).toBeInstanceOf(InvalidMessageTransition);
+  });
+
+  it("keeps a stopping reply in progress until its turn ends, then marks it stopped", () => {
+    const stopping = MessageTransitions.requestStop(MessageTransitions.appendDelta(streaming, "Hel") as Message);
+    expect(stopping).toMatchObject({ content: "Hel", status: "stopping" });
+    expect(isInProgress((stopping as Message).status)).toBe(true);
+    const more = MessageTransitions.appendDelta(stopping as Message, "lo") as Message;
+    expect(MessageTransitions.interrupt(more)).toMatchObject({ content: "Hello", status: "stopped" });
+    // A turn that finished before the runtime honoured the stop stays complete.
+    expect(MessageTransitions.complete(more)).toMatchObject({ status: "complete" });
+  });
+
+  it("marks a turn Hobbots ended itself as interrupted, and rejects stopping a finished reply", () => {
+    expect(MessageTransitions.interrupt(streaming)).toMatchObject({ status: "interrupted" });
+    const stopped = MessageTransitions.interrupt(MessageTransitions.requestStop(streaming) as Message) as Message;
+    expect(isInProgress(stopped.status)).toBe(false);
+    expect(MessageTransitions.requestStop(stopped)).toBeInstanceOf(InvalidMessageTransition);
   });
 });
 
