@@ -10,6 +10,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:pg": "node scripts/test-pg.mjs",
+    "test:e2e": "pnpm --filter @hobbots/web build && pnpm --filter @hobbots/web test:e2e",
     "pg:up": "docker compose -f infrastructure/local/compose.yaml up --detach --wait",
     "pg:down": "docker compose -f infrastructure/local/compose.yaml down",
     "lint": "biome check .",

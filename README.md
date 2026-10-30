@@ -44,6 +44,13 @@ pnpm test:pg       # starts PostgreSQL on 127.0.0.1:54329 if needed, then runs t
 pnpm pg:down       # stops it and discards its data
 ```
 
+The first-launch flow (Welcome, setup, first hob, Home, and a restart) runs in Chromium against a hub with the fake runtime and an empty data folder under `.data/e2e`. Install the browser once, then run it:
+
+```sh
+pnpm --filter @hobbots/web exec playwright install chromium
+pnpm test:e2e      # builds the web client, then runs apps/web/e2e (HOBBOTS_E2E_PORT, default 4380)
+```
+
 ## Repository
 
 - `apps/`: `server` (Effect TS v4 HTTP API and SSE), `web` (React client), `desktop` (Electron).
