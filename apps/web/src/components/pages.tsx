@@ -1,9 +1,12 @@
 import { Badge } from "@hobbots/ui/components/badge";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { setupQuery } from "../api/setup.ts";
 import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
 import { GeneralSettings } from "./general-settings.tsx";
 import { RuntimeCard } from "./runtime.tsx";
+import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
 
 function Page({
   icon,
@@ -81,11 +84,35 @@ const LATER_PROVIDERS = [
   { name: "Any OpenAI-compatible key", mark: "+", color: "#b79be8" },
 ];
 
+/** Settings › Permissions: the safety preset and the folders hobs may work in, as chosen during setup. */
+function PermissionSettings() {
+  const setup = useQuery(setupQuery);
+  if (setup.isError) {
+    return <p className="m-0 text-sm text-rose">Hobbots could not read your permissions. Try again in a moment.</p>;
+  }
+  if (!setup.data) return null;
+  return (
+    <>
+      <p className="m-0 text-secondary-text">
+        How much hobs will ask first, and where they will work. Hobbots saves your choice; today hobs only chat, so none
+        of it applies yet.
+      </p>
+      <PresetPicker label="Safety preset" value={setup.data.safetyPreset} />
+      <span className="lbl pt-2 text-label">Folders hobs may open</span>
+      {setup.data.approvedFolders.length === 0 && <p className="m-0 text-sm text-secondary-text">No folders yet.</p>}
+      <FolderPicker folders={setup.data.approvedFolders} />
+    </>
+  );
+}
+
 export function SettingsPage() {
   return (
     <Page icon="Settings" title="Settings" intro="How Hobbots starts, AI providers, devices, backups and diagnostics.">
       <Panel label="General">
         <GeneralSettings />
+      </Panel>
+      <Panel label="Permissions">
+        <PermissionSettings />
       </Panel>
       <Panel label="AI providers">
         <RuntimeCard />

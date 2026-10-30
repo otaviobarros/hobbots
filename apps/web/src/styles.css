@@ -72,6 +72,9 @@
   /* The name and look dice turn a quarter at a time. */
   --animate-hb-roll: hb-roll 0.5s steps(4) 1;
   --animate-hb-poof: hb-poof 0.7s steps(6) both;
+  /* The summoning circle turns while it gathers moonlight; sparks fly when a hob arrives. */
+  --animate-hb-spin: hb-spin 2.4s steps(16) infinite;
+  --animate-hb-spark: hb-spark 0.7s steps(5) forwards;
 
   @keyframes hb-bob {
     0%,
@@ -152,6 +155,21 @@
     }
     100% {
       transform: scale(1.7);
+      opacity: 0;
+    }
+  }
+  @keyframes hb-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes hb-spark {
+    0% {
+      transform: translate(0, 0) scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(var(--dx), var(--dy)) scale(0.4);
       opacity: 0;
     }
   }

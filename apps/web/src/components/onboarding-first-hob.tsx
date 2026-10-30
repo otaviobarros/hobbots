@@ -5,34 +5,30 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ApiError } from "../api/client.ts";
 import {
   CRAFTS,
   craftOf,
   draftProblem,
   effortWords,
   type FirstHobDraft,
+  keepDraft,
+  keptDraftOrStored,
   LABEL_MAX,
   nearbySeeds,
   pickCraft,
   pickLook,
   pickModel,
-  reopenDraft,
   restoreDraft,
   rollLook,
   rollName,
   settleBrain,
-  submitDraft,
 } from "../api/first-hob.ts";
-import { modelsQuery, useCreateHob } from "../api/queries.ts";
-import { useUpdateSetup } from "../api/setup.ts";
+import { modelsQuery } from "../api/queries.ts";
 import { HOB_COLORS, hobLook } from "../art/look.ts";
-import { readStored, writeStored } from "../lib/storage.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 
 const GUIDE = "Now the fun part. Every hob is good at something. Pick a craft, a name and a cloak.";
-const draftKey = "setup.firstHob";
 
 const DIE = ["owwwo", "wwwww", "wwoww", "wwwww", "owwwo"];
 const DIE_PALETTE = { o: "#141228", w: "#ece8ff" };
@@ -292,25 +288,21 @@ function LookPreview({
 
 /**
  * Onboarding step 2: the user makes their first hob, with a craft, a name from the dice, a seeded
- * look in one of the hob colors, and Claude Code's model and effort. Continue creates the hob.
+ * look in one of the hob colors, and Claude Code's model and effort. The summon creates it.
  */
 export function OnboardingFirstHob() {
   const navigate = useNavigate();
   const router = useRouter();
   const canGoBack = useCanGoBack();
   const models = useQuery(modelsQuery("claude-code"));
-  const create = useCreateHob();
-  const update = useUpdateSetup();
-  const [draft, setDraft] = useState<FirstHobDraft>(() =>
-    restoreDraft(readStored<Partial<FirstHobDraft> | null>(draftKey, null)),
-  );
+  const [draft, setDraft] = useState<FirstHobDraft>(() => restoreDraft(keptDraftOrStored()));
   const [nameRolls, setNameRolls] = useState(0);
   const [lookRolls, setLookRolls] = useState(0);
   const [tried, setTried] = useState(false);
 
   // Coming back to this step keeps what was chosen; a model the runtime dropped falls back,
   // unless the hob was already sent with it.
-  useEffect(() => writeStored(draftKey, draft), [draft]);
+  useEffect(() => keepDraft(draft), [draft]);
   useEffect(() => {
     if (models.data) setDraft((d) => (d.submitted ? d : settleBrain(d, models.data)));
   }, [models.data]);
@@ -321,32 +313,13 @@ export function OnboardingFirstHob() {
   const problem = locked
     ? undefined
     : (draftProblem(draft) ?? (model ? undefined : "Waiting for Claude Code's models"));
-  const busy = create.isPending || update.isPending;
-  const failed = create.isError || update.isError;
-  const rejected = create.error instanceof ApiError && create.error.tag === "InvalidHob" ? create.error : undefined;
 
   const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/providers" }));
-  // Safety, folders and the summon (#69) come next; until they exist, creating the hob ends setup.
-  const next = async () => {
+  // The draft waits in storage; the summon at the end of setup creates the hob.
+  const next = () => {
     setTried(true);
-    if (problem || busy) return;
-    // Once sent, the hob may exist even when no answer comes back, so the choices lock and every
-    // retry repeats the same request; the hub returns the hob it made the first time.
-    const sent = submitDraft(draft);
-    setDraft(sent);
-    try {
-      await create.mutateAsync(sent.submitted);
-    } catch (error) {
-      if (error instanceof ApiError && error.tag === "InvalidHob") setDraft(reopenDraft);
-      return;
-    }
-    try {
-      await update.mutateAsync({ completed: true });
-      writeStored(draftKey, null);
-      await navigate({ to: "/" });
-    } catch {
-      // The footer shows the failure from the mutation state.
-    }
+    if (problem) return;
+    void navigate({ to: "/setup/safety" });
   };
 
   const craftLine =
@@ -356,16 +329,12 @@ export function OnboardingFirstHob() {
         : "one of a kind"
       : `the ${craft?.label}`;
   const brainLine = `Claude · ${model?.displayName ?? "…"}${draft.effort ? ` · ${effortWords(draft.effort).label.toLowerCase()} effort` : ""}`;
-  const hint = rejected
-    ? `Hobbots could not create your hob: ${rejected.message}`
-    : failed
-      ? `Hobbots could not finish making ${draft.name.trim()}. Try again in a moment.`
-      : busy
-        ? `Making ${draft.name.trim()}…`
-        : (problem ??
-          (draft.kind === "custom"
-            ? `${draft.name.trim()} is ready`
-            : `${draft.name.trim()} the ${craftOf(draft)} is ready`));
+  const hint = locked
+    ? `${draft.name.trim()} is on the way. Finish summoning to change it.`
+    : (problem ??
+      (draft.kind === "custom"
+        ? `${draft.name.trim()} is ready`
+        : `${draft.name.trim()} the ${craftOf(draft)} is ready`));
 
   return (
     <OnboardingFrame
@@ -379,19 +348,14 @@ export function OnboardingFirstHob() {
           </Button>
           <span
             id="first-hob-hint"
-            role={failed ? "alert" : undefined}
-            className={cn(
-              "flex-1 text-right text-sm",
-              failed ? "text-rose" : problem && tried ? "text-lantern" : "text-secondary-text",
-            )}
+            className={cn("flex-1 text-right text-sm", problem && tried ? "text-lantern" : "text-secondary-text")}
           >
             {hint}
           </span>
           <Button
-            onClick={() => void next()}
+            onClick={next}
             aria-disabled={problem !== undefined}
             aria-describedby="first-hob-hint"
-            disabled={busy}
             className={
               problem ? "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_#22203f] hover:bg-line-2" : undefined
             }

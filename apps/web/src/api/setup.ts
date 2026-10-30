@@ -1,6 +1,6 @@
 import type { UpdateSetupPayload } from "@hobbots/api";
 import type { InstallationSetup } from "@hobbots/domain";
-import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, queryOptions, useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 
 export const setupQueryKey = ["setup"] as const;
@@ -40,9 +40,15 @@ export const readSetup = (queryClient: QueryClient, query: typeof setupQuery = s
     .fetchQuery({ ...query, staleTime: 0 })
     .catch(() => queryClient.getQueryData<InstallationSetup>(query.queryKey));
 
+const updateSetupKey = ["setup", "update"] as const;
+
+/** Whether a setup change is still on its way to the hub, so a step can wait for it before moving on. */
+export const useSavingSetup = () => useIsMutating({ mutationKey: updateSetupKey }) > 0;
+
 export const useUpdateSetup = () => {
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: updateSetupKey,
     mutationFn: (payload: UpdateSetupPayload) => call((c) => c.setup.update({ payload })),
     onSuccess: (setup) => queryClient.setQueryData(setupQueryKey, setup),
   });
