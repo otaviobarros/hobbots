@@ -10,7 +10,7 @@ import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server
 import { fileSettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
 import { claimSingleInstance, onSecondLaunch } from "./single-instance.ts";
-import { initialWindowBounds, minWindowSize } from "./window-size.ts";
+import { initialWindowBounds } from "./window-size.ts";
 
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
 app.setName("Hobbots");
@@ -80,8 +80,6 @@ const createWindow = async () => {
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const window = new BrowserWindow({
     ...initialWindowBounds(display.workArea),
-    minWidth: minWindowSize.width,
-    minHeight: minWindowSize.height,
     title: "Hobbots",
     backgroundColor: "#141228",
     // The traffic lights sit inside the 30px title strip of the Hobbots design.

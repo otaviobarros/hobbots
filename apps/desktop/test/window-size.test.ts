@@ -8,6 +8,8 @@ describe("the window's opening size", () => {
       y: 275,
       width: 2106,
       height: 1167,
+      minWidth: 960,
+      minHeight: 610,
     });
   });
 
@@ -24,11 +26,20 @@ describe("the window's opening size", () => {
       y: 25,
       width: 1280,
       height: 775,
+      minWidth: 960,
+      minHeight: 610,
     });
   });
 
-  it("never opens below the minimum size", () => {
-    expect(initialWindowBounds({ x: 0, y: 0, width: 800, height: 600 })).toMatchObject({ width: 960, height: 610 });
+  it("fills a work area smaller than the minimum size and lowers the minimum to fit it", () => {
+    expect(initialWindowBounds({ x: 0, y: 25, width: 800, height: 575 })).toEqual({
+      x: 0,
+      y: 25,
+      width: 800,
+      height: 575,
+      minWidth: 800,
+      minHeight: 575,
+    });
   });
 
   it("centers on a display to the side of the main one", () => {
