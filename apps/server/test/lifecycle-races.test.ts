@@ -61,8 +61,8 @@ const run = <A, E>(test: (gate: Gate, events: Array<HobbotsEvent>) => Effect.Eff
         return HobbotsRepository.of({
           ...base,
           upsertMessage: (message) => gate.pass("upsertMessage").pipe(Effect.andThen(base.upsertMessage(message))),
-          setAgentStatus: (id, from, to) =>
-            gate.pass("setAgentStatus").pipe(Effect.andThen(base.setAgentStatus(id, from, to))),
+          setAgentStatus: (next, from) =>
+            gate.pass("setAgentStatus").pipe(Effect.andThen(base.setAgentStatus(next, from))),
           updateAgentConfig: (agent) =>
             gate.pass("updateAgentConfig").pipe(Effect.andThen(base.updateAgentConfig(agent))),
         });

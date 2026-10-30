@@ -5,6 +5,7 @@ import { migrations } from "../src/index.ts";
 import hobBrain from "../src/migrations/0005_hob_brain.ts";
 import hobConfigVersions from "../src/migrations/0007_hob_config_versions.ts";
 import hobStatus from "../src/migrations/0008_hob_status.ts";
+import hobRetiredAt from "../src/migrations/0009_hob_retired_at.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -148,5 +149,29 @@ describe("0008_hob_status", () => {
     }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0008"))), Effect.runPromise);
 
     expect(rows).toEqual([{ id: "aldric", status: "active" }]);
+  });
+});
+
+describe("0009_hob_retired_at", () => {
+  // covers AG-006, DP-003
+  it("[TC-AG-060] keeps hobs retired before it, with no retirement time", async () => {
+    const rows = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "aldric",
+        name: "Aldric",
+        craft: "Guide",
+        runtime: "claude-code",
+        instructions: "",
+        status: "retired",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* hobRetiredAt;
+      return yield* sql<{ id: string; status: string; retiredAt: string | null }>`
+        SELECT id, status, retired_at FROM agents
+      `;
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0009"))), Effect.runPromise);
+
+    expect(rows).toEqual([{ id: "aldric", status: "retired", retiredAt: null }]);
   });
 });
