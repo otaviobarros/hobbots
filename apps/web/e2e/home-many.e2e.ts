@@ -33,7 +33,9 @@ const hubWithTwentyHobs = async () => {
       name,
       ...(i === 13
         ? { role: null, roleTitle: "Cartographer", sigil: "assistant", hat: null, tool: null }
-        : { role: "assistant", roleTitle: "Assistant", sigil: "assistant", hat: "pointed", tool: "none" }),
+        : i === 4 || i === 9
+          ? { role: "qa", roleTitle: "QA engineer", sigil: "qa", hat: "horned", tool: "lantern" }
+          : { role: "assistant", roleTitle: "Assistant", sigil: "assistant", hat: "pointed", tool: "none" }),
       lookSeed: 1000 + i * 337,
       lookColor: "violet",
       runtime: "claude-code",
@@ -66,9 +68,27 @@ test("[TC-UX-001] with 20 hobs the scene shows six, the hall holds 14 and the fi
   await expect(all.getByRole("button", { name: /^Resting/ })).toHaveAttribute("aria-expanded", "true");
   await expect(tiles).toHaveCount(20);
 
-  await all.getByRole("searchbox", { name: "Find a hob by name or craft" }).fill("carto");
+  await all.getByRole("searchbox", { name: "Find a hob by name or role" }).fill("carto");
   await expect(tiles).toHaveCount(1);
   await expect(all.getByRole("link", { name: /^Open chat with Wick, Cartographer/ })).toBeVisible();
+});
+
+// covers UX-001
+test("[TC-UX-004] Home tiles show each hob's sigil and role, and the filter finds hobs by role", async ({ page }) => {
+  const { url } = await hubWithTwentyHobs();
+  await page.goto(url);
+  const all = page.getByRole("region", { name: "All hobs" });
+  await page.getByRole("region", { name: "Your hobs right now" }).getByRole("button", { name: "20 resting" }).click();
+
+  await all.getByRole("searchbox", { name: "Find a hob by name or role" }).fill("QA");
+  const tiles = all.getByRole("link", { name: /^Open chat with/ });
+  await expect(tiles).toHaveCount(2);
+  for (const name of ["Hob 5", "Hob 10"]) {
+    const tile = all.getByRole("link", { name: `Open chat with ${name}, QA engineer, ready` });
+    await expect(tile).toContainText("QA engineer · ready");
+    // The sigil is decorative: the role is read once, from its title in words.
+    await expect(tile.locator('[data-slot="sigil-badge"]')).toHaveAttribute("aria-hidden", "true");
+  }
 });
 
 // covers UX-001
@@ -79,7 +99,7 @@ test("[TC-UX-002] ⌘K opens a hob's chat from any page", async ({ page }) => {
 
   await page.keyboard.press("ControlOrMeta+k");
   const finder = page.getByRole("dialog", { name: "Jump to a hob" });
-  await finder.getByRole("combobox", { name: "Find a hob by name or craft" }).fill("wick");
+  await finder.getByRole("combobox", { name: "Find a hob by name or role" }).fill("wick");
   await expect(finder.getByRole("option")).toHaveCount(1);
   await page.keyboard.press("Enter");
 

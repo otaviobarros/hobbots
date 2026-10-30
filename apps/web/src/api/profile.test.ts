@@ -1,6 +1,17 @@
 import { Agent, AgentId, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { brainLine, isDirty, profileDraft, profileEdit, rebaseDraft, retiredSummary } from "./profile.ts";
+import { firstHobPayload, newDraft } from "./first-hob.ts";
+import {
+  brainLine,
+  goodAt,
+  isDirty,
+  pickRole,
+  profileDraft,
+  profileEdit,
+  rebaseDraft,
+  retiredSummary,
+  roleProblem,
+} from "./profile.ts";
 
 const model = (id: string, displayName: string, efforts: RuntimeModel["efforts"]) =>
   new RuntimeModel({ id, displayName, description: "", efforts, main: true });
@@ -30,6 +41,11 @@ const hob = (patch: Partial<Agent> = {}) =>
 describe("hob profile", () => {
   it("starts from the hob's configuration, with no model as the runtime's default", () => {
     expect(profileDraft(hob(), offered)).toEqual({
+      role: null,
+      roleTitle: "Writer",
+      sigil: "assistant",
+      hat: null,
+      tool: null,
       instructions: "Write short answers.",
       model: "default",
       effort: "medium",
@@ -68,7 +84,7 @@ describe("hob profile", () => {
     // Another window switches the model while this one edits the instructions.
     const after = hob({ model: "opus", effort: "high", configVersion: 2 });
     const rebased = rebaseDraft(base, profileDraft(after, offered), draft);
-    expect(rebased).toEqual({ instructions: "Write long answers.", model: "opus", effort: "high" });
+    expect(rebased).toMatchObject({ instructions: "Write long answers.", model: "opus", effort: "high" });
     expect(profileEdit(after, rebased)).toEqual({ instructions: "Write long answers." });
   });
 
@@ -108,5 +124,43 @@ describe("hob profile", () => {
     expect(retiredSummary("Pip", "stop", false)).toBe("Pip is asleep. Its threads are kept and stay readable.");
     expect(retiredSummary("Pip", "finish", true)).toMatch(/^Pip finishes the replies/);
     expect(retiredSummary("Pip", "stop", true)).toMatch(/^Pip's running replies were stopped/);
+  });
+
+  it("takes a starter role with its title, sigil, hat and tool, as one edit", () => {
+    const pip = hob();
+    const draft = pickRole(profileDraft(pip, offered), "qa");
+    expect(profileEdit(pip, draft)).toEqual({
+      role: "qa",
+      roleTitle: "QA engineer",
+      sigil: "qa",
+      hat: "horned",
+      tool: "lantern",
+    });
+  });
+
+  it("keeps the title, sigil, hat and tool when switching to the user's own words", () => {
+    const qa = hob({ role: "qa", roleTitle: "QA engineer", sigil: "qa", hat: "horned", tool: "lantern" });
+    const own = pickRole(profileDraft(qa, offered), null);
+    expect(profileEdit(qa, own)).toEqual({ role: null });
+    expect(profileEdit(qa, { ...own, roleTitle: "  Bug hunter " })).toEqual({ role: null, roleTitle: "Bug hunter" });
+    expect(roleProblem({ ...own, roleTitle: "  " })).toBe("Give the role a title.");
+    expect(roleProblem(own)).toBeUndefined();
+  });
+
+  it("keeps a role picked here when another window saves a new version", () => {
+    const before = hob();
+    const base = profileDraft(before, offered);
+    const draft = pickRole(base, "qa");
+    const after = hob({ instructions: "Be brief.", configVersion: 2 });
+    const rebased = rebaseDraft(base, profileDraft(after, offered), draft);
+    expect(rebased).toMatchObject({ role: "qa", roleTitle: "QA engineer", instructions: "Be brief." });
+    expect(isDirty(base, draft)).toBe(true);
+  });
+
+  it("says what the hob is good at from its chores, else from its starter role", () => {
+    const summoned = firstHobPayload({ ...newDraft(), name: "Pip", chores: "Sort my inbox.\nDraft replies." });
+    expect(goodAt({ instructions: summoned.instructions, role: null })).toBe("Sort my inbox. Draft replies.");
+    expect(goodAt({ instructions: "Be brief.", role: "qa" })).toMatch(/\S/);
+    expect(goodAt({ instructions: "Be brief.", role: null })).toBeUndefined();
   });
 });
