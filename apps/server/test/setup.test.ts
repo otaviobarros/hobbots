@@ -1,15 +1,27 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Layer } from "effect";
 import { HttpRouter } from "effect/http";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { HobService } from "../src/hobs.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+
+// Folders are checked on the hub, so the tests make real ones.
+const temp = mkdtempSync(join(tmpdir(), "hobbots-setup-"));
+const code = join(temp, "code");
+const notes = join(temp, "notes");
+mkdirSync(code);
+mkdirSync(notes);
+writeFileSync(join(temp, "todo.txt"), "");
+afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
@@ -71,20 +83,20 @@ describe("the setup API", () => {
   it("[TC-OP-005] stores the preset and folders, completes setup and keeps the result", async () => {
     const chosen = await request("PATCH", "/api/setup", {
       safetyPreset: "trusting",
-      approvedFolders: ["/Users/me/code", "/Users/me/notes", "/Users/me/code"],
+      approvedFolders: [code, `${notes}/`, join(code, "..", "code")],
     });
     expect(chosen.status).toBe(200);
     expect(await chosen.json()).toEqual({
       completed: false,
       safetyPreset: "trusting",
-      approvedFolders: ["/Users/me/code", "/Users/me/notes"],
+      approvedFolders: [code, notes],
       connectedProviders: [],
     });
 
     const finished = {
       completed: true,
       safetyPreset: "trusting",
-      approvedFolders: ["/Users/me/code", "/Users/me/notes"],
+      approvedFolders: [code, notes],
       connectedProviders: [],
     };
     const done = await request("PATCH", "/api/setup", { completed: true });
@@ -104,6 +116,17 @@ describe("the setup API", () => {
       approvedFolders: [],
       connectedProviders: [],
     });
+  });
+
+  // covers OP-001, PE-001
+  it("[TC-OP-014] refuses a folder that is not a full path to a folder on the hub, and stores none", async () => {
+    for (const folder of ["code", join(temp, "missing"), join(temp, "todo.txt")]) {
+      const response = await request("PATCH", "/api/setup", { approvedFolders: [code, folder] });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ _tag: "InvalidFolder", folder });
+    }
+    const stored = (await (await request("GET", "/api/setup")).json()) as { approvedFolders: unknown };
+    expect(stored.approvedFolders).toEqual([]);
   });
 
   // covers OP-001, DP-001

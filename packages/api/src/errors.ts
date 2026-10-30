@@ -28,3 +28,10 @@ export class InvalidHob extends Schema.TaggedError<InvalidHob>()(
   { field: Schema.NullOr(Schema.String), message: Schema.String },
   { httpApiStatus: 400 },
 ) {}
+
+/** A folder the hub will not let hobs work in: not an absolute path, or not a folder on the hub. */
+export class InvalidFolder extends Schema.TaggedError<InvalidFolder>()(
+  "InvalidFolder",
+  { folder: Schema.String, message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
