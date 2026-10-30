@@ -5,7 +5,16 @@ import {
   InvalidHob,
   type UpdateAgentPayload,
 } from "@hobbots/api";
-import { Agent, AgentId, type Effort, type RoleId, type RuntimeModels, starterRole } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  DEFAULT_LENGTH,
+  DEFAULT_VOICE,
+  type Effort,
+  type RoleId,
+  type RuntimeModels,
+  starterRole,
+} from "@hobbots/domain";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter } from "@hobbots/runtimes";
 import { Context, DateTime, Effect, Layer, Option, SchemaIssue } from "effect";
@@ -64,10 +73,12 @@ export const HobInputErrorsLayer = HttpApiMiddleware.layerSchemaErrorTransform(H
 });
 
 const roleFields = ["role", "roleTitle", "sigil", "hat", "tool"] as const;
+const toneFields = ["voice", "length"] as const;
 
 const createdFields = [
   "name",
   ...roleFields,
+  ...toneFields,
   "lookSeed",
   "lookColor",
   "runtime",
@@ -76,8 +87,16 @@ const createdFields = [
   "instructions",
 ] as const satisfies ReadonlyArray<keyof CreateAgentPayload & keyof Agent>;
 
+/** A new hob's request with its tone filled in, so a retry that leaves the tone out matches. */
+const withTone = (payload: CreateAgentPayload) => ({
+  voice: DEFAULT_VOICE,
+  length: DEFAULT_LENGTH,
+  ...payload,
+});
+
 const editableFields = [
   ...roleFields,
+  ...toneFields,
   "lookSeed",
   "lookColor",
   "model",
@@ -103,7 +122,7 @@ export class HobService extends Context.Service<
 
       // A retry carries the same id and fields; the same id with other fields is another hob.
       const retried = (existing: Agent, payload: CreateAgentPayload) =>
-        createdFields.every((field) => existing[field] === payload[field])
+        createdFields.every((field) => existing[field] === withTone(payload)[field])
           ? Effect.succeed(existing)
           : Effect.fail(new InvalidHob({ field: "id", message: "Another hob already has this id" }));
 

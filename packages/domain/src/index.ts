@@ -9,3 +9,4 @@ export * from "./runtime.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./thread.ts";
+export * from "./tone.ts";
