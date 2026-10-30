@@ -1,9 +1,16 @@
-import { execFile } from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { accessSync, constants, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import { type AccountInfo, type ModelInfo, type Options, query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import {
+  type AccountInfo,
+  type ModelInfo,
+  type Options,
+  query,
+  type SDKMessage,
+  type SpawnOptions,
+} from "@anthropic-ai/claude-agent-sdk";
 import { RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { Clock, DateTime, Duration, Effect, Layer, Stream } from "effect";
 import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent } from "./adapter.ts";
@@ -123,6 +130,27 @@ const baseOptions = (config: ClaudeCodeConfig, executable: string): Options => (
   permissionMode: "dontAsk",
   settingSources: [],
 });
+
+const shutdownGrace = "10 seconds";
+
+const hasExited = (child: ChildProcess) => child.exitCode !== null || child.signalCode !== null;
+
+const waitForExit = (child: ChildProcess) =>
+  Effect.callback<void>((resume) => {
+    const done = () => resume(Effect.void);
+    child.once("exit", done);
+    if (hasExited(child)) done();
+    return Effect.sync(() => child.off("exit", done));
+  });
+
+/** Waits until a Claude Code process has exited, killing it if it is still running after the grace period. */
+export const exited = (child: ChildProcess, grace: Duration.Input = shutdownGrace) =>
+  waitForExit(child).pipe(
+    Effect.timeoutOrElse({
+      duration: grace,
+      orElse: () => Effect.sync(() => child.kill("SIGKILL")).pipe(Effect.andThen(waitForExit(child))),
+    }),
+  );
 
 /** The hob's brain for one turn; a null model or effort leaves Claude Code's own default. */
 export const brainOptions = (request: Pick<PromptRequest, "model" | "effort">): Pick<Options, "model" | "effort"> => ({
@@ -295,6 +323,19 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
         Effect.gen(function* () {
           const binary = yield* executable;
           const abortController = new AbortController();
+          // Hobbots starts the process itself so it can tell when it has really exited.
+          let child: ChildProcess | undefined;
+          const spawnClaudeCodeProcess = ({ command, args, cwd, env, signal }: SpawnOptions) => {
+            const spawned = spawn(command, args, {
+              cwd,
+              env,
+              signal,
+              stdio: ["pipe", "pipe", "ignore"],
+              windowsHide: true,
+            });
+            child = spawned;
+            return spawned;
+          };
           const turn = yield* Effect.acquireRelease(
             Effect.sync(() =>
               query({
@@ -302,6 +343,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                 options: {
                   ...baseOptions(config, binary),
                   abortController,
+                  spawnClaudeCodeProcess,
                   includePartialMessages: true,
                   systemPrompt: {
                     type: "preset",
@@ -313,11 +355,13 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                 },
               }),
             ),
+            // A cancelled turn has ended only once Claude Code has exited: close() starts the shutdown
+            // without waiting for it. A process that outlives the grace period is killed.
             (turn) =>
               Effect.sync(() => {
                 abortController.abort();
                 turn.close();
-              }),
+              }).pipe(Effect.andThen(child ? exited(child) : Effect.void)),
           );
           return Stream.fromAsyncIterable(turn, errorMessage).pipe(
             Stream.mapEffect((message) => Effect.try({ try: () => toEvents(message), catch: errorMessage })),
