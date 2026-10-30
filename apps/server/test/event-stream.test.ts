@@ -2,7 +2,7 @@ import { Agent, AgentId, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { EventJournal, HobbotsRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { RuntimeAdapter, type RuntimeEvent } from "@hobbots/runtimes";
-import { Deferred, Effect, Fiber, Layer, Queue, Schedule, type Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Queue, Schedule, type Scope, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
@@ -214,45 +214,38 @@ describe("event stream", () => {
   });
 
   // covers CH-004
-  it("[TC-CH-074] closes a connection whose client falls more than the buffer behind", async () => {
+  it("[TC-CH-074] ends a connection whose client falls more than the buffer behind, while the client still is not reading", async () => {
     const result = await run(() =>
       Effect.gen(function* () {
         const events = yield* EventStream;
         const bus = yield* EventBus;
         const reading = yield* Deferred.make<void>();
-        const resume = yield* Deferred.make<void>();
-        // The client reads Ready, then stalls while events pile up.
-        let count = 0;
+        // The client reads Ready, then stops reading for good, as a stalled socket would.
         const fiber = yield* events.connect(undefined).pipe(
-          Stream.runForEach(() =>
-            Effect.sync(() => count++).pipe(
-              Effect.andThen(Deferred.succeed(reading, undefined)),
-              Effect.andThen(Deferred.await(resume)),
-            ),
-          ),
-          Effect.map(() => count),
+          Stream.runForEach(() => Deferred.succeed(reading, undefined).pipe(Effect.andThen(Effect.never))),
           Effect.forkScoped,
         );
         yield* Deferred.await(reading);
-        for (let offset = 0; offset < 2 * CONNECTION_BUFFER; offset++) {
+        let published = 0;
+        while (fiber.pollUnsafe() === undefined && published < 3 * CONNECTION_BUFFER) {
           yield* bus.publishTransient({
             _tag: "MessageDelta",
             threadId: ThreadId.make("t"),
             messageId: MessageId.make("m"),
-            offset,
+            offset: published++,
             delta: "x",
           });
           // Publishers yield on their writes; let the connection take each event as it would.
           yield* Effect.yieldNow;
         }
-        yield* Deferred.succeed(resume, undefined);
-        return yield* Fiber.join(fiber);
+        return { exit: yield* Fiber.await(fiber), published };
       }),
     );
-    // Ready and the buffered frames arrive, the rest are dropped, and the stream ends so the client
-    // resumes from its cursor.
-    expect(result).toBeGreaterThan(CONNECTION_BUFFER);
-    expect(result).toBeLessThan(1 + 2 * CONNECTION_BUFFER);
+    // The connection ended (releasing its subscription) once the buffer overflowed, without the
+    // client draining it; the client resumes from its cursor.
+    expect(Exit.hasInterrupts(result.exit)).toBe(true);
+    expect(result.published).toBeGreaterThan(CONNECTION_BUFFER);
+    expect(result.published).toBeLessThan(3 * CONNECTION_BUFFER);
   });
 });
 

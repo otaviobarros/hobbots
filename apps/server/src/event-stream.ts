@@ -1,6 +1,6 @@
 import { EventEnvelope, type MessageDelta, STREAM_FRAME, type StreamReady } from "@hobbots/domain";
 import { EventJournal, type JournalHead } from "@hobbots/persistence";
-import { type Cause, Context, Effect, Layer, PubSub, Queue, Schema, Stream } from "effect";
+import { type Cause, Context, Effect, Exit, Fiber, Layer, PubSub, Queue, Schema, Scope, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { ChatService } from "./chat.ts";
 import { type BusEvent, EventBus } from "./event-bus.ts";
@@ -79,14 +79,27 @@ export class EventStream extends Context.Service<
       const connect = (cursor: string | undefined) =>
         Stream.unwrap(
           Effect.gen(function* () {
+            // The fiber writing this connection's response, ended at once when the client falls behind.
+            const writer = yield* Effect.fiber;
             // Subscribed before reading the head, so an entry committed meanwhile arrives on the bus.
-            const subscription = yield* bus.subscribe;
+            // The subscription has its own scope so an overflow can release it without waiting for
+            // the response to end, which a client that stopped reading would hold off indefinitely.
+            const subscriptionScope = yield* Scope.make();
+            yield* Effect.addFinalizer(() => Scope.close(subscriptionScope, Exit.void));
+            const subscription = yield* bus.subscribe.pipe(Scope.provide(subscriptionScope));
             // A client that falls this far behind is disconnected and resumes from its cursor. The
             // keep-alives share the buffer, so nothing downstream reads ahead of the client.
             const buffer = yield* Queue.dropping<BusEvent | KeepAlive, Cause.Done>(CONNECTION_BUFFER);
+            const overflow = Effect.gen(function* () {
+              yield* Scope.close(subscriptionScope, Exit.void);
+              yield* Queue.clear(buffer);
+              // Interrupting the writer destroys the response even while it waits for the client.
+              yield* Fiber.interrupt(writer).pipe(Effect.forkDetach);
+            });
             yield* PubSub.take(subscription).pipe(
               Effect.flatMap((event) => Queue.offer(buffer, event)),
               Effect.repeat({ while: (offered) => offered }),
+              Effect.andThen(overflow),
               // Also when the bus shuts down, so a stopping server has no endless response to wait for.
               Effect.ensuring(Queue.end(buffer)),
               Effect.forkScoped,
