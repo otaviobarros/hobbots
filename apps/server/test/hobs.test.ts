@@ -1,5 +1,13 @@
 import { NodeHttpServer } from "@effect/platform-node";
-import { type Agent, type Message, RuntimeModel, RuntimeModels, roleFields, starterRole } from "@hobbots/domain";
+import {
+  type Agent,
+  type Message,
+  RuntimeModel,
+  RuntimeModels,
+  roleFields,
+  starterRole,
+  toneLines,
+} from "@hobbots/domain";
 import { HobbotsRepository, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/runtimes";
@@ -341,6 +349,31 @@ describe("editing hobs", () => {
       told("Write short answers."),
       told("Write short answers.", "Wren", "qa"),
       "## About you\nYou are Wren, a hob in Hobbots. Your role is Gardener.",
+    ]);
+  });
+
+  // covers AG-002
+  it("[TC-AG-087] starts a hob at Default and Balanced, and tells the runtime a tone saved as a new version", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    expect([agent.voice, agent.length]).toEqual(["default", "balanced"]);
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const send = async (content: string, count: number) => {
+      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === count);
+    };
+
+    await send("first", 2);
+    const edited = await request("PATCH", `/api/agents/${agent.id}`, { voice: "pirate", length: "brief" });
+    expect([edited.body.voice, edited.body.length, edited.body.configVersion]).toEqual(["pirate", "brief", 2]);
+    await send("second", 4);
+    const invalid = await request("PATCH", `/api/agents/${agent.id}`, { voice: "cynical" });
+    expect(invalid.status).toBe(400);
+
+    const tone = toneLines("pirate", "brief").join("\n");
+    expect(prompts.map((p) => p.instructions)).toEqual([
+      told("Write short answers."),
+      told("Write short answers.").replace("\n\n## Your", `\n\n## How you talk\n${tone}\n\n## Your`),
     ]);
   });
 });

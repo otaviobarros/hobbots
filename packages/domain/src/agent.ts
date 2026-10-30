@@ -3,6 +3,7 @@ import { AgentId } from "./ids.ts";
 import { HobColor, LookSeed } from "./look.ts";
 import { Revision } from "./revision.ts";
 import { DEFAULT_SIGIL, RoleHat, RoleId, RoleTool } from "./roles.ts";
+import { DEFAULT_LENGTH, DEFAULT_VOICE, ReplyLength, Voice } from "./tone.ts";
 
 /** Runtimes an agent can run on. Only Claude Code is wired in the first slice. */
 export const RuntimeKind = Schema.Literals(["claude-code"]);
@@ -39,10 +40,17 @@ const roleSchemaFields = {
   tool: Schema.NullOr(RoleTool).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
 };
 
+/** How a hob talks; the defaults add nothing to what the runtime is told. */
+const toneSchemaFields = {
+  voice: Voice.pipe(Schema.withConstructorDefault(Effect.succeed(DEFAULT_VOICE))),
+  length: ReplyLength.pipe(Schema.withConstructorDefault(Effect.succeed(DEFAULT_LENGTH))),
+};
+
 export class Agent extends Schema.Class<Agent>("Agent")({
   id: AgentId,
   name: Schema.String,
   ...roleSchemaFields,
+  ...toneSchemaFields,
   runtime: RuntimeKind,
   /** A model the runtime supports, or null for the runtime's default. */
   model: Schema.NullOr(Schema.String),
@@ -69,6 +77,7 @@ export class AgentConfiguration extends Schema.Class<AgentConfiguration>("AgentC
   agentId: AgentId,
   version: ConfigVersion,
   ...roleSchemaFields,
+  ...toneSchemaFields,
   model: Schema.NullOr(Schema.String),
   effort: Schema.NullOr(Effort),
   instructions: Schema.String,

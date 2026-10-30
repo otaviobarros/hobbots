@@ -8,6 +8,7 @@ import hobStatus from "../src/migrations/0008_hob_status.ts";
 import hobRetiredAt from "../src/migrations/0009_hob_retired_at.ts";
 import hobRoles from "../src/migrations/0010_hob_roles.ts";
 import hobIdentity from "../src/migrations/0013_hob_identity.ts";
+import hobTone from "../src/migrations/0014_hob_tone.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -361,5 +362,41 @@ describe("0013_hob_identity", () => {
     const expected = ["Water the plants.", "Be gentle.", hobs[2][2]];
     expect(result.agents).toEqual(expected);
     expect(result.versions).toEqual(expected.flatMap((instructions) => [instructions, instructions]));
+  });
+});
+
+describe("0014_hob_tone", () => {
+  // covers AG-002, DP-003
+  it("[TC-AG-086] gives every existing hob and version the Default voice and Balanced length", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+        agentId: "pip",
+        version: 1,
+        roleTitle: "Writer",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* hobTone;
+      return {
+        agents: yield* sql`SELECT voice, length FROM agents`,
+        versions: yield* sql`SELECT voice, length FROM agent_config_versions`,
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0014"))), Effect.runPromise);
+
+    expect(result.agents).toEqual([{ voice: "default", length: "balanced" }]);
+    expect(result.versions).toEqual([{ voice: "default", length: "balanced" }]);
   });
 });

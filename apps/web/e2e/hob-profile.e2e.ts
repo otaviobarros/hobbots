@@ -185,3 +185,30 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   );
   expect(saved).toMatchObject({ role: null, roleTitle: "Bug hunter", sigil: "qa", configVersion: 3 });
 });
+
+// covers AG-002
+test("[TC-AG-088] picking a voice and a length in the profile saves them as the next version", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+  const profile = page.getByRole("main", { name: "Pip's profile" });
+  const tone = profile.getByRole("region", { name: "Tone" });
+  await expect(tone.getByRole("radio", { name: /^Default/ })).toBeChecked();
+  await expect(tone.getByRole("radio", { name: /^Balanced/ })).toBeChecked();
+
+  // Themed voices say they change the wording only, and picking one says what stays plain.
+  await expect(tone.getByRole("group", { name: /Themed/ })).toContainText("Changes wording only");
+  await tone.getByText("Old wizard", { exact: true }).click();
+  await expect(tone).toContainText("Code, commands, links and warnings stay plain");
+  await tone.getByText("Brief", { exact: true }).click();
+  await expect(page.getByText(/^Unsaved changes/)).toBeVisible();
+  await profile.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
+
+  const hobs = await api<Array<Hob & { voice: string; length: string }>>(current, "GET", "/api/agents");
+  const saved = hobs.find((h) => h.id === pip.id);
+  expect([saved?.voice, saved?.length, saved?.configVersion]).toEqual(["wizard", "brief", 2]);
+  await page.reload();
+  await expect(tone.getByRole("radio", { name: /^Old wizard/ })).toBeChecked();
+  await expect(tone.getByRole("radio", { name: /^Brief/ })).toBeChecked();
+});
