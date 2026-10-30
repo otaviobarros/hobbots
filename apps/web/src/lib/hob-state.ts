@@ -1,11 +1,7 @@
+import type { Agent } from "@hobbots/domain";
+
 /** Sprite states from the design sprite sheet that the current build can show, plus paused. */
 export type HobState = "idle" | "thinking" | "working" | "waiting" | "needs-you" | "asleep" | "paused" | "failed";
-
-/**
- * A hob's lifecycle on the hub (AG-006). Hobs saved before the server reported a status are active.
- * Retired hobs leave Home, so only active and paused reach a scene.
- */
-export type HobLifecycle = "active" | "paused" | "retired";
 
 /** Words for a state, for headers and screen readers. */
 export const stateLabel: Record<HobState, string> = {
@@ -20,11 +16,12 @@ export const stateLabel: Record<HobState, string> = {
 };
 
 /**
- * The one place a hob's state is worked out: its lifecycle first, then what its threads are doing.
+ * The one place a hob's state is worked out: its lifecycle (AG-006) first, then what its threads are
+ * doing. Retired hobs leave the hob list, so only active and paused hobs reach it.
  * A paused hob shows as paused even while a reply it started before the pause finishes streaming.
  */
 export const hobState = (
-  hob: { readonly id: string; readonly status?: HobLifecycle | undefined },
+  hob: Pick<Agent, "status">,
   threads: ReadonlyArray<{ readonly id: string }> | undefined,
   activity: Readonly<Record<string, "thinking" | "working">>,
 ): HobState => {

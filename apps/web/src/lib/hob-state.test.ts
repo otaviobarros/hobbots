@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { hobState, sceneOrder } from "./hob-state.ts";
 
 describe("hobState", () => {
-  const hob = { id: "aldric" };
+  const hob = { status: "active" } as const;
   const threads = [{ id: "t1" }, { id: "t2" }];
 
   it("rests when no thread streams", () => expect(hobState(hob, threads, {})).toBe("idle"));
@@ -12,7 +12,7 @@ describe("hobState", () => {
   it("ignores activity on other hobs' threads", () => expect(hobState(hob, threads, { t9: "working" })).toBe("idle"));
   it("shows paused over activity", () =>
     expect(hobState({ ...hob, status: "paused" }, threads, { t1: "working" })).toBe("paused"));
-  it("treats a hob with no status as active", () => expect(hobState(hob, undefined, {})).toBe("idle"));
+  it("rests before its threads load", () => expect(hobState(hob, undefined, {})).toBe("idle"));
 });
 
 describe("sceneOrder", () => {
