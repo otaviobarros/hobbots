@@ -69,7 +69,8 @@ const run = <A, E>(test: (gate: Gate, events: Array<HobbotsEvent>) => Effect.Eff
       }),
     ).pipe(Layer.provide(HobbotsRepository.layer), Layer.provide(TestDatabase));
     const bus = Layer.succeed(EventBus, {
-      publish: (event) => Effect.sync(() => void events.push(event)),
+      publish: (entries) => Effect.sync(() => void events.push(...entries.map((entry) => entry.payload))),
+      publishTransient: (event) => Effect.sync(() => void events.push(event)),
       stream: Stream.empty,
     });
     const admission = Layer.effect(

@@ -11,6 +11,7 @@ import hobStatus from "./0008_hob_status.ts";
 import hobRetiredAt from "./0009_hob_retired_at.ts";
 import hobRoles from "./0010_hob_roles.ts";
 import searchIndex from "./0011_search_index.ts";
+import eventJournal from "./0012_event_journal.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -29,4 +30,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0009_hob_retired_at": hobRetiredAt,
   "0010_hob_roles": hobRoles,
   "0011_search_index": searchIndex,
+  "0012_event_journal": eventJournal,
 };

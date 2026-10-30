@@ -55,7 +55,8 @@ const run = <A, E>(
     const confirm = yield* Deferred.make<void>();
     const events: Array<HobbotsEvent> = [];
     const bus = Layer.succeed(EventBus, {
-      publish: (event) => Effect.sync(() => void events.push(event)),
+      publish: (entries) => Effect.sync(() => void events.push(...entries.map((entry) => entry.payload))),
+      publishTransient: (event) => Effect.sync(() => void events.push(event)),
       stream: Stream.empty,
     });
     const layer = ChatService.layer.pipe(
@@ -217,7 +218,8 @@ describe("Stopping a reply", () => {
           Layer.provide(
             Layer.mergeAll(
               Layer.succeed(EventBus, {
-                publish: (event) => Effect.sync(() => void events.push(event)),
+                publish: (entries) => Effect.sync(() => void events.push(...entries.map((entry) => entry.payload))),
+                publishTransient: (event) => Effect.sync(() => void events.push(event)),
                 stream: Stream.empty,
               }),
               HobAdmission.layer,

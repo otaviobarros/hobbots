@@ -126,7 +126,8 @@ const makeSearch = (run: Run) =>
 const groupHits = (rows: ReadonlyArray<Row>, terms: ReadonlyArray<string>): Array<SearchHit> => {
   const hits = new Map<string, { thread: Thread; titleMatch: boolean; matchCount: number; matches: MessageMatch[] }>();
   for (const row of rows) {
-    const thread = decodeThread(row);
+    // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every revision fits a number.
+    const thread = decodeThread({ ...row, revision: Number(row.revision) });
     let hit = hits.get(thread.id);
     if (!hit) {
       // SQLite answers 0 or 1 where PostgreSQL answers a boolean.

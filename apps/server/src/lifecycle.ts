@@ -47,9 +47,10 @@ export class HobLifecycle extends Context.Service<
             return yield* new HobUnavailable({ agentId, status: next.from });
           }
           if (next.status === agent.status) return next;
-          if (yield* repo.setAgentStatus(next, agent.status)) {
-            yield* bus.publish({ _tag: "AgentUpserted", agent: next });
-            return next;
+          const committed = yield* repo.setAgentStatus(next, agent.status);
+          if (Option.isSome(committed)) {
+            yield* bus.publish(committed.value.entries);
+            return committed.value.value;
           }
         }
       });

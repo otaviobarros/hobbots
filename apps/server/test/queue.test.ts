@@ -121,8 +121,10 @@ const recordQueueEvents = Effect.gen(function* () {
   const bus = yield* EventBus;
   const events: Array<Extract<HobbotsEvent, { _tag: "MessageQueued" | "MessageDequeued" }>> = [];
   yield* bus.stream.pipe(
-    Stream.runForEach((event) =>
+    Stream.runForEach((published) =>
       Effect.sync(() => {
+        if (published._tag !== "Journaled") return;
+        const event = published.entry.payload;
         if (event._tag === "MessageQueued" || event._tag === "MessageDequeued") events.push(event);
       }),
     ),

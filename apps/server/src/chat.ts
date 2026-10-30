@@ -4,7 +4,6 @@ import {
   type AgentConfiguration,
   type AgentId,
   DEFAULT_THREAD_TITLE,
-  type HobbotsEvent,
   Message,
   MessageId,
   MessageTransitions,
@@ -13,27 +12,11 @@ import {
   ThreadId,
   titleFromPrompt,
 } from "@hobbots/domain";
-import { HobbotsRepository } from "@hobbots/persistence";
+import { type Committed, HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter, type RuntimeEvent } from "@hobbots/runtimes";
 import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { EventBus } from "./event-bus.ts";
-
-/** The events a saved message produces: always its upsert, then that it queued or any stop outcome it records. */
-const messageEvents = (message: Message): ReadonlyArray<HobbotsEvent> => {
-  const ids = { threadId: message.threadId, messageId: message.id };
-  const upserted: HobbotsEvent = { _tag: "MessageUpserted", message };
-  switch (message.status) {
-    case "queued":
-      return [upserted, { _tag: "MessageQueued", message }];
-    case "stopping":
-      return [upserted, { _tag: "TurnStopRequested", ...ids }];
-    case "stopped":
-      return [upserted, { _tag: "TurnStopped", ...ids }];
-    default:
-      return [upserted];
-  }
-};
 
 interface Reply {
   readonly current: Ref.Ref<Message>;
@@ -91,9 +74,6 @@ export class ChatService extends Context.Service<
       // The queued message Send now picked to start next in each thread.
       const chosen = new Map<ThreadId, MessageId>();
 
-      const publishMessage = (message: Message) =>
-        Effect.forEach(messageEvents(message), bus.publish, { discard: true });
-
       const findThread = (threadId: ThreadId) =>
         repo.findThread(threadId).pipe(
           Effect.flatMap(
@@ -110,12 +90,11 @@ export class ChatService extends Context.Service<
           ? Effect.void
           : Effect.fail(new HobUnavailable({ agentId: agent.id, status: agent.status }));
 
-      const saveThread = (thread: Thread) =>
-        repo.upsertThread(thread).pipe(Effect.andThen(bus.publish({ _tag: "ThreadUpserted", thread })));
-
-      // Every message write goes through here so its events follow the commit in a fixed order.
-      const saveMessage = (message: Message) =>
-        repo.upsertMessage(message).pipe(Effect.andThen(publishMessage(message)));
+      // Writes journal their events in the same transaction (ADR 013); the bus announces them once
+      // committed. Each returns what it stored, with its revision.
+      const announce = <A>(committed: Committed<A>) => Effect.as(bus.publish(committed.entries), committed.value);
+      const saveThread = (thread: Thread) => repo.upsertThread(thread).pipe(Effect.flatMap(announce));
+      const saveMessage = (message: Message) => repo.upsertMessage(message).pipe(Effect.flatMap(announce));
 
       // A previous process may have died mid-turn; those turns cannot resume. A reply the user had
       // asked to stop is stopped; any other is interrupted.
@@ -126,24 +105,23 @@ export class ChatService extends Context.Service<
 
       // A queued message's start and removal write, then announce the change once it is committed (CH-008).
       const saveStarted = (message: Message, reply: Message) =>
-        Effect.gen(function* () {
-          if (!(yield* repo.startQueuedMessage(message, reply))) return false;
-          yield* publishMessage(message);
-          yield* bus.publish({
-            _tag: "MessageDequeued",
-            threadId: message.threadId,
-            messageId: message.id,
-            reason: "started",
-          });
-          yield* publishMessage(reply);
-          return true;
-        });
+        repo.startQueuedMessage(message, reply).pipe(
+          Effect.flatMap(
+            Option.match({
+              onNone: () => Effect.succeed(null),
+              onSome: (committed) => announce(committed).pipe(Effect.map((saved) => saved.reply)),
+            }),
+          ),
+        );
       const saveRemoved = (threadId: ThreadId, messageId: MessageId) =>
-        Effect.gen(function* () {
-          if (!(yield* repo.removeQueuedMessage(threadId, messageId))) return false;
-          yield* bus.publish({ _tag: "MessageDequeued", threadId, messageId, reason: "removed" });
-          return true;
-        });
+        repo.removeQueuedMessage(threadId, messageId).pipe(
+          Effect.flatMap(
+            Option.match({
+              onNone: () => Effect.succeed(false),
+              onSome: (committed) => Effect.as(announce(committed), true),
+            }),
+          ),
+        );
 
       // Status is read under the hob's lock, so a pause or retirement cannot slip in before the thread is saved.
       const createThread = Effect.fn("ChatService.createThread")(function* (agentId: AgentId) {
@@ -162,8 +140,7 @@ export class ChatService extends Context.Service<
               createdAt: now,
               updatedAt: now,
             });
-            yield* saveThread(thread);
-            return thread;
+            return yield* saveThread(thread);
           }),
         );
       });
@@ -190,6 +167,19 @@ export class ChatService extends Context.Service<
       const runTurn = (config: AgentConfiguration, thread: Thread, prompt: string, reply: Reply) =>
         Effect.gen(function* () {
           const threadRef = yield* Ref.make(thread);
+          // Saves the streamed text about once a second without journaling it, so a crash keeps
+          // all but the last moment of it (ADR 013). Ending the reply saves it in full.
+          let checkpointed = "";
+          const checkpoint = Semaphore.withPermit(
+            reply.lock,
+            Effect.gen(function* () {
+              const current = yield* Ref.get(reply.current);
+              if (current.content === checkpointed) return;
+              yield* repo.checkpointMessage(current);
+              checkpointed = current.content;
+            }),
+          );
+          yield* checkpoint.pipe(Effect.delay("1 second"), Effect.forever, Effect.forkScoped);
           const update = (f: (message: Message) => Message | unknown) => transition(reply, f, saveMessage);
 
           const handle = (event: RuntimeEvent) => {
@@ -214,7 +204,12 @@ export class ChatService extends Context.Service<
                   reply,
                   (m) => MessageTransitions.appendDelta(m, event.text),
                   (m) =>
-                    bus.publish({ _tag: "MessageDelta", threadId: m.threadId, messageId: m.id, delta: event.text }),
+                    bus.publishTransient({
+                      _tag: "MessageDelta",
+                      threadId: m.threadId,
+                      messageId: m.id,
+                      delta: event.text,
+                    }),
                 );
               case "Completed":
                 return update((m) => MessageTransitions.complete(m, event.text));
@@ -236,6 +231,8 @@ export class ChatService extends Context.Service<
           // The stream ended without a result: treat it as a failure, not a silent success.
           yield* update((m) => MessageTransitions.fail(m, "Runtime ended without a result"));
         }).pipe(
+          // Stops the checkpoints as soon as the turn's stream is done.
+          Effect.scoped,
           // Runs after the runtime's stream has closed, so "stopped" means the turn really ended.
           Effect.onInterrupt(() => transition(reply, MessageTransitions.interrupt, saveMessage)),
           Effect.ensuring(
@@ -252,7 +249,7 @@ export class ChatService extends Context.Service<
         thread: Thread,
         agent: Agent,
         prompt: string,
-        saveReply: (reply: Message) => Effect.Effect<boolean> = (reply) => Effect.as(saveMessage(reply), true),
+        saveReply: (reply: Message) => Effect.Effect<Message | null> = saveMessage,
       ) =>
         Effect.gen(function* () {
           const config = yield* repo.findAgentConfig(agent.id, agent.configVersion).pipe(Effect.map(Option.getOrThrow));
@@ -272,11 +269,12 @@ export class ChatService extends Context.Service<
             title: thread.title === DEFAULT_THREAD_TITLE ? titleFromPrompt(prompt) : thread.title,
             updatedAt: now,
           });
-          if (!(yield* saveReply(assistantMessage))) return null;
+          const saved = yield* saveReply(assistantMessage);
+          if (saved === null) return null;
           yield* saveThread(updated);
           busy.add(thread.id);
           // Registered before the turn starts, so a stop sent right away still reaches it.
-          const reply: Reply = { current: yield* Ref.make(assistantMessage), lock: yield* Semaphore.make(1) };
+          const reply: Reply = { current: yield* Ref.make(saved), lock: yield* Semaphore.make(1) };
           replies.set(thread.id, reply);
           // The drain is forked outside the turn: it waits for the hob's lock, which a retirement
           // may hold while it waits for this very turn to stop.
@@ -285,7 +283,7 @@ export class ChatService extends Context.Service<
             thread.id,
             runTurn(config, updated, prompt, reply).pipe(Effect.ensuring(Effect.forkIn(drain(thread.id), scope))),
           );
-          return assistantMessage;
+          return saved;
         });
 
       // Starts the thread's next queued message, if its hob takes work: the one chosen with Send now,
@@ -365,10 +363,10 @@ export class ChatService extends Context.Service<
               configVersion: null,
               createdAt: yield* nowIso,
             });
-            yield* saveMessage(userMessage);
-            if (waits) return { userMessage, assistantMessage: null };
+            const saved = yield* saveMessage(userMessage);
+            if (waits) return { userMessage: saved, assistantMessage: null };
             const assistantMessage = yield* beginTurn(thread, agent, content);
-            return { userMessage, assistantMessage };
+            return { userMessage: saved, assistantMessage };
           }),
         );
       });

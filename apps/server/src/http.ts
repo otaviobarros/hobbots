@@ -1,7 +1,7 @@
 import { AgentNotFound, HobbotsApi, ThreadNotFound } from "@hobbots/api";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter } from "@hobbots/runtimes";
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, Option, Stream } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ChatService } from "./chat.ts";
 import { EventBus } from "./event-bus.ts";
@@ -93,7 +93,11 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
       health: () => Effect.succeed(installation),
       activity: () => activity,
       runtimes: () => runtime.health.pipe(Effect.map((health) => [health])),
-      events: () => Effect.succeed(bus.stream),
+      // The payloads only, until clients resume from the journal's cursor (#113).
+      events: () =>
+        Effect.succeed(
+          bus.stream.pipe(Stream.map((event) => (event._tag === "Journaled" ? event.entry.payload : event.event))),
+        ),
     });
   }),
 );

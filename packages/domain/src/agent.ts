@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 import { AgentId } from "./ids.ts";
 import { HobColor, LookSeed } from "./look.ts";
+import { Revision } from "./revision.ts";
 import { DEFAULT_SIGIL, RoleHat, RoleId, RoleTool } from "./roles.ts";
 
 /** Runtimes an agent can run on. Only Claude Code is wired in the first slice. */
@@ -57,6 +58,7 @@ export class Agent extends Schema.Class<Agent>("Agent")({
   /** The configuration version the fields above belong to. */
   configVersion: ConfigVersion,
   createdAt: Schema.String,
+  revision: Revision,
 }) {}
 
 /**

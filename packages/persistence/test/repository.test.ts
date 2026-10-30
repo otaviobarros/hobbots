@@ -128,7 +128,7 @@ describe("HobbotsRepository", () => {
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect(result.reinserted).toBe(false);
+    expect(Option.isNone(result.reinserted)).toBe(true);
     // Ties fall back to the id, compared byte by byte (uppercase before lowercase, "-" before letters).
     expect(result.agents.map((a) => [a.id, a.lookSeed])).toEqual([
       ["B", 0],
@@ -179,8 +179,9 @@ describe("HobbotsRepository", () => {
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect([result.updated, result.stale]).toEqual([true, false]);
-    expect(Option.getOrThrow(result.agent)).toEqual(second);
+    expect([Option.isSome(result.updated), Option.isSome(result.stale)]).toEqual([true, false]);
+    // The stored hob carries the revision of the edit's journal entry.
+    expect(Option.getOrThrow(result.agent)).toEqual(new Agent({ ...second, revision: 2 }));
     expect(Option.getOrThrow(result.v1)).toMatchObject({
       version: 1,
       role: null,
@@ -246,7 +247,7 @@ describe("HobbotsRepository", () => {
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
-    expect([result.retired, result.staleWake]).toEqual([true, false]);
+    expect([Option.isSome(result.retired), Option.isSome(result.staleWake)]).toEqual([true, false]);
     expect(result.current).toEqual([
       ["a", "active"],
       ["b", "paused"],
@@ -294,7 +295,9 @@ describe("HobbotsRepository", () => {
       return {
         next: Option.map(next, (m) => m.id),
         threads,
-        flags: [started, startedTwice, removedStarted, removedElsewhere, removed],
+        flags: [started, startedTwice]
+          .map(Option.isSome)
+          .concat([removedStarted, removedElsewhere, removed].map(Option.isSome)),
         messages: (yield* repo.listMessages(threadId)).map((m) => [m.id, m.status]),
         empty: yield* repo.threadsWithQueuedMessages,
       };
