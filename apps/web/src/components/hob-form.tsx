@@ -3,6 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import {
+  type BrainChoice,
   CHORES_MAX,
   CRAFTS,
   effortWords,
@@ -316,8 +317,11 @@ function EffortBars({ index, count, on }: { index: number; count: number; on: bo
   );
 }
 
-/** The model and effort a hob thinks with, with what each model is for and what the effort costs. */
-export function Brain<D extends FirstHobDraft>({
+/**
+ * The model and effort a hob thinks with, with what each model is for and what the effort costs.
+ * The hob profile edits an existing hob's brain with it too.
+ */
+export function Brain<D extends BrainChoice>({
   models,
   draft,
   onChange,
