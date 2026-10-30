@@ -9,7 +9,7 @@ import {
   roleFields,
   starterRole,
 } from "@hobbots/domain";
-import { type BrainChoice, effortWords, settleBrain } from "./first-hob.ts";
+import { type BrainChoice, openingLine, settleBrain } from "./first-hob.ts";
 
 /** A hob's role as the profile edits it: a starter role, or a title in the user's own words. */
 export interface RoleChoice {
@@ -43,6 +43,24 @@ export const ROLE_TITLE_MAX = 40;
 /** Why the role cannot be saved as it is, or undefined when it can. */
 export const roleProblem = (draft: RoleChoice): string | undefined =>
   draft.roleTitle.trim() === "" ? "Give the role a title." : undefined;
+
+// The first line Summon and onboarding write, such as "You are Pip, a hob in Hobbots. Your role is Writer: …".
+const OPENING = /^You are [^\n]*, a hob in Hobbots\.[^\n]*/;
+
+/**
+ * The instructions with their first line rewritten for the draft's role, when the role changed from
+ * the saved one and the first line is still the one Hobbots wrote for another role. Undefined when
+ * there is nothing to offer: the role is unchanged, the user wrote their own first line, or it
+ * already names this role.
+ */
+export const roleRewrite = (name: string, saved: RoleChoice, draft: ProfileDraft): string | undefined => {
+  const title = draft.roleTitle.trim();
+  if (title === "" || (draft.role === saved.role && title === saved.roleTitle)) return undefined;
+  const opening = OPENING.exec(draft.instructions)?.[0];
+  const line = openingLine(name, draft.role, title);
+  if (opening === undefined || opening === line) return undefined;
+  return line + draft.instructions.slice(opening.length);
+};
 
 /** The API's limit on instructions. */
 export const INSTRUCTIONS_MAX = 20_000;
@@ -126,14 +144,6 @@ export const isDirty = (base: ProfileDraft, draft: ProfileDraft): boolean =>
   base.model !== draft.model ||
   base.effort !== draft.effort;
 
-/** The brain as the header chip names it, such as "Claude · Opus · High effort". */
-export const brainLine = (hob: Pick<Agent, "model" | "effort">, models?: RuntimeModels): string => {
-  const id = hob.model ?? DEFAULT_MODEL;
-  const model = models?.models.find((m) => m.id === id)?.displayName ?? hob.model ?? "Default model";
-  const effort = hob.effort ? ` · ${effortWords(hob.effort).label} effort` : "";
-  return `Claude · ${model}${effort}`;
-};
-
 // Summon and onboarding fold the chores into the instructions under this line (see first-hob.ts).
 const CHORES_HEADING = "Your chores, in the user's words:\n";
 
@@ -155,6 +165,10 @@ export const goodAt = (hob: Pick<Agent, "instructions" | "role">): string | unde
   if (chores !== "") return chores;
   return hob.role === null ? undefined : starterRole(hob.role).note;
 };
+
+/** Where the hob works, when it was summoned and its version, for the line under the profile. */
+export const aboutLine = (hob: Pick<Agent, "createdAt" | "configVersion">): string =>
+  `Works on the hub · ${summonedLine(hob.createdAt)} · Version ${hob.configVersion}`;
 
 /** When the hob was summoned, as "Summoned Oct 2". */
 export const summonedLine = (createdAt: string): string =>

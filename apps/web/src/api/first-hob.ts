@@ -38,6 +38,36 @@ export const MORE_ROLES: ReadonlyArray<{
   roles: ALL_ROLES.filter((role) => starterRole(role).family === id && !PICKER_FIRST.includes(role)),
 })).filter((group) => group.roles.length > 0);
 
+/** A family of starter roles as the role sheet lists it. */
+export interface RoleGroup {
+  readonly family: RoleFamily;
+  readonly title: string;
+  readonly roles: ReadonlyArray<RoleId>;
+}
+
+/**
+ * Every starter role under its family, narrowed to one family (or `"all"`) and to the roles whose
+ * title or note holds every word of the search, in any case. Families left empty are dropped.
+ */
+export const roleGroups = (search: string, family: RoleFamily | "all" = "all"): ReadonlyArray<RoleGroup> => {
+  const words = search
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((word) => word !== "");
+  const matches = (id: RoleId) => {
+    const role = starterRole(id);
+    const text = `${role.title} ${role.note}`.toLowerCase();
+    return words.every((word) => text.includes(word));
+  };
+  return ROLE_FAMILIES.filter(({ id }) => family === "all" || id === family)
+    .map(({ id, title }) => ({
+      family: id,
+      title,
+      roles: ALL_ROLES.filter((role) => starterRole(role).family === id && matches(role)),
+    }))
+    .filter((group) => group.roles.length > 0);
+};
+
 /** Names and role titles are short enough for a name tag (the API's limit). */
 export const LABEL_MAX = 40;
 
@@ -371,7 +401,8 @@ export const draftProblem = (draft: FirstHobDraft): string | undefined => {
   return undefined;
 };
 
-const instructionsFor = (name: string, role: RoleId | null, title: string): string =>
+/** The instructions' first line, which names the hob and its role. The profile rewrites it when the role changes. */
+export const openingLine = (name: string, role: RoleId | null, title: string): string =>
   role === null
     ? `You are ${name}, a hob in Hobbots. Your role is ${title}.`
     : `You are ${name}, a hob in Hobbots. Your role is ${title}: ${starterRole(role).note.toLowerCase()}`;
@@ -385,7 +416,7 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
   const title = roleTitleOf(draft);
   const { role } = draft;
   const chores = draft.chores.trim();
-  const instructions = instructionsFor(name, role, title);
+  const instructions = openingLine(name, role, title);
   return {
     id: AgentId.make(draft.id),
     name,

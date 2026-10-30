@@ -1,8 +1,8 @@
-import { Agent, AgentId, RuntimeModel, RuntimeModels } from "@hobbots/domain";
+import { Agent, AgentId, RuntimeModel, RuntimeModels, starterRole } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { firstHobPayload, newDraft } from "./first-hob.ts";
 import {
-  brainLine,
+  aboutLine,
   goodAt,
   isDirty,
   pickRole,
@@ -11,6 +11,7 @@ import {
   rebaseDraft,
   retiredSummary,
   roleProblem,
+  roleRewrite,
 } from "./profile.ts";
 
 const model = (id: string, displayName: string, efforts: RuntimeModel["efforts"]) =>
@@ -114,10 +115,31 @@ describe("hob profile", () => {
     expect(isDirty(saved, afterAnswer)).toBe(true);
   });
 
-  it("names the brain by the runtime's display names", () => {
-    expect(brainLine(hob({ model: "opus", effort: "high" }), offered)).toBe("Claude · Opus · High effort");
-    expect(brainLine(hob({ effort: null }), offered)).toBe("Claude · Default");
-    expect(brainLine(hob({ model: "opus", effort: null }))).toBe("Claude · opus");
+  it("rewrites the first line Hobbots wrote when the role changes", () => {
+    const saved = profileDraft(
+      hob({ role: "writer", instructions: "You are Pip, a hob in Hobbots. Your role is Writer: old.\n\nBe brief." }),
+    );
+    expect(roleRewrite("Pip", saved, saved)).toBeUndefined();
+    expect(roleRewrite("Pip", saved, pickRole(saved, "qa"))).toBe(
+      `You are Pip, a hob in Hobbots. Your role is QA engineer: ${starterRole("qa").note.toLowerCase()}\n\nBe brief.`,
+    );
+    // A title in the user's own words.
+    expect(roleRewrite("Pip", saved, { ...pickRole(saved, null), roleTitle: "Bug hunter " })).toBe(
+      "You are Pip, a hob in Hobbots. Your role is Bug hunter.\n\nBe brief.",
+    );
+    // Instructions the user wrote themselves, or that already name the new role, are left alone.
+    const own = profileDraft(hob({ role: "writer", instructions: "Write short answers." }));
+    expect(roleRewrite("Pip", own, pickRole(own, "qa"))).toBeUndefined();
+    const named = pickRole(saved, "qa");
+    expect(
+      roleRewrite("Pip", saved, { ...named, instructions: roleRewrite("Pip", saved, named) ?? "" }),
+    ).toBeUndefined();
+    // No offer while the title is empty.
+    expect(roleRewrite("Pip", saved, { ...pickRole(saved, null), roleTitle: " " })).toBeUndefined();
+  });
+
+  it("sums up where the hob works, when it was summoned and its version", () => {
+    expect(aboutLine(hob({ configVersion: 3 }))).toMatch(/^Works on the hub · Summoned Oct \d+ · Version 3$/);
   });
 
   it("says what retiring did with the hob's work", () => {

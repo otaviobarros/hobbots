@@ -78,11 +78,11 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
   await expect(page.getByText(/^Unsaved changes/)).toBeVisible();
   // Looking at another tab keeps the unsaved edit.
   await page.getByRole("tab", { name: "Tools" }).click();
-  await page.getByRole("tab", { name: "Instructions" }).click();
+  await page.getByRole("tab", { name: "Profile" }).click();
   await expect(instructions).toHaveValue("Write long answers.");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
-  await expect(page.getByText("Version 2", { exact: true })).toBeVisible();
+  await expect(page.getByText(/· Version 2$/)).toBeVisible();
 
   // Back in the chat, the same thread's next reply runs on the edited configuration.
   await page.getByRole("link", { name: "← Back to chat" }).click();
@@ -107,17 +107,19 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
   await expect(page.getByRole("heading", { name: "Pip", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Pause Pip" }).click();
-  await expect(page.getByRole("listitem").filter({ hasText: /^Paused$/ })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: /^Paused$/ })).toBeVisible();
   await page.getByRole("button", { name: "Wake Pip" }).click();
   await expect(page.getByRole("button", { name: "Pause Pip" })).toBeVisible();
 
   // Keeping Pip changes nothing.
+  await page.getByRole("button", { name: "More actions for Pip" }).click();
   await page.getByRole("button", { name: "Retire hob" }).click();
   const dialog = page.getByRole("dialog", { name: "Retire Pip?" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Keep Pip" }).click();
   await expect(dialog).toBeHidden();
 
+  await page.getByRole("button", { name: "More actions for Pip" }).click();
   await page.getByRole("button", { name: "Retire hob" }).click();
   await dialog.getByText("Stop Pip's work now").click();
   await expect(dialog.getByRole("radio", { name: /Stop Pip's work now/ })).toBeChecked();
@@ -148,10 +150,14 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   const profile = page.getByRole("main", { name: "Pip's profile" });
   const chip = profile.locator("header").getByText(/^(Writer|QA engineer|Bug hunter)$/);
   await expect(chip).toHaveText("Writer");
-  const roles = profile.getByRole("group", { name: "Role" });
-  await roles.getByRole("button", { name: /^More roles/ }).click();
-  await roles.getByText("QA engineer", { exact: true }).click();
-  await expect(roles.getByRole("radio", { name: /^QA engineer/ })).toBeChecked();
+  await profile.getByRole("button", { name: "Change role" }).click();
+  const sheet = page.getByRole("dialog", { name: "Choose Pip's role" });
+  await sheet.getByText("QA engineer", { exact: true }).click();
+  await expect(sheet.getByRole("radio", { name: /^QA engineer/ })).toBeChecked();
+  // Escape keeps the pick, as the button does; the save bar still decides.
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(profile.getByText("QA engineer", { exact: true }).first()).toBeVisible();
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect(profile.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
   await expect(chip).toHaveText("QA engineer");
@@ -161,8 +167,10 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await page.getByRole("link", { name: "Edit hob" }).click();
 
   // A title in the user's own words keeps the QA sigil, hat and tool.
-  await roles.getByText("Your own", { exact: true }).click();
-  await profile.getByRole("textbox", { name: "Your own role title" }).fill("Bug hunter");
+  await profile.getByRole("button", { name: "Change role" }).click();
+  await sheet.getByText("Your own", { exact: true }).click();
+  await sheet.getByRole("textbox", { name: "Your own role title" }).fill("Bug hunter");
+  await sheet.getByRole("button", { name: "Use Bug hunter" }).click();
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect(profile.getByText("Saved as version 3. Pip's next reply uses it.")).toBeVisible();
   await expect(chip).toHaveText("Bug hunter");
