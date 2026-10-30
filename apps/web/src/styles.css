@@ -60,6 +60,8 @@
   --animate-hb-flicker: hb-flicker 2.4s steps(4) infinite;
   --animate-hb-float: hb-float 2.4s steps(6) infinite;
   --animate-hb-caret: hb-caret 1s steps(1) infinite;
+  /* A working hob's bar on the Home scene fills a tick at a time. */
+  --animate-hb-tick: hb-tick 4s steps(10) infinite;
   /* Welcome's village: the intro plays once, then only the idle loop runs. */
   --animate-hb-drop: hb-drop 0.7s steps(7) both;
   --animate-hb-walk: hb-walk 2.4s steps(18) both;
@@ -214,6 +216,14 @@
     100% {
       transform: translate(8px, -18px);
       opacity: 0;
+    }
+  }
+  @keyframes hb-tick {
+    from {
+      width: 0;
+    }
+    to {
+      width: 100%;
     }
   }
   @keyframes hb-caret {

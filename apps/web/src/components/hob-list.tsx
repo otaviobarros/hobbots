@@ -8,7 +8,7 @@ import { useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { agentsQuery, threadsQuery } from "../api/queries.ts";
 import { formatWhen } from "../lib/time.ts";
-import { HobSprite, hobStateFrom, stateLabel } from "./hob-sprite.tsx";
+import { HobSprite, hobState, stateLabel } from "./hob-sprite.tsx";
 
 /** Left panel: search, each hob with its threads, Rooms (later) and Summon. */
 export function HobList({
@@ -85,7 +85,7 @@ function HobEntry({
 }) {
   const threads = useQuery(threadsQuery(hob.id));
   const activity = useActivity();
-  const state = hobStateFrom(threads.data, activity);
+  const state = hobState(hob, threads.data, activity);
   const matchesHob =
     query === null || hob.name.toLowerCase().includes(query) || hob.craft.toLowerCase().includes(query);
   const visible = query === null || matchesHob ? threads.data : threads.data?.filter((t) => matches(t, query));
@@ -109,7 +109,9 @@ function HobEntry({
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex justify-between gap-1.5">
             <span className="font-pixel text-base font-semibold">{hob.name}</span>
-            <span className={cn("text-xs", state === "idle" ? "text-label" : "text-mint")}>{stateLabel[state]}</span>
+            <span className={cn("text-xs", state === "idle" || state === "paused" ? "text-label" : "text-mint")}>
+              {stateLabel[state]}
+            </span>
           </span>
           <span className="text-xs text-label">
             {hob.craft} · {count === 1 ? "1 thread" : `${count} threads`}

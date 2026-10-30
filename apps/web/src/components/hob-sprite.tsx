@@ -3,9 +3,9 @@ import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useMemo } from "react";
 import { hobLook } from "../art/look.ts";
+import type { HobState } from "../lib/hob-state.ts";
 
-/** Sprite states from the design sprite sheet that the current build can show. */
-export type HobState = "idle" | "thinking" | "working" | "waiting" | "needs-you" | "asleep" | "failed";
+export { type HobState, hobState, stateLabel } from "../lib/hob-state.ts";
 
 const motion: Record<HobState, string> = {
   idle: "",
@@ -14,6 +14,7 @@ const motion: Record<HobState, string> = {
   waiting: "",
   "needs-you": "",
   asleep: "opacity-60",
+  paused: "opacity-60",
   failed: "grayscale animate-hb-shake",
 };
 
@@ -21,6 +22,7 @@ const marks: Partial<Record<HobState, { text: string; className: string }>> = {
   waiting: { text: "?", className: "text-lantern animate-hb-blink" },
   "needs-you": { text: "!", className: "text-lantern animate-hb-blink" },
   asleep: { text: "z", className: "text-secondary-text animate-hb-float" },
+  paused: { text: "z", className: "text-secondary-text animate-hb-float" },
 };
 
 /**
@@ -60,24 +62,3 @@ export function HobSprite({
     </span>
   );
 }
-
-/** Words for a state, for headers and screen readers. */
-export const stateLabel: Record<HobState, string> = {
-  idle: "ready",
-  thinking: "thinking",
-  working: "working",
-  waiting: "waiting",
-  "needs-you": "needs you",
-  asleep: "asleep",
-  failed: "had a problem",
-};
-
-/** A hob is working while any of its threads streams a reply. */
-export const hobStateFrom = (
-  threads: ReadonlyArray<{ readonly id: string }> | undefined,
-  activity: Readonly<Record<string, "thinking" | "working">>,
-): HobState => {
-  const states = (threads ?? []).map((t) => activity[t.id]).filter((a) => a !== undefined);
-  if (states.includes("working")) return "working";
-  return states.length > 0 ? "thinking" : "idle";
-};
