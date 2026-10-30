@@ -41,15 +41,24 @@ New event types are added as variants of `HobbotsEvent` with a past-tense name (
 
 An incompatible payload change bumps that type's `schemaVersion`. The server decodes every version still in retention (upcasting old ones), or the migration rotates the journal epoch, which expires every cursor. A client that meets an unknown type or a newer version than it knows resyncs instead of guessing, so a browser tab left open across an upgrade recovers by itself.
 
-### Entity revisions
+### Sync generations and entity revisions
 
-Clients take state from two sources, query responses and events, which can arrive in either order. To keep a late response from undoing a newer event, every entity a client caches carries a **revision**: the `sequence` of the journal entry that last changed it.
+Clients take state from two sources, query responses and events, which can arrive in either order. Two rules keep them consistent: revisions decide which version of an entity wins, and sync generations decide which responses count and which entities exist.
+
+**Revisions.** Every entity a client caches carries a **revision**: the `sequence` of the journal entry that last changed it.
 
 - Agents, threads and messages gain a `revision` column, written in the same transaction as the change and its journal entry, and returned by every query and `…Upserted` payload.
-- A client keeps, per entity, whichever version has the higher revision, whether it came from a query or an event. A query response is merged entity by entity, never written over the cache wholesale. So a messages query that read a reply as `streaming` and lands after that reply's completion event cannot bring it back: the completed version has the higher revision.
-- A deletion is journaled like any change (for example `MessageDequeued` with reason `removed`). The client keeps a tombstone with that event's sequence until its next fresh `Ready`, and drops any query row for that entity with a lower revision, so a late response cannot bring a removed message back.
+- A deletion is journaled like any change (for example `MessageDequeued` with reason `removed`), and its sequence is the deleted entity's last revision.
+- An event that carries a whole entity, such as `MessageQueued`, counts as an upsert. Events that carry only IDs (`TurnStopRequested`, `TurnStopped`, `MessageDequeued` when the message started) never hold state that only they record: the entity's own event in the same transaction does. Clients may use them for transitions and notices, never as the only record of a state.
 - A streaming reply's checkpoint writes text without journaling, so it leaves the revision unchanged. Between two versions with the same revision the client keeps the longer text, since a reply's text only grows while it streams. A lagging checkpoint read by a query therefore cannot shorten text that a progress frame or delta already delivered.
-- An event that carries a whole entity, such as `MessageQueued`, is merged like an `…Upserted` event. Events that carry only IDs (`TurnStopRequested`, `TurnStopped`, `MessageDequeued` when the message started) never hold state that only they record: the entity's own event in the same transaction does. Clients may use them for transitions and notices, never as the only record of a state.
+
+**Generations.** A client's cache belongs to one sync generation, which starts at a fresh `Ready` and lasts across every resumed reconnect after it. Revisions are compared only within a generation.
+
+- During a generation the client keeps an **overlay**: for each entity changed by an event since the generation began, its latest version or a tombstone, with its revision. Events are applied to the cache as they arrive and recorded in the overlay.
+- Each query request is tagged with the generation it was sent in. A response from an earlier generation is discarded on arrival.
+- A response from the current generation **replaces the membership** of its query instead of merging into it. The result is the response's rows, then the overlay on top: an overlay version with a higher revision replaces its row, a tombstone with a higher revision removes it, and an overlay upsert that belongs to this query but is missing from the response is added (it was created after the response was read; had it been deleted since, the overlay would hold a tombstone). Anything else that is not in the response is gone. So a messages query that read a reply as `streaming` and lands after the reply's completion event cannot bring it back, and a late response cannot revive a removed message.
+- A **fresh `Ready`** starts a new generation: the client drops the overlay, every tombstone and every pending response, marks every cached query stale, and refetches them. Until a query's new response lands it may still be shown, but it is never merged with revisions from the old generation. A message removed while the client was away and past retention therefore disappears with the refetch, and after a backup restore (new epoch) the restored state replaces the cache even where its revisions are lower than the ones cached.
+- The overlay is small (one entry per entity changed in the generation) and is dropped at the next fresh `Ready`.
 
 ### Sequence and cursor
 
@@ -63,8 +72,8 @@ Clients take state from two sources, query responses and events, which can arriv
 - The browser's `EventSource` sends `Last-Event-ID` on reconnect, and the server resumes after that cursor. A client that cannot set the header on its first connection may pass `?after=<cursor>`; the header wins when both are present.
 - The first frame of every connection is `Ready` with `{ cursor, resumed }`, sent with `id` set to that cursor:
   - **Resumed** (the cursor is from this epoch and still in retention): the server subscribes to the bus, sends `Ready`, replays every entry after the cursor, sends the progress frames, then continues live without a gap.
-  - **Fresh** (no cursor, an unknown epoch, or a cursor older than retention): `Ready` carries `resumed: false` and the current head. The client refetches its queries and merges them by revision. The stream is already live, so nothing committed after the head is missed. A response may be older or newer than events the client has already applied; merging by revision keeps the newer of each entity whichever arrives last.
-- No separate snapshot endpoint is needed. The queries are the snapshot, and the revisions in them, not their arrival time, decide which state wins. This also covers every later refetch, such as a refetch when the window regains focus.
+  - **Fresh** (no cursor, an unknown epoch, or a cursor older than retention): `Ready` carries `resumed: false` and the current head. The client starts a new sync generation and refetches every query. The stream is already live, so nothing committed after the head is missed, and each response is reconciled with the events applied since `Ready` through the generation's overlay, whichever arrives first.
+- No separate snapshot endpoint is needed. The queries are the snapshot, and the generation and revisions, not arrival time, decide which state wins. The same rule covers every later refetch in a generation, such as a refetch when the window regains focus.
 - A connection whose client falls behind has a bounded buffer (1,000 frames). When it overflows, the server closes the connection and the client resumes from its cursor, so a slow client costs a replay, not memory. Disconnecting an observer never cancels work.
 - Every connection is authorized for the events it receives; today every allowed device sees the whole installation, and the correlation IDs are where narrower filtering will apply.
 
@@ -76,14 +85,14 @@ Clients take state from two sources, query responses and events, which can arriv
 
 ## Rationale
 
-Journaling in the same transaction is the smallest change that makes events survive a crash on a single-writer SQLite hub, and it stays correct on PostgreSQL. Rebuilding streamed text from the message keeps the journal small and resume cheap, at the cost of at most a second of text in a crash. Using the existing queries as the snapshot, made safe to merge in any order by entity revisions, avoids a second read model and the buffering a per-response watermark would need, and the epoch and explicit expiry turn every case the journal cannot replay into a visible refetch rather than silent loss.
+Journaling in the same transaction is the smallest change that makes events survive a crash on a single-writer SQLite hub, and it stays correct on PostgreSQL. Rebuilding streamed text from the message keeps the journal small and resume cheap, at the cost of at most a second of text in a crash. Using the existing queries as the snapshot, reconciled with events by sync generation and entity revision, avoids a second read model and a per-response watermark, and the epoch and explicit expiry turn every case the journal cannot replay into a visible refetch rather than silent loss.
 
 ## Consequences for Slice 6
 
 - **#112 Durable event journal:** journal and counter tables (with an epoch) and a `revision` column on agents, threads and messages in a new migration; repositories append events in the writing transaction; the bus publishes committed entries; message text checkpoints while streaming; boot recovery journals its writes; retention and compaction.
-- **#113 Resume the event stream:** SSE `id`, `Last-Event-ID` and `?after=`, the `Ready` frame, ordered replay with gap filling, progress frames, the bounded buffer; the web client resumes instead of refetching, refetches on a fresh `Ready`, merges query responses and events by revision with tombstones for deletions, and applies deltas by offset.
+- **#113 Resume the event stream:** SSE `id`, `Last-Event-ID` and `?after=`, the `Ready` frame, ordered replay with gap filling, progress frames, the bounded buffer; the web client resumes instead of refetching, starts a new sync generation and refetches on a fresh `Ready`, reconciles query responses with events through the generation's overlay, and applies deltas by offset.
 - **#114 Stop:** `TurnStopRequested` and `TurnStopped` are journaled in the transaction that writes the matching `MessageUpserted`, after it.
 - **#115 Queue:** `MessageQueued` and `MessageDequeued` are journaled in the transaction that writes the queued row or its start or removal.
 - **#116 Chat states:** "Reconnecting" is the time between losing the stream and the next `Ready`; an interrupted reply shows its checkpointed text.
 - **#117 Search:** emits no events. Index updates belong in the transaction that writes the message, not in a journal consumer.
-- **#118 End to end:** prove a crash between commit and publish, a minute offline, a reconnect mid-reply, an expired cursor, and a delayed query: a messages response that read a reply as streaming, held back until after the reply's completion event, must leave the reply complete. Measure the chunk rate and the text lost in a crash.
+- **#118 End to end:** prove a crash between commit and publish, a minute offline, a reconnect mid-reply, an expired cursor, a delayed query (a messages response that read a reply as streaming, held back until after the reply's completion event, must leave the reply complete), a queued message removed while the client is offline past retention (it must disappear after reconnecting), and a backup restore (the client must show the restored state, not its cache). Measure the chunk rate and the text lost in a crash.
