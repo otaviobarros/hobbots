@@ -16,7 +16,10 @@ export class EventBus extends Context.Service<
     /** Announces entries a write committed, in sequence order. */
     readonly publish: (entries: ReadonlyArray<EventEnvelope>) => Effect.Effect<void>;
     readonly publishTransient: (event: MessageDelta) => Effect.Effect<void>;
+    /** Every event from now on; it ends once the bus closes. */
     readonly stream: Stream.Stream<BusEvent>;
+    /** Ends every stream, so a closing server has no endless response left to wait for. */
+    readonly close: Effect.Effect<void>;
   }
 >()("@hobbots/server/EventBus") {
   static readonly layer = Layer.effect(
@@ -31,6 +34,7 @@ export class EventBus extends Context.Service<
           ).pipe(Effect.asVoid),
         publishTransient: (event) => PubSub.publish(pubsub, { _tag: "Transient", event }).pipe(Effect.asVoid),
         stream: Stream.fromPubSub(pubsub),
+        close: PubSub.shutdown(pubsub),
       });
     }),
   );
