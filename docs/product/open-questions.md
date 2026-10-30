@@ -11,7 +11,7 @@ These choices are not decided yet. They do not reopen decided product direction.
 | Delegation default | Explicit collaborator allowlist versus all configured hobs by default; automatic dynamic agent creation is not assumed. |
 | Limits | Final concurrency, depth, timeout, fairness, batching, retry and cost-limit defaults. |
 | Remote-to-local routing | Explicit handoff versus configured scoped routes, pairing, execution-grant transport and revocation. No silent privilege expansion. |
-| Policies | Exact matcher/precedence, standing-grant expiry, revocation during running actions, workspace isolation mechanism per runtime/platform; exact policy behind the Careful and Trusting presets. |
+| Policies | Exact matcher/precedence, standing-grant expiry, revocation during running actions. The preset mapping, folders and the sandbox are decided in ADR 014; what sandbox-runtime's credential masking hides and whether its live configuration updates work need evidence (#131). |
 | Lifecycle | Exhaustive task/attempt/approval transition tables, late-result and reassignment rules, partial completion semantics. |
 | Deployment | OS/architecture support, app-data paths, per-platform service installation, device token format and storage, routes after Tailscale. |
 | Persistence | Artifact storage backend, backup consistency, retention/redaction. Event compaction and cursor expiry are decided in ADR 013. |

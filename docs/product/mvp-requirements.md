@@ -78,7 +78,7 @@ Thread forking with context snapshots is an open extension.
 | PE-007 | Durable approval decisions with three lifetimes. | Approvals offer just this once, for this Quest, or always for this site; high-risk actions offer once only with a confirmation check box. Duplicate submission does not repeat the action; grants are tied to scope and expire/revoke predictably; expired requests cannot be approved late. |
 | PE-008 | Re-evaluate current authority before new effects. | An old attempt snapshot, queued continuation or stale approval cannot bypass a later restriction or revocation. |
 
-The onboarding presets are Careful, Balanced (Trusted Workspace, the default) and Trusting; their policy mapping is in the [permissions contract](../architecture/permissions.md) and still open where noted. Resource policy can authorize integrations in advance; all external actions are not automatically subject to a new prompt.
+The onboarding presets are Careful, Balanced (Trusted Workspace, the default) and Trusting; their policy mapping is in the [permissions contract](../architecture/permissions.md) and [ADR 014](../decisions/014-tool-policy-and-enforcement.md). Resource policy can authorize integrations in advance; all external actions are not automatically subject to a new prompt.
 
 ## UI, Workbench and deployment
 

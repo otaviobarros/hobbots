@@ -23,6 +23,8 @@ Normalize text/tool/status/approval/result events into Hobbots envelopes while r
 
 For each runtime/version/executor, verify native session persistence/resumption versus reconstruction; concurrent sessions versus serialized turns; streaming and cursor semantics; interruption acknowledgement; approval interception; sandbox/filesystem/network restrictions; terminal/artifact/diff visibility; browser screenshots versus live browser control; computer opt-in; model discovery; usage reporting; MCP support and scoped credentials.
 
+Each adapter also declares its enforcement capabilities (tool interception, process sandbox, hub tools, tool events, tool interruption) and what is blocked without each; [ADR 014](../decisions/014-tool-policy-and-enforcement.md) owns that table. Hobbots wraps the whole runtime process in its own sandbox and turns the runtime's sandbox off inside it, so a runtime's native sandbox modes are not part of the contract.
+
 Classify each capability as verified supported, unsupported, conditional or unverified, with runtime version, test date and evidence. All live capability entries are currently **unverified**. The selected integration strategy is not proof that a runtime supports every product feature.
 
 Expose unsupported previews and unavailable safe policies honestly. A text URL is not a live browser. A process exit is not necessarily a closed Quest. Cancellation acknowledgement and session resume must be checked rather than inferred.
