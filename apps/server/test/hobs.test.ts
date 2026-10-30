@@ -103,7 +103,7 @@ describe("creating hobs", () => {
   });
 
   // covers AG-001, AG-004
-  it("[TC-AG-040] a second hob with another model chats on its own threads, apart from the first", async () => {
+  it("[TC-AG-050] a second hob with another model chats on its own threads, apart from the first", async () => {
     const first: Agent = (await request("POST", "/api/agents", hob)).body;
     const second: Agent = (
       await request("POST", "/api/agents", {
