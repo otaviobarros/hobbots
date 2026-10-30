@@ -1,10 +1,11 @@
-import type { HobColor } from "@hobbots/domain";
+import type { HobColor, RoleHat, RoleTool } from "@hobbots/domain";
 import type { PixelPalette, PixelRows } from "@hobbots/ui/components/pixel-art";
 
 /**
  * The seeded hob avatar generator from the design's sprite sheet. The seed picks the hat,
  * gear, face, ears, beard, outfit and skin; the color comes from a fixed set of six. The same
- * seed and color always draw the same 14 × 14 hob, so the pair is saved with the hob.
+ * seed and color always draw the same 14 × 14 hob, so the pair is saved with the hob. A role's
+ * hat and tool, when the hob has them, replace the ones the seed picks and leave the rest as drawn.
  */
 
 export interface HobLook {
@@ -35,7 +36,7 @@ const rng = (seed: number) => {
   };
 };
 
-const HATS = {
+const HATS: Record<RoleHat, ReadonlyArray<string>> = {
   pointed: ["......hh......", ".....hhhh.....", "....hhhhhh....", "....hhhhhh....", "..hhhhhhhhhh.."],
   wizard: [".........hh...", "......hhhh....", ".....hhyhhh...", "....hhhhhyh...", "..hhhhhhhhhh.."],
   beanie: ["..............", "......tt......", "....hhhhhh....", "...hhhhhhhh...", "...tttttttt..."],
@@ -44,9 +45,9 @@ const HATS = {
   sprout: ["..............", "......gg......", ".......g......", "....rrrrrr....", "...rrrrrrrr..."],
   horned: ["..............", ".w..........w.", ".ww.hhhhhh.ww.", "..whhhhhhhhw..", "..tttttttttt.."],
   crown: ["..............", "...y..y..y....", "...yyyyyyy....", "...yoyyyoy....", "..rrrrrrrrrr.."],
-} as const;
+};
 
-const HAT_NAMES: Record<keyof typeof HATS, string> = {
+const HAT_NAMES: Record<RoleHat, string> = {
   pointed: "pointy hat",
   wizard: "wizard hat",
   beanie: "woolly cap",
@@ -59,7 +60,7 @@ const HAT_NAMES: Record<keyof typeof HATS, string> = {
 
 type Cell = readonly [y: number, x: number, color: string];
 
-const GEAR: Record<string, ReadonlyArray<Cell>> = {
+const GEAR: Record<RoleTool, ReadonlyArray<Cell>> = {
   wand: [
     [4, 12, "y"],
     [5, 11, "y"],
@@ -130,7 +131,7 @@ const GEAR: Record<string, ReadonlyArray<Cell>> = {
   none: [],
 };
 
-const GEAR_NAMES: Record<string, string> = {
+const GEAR_NAMES: Record<RoleTool, string> = {
   wand: "a wand",
   staff: "a staff",
   lantern: "a lantern",
@@ -140,18 +141,27 @@ const GEAR_NAMES: Record<string, string> = {
   none: "empty hands",
 };
 
+const pickOr = <T>(chosen: T | null | undefined, seeded: T): T => chosen ?? seeded;
+
 const SKINS = ["#e8b98f", "#d9a578", "#c98f6a", "#a8714f", "#f0c8a0", "#8d5a3c", "#a8c98f", "#c8b4e8"];
 const HAIR = ["#2a1f18", "#7a4a2a", "#c9a24a", "#ece8ff", "#b5523f"];
 
-export const hobLook = (seed: number, color: HobColor): HobLook => {
+/** The hat and tool a hob's role dresses it in; null or missing leaves the seed's pick. */
+export interface HobGear {
+  readonly hat?: RoleHat | null | undefined;
+  readonly tool?: RoleTool | null | undefined;
+}
+
+export const hobLook = (seed: number, color: HobColor, gear: HobGear = {}): HobLook => {
   const next = rng(seed);
   const pick = <T>(list: ReadonlyArray<T>): T => list[Math.floor(next() * list.length)] as T;
-  const hat = pick(Object.keys(HATS) as Array<keyof typeof HATS>);
+  // Every pick runs even when the role overrides it, so the face and outfit stay the seed's.
+  const hat = pickOr(gear.hat, pick(Object.keys(HATS) as Array<RoleHat>));
   const ears = pick(["none", "pointy", "pointy", "long"]);
   const eyes = pick(["dot", "dot", "big", "sleepy", "glasses"]);
   const beard = pick(["none", "none", "short", "long", "mustache"]);
   const body = pick(["tunic", "belt", "trim", "buttons", "robe"]);
-  const item = pick(Object.keys(GEAR));
+  const item = pickOr(gear.tool, pick(Object.keys(GEAR) as Array<RoleTool>));
   const skin = pick(SKINS);
   const hair = pick(HAIR);
   const blush = next() < 0.4;
@@ -246,7 +256,7 @@ export const hobLook = (seed: number, color: HobColor): HobLook => {
     stamp(13, "..ctttttttc...");
     set(13, 11, "c");
   }
-  for (const [y, x, ch] of GEAR[item] ?? []) set(y, x, ch);
+  for (const [y, x, ch] of GEAR[item]) set(y, x, ch);
   if (item !== "none") set(11, 12, "s");
 
   const colors = HOB_COLORS[color];

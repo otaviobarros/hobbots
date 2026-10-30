@@ -90,7 +90,7 @@ const run = <A, E>(test: (gate: Gate, events: Array<HobbotsEvent>) => Effect.Eff
         new Agent({
           id: HOB_ID,
           name: "Wren",
-          craft: "Scribe",
+          roleTitle: "Writer",
           runtime: "claude-code",
           model: null,
           effort: null,

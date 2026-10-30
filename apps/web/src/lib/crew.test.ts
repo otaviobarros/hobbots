@@ -11,9 +11,9 @@ describe("splitScene", () => {
 });
 
 describe("matchesHob", () => {
-  const hob = { name: "Bramble", craft: "Researcher" };
+  const hob = { name: "Bramble", roleTitle: "Researcher" };
   it("finds a hob by name", () => expect(matchesHob(hob, "bram")).toBe(true));
-  it("finds a hob by craft, ignoring case and spaces", () => expect(matchesHob(hob, "  SEARCH ")).toBe(true));
+  it("finds a hob by role title, ignoring case and spaces", () => expect(matchesHob(hob, "  SEARCH ")).toBe(true));
   it("leaves out a hob that matches neither", () => expect(matchesHob(hob, "scribe")).toBe(false));
   it("matches every hob with an empty filter", () => expect(matchesHob(hob, " ")).toBe(true));
 });

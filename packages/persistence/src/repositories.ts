@@ -103,7 +103,11 @@ export class HobbotsRepository extends Context.Service<
         sql`INSERT INTO agent_config_versions ${sql.insert({
           agent_id: agent.id,
           version: agent.configVersion,
-          craft: agent.craft,
+          role: agent.role,
+          role_title: agent.roleTitle,
+          sigil: agent.sigil,
+          hat: agent.hat,
+          tool: agent.tool,
           model: agent.model,
           effort: agent.effort,
           instructions: agent.instructions,
@@ -117,7 +121,11 @@ export class HobbotsRepository extends Context.Service<
           const inserted = yield* sql`INSERT INTO agents ${sql.insert({
             id: agent.id,
             name: agent.name,
-            craft: agent.craft,
+            role: agent.role,
+            role_title: agent.roleTitle,
+            sigil: agent.sigil,
+            hat: agent.hat,
+            tool: agent.tool,
             runtime: agent.runtime,
             model: agent.model,
             effort: agent.effort,
@@ -138,7 +146,11 @@ export class HobbotsRepository extends Context.Service<
       const updateAgentConfig = (agent: Agent, createdAt: string) =>
         Effect.gen(function* () {
           const updated = yield* sql`UPDATE agents SET
-              craft = ${agent.craft},
+              role = ${agent.role},
+              role_title = ${agent.roleTitle},
+              sigil = ${agent.sigil},
+              hat = ${agent.hat},
+              tool = ${agent.tool},
               model = ${agent.model},
               effort = ${agent.effort},
               instructions = ${agent.instructions},

@@ -1,10 +1,10 @@
 import { RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  craftOf,
   draftProblem,
   type FirstHobDraft,
   firstHobPayload,
+  gearOf,
   hobLine,
   keepDraft,
   keepSummonDraft,
@@ -17,6 +17,7 @@ import {
   pickModel,
   reopenDraft,
   restoreDraft,
+  roleTitleOf,
   rollLook,
   rollName,
   rollSeed,
@@ -155,7 +156,11 @@ describe("first hob draft", () => {
     expect(payload).toMatchObject({
       id,
       name: "Tinker",
-      craft: "Coder",
+      role: "engineer",
+      roleTitle: "Software engineer",
+      sigil: "engineer",
+      hat: "beanie",
+      tool: "wrench",
       lookSeed: 77,
       lookColor: "ember",
       runtime: "claude-code",
@@ -165,21 +170,32 @@ describe("first hob draft", () => {
     expect(payload.instructions).toContain("Tinker");
   });
 
-  it("sends the runtime's default model as no model, and its own craft in the user's words", () => {
+  it("sends the runtime's default model as no model, and its own role title in the user's words", () => {
     const payload = firstHobPayload(draft({ kind: "custom", craft: " Garden plans ", model: "default" }));
     expect(payload.model).toBeNull();
-    expect(payload.craft).toBe("Garden plans");
-    expect(craftOf(draft({ kind: "keeper" }))).toBe("Bookkeeper");
+    expect(payload).toMatchObject({ role: null, roleTitle: "Garden plans", sigil: "assistant", hat: null, tool: null });
+    expect(roleTitleOf(draft({ kind: "keeper" }))).toBe("Bookkeeper");
   });
 });
 
-describe("the hob line", () => {
-  it("names the hob with its craft, or the user's own words", () => {
+describe("the draft's role gear", () => {
+  it("dresses a starter role in its hat and tool and leaves a title of the user's own to the seed", () => {
     const draft = newDraft(
       () => 0.5,
       () => "id",
     );
-    expect(hobLine(draft)).toBe("Pip the Helper");
+    expect(gearOf({ ...draft, kind: "researcher" })).toEqual({ hat: "hood", tool: "lantern" });
+    expect(gearOf({ ...draft, kind: "custom", craft: "Gardening" })).toEqual({ hat: null, tool: null });
+  });
+});
+
+describe("the hob line", () => {
+  it("names the hob with its role, or the user's own words", () => {
+    const draft = newDraft(
+      () => 0.5,
+      () => "id",
+    );
+    expect(hobLine(draft)).toBe("Pip the Assistant");
     expect(hobLine({ ...draft, kind: "custom", craft: "Gardening ", name: "Moss" })).toBe("Moss, good at gardening");
   });
 });

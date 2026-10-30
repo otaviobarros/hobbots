@@ -36,8 +36,8 @@ describe("a summoned hob's draft", () => {
 
   it("adds the chores to the instructions and leaves them out when blank", () => {
     const payload = firstHobPayload({ ...pickCraft(fresh(), "coder"), chores: "  Run the tests.  " });
-    expect(payload).toMatchObject({ id, name: "Tinker", craft: "Coder", runtime: "claude-code" });
-    expect(payload.instructions).toMatch(/^You are Tinker, a hob in Hobbots\. Your craft is Coder: /);
+    expect(payload).toMatchObject({ id, name: "Tinker", roleTitle: "Software engineer", runtime: "claude-code" });
+    expect(payload.instructions).toMatch(/^You are Tinker, a hob in Hobbots\. Your role is Software engineer: /);
     expect(payload.instructions.endsWith("Your chores, in the user's words:\nRun the tests.")).toBe(true);
 
     expect(firstHobPayload({ ...fresh(), chores: " " }).instructions).not.toContain("chores");

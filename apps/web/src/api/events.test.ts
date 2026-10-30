@@ -43,7 +43,7 @@ describe("applyEvent", () => {
     const hob = new Agent({
       id: AgentId.make("wren"),
       name: "Wren",
-      craft: "Scribe",
+      roleTitle: "Writer",
       runtime: "claude-code",
       model: "sonnet",
       effort: "high",
@@ -65,7 +65,7 @@ describe("applyEvent", () => {
     const hob = new Agent({
       id: AgentId.make("wren"),
       name: "Wren",
-      craft: "Scribe",
+      roleTitle: "Writer",
       runtime: "claude-code",
       model: null,
       effort: null,
@@ -89,7 +89,7 @@ describe("applyEvent", () => {
       new Agent({
         id: AgentId.make(id),
         name: id,
-        craft: "Scribe",
+        roleTitle: "Writer",
         runtime: "claude-code",
         model: null,
         effort: null,

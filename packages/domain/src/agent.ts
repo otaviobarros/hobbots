@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 import { AgentId } from "./ids.ts";
 import { HobColor, LookSeed } from "./look.ts";
+import { DEFAULT_SIGIL, RoleHat, RoleId, RoleTool } from "./roles.ts";
 
 /** Runtimes an agent can run on. Only Claude Code is wired in the first slice. */
 export const RuntimeKind = Schema.Literals(["claude-code"]);
@@ -20,11 +21,27 @@ export type ConfigVersion = typeof ConfigVersion.Type;
 export const AgentStatus = Schema.Literals(["active", "paused", "retired"]);
 export type AgentStatus = typeof AgentStatus.Type;
 
+/**
+ * A hob's role: a starter role or a title in the user's own words, with the sigil, hat and tool that
+ * go with it. A label only; it grants nothing (ADR 005).
+ */
+const roleSchemaFields = {
+  /** The starter role, or null when the title is the user's own words. */
+  role: Schema.NullOr(RoleId).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
+  /** The starter role's title or the user's own words, such as "Frontend engineer". */
+  roleTitle: Schema.String,
+  /** The starter role whose sigil the hob shows; a custom title can borrow any of them. */
+  sigil: RoleId.pipe(Schema.withConstructorDefault(Effect.succeed(DEFAULT_SIGIL))),
+  /** The hat its sprite wears, or null to leave it to the look seed. */
+  hat: Schema.NullOr(RoleHat).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
+  /** The tool its sprite holds, or null to leave it to the look seed. */
+  tool: Schema.NullOr(RoleTool).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
+};
+
 export class Agent extends Schema.Class<Agent>("Agent")({
   id: AgentId,
   name: Schema.String,
-  /** What the hob is good at, such as "Guide" or "Scribe". */
-  craft: Schema.String,
+  ...roleSchemaFields,
   runtime: RuntimeKind,
   /** A model the runtime supports, or null for the runtime's default. */
   model: Schema.NullOr(Schema.String),
@@ -49,7 +66,7 @@ export class Agent extends Schema.Class<Agent>("Agent")({
 export class AgentConfiguration extends Schema.Class<AgentConfiguration>("AgentConfiguration")({
   agentId: AgentId,
   version: ConfigVersion,
-  craft: Schema.String,
+  ...roleSchemaFields,
   model: Schema.NullOr(Schema.String),
   effort: Schema.NullOr(Effort),
   instructions: Schema.String,

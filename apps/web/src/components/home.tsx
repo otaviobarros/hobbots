@@ -364,14 +364,14 @@ function AllHobs({
                       key={hob.id}
                       to="/hobs/$hobId"
                       params={{ hobId: hob.id }}
-                      aria-label={`Open chat with ${hob.name}, ${hob.craft}, ${stateLabel[state]}`}
-                      title={`${hob.name} · ${hob.craft} · ${stateLabel[state]}`}
+                      aria-label={`Open chat with ${hob.name}, ${hob.roleTitle}, ${stateLabel[state]}`}
+                      title={`${hob.name} · ${hob.roleTitle} · ${stateLabel[state]}`}
                       className="cut hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text no-underline hover:bg-line hover:text-text"
                     >
                       <HobSprite hob={hob} size={28} state={state} className="mr-1.5" />
                       <span className="flex min-w-0 flex-col">
                         <span className="truncate font-pixel text-sm font-semibold">{hob.name}</span>
-                        <span className="truncate text-xs text-label">{hob.craft}</span>
+                        <span className="truncate text-xs text-label">{hob.roleTitle}</span>
                       </span>
                     </Link>
                   ))}

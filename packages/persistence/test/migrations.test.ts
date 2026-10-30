@@ -6,6 +6,7 @@ import hobBrain from "../src/migrations/0005_hob_brain.ts";
 import hobConfigVersions from "../src/migrations/0007_hob_config_versions.ts";
 import hobStatus from "../src/migrations/0008_hob_status.ts";
 import hobRetiredAt from "../src/migrations/0009_hob_retired_at.ts";
+import hobRoles from "../src/migrations/0010_hob_roles.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -173,5 +174,53 @@ describe("0009_hob_retired_at", () => {
     }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0009"))), Effect.runPromise);
 
     expect(rows).toEqual([{ id: "aldric", status: "retired", retiredAt: null }]);
+  });
+});
+
+describe("0010_hob_roles", () => {
+  // covers AG-001, AG-002, DP-003
+  it("[TC-AG-072] moves every hob's craft to a role and keeps any other craft as its own title", async () => {
+    const crafts = ["Helper", "Scribe", "Coder", "Researcher", "Bookkeeper", "Guide"];
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      for (const [index, craft] of crafts.entries()) {
+        yield* sql`INSERT INTO agents ${sql.insert({
+          id: `hob${index}`,
+          name: craft,
+          craft,
+          runtime: "claude-code",
+          instructions: "",
+          lookSeed: index,
+          lookColor: "moss",
+          createdAt: "2026-10-28T00:00:00.000Z",
+        })}`;
+        yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+          agentId: `hob${index}`,
+          version: 1,
+          craft,
+          instructions: "",
+          lookSeed: index,
+          lookColor: "moss",
+          createdAt: "2026-10-28T00:00:00.000Z",
+        })}`;
+      }
+      yield* hobRoles;
+      const columns = sql.literal("role, role_title, sigil, hat, tool");
+      return {
+        agents: yield* sql`SELECT ${columns} FROM agents ORDER BY id`,
+        versions: yield* sql`SELECT ${columns} FROM agent_config_versions ORDER BY agent_id`,
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0010"))), Effect.runPromise);
+
+    const expected = [
+      { role: "assistant", roleTitle: "Assistant", sigil: "assistant", hat: null, tool: null },
+      { role: "writer", roleTitle: "Writer", sigil: "writer", hat: null, tool: null },
+      { role: "engineer", roleTitle: "Software engineer", sigil: "engineer", hat: null, tool: null },
+      { role: "researcher", roleTitle: "Researcher", sigil: "researcher", hat: null, tool: null },
+      { role: "bookkeeper", roleTitle: "Bookkeeper", sigil: "bookkeeper", hat: null, tool: null },
+      { role: null, roleTitle: "Guide", sigil: "assistant", hat: null, tool: null },
+    ];
+    expect(result.agents).toEqual(expected);
+    expect(result.versions).toEqual(expected);
   });
 });

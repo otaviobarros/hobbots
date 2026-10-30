@@ -1,5 +1,16 @@
 import type { CreateAgentPayload } from "@hobbots/api";
-import { AgentId, type Effort, type HobColor, type RuntimeModel, type RuntimeModels } from "@hobbots/domain";
+import {
+  type Agent,
+  AgentId,
+  DEFAULT_SIGIL,
+  type Effort,
+  type HobColor,
+  type RoleId,
+  type RuntimeModel,
+  type RuntimeModels,
+  roleFields,
+  starterRole,
+} from "@hobbots/domain";
 import { readStored, writeStored } from "../lib/storage.ts";
 
 /**
@@ -11,17 +22,23 @@ export type CraftKind = "helper" | "scribe" | "researcher" | "coder" | "keeper" 
 
 export const CRAFTS: ReadonlyArray<{
   readonly kind: CraftKind;
+  /** The starter role the hob takes; null for a title in the user's own words. */
+  readonly role: RoleId | null;
   readonly label: string;
   readonly note: string;
   /** The name a hob of this craft starts with until the user names it. */
   readonly name: string;
 }> = [
-  { kind: "helper", label: "Helper", note: "Does a bit of everything.", name: "Pip" },
-  { kind: "scribe", label: "Scribe", note: "Emails, notes and writing.", name: "Quill" },
-  { kind: "researcher", label: "Researcher", note: "Digs through the web for answers.", name: "Bramble" },
-  { kind: "coder", label: "Coder", note: "Builds and fixes code in your projects.", name: "Tinker" },
-  { kind: "keeper", label: "Bookkeeper", note: "Receipts, bills and spreadsheets.", name: "Ledger" },
-  { kind: "custom", label: "Your own", note: "You describe its craft in a few words.", name: "" },
+  ...(
+    [
+      ["helper", "assistant", "Pip"],
+      ["scribe", "writer", "Quill"],
+      ["researcher", "researcher", "Bramble"],
+      ["coder", "engineer", "Tinker"],
+      ["keeper", "bookkeeper", "Ledger"],
+    ] as const
+  ).map(([kind, role, name]) => ({ kind, role, label: starterRole(role).title, note: starterRole(role).note, name })),
+  { kind: "custom", role: null, label: "Your own", note: "You describe its role in a few words.", name: "" },
 ];
 
 /** Names and crafts are short enough for a name tag (the API's limit). */
@@ -213,9 +230,19 @@ export const pickModel = <D extends BrainChoice>(draft: D, model: RuntimeModel):
   effort: draft.effort !== null && model.efforts.includes(draft.effort) ? draft.effort : startingEffort(model),
 });
 
-/** The craft as the hob carries it: the chosen craft's label, or the user's own words. */
-export const craftOf = (draft: FirstHobDraft): string =>
-  draft.kind === "custom" ? draft.craft.trim() : (CRAFTS.find((c) => c.kind === draft.kind)?.label ?? "");
+const roleOf = (draft: FirstHobDraft): RoleId | null => CRAFTS.find((c) => c.kind === draft.kind)?.role ?? null;
+
+/** The role title as the hob carries it: the starter role's title, or the user's own words. */
+export const roleTitleOf = (draft: FirstHobDraft): string => {
+  const role = roleOf(draft);
+  return role === null ? draft.craft.trim() : starterRole(role).title;
+};
+
+/** The hat and tool the draft's role dresses the hob in; a title of the user's own leaves them to the seed. */
+export const gearOf = (draft: FirstHobDraft): Required<Pick<Agent, "hat" | "tool">> => {
+  const role = roleOf(draft);
+  return role === null ? { hat: null, tool: null } : { hat: starterRole(role).hat, tool: starterRole(role).tool };
+};
 
 /** What still stops the hob from being created, in words for the footer; undefined when ready. */
 export const draftProblem = (draft: FirstHobDraft): string | undefined => {
@@ -228,7 +255,7 @@ const instructionsFor = (name: string, kind: CraftKind, craft: string): string =
   const note = CRAFTS.find((c) => c.kind === kind)?.note;
   return kind === "custom" || !note
     ? `You are ${name}, a hob in Hobbots. You are good at ${craft.toLowerCase()}.`
-    : `You are ${name}, a hob in Hobbots. Your craft is ${craft}: ${note.toLowerCase()}`;
+    : `You are ${name}, a hob in Hobbots. Your role is ${craft}: ${note.toLowerCase()}`;
 };
 
 /**
@@ -237,13 +264,16 @@ const instructionsFor = (name: string, kind: CraftKind, craft: string): string =
  */
 export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
   const name = draft.name.trim();
-  const craft = craftOf(draft);
+  const title = roleTitleOf(draft);
+  const role = roleOf(draft);
   const chores = draft.chores.trim();
-  const instructions = instructionsFor(name, draft.kind, craft);
+  const instructions = instructionsFor(name, draft.kind, title);
   return {
     id: AgentId.make(draft.id),
     name,
-    craft,
+    ...(role === null
+      ? { role: null, roleTitle: title, sigil: DEFAULT_SIGIL, hat: null, tool: null }
+      : roleFields(role)),
     lookSeed: draft.lookSeed,
     lookColor: draft.lookColor,
     runtime: "claude-code",
@@ -319,16 +349,16 @@ export const settleSummonDraft = summoning.settle;
 export const thinksWith = (draft: FirstHobDraft, model: RuntimeModel | undefined): string =>
   `Claude · ${model?.displayName ?? "…"}${draft.effort ? ` · ${effortWords(draft.effort).label.toLowerCase()} effort` : ""}`;
 
-/** What the hob's line says after its name, such as "the Scribe" or "good at gardening". */
+/** What the hob's line says after its name, such as "the Writer" or "good at gardening". */
 export const kindLine = (draft: FirstHobDraft): string => {
   if (draft.kind !== "custom") return `the ${CRAFTS.find((c) => c.kind === draft.kind)?.label ?? ""}`;
   const craft = draft.craft.trim();
   return craft ? `good at ${craft.toLowerCase()}` : "one of a kind";
 };
 
-/** The hob as the Elder Hob sums it up, such as "Pip the Helper" or "Moss, good at gardening". */
+/** The hob as the Elder Hob sums it up, such as "Pip the Assistant" or "Moss, good at gardening". */
 export const hobLine = (draft: FirstHobDraft): string => {
   const name = draft.name.trim() || "Your hob";
-  const craft = craftOf(draft);
-  return draft.kind === "custom" ? `${name}, good at ${craft.toLowerCase()}` : `${name} the ${craft}`;
+  const title = roleTitleOf(draft);
+  return draft.kind === "custom" ? `${name}, good at ${title.toLowerCase()}` : `${name} the ${title}`;
 };

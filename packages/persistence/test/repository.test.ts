@@ -1,4 +1,4 @@
-import { Agent, AgentId, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, Message, MessageId, roleFields, Thread, ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { HobbotsRepository } from "../src/index.ts";
@@ -30,7 +30,7 @@ describe("HobbotsRepository", () => {
         new Agent({
           id: agentId,
           name: "Aldric",
-          craft: "Guide",
+          roleTitle: "Guide",
           runtime: "claude-code",
           model: null,
           effort: null,
@@ -91,7 +91,7 @@ describe("HobbotsRepository", () => {
       new Agent({
         id: AgentId.make(id),
         name: id,
-        craft: "Guide",
+        roleTitle: "Guide",
         runtime: "claude-code",
         model: null,
         effort: null,
@@ -143,7 +143,7 @@ describe("HobbotsRepository", () => {
     const first = new Agent({
       id: agentId,
       name: "Aldric",
-      craft: "Guide",
+      roleTitle: "Guide",
       runtime: "claude-code",
       model: null,
       effort: null,
@@ -153,14 +153,20 @@ describe("HobbotsRepository", () => {
       configVersion: 1,
       createdAt: now,
     });
-    const second = new Agent({ ...first, instructions: "Be thorough.", effort: "high", configVersion: 2 });
+    const second = new Agent({
+      ...first,
+      ...roleFields("qa"),
+      instructions: "Be thorough.",
+      effort: "high",
+      configVersion: 2,
+    });
 
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(first);
       const updated = yield* repo.updateAgentConfig(second);
       // Another edit also based on version 1 arrives after version 2 is stored.
-      const stale = yield* repo.updateAgentConfig(new Agent({ ...first, craft: "Scribe", configVersion: 2 }));
+      const stale = yield* repo.updateAgentConfig(new Agent({ ...first, roleTitle: "Writer", configVersion: 2 }));
       return {
         updated,
         stale,
@@ -175,12 +181,24 @@ describe("HobbotsRepository", () => {
     expect(Option.getOrThrow(result.agent)).toEqual(second);
     expect(Option.getOrThrow(result.v1)).toMatchObject({
       version: 1,
-      craft: "Guide",
+      role: null,
+      roleTitle: "Guide",
+      sigil: "assistant",
+      hat: null,
+      tool: null,
       instructions: "Be brief.",
       effort: null,
       lookSeed: 2 ** 32 - 1,
     });
-    expect(Option.getOrThrow(result.v2)).toMatchObject({ version: 2, craft: "Guide", instructions: "Be thorough." });
+    expect(Option.getOrThrow(result.v2)).toMatchObject({
+      version: 2,
+      role: "qa",
+      roleTitle: "QA engineer",
+      sigil: "qa",
+      hat: "horned",
+      tool: "lantern",
+      instructions: "Be thorough.",
+    });
     expect(Option.isNone(result.v3)).toBe(true);
   });
 
@@ -190,7 +208,7 @@ describe("HobbotsRepository", () => {
       new Agent({
         id: AgentId.make(id),
         name: id,
-        craft: "Guide",
+        roleTitle: "Guide",
         runtime: "claude-code",
         model: null,
         effort: null,

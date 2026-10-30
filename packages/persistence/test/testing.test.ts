@@ -11,7 +11,7 @@ const insertAndCount = () =>
     yield* sql`INSERT INTO agents ${sql.insert({
       id: "aldric",
       name: "Aldric",
-      craft: "Guide",
+      roleTitle: "Guide",
       runtime: "claude-code",
       instructions: "",
       createdAt: "2026-10-28T00:00:00.000Z",

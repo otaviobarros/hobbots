@@ -1,5 +1,5 @@
 import { NodeHttpServer } from "@effect/platform-node";
-import type { Agent, Message } from "@hobbots/domain";
+import { type Agent, type Message, roleFields } from "@hobbots/domain";
 import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -16,7 +16,7 @@ import { HobLifecycle } from "../src/lifecycle.ts";
 
 const hob = {
   name: "Wren",
-  craft: "Scribe",
+  ...roleFields("writer"),
   lookSeed: 7,
   lookColor: "moss",
   runtime: "claude-code",

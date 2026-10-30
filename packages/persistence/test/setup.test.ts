@@ -12,7 +12,7 @@ const TestLayer = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer)
 const aldric = new Agent({
   id: AgentId.make("aldric"),
   name: "Aldric",
-  craft: "Guide",
+  roleTitle: "Guide",
   runtime: "claude-code",
   model: null,
   effort: null,

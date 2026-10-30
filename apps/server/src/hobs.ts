@@ -5,7 +5,7 @@ import {
   InvalidHob,
   type UpdateAgentPayload,
 } from "@hobbots/api";
-import { Agent, AgentId, type Effort, type RuntimeModels } from "@hobbots/domain";
+import { Agent, AgentId, type Effort, type RoleId, type RuntimeModels, starterRole } from "@hobbots/domain";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter } from "@hobbots/runtimes";
 import { Context, DateTime, Effect, Layer, Option, SchemaIssue } from "effect";
@@ -37,6 +37,18 @@ export const checkBrain = (
   return undefined;
 };
 
+/** A starter role keeps its own title; a title in the user's own words goes with no role. */
+export const checkRole = (role: {
+  readonly role: RoleId | null;
+  readonly roleTitle: string;
+}): InvalidHob | undefined => {
+  if (role.role === null) return undefined;
+  const title = starterRole(role.role).title;
+  return role.roleTitle === title
+    ? undefined
+    : new InvalidHob({ field: "roleTitle", message: `The ${title} role is titled "${title}"` });
+};
+
 const formatIssue = SchemaIssue.makeFormatterStandardSchemaV1();
 
 /** The first failing field of a create or edit request, as `InvalidHob`. */
@@ -51,9 +63,11 @@ export const HobInputErrorsLayer = HttpApiMiddleware.layerSchemaErrorTransform(H
   );
 });
 
+const roleFields = ["role", "roleTitle", "sigil", "hat", "tool"] as const;
+
 const createdFields = [
   "name",
-  "craft",
+  ...roleFields,
   "lookSeed",
   "lookColor",
   "runtime",
@@ -63,7 +77,7 @@ const createdFields = [
 ] as const satisfies ReadonlyArray<keyof CreateAgentPayload & keyof Agent>;
 
 const editableFields = [
-  "craft",
+  ...roleFields,
   "lookSeed",
   "lookColor",
   "model",
@@ -98,7 +112,7 @@ export class HobService extends Context.Service<
         // Reconcile first, so a retry succeeds even if the runtime's model list changed since.
         const earlier = Option.getOrUndefined(yield* repo.findAgent(id));
         if (earlier !== undefined) return yield* retried(earlier, payload);
-        const invalid = checkBrain(yield* runtime.models, payload);
+        const invalid = checkRole(payload) ?? checkBrain(yield* runtime.models, payload);
         if (invalid !== undefined) return yield* invalid;
         const agent = new Agent({
           ...fields,
@@ -115,7 +129,12 @@ export class HobService extends Context.Service<
         return agent;
       });
 
-      const update = Effect.fn("HobService.update")(function* (id: AgentId, payload: UpdateAgentPayload) {
+      const update = Effect.fn("HobService.update")(function* (id: AgentId, edit: UpdateAgentPayload) {
+        // Taking a starter role brings its title.
+        const payload =
+          edit.role != null && edit.roleTitle === undefined
+            ? { ...edit, roleTitle: starterRole(edit.role).title }
+            : edit;
         // Under the hob's lock, so the event carries the status the hob has when the edit is
         // stored: a retirement publishes after it and a stale edit cannot re-list a retired hob.
         return yield* admission.withHob(
@@ -139,6 +158,8 @@ export class HobService extends Context.Service<
                 if (invalid !== undefined) return yield* invalid;
               }
               const next = new Agent({ ...agent, ...payload, configVersion: agent.configVersion + 1 });
+              const invalidRole = checkRole(next);
+              if (invalidRole !== undefined) return yield* invalidRole;
               if (yield* repo.updateAgentConfig(next)) {
                 yield* bus.publish({ _tag: "AgentUpserted", agent: next });
                 return next;

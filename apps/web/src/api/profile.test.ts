@@ -15,7 +15,7 @@ const hob = (patch: Partial<Agent> = {}) =>
   new Agent({
     id: AgentId.make("8a1f6c2e-3b4d-4e5f-9a6b-7c8d9e0f1a2b"),
     name: "Pip",
-    craft: "Scribe",
+    roleTitle: "Writer",
     runtime: "claude-code",
     model: null,
     effort: "medium",
