@@ -130,7 +130,11 @@ export const brainOptions = (request: Pick<PromptRequest, "model" | "effort">): 
   ...(request.effort ? { effort: request.effort } : {}),
 });
 
-/** Claude Code's model list in Hobbots' shape. A model without effort support takes no effort level. */
+/**
+ * Claude Code's model list in Hobbots' shape. A model without effort support takes no effort level.
+ * Its aliases, such as "opus", are the main models; pinned ids such as "claude-opus-4-8" are older
+ * versions kept for hobs that need them.
+ */
 export const toRuntimeModels = (infos: ReadonlyArray<ModelInfo>): RuntimeModels =>
   new RuntimeModels({
     runtime: "claude-code",
@@ -142,6 +146,7 @@ export const toRuntimeModels = (infos: ReadonlyArray<ModelInfo>): RuntimeModels 
           displayName: info.displayName,
           description: info.description,
           efforts: info.supportsEffort ? (info.supportedEffortLevels ?? []) : [],
+          main: !info.value.startsWith("claude-"),
         }),
     ),
   });
@@ -162,7 +167,7 @@ export const fallbackModels = new RuntimeModels({
     { id: "fable", displayName: "Fable", description: "Most capable for your hardest and longest-running tasks" },
     { id: "sonnet", displayName: "Sonnet", description: "Efficient for routine tasks" },
     { id: "haiku", displayName: "Haiku", description: "Fastest for quick answers" },
-  ].map((model) => new RuntimeModel({ ...model, efforts: allEfforts })),
+  ].map((model) => new RuntimeModel({ ...model, efforts: allEfforts, main: true })),
 });
 
 /**

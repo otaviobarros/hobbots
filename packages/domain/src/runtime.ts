@@ -21,6 +21,8 @@ export class RuntimeModel extends Schema.Class<RuntimeModel>("RuntimeModel")({
   description: Schema.String,
   /** Effort levels the model accepts; empty when it takes no effort setting. */
   efforts: Schema.Array(Effort),
+  /** Whether the vendor counts it among its main models; the rest are offered behind "More models". */
+  main: Schema.Boolean,
 }) {}
 
 /** The models a runtime offers, and whether the runtime itself reported them. */

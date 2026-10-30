@@ -198,9 +198,9 @@ describe("creating hobs", () => {
     const models = await request("GET", "/api/runtimes/claude-code/models");
     expect(models.status).toBe(200);
     expect(models.body.source).toBe("runtime");
-    expect(models.body.models.map((m: RuntimeModel) => [m.id, m.efforts.length])).toEqual([
-      ["fake-thinker", 5],
-      ["fake-quick", 0],
+    expect(models.body.models.map((m: RuntimeModel) => [m.id, m.efforts.length, m.main])).toEqual([
+      ["fake-thinker", 5, true],
+      ["fake-quick", 0, false],
     ]);
   });
 });
@@ -281,8 +281,14 @@ describe("checking a hob's brain", () => {
     runtime: "claude-code",
     source: "runtime",
     models: [
-      new RuntimeModel({ id: "default", displayName: "Default", description: "", efforts: ["low", "high"] }),
-      new RuntimeModel({ id: "old", displayName: "Old", description: "", efforts: [] }),
+      new RuntimeModel({
+        id: "default",
+        displayName: "Default",
+        description: "",
+        efforts: ["low", "high"],
+        main: true,
+      }),
+      new RuntimeModel({ id: "old", displayName: "Old", description: "", efforts: [], main: false }),
     ],
   });
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { brainLine, isDirty, profileDraft, profileEdit, rebaseDraft, retiredSummary } from "./profile.ts";
 
 const model = (id: string, displayName: string, efforts: RuntimeModel["efforts"]) =>
-  new RuntimeModel({ id, displayName, description: "", efforts });
+  new RuntimeModel({ id, displayName, description: "", efforts, main: true });
 
 const offered = new RuntimeModels({
   runtime: "claude-code",

@@ -206,6 +206,17 @@ export const settleBrain = <D extends BrainChoice>(draft: D, models: RuntimeMode
   return settled === draft.model && effort === draft.effort ? draft : { ...draft, model: settled, effort };
 };
 
+/**
+ * The runtime's main models, shown first, and the rest, offered behind "More models". A runtime
+ * that marks none as main has all of them shown.
+ */
+export const splitModels = (
+  models: ReadonlyArray<RuntimeModel>,
+): { readonly main: ReadonlyArray<RuntimeModel>; readonly more: ReadonlyArray<RuntimeModel> } => {
+  const main = models.filter((m) => m.main);
+  return main.length === 0 ? { main: models, more: [] } : { main, more: models.filter((m) => !m.main) };
+};
+
 /** Picking a model keeps the effort when the new model takes it. */
 export const pickModel = <D extends BrainChoice>(draft: D, model: RuntimeModel): D => ({
   ...draft,
