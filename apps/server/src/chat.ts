@@ -1,5 +1,6 @@
-import { AgentNotFound, ThreadBusy, ThreadNotFound } from "@hobbots/api";
+import { AgentNotFound, HobUnavailable, ThreadBusy, ThreadNotFound } from "@hobbots/api";
 import {
+  type Agent,
   type AgentConfiguration,
   type AgentId,
   DEFAULT_THREAD_TITLE,
@@ -13,6 +14,7 @@ import {
 import { HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter, type RuntimeEvent } from "@hobbots/runtimes";
 import { Context, DateTime, Effect, FiberMap, Layer, Option, Ref, Stream } from "effect";
+import { HobAdmission } from "./admission.ts";
 import { EventBus } from "./event-bus.ts";
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
@@ -20,12 +22,17 @@ const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 export class ChatService extends Context.Service<
   ChatService,
   {
-    readonly createThread: (agentId: AgentId) => Effect.Effect<Thread, AgentNotFound>;
+    readonly createThread: (agentId: AgentId) => Effect.Effect<Thread, AgentNotFound | HobUnavailable>;
     readonly sendPrompt: (
       threadId: ThreadId,
       content: string,
-    ) => Effect.Effect<{ userMessage: Message; assistantMessage: Message }, ThreadNotFound | ThreadBusy>;
+    ) => Effect.Effect<
+      { userMessage: Message; assistantMessage: Message },
+      ThreadNotFound | ThreadBusy | HobUnavailable
+    >;
     readonly interrupt: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
+    /** Stops every turn the hob has in progress and waits until each is recorded as interrupted. */
+    readonly interruptAgent: (agentId: AgentId) => Effect.Effect<void>;
     /** Threads with a turn in progress in this process. */
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
   }
@@ -36,6 +43,7 @@ export class ChatService extends Context.Service<
       const repo = yield* HobbotsRepository;
       const bus = yield* EventBus;
       const runtime = yield* RuntimeAdapter;
+      const admission = yield* HobAdmission;
       const turns = yield* FiberMap.make<ThreadId>();
 
       // A previous process may have died mid-turn; those turns cannot resume.
@@ -53,26 +61,39 @@ export class ChatService extends Context.Service<
           ),
         );
 
+      // Only an active hob takes new work; a paused or retired hob's threads stay readable.
+      const requireActive = (agent: Agent) =>
+        agent.status === "active"
+          ? Effect.void
+          : Effect.fail(new HobUnavailable({ agentId: agent.id, status: agent.status }));
+
       const saveThread = (thread: Thread) =>
         repo.upsertThread(thread).pipe(Effect.andThen(bus.publish({ _tag: "ThreadUpserted", thread })));
 
       const saveMessage = (message: Message) =>
         repo.upsertMessage(message).pipe(Effect.andThen(bus.publish({ _tag: "MessageUpserted", message })));
 
+      // Status is read under the hob's lock, so a pause or retirement cannot slip in before the thread is saved.
       const createThread = Effect.fn("ChatService.createThread")(function* (agentId: AgentId) {
-        const agent = yield* repo.findAgent(agentId);
-        if (Option.isNone(agent)) return yield* new AgentNotFound({ agentId });
-        const now = yield* nowIso;
-        const thread = new Thread({
-          id: ThreadId.make(crypto.randomUUID()),
+        return yield* admission.withHob(
           agentId,
-          title: DEFAULT_THREAD_TITLE,
-          runtimeSessionId: null,
-          createdAt: now,
-          updatedAt: now,
-        });
-        yield* saveThread(thread);
-        return thread;
+          Effect.gen(function* () {
+            const agent = yield* repo.findAgent(agentId);
+            if (Option.isNone(agent)) return yield* new AgentNotFound({ agentId });
+            yield* requireActive(agent.value);
+            const now = yield* nowIso;
+            const thread = new Thread({
+              id: ThreadId.make(crypto.randomUUID()),
+              agentId,
+              title: DEFAULT_THREAD_TITLE,
+              runtimeSessionId: null,
+              createdAt: now,
+              updatedAt: now,
+            });
+            yield* saveThread(thread);
+            return thread;
+          }),
+        );
       });
 
       // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
@@ -174,43 +195,54 @@ export class ChatService extends Context.Service<
         });
 
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (threadId: ThreadId, content: string) {
-        const thread = yield* findThread(threadId);
-        if (yield* FiberMap.has(turns, threadId)) return yield* new ThreadBusy({ threadId });
-        const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
-        const config = yield* repo.findAgentConfig(agent.id, agent.configVersion).pipe(Effect.map(Option.getOrThrow));
-        const now = yield* nowIso;
+        const { agentId } = yield* findThread(threadId);
+        // The status check and the turn's registration happen under the hob's lock, so a turn is
+        // either admitted before a retirement (which then sees and stops it) or refused after it.
+        return yield* admission.withHob(
+          agentId,
+          Effect.gen(function* () {
+            const thread = yield* findThread(threadId);
+            if (yield* FiberMap.has(turns, threadId)) return yield* new ThreadBusy({ threadId });
+            const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
+            const config = yield* repo
+              .findAgentConfig(agent.id, agent.configVersion)
+              .pipe(Effect.map(Option.getOrThrow));
+            yield* requireActive(agent);
+            const now = yield* nowIso;
 
-        const userMessage = new Message({
-          id: MessageId.make(crypto.randomUUID()),
-          threadId,
-          role: "user",
-          content,
-          status: "complete",
-          error: null,
-          configVersion: null,
-          createdAt: now,
-        });
-        const assistantMessage = new Message({
-          id: MessageId.make(crypto.randomUUID()),
-          threadId,
-          role: "assistant",
-          content: "",
-          status: "streaming",
-          error: null,
-          configVersion: config.version,
-          createdAt: now,
-        });
-        const updated = new Thread({
-          ...thread,
-          title: thread.title === DEFAULT_THREAD_TITLE ? titleFromPrompt(content) : thread.title,
-          updatedAt: now,
-        });
+            const userMessage = new Message({
+              id: MessageId.make(crypto.randomUUID()),
+              threadId,
+              role: "user",
+              content,
+              status: "complete",
+              error: null,
+              configVersion: null,
+              createdAt: now,
+            });
+            const assistantMessage = new Message({
+              id: MessageId.make(crypto.randomUUID()),
+              threadId,
+              role: "assistant",
+              content: "",
+              status: "streaming",
+              error: null,
+              configVersion: config.version,
+              createdAt: now,
+            });
+            const updated = new Thread({
+              ...thread,
+              title: thread.title === DEFAULT_THREAD_TITLE ? titleFromPrompt(content) : thread.title,
+              updatedAt: now,
+            });
 
-        yield* saveMessage(userMessage);
-        yield* saveMessage(assistantMessage);
-        yield* saveThread(updated);
-        yield* FiberMap.run(turns, threadId, runTurn(config, updated, content, assistantMessage));
-        return { userMessage, assistantMessage };
+            yield* saveMessage(userMessage);
+            yield* saveMessage(assistantMessage);
+            yield* saveThread(updated);
+            yield* FiberMap.run(turns, threadId, runTurn(config, updated, content, assistantMessage));
+            return { userMessage, assistantMessage };
+          }),
+        );
       });
 
       const interrupt = Effect.fn("ChatService.interrupt")(function* (threadId: ThreadId) {
@@ -220,7 +252,14 @@ export class ChatService extends Context.Service<
 
       const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
 
-      return ChatService.of({ createThread, sendPrompt, interrupt, activeThreads });
+      const interruptAgent = Effect.fn("ChatService.interruptAgent")(function* (agentId: AgentId) {
+        for (const threadId of yield* activeThreads) {
+          const thread = yield* repo.findThread(threadId);
+          if (Option.isSome(thread) && thread.value.agentId === agentId) yield* FiberMap.remove(turns, threadId);
+        }
+      });
+
+      return ChatService.of({ createThread, sendPrompt, interrupt, interruptAgent, activeThreads });
     }),
   );
 }

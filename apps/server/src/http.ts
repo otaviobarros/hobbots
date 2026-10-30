@@ -7,6 +7,7 @@ import { ChatService } from "./chat.ts";
 import { EventBus } from "./event-bus.ts";
 import { HobInputErrorsLayer, HobService } from "./hobs.ts";
 import { Installation } from "./installation.ts";
+import { HobLifecycle } from "./lifecycle.ts";
 import { SetupHandlers } from "./setup.ts";
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
@@ -15,10 +16,14 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
     const hobs = yield* HobService;
+    const lifecycle = yield* HobLifecycle;
     return handlers.handleAll({
-      list: () => repo.listAgents,
+      list: ({ query }) => repo.listAgentsWithStatus(query.status ? [query.status] : ["active", "paused"]),
       create: ({ payload }) => hobs.create(payload),
       update: ({ params, payload }) => hobs.update(params.agentId, payload),
+      pause: ({ params }) => lifecycle.pause(params.agentId),
+      wake: ({ params }) => lifecycle.wake(params.agentId),
+      retire: ({ params, payload }) => lifecycle.retire(params.agentId, payload.activeWork),
       threads: ({ params }) =>
         repo.findAgent(params.agentId).pipe(
           Effect.flatMap(

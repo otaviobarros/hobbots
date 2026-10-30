@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { migrations } from "../src/index.ts";
 import hobBrain from "../src/migrations/0005_hob_brain.ts";
 import hobConfigVersions from "../src/migrations/0007_hob_config_versions.ts";
+import hobStatus from "../src/migrations/0008_hob_status.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -126,5 +127,26 @@ describe("0007_hob_config_versions", () => {
       { id: "m1", configVersion: null },
       { id: "m2", configVersion: 1 },
     ]);
+  });
+});
+
+describe("0008_hob_status", () => {
+  // covers AG-006, DP-003
+  it("[TC-AG-036] keeps every existing hob active", async () => {
+    const rows = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "aldric",
+        name: "Aldric",
+        craft: "Guide",
+        runtime: "claude-code",
+        instructions: "",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* hobStatus;
+      return yield* sql<{ id: string; status: string }>`SELECT id, status FROM agents`;
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0008"))), Effect.runPromise);
+
+    expect(rows).toEqual([{ id: "aldric", status: "active" }]);
   });
 });

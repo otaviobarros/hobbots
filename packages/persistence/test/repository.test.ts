@@ -183,4 +183,50 @@ describe("HobbotsRepository", () => {
     expect(Option.getOrThrow(result.v2)).toMatchObject({ version: 2, craft: "Guide", instructions: "Be thorough." });
     expect(Option.isNone(result.v3)).toBe(true);
   });
+
+  // covers AG-006, DP-003
+  it("[TC-AG-035] stores a hob's lifecycle status, refuses a change from a stale status and lists hobs by status", async () => {
+    const agent = (id: string, status?: "active" | "paused" | "retired") =>
+      new Agent({
+        id: AgentId.make(id),
+        name: id,
+        craft: "Guide",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "violet",
+        configVersion: 1,
+        createdAt: now,
+        ...(status ? { status } : {}),
+      });
+
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(agent("a"));
+      yield* repo.insertAgent(agent("b", "paused"));
+      yield* repo.insertAgent(agent("c"));
+      const retired = yield* repo.setAgentStatus(AgentId.make("c"), "active", "retired");
+      // A wake computed from an earlier read of "paused" must not undo the retirement.
+      const staleWake = yield* repo.setAgentStatus(AgentId.make("c"), "paused", "active");
+      const ids = (statuses: ReadonlyArray<"active" | "paused" | "retired">) =>
+        repo.listAgentsWithStatus(statuses).pipe(Effect.map((agents) => agents.map((a) => [a.id, a.status])));
+      return {
+        retired,
+        staleWake,
+        current: yield* ids(["active", "paused"]),
+        archived: yield* ids(["retired"]),
+        none: yield* ids([]),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect([result.retired, result.staleWake]).toEqual([true, false]);
+    expect(result.current).toEqual([
+      ["a", "active"],
+      ["b", "paused"],
+    ]);
+    expect(result.archived).toEqual([["c", "retired"]]);
+    expect(result.none).toEqual([]);
+  });
 });

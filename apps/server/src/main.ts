@@ -6,12 +6,14 @@ import { HobbotsRepository, SetupRepository, SqliteLive } from "@hobbots/persist
 import { ClaudeCodeLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
+import { HobAdmission } from "./admission.ts";
 import { ChatService } from "./chat.ts";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
 import { HobService } from "./hobs.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
+import { HobLifecycle } from "./lifecycle.ts";
 import { IPv6Loopback } from "./loopback.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
 
@@ -39,9 +41,9 @@ const ServerLive = Layer.unwrap(
             workspaceDir: join(config.dataDir, "workspaces", "default"),
             executable: Option.getOrUndefined(config.claudeExecutable),
           });
-    const App = Layer.mergeAll(ChatService.layer, HobService.layer).pipe(
-      Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, Runtime, identity)),
-    );
+    const App = HobLifecycle.layer
+      .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)))
+      .pipe(Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, HobAdmission.layer, Runtime, identity)));
 
     if (!existsSync(join(config.webDir, "index.html"))) {
       yield* Effect.logWarning(

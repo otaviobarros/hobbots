@@ -10,6 +10,7 @@ import { HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter } from "@hobbots/runtimes";
 import { Context, DateTime, Effect, Layer, Option, SchemaIssue } from "effect";
 import { HttpApiMiddleware } from "effect/http-api";
+import { HobAdmission } from "./admission.ts";
 import { EventBus } from "./event-bus.ts";
 
 /**
@@ -84,6 +85,7 @@ export class HobService extends Context.Service<
       const repo = yield* HobbotsRepository;
       const bus = yield* EventBus;
       const runtime = yield* RuntimeAdapter;
+      const admission = yield* HobAdmission;
 
       // A retry carries the same id and fields; the same id with other fields is another hob.
       const retried = (existing: Agent, payload: CreateAgentPayload) =>
@@ -114,29 +116,36 @@ export class HobService extends Context.Service<
       });
 
       const update = Effect.fn("HobService.update")(function* (id: AgentId, payload: UpdateAgentPayload) {
-        // Another edit may land between reading the hob and storing the next version; then the
-        // edit applies again on top of that one, so both survive.
-        while (true) {
-          const current = yield* repo.findAgent(id);
-          if (Option.isNone(current)) return yield* new AgentNotFound({ agentId: id });
-          const agent = current.value;
-          if (editableFields.every((field) => payload[field] === undefined || payload[field] === agent[field])) {
-            return agent;
-          }
-          // A brain left as it was stays valid even if the runtime stopped offering it.
-          if (payload.model !== undefined || payload.effort !== undefined) {
-            const invalid = checkBrain(yield* runtime.models, {
-              model: payload.model === undefined ? agent.model : payload.model,
-              effort: payload.effort === undefined ? agent.effort : payload.effort,
-            });
-            if (invalid !== undefined) return yield* invalid;
-          }
-          const next = new Agent({ ...agent, ...payload, configVersion: agent.configVersion + 1 });
-          if (yield* repo.updateAgentConfig(next)) {
-            yield* bus.publish({ _tag: "AgentUpserted", agent: next });
-            return next;
-          }
-        }
+        // Under the hob's lock, so the event carries the status the hob has when the edit is
+        // stored: a retirement publishes after it and a stale edit cannot re-list a retired hob.
+        return yield* admission.withHob(
+          id,
+          Effect.gen(function* () {
+            // Another edit may land between reading the hob and storing the next version; then the
+            // edit applies again on top of that one, so both survive.
+            while (true) {
+              const current = yield* repo.findAgent(id);
+              if (Option.isNone(current)) return yield* new AgentNotFound({ agentId: id });
+              const agent = current.value;
+              if (editableFields.every((field) => payload[field] === undefined || payload[field] === agent[field])) {
+                return agent;
+              }
+              // A brain left as it was stays valid even if the runtime stopped offering it.
+              if (payload.model !== undefined || payload.effort !== undefined) {
+                const invalid = checkBrain(yield* runtime.models, {
+                  model: payload.model === undefined ? agent.model : payload.model,
+                  effort: payload.effort === undefined ? agent.effort : payload.effort,
+                });
+                if (invalid !== undefined) return yield* invalid;
+              }
+              const next = new Agent({ ...agent, ...payload, configVersion: agent.configVersion + 1 });
+              if (yield* repo.updateAgentConfig(next)) {
+                yield* bus.publish({ _tag: "AgentUpserted", agent: next });
+                return next;
+              }
+            }
+          }),
+        );
       });
 
       return HobService.of({ create, update });

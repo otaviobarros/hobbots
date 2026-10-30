@@ -12,9 +12,10 @@ export const queryKeys = {
   models: (runtime: RuntimeKind) => ["runtimes", runtime, "models"] as const,
 };
 
+/** The hobs that are not retired. */
 export const agentsQuery = queryOptions({
   queryKey: queryKeys.agents,
-  queryFn: () => call((c) => c.agents.list()),
+  queryFn: () => call((c) => c.agents.list({ query: {} })),
 });
 
 export const threadsQuery = (agentId: AgentId) =>

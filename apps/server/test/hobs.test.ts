@@ -6,11 +6,13 @@ import { makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/ru
 import { Effect, Layer, Schedule, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { checkBrain, HobService } from "../src/hobs.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { HobLifecycle } from "../src/lifecycle.ts";
 
 const hob = {
   name: "Wren",
@@ -41,16 +43,19 @@ beforeEach(() => {
       return Stream.fromEffect(Effect.promise(() => gate)).pipe(Stream.drain, Stream.concat(fake.sendPrompt(request)));
     },
   });
-  const App = Layer.mergeAll(ChatService.layer, HobService.layer).pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(Layer.provideMerge(TestDatabase)),
-        EventBus.layer,
-        runtime,
-        Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
+  const App = HobLifecycle.layer
+    .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)))
+    .pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(Layer.provideMerge(TestDatabase)),
+          EventBus.layer,
+          HobAdmission.layer,
+          runtime,
+          Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
+        ),
       ),
-    ),
-  );
+    );
   const web = HttpRouter.toWebHandler(
     ApiRoutes.pipe(Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
     { disableLogger: true },

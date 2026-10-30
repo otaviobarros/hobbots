@@ -60,6 +60,29 @@ describe("applyEvent", () => {
     expect(client.getQueryData(queryKeys.agents)).toEqual([hob]);
   });
 
+  it("drops a hob from the hob list once it is retired and keeps a paused one", () => {
+    const client = new QueryClient();
+    const hob = new Agent({
+      id: AgentId.make("wren"),
+      name: "Wren",
+      craft: "Scribe",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+      lookSeed: 7,
+      lookColor: "moss",
+      configVersion: 1,
+      createdAt: now,
+    });
+    client.setQueryData(queryKeys.agents, [hob]);
+    const paused = new Agent({ ...hob, status: "paused" });
+    applyEvent(client, { _tag: "AgentUpserted", agent: paused });
+    expect(client.getQueryData(queryKeys.agents)).toEqual([paused]);
+    applyEvent(client, { _tag: "AgentUpserted", agent: new Agent({ ...hob, status: "retired" }) });
+    expect(client.getQueryData(queryKeys.agents)).toEqual([]);
+  });
+
   it("tracks what the hob is doing from the reply's events", () => {
     const client = new QueryClient();
     const activity = () => client.getQueryData(activityQuery.queryKey)?.[threadId];
