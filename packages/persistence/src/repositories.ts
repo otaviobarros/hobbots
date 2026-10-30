@@ -14,7 +14,8 @@ export class HobbotsRepository extends Context.Service<
   {
     readonly listAgents: Effect.Effect<ReadonlyArray<Agent>>;
     readonly findAgent: (id: AgentId) => Effect.Effect<Option.Option<Agent>>;
-    readonly insertAgent: (agent: Agent) => Effect.Effect<void>;
+    /** Inserts the hob unless one with its id exists; true when it was inserted. */
+    readonly insertAgent: (agent: Agent) => Effect.Effect<boolean>;
     readonly listThreads: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Thread>>;
     readonly findThread: (id: ThreadId) => Effect.Effect<Option.Option<Thread>>;
     readonly upsertThread: (thread: Thread) => Effect.Effect<void>;
@@ -81,7 +82,7 @@ export class HobbotsRepository extends Context.Service<
           look_seed: agent.lookSeed,
           look_color: agent.lookColor,
           created_at: agent.createdAt,
-        })}`;
+        })} ON CONFLICT (id) DO NOTHING RETURNING id`;
 
       const upsertThread = (thread: Thread) =>
         sql`INSERT INTO threads ${sql.insert({
@@ -117,7 +118,11 @@ export class HobbotsRepository extends Context.Service<
       return HobbotsRepository.of({
         listAgents: listAgents().pipe(Effect.orDie),
         findAgent: (id) => findAgent(id).pipe(Effect.orDie),
-        insertAgent: (agent) => insertAgent(agent).pipe(Effect.asVoid, Effect.orDie),
+        insertAgent: (agent) =>
+          insertAgent(agent).pipe(
+            Effect.map((rows) => rows.length > 0),
+            Effect.orDie,
+          ),
         listThreads: (agentId) => listThreads(agentId).pipe(Effect.orDie),
         findThread: (id) => findThread(id).pipe(Effect.orDie),
         upsertThread: (thread) => upsertThread(thread).pipe(Effect.asVoid, Effect.orDie),

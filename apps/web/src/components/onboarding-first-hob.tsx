@@ -5,21 +5,24 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { ApiError } from "../api/client.ts";
 import {
   CRAFTS,
   craftOf,
   draftProblem,
   effortWords,
   type FirstHobDraft,
-  firstHobPayload,
   LABEL_MAX,
   nearbySeeds,
-  newDraft,
   pickCraft,
+  pickLook,
   pickModel,
+  reopenDraft,
+  restoreDraft,
+  rollLook,
   rollName,
-  rollSeed,
   settleBrain,
+  submitDraft,
 } from "../api/first-hob.ts";
 import { modelsQuery, useCreateHob } from "../api/queries.ts";
 import { useUpdateSetup } from "../api/setup.ts";
@@ -30,8 +33,6 @@ import { OnboardingFrame } from "./onboarding-frame.tsx";
 
 const GUIDE = "Now the fun part. Every hob is good at something. Pick a craft, a name and a cloak.";
 const draftKey = "setup.firstHob";
-// The hob this draft became, so trying again after a failed step does not make a second one.
-const createdKey = "setup.firstHob.created";
 
 const DIE = ["owwwo", "wwwww", "wwoww", "wwwww", "owwwo"];
 const DIE_PALETTE = { o: "#141228", w: "#ece8ff" };
@@ -224,18 +225,19 @@ function LookPreview({
         <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
           <legend className="lbl mb-1.5 text-xs text-label">More like this</legend>
           <div className="flex gap-1.5">
-            {nearbySeeds(draft.lookSeed).map((seed) => (
+            {nearbySeeds(draft.lookBase).map((seed) => (
               <label
                 key={seed}
                 className={cn(
-                  "hop-on-hover grid size-[42px] cursor-pointer place-items-center border-2 border-line-2 bg-line hover:border-moonlight",
+                  "hop-on-hover grid size-[42px] cursor-pointer place-items-center border-2 bg-line hover:border-moonlight",
+                  seed === draft.lookSeed ? "border-moonlight" : "border-line-2",
                   "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
                 )}
               >
                 <input
                   type="radio"
                   name="hob-look"
-                  checked={false}
+                  checked={seed === draft.lookSeed}
                   onChange={() => onPickSeed(seed)}
                   aria-label={`Look ${seed}`}
                   className="sr-only"
@@ -267,38 +269,48 @@ export function OnboardingFirstHob() {
   const models = useQuery(modelsQuery("claude-code"));
   const create = useCreateHob();
   const update = useUpdateSetup();
-  const [draft, setDraft] = useState<FirstHobDraft>(
-    () => readStored<FirstHobDraft | null>(draftKey, null) ?? newDraft(),
+  const [draft, setDraft] = useState<FirstHobDraft>(() =>
+    restoreDraft(readStored<Partial<FirstHobDraft> | null>(draftKey, null)),
   );
   const [nameRolls, setNameRolls] = useState(0);
   const [lookRolls, setLookRolls] = useState(0);
   const [tried, setTried] = useState(false);
 
-  // Coming back to this step keeps what was chosen; a model the runtime dropped falls back.
+  // Coming back to this step keeps what was chosen; a model the runtime dropped falls back,
+  // unless the hob was already sent with it.
   useEffect(() => writeStored(draftKey, draft), [draft]);
   useEffect(() => {
-    if (models.data) setDraft((d) => settleBrain(d, models.data));
+    if (models.data) setDraft((d) => (d.submitted ? d : settleBrain(d, models.data)));
   }, [models.data]);
 
   const craft = CRAFTS.find((c) => c.kind === draft.kind) ?? CRAFTS[0];
   const model = models.data?.models.find((m) => m.id === draft.model);
-  const problem = draftProblem(draft) ?? (model ? undefined : "Waiting for Claude Code's models");
+  const locked = draft.submitted !== null;
+  const problem = locked
+    ? undefined
+    : (draftProblem(draft) ?? (model ? undefined : "Waiting for Claude Code's models"));
   const busy = create.isPending || update.isPending;
   const failed = create.isError || update.isError;
+  const rejected = create.error instanceof ApiError && create.error.tag === "InvalidHob" ? create.error : undefined;
 
   const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/providers" }));
   // Safety, folders and the summon (#69) come next; until they exist, creating the hob ends setup.
   const next = async () => {
     setTried(true);
     if (problem || busy) return;
+    // Once sent, the hob may exist even when no answer comes back, so the choices lock and every
+    // retry repeats the same request; the hub returns the hob it made the first time.
+    const sent = submitDraft(draft);
+    setDraft(sent);
     try {
-      if (readStored<string | null>(createdKey, null) === null) {
-        const hob = await create.mutateAsync(firstHobPayload(draft));
-        writeStored(createdKey, hob.id);
-      }
+      await create.mutateAsync(sent.submitted);
+    } catch (error) {
+      if (error instanceof ApiError && error.tag === "InvalidHob") setDraft(reopenDraft);
+      return;
+    }
+    try {
       await update.mutateAsync({ completed: true });
       writeStored(draftKey, null);
-      writeStored(createdKey, null);
       await navigate({ to: "/" });
     } catch {
       // The footer shows the failure from the mutation state.
@@ -312,11 +324,15 @@ export function OnboardingFirstHob() {
         : "one of a kind"
       : `the ${craft?.label}`;
   const brainLine = `Claude · ${model?.displayName ?? "…"}${draft.effort ? ` · ${effortWords(draft.effort).label.toLowerCase()} effort` : ""}`;
-  const hint = failed
-    ? "Hobbots could not create your hob. Try again in a moment."
-    : problem && (tried || !model)
-      ? problem
-      : `${draft.name.trim()} the ${craftOf(draft) || "hob"} is ready`;
+  const hint = rejected
+    ? `Hobbots could not create your hob: ${rejected.message}`
+    : failed
+      ? `Hobbots could not finish making ${draft.name.trim()}. Try again in a moment.`
+      : busy
+        ? `Making ${draft.name.trim()}…`
+        : problem && (tried || !model)
+          ? problem
+          : `${draft.name.trim()} the ${craftOf(draft) || "hob"} is ready`;
 
   return (
     <OnboardingFrame
@@ -352,7 +368,9 @@ export function OnboardingFirstHob() {
         </>
       }
     >
-      <div className="flex animate-hb-in gap-6">
+      {/* Disabled once sent: the hob may already exist with exactly these choices. */}
+      <fieldset disabled={locked} className="m-0 flex min-w-0 animate-hb-in gap-6 border-0 p-0 disabled:opacity-85">
+        <legend className="sr-only">{locked ? `${draft.name.trim()}, as sent` : "Your first hob"}</legend>
         <div className="flex min-w-0 flex-1 flex-col gap-3.5">
           <div>
             <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">Meet your first hob</h1>
@@ -486,15 +504,15 @@ export function OnboardingFirstHob() {
           brainLine={brainLine}
           lookRolls={lookRolls}
           onRoll={() => {
-            setDraft((d) => ({ ...d, lookSeed: rollSeed(d.lookSeed) }));
+            setDraft((d) => rollLook(d));
             setLookRolls((n) => n + 1);
           }}
           onPickSeed={(seed) => {
-            setDraft((d) => ({ ...d, lookSeed: seed }));
+            setDraft((d) => pickLook(d, seed));
             setLookRolls((n) => n + 1);
           }}
         />
-      </div>
+      </fieldset>
     </OnboardingFrame>
   );
 }

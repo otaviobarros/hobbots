@@ -8,10 +8,15 @@ import {
   nearbySeeds,
   newDraft,
   pickCraft,
+  pickLook,
   pickModel,
+  reopenDraft,
+  restoreDraft,
+  rollLook,
   rollName,
   rollSeed,
   settleBrain,
+  submitDraft,
 } from "./first-hob.ts";
 
 const model = (id: string, efforts: RuntimeModel["efforts"]) =>
@@ -23,7 +28,14 @@ const offered = new RuntimeModels({
   models: [model("default", ["low", "medium", "high"]), model("opus", ["low", "high", "max"]), model("quick", [])],
 });
 
-const draft = (patch: Partial<FirstHobDraft> = {}): FirstHobDraft => ({ ...newDraft(() => 0.5), ...patch });
+const id = "8a1f6c2e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
+const draft = (patch: Partial<FirstHobDraft> = {}): FirstHobDraft => ({
+  ...newDraft(
+    () => 0.5,
+    () => id,
+  ),
+  ...patch,
+});
 
 describe("first hob draft", () => {
   it("rolls a name other than the current one", () => {
@@ -42,6 +54,37 @@ describe("first hob draft", () => {
     expect(seeds).toHaveLength(5);
     expect(new Set(seeds).size).toBe(5);
     expect(seeds).not.toContain(4821);
+  });
+
+  it("keeps the nearby looks while one of them is picked, and moves them with a new look", () => {
+    const start = draft({ lookSeed: 4821, lookBase: 4821 });
+    const picked = pickLook(start, nearbySeeds(4821)[2] ?? 0);
+    expect(nearbySeeds(picked.lookBase)).toEqual(nearbySeeds(4821));
+    expect(nearbySeeds(picked.lookBase)).toContain(picked.lookSeed);
+    const again = pickLook(picked, nearbySeeds(4821)[3] ?? 0);
+    expect(nearbySeeds(again.lookBase)).toEqual(nearbySeeds(4821));
+
+    const rolled = rollLook(again, () => 0.1);
+    expect(rolled.lookBase).toBe(rolled.lookSeed);
+    expect(rolled.lookSeed).not.toBe(again.lookSeed);
+  });
+
+  it("completes a draft saved before it had an id or nearby looks", () => {
+    const { id: _, lookBase: __, submitted: ___, ...older } = draft({ name: "Wren", lookSeed: 77 });
+    const restored = restoreDraft(older);
+    expect(restored).toMatchObject({ name: "Wren", lookSeed: 77, lookBase: 77, submitted: null });
+    expect(restored.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(restoreDraft(draft({ lookSeed: 77, lookBase: 12 }))).toMatchObject({ id, lookSeed: 77, lookBase: 12 });
+  });
+
+  it("sends the same request on every retry once submitted, and a new id after a rejection", () => {
+    const sent = submitDraft(draft({ name: "Wren" }));
+    expect(sent.submitted).toMatchObject({ id, name: "Wren" });
+    // A draft already sent keeps its request, whatever the draft says now.
+    expect(submitDraft({ ...sent, name: "Moss" }).submitted).toBe(sent.submitted);
+
+    const reopened = reopenDraft(sent, () => "another");
+    expect(reopened).toMatchObject({ id: "another", name: "Wren", submitted: null });
   });
 
   it("renames an unnamed hob after its craft and keeps a name the user chose", () => {
@@ -84,6 +127,7 @@ describe("first hob draft", () => {
       draft({ kind: "coder", name: " Tinker ", lookSeed: 77, lookColor: "ember", model: "opus", effort: "max" }),
     );
     expect(payload).toMatchObject({
+      id,
       name: "Tinker",
       craft: "Coder",
       lookSeed: 77,

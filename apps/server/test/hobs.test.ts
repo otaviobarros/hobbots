@@ -113,6 +113,31 @@ describe("creating hobs", () => {
     expect((await request("GET", "/api/agents")).body).toEqual([]);
   });
 
+  // covers AG-001
+  it("[TC-AG-007] returns the hob created first when a create is retried with the same id", async () => {
+    const id = crypto.randomUUID();
+    const first = await request("POST", "/api/agents", { ...hob, id });
+    expect(first).toMatchObject({ status: 200, body: { ...hob, id } });
+
+    const retry = await request("POST", "/api/agents", { ...hob, id });
+    expect(retry).toEqual(first);
+    expect((await request("GET", "/api/agents")).body).toEqual([first.body]);
+  });
+
+  // covers AG-001
+  it("[TC-AG-008] rejects a create that reuses an id for different choices or is not a UUID", async () => {
+    const id = crypto.randomUUID();
+    const first = await request("POST", "/api/agents", { ...hob, id });
+
+    const other = await request("POST", "/api/agents", { ...hob, id, name: "Moss" });
+    expect(other).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "id" } });
+
+    const notUuid = await request("POST", "/api/agents", { ...hob, id: "wren" });
+    expect(notUuid).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "id" } });
+
+    expect((await request("GET", "/api/agents")).body).toEqual([first.body]);
+  });
+
   // covers AG-001, AG-005
   it("[TC-AG-004] lists the models the runtime offers for the picker", async () => {
     const models = await request("GET", "/api/runtimes/claude-code/models");

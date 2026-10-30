@@ -1,5 +1,5 @@
 import type { CreateAgentPayload } from "@hobbots/api";
-import type { Effort, HobColor, RuntimeModel, RuntimeModels } from "@hobbots/domain";
+import { AgentId, type Effort, type HobColor, type RuntimeModel, type RuntimeModels } from "@hobbots/domain";
 
 /**
  * The first hob as the user shapes it during onboarding, before the hub creates it. Kept apart
@@ -86,6 +86,8 @@ export const nearbySeeds = (seed: number): ReadonlyArray<number> =>
   [1, 2, 3, 4, 5].map((k) => ((seed * 31 + k * 7919) % 9998) + 1);
 
 export interface FirstHobDraft {
+  /** The hob's id, chosen up front so a retried create returns the hob made the first time. */
+  readonly id: string;
   readonly kind: CraftKind;
   /** The user's own craft, used when the kind is custom. */
   readonly craft: string;
@@ -93,22 +95,55 @@ export interface FirstHobDraft {
   /** Whether the user typed or rolled the name, so picking another craft keeps it. */
   readonly named: boolean;
   readonly lookSeed: number;
+  /** The look "More like this" is drawn from; only a new look moves it, so picking one keeps the set. */
+  readonly lookBase: number;
   readonly lookColor: HobColor;
   /** A model id from the runtime's list; null until the list arrives. */
   readonly model: string | null;
   readonly effort: Effort | null;
+  /**
+   * The create request once Continue sent it. From then on the hob may exist, so the choices stay
+   * locked and every retry sends this same request; only a rejected request unlocks them.
+   */
+  readonly submitted: CreateAgentPayload | null;
 }
 
-export const newDraft = (random: Random = Math.random): FirstHobDraft => ({
-  kind: "helper",
-  craft: "",
-  name: "Pip",
-  named: false,
-  lookSeed: rollSeed(0, random),
-  lookColor: "violet",
-  model: null,
-  effort: null,
-});
+export const newDraft = (
+  random: Random = Math.random,
+  makeId: () => string = () => crypto.randomUUID(),
+): FirstHobDraft => {
+  const lookSeed = rollSeed(0, random);
+  return {
+    id: makeId(),
+    kind: "helper",
+    craft: "",
+    name: "Pip",
+    named: false,
+    lookSeed,
+    lookBase: lookSeed,
+    lookColor: "violet",
+    model: null,
+    effort: null,
+    submitted: null,
+  };
+};
+
+/** A draft read back from storage, completed with fields an older save may lack. */
+export const restoreDraft = (stored: Partial<FirstHobDraft> | null, random: Random = Math.random): FirstHobDraft => {
+  if (stored === null) return newDraft(random);
+  const fresh = newDraft(random);
+  const lookSeed = stored.lookSeed ?? fresh.lookSeed;
+  return { ...fresh, lookBase: lookSeed, ...stored, lookSeed };
+};
+
+/** A new look from the dice, which also brings a new set of nearby looks. */
+export const rollLook = (draft: FirstHobDraft, random: Random = Math.random): FirstHobDraft => {
+  const lookSeed = rollSeed(draft.lookSeed, random);
+  return { ...draft, lookSeed, lookBase: lookSeed };
+};
+
+/** Picking one of the nearby looks keeps the set it was picked from. */
+export const pickLook = (draft: FirstHobDraft, lookSeed: number): FirstHobDraft => ({ ...draft, lookSeed });
 
 /** Picking a craft renames an unnamed hob to that craft's usual name. */
 export const pickCraft = (draft: FirstHobDraft, kind: CraftKind): FirstHobDraft => {
@@ -167,6 +202,7 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
   const name = draft.name.trim();
   const craft = craftOf(draft);
   return {
+    id: AgentId.make(draft.id),
     name,
     craft,
     lookSeed: draft.lookSeed,
@@ -177,3 +213,19 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
     instructions: instructionsFor(name, draft.kind, craft),
   };
 };
+
+/** Locks the draft to its create request; a draft already sent keeps the request it sent. */
+export const submitDraft = (draft: FirstHobDraft): FirstHobDraft & { readonly submitted: CreateAgentPayload } => ({
+  ...draft,
+  submitted: draft.submitted ?? firstHobPayload(draft),
+});
+
+/**
+ * Unlocks a draft whose request the hub rejected. Nothing was created under its id, but a fresh one
+ * keeps an edited request from ever meeting an earlier hob.
+ */
+export const reopenDraft = (draft: FirstHobDraft, makeId: () => string = () => crypto.randomUUID()): FirstHobDraft => ({
+  ...draft,
+  id: makeId(),
+  submitted: null,
+});
