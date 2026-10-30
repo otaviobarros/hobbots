@@ -1,4 +1,4 @@
-import type { Server } from "node:http";
+import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 import { Effect, Layer } from "effect";
 import { EventBus } from "./event-bus.ts";
@@ -29,14 +29,17 @@ export const StopWithoutWaitingForClients = (server: Server) =>
         // A browser can open one more once its event stream ends, and the IPv6 relay still accepts.
         endIfIdle(socket);
       });
-      server.on("request", (request, response) => {
+      const track = (request: IncomingMessage, response: ServerResponse) => {
         const socket = request.socket;
         connections.set(socket, (connections.get(socket) ?? 0) + 1);
         response.once("close", () => {
           connections.set(socket, (connections.get(socket) ?? 1) - 1);
           endIfIdle(socket);
         });
-      });
+      };
+      server.on("request", track);
+      // Node emits a request sent with `Expect: 100-continue` here instead of as "request".
+      server.on("checkContinue", track);
       yield* Effect.addFinalizer(() =>
         Effect.andThen(
           Effect.sync(() => {
