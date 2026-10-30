@@ -23,6 +23,7 @@ import {
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/http-api";
 import { AgentNotFound, HobUnavailable, InvalidHob, MessageNotQueued, ThreadNotFound } from "./errors.ts";
+import { PermissionsGroup } from "./permissions.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
 
@@ -231,4 +232,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(SystemGroup)
   .add(SetupGroup)
   .add(RuntimesGroup)
-  .add(SearchGroup) {}
+  .add(SearchGroup)
+  .add(PermissionsGroup) {}

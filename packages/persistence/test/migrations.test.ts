@@ -9,6 +9,7 @@ import hobRetiredAt from "../src/migrations/0009_hob_retired_at.ts";
 import hobRoles from "../src/migrations/0010_hob_roles.ts";
 import hobIdentity from "../src/migrations/0013_hob_identity.ts";
 import hobTone from "../src/migrations/0014_hob_tone.ts";
+import hobPolicy from "../src/migrations/0015_hob_policy.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -445,6 +446,96 @@ describe("0014_hob_tone", () => {
 
     expect(entries.map((e) => e.payload)).toMatchObject([
       { _tag: "AgentUpserted", agent: { id: "pip", voice: "default", length: "balanced" } },
+    ]);
+  });
+});
+
+describe("0015_hob_policy", () => {
+  // covers AG-002, AG-004, DP-003
+  it("[TC-AG-089] gives every existing hob and version an empty policy: no own or hidden folders, no overrides", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+        agentId: "pip",
+        version: 1,
+        roleTitle: "Writer",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* hobPolicy;
+      return {
+        agents: yield* sql`SELECT own_folders, hidden_shared_folders, policy_overrides FROM agents`,
+        versions: yield* sql`SELECT own_folders, hidden_shared_folders, policy_overrides FROM agent_config_versions`,
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0015"))), Effect.runPromise);
+
+    const empty = { ownFolders: "[]", hiddenSharedFolders: "[]", policyOverrides: "{}" };
+    expect(result.agents).toEqual([empty]);
+    expect(result.versions).toEqual([empty]);
+  });
+
+  // covers DP-003
+  it("[TC-DP-034] still reads a hob event journaled before policies existed, with the empty policy", async () => {
+    // The AgentUpserted payload as the hub journaled it before 0015, with no policy.
+    const before = {
+      _tag: "AgentUpserted",
+      agent: {
+        id: "pip",
+        name: "Pip",
+        role: "writer",
+        roleTitle: "Writer",
+        sigil: "writer",
+        hat: null,
+        tool: null,
+        voice: "default",
+        length: "balanced",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        status: "active",
+        retiredAt: null,
+        configVersion: 1,
+        createdAt: "2026-10-28T00:00:00.000Z",
+        revision: 1,
+      },
+    };
+    const database = TestDatabaseAt(migrationsBefore("0015"));
+    const entries = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;
+      yield* sql`INSERT INTO event_journal ${sql.insert({
+        sequence: 1,
+        id: "5d2e7f1a-4c3b-4a6d-8e9f-0a1b2c3d4e5f",
+        type: "AgentUpserted",
+        schemaVersion: 1,
+        occurredAt: "2026-10-28T00:00:00.000Z",
+        agentId: "pip",
+        payload: JSON.stringify(before),
+      })}`;
+      yield* hobPolicy;
+      return yield* (yield* EventJournal).readAfter(0);
+    }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
+
+    expect(entries.map((e) => e.payload)).toMatchObject([
+      {
+        _tag: "AgentUpserted",
+        agent: { id: "pip", policy: { ownFolders: [], hiddenSharedFolders: [], overrides: {} } },
+      },
     ]);
   });
 });

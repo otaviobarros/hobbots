@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 import { AgentId } from "./ids.ts";
 import { HobColor, LookSeed } from "./look.ts";
+import { EMPTY_HOB_POLICY, HobPolicy } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { DEFAULT_SIGIL, RoleHat, RoleId, RoleTool } from "./roles.ts";
 import { DEFAULT_LENGTH, DEFAULT_VOICE, ReplyLength, Voice } from "./tone.ts";
@@ -55,11 +56,23 @@ const toneSchemaFields = {
   ),
 };
 
+/**
+ * The hob's own folders and overrides (ADR 014). Hob events journaled before policies existed carry
+ * none, so decoding them fills in the empty policy: the shared folders and the preset as they are.
+ */
+const policySchemaFields = {
+  policy: HobPolicy.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(EMPTY_HOB_POLICY)),
+    Schema.withConstructorDefault(Effect.succeed(EMPTY_HOB_POLICY)),
+  ),
+};
+
 export class Agent extends Schema.Class<Agent>("Agent")({
   id: AgentId,
   name: Schema.String,
   ...roleSchemaFields,
   ...toneSchemaFields,
+  ...policySchemaFields,
   runtime: RuntimeKind,
   /** A model the runtime supports, or null for the runtime's default. */
   model: Schema.NullOr(Schema.String),
@@ -87,6 +100,7 @@ export class AgentConfiguration extends Schema.Class<AgentConfiguration>("AgentC
   version: ConfigVersion,
   ...roleSchemaFields,
   ...toneSchemaFields,
+  ...policySchemaFields,
   model: Schema.NullOr(Schema.String),
   effort: Schema.NullOr(Effort),
   instructions: Schema.String,

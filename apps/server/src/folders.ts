@@ -1,4 +1,4 @@
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { InvalidFolder } from "@hobbots/api";
@@ -6,8 +6,9 @@ import { Effect } from "effect";
 
 /**
  * A folder the user lets hobs work in, as the hub stores it: `~` expanded to the hub user's home,
- * then resolved to a normalized absolute path. Only an existing folder on the hub is accepted,
- * since hobs always work on the hub (ADR 010), whichever device the path was typed on.
+ * then canonical, with every symlink resolved and, on a case-insensitive volume, the case the volume
+ * stores (ADR 014). Only an existing folder on the hub is accepted, since hobs always work on the
+ * hub (ADR 010), whichever device the path was typed on.
  */
 export const checkFolder = (typed: string, home: string = homedir()): Effect.Effect<string, InvalidFolder> => {
   const trimmed = typed.trim();
@@ -19,12 +20,15 @@ export const checkFolder = (typed: string, home: string = homedir()): Effect.Eff
   }
   const folder = resolve(expanded);
   return Effect.tryPromise({
-    try: () => stat(folder),
+    try: async () => {
+      const canonical = await realpath(folder);
+      return { canonical, info: await stat(canonical) };
+    },
     catch: () => new InvalidFolder({ folder: typed, message: `There is no folder at ${folder} on this hub` }),
   }).pipe(
-    Effect.flatMap((info) =>
+    Effect.flatMap(({ canonical, info }) =>
       info.isDirectory()
-        ? Effect.succeed(folder)
+        ? Effect.succeed(canonical)
         : Effect.fail(new InvalidFolder({ folder: typed, message: `${folder} is a file, not a folder` })),
     ),
   );

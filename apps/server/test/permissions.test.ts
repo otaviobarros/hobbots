@@ -1,0 +1,242 @@
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { NodeHttpServer } from "@effect/platform-node";
+import { type Agent, type Message, PRESET_DECISIONS, roleFields } from "@hobbots/domain";
+import { HobbotsRepository, SearchIndex, SetupRepository } from "@hobbots/persistence";
+import { TestDatabase } from "@hobbots/persistence/testing";
+import { makeFakeRuntime, RuntimeAdapter } from "@hobbots/runtimes";
+import { Effect, Layer, Schedule, Stream } from "effect";
+import { HttpRouter } from "effect/http";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { HobAdmission } from "../src/admission.ts";
+import { ChatService } from "../src/chat.ts";
+import { EventBus } from "../src/event-bus.ts";
+import { HobService } from "../src/hobs.ts";
+import { ApiRoutes } from "../src/http.ts";
+import { Installation } from "../src/installation.ts";
+import { HobLifecycle } from "../src/lifecycle.ts";
+
+// Folders are checked on the hub, so the tests make real ones. Canonical, since the hub stores
+// folders with symlinks resolved (on macOS the temp folder is one).
+const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-permissions-")));
+const shared = join(temp, "shared");
+const notes = join(temp, "notes");
+const own = join(temp, "own");
+mkdirSync(shared);
+mkdirSync(notes);
+mkdirSync(own);
+symlinkSync(own, join(temp, "own-link"));
+afterAll(() => rmSync(temp, { recursive: true, force: true }));
+
+const hob = {
+  name: "Wren",
+  ...roleFields("writer"),
+  lookSeed: 7,
+  lookColor: "moss",
+  runtime: "claude-code",
+  model: null,
+  effort: null,
+  instructions: "",
+};
+
+// Each turn waits for this before the runtime replies, so a test can act while a reply is running.
+let replyGate: Promise<void>;
+let handler: (request: Request) => Promise<Response>;
+let dispose: () => Promise<void>;
+
+beforeEach(() => {
+  replyGate = Promise.resolve();
+  const fake = makeFakeRuntime();
+  const runtime = Layer.succeed(RuntimeAdapter, {
+    ...fake,
+    sendPrompt: (request) => {
+      const gate = replyGate;
+      return Stream.fromEffect(Effect.promise(() => gate)).pipe(Stream.drain, Stream.concat(fake.sendPrompt(request)));
+    },
+  });
+  const App = HobLifecycle.layer
+    .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)))
+    .pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer, SearchIndex.layer).pipe(
+            Layer.provideMerge(TestDatabase),
+          ),
+          EventBus.layer,
+          HobAdmission.layer,
+          runtime,
+          Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
+        ),
+      ),
+    );
+  const web = HttpRouter.toWebHandler(
+    ApiRoutes.pipe(Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
+    { disableLogger: true },
+  );
+  handler = (request) => web.handler(request);
+  dispose = web.dispose;
+});
+afterEach(() => dispose());
+
+const request = async (method: string, path: string, body?: unknown) => {
+  const response = await handler(
+    new Request(`http://localhost:4364${path}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+  );
+  const text = await response.text();
+  return { status: response.status, body: text ? JSON.parse(text) : undefined };
+};
+
+const waitFor = (ready: () => Promise<boolean>) =>
+  Effect.runPromise(
+    Effect.tryPromise(ready).pipe(
+      Effect.flatMap((done) => (done ? Effect.void : Effect.fail("waiting"))),
+      Effect.retry(Schedule.spaced("5 millis")),
+    ),
+  );
+
+// A Balanced installation with two shared folders and one hob.
+const newHob = async (): Promise<Agent> => {
+  await request("PATCH", "/api/setup", { safetyPreset: "balanced", approvedFolders: [shared, notes] });
+  return (await request("POST", "/api/agents", hob)).body;
+};
+const permissions = (agent: Agent) => `/api/agents/${agent.id}/permissions`;
+
+describe("a hob's folders", () => {
+  // covers AG-002, AG-004
+  it("[TC-AG-090] starts with the shared folders and the preset, and stores a folder change as a new version", async () => {
+    const agent = await newHob();
+    expect(await request("GET", permissions(agent))).toEqual({
+      status: 200,
+      body: {
+        agentId: agent.id,
+        configVersion: 1,
+        preset: "balanced",
+        sharedFolders: [shared, notes],
+        policy: { ownFolders: [], hiddenSharedFolders: [], overrides: {} },
+        folders: [shared, notes],
+        decisions: PRESET_DECISIONS.balanced,
+      },
+    });
+
+    // Its own folder is stored canonical, through the symlink, and kept once.
+    const changed = await request("PATCH", permissions(agent), {
+      ownFolders: [join(temp, "own-link"), own],
+      hiddenSharedFolders: [notes],
+    });
+    expect(changed).toMatchObject({
+      status: 200,
+      body: {
+        configVersion: 2,
+        policy: { ownFolders: [own], hiddenSharedFolders: [notes], overrides: {} },
+        folders: [shared, own],
+      },
+    });
+    const listed: Array<Agent> = (await request("GET", "/api/agents")).body;
+    expect(listed).toMatchObject([{ id: agent.id, configVersion: 2, policy: changed.body.policy }]);
+
+    // The same folders again change nothing and add no version.
+    const same = await request("PATCH", permissions(agent), { ownFolders: [own] });
+    expect(same.body).toEqual(changed.body);
+
+    // Other edits keep the policy.
+    const renamed = await request("PATCH", `/api/agents/${agent.id}`, { instructions: "Be brief." });
+    expect(renamed.body).toMatchObject({ configVersion: 3, policy: changed.body.policy });
+  });
+
+  // covers AG-004
+  it("[TC-AG-091] refuses a missing folder, an own folder that is already shared and hiding a folder that is not shared", async () => {
+    const agent = await newHob();
+    const missing = await request("PATCH", permissions(agent), { ownFolders: [join(temp, "missing")] });
+    expect(missing).toMatchObject({ status: 400, body: { _tag: "InvalidFolder" } });
+    const alreadyShared = await request("PATCH", permissions(agent), { ownFolders: [shared] });
+    expect(alreadyShared).toMatchObject({ status: 400, body: { _tag: "InvalidFolder", folder: shared } });
+    const notShared = await request("PATCH", permissions(agent), { hiddenSharedFolders: [own] });
+    expect(notShared).toMatchObject({ status: 400, body: { _tag: "InvalidFolder", folder: own } });
+
+    const unknown = await request("PATCH", `/api/agents/${crypto.randomUUID()}/permissions`, { ownFolders: [] });
+    expect(unknown).toMatchObject({ status: 404, body: { _tag: "AgentNotFound" } });
+    expect((await request("GET", permissions(agent))).body).toMatchObject({
+      configVersion: 1,
+      folders: [shared, notes],
+    });
+  });
+
+  // covers AG-002
+  it("[TC-AG-092] finishes a running reply with the configuration it started with when the folders change", async () => {
+    const agent = await newHob();
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+
+    let release = () => {};
+    replyGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await request("POST", `/api/threads/${thread.id}/messages`, { content: "first" });
+    await waitFor(async () => (await messages()).some((m) => m.status === "streaming"));
+
+    const changed = await request("PATCH", permissions(agent), { ownFolders: [own] });
+    expect(changed.body).toMatchObject({ configVersion: 2 });
+    release();
+    await waitFor(async () => (await messages()).every((m) => m.status !== "streaming"));
+    expect((await messages()).map((m) => m.configVersion)).toEqual([null, 1]);
+  });
+});
+
+describe("a hob's overrides", () => {
+  // covers AG-004, PE-001
+  it("[TC-AG-093] narrows the preset, and rejects an override that would widen it and stores nothing", async () => {
+    const agent = await newHob();
+
+    const widening = await request("PATCH", permissions(agent), {
+      overrides: { push: "allow", "delete-files": "allow", "edit-files": "ask" },
+    });
+    expect(widening).toMatchObject({
+      status: 400,
+      body: { _tag: "OverrideWidens", preset: "balanced", operations: ["delete-files", "push"] },
+    });
+    const outside = await request("PATCH", permissions(agent), { overrides: { "outside-folders": "ask" } });
+    expect(outside).toMatchObject({ status: 400, body: { _tag: "OverrideWidens", operations: ["outside-folders"] } });
+    expect((await request("GET", permissions(agent))).body).toMatchObject({
+      configVersion: 1,
+      policy: { overrides: {} },
+    });
+
+    const narrowed = await request("PATCH", permissions(agent), {
+      overrides: { "edit-files": "ask", "use-web": "deny", push: "ask" },
+    });
+    expect(narrowed).toMatchObject({
+      status: 200,
+      body: {
+        configVersion: 2,
+        policy: { overrides: { "edit-files": "ask", "use-web": "deny", push: "ask" } },
+        decisions: { ...PRESET_DECISIONS.balanced, "edit-files": "ask", "use-web": "deny" },
+      },
+    });
+  });
+
+  // covers AG-004, PE-008
+  it("[TC-AG-094] keeps an override narrowing under a stricter preset picked later", async () => {
+    const agent = await newHob();
+    await request("PATCH", permissions(agent), { overrides: { "run-commands": "ask", "use-web": "allow" } });
+    await request("PATCH", "/api/setup", { safetyPreset: "careful" });
+
+    const careful = await request("GET", permissions(agent));
+    // Careful asks before the web, so the stored Allow cannot widen it.
+    expect(careful.body).toMatchObject({
+      preset: "careful",
+      decisions: { ...PRESET_DECISIONS.careful, "use-web": "ask", "run-commands": "ask" },
+    });
+
+    // A change that leaves the overrides alone is still accepted.
+    const folders = await request("PATCH", permissions(agent), { ownFolders: [own] });
+    expect(folders).toMatchObject({ status: 200, body: { configVersion: 3 } });
+    // Saving them again is checked against the preset as it is now.
+    const again = await request("PATCH", permissions(agent), { overrides: { "use-web": "allow" } });
+    expect(again).toMatchObject({ status: 400, body: { _tag: "OverrideWidens", preset: "careful" } });
+  });
+});
