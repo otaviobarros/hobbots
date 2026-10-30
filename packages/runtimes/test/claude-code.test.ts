@@ -347,7 +347,8 @@ describe("a Claude Code turn that fails", () => {
     expect(JSON.stringify(exit)).toContain("Error: model not available");
   });
 
-  it("keeps only the end of a long error output", async () => {
+  // covers CH-004
+  it("[TC-CH-023] keeps only the end of a long error output", async () => {
     const child = spawn("/bin/sh", ["-c", "head -c 5000 /dev/zero | tr '\\0' x >&2; echo >&2; echo the end >&2"], {
       stdio: ["ignore", "ignore", "pipe"],
     });
