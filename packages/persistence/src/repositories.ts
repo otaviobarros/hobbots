@@ -17,10 +17,10 @@ export class HobbotsRepository extends Context.Service<
     readonly listAgentsWithStatus: (statuses: ReadonlyArray<AgentStatus>) => Effect.Effect<ReadonlyArray<Agent>>;
     readonly findAgent: (id: AgentId) => Effect.Effect<Option.Option<Agent>>;
     /**
-     * Moves the hob from one status to another. False, and nothing changed, when its status is no
-     * longer `from` (another change landed first).
+     * Saves the hob's lifecycle fields (status and retirement time) from `next`. False, and nothing
+     * changed, when its stored status is no longer `from` (another change landed first).
      */
-    readonly setAgentStatus: (id: AgentId, from: AgentStatus, to: AgentStatus) => Effect.Effect<boolean>;
+    readonly setAgentStatus: (next: Agent, from: AgentStatus) => Effect.Effect<boolean>;
     /** Inserts the hob and its first configuration unless one with its id exists; true when it was inserted. */
     readonly insertAgent: (agent: Agent) => Effect.Effect<boolean>;
     readonly findAgentConfig: (id: AgentId, version: number) => Effect.Effect<Option.Option<AgentConfiguration>>;
@@ -126,6 +126,7 @@ export class HobbotsRepository extends Context.Service<
             look_color: agent.lookColor,
             config_version: agent.configVersion,
             status: agent.status,
+            retired_at: agent.retiredAt,
             created_at: agent.createdAt,
           })} ON CONFLICT (id) DO NOTHING RETURNING id`;
           if (inserted.length === 0) return false;
@@ -187,8 +188,9 @@ export class HobbotsRepository extends Context.Service<
         listAgentsWithStatus: (statuses) =>
           statuses.length === 0 ? Effect.succeed([]) : listAgentsWithStatus(statuses).pipe(Effect.orDie),
         findAgent: (id) => findAgent(id).pipe(Effect.orDie),
-        setAgentStatus: (id, from, to) =>
-          sql`UPDATE agents SET status = ${to} WHERE id = ${id} AND status = ${from} RETURNING id`.pipe(
+        setAgentStatus: (next, from) =>
+          sql`UPDATE agents SET status = ${next.status}, retired_at = ${next.retiredAt}
+            WHERE id = ${next.id} AND status = ${from} RETURNING id`.pipe(
             Effect.map((rows) => rows.length > 0),
             Effect.orDie,
           ),

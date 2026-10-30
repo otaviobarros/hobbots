@@ -66,17 +66,26 @@ describe("AgentTransitions", () => {
     const paused = AgentTransitions.pause(hob) as Agent;
     expect(paused.status).toBe("paused");
     expect((AgentTransitions.wake(paused) as Agent).status).toBe("active");
-    expect((AgentTransitions.retire(paused) as Agent).status).toBe("retired");
+    expect((AgentTransitions.retire(paused, "2026-10-30T12:00:00.000Z") as Agent).status).toBe("retired");
   });
 
   it("returns the hob unchanged when it is already in the requested state", () => {
     expect(AgentTransitions.wake(hob)).toBe(hob);
-    const retired = AgentTransitions.retire(hob) as Agent;
-    expect(AgentTransitions.retire(retired)).toBe(retired);
+    const retired = AgentTransitions.retire(hob, "2026-10-30T12:00:00.000Z") as Agent;
+    expect(AgentTransitions.retire(retired, "2026-10-31T12:00:00.000Z")).toBe(retired);
+  });
+
+  it("records when a hob retired, and only the first time", () => {
+    expect(hob.retiredAt).toBeNull();
+    const retired = AgentTransitions.retire(hob, "2026-10-30T12:00:00.000Z") as Agent;
+    expect(retired.retiredAt).toBe("2026-10-30T12:00:00.000Z");
+    expect((AgentTransitions.retire(retired, "2026-10-31T12:00:00.000Z") as Agent).retiredAt).toBe(
+      "2026-10-30T12:00:00.000Z",
+    );
   });
 
   it("keeps a retired hob retired", () => {
-    const retired = AgentTransitions.retire(hob) as Agent;
+    const retired = AgentTransitions.retire(hob, "2026-10-30T12:00:00.000Z") as Agent;
     expect(AgentTransitions.pause(retired)).toMatchObject({ _tag: "InvalidAgentTransition", from: "retired" });
     expect(AgentTransitions.wake(retired)).toBeInstanceOf(InvalidAgentTransition);
   });

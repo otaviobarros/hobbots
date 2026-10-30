@@ -185,7 +185,7 @@ describe("HobbotsRepository", () => {
   });
 
   // covers AG-006, DP-003
-  it("[TC-AG-035] stores a hob's lifecycle status, refuses a change from a stale status and lists hobs by status", async () => {
+  it("[TC-AG-035] stores a hob's lifecycle status and retirement time, refuses a change from a stale status and lists hobs by status", async () => {
     const agent = (id: string, status?: "active" | "paused" | "retired") =>
       new Agent({
         id: AgentId.make(id),
@@ -207,9 +207,12 @@ describe("HobbotsRepository", () => {
       yield* repo.insertAgent(agent("a"));
       yield* repo.insertAgent(agent("b", "paused"));
       yield* repo.insertAgent(agent("c"));
-      const retired = yield* repo.setAgentStatus(AgentId.make("c"), "active", "retired");
+      const retired = yield* repo.setAgentStatus(
+        new Agent({ ...agent("c", "retired"), retiredAt: "2026-10-30T12:00:00.000Z" }),
+        "active",
+      );
       // A wake computed from an earlier read of "paused" must not undo the retirement.
-      const staleWake = yield* repo.setAgentStatus(AgentId.make("c"), "paused", "active");
+      const staleWake = yield* repo.setAgentStatus(agent("c", "active"), "paused");
       const ids = (statuses: ReadonlyArray<"active" | "paused" | "retired">) =>
         repo.listAgentsWithStatus(statuses).pipe(Effect.map((agents) => agents.map((a) => [a.id, a.status])));
       return {
@@ -217,6 +220,8 @@ describe("HobbotsRepository", () => {
         staleWake,
         current: yield* ids(["active", "paused"]),
         archived: yield* ids(["retired"]),
+        retiredAt: (yield* repo.listAgentsWithStatus(["retired"]))[0]?.retiredAt,
+        activeRetiredAt: (yield* repo.listAgentsWithStatus(["active"]))[0]?.retiredAt,
         none: yield* ids([]),
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
@@ -227,6 +232,7 @@ describe("HobbotsRepository", () => {
       ["b", "paused"],
     ]);
     expect(result.archived).toEqual([["c", "retired"]]);
+    expect([result.retiredAt, result.activeRetiredAt]).toEqual(["2026-10-30T12:00:00.000Z", null]);
     expect(result.none).toEqual([]);
   });
 });

@@ -23,3 +23,14 @@ export const greeting = (date: Date = new Date()): string => {
   if (hour < 18) return "Good afternoon";
   return "Good evening";
 };
+
+/** A calendar day: "Oct 12", with the year when it is not this year. */
+export const formatDay = (iso: string, now: Date = new Date()): string => {
+  const then = new Date(iso);
+  return then.toLocaleDateString(
+    [],
+    then.getFullYear() === now.getFullYear()
+      ? { month: "short", day: "numeric" }
+      : { month: "short", day: "numeric", year: "numeric" },
+  );
+};

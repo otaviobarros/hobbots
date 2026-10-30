@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatWhen, greeting } from "./time.ts";
+import { formatDay, formatWhen, greeting } from "./time.ts";
 
 describe("formatWhen", () => {
   const now = new Date(2026, 9, 28, 15, 0);
@@ -15,5 +15,13 @@ describe("greeting", () => {
   it("follows the local hour", () => {
     expect(greeting(new Date(2026, 9, 28, 8))).toBe("Good morning");
     expect(greeting(new Date(2026, 9, 28, 21))).toBe("Good evening");
+  });
+});
+
+describe("formatDay", () => {
+  const now = new Date(2026, 9, 28, 15, 0);
+  it("leaves out this year and names another", () => {
+    expect(formatDay(new Date(2026, 9, 12, 9).toISOString(), now)).not.toMatch(/2026/);
+    expect(formatDay(new Date(2025, 8, 30, 9).toISOString(), now)).toMatch(/2025/);
   });
 });

@@ -1,7 +1,7 @@
 import { AgentNotFound, HobUnavailable } from "@hobbots/api";
 import { type Agent, type AgentId, AgentTransitions, InvalidAgentTransition, type RetireWork } from "@hobbots/domain";
 import { HobbotsRepository } from "@hobbots/persistence";
-import { Context, Effect, Layer, Option } from "effect";
+import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { ChatService } from "./chat.ts";
 import { EventBus } from "./event-bus.ts";
@@ -47,7 +47,7 @@ export class HobLifecycle extends Context.Service<
             return yield* new HobUnavailable({ agentId, status: next.from });
           }
           if (next.status === agent.status) return next;
-          if (yield* repo.setAgentStatus(agentId, agent.status, next.status)) {
+          if (yield* repo.setAgentStatus(next, agent.status)) {
             yield* bus.publish({ _tag: "AgentUpserted", agent: next });
             return next;
           }
@@ -63,7 +63,8 @@ export class HobLifecycle extends Context.Service<
         return yield* admission.withHob(
           agentId,
           Effect.gen(function* () {
-            const retired = yield* apply(agentId, AgentTransitions.retire).pipe(
+            const at = DateTime.formatIso(yield* DateTime.now);
+            const retired = yield* apply(agentId, (agent) => AgentTransitions.retire(agent, at)).pipe(
               // Retiring is allowed from every state, so the transition cannot be refused.
               Effect.catchTag("HobUnavailable", Effect.die),
             );

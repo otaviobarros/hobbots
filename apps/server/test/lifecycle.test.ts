@@ -136,6 +136,8 @@ describe("retiring hobs", () => {
 
     const retired = await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "finish" });
     expect(retired).toMatchObject({ status: 200, body: { id: agent.id, status: "retired" } });
+    const retiredAt = (retired.body as { retiredAt: string }).retiredAt;
+    expect(new Date(retiredAt).toISOString()).toBe(retiredAt);
 
     const refused = await request("POST", `/api/threads/${thread.id}/messages`, { content: "again" });
     expect(refused).toMatchObject({ status: 409, body: { _tag: "HobUnavailable", status: "retired" } });
@@ -151,7 +153,8 @@ describe("retiring hobs", () => {
     expect((await messages(thread.id)).map((m) => m.content)).toEqual(["hello", "Echo: hello"]);
     expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toMatchObject([{ id: thread.id }]);
     expect((await request("GET", "/api/agents")).body).toEqual([]);
-    expect((await request("GET", "/api/agents?status=retired")).body).toMatchObject([{ id: agent.id }]);
+    // Archived hobs show when the hob retired; retiring again kept the first time.
+    expect((await request("GET", "/api/agents?status=retired")).body).toMatchObject([{ id: agent.id, retiredAt }]);
     expect((await request("GET", "/api/agents?status=active")).body).toEqual([]);
   });
 

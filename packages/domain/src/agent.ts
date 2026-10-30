@@ -35,6 +35,8 @@ export class Agent extends Schema.Class<Agent>("Agent")({
   lookColor: HobColor,
   /** A new hob starts active. */
   status: AgentStatus.pipe(Schema.withConstructorDefault(Effect.succeed("active" as const))),
+  /** When the hob was retired; null until then, and for hobs retired before this was recorded. */
+  retiredAt: Schema.NullOr(Schema.String).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
   /** The configuration version the fields above belong to. */
   configVersion: ConfigVersion,
   createdAt: Schema.String,
@@ -66,10 +68,16 @@ export class InvalidAgentTransition extends Schema.TaggedError<InvalidAgentTrans
   action: Schema.String,
 }) {}
 
-const move = (agent: Agent, action: string, from: ReadonlyArray<AgentStatus>, to: AgentStatus) => {
+const move = (
+  agent: Agent,
+  action: string,
+  from: ReadonlyArray<AgentStatus>,
+  to: AgentStatus,
+  changes: Partial<Agent> = {},
+) => {
   if (agent.status === to) return agent;
   return from.includes(agent.status)
-    ? new Agent({ ...agent, status: to })
+    ? new Agent({ ...agent, ...changes, status: to })
     : new InvalidAgentTransition({ agentId: agent.id, from: agent.status, action });
 };
 
@@ -80,5 +88,7 @@ const move = (agent: Agent, action: string, from: ReadonlyArray<AgentStatus>, to
 export const AgentTransitions = {
   pause: (agent: Agent): Agent | InvalidAgentTransition => move(agent, "pause", ["active"], "paused"),
   wake: (agent: Agent): Agent | InvalidAgentTransition => move(agent, "wake", ["paused"], "active"),
-  retire: (agent: Agent): Agent | InvalidAgentTransition => move(agent, "retire", ["active", "paused"], "retired"),
+  /** Records `at` (an ISO-8601 time) as when the hob retired. */
+  retire: (agent: Agent, at: string): Agent | InvalidAgentTransition =>
+    move(agent, "retire", ["active", "paused"], "retired", { retiredAt: at }),
 };

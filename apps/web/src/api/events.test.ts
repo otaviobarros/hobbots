@@ -83,6 +83,33 @@ describe("applyEvent", () => {
     expect(client.getQueryData(queryKeys.agents)).toEqual([]);
   });
 
+  it("adds a hob retired elsewhere to loaded Archived hobs, most recently retired first", () => {
+    const client = new QueryClient();
+    const hob = (id: string, retiredAt: string | null) =>
+      new Agent({
+        id: AgentId.make(id),
+        name: id,
+        craft: "Scribe",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 7,
+        lookColor: "moss",
+        configVersion: 1,
+        createdAt: now,
+        status: "retired",
+        retiredAt,
+      });
+    const older = hob("fern", null);
+    const wren = hob("wren", "2026-10-30T12:00:00.000Z");
+    applyEvent(client, { _tag: "AgentUpserted", agent: wren });
+    expect(client.getQueryData(queryKeys.archivedAgents)).toBeUndefined();
+    client.setQueryData(queryKeys.archivedAgents, [older]);
+    applyEvent(client, { _tag: "AgentUpserted", agent: wren });
+    expect(client.getQueryData(queryKeys.archivedAgents)).toEqual([wren, older]);
+  });
+
   it("tracks what the hob is doing from the reply's events", () => {
     const client = new QueryClient();
     const activity = () => client.getQueryData(activityQuery.queryKey)?.[threadId];

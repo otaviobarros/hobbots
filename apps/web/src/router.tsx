@@ -8,16 +8,17 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { keptDraftOrStored } from "./api/first-hob.ts";
-import { agentsQuery, threadsQuery } from "./api/queries.ts";
+import { agentsQuery, archivedAgentsQuery, threadsQuery } from "./api/queries.ts";
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
+import { ArchivedHobView } from "./components/archived-hobs.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
 import { OnboardingFirstHob } from "./components/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
-import { InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
+import { ArchivedHobsPage, InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
 import { Summon } from "./components/summon.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
@@ -166,6 +167,45 @@ const inboxRoute = createRoute({ getParentRoute: () => shellRoute, path: "inbox"
 const usageRoute = createRoute({ getParentRoute: () => shellRoute, path: "usage", component: UsagePage });
 const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "settings", component: SettingsPage });
 
+// Settings › Archived hobs: retired hobs, whose threads open read-only (AG-006).
+const archivedRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "settings/archived",
+  component: ArchivedHobsPage,
+});
+
+// A retired hob opens on its most recent thread.
+const archivedHobRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "settings/archived/$hobId",
+  beforeLoad: async ({ context, params }) => {
+    const hobId = AgentId.make(params.hobId);
+    const [threads, archived] = await Promise.all([
+      context.queryClient.ensureQueryData(threadsQuery(hobId)).catch(() => []),
+      context.queryClient.ensureQueryData(archivedAgentsQuery),
+    ]);
+    // Only a retired hob's threads open here; any other id shows that it is not archived.
+    if (!archived.some((hob) => hob.id === hobId)) return;
+    const target = threads[0];
+    if (target) {
+      throw redirect({ to: "/settings/archived/$hobId/threads/$threadId", params: { hobId, threadId: target.id } });
+    }
+  },
+  component: function ArchivedHobPage() {
+    const params = archivedHobRoute.useParams();
+    return <ArchivedHobView hobId={AgentId.make(params.hobId)} />;
+  },
+});
+
+const archivedThreadRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "settings/archived/$hobId/threads/$threadId",
+  component: function ArchivedThreadPage() {
+    const params = archivedThreadRoute.useParams();
+    return <ArchivedHobView hobId={AgentId.make(params.hobId)} threadId={ThreadId.make(params.threadId)} />;
+  },
+});
+
 const routeTree = rootRoute.addChildren([
   welcomeRoute,
   setupWhereRoute,
@@ -184,6 +224,9 @@ const routeTree = rootRoute.addChildren([
     inboxRoute,
     usageRoute,
     settingsRoute,
+    archivedRoute,
+    archivedHobRoute,
+    archivedThreadRoute,
   ]),
 ]);
 

@@ -4,7 +4,7 @@ import { Schema } from "effect";
 import { useEffect, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
 import { API_URL } from "./client.ts";
-import { queryKeys, sortThreads, upsertById } from "./queries.ts";
+import { queryKeys, sortArchived, sortThreads, upsertById } from "./queries.ts";
 
 const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(HobbotsEvent));
 
@@ -20,6 +20,12 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
             ? old.filter((agent) => agent.id !== event.agent.id)
             : upsertById(old, event.agent),
       );
+      // A hob retired elsewhere joins Archived hobs.
+      if (event.agent.status === "retired") {
+        queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.archivedAgents, (old) =>
+          old === undefined ? old : sortArchived(upsertById(old, event.agent)),
+        );
+      }
       return;
     case "ThreadUpserted":
       queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(event.thread.agentId), (old) =>
