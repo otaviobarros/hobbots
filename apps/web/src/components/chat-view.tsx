@@ -18,7 +18,7 @@ import {
 import { sendErrorText } from "../lib/send-error.ts";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
-import { MessageRow, QueuedRow } from "./message-row.tsx";
+import { MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
 import { RuntimeChip } from "./runtime.tsx";
 
 const IDEAS = ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"];
@@ -27,6 +27,7 @@ const IDEAS = ["Summarize an article I paste", "Help me plan my week", "Explain 
 export function ChatView({
   hobId,
   threadId,
+  focusMessageId,
   navOpen,
   panelOpen,
   onShowNav,
@@ -34,6 +35,7 @@ export function ChatView({
 }: {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
+  focusMessageId?: string | undefined;
   navOpen: boolean;
   panelOpen: boolean;
   onShowNav: () => void;
@@ -66,9 +68,21 @@ export function ChatView({
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
 
+  // A search match opens with its message in view and holds it there while a reply streams, until
+  // the user scrolls back down to the end or sends a message.
+  const [released, setReleased] = useState<string>();
+  const holding = focusMessageId !== undefined && released !== focusMessageId;
+  const follow = () => setReleased(focusMessageId);
+
   useEffect(() => {
-    if (lastContent !== undefined) bottom.current?.scrollIntoView({ block: "end" });
-  }, [lastContent]);
+    if (lastContent !== undefined && !holding) bottom.current?.scrollIntoView({ block: "end" });
+  }, [lastContent, holding]);
+
+  const focusLoaded = messages.data?.some((m) => m.id === focusMessageId) ?? false;
+  useEffect(() => {
+    if (focusLoaded && focusMessageId)
+      document.getElementById(messageElementId(focusMessageId))?.scrollIntoView({ block: "center" });
+  }, [focusLoaded, focusMessageId]);
 
   const current = hob.data;
   if (!current) return <main className="flex-1" />;
@@ -77,6 +91,7 @@ export function ChatView({
   const paused = current.status === "paused";
   const title = thread.data?.title ?? "New thread";
   const sendDraft = (content: string) => {
+    follow();
     if (threadId) {
       send.mutate(content, { onSuccess: () => setDraft("") });
       return;
@@ -136,7 +151,13 @@ export function ChatView({
         </Button>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-[18px]">
+      <div
+        onScroll={(event) => {
+          const view = event.currentTarget;
+          if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
+        }}
+        className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-[18px]"
+      >
         {threadId && messages.isPending && <p className="text-label">Loading messages…</p>}
         {empty && !messages.isLoading && (
           <div className="m-auto flex max-w-[420px] animate-hb-in flex-col items-center gap-3 text-center">
@@ -159,7 +180,7 @@ export function ChatView({
           </div>
         )}
         {transcript?.map((message) => (
-          <MessageRow key={message.id} message={message} hob={current} />
+          <MessageRow key={message.id} message={message} hob={current} focused={message.id === focusMessageId} />
         ))}
         {queued.map((message) => (
           <QueuedRow

@@ -18,7 +18,16 @@ const usePersistentToggle = (key: string) => {
 };
 
 /** The chat workspace: hob list, chat, and the Quest panel. Both side panels collapse. */
-export function HobsLayout({ hobId, threadId }: { hobId: AgentId; threadId?: ThreadId | undefined }) {
+export function HobsLayout({
+  hobId,
+  threadId,
+  focusMessageId,
+}: {
+  hobId: AgentId;
+  threadId?: ThreadId | undefined;
+  /** A message to scroll to and mark, such as a search match. */
+  focusMessageId?: string | undefined;
+}) {
   const [navOpen, setNavOpen] = usePersistentToggle("layout.navOpen");
   const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
   useThreadKeys(hobId, threadId);
@@ -30,6 +39,7 @@ export function HobsLayout({ hobId, threadId }: { hobId: AgentId; threadId?: Thr
         key={threadId ?? `new-${hobId}`}
         hobId={hobId}
         threadId={threadId}
+        focusMessageId={focusMessageId}
         navOpen={navOpen}
         panelOpen={panelOpen}
         onShowNav={() => setNavOpen(true)}

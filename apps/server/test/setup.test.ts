@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
-import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
+import { HobbotsRepository, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Layer } from "effect";
@@ -30,7 +30,7 @@ let dispose: () => Promise<void>;
 
 // A fresh database per test: the whole API over the test database, without seeded hobs.
 beforeEach(() => {
-  const Persistence = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(
+  const Persistence = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer, SearchIndex.layer).pipe(
     Layer.provideMerge(TestDatabase),
   );
   const App = HobLifecycle.layer

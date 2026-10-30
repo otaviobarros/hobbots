@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
-import { HobbotsRepository, SetupRepository, SqliteLive } from "@hobbots/persistence";
+import { HobbotsRepository, SearchIndex, SetupRepository, SqliteLive } from "@hobbots/persistence";
 import { ClaudeCodeLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
@@ -31,9 +31,13 @@ const ServerLive = Layer.unwrap(
     });
 
     // New installations start without hobs; the user summons the first one during setup.
-    const Persistence = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(
-      Layer.provideMerge(SqliteLive(join(config.dataDir, "hobbots.sqlite"))),
-    );
+    const database = join(config.dataDir, "hobbots.sqlite");
+    // Search reads the same file from a worker thread, so a long search never blocks the server.
+    const Persistence = Layer.mergeAll(
+      HobbotsRepository.layer,
+      SetupRepository.layer,
+      SearchIndex.sqliteWorker(database),
+    ).pipe(Layer.provideMerge(SqliteLive(database)));
     const Runtime =
       config.runtime === "fake"
         ? FakeRuntimeLayer({ delay: "40 millis", stopDelay: "600 millis" })

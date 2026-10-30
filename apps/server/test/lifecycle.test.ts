@@ -1,6 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import { type Agent, type Message, roleFields } from "@hobbots/domain";
-import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
+import { HobbotsRepository, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule } from "effect";
@@ -34,7 +34,9 @@ beforeEach(() => {
     Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)),
     Layer.provideMerge(
       Layer.mergeAll(
-        Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(Layer.provideMerge(TestDatabase)),
+        Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer, SearchIndex.layer).pipe(
+          Layer.provideMerge(TestDatabase),
+        ),
         EventBus.layer,
         HobAdmission.layer,
         FakeRuntimeLayer({ delay: "40 millis" }),

@@ -112,8 +112,8 @@ test("[TC-UX-002] ⌘K opens a hob's chat from any page", async ({ page }) => {
   await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
 
   await page.keyboard.press("ControlOrMeta+k");
-  const finder = page.getByRole("dialog", { name: "Jump to a hob" });
-  await finder.getByRole("combobox", { name: "Find a hob by name or role" }).fill("wick");
+  const finder = page.getByRole("dialog", { name: "Jump anywhere" });
+  await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("wick");
   await expect(finder.getByRole("option")).toHaveCount(1);
   await page.keyboard.press("Enter");
 
@@ -128,7 +128,7 @@ test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", asy
   await expect(page.getByRole("region", { name: "All hobs" })).toBeVisible();
 
   await page.keyboard.press("ControlOrMeta+k");
-  const finder = page.getByRole("dialog", { name: "Jump to a hob" });
+  const finder = page.getByRole("dialog", { name: "Jump anywhere" });
   await expect(finder.getByRole("option")).toHaveCount(20);
   const chosen = finder.getByRole("option", { selected: true });
   await expect(chosen).toBeInViewport();
@@ -144,7 +144,7 @@ test("[TC-UX-003] the finder keeps the hob chosen with the arrows in sight", asy
   await expect(chosen).toBeInViewport();
 
   await page.keyboard.press("ArrowUp");
-  const hobId = (await chosen.getAttribute("id"))?.replace("hob-jump-", "");
+  const hobId = (await chosen.getAttribute("id"))?.replace("hob-jump-hob-", "");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`#/hobs/${hobId}/new$`));
 });

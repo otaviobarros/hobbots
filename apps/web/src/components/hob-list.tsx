@@ -9,8 +9,9 @@ import { useActivity } from "../api/activity.ts";
 import { agentsQuery, threadsQuery } from "../api/queries.ts";
 import { formatWhen } from "../lib/time.ts";
 import { HobSprite, hobState, stateLabel } from "./hob-sprite.tsx";
+import { SearchResults } from "./search-results.tsx";
 
-/** Left panel: search, each hob with its threads, Rooms (later) and Summon. */
+/** Left panel: search, each hob with its threads, Rooms (later) and Summon. A search shows its results instead of the hobs. */
 export function HobList({
   hobId,
   threadId,
@@ -34,8 +35,8 @@ export function HobList({
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search hobs and threads"
-          aria-label="Search hobs and threads"
+          placeholder="Search hobs, threads, messages"
+          aria-label="Search hobs, threads and messages"
           className="min-w-0 flex-1 border-2 border-control bg-deep px-[9px] py-[7px] text-sm text-text placeholder:text-label"
         />
         <Button variant="icon" size="icon" onClick={onHide} aria-label="Hide hob list" title="Hide hob list">
@@ -43,20 +44,18 @@ export function HobList({
         </Button>
       </div>
 
-      <div className="flex min-h-0 flex-col gap-px overflow-y-auto">
-        <span className="lbl px-2 pb-1.5 text-label">{searching ? "Results" : "Hobs"}</span>
-        {agents.isPending && <p className="px-2 text-sm text-label">Loading hobs…</p>}
-        {agents.isError && <p className="px-2 text-sm text-rose">Could not load your hobs.</p>}
-        {agents.data?.map((hob) => (
-          <HobEntry
-            key={hob.id}
-            hob={hob}
-            open={searching || hob.id === hobId}
-            threadId={threadId}
-            query={searching ? query.trim().toLowerCase() : null}
-          />
-        ))}
-      </div>
+      {searching ? (
+        <SearchResults query={query} onOpen={() => setQuery("")} />
+      ) : (
+        <div className="flex min-h-0 flex-col gap-px overflow-y-auto">
+          <span className="lbl px-2 pb-1.5 text-label">Hobs</span>
+          {agents.isPending && <p className="px-2 text-sm text-label">Loading hobs…</p>}
+          {agents.isError && <p className="px-2 text-sm text-rose">Could not load your hobs.</p>}
+          {agents.data?.map((hob) => (
+            <HobEntry key={hob.id} hob={hob} open={hob.id === hobId} threadId={threadId} />
+          ))}
+        </div>
+      )}
 
       <div className="mt-auto flex flex-col gap-2">
         <div className="flex items-center gap-2 border-2 border-dashed border-control px-2.5 py-2">
@@ -66,30 +65,16 @@ export function HobList({
         <Button asChild>
           <Link to="/summon">+ Summon a hob</Link>
         </Button>
-        <span className="text-center text-xs text-label">⌥↑ ⌥↓ switch threads</span>
+        <span className="text-center text-xs text-label">⌘K jump anywhere · ⌥↑ ⌥↓ switch threads</span>
       </div>
     </nav>
   );
 }
 
-function HobEntry({
-  hob,
-  open,
-  threadId,
-  query,
-}: {
-  hob: Agent;
-  open: boolean;
-  threadId?: ThreadId | undefined;
-  query: string | null;
-}) {
+function HobEntry({ hob, open, threadId }: { hob: Agent; open: boolean; threadId?: ThreadId | undefined }) {
   const threads = useQuery(threadsQuery(hob.id));
   const activity = useActivity();
   const state = hobState(hob, threads.data, activity);
-  const matchesHob =
-    query === null || hob.name.toLowerCase().includes(query) || hob.roleTitle.toLowerCase().includes(query);
-  const visible = query === null || matchesHob ? threads.data : threads.data?.filter((t) => matches(t, query));
-  if (query !== null && !matchesHob && !visible?.length) return null;
   const count = threads.data?.length ?? 0;
 
   return (
@@ -100,7 +85,7 @@ function HobEntry({
         aria-expanded={open}
         className={cn(
           "hop-on-hover cut flex w-full items-center gap-2.5 px-2 py-[7px] text-text no-underline hover:bg-hover hover:text-text",
-          open && query === null && "bg-line",
+          open && "bg-line",
         )}
       >
         <span className="bg-line p-0.5">
@@ -121,7 +106,7 @@ function HobEntry({
       </Link>
       {open && (
         <div className="flex animate-hb-in flex-col pt-0.5 pb-1.5">
-          {visible?.map((thread) => (
+          {threads.data?.map((thread) => (
             <ThreadLink
               key={thread.id}
               hobId={hob.id}
@@ -130,22 +115,18 @@ function HobEntry({
               live={!!activity[thread.id]}
             />
           ))}
-          {query === null && (
-            <Link
-              to="/hobs/$hobId/new"
-              params={{ hobId: hob.id }}
-              className="flex w-full items-center py-[7px] pr-2.5 pl-[34px] text-sm text-lantern no-underline hover:bg-hover"
-            >
-              + New thread
-            </Link>
-          )}
+          <Link
+            to="/hobs/$hobId/new"
+            params={{ hobId: hob.id }}
+            className="flex w-full items-center py-[7px] pr-2.5 pl-[34px] text-sm text-lantern no-underline hover:bg-hover"
+          >
+            + New thread
+          </Link>
         </div>
       )}
     </div>
   );
 }
-
-const matches = (thread: Thread, query: string) => thread.title.toLowerCase().includes(query);
 
 function ThreadLink({
   hobId,
