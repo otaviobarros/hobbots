@@ -22,6 +22,7 @@ import {
   rollSeed,
   sampleChores,
   settleBrain,
+  settleSummonDraft,
   submitDraft,
 } from "./first-hob.ts";
 
@@ -215,5 +216,24 @@ describe("the kept first-hob draft", () => {
     keepSummonDraft(null);
     expect(keptSummonDraft()).toBeNull();
     expect(keptDraftOrStored()).toMatchObject({ name: "Pip" });
+  });
+
+  it("forgets the summoned hob's draft once its request settles", () => {
+    const sent = submitDraft(draft({ name: "Moss" }));
+    keepSummonDraft(sent);
+    settleSummonDraft(sent.id, null);
+    expect(keptSummonDraft()).toBeNull();
+  });
+
+  it("leaves a newer draft alone when an earlier summon settles late", () => {
+    const sent = submitDraft(draft({ name: "Moss" }));
+    keepSummonDraft(sent);
+    // The user reopened Summon after Moss joined the list and started on the next hob.
+    const next = draft({ id: "00000000-0000-4000-8000-000000000002", name: "Quill" });
+    keepSummonDraft(next);
+    settleSummonDraft(sent.id, null);
+    expect(keptSummonDraft()).toMatchObject({ id: next.id, name: "Quill" });
+    settleSummonDraft(sent.id, reopenDraft(sent));
+    expect(keptSummonDraft()).toMatchObject({ id: next.id, name: "Quill" });
   });
 });

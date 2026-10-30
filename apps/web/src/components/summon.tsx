@@ -15,6 +15,7 @@ import {
   rollLook,
   rollName,
   settleBrain,
+  settleSummonDraft,
   submitDraft,
 } from "../api/first-hob.ts";
 import { agentsQuery, modelsQuery, runtimesQuery, useCreateHob } from "../api/queries.ts";
@@ -113,14 +114,15 @@ export function Summon() {
     setDraft(sent);
     try {
       const made = await create.mutateAsync(sent.submitted);
-      // The hob exists, so the next Summon starts fresh, even when the user already left.
-      keepSummonDraft(null);
+      // The hob exists, so the next Summon starts fresh, even when the user already left. A newer
+      // draft started meanwhile belongs to another hob and stays.
+      settleSummonDraft(sent.id, null);
       if (!left.current) void navigate({ to: "/hobs/$hobId/new", params: { hobId: made.id }, replace: true });
     } catch (error) {
       if (error instanceof ApiError && error.tag === "InvalidHob") {
         const reopened = reopenDraft(sent);
         setDraft(reopened);
-        keepSummonDraft(reopened);
+        settleSummonDraft(sent.id, reopened);
       }
     }
   };

@@ -275,15 +275,24 @@ export const reopenDraft = <D extends FirstHobDraft>(
 const draftKeeper = (key: string) => {
   // Undefined means "not set in this window".
   let kept: Partial<FirstHobDraft> | null | undefined;
+  const read = (): Partial<FirstHobDraft> | null =>
+    kept !== undefined ? kept : readStored<Partial<FirstHobDraft> | null>(key, null);
+  const keep = (draft: FirstHobDraft | null) => {
+    kept = draft;
+    writeStored(key, draft);
+  };
   return {
     /** Keeps the draft, or forgets it with null once the hob exists. */
-    keep: (draft: FirstHobDraft | null) => {
-      kept = draft;
-      writeStored(key, draft);
-    },
+    keep,
     /** The draft kept in this window, else the one browser storage remembers, else null. */
-    kept: (): Partial<FirstHobDraft> | null =>
-      kept !== undefined ? kept : readStored<Partial<FirstHobDraft> | null>(key, null),
+    kept: read,
+    /**
+     * Replaces the draft only while it is still the one sent under `id`. A request that settles
+     * after the user started another draft leaves that newer draft alone.
+     */
+    settle: (id: string, next: FirstHobDraft | null) => {
+      if (read()?.id === id) keep(next);
+    },
   };
 };
 
@@ -300,6 +309,7 @@ export const SUMMON_DRAFT_KEY = "summon.draft";
 const summoning = draftKeeper(SUMMON_DRAFT_KEY);
 export const keepSummonDraft = summoning.keep;
 export const keptSummonDraft = summoning.kept;
+export const settleSummonDraft = summoning.settle;
 
 /** The model and effort the hob thinks with, such as "Claude · Sonnet · medium effort". */
 export const thinksWith = (draft: FirstHobDraft, model: RuntimeModel | undefined): string =>
