@@ -1,7 +1,7 @@
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { migrations } from "../src/index.ts";
+import { EventJournal, migrations } from "../src/index.ts";
 import hobBrain from "../src/migrations/0005_hob_brain.ts";
 import hobConfigVersions from "../src/migrations/0007_hob_config_versions.ts";
 import hobStatus from "../src/migrations/0008_hob_status.ts";
@@ -398,5 +398,53 @@ describe("0014_hob_tone", () => {
 
     expect(result.agents).toEqual([{ voice: "default", length: "balanced" }]);
     expect(result.versions).toEqual([{ voice: "default", length: "balanced" }]);
+  });
+
+  // covers DP-003
+  it("[TC-DP-032] still reads a hob event journaled before tone existed, with the default tone", async () => {
+    // The AgentUpserted payload as the hub journaled it before 0014, with no voice or length.
+    const before = {
+      _tag: "AgentUpserted",
+      agent: {
+        id: "pip",
+        name: "Pip",
+        role: "writer",
+        roleTitle: "Writer",
+        sigil: "writer",
+        hat: null,
+        tool: null,
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        status: "active",
+        retiredAt: null,
+        configVersion: 1,
+        createdAt: "2026-10-28T00:00:00.000Z",
+        revision: 1,
+      },
+    };
+    const database = TestDatabaseAt(migrationsBefore("0014"));
+    const entries = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;
+      yield* sql`INSERT INTO event_journal ${sql.insert({
+        sequence: 1,
+        id: "8a1f6c2e-3b4d-4e5f-9a6b-7c8d9e0f1a2b",
+        type: "AgentUpserted",
+        schemaVersion: 1,
+        occurredAt: "2026-10-28T00:00:00.000Z",
+        agentId: "pip",
+        payload: JSON.stringify(before),
+      })}`;
+      yield* hobTone;
+      return yield* (yield* EventJournal).readAfter(0);
+    }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
+
+    expect(entries.map((e) => e.payload)).toMatchObject([
+      { _tag: "AgentUpserted", agent: { id: "pip", voice: "default", length: "balanced" } },
+    ]);
   });
 });

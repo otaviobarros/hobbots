@@ -40,10 +40,19 @@ const roleSchemaFields = {
   tool: Schema.NullOr(RoleTool).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
 };
 
-/** How a hob talks; the defaults add nothing to what the runtime is told. */
+/**
+ * How a hob talks; the defaults add nothing to what the runtime is told. Hob events journaled
+ * before tone existed carry neither field, so decoding them fills in the defaults (ADR 013).
+ */
 const toneSchemaFields = {
-  voice: Voice.pipe(Schema.withConstructorDefault(Effect.succeed(DEFAULT_VOICE))),
-  length: ReplyLength.pipe(Schema.withConstructorDefault(Effect.succeed(DEFAULT_LENGTH))),
+  voice: Voice.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(DEFAULT_VOICE)),
+    Schema.withConstructorDefault(Effect.succeed(DEFAULT_VOICE)),
+  ),
+  length: ReplyLength.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(DEFAULT_LENGTH)),
+    Schema.withConstructorDefault(Effect.succeed(DEFAULT_LENGTH)),
+  ),
 };
 
 export class Agent extends Schema.Class<Agent>("Agent")({
