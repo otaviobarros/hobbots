@@ -345,6 +345,42 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * One scrollbar for every panel: a square thumb inset in a 10px gutter, brightening on hover and
+ * while dragged. Chromium ignores the ::-webkit-scrollbar rules once scrollbar-color is set, so the
+ * standard properties are left to browsers without them, such as Firefox.
+ */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-line-2);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-control);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--color-label);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-color: var(--color-line-2) transparent;
+    scrollbar-width: thin;
+  }
+}
+
 /* Base layer, so utility classes on a link still win. */
 @layer base {
   a {
