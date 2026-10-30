@@ -1,6 +1,6 @@
 # API, MCP and real-time events
 
-**Decided:** Effect v4 typed HTTP API, schemas/typed errors, persisted events delivered with Effect Stream/SSE, and scoped MCP agent tools. Exact endpoints and payload schemas below are design contracts to finalize, not implemented APIs.
+**Decided:** Effect v4 typed HTTP API, schemas/typed errors, persisted events delivered with Effect Stream/SSE, and scoped MCP agent tools. The event envelope, journal and reconnect protocol follow [ADR 013](../decisions/013-event-journal.md); other endpoints and payload schemas below are design contracts to finalize, not implemented APIs.
 
 The browser and Electron submit commands to the same application services. Command areas include agent configuration, threads/prompts, Quests/tasks/delegations, inbox messages/acknowledgements, cancellations, approvals, executor registration and authorized artifact inspection. HTTP handlers validate input and identity; domain services validate authority and transitions.
 
@@ -8,15 +8,17 @@ Hobbots MCP exposes only permitted agent coordination capabilities: delegate, in
 
 ## Event envelope
 
-Fields: event ID, schema version, durable sequence/cursor, timestamp, source, type, correlation identifiers (agent, thread, Quest, task, delegation, attempt, executor and runtime session as relevant), payload and causation/reference IDs. Validate inputs at boundaries; redact secrets before persistence.
+**Decided** ([ADR 013](../decisions/013-event-journal.md)). Every journaled event has an event ID, a gap-free per-installation `sequence` (the cursor), a per-type `schemaVersion`, `type`, `occurredAt`, correlation IDs (agent, thread, message, and later Quest, task, delegation, attempt, executor and runtime session as relevant), a `causationId` and a `HobbotsEvent` payload. The event is written in the same transaction as the change it describes. Validate inputs at boundaries; redact secrets before persistence.
 
-Event families cover agent/thread/message creation and streaming; Quest/task lifecycle; delegation request/acceptance/message/result; execution start/output/outcome; tool start/output/completion; approval request/resolution; executor connect/disconnect. Inbox acknowledgement/consumption and responsibility closure must also be observable. Exact names are drafts and versioned before implementation.
+Event families cover agent/thread/message creation and streaming; turn stop and message queueing; Quest/task lifecycle; delegation request/acceptance/message/result; execution start/output/outcome; tool start/output/completion; approval request/resolution; executor connect/disconnect. Inbox acknowledgement/consumption and responsibility closure must also be observable. Names beyond those in ADR 013 are drafts and versioned before implementation.
+
+`MessageDelta` is the only transient event: it is not journaled, has no cursor, and carries the text offset it starts at so clients apply it idempotently. Streamed text is rebuilt on resume from the message row, which is checkpointed at most once a second while a reply streams.
 
 ## Reconnect protocol
 
-Load an authorized snapshot and its matching cursor, then replay subsequent persisted events. Make the snapshot/stream handoff gap-free. Repeated events and message deltas are deduplicated by stable identity/sequence. A cursor outside retention triggers explicit snapshot refresh. Only events authorized for that client are streamed; keep secrets and inaccessible artifact content out of events.
+Journaled events are SSE frames whose `id` is the cursor; transient frames carry no `id`. A client resumes with `Last-Event-ID` (or `?after=` on a first connection). Every connection starts with a `Ready` frame: resumed connections replay every entry after the cursor in sequence order, then send the current text of each streaming reply, then continue live without a gap. A missing, foreign-epoch or expired cursor gets `resumed: false`, and the client refetches its queries as the snapshot. A fresh `Ready` starts a new sync generation: the client discards earlier responses, revisions and tombstones and refetches. Within a generation every entity carries a `revision` (the sequence of its last change); a query response replaces its query's membership and is overlaid with the newer upserts and tombstones received since the generation began, so neither a delayed response nor a missed deletion leaves stale state. Journal entries are kept for 7 days and at least the latest 10,000. Only events authorized for that client are streamed; keep secrets and inaccessible artifact content out of events.
 
-Typed domain failures include runtime unavailable, permission denied, invalid transition, stale version, timeout, executor disconnected and uncertain external outcome. Normalize useful failure categories without erasing vendor evidence. Bound stream buffers and slow-client behavior; disconnecting an observer does not cancel work.
+Typed domain failures include runtime unavailable, permission denied, invalid transition, stale version, timeout, executor disconnected and uncertain external outcome. Normalize useful failure categories without erasing vendor evidence. Each connection buffers at most 1,000 frames; a client that falls further behind is disconnected and resumes from its cursor. Disconnecting an observer does not cancel work.
 
 SSE is server-to-client observation. Commands and human approval decisions use authenticated request paths. Decide cookie/session strategy, CSRF/origin rules and executor transport contracts before network-enabled implementation.
 

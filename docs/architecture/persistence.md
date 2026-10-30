@@ -4,7 +4,7 @@
 
 Persist agents/configuration versions, threads/messages/session bindings, Quests/tasks/dependencies/delegations, attempts, inbox/delivery/processing state, responsibilities, approvals/policy versions, executor identity/health, artifact metadata and event sequences. Store large artifacts outside relational rows with authorized stable references as appropriate; exact remote object storage is not locked.
 
-Use validated current-state projections plus an append-only event journal. This does not require full event sourcing for every entity. Update authoritative state, event and outgoing obligations in one transaction where consistency demands it. Notify in-process subscribers and SSE clients after commit. An outbox or equivalent durable mechanism repairs a crash between commit and dispatch.
+Use validated current-state projections plus an append-only event journal ([ADR 013](../decisions/013-event-journal.md)). This does not require full event sourcing for every entity. Each state change appends its events to the journal in the same transaction, with a gap-free sequence from a counter row, so the journal is also the outbox for clients. Notify in-process subscribers and SSE clients after commit; the journal, not the bus, defines order.
 
 Use unique idempotency keys for commands and message/effect handling. Enforce expected versions for competing transitions. Claims have owner, expiry and fencing/version semantics. Reclaim abandoned work without allowing an older worker to overwrite a newer result. Ordering is per documented durable stream/aggregate; do not infer global causality from timestamps alone.
 
@@ -12,4 +12,4 @@ Runtime tool side effects are not inside a SQL transaction. Record intent and re
 
 Back up relational state and artifact storage consistently. Define migration, retention, redaction and restore policy before release. Each installation has one database; there are no replicas to synchronize. Test duplicate handling, crash boundaries, leases, migrations and restore against SQLite, and against PostgreSQL before offering it.
 
-Storage must not silently discard events needed for live cursors or open responsibilities. Define cursor expiry and snapshot rebuild before journal compaction. Exclude secrets from payloads and restrict artifact access through executor/workspace policy.
+The journal keeps 7 days and at least the latest 10,000 entries; an older cursor gets an explicit snapshot refresh. It serves client resume only: durable work keeps its own records, so compaction never discards what open responsibilities need. Exclude secrets from payloads and restrict artifact access through executor/workspace policy.
