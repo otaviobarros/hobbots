@@ -40,6 +40,20 @@ export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload
   };
 };
 
+/**
+ * Moves a draft onto a newer baseline, such as a version saved from another window or the answer
+ * to a save. Each part the user left as it was in the old baseline takes the new value; each part
+ * they changed keeps their edit. The model and effort move together, as the form picks them.
+ */
+export const rebaseDraft = (from: ProfileDraft, to: ProfileDraft, draft: ProfileDraft): ProfileDraft => {
+  const brainEdited = draft.model !== from.model || draft.effort !== from.effort;
+  return {
+    instructions: draft.instructions === from.instructions ? to.instructions : draft.instructions,
+    model: brainEdited ? draft.model : to.model,
+    effort: brainEdited ? draft.effort : to.effort,
+  };
+};
+
 /** Whether the draft differs from where the form started. */
 export const isDirty = (base: ProfileDraft, draft: ProfileDraft): boolean =>
   base.instructions !== draft.instructions || base.model !== draft.model || base.effort !== draft.effort;

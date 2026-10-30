@@ -1,6 +1,6 @@
 import { Agent, AgentId, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { brainLine, isDirty, profileDraft, profileEdit, retiredSummary } from "./profile.ts";
+import { brainLine, isDirty, profileDraft, profileEdit, rebaseDraft, retiredSummary } from "./profile.ts";
 
 const model = (id: string, displayName: string, efforts: RuntimeModel["efforts"]) =>
   new RuntimeModel({ id, displayName, description: "", efforts });
@@ -59,6 +59,29 @@ describe("hob profile", () => {
 
     expect(profileEdit(pip, { ...draft, model: "opus", effort: "high" })).toEqual({ model: "opus", effort: "high" });
     expect(profileEdit(hob({ model: "opus" }), { ...draft, model: "default" })).toEqual({ model: null });
+  });
+
+  it("keeps a change saved elsewhere that the user did not touch, and sends only the user's edit", () => {
+    const before = hob();
+    const base = profileDraft(before, offered);
+    const draft = { ...base, instructions: "Write long answers." };
+    // Another window switches the model while this one edits the instructions.
+    const after = hob({ model: "opus", effort: "high", configVersion: 2 });
+    const rebased = rebaseDraft(base, profileDraft(after, offered), draft);
+    expect(rebased).toEqual({ instructions: "Write long answers.", model: "opus", effort: "high" });
+    expect(profileEdit(after, rebased)).toEqual({ instructions: "Write long answers." });
+  });
+
+  it("keeps what the user typed after pressing Save once the save answers", () => {
+    const before = hob();
+    const sent = { ...profileDraft(before, offered), instructions: "Write long answers." };
+    const typing = { ...sent, instructions: "Write long answers. In French." };
+    const saved = hob({ instructions: "Write long answers.", configVersion: 2 });
+    const fresh = profileDraft(saved, offered);
+    const rebased = rebaseDraft(sent, fresh, typing);
+    expect(rebased.instructions).toBe("Write long answers. In French.");
+    expect(isDirty(fresh, rebased)).toBe(true);
+    expect(rebaseDraft(sent, fresh, sent)).toEqual(fresh);
   });
 
   it("names the brain by the runtime's display names", () => {

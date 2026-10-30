@@ -6,7 +6,6 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useId, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { ApiError } from "../api/client.ts";
-import { effortWords } from "../api/first-hob.ts";
 import {
   brainLine,
   INSTRUCTIONS_MAX,
@@ -15,6 +14,7 @@ import {
   profileDraft,
   profileEdit,
   RETIRE_OPTIONS,
+  rebaseDraft,
   retiredSummary,
   summonedLine,
 } from "../api/profile.ts";
@@ -157,7 +157,10 @@ function Profile({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
         <div role="tabpanel" id="profile-panel" aria-labelledby={`profile-tab-${tab}`}>
-          {tab === "instructions" && <InstructionsTab hob={hob} />}
+          {/* Kept mounted, so looking at another tab never drops unsaved edits. */}
+          <div hidden={tab !== "instructions"}>
+            <InstructionsTab hob={hob} />
+          </div>
           {tab === "tools" && <ToolsTab name={hob.name} />}
           {tab === "permissions" && <PermissionsTab name={hob.name} />}
         </div>
@@ -230,17 +233,18 @@ function InstructionsTab({ hob }: { hob: Agent }) {
   const [draft, setDraft] = useState<ProfileDraft>(base);
   const [saved, setSaved] = useState<number | null>(null);
   const dirty = isDirty(base, draft);
-  const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty;
+  const baseRef = useRef(base);
+  baseRef.current = base;
 
-  // A new version saved elsewhere, or the model list arriving, refreshes an untouched form.
+  // A new version saved elsewhere, or the model list arriving, refreshes what the user left alone
+  // and keeps what they edited, so saving never undoes a change made in another window.
   useEffect(() => {
+    const from = baseRef.current;
     const fresh = profileDraft(hob, models.data);
     setBase(fresh);
-    if (!dirtyRef.current) setDraft(fresh);
+    setDraft((d) => rebaseDraft(from, fresh, d));
   }, [hob, models.data]);
 
-  const model = models.data?.models.find((m) => m.id === draft.model);
   const edit = profileEdit(hob, draft);
   const changes = Object.keys(edit).length > 0;
   const rejected = update.error instanceof ApiError && update.error.tag === "InvalidHob" ? update.error : undefined;
@@ -248,11 +252,13 @@ function InstructionsTab({ hob }: { hob: Agent }) {
   const save = (event: React.FormEvent) => {
     event.preventDefault();
     if (!changes || update.isPending) return;
+    const sent = draft;
     update.mutate(edit, {
       onSuccess: (next) => {
+        // Anything typed while the save was on its way stays, still marked unsaved.
         const fresh = profileDraft(next, models.data);
         setBase(fresh);
-        setDraft(fresh);
+        setDraft((d) => rebaseDraft(sent, fresh, d));
         setSaved(next.configVersion);
       },
     });
@@ -340,15 +346,7 @@ function InstructionsTab({ hob }: { hob: Agent }) {
               </Button>
             </span>
           ) : (
-            <>
-              <Brain models={models.data.models} draft={draft} onChange={setDraft} compact />
-              {model && (
-                <span key={model.id} className="animate-hb-in text-[13px] leading-snug text-secondary-text">
-                  {model.description}
-                  {draft.effort && ` ${effortWords(draft.effort).note}`}
-                </span>
-              )}
-            </>
+            <Brain models={models.data.models} draft={draft} onChange={setDraft} />
           )}
           <span className="text-[13px] text-label">Other providers arrive later.</span>
         </fieldset>
