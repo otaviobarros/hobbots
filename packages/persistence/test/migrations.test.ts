@@ -7,6 +7,7 @@ import hobConfigVersions from "../src/migrations/0007_hob_config_versions.ts";
 import hobStatus from "../src/migrations/0008_hob_status.ts";
 import hobRetiredAt from "../src/migrations/0009_hob_retired_at.ts";
 import hobRoles from "../src/migrations/0010_hob_roles.ts";
+import hobIdentity from "../src/migrations/0013_hob_identity.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -222,5 +223,90 @@ describe("0010_hob_roles", () => {
     ];
     expect(result.agents).toEqual(expected);
     expect(result.versions).toEqual(expected);
+  });
+});
+
+describe("0013_hob_identity", () => {
+  // covers AG-002, DP-003
+  it("[TC-AG-084] removes only the opening Hobbots wrote from every hob and version, and keeps the rest", async () => {
+    const hobs = [
+      // An old craft opening, then chores.
+      [
+        "Pip",
+        "Assistant",
+        "You are Pip, a hob in Hobbots. Your craft is Helper: does a bit of everything.\n\nYour chores, in the user's words:\nSort mail.",
+      ],
+      // A starter role's opening, alone.
+      [
+        "Wren",
+        "Writer",
+        "You are Wren, a hob in Hobbots. Your role is Writer: drafts emails, posts and documents with you.",
+      ],
+      // An opening for a role other than the saved one still goes.
+      [
+        "Ada",
+        "QA engineer",
+        "You are Ada, a hob in Hobbots. Your role is Writer: drafts emails, posts and documents with you.\nBe brief.",
+      ],
+      // A title in the user's own words, in both wordings.
+      ["Fern", "Gardener", "You are Fern, a hob in Hobbots. Your role is Gardener.\n\nWater the plants."],
+      ["Moss", "Guide", "You are Moss, a hob in Hobbots. You are good at guide."],
+      // Openings the user changed, or never had, stay.
+      [
+        "Bram",
+        "Writer",
+        "You are Bram, a hob in Hobbots. Your role is Writer: drafts emails, posts and documents with you. Always ask first.",
+      ],
+      ["Ivy", "Writer", "You are Ivy, a hob in Hobbots. Always ask before deleting files."],
+      ["Oak", "Writer", "Write short answers."],
+    ] as const;
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      for (const [index, [name, roleTitle, instructions]] of hobs.entries()) {
+        yield* sql`INSERT INTO agents ${sql.insert({
+          id: `hob${index}`,
+          name,
+          roleTitle,
+          runtime: "claude-code",
+          instructions,
+          lookSeed: index,
+          lookColor: "moss",
+          createdAt: "2026-10-30T00:00:00.000Z",
+        })}`;
+        for (const version of [1, 2]) {
+          yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+            agentId: `hob${index}`,
+            version,
+            roleTitle,
+            instructions,
+            lookSeed: index,
+            lookColor: "moss",
+            createdAt: "2026-10-30T00:00:00.000Z",
+          })}`;
+        }
+      }
+      yield* hobIdentity;
+      return {
+        agents: (yield* sql<{ instructions: string }>`SELECT instructions FROM agents ORDER BY id`).map(
+          (row) => row.instructions,
+        ),
+        versions: (yield* sql<{ instructions: string }>`
+          SELECT instructions FROM agent_config_versions ORDER BY agent_id, version
+        `).map((row) => row.instructions),
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0013"))), Effect.runPromise);
+
+    const expected = [
+      "Your chores, in the user's words:\nSort mail.",
+      "",
+      "Be brief.",
+      "Water the plants.",
+      "",
+      hobs[5][2],
+      hobs[6][2],
+      hobs[7][2],
+    ];
+    expect(result.agents).toEqual(expected);
+    expect(result.versions).toEqual(expected.flatMap((instructions) => [instructions, instructions]));
   });
 });

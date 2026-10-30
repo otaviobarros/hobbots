@@ -401,22 +401,16 @@ export const draftProblem = (draft: FirstHobDraft): string | undefined => {
   return undefined;
 };
 
-/** The instructions' first line, which names the hob and its role. The profile rewrites it when the role changes. */
-export const openingLine = (name: string, role: RoleId | null, title: string): string =>
-  role === null
-    ? `You are ${name}, a hob in Hobbots. Your role is ${title}.`
-    : `You are ${name}, a hob in Hobbots. Your role is ${title}: ${starterRole(role).note.toLowerCase()}`;
-
 /**
- * The create request for the draft, with the chores added to the instructions when there are any.
- * The runtime's "default" entry is sent as no model.
+ * The create request for the draft. The instructions hold the chores in the user's words, or nothing:
+ * the hub tells the runtime the hob's name and role on every turn. The runtime's "default" entry is
+ * sent as no model.
  */
 export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
   const name = draft.name.trim();
   const title = roleTitleOf(draft);
   const { role } = draft;
   const chores = draft.chores.trim();
-  const instructions = openingLine(name, role, title);
   return {
     id: AgentId.make(draft.id),
     name,
@@ -429,7 +423,7 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
     runtime: "claude-code",
     model: draft.model === null || draft.model === "default" ? null : draft.model,
     effort: draft.effort,
-    instructions: chores ? `${instructions}\n\nYour chores, in the user's words:\n${chores}` : instructions,
+    instructions: chores ? `Your chores, in the user's words:\n${chores}` : "",
   };
 };
 

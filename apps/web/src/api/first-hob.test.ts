@@ -182,8 +182,8 @@ describe("first hob draft", () => {
 
   it("adds the chores to the instructions in the user's words, and leaves out blank ones", () => {
     const payload = firstHobPayload(draft({ name: "Moss", chores: "  Water the plants.  " }));
-    expect(payload.instructions.endsWith("Your chores, in the user's words:\nWater the plants.")).toBe(true);
-    expect(firstHobPayload(draft({ chores: " " })).instructions).not.toContain("chores");
+    expect(payload.instructions).toBe("Your chores, in the user's words:\nWater the plants.");
+    expect(firstHobPayload(draft({ chores: " " })).instructions).toBe("");
   });
 
   it("starts on the runtime's default model and medium effort", () => {
@@ -241,14 +241,15 @@ describe("first hob draft", () => {
       model: "opus",
       effort: "max",
     });
-    expect(payload.instructions).toContain("Tinker");
+    // The hub tells the runtime the hob's name and role; the instructions are the chores alone.
+    expect(payload.instructions).toMatch(/^Your chores, in the user's words:\n/);
   });
 
   it("sends the runtime's default model as no model, and its own role title in the user's words", () => {
     const payload = firstHobPayload({ ...pickRole(draft({ model: "default" }), null), ownTitle: " Garden plans " });
     expect(payload.model).toBeNull();
     expect(payload).toMatchObject({ role: null, roleTitle: "Garden plans", sigil: "assistant", hat: null, tool: null });
-    expect(payload.instructions).toMatch(/^You are Pip, a hob in Hobbots\. Your role is Garden plans\./);
+    expect(payload.instructions).not.toContain("a hob in Hobbots");
     expect(roleTitleOf(pickRole(draft(), "bookkeeper"))).toBe("Bookkeeper");
   });
 

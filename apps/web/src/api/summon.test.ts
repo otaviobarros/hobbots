@@ -37,10 +37,10 @@ describe("a summoned hob's draft", () => {
   it("adds the chores to the instructions and leaves them out when blank", () => {
     const payload = firstHobPayload({ ...pickRole(fresh(), "engineer"), name: "Tinker", chores: "  Run the tests.  " });
     expect(payload).toMatchObject({ id, name: "Tinker", roleTitle: "Software engineer", runtime: "claude-code" });
-    expect(payload.instructions).toMatch(/^You are Tinker, a hob in Hobbots\. Your role is Software engineer: /);
-    expect(payload.instructions.endsWith("Your chores, in the user's words:\nRun the tests.")).toBe(true);
+    // The hub tells the runtime the hob's name and role, so the instructions hold only the chores.
+    expect(payload.instructions).toBe("Your chores, in the user's words:\nRun the tests.");
 
-    expect(firstHobPayload({ ...fresh(), chores: " " }).instructions).not.toContain("chores");
+    expect(firstHobPayload({ ...fresh(), chores: " " }).instructions).toBe("");
   });
 
   it("names the role after the hob's name", () => {
