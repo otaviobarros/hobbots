@@ -8,7 +8,16 @@ import { queryKeys } from "./queries.ts";
 const threadId = ThreadId.make("t1");
 const now = "2026-10-28T12:00:00.000Z";
 const reply = (status: Message["status"], content: string) =>
-  new Message({ id: MessageId.make("m1"), threadId, role: "assistant", content, status, error: null, createdAt: now });
+  new Message({
+    id: MessageId.make("m1"),
+    threadId,
+    role: "assistant",
+    content,
+    status,
+    error: null,
+    configVersion: 1,
+    createdAt: now,
+  });
 
 describe("applyEvent", () => {
   it("does not create a partial list for a thread that was never loaded", () => {
@@ -41,6 +50,7 @@ describe("applyEvent", () => {
       instructions: "",
       lookSeed: 7,
       lookColor: "moss",
+      configVersion: 1,
       createdAt: now,
     });
     applyEvent(client, { _tag: "AgentUpserted", agent: hob });
