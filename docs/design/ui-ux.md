@@ -20,7 +20,7 @@ Hobbots is a modern AI chat app with a pixel-folklore character: small hobs that
 | Mint | `#7fd1b9` (deep `#3f8a75`) | Working, done, approve |
 | Rose | `#ee9292` | Deny, stop, error |
 
-Status tags: Working (mint on ground), Running (mint deep), Waiting and Needs you (lantern), Queued (line 2), Cancelled (line 2 with secondary text), Failed (rose). Workbench view labels: Live (mint), Screenshot (`#8fb4f0`, with age), History, Unavailable (with reason), Later. Provider tiles: Claude C `#e39a74`, ChatGPT G `#8fd3a8`, Gemini G `#8fb4f0`, Grok X `#c9c3e8`, Local L `#f3e9b5`, Other + `#b79be8`.
+Status tags: Working (mint on ground), Running (mint deep), Waiting and Needs you (lantern), Queued (line 2), Cancelled (line 2 with secondary text), Failed (rose). Unsandboxed (rose outline on ground) marks a hob running without the sandbox; Needs the sandbox (line 2 with secondary text) marks an action blocked because the sandbox is unavailable. Workbench view labels: Live (mint), Screenshot (`#8fb4f0`, with age), History, Unavailable (with reason), Later. Provider tiles: Claude C `#e39a74`, ChatGPT G `#8fd3a8`, Gemini G `#8fb4f0`, Grok X `#c9c3e8`, Local L `#f3e9b5`, Other + `#b79be8`.
 
 All text passes WCAG AA; the lowest pair is 5.6:1. Control borders are at least 3:1.
 
@@ -59,6 +59,8 @@ The component sheet defines: buttons (primary, approve, secondary, deny, quiet, 
 - Retire asks what happens to a hob's work (hand it off, let it finish, stop it now). Nothing is deleted; the hob moves to Settings › Archived hobs.
 - Closing the window keeps Hobbots in the menu bar by default; Settings › General lets the user change that and turn off Open at login. With it off, closing the last window while hobs work first says that their work will stop.
 - Providers appear only when connected; keys typed by hand go to the OS keychain and never into chat.
+- Connections that give a hob abilities beyond its runtime's own tools are called **Charms**: integrations with other apps and services (GitHub first, with Push; later Slack, Google Drive, any MCP server). They are connected once and granted per hob. The hob profile's tabs are Profile, Charms and Permissions. Rules show Allow, Ask or Never; a rule Hobbots can only check, not enforce, says so.
+- A hob running without the sandbox shows the Unsandboxed tag on its profile, chat header, Workbench header and Home tile. Turning the sandbox off asks for a confirmation check box.
 
 ## Implementation status
 
