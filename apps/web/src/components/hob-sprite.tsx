@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { hobLook } from "../art/look.ts";
 import type { HobState } from "../lib/hob-state.ts";
 
-export { type HobState, hobState, stateLabel } from "../lib/hob-state.ts";
+export { type HobState, hobState, stateLabel, threadState } from "../lib/hob-state.ts";
 
 const motion: Record<HobState, string> = {
   idle: "",

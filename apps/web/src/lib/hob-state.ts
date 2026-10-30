@@ -31,6 +31,19 @@ export const hobState = (
   return states.length > 0 ? "thinking" : "idle";
 };
 
+/**
+ * One thread's state for the chat header. The hob's lifecycle wins here too, so the header agrees
+ * with the rail and Home while a reply started before the pause finishes.
+ */
+export const threadState = (
+  hob: Pick<Agent, "status">,
+  activity: "thinking" | "working" | undefined,
+  streaming: boolean,
+): HobState => {
+  if (hob.status === "paused") return "paused";
+  return activity ?? (streaming ? "working" : "idle");
+};
+
 // Who stands in front of the scene: those who need you, then the busiest, then the rest.
 const sceneRank: Record<HobState, number> = {
   "needs-you": 0,
