@@ -1,4 +1,6 @@
+import { CreateAgentPayload } from "@hobbots/api";
 import { RuntimeModel, RuntimeModels } from "@hobbots/domain";
+import { Schema } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   draftProblem,
@@ -83,6 +85,37 @@ describe("first hob draft", () => {
     expect(restored).toMatchObject({ name: "Wren", lookSeed: 77, lookBase: 77, submitted: null });
     expect(restored.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(restoreDraft(draft({ lookSeed: 77, lookBase: 12 }))).toMatchObject({ id, lookSeed: 77, lookBase: 12 });
+  });
+
+  // covers AG-001
+  it("[TC-AG-074] moves a request sent before roles to the role the hub gave its hob, so a retry still sends", () => {
+    const legacy = (craft: string) => {
+      const { role: _, roleTitle: __, sigil: ___, hat: ____, tool: _____, ...rest } = firstHobPayload(draft());
+      return draft({ submitted: { ...rest, craft } as unknown as FirstHobDraft["submitted"] });
+    };
+    const scribe = restoreDraft(legacy("Scribe"));
+    // The same fields migration 0010 gave a hob created as a Scribe, with the id and instructions sent.
+    expect(scribe.submitted).toEqual({
+      ...firstHobPayload(draft()),
+      role: "writer",
+      roleTitle: "Writer",
+      sigil: "writer",
+      hat: null,
+      tool: null,
+    });
+    expect(restoreDraft(legacy("Guide")).submitted).toMatchObject({
+      id,
+      role: null,
+      roleTitle: "Guide",
+      sigil: "assistant",
+      hat: null,
+      tool: null,
+    });
+    // Every retry repeats the upgraded request, which the API client can encode.
+    const retried = submitDraft(scribe).submitted;
+    expect(retried).toBe(scribe.submitted);
+    expect(() => Schema.encodeSync(CreateAgentPayload)(retried)).not.toThrow();
+    expect(restoreDraft(draft({ submitted: firstHobPayload(draft()) })).submitted).toEqual(firstHobPayload(draft()));
   });
 
   it("gives a draft saved before it had chores its craft's sample ones", () => {

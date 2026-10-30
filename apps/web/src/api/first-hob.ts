@@ -172,6 +172,31 @@ export const newDraft = (
   };
 };
 
+/** The starter roles the first crafts became, as the hub's migration 0010 moved them. */
+const CRAFT_ROLES: Readonly<Record<string, RoleId>> = {
+  Helper: "assistant",
+  Scribe: "writer",
+  Coder: "engineer",
+  Researcher: "researcher",
+  Bookkeeper: "bookkeeper",
+};
+
+/**
+ * A create request sent before hobs had roles, which named a craft. It moves to a role the way the
+ * hub moved stored hobs, hat and tool left to the seed, so a retry still matches a hob the first
+ * send created; its id and instructions stay as they were sent.
+ */
+const upgradeSubmitted = (submitted: CreateAgentPayload | null): CreateAgentPayload | null => {
+  if (submitted === null || "roleTitle" in submitted) return submitted;
+  const { craft, ...rest } = submitted as Omit<CreateAgentPayload, keyof ReturnType<typeof roleFields>> & {
+    readonly craft: string;
+  };
+  const role = CRAFT_ROLES[craft];
+  return role === undefined
+    ? { ...rest, role: null, roleTitle: craft, sigil: DEFAULT_SIGIL, hat: null, tool: null }
+    : { ...rest, ...roleFields(role), hat: null, tool: null };
+};
+
 /** A draft read back from storage, completed with fields an older save may lack. */
 export const restoreDraft = (stored: Partial<FirstHobDraft> | null, random: Random = Math.random): FirstHobDraft => {
   if (stored === null) return newDraft(random);
@@ -179,7 +204,8 @@ export const restoreDraft = (stored: Partial<FirstHobDraft> | null, random: Rand
   const lookSeed = stored.lookSeed ?? fresh.lookSeed;
   // A draft saved before it had chores gets its craft's sample ones.
   const chores = sampleChores(stored.kind ?? fresh.kind);
-  return { ...fresh, lookBase: lookSeed, chores, ...stored, lookSeed };
+  const submitted = upgradeSubmitted(stored.submitted ?? null);
+  return { ...fresh, lookBase: lookSeed, chores, ...stored, lookSeed, submitted };
 };
 
 /** A new look from the dice, which also brings a new set of nearby looks. */
