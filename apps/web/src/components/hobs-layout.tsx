@@ -56,7 +56,6 @@ const useThreadKeys = (hobId: AgentId, threadId: ThreadId | undefined) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
     const onKey = (event: KeyboardEvent) => {
       if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
       const list = threads.data ?? [];

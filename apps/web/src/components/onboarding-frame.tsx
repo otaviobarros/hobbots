@@ -84,7 +84,6 @@ export function OnboardingFrame({
 
       <main className="flex min-w-0 flex-1 flex-col bg-ground px-10 pt-[26px] pb-[22px]">
         <ol aria-label="Setup steps" className="m-0 mb-[22px] flex list-none items-center p-0">
-          {/** biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches. */}
           {SETUP_STEPS.map((name, i) => {
             const done = i < step;
             const current = i === step;

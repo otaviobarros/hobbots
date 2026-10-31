@@ -465,7 +465,7 @@ export const turnEvents = () => {
     return ended;
   };
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
+  // complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
   return (message: SDKMessage): ReadonlyArray<RuntimeEvent> => {
     switch (message.type) {
       case "system":
@@ -768,7 +768,6 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
 
     const sendPrompt = (request: PromptRequest) =>
       Stream.callback<RuntimeEvent, RuntimeError | RuntimeLimitReached>((queue) =>
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
         Effect.gen(function* () {
           const binary = yield* executable;
           const tools = toolTurn(request.tools, sandbox.state);

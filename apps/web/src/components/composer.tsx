@@ -13,7 +13,7 @@ export interface PausedHob {
   readonly canQueue: boolean;
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export function Composer({
   placeholder,
   draft,

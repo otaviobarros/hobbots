@@ -99,11 +99,13 @@ One hub server and one durable state model serve the browser, Electron and every
 
 ### STD-ARCH-012 Functions stay under the complexity limit
 
-A function's cognitive complexity stays at 15 or below. Above that, split it into named steps or move a branch table into data. An older function over the limit keeps a `biome-ignore` comment until someone splits it. Add a new one only with a reason that says why the function cannot be split.
+A function's cyclomatic complexity stays at 15 or below. The count starts at 1 and adds 1 for each `if`, loop, `catch`, `case`, ternary, `&&`, `||`, `??`, logical assignment, default value and optional call or member access, as in ESLint's `complexity` rule. Nested functions count on their own. Above 15, split the function into named steps or move a branch table into data.
 
-- **Why:** a function that reads in one pass is easier to test and review, for people and coding agents alike.
-- **Enforced by:** Biome `complexity/noExcessiveCognitiveComplexity` (`maxAllowedComplexity: 15`) in `pnpm check`, configured in `biome.json`.
-- **Applies to:** all code Biome checks.
+An older function above the limit keeps a `// complexity-ignore: <reason>` comment just above it until someone splits it. Add a new one only with a reason that says why the function cannot be split. The check fails on a marker with no reason and on a marker that no longer allows anything.
+
+- **Why:** a function with few paths is easier to read, test and review, for people and coding agents alike.
+- **Enforced by:** `scripts/check-complexity.mjs` in `pnpm check` (`pnpm lint:complexity`), with its own tests in `scripts/complexity.test.mjs`.
+- **Applies to:** every tracked JavaScript and TypeScript file Biome checks.
 
 ## Guidance
 

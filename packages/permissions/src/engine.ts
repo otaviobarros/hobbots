@@ -296,7 +296,7 @@ const enforcementOf = (context: PolicyContext, operation: PolicyOperation): Poli
   ruleEnforcement(operation, (other) => layered(context, other).decision, context.sandbox);
 
 /** Decides a request whose paths are already canonical. Pure: the same inputs give the same verdict. */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export const evaluate = (context: PolicyContext, scope: ResolvedScope, request: ResolvedRequest): PolicyVerdict => {
   let answer: Answer;
   let targets: ReadonlyArray<string>;

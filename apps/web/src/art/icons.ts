@@ -125,19 +125,15 @@ export const potion = (left: number): PixelRows => {
     "...######...",
   ];
   const firstFilled = 12 - Math.round(Math.min(1, Math.max(0, left)) * 7);
-  const liquid = (y: number): string => {
-    if (y < firstFilled) return "e";
-    return y === firstFilled ? "t" : "f";
-  };
   return rows.map((row, y) => {
     const a = row.indexOf("#");
     const b = row.lastIndexOf("#");
-    const inside = (x: number): boolean => y >= 5 && x > a && x < b;
     return row
       .split("")
       .map((ch, x) => {
         if (ch === "#") return y <= 2 ? "k" : "g";
-        return inside(x) ? liquid(y) : ".";
+        if (y >= 5 && x > a && x < b) return y >= firstFilled ? (y === firstFilled ? "t" : "f") : "e";
+        return ".";
       })
       .join("");
   });

@@ -50,7 +50,6 @@ const isMissing = (error: unknown): boolean => {
  * `..` after a symlink climbs from the link's target and not from the link's own folder. A
  * dangling symlink resolves to its target, since writing through it creates the target.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 const resolvePath = async (input: string, followed: { count: number }): Promise<string> => {
   const parsed = path.parse(input);
   const pending = input.slice(parsed.root.length).split(path.sep);
@@ -119,7 +118,6 @@ const platformDefault = (): boolean => process.platform !== "darwin" && process.
  * entry of its own is a different file, so a sibling `PROJECT -> project` link on a case-sensitive
  * volume cannot pass for case folding. Cached per device.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 const probeCaseSensitivity = async (dir: string, cache: Map<number, boolean>): Promise<boolean> => {
   const device = (await fs.lstat(dir)).dev;
   const cached = cache.get(device);
@@ -270,7 +268,6 @@ export class PathResolver extends Context.Service<
        * Repositories at or below `dir`, without following links or entering a repository's working
        * tree; null when the search passes the entry limit.
        */
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
       const repositoriesBelow = async (dir: string, caseSensitive: boolean): Promise<Array<string> | null> => {
         const found: Array<string> = [];
         const pending = [dir];
@@ -326,7 +323,6 @@ export class PathResolver extends Context.Service<
         for (const child of known.children) forget(index, child);
       };
       /** Lists `dirs` and every new directory below them; false once past the entry limit. */
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
       const visit = async (index: FolderIndex, dirs: Array<string>, caseSensitive: boolean): Promise<boolean> => {
         for (let dir = dirs.pop(); dir !== undefined; dir = dirs.pop()) {
           let listed: IndexedDir | null;
@@ -429,7 +425,6 @@ export class PathResolver extends Context.Service<
           }),
         protectedGitPathsIn: (folders) =>
           Effect.tryPromise({
-            // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
             try: async () => {
               const repositories = new Set<string>();
               const unsearched: Array<string> = [];

@@ -16,8 +16,10 @@
     "lint": "biome check .",
     "lint:unused": "knip",
     "lint:dup": "jscpd",
+    "lint:complexity": "node scripts/check-complexity.mjs",
+    "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "format": "biome check --write .",
-    "check": "node scripts/check-standards.mjs && knip && jscpd && biome check . && turbo run typecheck test"
+    "check": "node scripts/check-standards.mjs && node scripts/check-complexity.mjs && node --test \"scripts/*.test.mjs\" && knip && jscpd && biome check . && turbo run typecheck test"
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {
@@ -25,6 +27,7 @@
     "@types/node": "26.6.5",
     "jscpd": "5.4.2",
     "knip": "6.44.0",
+    "oxc-parser": "0.156.0",
     "turbo": "2.11.10",
     "typescript": "7.0.2",
     "vitest": "5.0.5"

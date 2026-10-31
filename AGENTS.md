@@ -6,7 +6,7 @@ The code is the first validation slice of [ADR 009](docs/decisions/009-toolchain
 
 ## Commands
 
-- `pnpm check` runs the standards index check, knip, jscpd, Biome, typecheck and tests. Run it before you hand work back.
+- `pnpm check` runs the standards index check, the complexity check, knip, jscpd, Biome, typecheck and tests. Run it before you hand work back.
 - `pnpm test:pg` runs the persistence and server suites on PostgreSQL. Run it when a change touches SQL, migrations or repositories. It needs Docker.
 - `pnpm add <pkg>` adds a dependency at its latest stable release, pinned exactly (STD-DOCS-006). Effect packages use the workspace catalog (STD-EFFECT-005).
 

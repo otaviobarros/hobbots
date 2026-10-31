@@ -24,7 +24,7 @@ import { messages } from "./messages.ts";
 import { Stars } from "./scene.tsx";
 
 /** Home, the landing page: what your hobs are doing, what needs you, and what is left of each AI plan. */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export function Home() {
   const agents = useQuery(agentsQuery);
   const hobs = agents.data ?? [];

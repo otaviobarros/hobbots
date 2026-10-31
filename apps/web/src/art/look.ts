@@ -152,7 +152,7 @@ export interface HobGear {
   readonly tool?: RoleTool | null | undefined;
 }
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export const hobLook = (seed: number, color: HobColor, gear: HobGear = {}): HobLook => {
   const next = rng(seed);
   const pick = <T>(list: ReadonlyArray<T>): T => list[Math.floor(next() * list.length)] as T;

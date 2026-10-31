@@ -50,7 +50,7 @@ const ANSWER: Readonly<Record<RuleAnswer, { text: string; className: string }>> 
  * Summon a hob, after onboarding: a role, the chores in the user's words, a seeded look with
  * the role's hat and tool, a name from the dice and what it thinks with. The summon opens the new hob's chat.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export function Summon() {
   const navigate = useNavigate();
   const router = useRouter();
