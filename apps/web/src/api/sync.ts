@@ -34,13 +34,13 @@ export const syncState = (client: QueryClient): SyncState => {
 
 /**
  * Starts a new sync generation: the overlay and every pending response are dropped, and every
- * cached query is marked stale and fetched again, since what was missed cannot be replayed.
+ * cached query but the local ones is marked stale and fetched again, since what was missed cannot be replayed.
  */
 export const startGeneration = (client: QueryClient) => {
   const state = syncState(client);
   state.generation += 1;
   state.overlay.clear();
-  void client.invalidateQueries();
+  void client.invalidateQueries({ predicate: (query) => query.meta?.local !== true });
 };
 
 export const recordAgent = (client: QueryClient, agent: Agent) =>

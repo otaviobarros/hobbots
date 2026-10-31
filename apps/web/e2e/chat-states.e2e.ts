@@ -227,6 +227,139 @@ test("[TC-CH-104] a refused waiting message can be edited back into the composer
   await expect(page.getByRole("textbox", { name: /^Message Pip/ })).toHaveValue("fix me");
 });
 
+/** Holds the matching requests until `release` is called, to act while they are on their way. */
+const holdRequests = async (page: Page, url: string, method: string) => {
+  let release = () => {};
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const held: Array<string> = [];
+  await page.route(url, async (route) => {
+    if (route.request().method() !== method) return route.fallback();
+    held.push(route.request().url());
+    await released;
+    await route.fallback();
+  });
+  return { held, release };
+};
+
+/** Stops the hub and waits for the page to notice. */
+const goOffline = async (current: Hub, page: Page) => {
+  await current.stop();
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting to Hobbots" })).toBeVisible();
+};
+
+// covers CH-004
+test("[TC-CH-106] a message edited while the one before it starts the thread stays edited", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await expect(page.getByText("Hello, I'm Pip!")).toBeVisible();
+
+  await goOffline(current, page);
+  await send(page, "first");
+  await send(page, "second");
+  const creating = await holdRequests(page, "**/api/agents/*/threads", "POST");
+  hub = await startHub(dataDir);
+  await expect.poll(() => creating.held.length).toBe(1);
+
+  const waiting = page.getByRole("region", { name: "Waiting to send" });
+  await expect(waiting.nth(0).getByRole("button", { name: "Edit" })).toBeDisabled();
+  await waiting.nth(1).getByRole("button", { name: "Edit" }).click();
+  const composer = page.getByRole("textbox", { name: /^Message Pip/ });
+  await composer.fill("second, edited");
+  creating.release();
+
+  await expect(page).toHaveURL(/threads\//);
+  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(composer).toHaveValue("second, edited");
+  await expect(waiting).toHaveCount(0);
+  expect((await replies(hub, page, "user")).map((m) => m.content)).toEqual(["first"]);
+});
+
+// covers CH-004
+test("[TC-CH-107] waiting messages survive a full resync and still go out", async ({ page }) => {
+  // Keeps a handle on the page's event stream, to hand it an event it cannot read.
+  await page.addInitScript(() => {
+    const Native = window.EventSource;
+    window.EventSource = class extends Native {
+      constructor(url: string | URL, init?: EventSourceInit) {
+        super(url, init);
+        (window as unknown as { stream: EventSource }).stream = this;
+      }
+    };
+  });
+  const { current, pip } = await hubWithPip();
+  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await send(page, "first");
+  await expect(page.getByText("Echo: first")).toBeVisible();
+
+  await goOffline(current, page);
+  await send(page, "after the resync");
+  // The hub refuses the message, so it is still waiting when the client starts over.
+  let refuse = true;
+  await page.route("**/api/threads/*/messages", (route) =>
+    refuse && route.request().method() === "POST"
+      ? route.fulfill({ status: 503, contentType: "application/json", body: "{}" })
+      : route.fallback(),
+  );
+  hub = await startHub(dataDir);
+  const waiting = page.getByRole("region", { name: "Waiting to send" });
+  await expect(waiting).toContainText("◷ Not sent yet.");
+
+  // An event this client cannot read makes it fetch everything again from the hub.
+  const refetched = page.waitForRequest((request) => request.method() === "GET" && /\/api\/agents/.test(request.url()));
+  await page.evaluate(() => {
+    const stream = (window as unknown as { stream: EventSource }).stream;
+    stream.dispatchEvent(new MessageEvent("message", { data: "not an event" }));
+  });
+  await refetched;
+  await page.waitForTimeout(300);
+  await expect(waiting).toContainText("after the resync");
+  await expect(page.getByText(/Reconnecting to Hobbots/)).toBeHidden();
+
+  refuse = false;
+  await waiting.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByText("Echo: after the resync")).toBeVisible();
+  await expect(waiting).toHaveCount(0);
+});
+
+// covers CH-004
+test("[TC-CH-108] leaving a thread while its waiting message is on its way sends it only once", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await send(page, "first");
+  await expect(page.getByText("Echo: first")).toBeVisible();
+  const threadUrl = page.url();
+
+  await goOffline(current, page);
+  await send(page, "only once");
+  const sending = await holdRequests(page, "**/api/threads/*/messages", "POST");
+  hub = await startHub(dataDir);
+  await expect.poll(() => sending.held.length).toBe(1);
+
+  // Moving to another page in the app closes this chat while the message is still on its way.
+  const threadHash = new URL(threadUrl).hash;
+  await page.evaluate((hash) => {
+    window.location.hash = hash;
+  }, `#/hobs/${pip.id}/new`);
+  await expect(page.getByText("Echo: first")).toBeHidden();
+  sending.release();
+  const threadId = threadHash.match(/threads\/([^/?#]+)/)?.[1];
+  const userMessages = async () =>
+    (await api<ReadonlyArray<Reply>>(hub as Hub, "GET", `/api/threads/${threadId}/messages`))
+      .filter((m) => m.role === "user")
+      .map((m) => m.content);
+  await expect.poll(userMessages).toEqual(["first", "only once"]);
+
+  await page.evaluate((hash) => {
+    window.location.hash = hash;
+  }, threadHash);
+  await expect(page.getByText("Echo: only once")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Waiting to send" })).toHaveCount(0);
+  await page.waitForTimeout(500);
+  expect(await userMessages()).toEqual(["first", "only once"]);
+});
+
 // covers CH-001
 test("[TC-CH-095] a new hob with no threads says hello", async ({ page }) => {
   const { current, pip } = await hubWithPip();

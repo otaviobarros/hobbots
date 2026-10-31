@@ -1,10 +1,21 @@
 import { type AgentId, isInProgress, isResumable, type ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
-import { updateWaiting, useConnection, useWaiting, type WaitingPlace } from "../api/live.ts";
+import { useConnection } from "../api/live.ts";
+import {
+  carriedDraft,
+  carryDraft,
+  dropCarriedDraft,
+  enqueue,
+  followed,
+  takeBack,
+  tryAgain,
+  useOutbox,
+  type WaitingPlace,
+} from "../api/outbox.ts";
 import {
   agentsQuery,
   messagesQuery,
@@ -31,9 +42,6 @@ const BRAIN_PROBLEM: Record<NonNullable<ReturnType<typeof runtimeProblem>>, stri
   outdated: "is older than Hobbots supports",
   signedOut: "is signed out",
 };
-
-const dropWaiting = (queryClient: QueryClient, place: WaitingPlace, id: string) =>
-  updateWaiting(queryClient, place, (old) => old.filter((message) => message.id !== id));
 
 const IDEAS = ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"];
 
@@ -64,14 +72,12 @@ export function ChatView({
   const messages = useQuery({ ...messagesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
   const activity = useActivity();
   const navigate = useNavigate();
-  const [draft, setDraft] = useState("");
-  // Messages sent while the hub is out of reach wait, in order, and go out one at a time when it is
-  // back. Each stays until the hub takes it; one the hub refuses stays for the user to retry or edit.
-  const queryClient = useQueryClient();
+  // A draft carried from a fresh page into the thread it started picks up where it was.
+  const [draft, setDraft] = useState(() => carriedDraft(threadId ?? `new-${hobId}`));
+  // Messages sent while the hub is out of reach wait in the outbox, which sends them when it is back.
   const place: WaitingPlace = threadId ?? `new-${hobId}`;
-  const waiting = useWaiting(place);
-  const [held, setHeld] = useState(false);
-  const flushing = useRef(false);
+  const outbox = useOutbox(place);
+  const waiting = outbox.messages;
   const connection = useConnection();
   const brain = useQuery({ ...runtimesQuery, select: (runtimes) => runtimeProblem(runtimes[0]) });
   const bottom = useRef<HTMLDivElement>(null);
@@ -114,15 +120,19 @@ export function ChatView({
       document.getElementById(messageElementId(focusMessageId))?.scrollIntoView({ block: "center" });
   }, [focusLoaded, focusMessageId]);
 
-  // A refused send is tried again after the next reconnect, or when the user asks.
+  // When a waiting message starts this page's thread, the page follows it there with its draft.
+  const draftNow = useRef(draft);
+  draftNow.current = draft;
   useEffect(() => {
-    if (connection !== "live") setHeld(false);
-  }, [connection]);
-  const flushNext = useRef<() => void>(() => undefined);
-  const next = waiting[0];
+    const started = outbox.startedThread;
+    if (started === undefined) return;
+    followed(place);
+    carryDraft(started, draftNow.current);
+    void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: started } });
+  }, [outbox.startedThread, place, hobId, navigate]);
   useEffect(() => {
-    if (connection === "live" && next !== undefined && !held && !flushing.current) flushNext.current();
-  }, [connection, next, held]);
+    dropCarriedDraft(place);
+  }, [place]);
 
   const current = hob.data;
   if (!current) return <main className="flex-1" />;
@@ -142,36 +152,11 @@ export function ChatView({
       },
     });
   };
-  flushNext.current = () => {
-    const first = waiting[0];
-    if (first === undefined) return;
-    flushing.current = true;
-    const settle = {
-      onSettled: () => {
-        flushing.current = false;
-      },
-      onError: () => setHeld(true),
-    };
-    if (threadId) {
-      send.mutate(first.content, { ...settle, onSuccess: () => dropWaiting(queryClient, place, first.id) });
-      return;
-    }
-    start.mutate(first.content, {
-      ...settle,
-      onSuccess: ({ thread: created }) => {
-        // The rest follow into the thread the first one started.
-        const rest = waiting.slice(1);
-        updateWaiting(queryClient, place, () => []);
-        updateWaiting(queryClient, created.id, (old) => [...old, ...rest]);
-        void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: created.id } });
-      },
-    });
-  };
   const sendDraft = (content: string) => {
     follow();
     // Behind messages already waiting, a new one waits too, so they go out in the order sent.
     if (connection === "reconnecting" || waiting.length > 0) {
-      updateWaiting(queryClient, place, (old) => [...old, { id: crypto.randomUUID(), content }]);
+      enqueue(place, content);
       setDraft("");
       return;
     }
@@ -286,7 +271,7 @@ export function ChatView({
           >
             <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
             <span className="text-xs text-label">
-              {held && index === 0
+              {outbox.refused && index === 0
                 ? "◷ Not sent yet. It stays here until you try again or edit it."
                 : connection === "live"
                   ? "◷ Sending…"
@@ -296,16 +281,17 @@ export function ChatView({
               <Button
                 variant="outline"
                 size="xs"
-                disabled={index === 0 && (send.isPending || start.isPending)}
+                disabled={outbox.sending === message.id}
                 onClick={() => {
-                  dropWaiting(queryClient, place, message.id);
-                  setDraft((old) => (old.trim() === "" ? message.content : `${old}\n${message.content}`));
+                  const content = takeBack(place, message.id);
+                  if (content === undefined) return;
+                  setDraft((old) => (old.trim() === "" ? content : `${old}\n${content}`));
                 }}
               >
                 Edit
               </Button>
-              {held && index === 0 && (
-                <Button variant="outline" size="xs" onClick={() => setHeld(false)}>
+              {outbox.refused && index === 0 && (
+                <Button variant="outline" size="xs" onClick={() => tryAgain(place)}>
                   Try again
                 </Button>
               )}

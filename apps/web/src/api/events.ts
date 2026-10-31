@@ -18,6 +18,7 @@ import { recordActivity, setActivity } from "./activity.ts";
 import { API_URL } from "./client.ts";
 import type { ConnectionState } from "./live.ts";
 import { setConnection, setSteps } from "./live.ts";
+import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { queryKeys, sortArchived, sortThreads, upsertById, upsertMessage } from "./queries.ts";
 import {
   newer,
@@ -150,7 +151,9 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
     const report = (next: ConnectionState) => {
       setState(next);
       setConnection(queryClient, next);
+      connectionChanged(next);
     };
+    attachOutbox(queryClient);
     const sync = syncState(queryClient);
     const after = sync.cursor === undefined ? "" : `?after=${encodeURIComponent(sync.cursor)}`;
     const source = new EventSource(`${API_URL}/api/events${after}`);
