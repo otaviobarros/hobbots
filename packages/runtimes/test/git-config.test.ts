@@ -41,6 +41,27 @@ describe("the user's Git config in the sandbox", () => {
     expect(secretIn('[credential]\n\thelper = "!f() { echo username=me; echo password=hunter2; }; f"')).not.toBeNull();
   });
 
+  it("opens a config that names a password manager's programs by path", () => {
+    const signing = [
+      "[user]",
+      "\tsigningkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBzbW9tZWtleWRhdGFoZXJl",
+      "[gpg]",
+      "\tformat = ssh",
+      '[gpg "ssh"]',
+      '\tprogram = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"',
+      "[commit]",
+      "\tgpgsign = true",
+      "[credential]",
+      "\thelper = ~/bin/git-credential-password-store",
+    ].join("\n");
+    expect(secretIn(signing)).toBeNull();
+    expect(secretIn('[gpg "ssh"]\n\tprogram=/Applications/1Password.app/Contents/MacOS/op-ssh-sign')).toBeNull();
+    // Words outside a path, or a path holding an assignment, still count.
+    expect(secretIn("[credential]\n\thelper = /usr/bin/helper --password=hunter2")).not.toBeNull();
+    expect(secretIn("[credential]\n\thelper = /tmp/x/password=hunter2")).not.toBeNull();
+    expect(secretIn("# 1Password vault: work")).not.toBeNull();
+  });
+
   it("reads pattern lists for token shapes and URL passwords only", () => {
     expect(secretIn("secrets/\n*.token\n.env", "list")).toBeNull();
     expect(secretIn("ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "list")).not.toBeNull();

@@ -57,6 +57,34 @@ const hasUrlPassword = (line: string) => {
   }
 };
 
+/**
+ * A line without the file paths in it, such as `/Applications/1Password.app/Contents/MacOS/op-ssh-sign`
+ * or `~/bin/password-store-helper`, which name programs rather than hold credentials. A path starts
+ * with `/` or `~/` at the start of the line or after a space, quote or `=`, and runs to the next
+ * space or quote; one holding `=` is kept, since it may be an assignment such as `password=…`.
+ */
+const withoutPaths = (line: string) => {
+  let kept = "";
+  let i = 0;
+  while (i < line.length) {
+    const before = line[i - 1];
+    const starts =
+      (line[i] === "/" || (line[i] === "~" && line[i + 1] === "/")) &&
+      (i === 0 || isSpace(before) || before === '"' || before === "'" || before === "=");
+    if (!starts) {
+      kept += line[i];
+      i++;
+      continue;
+    }
+    let end = i;
+    while (end < line.length && !isSpace(line[end]) && line[end] !== '"' && line[end] !== "'") end++;
+    const path = line.slice(i, end);
+    if (path.includes("=")) kept += path;
+    i = end;
+  }
+  return kept;
+};
+
 /** A config file, read for its settings, or a list of patterns such as an ignore or attributes file. */
 export type GitFileKind = "config" | "list";
 
@@ -64,13 +92,17 @@ export type GitFileKind = "config" | "list";
  * Why a file's text looks like it holds a secret, or null when it does not. The whole text is
  * scanned, comments included, since the sandbox opens the file as it is. In a config file any line
  * naming a token, password, secret or authorization header counts, in a key, a value (an inline
- * credential helper) or a comment. Pattern lists only count URL passwords and token shapes, since
+ * credential helper) or a comment, apart from file paths, which name programs such as 1Password's
+ * signer. Pattern lists only count URL passwords and token shapes, since
  * entries such as `secrets/` or `*.token` are common there.
  */
 export const secretIn = (text: string, kind: GitFileKind = "config"): string | null => {
   const lines = text.split("\n");
-  if (kind === "config" && lines.some((line) => SECRET_WORDS.some((word) => line.toLowerCase().includes(word))))
-    return "it names a token, password, secret or authorization header";
+  const names = (line: string) => {
+    const words = withoutPaths(line).toLowerCase();
+    return SECRET_WORDS.some((word) => words.includes(word));
+  };
+  if (kind === "config" && lines.some(names)) return "it names a token, password, secret or authorization header";
   if (lines.some(hasUrlPassword)) return "it holds a URL with a password";
   if (lines.some((line) => TOKEN_SHAPE.test(line))) return "it holds what looks like an access token";
   return null;

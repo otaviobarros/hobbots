@@ -689,10 +689,24 @@ describe("the process sandbox", () => {
         const repo = join(project, "repo-074");
         spawnSync("git", ["init", "-q", repo]);
 
-        // The identity sits in a file the config includes, quoted and followed by a comment.
+        // The identity sits in a file the config includes, quoted and followed by a comment, and the
+        // config signs with 1Password, as many do: it opens, and the commit goes through unsigned.
         const open = join(root, "home-open");
         mkdirSync(open);
-        writeFileSync(join(open, ".gitconfig"), '[include]\n\tpath = "identity.local" # work identity\n');
+        writeFileSync(
+          join(open, ".gitconfig"),
+          [
+            "[include]",
+            '\tpath = "identity.local" # work identity',
+            "[gpg]",
+            "\tformat = ssh",
+            '[gpg "ssh"]',
+            "\tprogram = /Applications/1Password.app/Contents/MacOS/op-ssh-sign",
+            "[commit]",
+            "\tgpgsign = true",
+            "",
+          ].join("\n"),
+        );
         writeFileSync(join(open, "identity.local"), "[user]\n\tname = Hob\n\temail = hob@example.com\n");
         const committed = yield* runAt(open, `cd ${repo} && echo x > a && git add a && git commit -qm a`);
         // Apple's /usr/bin/git stub warns that xcrun cannot cache under the user's closed temp folder.
