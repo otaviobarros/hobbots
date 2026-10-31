@@ -222,6 +222,23 @@ export interface ProcessSandboxShape {
 // The runtime's command line reaches the wrapped shell in this variable, already quoted, because the
 // wrap is prepared before the runtime's arguments are known. The shell removes it before running them.
 const COMMAND_VARIABLE = "HOBBOTS_SANDBOXED_COMMAND";
+/**
+ * Where each turn's temporary folder goes. Claude Code puts its sockets under `$CLAUDE_CODE_TMPDIR`
+ * and, when that path is too long for a Unix socket (about 30 bytes), gives commands `/tmp/claude`
+ * instead, which the sandbox does not let them write: Git then cannot commit. macOS's own temporary
+ * folder is too long, so `/tmp` is used there (`/private/tmp/hb-XXXXXX`, 22 bytes).
+ */
+export const TEMP_BASE = platform() === "darwin" ? "/tmp" : tmpdir();
+
+/** Turns commit and tag signing off for commands, through variables Claude Code's scrub keeps. */
+export const UNSIGNED_GIT = {
+  GIT_CONFIG_COUNT: "2",
+  GIT_CONFIG_KEY_0: "commit.gpgsign",
+  GIT_CONFIG_VALUE_0: "false",
+  GIT_CONFIG_KEY_1: "tag.gpgsign",
+  GIT_CONFIG_VALUE_1: "false",
+} as const;
+
 const LAUNCHER = `c=$${COMMAND_VARIABLE}; unset ${COMMAND_VARIABLE}; eval "exec $c"`;
 
 export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandboxShape>()(
@@ -291,7 +308,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
         Effect.tryPromise({
           try: async (): Promise<PreparedSandbox> => {
             mkdirSync(scope.runtimeFolder, { recursive: true, mode: 0o700 });
-            const tempFolder = realOrSelf(mkdtempSync(join(tmpdir(), "hobbots-turn-")));
+            const tempFolder = realOrSelf(mkdtempSync(join(TEMP_BASE, "hb-")));
             // The proxy knows the turn by this id alone, so it must be unguessable (128 bits or more).
             const commandId = randomBytes(16).toString("base64url");
             const release = () => {
@@ -338,6 +355,9 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                     CLAUDE_CODE_TMPDIR: tempFolder,
                     // Claude Code keeps its sign-in to itself: commands, hooks and MCP servers start without it.
                     CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
+                    // Signing cannot reach the user's keys or agent inside the sandbox, so a config that
+                    // asks for it (`commit.gpgsign`) would stop every commit. The scrub keeps these.
+                    ...UNSIGNED_GIT,
                     [COMMAND_VARIABLE]: [command, ...args].map(shellQuote).join(" "),
                   },
                 }),

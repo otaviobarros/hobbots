@@ -648,8 +648,20 @@ describe("the process sandbox", () => {
           const gitProject = join(project, "repo");
           spawnSync("git", ["init", "-q", gitProject]);
           const status = run(`git -C ${gitProject} status --short`);
-          if (gitConfigAccess(homedir())._tag === "Open") expect(status.status).toBe(0);
-          else expect(status.stderr).toContain("unable to access");
+          if (gitConfigAccess(homedir())._tag === "Open") {
+            expect(status.status).toBe(0);
+            // And commits: Git writes temporary files under $TMPDIR, which must stay short enough that
+            // Claude Code keeps it, and signing is off, since no key or agent is reachable here.
+            const commit = run(
+              `cd ${gitProject} && echo x > a && git add a && git -c user.name=Hob -c user.email=hob@example.com commit -qm a`,
+            );
+            expect(commit.stderr).toBe("");
+            expect(commit.status).toBe(0);
+          } else expect(status.stderr).toContain("unable to access");
+          const temp = run('echo "$TMPDIR" && touch "$TMPDIR/probe"');
+          expect(temp.status).toBe(0);
+          expect(temp.stdout.trim().length).toBeLessThanOrEqual(30);
+          expect(run(`git -C ${gitProject} config --get commit.gpgsign`).stdout.trim()).toBe("false");
           // Open or not, the config stays read-only.
           expect(run(`echo "# x" >> ${join(homedir(), ".gitconfig")}`).status).not.toBe(0);
         } finally {
