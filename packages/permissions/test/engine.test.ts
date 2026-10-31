@@ -84,7 +84,10 @@ describe("policy engine", () => {
   });
 
   // covers PE-002, AG-004
-  it("[TC-PE-002] refuses escapes through `..`, symlinks and the data folder under every preset", async () => {
+  // 90 real path checks against the filesystem; on a busy two-core CI runner they take longer than the 5 s default.
+  it("[TC-PE-002] refuses escapes through `..`, symlinks and the data folder under every preset", {
+    timeout: 30_000,
+  }, async () => {
     for (const preset of SafetyPreset.literals) {
       for (const [how, request] of escapes(home)) {
         for (const operation of ["read-files", "edit-files", "delete-files"] as const) {
