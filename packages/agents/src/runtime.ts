@@ -126,6 +126,8 @@ export interface ApprovalAction {
   readonly reason: string;
   /** The policy version the call was decided under. */
   readonly policyVersion: string;
+  /** A high-risk action, approved once only and with the user's confirmation. */
+  readonly onceOnly: boolean;
 }
 
 /**

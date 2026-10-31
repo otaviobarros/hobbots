@@ -14,6 +14,7 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";
 import { useEffect, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
+import { storeApproval } from "./approvals.ts";
 import { API_URL } from "./client.ts";
 import type { ConnectionState } from "./live.ts";
 import { setConnection } from "./live.ts";
@@ -119,6 +120,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     // The reply's own upsert, sent just before, already carries its stopping or stopped status.
     case "TurnStopRequested":
     case "TurnStopped":
+      return;
+    case "ApprovalRequested":
+    case "ApprovalResolved":
+      storeApproval(queryClient, event.approval);
       return;
   }
 };

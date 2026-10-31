@@ -1,4 +1,4 @@
-import type { Agent, AgentId, Message, Thread, ThreadId } from "@hobbots/domain";
+import type { Agent, AgentId, ApprovalRequest, Message, Thread, ThreadId } from "@hobbots/domain";
 import type { QueryClient, QueryFunctionContext } from "@tanstack/react-query";
 
 /**
@@ -19,7 +19,10 @@ type OverlayEntry =
   | { readonly kind: "agent"; readonly revision: number; readonly value: Agent }
   | { readonly kind: "thread"; readonly revision: number; readonly value: Thread }
   | { readonly kind: "message"; readonly revision: number; readonly value: Message }
+  | { readonly kind: "approval"; readonly revision: number; readonly value: ApprovalRequest }
   | { readonly kind: "removed"; readonly revision: number };
+
+type Kind = Exclude<OverlayEntry["kind"], "removed">;
 
 const states = new WeakMap<QueryClient, SyncState>();
 
@@ -49,6 +52,8 @@ export const recordThread = (client: QueryClient, thread: Thread) =>
   record(client, `thread:${thread.id}`, { kind: "thread", revision: thread.revision, value: thread });
 export const recordMessage = (client: QueryClient, message: Message) =>
   record(client, `message:${message.id}`, { kind: "message", revision: message.revision, value: message });
+export const recordApproval = (client: QueryClient, approval: ApprovalRequest) =>
+  record(client, `approval:${approval.id}`, { kind: "approval", revision: approval.revision, value: approval });
 /** A removed message never returns (IDs are not reused), so its tombstone outranks every version. */
 export const recordRemovedMessage = (client: QueryClient, messageId: string) =>
   record(client, `message:${messageId}`, { kind: "removed", revision: Number.POSITIVE_INFINITY });
@@ -88,7 +93,7 @@ export const newer = <T extends { readonly revision: number }>(known: T | undefi
 const reconcile = <T extends { readonly id: string; readonly revision: number }>(
   client: QueryClient,
   rows: ReadonlyArray<T>,
-  kind: "agent" | "thread" | "message",
+  kind: Kind,
   belongs: (value: T) => boolean,
   upsert: (list: ReadonlyArray<T>, item: T) => Array<T>,
   cached: ReadonlyArray<T> | undefined,
@@ -128,7 +133,7 @@ const replaceById = <T extends { readonly id: string }>(list: ReadonlyArray<T>, 
 const synced =
   <T extends { readonly id: string; readonly revision: number }>(
     fetch: () => Promise<ReadonlyArray<T>>,
-    kind: "agent" | "thread" | "message",
+    kind: Kind,
     belongs: (value: T) => boolean,
     order: (items: Array<T>) => Array<T> = (items) => items,
     upsert: (list: ReadonlyArray<T>, item: T) => Array<T> = replaceById,
@@ -160,3 +165,6 @@ export const syncedMessages = (
   fetch: () => Promise<ReadonlyArray<Message>>,
   upsert: (list: ReadonlyArray<Message>, message: Message) => Array<Message>,
 ) => synced(fetch, "message", (message) => message.threadId === threadId, undefined, upsert);
+
+export const syncedApprovals = (threadId: ThreadId, fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
+  synced(fetch, "approval", (approval) => approval.threadId === threadId);

@@ -1,4 +1,4 @@
-import { ApprovalActionChanged, ApprovalClosed, ApprovalNotFound } from "@hobbots/api";
+import { ApprovalActionChanged, ApprovalClosed, ApprovalNotConfirmed, ApprovalNotFound } from "@hobbots/api";
 import {
   type AgentId,
   type ApprovalDecision,
@@ -66,6 +66,8 @@ export interface ApprovalDecisionInput {
   readonly actionDigest: string;
   /** Why they deny it, which goes back to the hob. Ignored on approve. */
   readonly reason?: string | undefined;
+  /** That they confirmed a high-risk action; approving one needs it. */
+  readonly confirmed?: boolean | undefined;
 }
 
 /** A turn's approvals, and the way to close them once the turn has ended. */
@@ -80,6 +82,17 @@ interface Waiter {
   readonly agentId: AgentId;
   readonly decision: Deferred.Deferred<ApprovalOutcome>;
 }
+
+/** Why a pending request cannot take this decision: another action, or a high-risk one unconfirmed. */
+const refusedDecision = (
+  approval: ApprovalRequest,
+  input: ApprovalDecisionInput,
+): ApprovalActionChanged | ApprovalNotConfirmed | null => {
+  if (input.actionDigest !== approval.actionDigest) return new ApprovalActionChanged({ approvalId: approval.id });
+  if (input.decision === "approve" && approval.onceOnly && input.confirmed !== true)
+    return new ApprovalNotConfirmed({ approvalId: approval.id });
+  return null;
+};
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
@@ -104,7 +117,10 @@ export class ApprovalService extends Context.Service<
     readonly decide: (
       id: ApprovalId,
       input: ApprovalDecisionInput,
-    ) => Effect.Effect<ApprovalRequest, ApprovalNotFound | ApprovalClosed | ApprovalActionChanged>;
+    ) => Effect.Effect<
+      ApprovalRequest,
+      ApprovalNotFound | ApprovalClosed | ApprovalActionChanged | ApprovalNotConfirmed
+    >;
     /** Expires the hob's pending requests, as when it retires: a retired hob is never approved anything. */
     readonly expireForAgent: (agentId: AgentId) => Effect.Effect<void>;
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
@@ -206,6 +222,7 @@ export class ApprovalService extends Context.Service<
                       reason: action.reason,
                       actionDigest: yield* actionDigest(action),
                       policyVersion: action.policyVersion,
+                      onceOnly: action.onceOnly,
                       state: asking ? "pending" : "expired",
                       denyReason: null,
                       createdAt: now,
@@ -255,8 +272,8 @@ export class ApprovalService extends Context.Service<
             if (approval.state === state) return approval;
             if (approval.state !== "pending")
               return yield* new ApprovalClosed({ approvalId: id, state: approval.state });
-            if (input.actionDigest !== approval.actionDigest)
-              return yield* new ApprovalActionChanged({ approvalId: id });
+            const refused = refusedDecision(approval, input);
+            if (refused !== null) return yield* refused;
             const waiter = waiters.get(id);
             // Nothing waits for it here, so no call would run, or its hob retired: it can only expire.
             if (waiter === undefined || !(yield* hobActive(approval.agentId))) {

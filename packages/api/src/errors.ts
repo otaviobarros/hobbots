@@ -93,6 +93,13 @@ export class ApprovalClosed extends Schema.TaggedError<ApprovalClosed>()(
   { httpApiStatus: 409 },
 ) {}
 
+/** A high-risk request is approved only with the user's confirmation (PE-007). */
+export class ApprovalNotConfirmed extends Schema.TaggedError<ApprovalNotConfirmed>()(
+  "ApprovalNotConfirmed",
+  { approvalId: ApprovalId },
+  { httpApiStatus: 422 },
+) {}
+
 /** The decision names another action than the one the request is for, so it does not apply. */
 export class ApprovalActionChanged extends Schema.TaggedError<ApprovalActionChanged>()(
   "ApprovalActionChanged",

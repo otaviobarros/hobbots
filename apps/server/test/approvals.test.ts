@@ -90,7 +90,9 @@ const TestLayer = HobLifecycle.layer.pipe(
   ),
 );
 
-const PUSH = "Ship it\nfake:tool Bash git push origin main";
+// A push to a feature branch asks; one to the default branch is high risk and needs confirming.
+const PUSH = "Ship it\nfake:tool Bash git push origin feature";
+const PROTECTED_PUSH = "Ship it\nfake:tool Bash git push origin main";
 
 /** Sends the prompt and waits until its tool call waits for a decision. */
 const askInNewThread = (prompt = PUSH) =>
@@ -178,9 +180,10 @@ describe("Ask decisions", () => {
       agentId: HOB_ID,
       tool: "Bash",
       operation: "push",
-      arguments: { command: "git push origin main" },
-      label: "Running git push origin main",
+      arguments: { command: "git push origin feature" },
+      label: "Running git push origin feature",
       state: "pending",
+      onceOnly: false,
     });
     expect(result.request.actionDigest).toMatch(/^[0-9a-f]{64}$/);
     expect(result.request.policyVersion).toMatch(/^r\d+-/);
@@ -195,7 +198,39 @@ describe("Ask decisions", () => {
       id: "fake-tool-1",
       approvalId: result.request.id,
     });
-    expect(steps.at(-1)).toMatchObject({ id: "fake-tool-1", label: "Running git push origin main", state: "done" });
+    expect(steps.at(-1)).toMatchObject({ id: "fake-tool-1", label: "Running git push origin feature", state: "done" });
+  });
+
+  // covers PE-007
+  it("[TC-PE-077] approves a high-risk push only with the user's confirmation", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const { thread, pending } = yield* askInNewThread(PROTECTED_PUSH);
+        const request = pending[0] as ApprovalRequest;
+        const unconfirmed = yield* Effect.exit(
+          approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
+        );
+        const stillWaiting = yield* pendingIn(thread.id);
+        const approved = yield* approvals.decide(request.id, {
+          decision: "approve",
+          actionDigest: request.actionDigest,
+          confirmed: true,
+        });
+        const done = yield* settled(thread.id);
+        return { request, unconfirmed, stillWaiting, approved, done };
+      }),
+    );
+
+    expect(result.request).toMatchObject({ onceOnly: true, state: "pending" });
+    expect(Exit.isFailure(result.unconfirmed) && JSON.stringify(result.unconfirmed.cause)).toContain(
+      "ApprovalNotConfirmed",
+    );
+    expect(result.stillWaiting.map((a) => a.id)).toEqual([result.request.id]);
+    expect(result.approved.state).toBe("approved");
+    expect(result.done.status).toBe("complete");
+    expect(result.done.steps.at(-1)).toMatchObject({ state: "done" });
   });
 
   // covers PE-003, PE-007
@@ -398,6 +433,7 @@ describe("Ask decisions", () => {
           label: "Running git push origin main",
           reason: "Pushing asks first.",
           policyVersion: "r1-test",
+          onceOnly: false,
         });
         const [request] = yield* approvals.listForThread(thread.id);
         const decision = { decision: "approve", actionDigest: (request as ApprovalRequest).actionDigest } as const;
@@ -443,6 +479,7 @@ describe("Ask decisions", () => {
           label: "Running git push origin main",
           reason: "Pushing asks first.",
           policyVersion: "r1-test",
+          onceOnly: false,
         });
         return yield* approvals.listForThread(thread.id);
       }).pipe(Effect.provide(Layer.fresh(ApprovalService.layer)));
