@@ -37,7 +37,7 @@ interface Reply {
 const CONTINUE_CONTEXT = 4_000;
 
 /** The prompt that resumes a reply that ended early, so the runtime picks up where it left off. */
-export const continuePrompt = (content: string) =>
+const continuePrompt = (content: string) =>
   [
     "Your previous reply was cut off before it finished. It ends with this text:",
     "",
@@ -476,15 +476,28 @@ export class ChatService extends Context.Service<
           ),
         );
 
+      // Reads the thread and its hob again under the hob's lock, so neither changes before `body` ends.
+      const withThreadHob = <A, E, R>(
+        threadId: ThreadId,
+        body: (thread: Thread, agent: Agent) => Effect.Effect<A, E, R>,
+      ) =>
+        Effect.gen(function* () {
+          const { agentId } = yield* findThread(threadId);
+          return yield* admission.withHob(
+            agentId,
+            Effect.gen(function* () {
+              const thread = yield* findThread(threadId);
+              const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
+              return yield* body(thread, agent);
+            }),
+          );
+        });
+
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (threadId: ThreadId, content: string) {
-        const { agentId } = yield* findThread(threadId);
         // The status check and the turn's registration happen under the hob's lock, so a turn is
         // either admitted before a retirement (which then sees and stops it) or refused after it.
-        return yield* admission.withHob(
-          agentId,
+        return yield* withThreadHob(threadId, (thread, agent) =>
           Effect.gen(function* () {
-            const thread = yield* findThread(threadId);
-            const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
             // A retired hob takes nothing; a paused one keeps messages queued until it wakes.
             if (agent.status === "retired") yield* requireActive(agent);
             // A message waits while its hob is paused, while a reply runs, and behind any message
@@ -557,12 +570,8 @@ export class ChatService extends Context.Service<
         threadId: ThreadId,
         messageId: MessageId,
       ) {
-        const { agentId } = yield* findThread(threadId);
-        return yield* admission.withHob(
-          agentId,
+        return yield* withThreadHob(threadId, (thread, agent) =>
           Effect.gen(function* () {
-            const thread = yield* findThread(threadId);
-            const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
             yield* requireActive(agent);
             const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued");
             const message = transcript.at(-1);

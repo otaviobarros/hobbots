@@ -3,7 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   draftProblem,
   type FirstHobDraft,
@@ -13,25 +13,25 @@ import {
   kindLine,
   LABEL_MAX,
   pickLook,
+  rerollName,
   restoreDraft,
   roleTitleOf,
   rollLook,
-  rollName,
-  settleBrain,
 } from "../api/first-hob.ts";
 import { modelsQuery } from "../api/queries.ts";
-import { hobLook } from "../art/look.ts";
 import {
-  Brain,
   ChoresField,
   ColorSwatches,
   Die,
   draftRolePicker,
   GearPicker,
   HobSummary,
+  ModelsBrain,
   NameDice,
   NearbyLooks,
   RolePicker,
+  useDraftLook,
+  useSettledBrain,
 } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
@@ -67,10 +67,7 @@ function LookPreview({
   onChange: (update: (draft: FirstHobDraft) => FirstHobDraft) => void;
 }) {
   const gear = gearOf(draft);
-  const look = useMemo(
-    () => hobLook(draft.lookSeed, draft.lookColor, { hat: gear.hat, tool: gear.tool }),
-    [draft.lookSeed, draft.lookColor, gear.hat, gear.tool],
-  );
+  const look = useDraftLook(draft);
   const [stars] = useState(previewStars);
   const name = draft.name.trim() || "your hob";
   return (
@@ -146,9 +143,7 @@ export function OnboardingFirstHob() {
   // Coming back to this step keeps what was chosen; a model the runtime dropped falls back,
   // unless the hob was already sent with it.
   useEffect(() => keepDraft(draft), [draft]);
-  useEffect(() => {
-    if (models.data) setDraft((d) => (d.submitted ? d : settleBrain(d, models.data)));
-  }, [models.data]);
+  useSettledBrain(models.data, setDraft);
 
   const model = models.data?.models.find((m) => m.id === draft.model);
   const locked = draft.submitted !== null;
@@ -238,7 +233,7 @@ export function OnboardingFirstHob() {
                   size={22}
                   rolls={nameRolls}
                   onRoll={() => {
-                    setDraft((d) => ({ ...d, name: rollName(d.name), named: true }));
+                    setDraft(rerollName);
                     setNameRolls((n) => n + 1);
                   }}
                   className="size-11"
@@ -268,20 +263,7 @@ export function OnboardingFirstHob() {
                 Claude
               </span>
             </div>
-            {models.isPending ? (
-              <span className="py-2 text-sm text-lantern">
-                Asking Claude Code for its models <span className="animate-hb-blink">•••</span>
-              </span>
-            ) : models.isError ? (
-              <span role="alert" className="flex items-center gap-3 text-sm text-rose">
-                Hobbots could not get Claude Code's models.
-                <Button variant="outline" size="xs" onClick={() => void models.refetch()}>
-                  Try again
-                </Button>
-              </span>
-            ) : (
-              <Brain models={models.data.models} draft={draft} onChange={setDraft} />
-            )}
+            <ModelsBrain models={models} draft={draft} onChange={setDraft} waitingClassName="py-2" />
           </div>
         </div>
 

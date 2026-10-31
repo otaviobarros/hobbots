@@ -46,6 +46,22 @@ const policyColumns = (policy: HobPolicy) => ({
   hidden_shared_folders: JSON.stringify(policy.hiddenSharedFolders),
   policy_overrides: JSON.stringify(policy.overrides),
 });
+// The columns one configuration version sets, on the hob and in its history.
+const configColumns = (agent: Agent) => ({
+  role: agent.role,
+  role_title: agent.roleTitle,
+  sigil: agent.sigil,
+  hat: agent.hat,
+  tool: agent.tool,
+  voice: agent.voice,
+  length: agent.length,
+  ...policyColumns(agent.policy),
+  model: agent.model,
+  effort: agent.effort,
+  instructions: agent.instructions,
+  look_seed: agent.lookSeed,
+  look_color: agent.lookColor,
+});
 const revisedRows = (rows: ReadonlyArray<{ readonly revision?: unknown }>) =>
   rows.map((row) => ({ ...row, revision: Number(row.revision) }));
 
@@ -190,19 +206,7 @@ export class HobbotsRepository extends Context.Service<
         sql`INSERT INTO agent_config_versions ${sql.insert({
           agent_id: agent.id,
           version: agent.configVersion,
-          role: agent.role,
-          role_title: agent.roleTitle,
-          sigil: agent.sigil,
-          hat: agent.hat,
-          tool: agent.tool,
-          voice: agent.voice,
-          length: agent.length,
-          ...policyColumns(agent.policy),
-          model: agent.model,
-          effort: agent.effort,
-          instructions: agent.instructions,
-          look_seed: agent.lookSeed,
-          look_color: agent.lookColor,
+          ...configColumns(agent),
           created_at: createdAt,
         })}`;
 
@@ -245,20 +249,8 @@ export class HobbotsRepository extends Context.Service<
             const inserted = yield* sql`INSERT INTO agents ${sql.insert({
               id: agent.id,
               name: agent.name,
-              role: agent.role,
-              role_title: agent.roleTitle,
-              sigil: agent.sigil,
-              hat: agent.hat,
-              tool: agent.tool,
-              voice: agent.voice,
-              length: agent.length,
-              ...policyColumns(agent.policy),
+              ...configColumns(agent),
               runtime: agent.runtime,
-              model: agent.model,
-              effort: agent.effort,
-              instructions: agent.instructions,
-              look_seed: agent.lookSeed,
-              look_color: agent.lookColor,
               config_version: agent.configVersion,
               status: agent.status,
               retired_at: agent.retiredAt,
@@ -276,25 +268,8 @@ export class HobbotsRepository extends Context.Service<
         journaled(1, (revision) =>
           Effect.gen(function* () {
             const agent = new Agent({ ...input, revision });
-            const policy = policyColumns(agent.policy);
-            const updated = yield* sql`UPDATE agents SET
-                role = ${agent.role},
-                role_title = ${agent.roleTitle},
-                sigil = ${agent.sigil},
-                hat = ${agent.hat},
-                tool = ${agent.tool},
-                voice = ${agent.voice},
-                length = ${agent.length},
-                own_folders = ${policy.own_folders},
-                hidden_shared_folders = ${policy.hidden_shared_folders},
-                policy_overrides = ${policy.policy_overrides},
-                model = ${agent.model},
-                effort = ${agent.effort},
-                instructions = ${agent.instructions},
-                look_seed = ${agent.lookSeed},
-                look_color = ${agent.lookColor},
-                config_version = ${agent.configVersion},
-                revision = ${revision}
+            const columns = { ...configColumns(agent), config_version: agent.configVersion, revision };
+            const updated = yield* sql`UPDATE agents SET ${sql.update(columns)}
               WHERE id = ${agent.id} AND config_version = ${agent.configVersion - 1}
               RETURNING id`;
             if (updated.length === 0) return null;

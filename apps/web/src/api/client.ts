@@ -4,7 +4,7 @@ import { FetchHttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 
 /** What macOS reports for the desktop app's login item; `unavailable` outside the installed Mac app. */
-export type LoginItemStatus = "enabled" | "requires-approval" | "not-registered" | "not-found" | "unavailable";
+type LoginItemStatus = "enabled" | "requires-approval" | "not-registered" | "not-found" | "unavailable";
 
 export interface LoginItemState {
   readonly openAtLogin: boolean;

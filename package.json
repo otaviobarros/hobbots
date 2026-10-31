@@ -14,13 +14,17 @@
     "pg:up": "docker compose -f infrastructure/local/compose.yaml up --detach --wait",
     "pg:down": "docker compose -f infrastructure/local/compose.yaml down",
     "lint": "biome check .",
+    "lint:unused": "knip",
+    "lint:dup": "jscpd",
     "format": "biome check --write .",
-    "check": "node scripts/check-standards.mjs && biome check . && turbo run typecheck test"
+    "check": "node scripts/check-standards.mjs && knip && jscpd && biome check . && turbo run typecheck test"
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {
     "@biomejs/biome": "^2.6.3",
     "@types/node": "^26.6.5",
+    "jscpd": "^5.4.2",
+    "knip": "^6.44.0",
     "turbo": "^2.11.10",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"

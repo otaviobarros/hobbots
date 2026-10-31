@@ -20,6 +20,7 @@ import {
 import { sceneOrder } from "../lib/hob-state.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
 import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
 import { Stars } from "./scene.tsx";
 
 /** Home, the landing page: what your hobs are doing, what needs you, and what is left of each AI plan. */
@@ -128,7 +129,7 @@ export function Home() {
               key={hob.id}
               to="/hobs/$hobId"
               params={{ hobId: hob.id }}
-              aria-label={`Open chat with ${hob.name}, ${hob.roleTitle}, ${stateLabel[state]}`}
+              aria-label={openChatLabel(hob, state)}
               className="hop-on-hover flex flex-col items-center gap-1.5 text-ground no-underline"
             >
               <span
@@ -167,13 +168,7 @@ export function Home() {
           />
           <div className="flex min-w-0 flex-col gap-3.5">
             <NeedsYou />
-            <Card label="Happening now" extra={live.length > 0 && <LiveDot />}>
-              {live.length === 0 ? (
-                <p className="m-0 text-sm text-secondary-text">All quiet. No hob is replying right now.</p>
-              ) : (
-                <HappeningNow live={live} activity={activity} />
-              )}
-            </Card>
+            <HappeningNowCard live={live} activity={activity} />
             <AiPlans />
           </div>
         </div>
@@ -182,13 +177,7 @@ export function Home() {
           <NeedsYou />
 
           <div className="flex min-w-0 flex-col gap-[18px]">
-            <Card label="Happening now" extra={live.length > 0 && <LiveDot />}>
-              {live.length === 0 ? (
-                <p className="m-0 text-sm text-secondary-text">All quiet. No hob is replying right now.</p>
-              ) : (
-                <HappeningNow live={live} activity={activity} />
-              )}
-            </Card>
+            <HappeningNowCard live={live} activity={activity} />
             <Card label="Recent threads" className="flex-1">
               {recent.length === 0 && <p className="m-0 text-sm text-secondary-text">No threads yet.</p>}
               {recent.slice(0, 4).map(({ hob, thread }) => (
@@ -368,7 +357,7 @@ function AllHobs({
                       key={hob.id}
                       to="/hobs/$hobId"
                       params={{ hobId: hob.id }}
-                      aria-label={`Open chat with ${hob.name}, ${hob.roleTitle}, ${stateLabel[state]}`}
+                      aria-label={openChatLabel(hob, state)}
                       title={`${hob.name} · ${hob.roleTitle} · ${stateLabel[state]}`}
                       className="cut hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text no-underline hover:bg-line hover:text-text"
                     >
@@ -444,6 +433,27 @@ function Card({
 }
 
 /** Every reply streaming right now; each opens its thread. */
+const openChatLabel = (hob: Agent, state: HobState) =>
+  messages.home.openChat({ name: hob.name, role: hob.roleTitle, state: stateLabel[state] });
+
+function HappeningNowCard({
+  live,
+  activity,
+}: {
+  live: ReadonlyArray<{ hob: Agent; thread: Thread }>;
+  activity: ActivityMap;
+}) {
+  return (
+    <Card label={messages.home.happeningNow} extra={live.length > 0 && <LiveDot />}>
+      {live.length === 0 ? (
+        <p className="m-0 text-sm text-secondary-text">{messages.home.allQuiet}</p>
+      ) : (
+        <HappeningNow live={live} activity={activity} />
+      )}
+    </Card>
+  );
+}
+
 function HappeningNow({
   live,
   activity,

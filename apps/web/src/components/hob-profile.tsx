@@ -22,7 +22,7 @@ import {
 } from "../api/profile.ts";
 import { agentsQuery, modelsQuery, threadsQuery, usePauseHob, useRetireHob, useUpdateHob } from "../api/queries.ts";
 import { hobState, stateLabel } from "../lib/hob-state.ts";
-import { Brain, Choice } from "./hob-form.tsx";
+import { Choice, ModelsBrain } from "./hob-form.tsx";
 import { CharmsTab, PermissionsTab } from "./hob-permissions.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { RoleSheet } from "./role-sheet.tsx";
@@ -374,20 +374,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
                 Claude
               </Choice>
             </div>
-            {models.isPending ? (
-              <span className="py-1 text-sm text-lantern">
-                Asking Claude Code for its models <span className="animate-hb-blink">•••</span>
-              </span>
-            ) : models.isError ? (
-              <span role="alert" className="flex items-center gap-3 text-sm text-rose">
-                Hobbots could not get Claude Code's models.
-                <Button type="button" variant="outline" size="xs" onClick={() => void models.refetch()}>
-                  Try again
-                </Button>
-              </span>
-            ) : (
-              <Brain models={models.data.models} draft={draft} onChange={setDraft} />
-            )}
+            <ModelsBrain models={models} draft={draft} onChange={setDraft} />
             <span className="text-[13px] text-label">Other providers arrive later.</span>
           </fieldset>
 

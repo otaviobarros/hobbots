@@ -24,7 +24,7 @@ Scope: this repository. Purpose: tell people and coding agents where each projec
 Commands live in executable configuration; read them there rather than from this guide. Working directory: repository root.
 
 - Script catalog: root [`package.json`](../package.json) `scripts` (`check` is the required pre-PR gate per AGENTS.md and CONTRIBUTING.md); per-package scripts in each `package.json`; task graph in [`turbo.json`](../turbo.json).
-- Lint/format rules: [`biome.json`](../biome.json) (`docs/` is excluded). Type strictness: [`tsconfig.base.json`](../tsconfig.base.json).
+- Lint/format rules: [`biome.json`](../biome.json) (`docs/` is excluded). Unused code: [`knip.jsonc`](../knip.jsonc). Copied code: [`.jscpd.json`](../.jscpd.json). Type strictness: [`tsconfig.base.json`](../tsconfig.base.json).
 - Tests: Vitest, under `test/` or beside the source as `*.test.ts`. `packages/api` and `packages/ui` have no tests; `apps/desktop` tests its main-process helpers and build scripts, and drives a packaged app end to end with Node's test runner in `scripts/background-service.e2e.ts`. `apps/web/e2e` drives the served web client in Chromium with Playwright (`pnpm test:e2e`, its own CI job); each test starts a hub from source with an empty data folder under `.data/e2e`.
 - Deterministic runtime: `HOBBOTS_RUNTIME=fake` selects the fake adapter in [`packages/runtimes/src/fake.ts`](../packages/runtimes/src/fake.ts) (see [`apps/server/src/config.ts`](../apps/server/src/config.ts)). A prompt that starts with `fake:cut-off` or `fake:limit` makes it end the reply early as a provider would, and `HOBBOTS_FAKE_AVAILABILITY` (`ready`, `outdated`, `signedOut`, `unavailable` or `unverified`) sets what its health check reports.
 - CI: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `pnpm check` (SQLite) and, in a second job, the persistence and server suites with `HOBBOTS_TEST_DB=postgres` against a PostgreSQL service container.
@@ -80,6 +80,7 @@ Workflow selection: **Default for matching tasks** (selected by the maintainer d
 | Worktree isolation (own install, data folder, port) | Accepted | Setup interview; [Environment and worktrees](#environment-and-worktrees) | Keeps agent work off real user data |
 | Glossary | Accepted | [Glossary](product/glossary.md) | Built only from existing docs |
 | Stable rule IDs (`STD-<AREA>-NNN`) with an index check in `pnpm check` | Accepted | Standards interview, issue #170; [Engineering standards](standards/README.md) | Whole repository |
+| knip and jscpd block unused and copied code in `pnpm check` | Accepted | Issue #170; STD-DUP-005, STD-DUP-006 | Whole repository; tests and generated files are outside jscpd |
 | CI running `pnpm check` on SQLite and the persistence and server suites on PostgreSQL | Established | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [ADR 011](decisions/011-sqlite-storage.md) | Every pull request and push to `main` |
 | Agent-engineering default routing | Accepted | Setup interview; [AGENTS.md](../AGENTS.md#workflow) | Guidance, not enforcement |
 

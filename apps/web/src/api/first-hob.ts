@@ -185,6 +185,13 @@ export const rollName = (current: string, random: Random = Math.random): string 
   return pick(others, random);
 };
 
+/** The draft with a new random name, marked as named so a later role change keeps it. */
+export const rerollName = (draft: FirstHobDraft): FirstHobDraft => ({
+  ...draft,
+  name: rollName(draft.name),
+  named: true,
+});
+
 /** A new look seed, never the current one; small numbers read well as "Look #4821". */
 export const rollSeed = (current: number, random: Random = Math.random): number => {
   const seed = 1 + Math.floor(random() * 9998);
@@ -343,13 +350,13 @@ export const pickRole = <D extends FirstHobDraft>(draft: D, role: RoleId | null)
 });
 
 /** The effort a model starts on: medium where it takes one, else its lowest, or none. */
-export const startingEffort = (model: RuntimeModel | undefined): Effort | null => {
+const startingEffort = (model: RuntimeModel | undefined): Effort | null => {
   if (!model || model.efforts.length === 0) return null;
   return model.efforts.includes("medium") ? "medium" : (model.efforts[0] ?? null);
 };
 
 /** The runtime's own default model when it lists one, else the first. */
-export const startingModel = (models: RuntimeModels): RuntimeModel | undefined =>
+const startingModel = (models: RuntimeModels): RuntimeModel | undefined =>
   models.models.find((m) => m.id === "default") ?? models.models[0];
 
 /**
@@ -384,9 +391,6 @@ export const pickModel = <D extends BrainChoice>(draft: D, model: RuntimeModel):
 /** The role title as the hob carries it: the starter role's title, or the user's own words. */
 export const roleTitleOf = (draft: FirstHobDraft): string =>
   draft.role === null ? draft.ownTitle.trim() : starterRole(draft.role).title;
-
-/** The sigil the hob shows: its starter role's, or the one a title of the user's own borrows. */
-export const sigilOf = (draft: FirstHobDraft): RoleId => draft.role ?? draft.ownSigil;
 
 /** The hat and tool the sprite wears; null leaves them to the look seed. */
 export const gearOf = (draft: FirstHobDraft): Required<Pick<Agent, "hat" | "tool">> => ({
@@ -475,14 +479,14 @@ const draftKeeper = (key: string) => {
 };
 
 /** Where onboarding keeps the draft between steps, until the summon creates the hob. */
-export const FIRST_HOB_DRAFT_KEY = "setup.firstHob";
+const FIRST_HOB_DRAFT_KEY = "setup.firstHob";
 
 const firstHob = draftKeeper(FIRST_HOB_DRAFT_KEY);
 export const keepDraft = firstHob.keep;
 export const keptDraftOrStored = firstHob.kept;
 
 /** Where Summon keeps its draft while the user looks elsewhere, until the hob exists. */
-export const SUMMON_DRAFT_KEY = "summon.draft";
+const SUMMON_DRAFT_KEY = "summon.draft";
 
 const summoning = draftKeeper(SUMMON_DRAFT_KEY);
 export const keepSummonDraft = summoning.keep;

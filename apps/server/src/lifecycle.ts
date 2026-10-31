@@ -1,10 +1,11 @@
-import { AgentNotFound, HobUnavailable } from "@hobbots/api";
+import { type AgentNotFound, HobUnavailable } from "@hobbots/api";
 import { type Agent, type AgentId, AgentTransitions, InvalidAgentTransition, type RetireWork } from "@hobbots/domain";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { ChatService } from "./chat.ts";
 import { EventBus } from "./event-bus.ts";
+import { foundAgent } from "./hobs.ts";
 
 /** Pauses, wakes and retires hobs (AG-006). Nothing here deletes a hob or its threads. */
 export class HobLifecycle extends Context.Service<
@@ -23,15 +24,7 @@ export class HobLifecycle extends Context.Service<
       const chat = yield* ChatService;
       const admission = yield* HobAdmission;
 
-      const findAgent = (agentId: AgentId) =>
-        repo.findAgent(agentId).pipe(
-          Effect.flatMap(
-            Option.match({
-              onNone: () => Effect.fail(new AgentNotFound({ agentId })),
-              onSome: Effect.succeed,
-            }),
-          ),
-        );
+      const findAgent = (agentId: AgentId) => repo.findAgent(agentId).pipe(Effect.flatMap(foundAgent(agentId)));
 
       // Saves and announces a changed status; a repeated request changes nothing and stays quiet.
       // The update only applies to the status the transition was computed from, so a stale read

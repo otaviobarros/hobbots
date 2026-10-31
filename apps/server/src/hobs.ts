@@ -55,11 +55,14 @@ export const checkBrain = (
   return undefined;
 };
 
+/** The hob a lookup found, or `AgentNotFound` when there is none with this ID. */
+export const foundAgent =
+  (agentId: AgentId) =>
+  (agent: Option.Option<Agent>): Effect.Effect<Agent, AgentNotFound> =>
+    Option.match(agent, { onNone: () => Effect.fail(new AgentNotFound({ agentId })), onSome: Effect.succeed });
+
 /** A starter role keeps its own title; a title in the user's own words goes with no role. */
-export const checkRole = (role: {
-  readonly role: RoleId | null;
-  readonly roleTitle: string;
-}): InvalidHob | undefined => {
+const checkRole = (role: { readonly role: RoleId | null; readonly roleTitle: string }): InvalidHob | undefined => {
   if (role.role === null) return undefined;
   const title = starterRole(role.role).title;
   return role.roleTitle === title
@@ -68,7 +71,7 @@ export const checkRole = (role: {
 };
 
 /** An override that would allow more than the preset, naming each operation it widens. */
-export const checkOverrides = (preset: SafetyPreset, overrides: HobPolicy["overrides"]): OverrideWidens | undefined => {
+const checkOverrides = (preset: SafetyPreset, overrides: HobPolicy["overrides"]): OverrideWidens | undefined => {
   const widened = POLICY_OPERATIONS.filter((operation) => {
     const override = overrides[operation];
     return override !== undefined && !isNarrowerOrEqual(override, PRESET_DECISIONS[preset][operation]);

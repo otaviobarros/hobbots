@@ -6,7 +6,7 @@ import type { SettingsStore } from "./settings.ts";
  * build cannot register one: a development checkout, which would register Electron itself, or a
  * platform other than macOS (ADR 012).
  */
-export type LoginItemStatus = "enabled" | "requires-approval" | "not-registered" | "not-found" | "unavailable";
+type LoginItemStatus = "enabled" | "requires-approval" | "not-registered" | "not-found" | "unavailable";
 
 /** The choice in Settings › General and what macOS made of it. */
 export interface LoginItemState {

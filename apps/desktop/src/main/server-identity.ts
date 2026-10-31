@@ -59,16 +59,6 @@ export const checkServer = async (apiUrl: string, dataDir: string): Promise<Serv
   return judgeHealth(body, ownInstallation(dataDir));
 };
 
-/** Waits while nothing listens on the port, then reports what answered; "none" after the timeout. */
-export const waitForServer = async (apiUrl: string, dataDir: string, timeoutMs: number): Promise<ServerCheck> => {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const check = await checkServer(apiUrl, dataDir);
-    if (check.kind !== "none" || Date.now() >= deadline) return check;
-    await new Promise((r) => setTimeout(r, 250));
-  }
-};
-
 /** The error to show instead of connecting to something that is not this installation's server. */
 export const serverProblem = (check: ServerCheck, port: number): { message: string; detail: string } | undefined => {
   switch (check.kind) {

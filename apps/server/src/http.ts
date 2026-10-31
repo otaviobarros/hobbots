@@ -1,10 +1,10 @@
-import { AgentNotFound, HobbotsApi, ThreadNotFound } from "@hobbots/api";
+import { HobbotsApi, ThreadNotFound } from "@hobbots/api";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ChatService } from "./chat.ts";
-import { HobInputErrorsLayer, HobService } from "./hobs.ts";
+import { foundAgent, HobInputErrorsLayer, HobService } from "./hobs.ts";
 import { Installation } from "./installation.ts";
 import { HobLifecycle } from "./lifecycle.ts";
 import { PermissionsHandlers } from "./permissions.ts";
@@ -27,12 +27,8 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
       retire: ({ params, payload }) => lifecycle.retire(params.agentId, payload.activeWork),
       threads: ({ params }) =>
         repo.findAgent(params.agentId).pipe(
-          Effect.flatMap(
-            Option.match({
-              onNone: () => Effect.fail(new AgentNotFound({ agentId: params.agentId })),
-              onSome: () => repo.listThreads(params.agentId),
-            }),
-          ),
+          Effect.flatMap(foundAgent(params.agentId)),
+          Effect.flatMap(() => repo.listThreads(params.agentId)),
         ),
       createThread: ({ params }) => chat.createThread(params.agentId),
     });

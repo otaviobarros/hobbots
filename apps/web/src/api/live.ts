@@ -5,7 +5,7 @@ import { type QueryClient, queryOptions, useQuery } from "@tanstack/react-query"
  * Marks a query that holds what only this client knows. A resync with the hub fetches every other
  * query again, but refetching one of these would only reset it.
  */
-export const LOCAL = { local: true } as const;
+const LOCAL = { local: true } as const;
 
 /** Whether this client hears the hub's live events right now. */
 export type ConnectionState = "connecting" | "live" | "reconnecting";

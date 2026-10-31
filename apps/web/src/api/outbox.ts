@@ -10,7 +10,7 @@ import { sendPrompt, startThread } from "./queries.ts";
  * resync cannot replace them, and outside any component, so a delivery is acknowledged even after
  * its chat has closed.
  */
-export type WaitingMessage = { readonly id: string; readonly content: string };
+type WaitingMessage = { readonly id: string; readonly content: string };
 
 /** Where messages wait: a thread, or a hob's fresh page before its thread exists. */
 export type WaitingPlace = ThreadId | `new-${AgentId}`;
