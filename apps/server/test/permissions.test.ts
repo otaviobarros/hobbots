@@ -30,6 +30,10 @@ mkdirSync(own);
 symlinkSync(own, join(temp, "own-link"));
 const sharedLink = join(temp, "shared-link");
 symlinkSync(shared, sharedLink);
+// A folder that is away at first, like one on an unmounted drive.
+const away = join(temp, "away");
+const awayLink = join(temp, "away-link");
+symlinkSync(away, awayLink);
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
 const hob = {
@@ -231,6 +235,39 @@ describe("a hob's hidden folders", () => {
       sharedFolders: [shared, notes],
       folders: [notes],
     });
+  });
+
+  // covers AG-004, PE-001
+  it("[TC-AG-096] keeps a shared folder hidden that was away when it was hidden, once it returns and setup is saved again", async () => {
+    await dispose();
+    start([awayLink, notes]);
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+
+    // Away, it keeps the spelling it was saved with, and so does hiding it.
+    expect((await request("GET", permissions(agent))).body).toMatchObject({ sharedFolders: [awayLink, notes] });
+    const hidden = await request("PATCH", permissions(agent), { hiddenSharedFolders: [awayLink] });
+    expect(hidden).toMatchObject({
+      status: 200,
+      body: { configVersion: 2, policy: { hiddenSharedFolders: [awayLink] }, folders: [notes] },
+    });
+
+    // Back, it stays hidden, before and after setup stores it canonical.
+    mkdirSync(away);
+    expect((await request("GET", permissions(agent))).body).toMatchObject({ folders: [notes] });
+    // A second hob can hide it by the folder it names now, though setup still has the old spelling.
+    const other: Agent = (await request("POST", "/api/agents", { ...hob, name: "Fern" })).body;
+    expect(await request("PATCH", permissions(other), { hiddenSharedFolders: [away] })).toMatchObject({
+      status: 200,
+      body: { folders: [notes] },
+    });
+    await request("PATCH", "/api/setup", { approvedFolders: [awayLink, notes] });
+    for (const hobAgent of [agent, other]) {
+      expect((await request("GET", permissions(hobAgent))).body).toMatchObject({
+        sharedFolders: [away, notes],
+        folders: [notes],
+      });
+    }
+    expect((await request("GET", permissions(agent))).body).toMatchObject({ configVersion: 2 });
   });
 });
 

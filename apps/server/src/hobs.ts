@@ -29,7 +29,7 @@ import { Context, DateTime, Effect, Layer, Option, SchemaIssue } from "effect";
 import { HttpApiMiddleware } from "effect/http-api";
 import { HobAdmission } from "./admission.ts";
 import { EventBus } from "./event-bus.ts";
-import { checkFolder } from "./folders.ts";
+import { checkFolder, folderIdentity, sameFolderIn } from "./folders.ts";
 
 /**
  * Checks a new hob's model and effort against what the runtime offers. A null model is the
@@ -248,14 +248,10 @@ export class HobService extends Context.Service<
         const ownFolders = payload.ownFolders && [
           ...new Set(yield* Effect.forEach(payload.ownFolders, (folder) => checkFolder(folder))),
         ];
-        // A hidden folder is compared by its canonical form too, so any spelling of a shared folder
-        // hides it. One that no longer exists on the hub keeps its spelling, to match the stored one.
+        // A hidden folder is stored canonical too, so any spelling of a shared folder hides it. One
+        // missing from the hub keeps its spelling; it is compared by identity whenever it is read.
         const hiddenSharedFolders = payload.hiddenSharedFolders && [
-          ...new Set(
-            yield* Effect.forEach(payload.hiddenSharedFolders, (folder) =>
-              checkFolder(folder).pipe(Effect.orElseSucceed(() => folder)),
-            ),
-          ),
+          ...new Set(yield* Effect.forEach(payload.hiddenSharedFolders, folderIdentity)),
         ];
         return yield* nextVersion(id, (agent) =>
           Effect.gen(function* () {
@@ -279,7 +275,10 @@ export class HobService extends Context.Service<
               }
             }
             if (hiddenSharedFolders !== undefined) {
-              const unknown = policy.hiddenSharedFolders.find((folder) => !approvedFolders.includes(folder));
+              const isShared = yield* sameFolderIn(approvedFolders);
+              const unknown = yield* Effect.findFirst(policy.hiddenSharedFolders, (folder) =>
+                Effect.map(isShared(folder), (shared) => !shared),
+              ).pipe(Effect.map(Option.getOrUndefined));
               if (unknown !== undefined) {
                 return yield* new InvalidFolder({ folder: unknown, message: `${unknown} is not a shared folder` });
               }

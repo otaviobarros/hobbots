@@ -12,12 +12,20 @@ import {
 import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
+import { sameFolderIn } from "./folders.ts";
 import { HobService } from "./hobs.ts";
 
-/** The folders a hob works in: the shared folders it does not hide, then its own (ADR 014). */
-export const effectiveFolders = (sharedFolders: ReadonlyArray<string>, policy: HobPolicy): ReadonlyArray<string> => [
-  ...new Set([...sharedFolders.filter((folder) => !policy.hiddenSharedFolders.includes(folder)), ...policy.ownFolders]),
-];
+/**
+ * The folders a hob works in: the shared folders it does not hide, then its own (ADR 014). A shared
+ * folder is hidden when a hidden entry names the same folder now, whatever spelling either was
+ * stored with, so canonicalizing a shared folder later never shows a hidden one again.
+ */
+export const effectiveFolders = (sharedFolders: ReadonlyArray<string>, policy: HobPolicy) =>
+  Effect.gen(function* () {
+    const isHidden = yield* sameFolderIn(policy.hiddenSharedFolders);
+    const visible = yield* Effect.filter(sharedFolders, (folder) => Effect.map(isHidden(folder), (hidden) => !hidden));
+    return [...new Set([...visible, ...policy.ownFolders])];
+  });
 
 /**
  * Per operation, the narrower of the preset and the hob's override. Taking the narrower one keeps an
@@ -42,19 +50,18 @@ export const PermissionsHandlers = HttpApiBuilder.group(HobbotsApi, "permissions
     const setup = yield* SetupRepository;
     const hobs = yield* HobService;
     const permissions = (agent: Agent) =>
-      setup.get.pipe(
-        Effect.map(
-          ({ safetyPreset, approvedFolders }): HobPermissions => ({
-            agentId: agent.id,
-            configVersion: agent.configVersion,
-            preset: safetyPreset,
-            sharedFolders: approvedFolders,
-            policy: agent.policy,
-            folders: effectiveFolders(approvedFolders, agent.policy),
-            decisions: effectiveDecisions(safetyPreset, agent.policy.overrides),
-          }),
-        ),
-      );
+      Effect.gen(function* () {
+        const { safetyPreset, approvedFolders } = yield* setup.get;
+        return {
+          agentId: agent.id,
+          configVersion: agent.configVersion,
+          preset: safetyPreset,
+          sharedFolders: approvedFolders,
+          policy: agent.policy,
+          folders: yield* effectiveFolders(approvedFolders, agent.policy),
+          decisions: effectiveDecisions(safetyPreset, agent.policy.overrides),
+        } satisfies HobPermissions;
+      });
     return handlers.handleAll({
       get: ({ params }) =>
         repo.findAgent(params.agentId).pipe(

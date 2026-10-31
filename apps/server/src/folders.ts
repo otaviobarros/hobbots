@@ -36,22 +36,32 @@ export const checkFolder = (typed: string, home: string = homedir()): Effect.Eff
 };
 
 /**
- * Stores the shared folders canonical when the hub starts. Folders saved before they were stored
- * canonical may be symlink spellings; a hob's hidden folders compare by the canonical form, so
- * without this a later save of the unchanged setup would rewrite a hidden folder's spelling and
- * show it again (ADR 014). A folder missing from the hub keeps its spelling; duplicates are kept once.
+ * The folder a stored path names now: canonical while it is on the hub, else the path as stored.
+ * A folder that was missing when it was stored, such as one on an unmounted drive, keeps its
+ * spelling; comparing by this identity matches it again once it returns.
+ */
+export const folderIdentity = (folder: string): Effect.Effect<string> =>
+  checkFolder(folder).pipe(Effect.orElseSucceed(() => folder));
+
+/** Whether `folder` is one of `among`, by spelling or by the folder each names now. */
+export const sameFolderIn = (among: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const identities = new Set([...among, ...(yield* Effect.forEach(among, folderIdentity))]);
+    return (folder: string) =>
+      Effect.map(folderIdentity(folder), (identity) => identities.has(folder) || identities.has(identity));
+  });
+
+/**
+ * Stores the shared folders canonical when the hub starts, since folders saved before they were
+ * stored canonical may be symlink spellings (ADR 014). A folder missing from the hub keeps its
+ * spelling; duplicates are kept once. Hidden folders do not depend on this: they compare by
+ * `folderIdentity` whenever they are read, so a later rewrite of a spelling cannot show one again.
  */
 export const CanonicalSharedFolders = Layer.effectDiscard(
   Effect.gen(function* () {
     const setup = yield* SetupRepository;
     const { approvedFolders } = yield* setup.get;
-    const canonical = [
-      ...new Set(
-        yield* Effect.forEach(approvedFolders, (folder) =>
-          checkFolder(folder).pipe(Effect.orElseSucceed(() => folder)),
-        ),
-      ),
-    ];
+    const canonical = [...new Set(yield* Effect.forEach(approvedFolders, folderIdentity))];
     if (canonical.join("\0") !== approvedFolders.join("\0")) {
       yield* setup.update({ approvedFolders: canonical });
     }
