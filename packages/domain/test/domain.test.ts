@@ -91,6 +91,29 @@ describe("a reply cut off or limited by the provider", () => {
   });
 });
 
+describe("a reply's steps when its turn ends", () => {
+  // covers CH-004, CH-007
+  it("[TC-CH-113] leaves running and awaiting steps unfinished for good, so Continue cannot revive them", () => {
+    const call = { tool: "Bash", operation: "run-commands", targets: ["/work"] } as const;
+    const withSteps = MessageTransitions.setSteps(MessageTransitions.appendDelta(streaming, "Hel") as Message, [
+      { id: "t1", kind: "tool", label: "Running pnpm test", state: "running", call },
+      { id: "t2", kind: "tool", label: "Pushing", state: "awaiting", call, approvalId: "a1" },
+      { id: "t3", kind: "tool", label: "Editing a.ts", state: "done", call },
+    ]) as Message;
+    for (const ended of [
+      MessageTransitions.interrupt(withSteps),
+      MessageTransitions.cutOff(withSteps, "gone"),
+      MessageTransitions.limit(withSteps, null),
+      MessageTransitions.complete(withSteps),
+    ]) {
+      expect((ended as Message).steps.map((step) => step.state)).toEqual(["unfinished", "unfinished", "done"]);
+    }
+    const resumed = MessageTransitions.resume(MessageTransitions.interrupt(withSteps) as Message) as Message;
+    expect(resumed.status).toBe("streaming");
+    expect(resumed.steps.map((step) => step.state)).toEqual(["unfinished", "unfinished", "done"]);
+  });
+});
+
 describe("QueuedMessageTransitions", () => {
   const queued = new Message({ ...streaming, role: "user", status: "queued", configVersion: null });
 

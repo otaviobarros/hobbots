@@ -40,8 +40,10 @@ export const isResumable = (status: MessageStatus): boolean => status === "inter
  * - `done`: ended; a tool call ended without an error.
  * - `failed`: a tool call ended with an error, a sandbox refusal included.
  * - `denied`: a tool call never ran; `reason` says why and `decidedBy` who refused it.
+ * - `unfinished`: its turn ended while it was running or awaiting, so its outcome is unknown. Final:
+ *   Continue starts new steps and never revives it.
  */
-export const ReplyStepState = Schema.Literals(["running", "awaiting", "done", "failed", "denied"]);
+export const ReplyStepState = Schema.Literals(["running", "awaiting", "done", "failed", "denied", "unfinished"]);
 export type ReplyStepState = typeof ReplyStepState.Type;
 
 /** A tool call the step stands for, as the policy decided it (ADR 014). */
@@ -68,8 +70,8 @@ export const ReplyStep = Schema.Struct({
   approvalId: Schema.optionalKey(Schema.String),
   /** For a `denied` step: why the call was refused. */
   reason: Schema.optionalKey(Schema.String),
-  /** For a `denied` step: the policy hook refused it, or the OS sandbox around the runtime. */
-  decidedBy: Schema.optionalKey(Schema.Literals(["policy", "sandbox"])),
+  /** For a `denied` step: the policy hook refused it, the user denied its Ask, or the OS sandbox did. */
+  decidedBy: Schema.optionalKey(Schema.Literals(["policy", "user", "sandbox"])),
 });
 export type ReplyStep = typeof ReplyStep.Type;
 
@@ -101,6 +103,16 @@ export class InvalidMessageTransition extends Schema.TaggedError<InvalidMessageT
   { messageId: MessageId, from: MessageStatus, action: Schema.String },
 ) {}
 
+/** A turn's end: every step still running or awaiting is left unfinished, so it never reads as active again. */
+const endTurn = (message: Message, fields: Partial<Message>): Message =>
+  new Message({
+    ...message,
+    ...fields,
+    steps: message.steps.map((step) =>
+      step.state === "running" || step.state === "awaiting" ? { ...step, state: "unfinished" as const } : step,
+    ),
+  });
+
 const requireInProgress = (message: Message, action: string) =>
   isInProgress(message.status)
     ? undefined
@@ -120,14 +132,10 @@ export const MessageTransitions = {
 
   complete: (message: Message, finalContent?: string): Message | InvalidMessageTransition =>
     requireInProgress(message, "complete") ??
-    new Message({
-      ...message,
-      content: finalContent ?? message.content,
-      status: "complete",
-    }),
+    endTurn(message, { content: finalContent ?? message.content, status: "complete" }),
 
   fail: (message: Message, error: string): Message | InvalidMessageTransition =>
-    requireInProgress(message, "fail") ?? new Message({ ...message, status: "failed", error }),
+    requireInProgress(message, "fail") ?? endTurn(message, { status: "failed", error }),
 
   /**
    * The runtime failed. A reply that had started writing was cut off, so it keeps its text and can
@@ -135,11 +143,11 @@ export const MessageTransitions = {
    */
   cutOff: (message: Message, error: string): Message | InvalidMessageTransition =>
     requireInProgress(message, "cutOff") ??
-    new Message({ ...message, status: message.content.length > 0 ? "interrupted" : "failed", error }),
+    endTurn(message, { status: message.content.length > 0 ? "interrupted" : "failed", error }),
 
   /** The provider's usage limit ended the turn; the text so far is kept. */
   limit: (message: Message, resetsAt: string | null): Message | InvalidMessageTransition =>
-    requireInProgress(message, "limit") ?? new Message({ ...message, status: "limited", error: null, resetsAt }),
+    requireInProgress(message, "limit") ?? endTurn(message, { status: "limited", error: null, resetsAt }),
 
   /** Continue: a reply that ended early streams again, appending to the text it kept. */
   resume: (message: Message): Message | InvalidMessageTransition =>
@@ -158,7 +166,7 @@ export const MessageTransitions = {
   /** The turn ended: stopped when the user asked for it, otherwise interrupted by Hobbots. */
   interrupt: (message: Message): Message | InvalidMessageTransition =>
     requireInProgress(message, "interrupt") ??
-    new Message({ ...message, status: message.status === "stopping" ? "stopped" : "interrupted" }),
+    endTurn(message, { status: message.status === "stopping" ? "stopped" : "interrupted" }),
 };
 
 /** Pure transitions for a user message waiting in its thread's queue (CH-008). */

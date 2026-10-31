@@ -1,13 +1,15 @@
 import type { ReplyStep, ToolCall } from "@hobbots/domain";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@hobbots/ui/components/collapsible";
 import { cn } from "@hobbots/ui/lib/utils";
-import { operationLabel, type StepOutcome, shownSteps, stepOutcome } from "../lib/reply-steps.ts";
+import { operationLabel, shownSteps } from "../lib/reply-steps.ts";
 import { messages } from "./messages.ts";
+
+type StepState = ReplyStep["state"];
 
 const copy = messages.steps;
 
 /** The mark before each step, and its color. A running step blinks until Reduce motion stops it. */
-const MARK: Record<StepOutcome, { readonly glyph: string; readonly className: string }> = {
+const MARK: Record<StepState, { readonly glyph: string; readonly className: string }> = {
   running: { glyph: "●", className: "animate-hb-blink text-lantern" },
   awaiting: { glyph: "◷", className: "text-lantern" },
   done: { glyph: "✓", className: "text-mint" },
@@ -30,11 +32,11 @@ export function ReplySteps({ steps, inProgress }: { steps: ReadonlyArray<ReplySt
       className="m-0 flex list-none flex-col gap-[3px] border-2 border-line bg-panel px-2.5 py-2 text-[13px]"
     >
       {shown.map((step) => (
-        <li key={step.id} data-state={stepOutcome(step, inProgress)}>
+        <li key={step.id} data-state={step.state}>
           {step.kind === "tool" && step.call ? (
-            <ToolStep step={step} call={step.call} outcome={stepOutcome(step, inProgress)} />
+            <ToolStep step={step} call={step.call} outcome={step.state} />
           ) : (
-            <StepLine step={step} outcome={stepOutcome(step, inProgress)} />
+            <StepLine step={step} outcome={step.state} />
           )}
         </li>
       ))}
@@ -42,7 +44,7 @@ export function ReplySteps({ steps, inProgress }: { steps: ReadonlyArray<ReplySt
   );
 }
 
-function StepLine({ step, outcome }: { step: ReplyStep; outcome: StepOutcome }) {
+function StepLine({ step, outcome }: { step: ReplyStep; outcome: StepState }) {
   const mark = MARK[outcome];
   return (
     <span className="flex items-center gap-2 text-secondary-text">
@@ -57,8 +59,11 @@ function StepLine({ step, outcome }: { step: ReplyStep; outcome: StepOutcome }) 
   );
 }
 
+/** Why a refused step never ran, by who refused it. */
+const DENIED = { policy: copy.deniedByPolicy, user: copy.deniedByUser, sandbox: copy.deniedBySandbox } as const;
+
 /** The line under a tool step that says what happened, when its mark alone does not. */
-const stepNote = (step: ReplyStep, outcome: StepOutcome): string | null => {
+const stepNote = (step: ReplyStep, outcome: StepState): string | null => {
   switch (outcome) {
     case "awaiting":
       return copy.awaiting;
@@ -66,16 +71,14 @@ const stepNote = (step: ReplyStep, outcome: StepOutcome): string | null => {
       return copy.failed;
     case "unfinished":
       return copy.unfinished;
-    case "denied": {
-      const reason = step.reason ?? "";
-      return step.decidedBy === "sandbox" ? copy.deniedBySandbox({ reason }) : copy.deniedByPolicy({ reason });
-    }
+    case "denied":
+      return DENIED[step.decidedBy ?? "policy"]({ reason: step.reason ?? "" });
     default:
       return null;
   }
 };
 
-function ToolStep({ step, call, outcome }: { step: ReplyStep; call: ToolCall; outcome: StepOutcome }) {
+function ToolStep({ step, call, outcome }: { step: ReplyStep; call: ToolCall; outcome: StepState }) {
   const note = stepNote(step, outcome);
   return (
     <Collapsible className="flex flex-col gap-0.5">

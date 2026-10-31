@@ -61,8 +61,8 @@ export type RuntimeEvent =
       readonly targets: ReadonlyArray<string>;
       readonly label: string;
       readonly reason: string;
-      /** Who refused it: the policy hook, or the OS sandbox around the runtime. */
-      readonly decidedBy: "policy" | "sandbox";
+      /** Who refused it: the policy hook, the user answering an Ask, or the OS sandbox around the runtime. */
+      readonly decidedBy: "policy" | "user" | "sandbox";
     }
   | {
       readonly _tag: "Completed";

@@ -214,6 +214,57 @@ describe("event stream", () => {
     ]);
   });
 
+  // covers CH-004, CH-007
+  it("[TC-CH-114] keeps a tool step cut off by an interruption unfinished when Continue resumes the reply", async () => {
+    const steps = await run((turn) =>
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const thread = yield* chat.createThread(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "Run the tests");
+        const reply = repo.listMessages(thread.id).pipe(Effect.map((messages) => messages.at(-1)));
+        const until = (check: (status: string | undefined) => boolean) =>
+          reply.pipe(
+            Effect.flatMap((m) => (check(m?.status) && m?.steps.length ? Effect.succeed(m) : Effect.fail("busy"))),
+            Effect.retry(Schedule.spaced("5 millis")),
+          );
+        const tests = {
+          tool: "Bash",
+          operation: "run-commands",
+          targets: ["/work"],
+          label: "Running pnpm test",
+        } as const;
+        yield* Queue.offerAll(turn, [
+          { _tag: "SessionStarted", sessionId: "s1", billing: "fake" },
+          { _tag: "TextDelta", text: "Running" },
+          { _tag: "ToolStarted", id: "t1", ...tests },
+        ]);
+        yield* until((status) => status === "streaming");
+        // Hobbots ends the turn mid-tool, as a pause or restart does.
+        yield* chat.interruptAgent(HOB_ID);
+        const interrupted = yield* until((status) => status === "interrupted");
+
+        // The thread is free once the ended turn's drain has run.
+        yield* chat
+          .continueReply(thread.id, assistantMessage?.id ?? MessageId.make(""))
+          .pipe(Effect.retry(Schedule.spaced("5 millis")));
+        yield* Queue.offerAll(turn, [
+          { _tag: "ToolStarted", id: "t1", ...tests },
+          { _tag: "ToolFinished", id: "t1", failed: false },
+          { _tag: "Completed", sessionId: "s1", text: " done." },
+        ]);
+        const completed = yield* until((status) => status === "complete");
+        return { interrupted: interrupted.steps, completed: completed.steps };
+      }),
+    );
+
+    expect(steps.interrupted.map((step) => [step.id, step.state])).toEqual([["t1", "unfinished"]]);
+    expect(steps.completed.map((step) => [step.id, step.state])).toEqual([
+      ["t1", "unfinished"],
+      ["t1@1", "done"],
+    ]);
+  });
+
   // covers CH-004
   it("[TC-CH-072] starts fresh at the head for a missing, malformed, foreign or future cursor", async () => {
     const result = await run(() =>

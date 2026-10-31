@@ -61,6 +61,7 @@ export const messages = {
     unfinished: "The reply ended before this step finished.",
     deniedByPolicy: ({ reason }: { reason: string }) => `Not allowed by the hob's permissions: ${reason}`,
     deniedBySandbox: ({ reason }: { reason: string }) => `Blocked by the sandbox: ${reason}`,
+    deniedByUser: ({ reason }: { reason: string }) => `You denied this: ${reason}`,
     tool: "Tool",
     operation: "Action",
     targets: "On",
