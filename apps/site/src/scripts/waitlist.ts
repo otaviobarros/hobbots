@@ -1,3 +1,4 @@
+import { EMAIL, emailProblem } from "./email.ts";
 import { getMine } from "./mine.ts";
 import { replay } from "./motion.ts";
 import { notes } from "./sound.ts";
@@ -6,14 +7,6 @@ import { notes } from "./sound.ts";
  * The two wait-list forms share one email. This step checks the address and shows the success state
  * of the design; saving the sign-up comes with the wait-list action (#185).
  */
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const problem = (email: string) => {
-  if (!email) return "Type your email address first.";
-  if (!EMAIL.test(email)) return "That email looks incomplete. Check for an @ and a domain, like you@example.com.";
-  return "";
-};
 
 export const initWaitlist = () => {
   const forms = [...document.querySelectorAll<HTMLFormElement>("[data-join-form]")];
@@ -81,7 +74,7 @@ export const initWaitlist = () => {
       event.preventDefault();
       const input = form.querySelector<HTMLInputElement>("[data-email]");
       const email = input?.value.trim() ?? "";
-      const message = problem(email);
+      const message = emailProblem(email);
       if (message) {
         const error = form.querySelector("[data-error]");
         if (error) {

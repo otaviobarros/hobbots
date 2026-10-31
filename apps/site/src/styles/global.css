@@ -369,6 +369,7 @@ code {
 }
 @media (max-width: 760px) {
   .hide-sm {
+    /* biome-ignore lint/complexity/noImportantStyles: hides decoration whatever display a component sets. */
     display: none !important;
   }
 }
@@ -642,7 +643,9 @@ code {
   *,
   *::before,
   *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: Reduce motion has to win over every component's animation. */
     animation: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: as above, for transitions. */
     transition: none !important;
   }
   .shoot,

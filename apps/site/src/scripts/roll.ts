@@ -36,27 +36,11 @@ export const initRoll = () => {
     bounce();
   });
 
-  const swatches = [...section.querySelectorAll<HTMLButtonElement>("[data-color]")];
-  const pick = (swatch: HTMLButtonElement) => {
-    for (const other of swatches) {
-      const on = other === swatch;
-      other.setAttribute("aria-checked", String(on));
-      other.tabIndex = on ? 0 : -1;
-    }
-    setMine({ color: swatch.dataset.color as HobColor });
-    bounce();
-  };
-  swatches.forEach((swatch, i) => {
-    swatch.addEventListener("click", () => pick(swatch));
-    // Arrow keys move the choice, as in any radio group.
-    swatch.addEventListener("keydown", (event) => {
-      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
-      if (!step) return;
-      event.preventDefault();
-      const next = swatches[(i + step + swatches.length) % swatches.length];
-      if (!next) return;
-      next.focus();
-      pick(next);
+  for (const swatch of section.querySelectorAll<HTMLInputElement>("[data-color]")) {
+    swatch.addEventListener("change", () => {
+      if (!swatch.checked) return;
+      setMine({ color: swatch.value as HobColor });
+      bounce();
     });
-  });
+  }
 };

@@ -47,22 +47,18 @@ const first = hobLook(11, "violet");
         <span class="pxf name" data-mine-name>Pip</span>
         <span class="look" data-mine-look>{first.recipe}</span>
       </div>
-      <div role="radiogroup" aria-label="Hob color" class="colors">
+      <fieldset class="colors">
+        <legend class="sr">Hob color</legend>
         {
           colors.map(([id, color]) => (
-            <button
-              type="button"
-              role="radio"
-              aria-checked={id === "violet" ? "true" : "false"}
-              aria-label={color.label}
-              tabindex={id === "violet" ? 0 : -1}
-              data-color={id}
-            >
-              <span style={`background: ${color.hat}`} />
-            </button>
+            <label class="swatch">
+              <input class="sr" type="radio" name="hob-color" value={id} checked={id === "violet"} data-color />
+              <span class="fill" style={`background: ${color.hat}`} />
+              <span class="sr">{color.label}</span>
+            </label>
           ))
         }
-      </div>
+      </fieldset>
       <div class="actions">
         <button type="button" class="btn cut" data-roll>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" shape-rendering="crispEdges">
@@ -174,17 +170,28 @@ const first = hobLook(11, "violet");
   .actions .btn {
     font-size: 16px;
   }
-  [role="radio"] {
+  fieldset {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .swatch {
+    position: relative;
+    box-sizing: border-box;
     width: 44px;
     height: 44px;
     padding: 6px;
-    border: 0;
     background: var(--color-line);
+    cursor: pointer;
   }
-  [role="radio"][aria-checked="true"] {
+  .swatch:has(:checked) {
     background: var(--color-moonlight);
   }
-  [role="radio"] span {
+  .swatch:has(:focus-visible) {
+    outline: 3px solid var(--color-moonlight);
+    outline-offset: 2px;
+  }
+  .fill {
     display: block;
     width: 100%;
     height: 100%;
