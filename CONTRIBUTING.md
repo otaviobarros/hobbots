@@ -7,7 +7,7 @@ Thanks for helping build Hobbots. Start here:
 - **Running it:** see [Run from source](README.md#run-from-source) in the README, and run `pnpm check` before opening a pull request.
 - **Commits:** use [Conventional Commits](https://www.conventionalcommits.org/); they decide the next version, as [Releases](docs/contributing/releases.md) explains.
 
-Report security vulnerabilities privately through the repository's Security tab, not in a public issue.
+Report security vulnerabilities privately through the repository's Security tab, not in a public issue. The [security policy](SECURITY.md) explains how and what is in scope.
 
 By contributing you agree that your contributions are licensed under the [Apache License 2.0](LICENSE).
 
