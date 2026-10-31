@@ -655,7 +655,9 @@ describe("the process sandbox", () => {
             const commit = run(
               `cd ${gitProject} && echo x > a && git add a && git -c user.name=Hob -c user.email=hob@example.com commit -qm a`,
             );
-            expect(commit.stderr).toBe("");
+            // Apple's /usr/bin/git stub warns that xcrun cannot cache under the user's closed temp folder.
+            const errors = commit.stderr.split("\n").filter((line) => line !== "" && !line.includes("xcrun_db"));
+            expect(errors).toEqual([]);
             expect(commit.status).toBe(0);
           } else expect(status.stderr).toContain("unable to access");
           const temp = run('echo "$TMPDIR" && touch "$TMPDIR/probe"');
