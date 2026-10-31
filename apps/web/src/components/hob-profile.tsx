@@ -21,25 +21,25 @@ import {
   roleProblem,
 } from "../api/profile.ts";
 import { agentsQuery, modelsQuery, threadsQuery, usePauseHob, useRetireHob, useUpdateHob } from "../api/queries.ts";
-import { presetInfo, type RuleAnswer } from "../api/safety.ts";
-import { setupQuery } from "../api/setup.ts";
 import { hobState, stateLabel } from "../lib/hob-state.ts";
 import { Brain, Choice } from "./hob-form.tsx";
+import { CharmsTab, PermissionsTab } from "./hob-permissions.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { RoleSheet } from "./role-sheet.tsx";
 import { RoleSigil } from "./role-sigil.tsx";
 import { TonePicker } from "./tone-picker.tsx";
 
-type Tab = "profile" | "tools" | "permissions";
+type Tab = "profile" | "charms" | "permissions";
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
   ["profile", "Profile"],
-  ["tools", "Tools"],
+  ["charms", "Charms"],
   ["permissions", "Permissions"],
 ];
 
 /**
- * A hob's profile (screen 11): who it is, how it talks and how it thinks. Role, tone, instructions and brain are edited
- * together and saved as the hob's next configuration version; Pause / Wake and Retire act at once.
+ * A hob's profile (screen 11): who it is, how it talks and how it thinks, what it can do and what it may touch. Role,
+ * tone, instructions and brain are edited together and saved as the hob's next configuration version; Charms lists its
+ * tools; Permissions saves each change to its folders and rules at once. Pause / Wake and Retire act at once.
  */
 export function HobProfile({ hobId }: { hobId: AgentId }) {
   const hob = useQuery({ ...agentsQuery, select: (agents) => agents.find((a) => a.id === hobId) });
@@ -181,8 +181,8 @@ function Profile({
         </div>
         {tab !== "profile" && (
           <div className="min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
-            {tab === "tools" && <ToolsTab name={hob.name} />}
-            {tab === "permissions" && <PermissionsTab name={hob.name} />}
+            {tab === "charms" && <CharmsTab hob={hob} onPermissions={() => setTab("permissions")} />}
+            {tab === "permissions" && <PermissionsTab hob={hob} />}
           </div>
         )}
       </div>
@@ -532,75 +532,6 @@ function MoreActions({ name, disabled, onRetire }: { name: string; disabled: boo
           </button>
         </div>
       )}
-    </div>
-  );
-}
-
-/** Tools are shown read-only until hobs can use apps. */
-function ToolsTab({ name }: { name: string }) {
-  return (
-    <div className="flex max-w-[760px] flex-col gap-2.5">
-      <span className="text-secondary-text">
-        Apps {name} can use. {name} only sees the accounts you connect here.
-      </span>
-      <div className="cut flex items-center gap-3.5 border-2 border-line bg-card px-4 py-3.5">
-        <span
-          aria-hidden
-          className="grid size-10 flex-none place-items-center bg-line font-pixel text-lg font-bold text-moonlight"
-        >
-          C
-        </span>
-        <div className="flex flex-1 flex-col gap-0.5">
-          <span className="font-bold">Chat</span>
-          <span className="text-[13px] text-secondary-text">Answers in its threads.</span>
-        </div>
-        <span className="text-[13px] text-mint">Always on</span>
-      </div>
-      <span className="text-[13px] text-label">
-        Hobs only chat today. Connecting apps such as email or a web browser arrives in a later update.
-      </span>
-    </div>
-  );
-}
-
-const ANSWER_COLOR: Readonly<Record<RuleAnswer, string>> = {
-  Allow: "bg-mint",
-  Ask: "bg-lantern",
-  Never: "bg-rose",
-};
-
-/** Permissions are shown read-only, from the safety preset, until hobs can act. */
-function PermissionsTab({ name }: { name: string }) {
-  const setup = useQuery(setupQuery);
-  const preset = setup.data ? presetInfo(setup.data.safetyPreset) : undefined;
-  return (
-    <div className="flex max-w-[860px] flex-col gap-2">
-      <span className="text-secondary-text">
-        What {name} may do on its own. Ask means {name} shows a permission card in chat and waits for you.
-      </span>
-      {preset?.rules.map(([rule, answer]) => (
-        <div key={rule} className="flex items-center gap-4 border-b-2 border-line py-3">
-          <span className="flex-1 font-bold">{rule}</span>
-          <ul aria-label={`${rule}: ${answer}`} className="m-0 flex list-none border-2 border-control p-0">
-            {(["Allow", "Ask", "Never"] as const).map((option) => (
-              <li
-                key={option}
-                aria-hidden
-                className={cn(
-                  "min-w-[70px] px-3 py-1.5 text-center text-sm",
-                  option === answer ? cn(ANSWER_COLOR[option], "text-ground") : "text-label",
-                )}
-              >
-                {option}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-      <span className="text-[13px] text-label">
-        {preset ? `From your ${preset.label} safety. ` : ""}Hobs only chat today, so these apply once they can act.
-        Changing them per hob arrives with that update.
-      </span>
     </div>
   );
 }

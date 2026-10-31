@@ -1,5 +1,6 @@
 import type { SafetyPreset } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { Switch } from "@hobbots/ui/components/switch";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useId, useState } from "react";
 import { ApiError } from "../api/client.ts";
@@ -73,8 +74,16 @@ export function PresetPicker({
           );
         })}
       </div>
+      {shown === "trusting" && (
+        <LockedSwitch
+          label="Let new hobs run without the sandbox"
+          note="New hobs would start outside the sandbox, so their commands could reach the whole computer."
+          checked={false}
+          later="Off for now. Running without the sandbox arrives in a later update."
+        />
+      )}
       <p className="m-0 text-[13px] text-label">
-        These rules apply once hobs can open files, browse and send things. Today hobs only chat.
+        Every hob stays inside its folders. You can make one hob more careful from its profile.
       </p>
       {update.isError && (
         <p role="alert" className="m-0 text-sm text-rose">
@@ -86,27 +95,91 @@ export function PresetPicker({
 }
 
 /**
+ * A switch the user cannot change yet, with why. Turning the sandbox off is a recorded user grant
+ * (ADR 014), which the hub does not store yet, so the switch shows where it will be and stays put.
+ */
+export function LockedSwitch({
+  label,
+  note,
+  checked,
+  later,
+}: {
+  label: string;
+  note: string;
+  checked: boolean;
+  later: string;
+}) {
+  const labelId = useId();
+  const noteId = useId();
+  return (
+    <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+      <div className="flex flex-1 flex-col gap-0.5">
+        <span className="flex items-center gap-2">
+          <span id={labelId} className="font-bold">
+            {label}
+          </span>
+          <span className="bg-lantern px-1.5 text-xs text-ground">Later</span>
+        </span>
+        <span id={noteId} className="text-[13px] text-secondary-text">
+          {note} {later}
+        </span>
+      </div>
+      <Switch aria-labelledby={labelId} aria-describedby={noteId} checked={checked} disabled />
+    </div>
+  );
+}
+
+/**
  * The folders hobs may work in. In the Hobbots app a folder comes from the system folder picker;
  * in a browser the user types its path on the hub. Every change is checked and stored by the hub.
  */
 export function FolderPicker({ folders }: { folders: ReadonlyArray<string> }) {
   const update = useUpdateSetup();
+  return (
+    <FolderList
+      label="Folders hobs may open"
+      folders={folders}
+      saving={update.isPending ? update.variables.approvedFolders : undefined}
+      pending={update.isPending}
+      error={update.error}
+      onSave={(next, onSaved) => update.mutate({ approvedFolders: next }, { onSuccess: () => onSaved?.() })}
+    />
+  );
+}
+
+/**
+ * A list of folders with Remove on each and a way to add one: the system folder picker in the
+ * Hobbots app, a typed path on the hub in a browser. The caller stores each change.
+ */
+export function FolderList({
+  label,
+  folders,
+  saving,
+  pending,
+  error,
+  onSave,
+}: {
+  label: string;
+  folders: ReadonlyArray<string>;
+  /** The list on its way to the hub, shown until it answers. */
+  saving: ReadonlyArray<string> | undefined;
+  pending: boolean;
+  error: Error | null;
+  onSave: (next: ReadonlyArray<string>, onSaved?: () => void) => void;
+}) {
   const inputId = useId();
   const errorId = useId();
   const [typed, setTyped] = useState("");
   const [picking, setPicking] = useState(false);
-  const shown = update.isPending && update.variables.approvedFolders ? update.variables.approvedFolders : folders;
-  const refused = update.error instanceof ApiError && update.error.tag === "InvalidFolder" ? update.error : undefined;
-
-  const save = (next: ReadonlyArray<string>, onSaved?: () => void) =>
-    update.mutate({ approvedFolders: next }, { onSuccess: () => onSaved?.() });
+  const shown = saving ?? folders;
+  const refused = error instanceof ApiError && error.tag === "InvalidFolder" ? error : undefined;
 
   const pick = async () => {
     if (!chooseFolder || picking) return;
     setPicking(true);
     try {
       const folder = await chooseFolder();
-      if (folder) save(addFolder(folders, folder));
+      if (folder) onSave(addFolder(folders, folder));
     } finally {
       setPicking(false);
     }
@@ -115,7 +188,7 @@ export function FolderPicker({ folders }: { folders: ReadonlyArray<string> }) {
   return (
     <div className="flex flex-col gap-2.5">
       {shown.length > 0 && (
-        <ul aria-label="Folders hobs may open" className="m-0 grid list-none grid-cols-1 gap-2.5 p-0 lg:grid-cols-2">
+        <ul aria-label={label} className="m-0 grid list-none grid-cols-1 gap-2.5 p-0 lg:grid-cols-2">
           {shown.map((folder) => (
             <li
               key={folder}
@@ -136,8 +209,8 @@ export function FolderPicker({ folders }: { folders: ReadonlyArray<string> }) {
               <Button
                 variant="outline"
                 size="xs"
-                disabled={update.isPending}
-                onClick={() => save(removeFolder(folders, folder))}
+                disabled={pending}
+                onClick={() => onSave(removeFolder(folders, folder))}
                 aria-label={`Remove ${folder}`}
               >
                 Remove
@@ -149,7 +222,7 @@ export function FolderPicker({ folders }: { folders: ReadonlyArray<string> }) {
 
       {chooseFolder ? (
         <div>
-          <Button variant="outline" onClick={() => void pick()} disabled={picking || update.isPending}>
+          <Button variant="outline" onClick={() => void pick()} disabled={picking || pending}>
             + Choose a folder…
           </Button>
         </div>
@@ -159,8 +232,8 @@ export function FolderPicker({ folders }: { folders: ReadonlyArray<string> }) {
           onSubmit={(event) => {
             event.preventDefault();
             const folder = typed.trim();
-            if (folder === "" || update.isPending) return;
-            save(addFolder(folders, folder), () => setTyped(""));
+            if (folder === "" || pending) return;
+            onSave(addFolder(folders, folder), () => setTyped(""));
           }}
         >
           <label htmlFor={inputId} className="sr-only">
@@ -178,7 +251,7 @@ export function FolderPicker({ folders }: { folders: ReadonlyArray<string> }) {
             autoComplete="off"
             className="min-w-[260px] flex-1 border-2 border-control bg-deep px-[11px] py-[7px] font-mono text-sm text-text placeholder:text-label"
           />
-          <Button type="submit" variant="outline" disabled={typed.trim() === "" || update.isPending}>
+          <Button type="submit" variant="outline" disabled={typed.trim() === "" || pending}>
             Add folder
           </Button>
           <span className="w-full text-[13px] text-label">
@@ -192,7 +265,7 @@ export function FolderPicker({ folders }: { folders: ReadonlyArray<string> }) {
           {refused.message}
         </p>
       ) : (
-        update.isError && (
+        error && (
           <p role="alert" className="m-0 text-sm text-rose">
             Hobbots could not save the folders. Try again in a moment.
           </p>

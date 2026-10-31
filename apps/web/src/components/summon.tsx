@@ -206,7 +206,7 @@ export function Summon() {
                   </div>
                 ))}
               <span className="text-[13px] text-secondary-text">
-                Safety is the same for every hob, and applies once hobs can act.{" "}
+                Safety is the same for every hob; you can make one more careful from its profile.{" "}
                 <Link to="/settings">Change it in Settings</Link>
               </span>
             </section>

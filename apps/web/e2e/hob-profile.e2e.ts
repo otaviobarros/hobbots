@@ -1,3 +1,4 @@
+import { mkdtempSync, realpathSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
 
@@ -8,10 +9,14 @@ test.beforeEach(() => {
   dataDir = emptyDataDir();
 });
 
+// Folders a test made for a hob to work in.
+const extraDirs: Array<string> = [];
+
 test.afterEach(async () => {
   await hub?.stop();
   hub = undefined;
   removeDataDir(dataDir);
+  for (const dir of extraDirs.splice(0)) removeDataDir(dir);
 });
 
 interface Hob {
@@ -77,7 +82,7 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
   await instructions.fill("Write long answers.");
   await expect(page.getByText(/^Unsaved changes/)).toBeVisible();
   // Looking at another tab keeps the unsaved edit.
-  await page.getByRole("tab", { name: "Tools" }).click();
+  await page.getByRole("tab", { name: "Charms" }).click();
   await page.getByRole("tab", { name: "Profile" }).click();
   await expect(instructions).toHaveValue("Write long answers.");
   await page.getByRole("button", { name: "Save changes" }).click();
@@ -216,4 +221,103 @@ test("[TC-AG-088] picking a voice and a length in the profile saves them as the 
   await page.reload();
   await expect(tone.getByRole("radio", { name: /^Old wizard/ })).toBeChecked();
   await expect(tone.getByRole("radio", { name: /^Brief/ })).toBeChecked();
+});
+
+interface Permissions {
+  readonly configVersion: number;
+  readonly folders: ReadonlyArray<string>;
+  readonly policy: { readonly ownFolders: ReadonlyArray<string>; readonly overrides: Record<string, string> };
+  readonly decisions: Record<string, string>;
+}
+
+// covers AG-004, PE-001, PE-002
+test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule as new versions", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  // Beside the hub's data folder, not inside it: hobs never reach Hobbots' own data.
+  const own = mkdtempSync(`${dataDir}-pip-`);
+  extraDirs.push(own);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+
+  // Charms lists the built-in tools with the Balanced answers.
+  await page.getByRole("tab", { name: "Charms" }).click();
+  const files = page.getByRole("listitem").filter({ hasText: "Files" });
+  await expect(files).toContainText("Delete is checked by Hobbots");
+  await page.getByRole("button", { name: "Change what Pip may do" }).click();
+  await expect(page.getByRole("tab", { name: "Permissions" })).toHaveAttribute("aria-selected", "true");
+
+  // An own folder is stored canonical and becomes part of Pip's folders.
+  await page.getByRole("textbox", { name: "Folder path on the hub" }).fill(own);
+  await page.getByRole("button", { name: "Add folder" }).click();
+  const ownList = page.getByRole("list", { name: "Pip's own folders" });
+  await expect(ownList.getByText(realpathSync(own))).toBeVisible();
+
+  // Run commands is Allow under Balanced; Never is offered, a wider answer than Ask on Delete is not.
+  const commands = page.getByRole("radiogroup", { name: "Run commands" });
+  await expect(commands.getByRole("radio", { name: "Allow" })).toBeChecked();
+  await commands.getByText("Ask", { exact: true }).click();
+  await expect(commands.getByRole("radio", { name: "Ask" })).toBeChecked();
+  await expect(
+    page.getByRole("radiogroup", { name: "Delete files" }).getByRole("radio", { name: "Allow" }),
+  ).toBeDisabled();
+  await expect(page.getByText("Narrowed from Allow.")).toBeVisible();
+
+  const saved = await api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`);
+  expect(saved).toMatchObject({
+    configVersion: 3,
+    folders: [realpathSync(own)],
+    policy: { ownFolders: [realpathSync(own)], overrides: { "run-commands": "ask" } },
+    decisions: { "run-commands": "ask", "delete-files": "ask" },
+  });
+
+  // Picking the preset's answer again drops the override; removing the folder empties the list.
+  await commands.getByText("Allow", { exact: true }).click();
+  await expect(commands.getByRole("radio", { name: "Allow" })).toBeChecked();
+  await ownList.getByRole("button", { name: `Remove ${realpathSync(own)}` }).click();
+  await expect(page.getByText("None yet. Only Pip can work in a folder added here.")).toBeVisible();
+  await expect
+    .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
+    .toMatchObject({ configVersion: 5, folders: [], policy: { ownFolders: [], overrides: {} } });
+});
+
+// covers PE-001
+test("[TC-PE-031] hiding a shared folder still works after another hidden one stops being shared", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  const [kept, dropped] = [mkdtempSync(`${dataDir}-kept-`), mkdtempSync(`${dataDir}-dropped-`)].map((dir) => {
+    extraDirs.push(dir);
+    return realpathSync(dir);
+  });
+  await api(current, "PATCH", "/api/setup", { approvedFolders: [kept, dropped] });
+  await api(current, "PATCH", `/api/agents/${pip.id}/permissions`, { hiddenSharedFolders: [dropped] });
+  // Settings stops sharing the folder Pip hides; its hidden entry stays stored.
+  await api(current, "PATCH", "/api/setup", { approvedFolders: [kept] });
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+  await page.getByRole("tab", { name: "Permissions" }).click();
+
+  await page.getByRole("button", { name: `Hide ${kept} from Pip` }).click();
+  await expect(page.getByRole("button", { name: `Show ${kept} to Pip` })).toBeVisible();
+  await expect
+    .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
+    .toMatchObject({ folders: [], policy: { hiddenSharedFolders: [kept] } });
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+// covers PE-001, PE-002
+test("[TC-PE-033] an open Permissions tab follows a safety change made in another window", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  const shared = realpathSync(mkdtempSync(`${dataDir}-shared-`));
+  extraDirs.push(shared);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  const commands = page.getByRole("radiogroup", { name: "Run commands" });
+  await expect(commands.getByRole("radio", { name: "Allow" })).toBeChecked();
+
+  // Another window picks Careful and shares a folder; nothing tells this hob about it.
+  await api(current, "PATCH", "/api/setup", { safetyPreset: "careful", approvedFolders: [shared] });
+
+  await expect(commands.getByRole("radio", { name: "Ask" })).toBeChecked({ timeout: 10_000 });
+  await expect(commands.getByRole("radio", { name: "Allow" })).toBeDisabled();
+  await expect(page.getByRole("list", { name: "Shared folders" })).toContainText(shared);
 });
