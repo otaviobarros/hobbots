@@ -2,7 +2,7 @@ import { EventPublisher } from "@hobbots/agents";
 import type { EventEnvelope, TransientEvent } from "@hobbots/domain";
 import { Context, Effect, Layer, PubSub, type Scope, Stream } from "effect";
 
-/** What the bus carries: a committed journal entry, or a transient reply chunk or step list (ADR 013). */
+/** What the bus carries: a committed journal entry, or a transient reply chunk (ADR 013). */
 export type BusEvent =
   | { readonly _tag: "Journaled"; readonly entry: EventEnvelope }
   | { readonly _tag: "Transient"; readonly event: TransientEvent };

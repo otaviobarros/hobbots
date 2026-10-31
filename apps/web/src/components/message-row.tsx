@@ -1,10 +1,12 @@
 import { type Agent, isInProgress, type Message } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { useReplySteps } from "../api/live.ts";
 import { formatTime, refillText } from "../lib/time.ts";
 import { HobSprite } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
 import { ReplySteps } from "./reply-steps.tsx";
+
+const copy = messages.reply;
 
 /** The element id of a message's row, for scrolling to it. */
 export const messageElementId = (id: string) => `message-${id}`;
@@ -61,9 +63,6 @@ function ReplyRow({
 }) {
   const streaming = isInProgress(message.status);
   const writing = message.status === "streaming";
-  // Steps are live only, so a finished reply shows none.
-  const steps = useReplySteps(message.id);
-  const liveSteps = streaming ? steps : [];
   return (
     <div id={id} className={cn("flex max-w-[640px] animate-hb-in gap-2.5", focused && focusRing)}>
       <HobSprite hob={hob} size={26} state={streaming ? "working" : message.status === "failed" ? "failed" : "idle"} />
@@ -71,9 +70,9 @@ function ReplyRow({
         <span className="text-xs text-label">
           <b className="font-pixel text-sm text-moonlight">{hob.name}</b> {formatTime(message.createdAt)}
         </span>
-        <ReplySteps steps={liveSteps} />
+        <ReplySteps steps={message.steps} inProgress={streaming} />
         {writing && message.content.length === 0 ? (
-          liveSteps.length === 0 && <Thinking name={hob.name} />
+          message.steps.length === 0 && <Thinking name={hob.name} />
         ) : (
           <span className="leading-normal whitespace-pre-wrap">
             {message.content}
@@ -85,43 +84,40 @@ function ReplyRow({
         {message.status === "stopping" && (
           <span role="status" className="flex items-center gap-2 text-[13px] text-lantern">
             <span aria-hidden className="size-[5px] animate-hb-blink bg-lantern" />
-            Stopping this reply…
+            {copy.stopping}
           </span>
         )}
         {message.status === "stopped" && (
           <span role="status" className="animate-hb-pop origin-left text-[13px] text-lantern">
-            ■ You stopped this reply. {hob.name} kept what it wrote so far.
+            {copy.stopped({ name: hob.name })}
           </span>
         )}
         {message.status === "interrupted" && (
           <span className="animate-hb-pop origin-left text-[13px] text-rose">
-            {message.error === null
-              ? `This reply was cut off, not by you: Hobbots restarted or ${hob.name} was paused. What it wrote so far is kept.`
-              : `Answer cut off: ${message.error}. Nothing was lost before this point.`}
+            {message.error === null ? copy.interrupted({ name: hob.name }) : copy.cutOff({ error: message.error })}
           </span>
         )}
         {message.status === "limited" && (
           <span role="status" className="animate-hb-pop origin-left text-[13px] text-lantern">
-            ⚗ {hob.name} used up the Claude allowance for now. {refillText(message.resetsAt)} What it wrote so far is
-            kept.
+            {copy.limited({ name: hob.name, refill: refillText(message.resetsAt) })}
           </span>
         )}
         {resume &&
           (resume.pending ? (
             <span role="status" className="flex items-center gap-2 text-[13px] text-secondary-text">
               <span aria-hidden className="size-[5px] animate-hb-blink bg-mint" />
-              Picking up where {hob.name} left off…
+              {copy.resuming({ name: hob.name })}
             </span>
           ) : (
             <span className="flex gap-2 pt-1">
               <Button variant="outline" size="xs" onClick={resume.onContinue}>
-                Continue from here
+                {copy.continue}
               </Button>
             </span>
           ))}
         {message.status === "failed" && (
           <span className="animate-hb-pop origin-left text-[13px] text-rose">
-            ✗ This reply failed: {message.error ?? "unknown error"}. Send your message again to retry.
+            {copy.failed({ error: message.error })}
           </span>
         )}
       </div>
@@ -151,20 +147,20 @@ export function QueuedRow({
   const paused = hob.status !== "active";
   return (
     <section
-      aria-label="Queued message"
+      aria-label={messages.queued.label}
       className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end"
     >
       <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
       <span className="text-xs text-label">
-        {paused ? `◷ Queued. Waits until you wake ${hob.name}.` : `◷ Queued. ${hob.name} reads it after this reply.`}
+        {paused ? messages.queued.waitsForWake({ name: hob.name }) : messages.queued.readsNext({ name: hob.name })}
       </span>
       <span className="flex gap-2">
         <Button variant="outline" size="xs" onClick={onRemove} disabled={pending}>
-          Remove
+          {messages.queued.remove}
         </Button>
         {!paused && (
           <Button variant="outline" size="xs" onClick={onSendNow} disabled={pending}>
-            {replying ? "Send now and interrupt" : "Send now"}
+            {replying ? messages.queued.sendNowAndInterrupt : messages.queued.sendNow}
           </Button>
         )}
       </span>
@@ -175,7 +171,7 @@ export function QueuedRow({
 function Thinking({ name }: { name: string }) {
   return (
     <span role="status" className="flex items-center gap-2.5 text-sm text-secondary-text">
-      {name} is thinking
+      {copy.thinking({ name })}
       <span aria-hidden className="flex gap-1">
         <span className="size-[5px] animate-hb-blink bg-mint" />
         <span className="size-[5px] animate-hb-blink bg-mint [animation-delay:.3s]" />

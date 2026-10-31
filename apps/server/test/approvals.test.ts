@@ -18,7 +18,7 @@ import {
   EMPTY_HOB_POLICY,
   isInProgress,
   type Message,
-  type MessageSteps,
+  type ReplyStep,
   type ThreadId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -27,7 +27,7 @@ import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, type Scope } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import { EventBus } from "../src/event-bus.ts";
+import { type BusEvent, EventBus } from "../src/event-bus.ts";
 
 const HOB_ID = AgentId.make("aldric");
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-approvals-")));
@@ -132,10 +132,13 @@ const settled = (threadId: ThreadId) =>
     Effect.retry(Schedule.spaced("5 millis")),
   );
 
-const toolSteps = (events: ReadonlyArray<{ readonly _tag: string; readonly event?: unknown }>) =>
+/** Each saved version of the reply's tool steps, in order. */
+const toolSteps = (events: ReadonlyArray<BusEvent>): ReadonlyArray<ReplyStep> =>
   events.flatMap((event) =>
-    event._tag === "Transient" && (event.event as MessageSteps)._tag === "MessageSteps"
-      ? (event.event as MessageSteps).steps.filter((step) => step.kind === "tool")
+    event._tag === "Journaled" &&
+    event.entry.payload._tag === "MessageUpserted" &&
+    event.entry.payload.message.role === "assistant"
+      ? event.entry.payload.message.steps.filter((step) => step.kind === "tool")
       : [],
   );
 
@@ -186,12 +189,13 @@ describe("Ask decisions", () => {
     expect(result.done.status).toBe("complete");
     const journaled = result.events.flatMap((e) => (e._tag === "Journaled" ? [e.entry.type] : []));
     expect(journaled.filter((type) => type.startsWith("Approval"))).toEqual(["ApprovalRequested", "ApprovalResolved"]);
-    expect(toolSteps(result.events).at(-1)).toEqual({
+    const steps = toolSteps(result.events);
+    // The step waits on the request, then runs once approved.
+    expect(steps.find((step) => step.state === "awaiting")).toMatchObject({
       id: "fake-tool-1",
-      kind: "tool",
-      label: "Running git push origin main",
-      state: "done",
+      approvalId: result.request.id,
     });
+    expect(steps.at(-1)).toMatchObject({ id: "fake-tool-1", label: "Running git push origin main", state: "done" });
   });
 
   // covers PE-003, PE-007
@@ -222,12 +226,9 @@ describe("Ask decisions", () => {
     expect(result.again.revision).toBe(result.both[0].revision);
     const resolved = result.events.filter((e) => e._tag === "Journaled" && e.entry.type === "ApprovalResolved");
     expect(resolved).toHaveLength(1);
-    const started = new Set(
-      toolSteps(result.events)
-        .filter((step) => step.id === "fake-tool-1")
-        .map((step) => step.state),
-    );
-    expect(started).toEqual(new Set(["running", "done"]));
+    const states = toolSteps(result.events).map((step) => step.state);
+    expect(states.at(-1)).toBe("done");
+    expect(states.filter((state) => state === "running").length).toBeLessThanOrEqual(1);
   });
 
   // covers PE-003
@@ -256,7 +257,11 @@ describe("Ask decisions", () => {
 
     expect(result.denied).toMatchObject({ state: "denied", denyReason: "Not on Fridays" });
     expect(result.done.status).toBe("complete");
-    expect(toolSteps(result.events)).toEqual([]);
+    expect(toolSteps(result.events).at(-1)).toMatchObject({
+      state: "denied",
+      decidedBy: "user",
+      reason: expect.stringContaining("Not on Fridays"),
+    });
     expect(Exit.isFailure(result.late) && JSON.stringify(result.late.cause)).toContain("ApprovalClosed");
   });
 

@@ -10,7 +10,7 @@ interface ApprovalRow {
   readonly revision?: unknown;
 }
 
-// Targets and arguments are JSON text (migration 0017); the revision is a bigint on PostgreSQL.
+// Targets and arguments are JSON text (migration 0018); the revision is a bigint on PostgreSQL.
 const approvalRows = (rows: ReadonlyArray<ApprovalRow>) =>
   rows.map((row) => ({
     ...row,

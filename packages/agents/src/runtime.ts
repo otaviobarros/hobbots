@@ -39,8 +39,8 @@ export type RuntimeEvent =
       readonly label: string;
     }
   /**
-   * The policy answered Ask for a tool call: it waits for the user's decision on `approvalId`, then
-   * starts (ToolStarted with the same id) or is refused (ToolDenied).
+   * The policy answered Ask: the tool call waits for the user's decision on `approvalId`. It then
+   * starts with the same `id`, or is denied.
    */
   | {
       readonly _tag: "ToolAwaitingApproval";
@@ -62,7 +62,7 @@ export type RuntimeEvent =
       readonly targets: ReadonlyArray<string>;
       readonly label: string;
       readonly reason: string;
-      /** Who refused it: the policy hook, the user on an approval request, or the OS sandbox around the runtime. */
+      /** Who refused it: the policy hook, the user answering an Ask, or the OS sandbox around the runtime. */
       readonly decidedBy: "policy" | "user" | "sandbox";
     }
   | {

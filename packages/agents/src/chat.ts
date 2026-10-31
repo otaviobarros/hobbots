@@ -9,10 +9,8 @@ import {
   isResumable,
   Message,
   MessageId,
-  type MessageSteps,
   MessageTransitions,
   QueuedMessageTransitions,
-  type ReplyStep,
   systemInstructions,
   Thread,
   ThreadId,
@@ -24,13 +22,14 @@ import { ApprovalService } from "./approvals.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { RuntimeAdapter, type RuntimeEvent, type ToolAccess } from "./runtime.ts";
+import { nextSteps } from "./steps.ts";
 import { HobTools, narrows } from "./tools.ts";
 
 interface Reply {
   readonly current: Ref.Ref<Message>;
   readonly lock: Semaphore.Semaphore;
-  /** What the runtime reported doing besides writing, in order. Held in memory only, like the turn. */
-  readonly steps: Ref.Ref<ReadonlyArray<ReplyStep>>;
+  /** How many steps the reply had from earlier turns when Continue resumed it; this turn's come after. */
+  readonly stepsFrom: number;
   /** The text the reply already had when Continue resumed it; the runtime's final text comes after it. */
   readonly prefix: string;
 }
@@ -96,8 +95,6 @@ export class ChatService extends Context.Service<
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
     /** The replies still streaming or stopping, with all the text held in memory so far. */
     readonly streamingReplies: Effect.Effect<ReadonlyArray<Message>>;
-    /** The steps of each reply still streaming or stopping. */
-    readonly streamingSteps: Effect.Effect<ReadonlyArray<MessageSteps>>;
   }
 >()("@hobbots/agents/ChatService") {
   static readonly layer = Layer.effect(
@@ -306,36 +303,14 @@ export class ChatService extends Context.Service<
                       delta: event.text,
                     }),
                 );
-              case "StepStarted":
-              case "StepEnded":
-                return Semaphore.withPermit(
-                  reply.lock,
-                  Effect.gen(function* () {
-                    const current = yield* Ref.get(reply.current);
-                    if (!isInProgress(current.status)) return;
-                    const steps = yield* Ref.updateAndGet(reply.steps, (steps) =>
-                      event._tag === "StepStarted"
-                        ? [...steps, { id: event.id, kind: event.kind, label: event.label, state: "running" as const }]
-                        : steps.map((step) => (step.id === event.id ? { ...step, state: "done" as const } : step)),
-                    );
-                    yield* bus.publishTransient({
-                      _tag: "MessageSteps",
-                      threadId: current.threadId,
-                      messageId: current.id,
-                      steps,
-                    });
-                  }),
-                );
               case "Completed":
                 return update((m) => MessageTransitions.complete(m, reply.prefix + event.text));
-              // A tool call is one of the reply's steps; a refused one never ran, and the reply says why.
-              case "ToolStarted":
-                return handle({ _tag: "StepStarted", id: event.id, kind: "tool", label: event.label });
-              case "ToolFinished":
-                return handle({ _tag: "StepEnded", id: event.id });
-              case "ToolAwaitingApproval":
-              case "ToolDenied":
-                return Effect.void;
+              // Steps, a tool call's included, are saved with the reply, so they replay on reconnect.
+              default:
+                return update((m) => {
+                  const steps = nextSteps(m.steps, reply.stepsFrom, event);
+                  return steps === null ? undefined : MessageTransitions.setSteps(m, steps);
+                });
             }
           };
 
@@ -425,7 +400,7 @@ export class ChatService extends Context.Service<
           const reply: Reply = {
             current: yield* Ref.make(saved),
             lock: yield* Semaphore.make(1),
-            steps: yield* Ref.make<ReadonlyArray<ReplyStep>>([]),
+            stepsFrom: saved.steps.length,
             prefix: saved.content,
           };
           replies.set(thread.id, reply);
@@ -610,25 +585,6 @@ export class ChatService extends Context.Service<
       const streamingReplies = Effect.suspend(() =>
         Effect.forEach(Array.from(replies.values()), (reply) => Ref.get(reply.current)),
       ).pipe(Effect.map((messages) => messages.filter((message) => isInProgress(message.status))));
-      const streamingSteps = Effect.suspend(() =>
-        Effect.forEach(Array.from(replies.values()), (reply) =>
-          Effect.all([Ref.get(reply.current), Ref.get(reply.steps)]),
-        ),
-      ).pipe(
-        Effect.map((entries) =>
-          entries
-            .filter(([message, steps]) => isInProgress(message.status) && steps.length > 0)
-            .map(
-              ([message, steps]): MessageSteps => ({
-                _tag: "MessageSteps",
-                threadId: message.threadId,
-                messageId: message.id,
-                steps,
-              }),
-            ),
-        ),
-      );
-
       const interruptAgent = Effect.fn("ChatService.interruptAgent")(function* (agentId: AgentId) {
         for (const threadId of yield* activeThreads) {
           const thread = yield* repo.findThread(threadId);
@@ -674,7 +630,6 @@ export class ChatService extends Context.Service<
         drainAgent,
         activeThreads,
         streamingReplies,
-        streamingSteps,
       });
     }),
   );

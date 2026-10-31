@@ -65,6 +65,9 @@ const configColumns = (agent: Agent) => ({
 });
 const revisedRows = (rows: ReadonlyArray<{ readonly revision?: unknown }>) =>
   rows.map((row) => ({ ...row, revision: Number(row.revision) }));
+// A message's steps are one JSON text column (migration 0017).
+const messageRows = (rows: ReadonlyArray<{ readonly revision?: unknown; readonly steps?: unknown }>) =>
+  rows.map((row) => ({ ...row, revision: Number(row.revision), steps: JSON.parse(String(row.steps ?? "[]")) }));
 
 /** The SQL store of hobs, threads and messages, for SQLite and PostgreSQL (ADR 011). */
 export const HobbotsRepositoryLive = Layer.effect(
@@ -125,14 +128,14 @@ export const HobbotsRepositoryLive = Layer.effect(
       Request: Schema.String,
       Result: Message,
       execute: (threadId) =>
-        sql`SELECT * FROM messages WHERE thread_id = ${threadId} ORDER BY seq`.pipe(Effect.map(revisedRows)),
+        sql`SELECT * FROM messages WHERE thread_id = ${threadId} ORDER BY seq`.pipe(Effect.map(messageRows)),
     });
     const nextQueuedMessage = SqlSchema.findOneOption({
       Request: Schema.String,
       Result: Message,
       execute: (threadId) =>
         sql`SELECT * FROM messages WHERE thread_id = ${threadId} AND status = 'queued' ORDER BY seq LIMIT 1`.pipe(
-          Effect.map(revisedRows),
+          Effect.map(messageRows),
         ),
     });
     const threadsWithQueuedMessages = SqlSchema.findAll({
@@ -146,7 +149,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       Result: Message,
       execute: () =>
         sql`SELECT * FROM messages WHERE status IN ('streaming', 'stopping') ORDER BY ${bytewise("thread_id")}, seq`.pipe(
-          Effect.map(revisedRows),
+          Effect.map(messageRows),
         ),
     });
 
@@ -233,10 +236,11 @@ export const HobbotsRepositoryLive = Layer.effect(
 
     // Writes the message row only; the caller journals its events in the same transaction.
     const writeMessage = (message: Message) =>
-      sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, resets_at, created_at, revision, seq)
+      sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, resets_at, steps, created_at, revision, seq)
         VALUES (
           ${message.id}, ${message.threadId}, ${message.role}, ${message.content},
-          ${message.status}, ${message.error}, ${message.configVersion}, ${message.resetsAt}, ${message.createdAt}, ${message.revision},
+          ${message.status}, ${message.error}, ${message.configVersion}, ${message.resetsAt}, ${JSON.stringify(message.steps)},
+          ${message.createdAt}, ${message.revision},
           (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE thread_id = ${message.threadId})
         )
         ON CONFLICT (id) DO UPDATE SET
@@ -245,6 +249,7 @@ export const HobbotsRepositoryLive = Layer.effect(
           error = excluded.error,
           config_version = excluded.config_version,
           resets_at = excluded.resets_at,
+          steps = excluded.steps,
           revision = excluded.revision`;
 
     // The message's revision is its MessageUpserted entry, the first of its events.

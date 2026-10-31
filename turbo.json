@@ -7,6 +7,11 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "out/**"]
     },
+    "@hobbots/site#build": {
+      "dependsOn": ["^build"],
+      "env": ["CLOUDFLARE_ENV"],
+      "outputs": ["dist/**", ".wrangler/deploy/**"]
+    },
     "typecheck": {
       "dependsOn": ["^typecheck"]
     },

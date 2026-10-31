@@ -12,6 +12,8 @@ catalog:
 allowBuilds:
   electron: true
   esbuild: true
+  # Cloudflare's local Workers runtime, used by wrangler and the site's dev server.
+  workerd: true
   # Windows installer helper pulled in by electron-builder; macOS packaging does not need it.
   electron-winstaller: false
 permissions:
