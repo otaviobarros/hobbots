@@ -1,7 +1,7 @@
 /**
  * Draws the README banner: the chief of the hobs and the three Welcome hobs on the night sky,
  * between two lit houses, under the word HOBBOTS. Everything comes from the app's own art
- * (`apps/web/src/art`) and the design tokens, so the banner changes when the art does.
+ * (`packages/art` and `apps/web/src/art`) and the design tokens, so the banner changes when the art does.
  *
  * The scene is a grid of cells; each cell is CELL pixels, drawn as crisp SVG rectangles that
  * GitHub renders as an image. Run `node scripts/readme-banner.mjs` (Node 22.18 or later, for type
@@ -11,9 +11,9 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CHIEF, CHIEF_PALETTE } from "../apps/web/src/art/chief.ts";
-import { hobLook } from "../apps/web/src/art/look.ts";
 import { SCENE_HOBS } from "../apps/web/src/art/village.ts";
+import { CHIEF, CHIEF_PALETTE } from "../packages/art/src/chief.ts";
+import { hobLook } from "../packages/art/src/look.ts";
 
 export const BANNER_PATH = join(import.meta.dirname, "../docs/assets/readme-banner.svg");
 
