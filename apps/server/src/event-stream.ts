@@ -1,15 +1,15 @@
-import { EventEnvelope, type MessageDelta, STREAM_FRAME, type StreamReady } from "@hobbots/domain";
+import { EventEnvelope, STREAM_FRAME, type StreamReady, type TransientEvent } from "@hobbots/domain";
 import { EventJournal, type JournalHead } from "@hobbots/persistence";
 import { type Cause, Context, Effect, Exit, Fiber, Layer, PubSub, Queue, Schema, Scope, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { ChatService } from "./chat.ts";
 import { type BusEvent, EventBus } from "./event-bus.ts";
 
-/** What a connection sends, in order: `Ready`, journal entries by sequence, reply chunks, keep-alives (ADR 013). */
+/** What a connection sends, in order: `Ready`, journal entries by sequence, transient reply events, keep-alives (ADR 013). */
 export type StreamFrame =
   | ({ readonly _tag: "Ready" } & StreamReady)
   | { readonly _tag: "Entry"; readonly cursor: string; readonly entry: EventEnvelope }
-  | { readonly _tag: "Delta"; readonly event: MessageDelta }
+  | { readonly _tag: "Transient"; readonly event: TransientEvent }
   | KeepAlive;
 
 type KeepAlive = { readonly _tag: "KeepAlive" };
@@ -50,8 +50,10 @@ export const encodeFrame = (frame: StreamFrame): string => {
       return `id: ${frame.cursor}\nevent: ${STREAM_FRAME.ready}\ndata: ${JSON.stringify({ cursor: frame.cursor, resumed: frame.resumed })}\n\n`;
     case "Entry":
       return `id: ${frame.cursor}\ndata: ${JSON.stringify(encodeEnvelope(frame.entry))}\n\n`;
-    case "Delta":
-      return `event: ${STREAM_FRAME.delta}\ndata: ${JSON.stringify(frame.event)}\n\n`;
+    case "Transient": {
+      const name = frame.event._tag === "MessageDelta" ? STREAM_FRAME.delta : STREAM_FRAME.steps;
+      return `event: ${name}\ndata: ${JSON.stringify(frame.event)}\n\n`;
+    }
     case "KeepAlive":
       return ": keep-alive\n\n";
   }
@@ -59,7 +61,7 @@ export const encodeFrame = (frame: StreamFrame): string => {
 
 /**
  * One client's view of the event stream: `Ready`, then every journal entry after its cursor in
- * sequence order, then the text of each reply still streaming, then live events with no gap. The
+ * sequence order, then the text and steps of each reply still streaming, then live events with no gap. The
  * bus only wakes the connection; the journal decides the order and fills any gap.
  */
 export class EventStream extends Context.Service<
@@ -132,11 +134,11 @@ export class EventStream extends Context.Service<
                   ),
               ),
             );
-            // The full text of each reply still streaming, as a chunk at offset 0.
-            const progress = Stream.fromIterableEffect(chat.streamingReplies).pipe(
+            // The full text of each reply still streaming, as a chunk at offset 0, then the steps of each.
+            const text = Stream.fromIterableEffect(chat.streamingReplies).pipe(
               Stream.map(
                 (message): StreamFrame => ({
-                  _tag: "Delta",
+                  _tag: "Transient",
                   event: {
                     _tag: "MessageDelta",
                     threadId: message.threadId,
@@ -147,10 +149,14 @@ export class EventStream extends Context.Service<
                 }),
               ),
             );
+            const steps = Stream.fromIterableEffect(chat.streamingSteps).pipe(
+              Stream.map((event): StreamFrame => ({ _tag: "Transient", event })),
+            );
+            const progress = Stream.concat(text, steps);
             const live = Stream.fromQueue(buffer).pipe(
               Stream.flatMap((event): Stream.Stream<StreamFrame> => {
                 if (event._tag === "KeepAlive") return Stream.succeed(event);
-                if (event._tag === "Transient") return Stream.succeed({ _tag: "Delta", event: event.event });
+                if (event._tag === "Transient") return Stream.succeed({ _tag: "Transient", event: event.event });
                 if (event.entry.sequence <= sent) return Stream.empty;
                 if (event.entry.sequence === sent + 1) return Stream.succeed(entry(event.entry));
                 // Entries are missing before this one: read them from the journal, this one included.

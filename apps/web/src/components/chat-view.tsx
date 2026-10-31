@@ -1,13 +1,16 @@
-import { type AgentId, isInProgress, type ThreadId } from "@hobbots/domain";
+import { type AgentId, isInProgress, isResumable, type ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
+import { useConnection } from "../api/live.ts";
 import {
   agentsQuery,
   messagesQuery,
+  runtimesQuery,
   threadsQuery,
+  useContinueReply,
   useInterrupt,
   usePauseHob,
   useRemoveQueued,
@@ -15,11 +18,19 @@ import {
   useSendPrompt,
   useStartThread,
 } from "../api/queries.ts";
+import { runtimeProblem } from "../api/runtime-health.ts";
 import { sendErrorText } from "../lib/send-error.ts";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
 import { MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
 import { RuntimeChip } from "./runtime.tsx";
+
+const BRAIN_PROBLEM: Record<NonNullable<ReturnType<typeof runtimeProblem>>, string> = {
+  notFound: "is not installed on this Mac",
+  notStarted: "did not start",
+  outdated: "is older than Hobbots supports",
+  signedOut: "is signed out",
+};
 
 const IDEAS = ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"];
 
@@ -51,6 +62,10 @@ export function ChatView({
   const activity = useActivity();
   const navigate = useNavigate();
   const [draft, setDraft] = useState("");
+  // A message sent while the hub is out of reach waits here and goes out when it is back.
+  const [waiting, setWaiting] = useState<string>();
+  const connection = useConnection();
+  const brain = useQuery({ ...runtimesQuery, select: (runtimes) => runtimeProblem(runtimes[0]) });
   const bottom = useRef<HTMLDivElement>(null);
 
   const send = useSendPrompt(threadId ?? ("" as ThreadId));
@@ -59,6 +74,7 @@ export function ChatView({
   const pause = usePauseHob(hobId);
   const remove = useRemoveQueued(threadId ?? ("" as ThreadId));
   const sendNow = useSendNow(threadId ?? ("" as ThreadId));
+  const resume = useContinueReply(threadId ?? ("" as ThreadId));
 
   const streaming = messages.data?.some((m) => isInProgress(m.status)) ?? false;
   // Stopping lasts from the hub recording the request until the runtime confirms the turn ended.
@@ -67,6 +83,12 @@ export function ChatView({
   const transcript = messages.data?.filter((m) => m.status !== "queued");
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
+  // Only the thread's latest reply can be continued, and only while nothing else runs.
+  const latest = transcript?.at(-1);
+  const resumable =
+    latest?.role === "assistant" && isResumable(latest.status) && !streaming && hob.data?.status === "active"
+      ? latest
+      : undefined;
 
   // A search match opens with its message in view and holds it there while a reply streams, until
   // the user scrolls back down to the end or sends a message.
@@ -84,27 +106,44 @@ export function ChatView({
       document.getElementById(messageElementId(focusMessageId))?.scrollIntoView({ block: "center" });
   }, [focusLoaded, focusMessageId]);
 
+  const sendLatest = useRef<(content: string) => void>(() => undefined);
+  useEffect(() => {
+    if (connection !== "live" || waiting === undefined) return;
+    setWaiting(undefined);
+    sendLatest.current(waiting);
+  }, [connection, waiting]);
+
   const current = hob.data;
   if (!current) return <main className="flex-1" />;
 
   const state = threadState(current, threadId ? activity[threadId] : undefined, streaming);
   const paused = current.status === "paused";
   const title = thread.data?.title ?? "New thread";
-  const sendDraft = (content: string) => {
-    follow();
+  const deliver = (content: string, clearDraft: boolean) => {
     if (threadId) {
-      send.mutate(content, { onSuccess: () => setDraft("") });
+      send.mutate(content, { onSuccess: () => clearDraft && setDraft("") });
       return;
     }
     start.mutate(content, {
       onSuccess: ({ thread: created }) => {
-        setDraft("");
+        if (clearDraft) setDraft("");
         void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: created.id } });
       },
     });
   };
+  sendLatest.current = (content) => deliver(content, false);
+  const sendDraft = (content: string) => {
+    follow();
+    if (connection === "reconnecting") {
+      setWaiting(content);
+      setDraft("");
+      return;
+    }
+    deliver(content, true);
+  };
   const error = send.error ?? start.error;
   const queueError = remove.error ?? sendNow.error;
+  const brainProblem = brain.data ?? null;
   // Waking clears a send the paused hob refused, so the draft can simply be sent again.
   const wake = () =>
     pause.mutate(false, {
@@ -180,7 +219,17 @@ export function ChatView({
           </div>
         )}
         {transcript?.map((message) => (
-          <MessageRow key={message.id} message={message} hob={current} focused={message.id === focusMessageId} />
+          <MessageRow
+            key={message.id}
+            message={message}
+            hob={current}
+            focused={message.id === focusMessageId}
+            resume={
+              message.id === resumable?.id
+                ? { pending: resume.isPending, onContinue: () => resume.mutate(message.id) }
+                : undefined
+            }
+          />
         ))}
         {queued.map((message) => (
           <QueuedRow
@@ -193,6 +242,30 @@ export function ChatView({
             onSendNow={() => sendNow.mutate(message.id)}
           />
         ))}
+        {waiting !== undefined && (
+          <section
+            aria-label="Waiting to send"
+            className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end"
+          >
+            <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{waiting}</div>
+            <span className="text-xs text-label">◷ Waiting to send. It goes out when we reconnect.</span>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => {
+                setDraft(waiting);
+                setWaiting(undefined);
+              }}
+            >
+              Edit
+            </Button>
+          </section>
+        )}
+        {resume.isError && (
+          <p role="alert" className="text-sm text-rose">
+            {current.name} could not continue that reply. {sendErrorText(resume.error, current)}
+          </p>
+        )}
         {queueError && (
           <p role="alert" className="text-sm text-rose">
             That message already started or was removed.
@@ -211,6 +284,21 @@ export function ChatView({
         <div ref={bottom} />
       </div>
 
+      {brainProblem !== null && (
+        <section
+          aria-label="Brain unavailable"
+          className="mx-4 mb-2 flex flex-wrap items-center gap-2.5 bg-card px-3.5 py-2.5 text-sm"
+        >
+          <span className="flex-1 text-lantern">
+            {current.name} can't think right now: Claude Code {BRAIN_PROBLEM[brainProblem]}.
+          </span>
+          <Button asChild variant="outline" size="xs">
+            <Link to="/settings" hash="ai-providers">
+              Fix it in Settings
+            </Link>
+          </Button>
+        </section>
+      )}
       <Composer
         placeholder={`Message ${current.name} in “${title}”…`}
         draft={draft}

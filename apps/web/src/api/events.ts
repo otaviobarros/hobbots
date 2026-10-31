@@ -6,6 +6,7 @@ import {
   isInProgress,
   type Message,
   MessageDelta,
+  MessageSteps,
   STREAM_FRAME,
   StreamReady,
   type Thread,
@@ -15,6 +16,8 @@ import { Schema } from "effect";
 import { useEffect, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
 import { API_URL } from "./client.ts";
+import type { ConnectionState } from "./live.ts";
+import { setConnection, setSteps } from "./live.ts";
 import { queryKeys, sortArchived, sortThreads, upsertById, upsertMessage } from "./queries.ts";
 import {
   newer,
@@ -29,6 +32,7 @@ import {
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
 const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady));
 const decodeDelta = Schema.decodeUnknownSync(Schema.fromJsonString(MessageDelta));
+const decodeSteps = Schema.decodeUnknownSync(Schema.fromJsonString(MessageSteps));
 
 /** Replaces an entity in a list unless the list already holds a newer version of it. */
 const upsertNewer = <T extends { readonly id: string; readonly revision: number }>(
@@ -113,14 +117,15 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "MessageDelta":
       applyDelta(queryClient, event);
       return;
+    case "MessageSteps":
+      setSteps(queryClient, event.messageId, event.steps);
+      return;
     // The reply's own upsert, sent just before, already carries its stopping or stopped status.
     case "TurnStopRequested":
     case "TurnStopped":
       return;
   }
 };
-
-export type ConnectionState = "connecting" | "live" | "reconnecting";
 
 /** True when this client knows how to read the entry: its type and payload version. */
 const understands = (entry: EventEnvelope) =>
@@ -132,12 +137,20 @@ const understands = (entry: EventEnvelope) =>
  * last cursor received (the browser sends it as `Last-Event-ID` when it reconnects), so a
  * reconnect replays what was missed instead of refetching everything. A fresh `Ready` (a first
  * connection, or a cursor the hub can no longer replay) starts a new sync generation.
+ *
+ * The browser retries a dropped stream on its own; `retry` opens a new one now.
  */
-export const useHobbotsEvents = (): ConnectionState => {
+export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void } => {
   const queryClient = useQueryClient();
   const [state, setState] = useState<ConnectionState>("connecting");
+  const [attempt, setAttempt] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new attempt opens a new stream.
   useEffect(() => {
+    const report = (next: ConnectionState) => {
+      setState(next);
+      setConnection(queryClient, next);
+    };
     const sync = syncState(queryClient);
     const after = sync.cursor === undefined ? "" : `?after=${encodeURIComponent(sync.cursor)}`;
     const source = new EventSource(`${API_URL}/api/events${after}`);
@@ -146,7 +159,7 @@ export const useHobbotsEvents = (): ConnectionState => {
         const ready = decodeReady(frame.data);
         sync.cursor = ready.cursor;
         if (!ready.resumed) startGeneration(queryClient);
-        setState("live");
+        report("live");
       } catch (error) {
         console.warn("Ignoring malformed event", error);
       }
@@ -171,10 +184,18 @@ export const useHobbotsEvents = (): ConnectionState => {
         console.warn("Ignoring malformed event", error);
       }
     });
+    source.addEventListener(STREAM_FRAME.steps, (frame) => {
+      try {
+        const event = decodeSteps(frame.data);
+        setSteps(queryClient, event.messageId, event.steps);
+      } catch (error) {
+        console.warn("Ignoring malformed event", error);
+      }
+    });
     // "Reconnecting" lasts until the next Ready.
-    source.onerror = () => setState("reconnecting");
+    source.onerror = () => report("reconnecting");
     return () => source.close();
-  }, [queryClient]);
+  }, [queryClient, attempt]);
 
-  return state;
+  return { state, retry: () => setAttempt((n) => n + 1) };
 };

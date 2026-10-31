@@ -1,3 +1,4 @@
+import { Button } from "@hobbots/ui/components/button";
 import { Outlet } from "@tanstack/react-router";
 import { useHobbotsEvents } from "../api/events.ts";
 import { HobJump } from "./hob-jump.tsx";
@@ -22,7 +23,7 @@ export function AppShell() {
 
   return (
     <>
-      {connection === "reconnecting" && (
+      {connection.state === "reconnecting" && (
         <div
           role="status"
           className="flex flex-none items-center gap-2 bg-lantern px-3 py-1.5 text-xs font-bold text-ground"
@@ -30,7 +31,17 @@ export function AppShell() {
           <span aria-hidden className="animate-hb-blink">
             ●
           </span>
-          Reconnecting to Hobbots… Messages wait until the server is back.
+          <span className="flex-1">
+            Reconnecting to Hobbots… Messages you send wait here and go out when it is back.
+          </span>
+          <Button
+            variant="outline"
+            size="xs"
+            className="border-ground text-ground hover:bg-lantern-hover"
+            onClick={connection.retry}
+          >
+            Try now
+          </Button>
         </div>
       )}
       <div className="flex min-h-0 flex-1">

@@ -1,14 +1,17 @@
-import { AgentNotFound, HobUnavailable, MessageNotQueued, ThreadNotFound } from "@hobbots/api";
+import { AgentNotFound, HobUnavailable, MessageNotQueued, ReplyNotResumable, ThreadNotFound } from "@hobbots/api";
 import {
   type Agent,
   type AgentConfiguration,
   type AgentId,
   DEFAULT_THREAD_TITLE,
   isInProgress,
+  isResumable,
   Message,
   MessageId,
+  type MessageSteps,
   MessageTransitions,
   QueuedMessageTransitions,
+  type ReplyStep,
   systemInstructions,
   Thread,
   ThreadId,
@@ -23,7 +26,24 @@ import { EventBus } from "./event-bus.ts";
 interface Reply {
   readonly current: Ref.Ref<Message>;
   readonly lock: Semaphore.Semaphore;
+  /** What the runtime reported doing besides writing, in order. Held in memory only, like the turn. */
+  readonly steps: Ref.Ref<ReadonlyArray<ReplyStep>>;
+  /** The text the reply already had when Continue resumed it; the runtime's final text comes after it. */
+  readonly prefix: string;
 }
+
+/** How much of a cut-off reply the runtime is shown when asked to continue it. */
+const CONTINUE_CONTEXT = 4_000;
+
+/** The prompt that resumes a reply that ended early, so the runtime picks up where it left off. */
+export const continuePrompt = (content: string) =>
+  [
+    "Your previous reply was cut off before it finished. It ends with this text:",
+    "",
+    content.slice(-CONTINUE_CONTEXT),
+    "",
+    "Continue from exactly where it stops. Do not repeat what is already written.",
+  ].join("\n");
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
@@ -51,6 +71,14 @@ export class ChatService extends Context.Service<
      * turn in progress, changes nothing.
      */
     readonly stop: (threadId: ThreadId) => Effect.Effect<void, ThreadNotFound>;
+    /**
+     * Continue: resumes a reply that was cut off or ended by the provider's limit, in place. Only the
+     * thread's latest message can be continued, while its hob is active and no other turn runs.
+     */
+    readonly continueReply: (
+      threadId: ThreadId,
+      messageId: MessageId,
+    ) => Effect.Effect<Message, ThreadNotFound | HobUnavailable | ReplyNotResumable>;
     /** Stops every turn the hob has in progress and waits until each has ended (stopped if the user had asked, otherwise interrupted). */
     readonly interruptAgent: (agentId: AgentId) => Effect.Effect<void>;
     /** Starts the hob's queued messages in threads with no turn running, as when it wakes. */
@@ -59,6 +87,8 @@ export class ChatService extends Context.Service<
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
     /** The replies still streaming or stopping, with all the text held in memory so far. */
     readonly streamingReplies: Effect.Effect<ReadonlyArray<Message>>;
+    /** The steps of each reply still streaming or stopping. */
+    readonly streamingSteps: Effect.Effect<ReadonlyArray<MessageSteps>>;
   }
 >()("@hobbots/server/ChatService") {
   static readonly layer = Layer.effect(
@@ -216,8 +246,28 @@ export class ChatService extends Context.Service<
                       delta: event.text,
                     }),
                 );
+              case "StepStarted":
+              case "StepEnded":
+                return Semaphore.withPermit(
+                  reply.lock,
+                  Effect.gen(function* () {
+                    const current = yield* Ref.get(reply.current);
+                    if (!isInProgress(current.status)) return;
+                    const steps = yield* Ref.updateAndGet(reply.steps, (steps) =>
+                      event._tag === "StepStarted"
+                        ? [...steps, { id: event.id, kind: event.kind, label: event.label, state: "running" as const }]
+                        : steps.map((step) => (step.id === event.id ? { ...step, state: "done" as const } : step)),
+                    );
+                    yield* bus.publishTransient({
+                      _tag: "MessageSteps",
+                      threadId: current.threadId,
+                      messageId: current.id,
+                      steps,
+                    });
+                  }),
+                );
               case "Completed":
-                return update((m) => MessageTransitions.complete(m, event.text));
+                return update((m) => MessageTransitions.complete(m, reply.prefix + event.text));
             }
           };
 
@@ -231,10 +281,13 @@ export class ChatService extends Context.Service<
             })
             .pipe(
               Stream.runForEach(handle),
-              Effect.catchTag("RuntimeError", (error) => update((m) => MessageTransitions.fail(m, error.message))),
+              Effect.catchTags({
+                RuntimeError: (error) => update((m) => MessageTransitions.cutOff(m, error.message)),
+                RuntimeLimitReached: (error) => update((m) => MessageTransitions.limit(m, error.resetsAt)),
+              }),
             );
-          // The stream ended without a result: treat it as a failure, not a silent success.
-          yield* update((m) => MessageTransitions.fail(m, "Runtime ended without a result"));
+          // The stream ended without a result: treat it as cut off, not a silent success.
+          yield* update((m) => MessageTransitions.cutOff(m, "Runtime ended without a result"));
         }).pipe(
           // Stops the checkpoints as soon as the turn's stream is done.
           Effect.scoped,
@@ -277,20 +330,31 @@ export class ChatService extends Context.Service<
           const saved = yield* saveReply(assistantMessage);
           if (saved === null) return null;
           yield* saveThread(updated);
+          yield* launch(agent, config, updated, prompt, saved);
+          return saved;
+        });
+
+      // Runs a turn for a reply that is already saved as streaming. Runs under the hob's lock.
+      const launch = (agent: Agent, config: AgentConfiguration, thread: Thread, prompt: string, saved: Message) =>
+        Effect.gen(function* () {
           busy.add(thread.id);
           // Registered before the turn starts, so a stop sent right away still reaches it.
-          const reply: Reply = { current: yield* Ref.make(saved), lock: yield* Semaphore.make(1) };
+          const reply: Reply = {
+            current: yield* Ref.make(saved),
+            lock: yield* Semaphore.make(1),
+            steps: yield* Ref.make<ReadonlyArray<ReplyStep>>([]),
+            prefix: saved.content,
+          };
           replies.set(thread.id, reply);
           // The drain is forked outside the turn: it waits for the hob's lock, which a retirement
           // may hold while it waits for this very turn to stop.
           yield* FiberMap.run(
             turns,
             thread.id,
-            runTurn(agent.name, config, updated, prompt, reply).pipe(
+            runTurn(agent.name, config, thread, prompt, reply).pipe(
               Effect.ensuring(Effect.forkIn(drain(thread.id), scope)),
             ),
           );
-          return saved;
         });
 
       // Starts the thread's next queued message, if its hob takes work: the one chosen with Send now,
@@ -421,10 +485,57 @@ export class ChatService extends Context.Service<
         if (Option.isSome(requested)) yield* Effect.forkIn(FiberMap.remove(turns, threadId), scope);
       });
 
+      // The reply streams again with the configuration the hob has now, like any new turn.
+      const continueReply = Effect.fn("ChatService.continueReply")(function* (
+        threadId: ThreadId,
+        messageId: MessageId,
+      ) {
+        const { agentId } = yield* findThread(threadId);
+        return yield* admission.withHob(
+          agentId,
+          Effect.gen(function* () {
+            const thread = yield* findThread(threadId);
+            const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
+            yield* requireActive(agent);
+            const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued");
+            const message = transcript.at(-1);
+            if (busy.has(threadId) || message?.id !== messageId || !isResumable(message.status)) {
+              return yield* new ReplyNotResumable({ messageId });
+            }
+            const resumed = MessageTransitions.resume(message);
+            if (!(resumed instanceof Message)) return yield* new ReplyNotResumable({ messageId });
+            const config = yield* repo
+              .findAgentConfig(agent.id, agent.configVersion)
+              .pipe(Effect.map(Option.getOrThrow));
+            const saved = yield* saveMessage(new Message({ ...resumed, configVersion: config.version }));
+            yield* launch(agent, config, thread, continuePrompt(message.content), saved);
+            return saved;
+          }),
+        );
+      });
+
       const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
       const streamingReplies = Effect.suspend(() =>
         Effect.forEach(Array.from(replies.values()), (reply) => Ref.get(reply.current)),
       ).pipe(Effect.map((messages) => messages.filter((message) => isInProgress(message.status))));
+      const streamingSteps = Effect.suspend(() =>
+        Effect.forEach(Array.from(replies.values()), (reply) =>
+          Effect.all([Ref.get(reply.current), Ref.get(reply.steps)]),
+        ),
+      ).pipe(
+        Effect.map((entries) =>
+          entries
+            .filter(([message, steps]) => isInProgress(message.status) && steps.length > 0)
+            .map(
+              ([message, steps]): MessageSteps => ({
+                _tag: "MessageSteps",
+                threadId: message.threadId,
+                messageId: message.id,
+                steps,
+              }),
+            ),
+        ),
+      );
 
       const interruptAgent = Effect.fn("ChatService.interruptAgent")(function* (agentId: AgentId) {
         for (const threadId of yield* activeThreads) {
@@ -450,10 +561,12 @@ export class ChatService extends Context.Service<
         removeQueued,
         sendNow,
         stop,
+        continueReply,
         interruptAgent,
         drainAgent,
         activeThreads,
         streamingReplies,
+        streamingSteps,
       });
     }),
   );

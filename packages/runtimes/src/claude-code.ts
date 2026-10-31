@@ -10,11 +10,12 @@ import {
   type Options,
   query,
   type SDKMessage,
+  type SDKRateLimitInfo,
   type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import { RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { Clock, DateTime, Duration, Effect, Layer, Stream } from "effect";
-import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent } from "./adapter.ts";
+import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent, RuntimeLimitReached } from "./adapter.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
@@ -171,8 +172,11 @@ export const stderrTail = (stderr: Readable, limit = stderrTailLimit) => {
 };
 
 /** A failed turn's error, with what Claude Code wrote to stderr when the process itself failed. */
-const withStderr = (error: RuntimeError, child: ChildProcess | undefined, tail: string) =>
-  child && tail !== "" && ((child.exitCode !== null && child.exitCode !== 0) || child.signalCode !== null)
+const withStderr = (error: RuntimeError | RuntimeLimitReached, child: ChildProcess | undefined, tail: string) =>
+  error instanceof RuntimeError &&
+  child &&
+  tail !== "" &&
+  ((child.exitCode !== null && child.exitCode !== 0) || child.signalCode !== null)
     ? new RuntimeError({ message: `${error.message}\n${tail}` })
     : error;
 
@@ -252,49 +256,94 @@ export const expiringCache = <A>(maxAge: (value: A) => Duration.Duration) => {
     });
 };
 
-const toEvents = (message: SDKMessage): ReadonlyArray<RuntimeEvent> => {
-  switch (message.type) {
-    case "system":
-      return message.subtype === "init"
-        ? [
-            {
-              _tag: "SessionStarted",
-              sessionId: message.session_id,
-              billing: billingFrom(message.apiKeySource),
-            },
-          ]
-        : [];
-    case "stream_event": {
-      const event = message.event;
-      if (
-        message.parent_tool_use_id === null &&
-        event.type === "content_block_delta" &&
-        event.delta.type === "text_delta"
-      ) {
-        return [{ _tag: "TextDelta", text: event.delta.text }];
+/** The rate limit refused the turn and no paid overage covers it. */
+const limitReached = (info: SDKRateLimitInfo) =>
+  info.status === "rejected" && info.overageStatus !== "allowed" && info.overageStatus !== "allowed_warning";
+
+/**
+ * Maps one turn's SDK messages to runtime events. Stateful, so make one per turn: a thinking block
+ * becomes a step that starts with the block and ends when it stops.
+ */
+export const turnEvents = () => {
+  // The step of each open thinking block, by content block index.
+  const open = new Map<number, string>();
+  let steps = 0;
+  const endAll = (): ReadonlyArray<RuntimeEvent> => {
+    const ended = Array.from(open.values(), (id): RuntimeEvent => ({ _tag: "StepEnded", id }));
+    open.clear();
+    return ended;
+  };
+
+  return (message: SDKMessage): ReadonlyArray<RuntimeEvent> => {
+    switch (message.type) {
+      case "system":
+        return message.subtype === "init"
+          ? [
+              {
+                _tag: "SessionStarted",
+                sessionId: message.session_id,
+                billing: billingFrom(message.apiKeySource),
+              },
+            ]
+          : [];
+      case "stream_event": {
+        const event = message.event;
+        // Subagents' own output stays out of the hob's reply.
+        if (message.parent_tool_use_id !== null) return [];
+        switch (event.type) {
+          case "content_block_start": {
+            const block = event.content_block.type;
+            if (block !== "thinking" && block !== "redacted_thinking") return [];
+            steps += 1;
+            const id = `thinking-${steps}`;
+            open.set(event.index, id);
+            return [{ _tag: "StepStarted", id, kind: "thinking", label: "Thinking" }];
+          }
+          case "content_block_stop": {
+            const id = open.get(event.index);
+            if (id === undefined) return [];
+            open.delete(event.index);
+            return [{ _tag: "StepEnded", id }];
+          }
+          case "content_block_delta":
+            return event.delta.type === "text_delta" ? [{ _tag: "TextDelta", text: event.delta.text }] : [];
+          // Block indexes start again with each message.
+          case "message_stop":
+            return endAll();
+          default:
+            return [];
+        }
       }
-      return [];
-    }
-    case "result":
-      if (message.subtype !== "success" || message.is_error) {
-        throw new RuntimeError({
-          message: message.subtype === "success" ? message.result : `Claude Code turn ended: ${message.subtype}`,
+      case "rate_limit_event":
+        if (!limitReached(message.rate_limit_info)) return [];
+        throw new RuntimeLimitReached({
+          resetsAt:
+            message.rate_limit_info.resetsAt === undefined
+              ? null
+              : new Date(message.rate_limit_info.resetsAt * 1000).toISOString(),
         });
-      }
-      return [
-        {
-          _tag: "Completed",
-          sessionId: message.session_id,
-          text: message.result,
-        },
-      ];
-    default:
-      return [];
-  }
+      case "result":
+        if (message.subtype !== "success" || message.is_error) {
+          throw new RuntimeError({
+            message: message.subtype === "success" ? message.result : `Claude Code turn ended: ${message.subtype}`,
+          });
+        }
+        return [
+          ...endAll(),
+          {
+            _tag: "Completed",
+            sessionId: message.session_id,
+            text: message.result,
+          },
+        ];
+      default:
+        return [];
+    }
+  };
 };
 
 const errorMessage = (error: unknown) =>
-  error instanceof RuntimeError
+  error instanceof RuntimeError || error instanceof RuntimeLimitReached
     ? error
     : new RuntimeError({
         message: error instanceof Error ? error.message : String(error),
@@ -398,6 +447,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                 turn.close();
               }).pipe(Effect.andThen(child ? exited(child) : Effect.void)),
           );
+          const toEvents = turnEvents();
           return Stream.fromAsyncIterable(turn, errorMessage).pipe(
             Stream.mapEffect((message) => Effect.try({ try: () => toEvents(message), catch: errorMessage })),
             Stream.flattenIterable,

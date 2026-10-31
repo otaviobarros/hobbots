@@ -1,8 +1,10 @@
 import { type Agent, isInProgress, type Message } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { formatTime } from "../lib/time.ts";
+import { useReplySteps } from "../api/live.ts";
+import { formatTime, refillText } from "../lib/time.ts";
 import { HobSprite } from "./hob-sprite.tsx";
+import { ReplySteps } from "./reply-steps.tsx";
 
 /** The element id of a message's row, for scrolling to it. */
 export const messageElementId = (id: string) => `message-${id}`;
@@ -10,8 +12,21 @@ export const messageElementId = (id: string) => `message-${id}`;
 // A message opened from search wears a lantern outline, so the eye finds it.
 const focusRing = "outline-2 outline-offset-4 outline-lantern";
 
+/** Continuing a reply that was cut off: offered on the thread's latest reply only. */
+export type ContinueReply = { readonly pending: boolean; readonly onContinue: () => void };
+
 /** One message; `focused` marks the one a search result opened. */
-export function MessageRow({ message, hob, focused = false }: { message: Message; hob: Agent; focused?: boolean }) {
+export function MessageRow({
+  message,
+  hob,
+  focused = false,
+  resume,
+}: {
+  message: Message;
+  hob: Agent;
+  focused?: boolean;
+  resume?: ContinueReply | undefined;
+}) {
   const id = messageElementId(message.id);
   if (message.role === "user") {
     return (
@@ -27,8 +42,27 @@ export function MessageRow({ message, hob, focused = false }: { message: Message
     );
   }
 
+  return <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume} />;
+}
+
+function ReplyRow({
+  message,
+  hob,
+  id,
+  focused,
+  resume,
+}: {
+  message: Message;
+  hob: Agent;
+  id: string;
+  focused: boolean;
+  resume: ContinueReply | undefined;
+}) {
   const streaming = isInProgress(message.status);
   const writing = message.status === "streaming";
+  // Steps are live only, so a finished reply shows none.
+  const steps = useReplySteps(message.id);
+  const liveSteps = streaming ? steps : [];
   return (
     <div id={id} className={cn("flex max-w-[640px] animate-hb-in gap-2.5", focused && focusRing)}>
       <HobSprite hob={hob} size={26} state={streaming ? "working" : message.status === "failed" ? "failed" : "idle"} />
@@ -36,8 +70,9 @@ export function MessageRow({ message, hob, focused = false }: { message: Message
         <span className="text-xs text-label">
           <b className="font-pixel text-sm text-moonlight">{hob.name}</b> {formatTime(message.createdAt)}
         </span>
+        <ReplySteps steps={liveSteps} />
         {writing && message.content.length === 0 ? (
-          <Thinking name={hob.name} />
+          liveSteps.length === 0 && <Thinking name={hob.name} />
         ) : (
           <span className="leading-normal whitespace-pre-wrap">
             {message.content}
@@ -59,10 +94,30 @@ export function MessageRow({ message, hob, focused = false }: { message: Message
         )}
         {message.status === "interrupted" && (
           <span className="animate-hb-pop origin-left text-[13px] text-rose">
-            This reply was cut off, not by you: Hobbots restarted or {hob.name} was paused. What it wrote so far is
+            {message.error === null
+              ? `This reply was cut off, not by you: Hobbots restarted or ${hob.name} was paused. What it wrote so far is kept.`
+              : `Answer cut off: ${message.error}. Nothing was lost before this point.`}
+          </span>
+        )}
+        {message.status === "limited" && (
+          <span role="status" className="animate-hb-pop origin-left text-[13px] text-lantern">
+            ⚗ {hob.name} used up the Claude allowance for now. {refillText(message.resetsAt)} What it wrote so far is
             kept.
           </span>
         )}
+        {resume &&
+          (resume.pending ? (
+            <span role="status" className="flex items-center gap-2 text-[13px] text-secondary-text">
+              <span aria-hidden className="size-[5px] animate-hb-blink bg-mint" />
+              Picking up where {hob.name} left off…
+            </span>
+          ) : (
+            <span className="flex gap-2 pt-1">
+              <Button variant="outline" size="xs" onClick={resume.onContinue}>
+                Continue from here
+              </Button>
+            </span>
+          ))}
         {message.status === "failed" && (
           <span className="animate-hb-pop origin-left text-[13px] text-rose">
             ✗ This reply failed: {message.error ?? "unknown error"}. Send your message again to retry.

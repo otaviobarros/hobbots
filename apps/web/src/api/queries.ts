@@ -3,7 +3,7 @@ import type { Agent, AgentId, Message, MessageId, RetireWork, RuntimeKind, Threa
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
 import { runtimeStaleTime } from "./runtime-health.ts";
-import { syncedAgents, syncedMessages, syncedThreads } from "./sync.ts";
+import { newer, syncedAgents, syncedMessages, syncedThreads } from "./sync.ts";
 
 export const queryKeys = {
   agents: ["agents"] as const,
@@ -197,6 +197,29 @@ export const useStartThread = (agentId: AgentId) => {
       );
       queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(thread.id), (old) =>
         insertIfMissing(insertIfMissing(old, userMessage), assistantMessage),
+      );
+    },
+  });
+};
+
+/** Continues a reply that was cut off or hit a limit, in the same message. */
+export const useContinueReply = (threadId: ThreadId) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (messageId: MessageId) => call((c) => c.threads.continueReply({ params: { threadId, messageId } })),
+    onError: refreshIfUnavailable(queryClient),
+    onSuccess: (message) => {
+      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId), (old) =>
+        // A live event may already have brought a newer version of the reply.
+        old
+          ? upsertMessage(
+              old,
+              newer(
+                old.find((m) => m.id === message.id),
+                message,
+              ),
+            )
+          : old,
       );
     },
   });

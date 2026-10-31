@@ -6,6 +6,7 @@ import {
   InvalidAgentTransition,
   InvalidMessageTransition,
   isInProgress,
+  isResumable,
   Message,
   MessageId,
   MessageTransitions,
@@ -54,6 +55,39 @@ describe("MessageTransitions", () => {
     const stopped = MessageTransitions.interrupt(MessageTransitions.requestStop(streaming) as Message) as Message;
     expect(isInProgress(stopped.status)).toBe(false);
     expect(MessageTransitions.requestStop(stopped)).toBeInstanceOf(InvalidMessageTransition);
+  });
+});
+
+describe("a reply cut off or limited by the provider", () => {
+  it("keeps a reply with text as interrupted with the reason, and fails one with none", () => {
+    const partial = MessageTransitions.appendDelta(streaming, "Hel") as Message;
+    expect(MessageTransitions.cutOff(partial, "Claude stopped responding")).toMatchObject({
+      status: "interrupted",
+      error: "Claude stopped responding",
+      content: "Hel",
+    });
+    expect(MessageTransitions.cutOff(streaming, "Claude stopped responding")).toMatchObject({ status: "failed" });
+  });
+
+  it("records when a limited reply's allowance refills", () => {
+    const limited = MessageTransitions.limit(streaming, "2026-10-28T01:00:00.000Z") as Message;
+    expect(limited).toMatchObject({ status: "limited", resetsAt: "2026-10-28T01:00:00.000Z" });
+    expect(isResumable(limited.status)).toBe(true);
+  });
+
+  it("resumes only an interrupted or limited reply, clearing why it ended", () => {
+    const cut = MessageTransitions.cutOff(MessageTransitions.appendDelta(streaming, "Hel") as Message, "gone");
+    expect(MessageTransitions.resume(cut as Message)).toMatchObject({
+      status: "streaming",
+      error: null,
+      content: "Hel",
+    });
+    const limited = MessageTransitions.limit(streaming, null) as Message;
+    expect(MessageTransitions.resume(limited)).toMatchObject({ status: "streaming", resetsAt: null });
+    const done = MessageTransitions.complete(streaming, "x") as Message;
+    expect(MessageTransitions.resume(done)).toBeInstanceOf(InvalidMessageTransition);
+    const stopped = MessageTransitions.interrupt(MessageTransitions.requestStop(streaming) as Message) as Message;
+    expect(MessageTransitions.resume(stopped)).toBeInstanceOf(InvalidMessageTransition);
   });
 });
 

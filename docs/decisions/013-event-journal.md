@@ -37,7 +37,7 @@ Every journaled event is stored and sent in one envelope:
 | `causationId` | The event ID that caused this one, or null. |
 | `payload` | A variant of the `HobbotsEvent` union in `@hobbots/domain`. Secrets are redacted before it is written. |
 
-New event types are added as variants of `HobbotsEvent` with a past-tense name (`TurnStopped`, `MessageQueued`). A payload carries the IDs it affects, or the whole entity for an `…Upserted` event. A new event is journaled unless it is a high-rate progress signal whose content is already in durable state, and a transient event needs an idempotent form like the delta's offset.
+New event types are added as variants of `HobbotsEvent` with a past-tense name (`TurnStopped`, `MessageQueued`). A payload carries the IDs it affects, or the whole entity for an `…Upserted` event. A new event is journaled unless it is a high-rate progress signal whose content is already in durable state or is deliberately live only, and a transient event needs an idempotent form like the delta's offset. `MessageSteps` (#116), a running reply's steps, is the second transient event: each carries the whole list, and the progress frames sent on connect include it after the text.
 
 An incompatible payload change bumps that type's `schemaVersion`. The server decodes every version still in retention (upcasting old ones), or the migration rotates the journal epoch, which expires every cursor. A client that meets an unknown type or a newer version than it knows resyncs instead of guessing, so a browser tab left open across an upgrade recovers by itself.
 

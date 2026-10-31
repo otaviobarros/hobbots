@@ -11,9 +11,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
+import { RuntimeLimitReached } from "../src/adapter.ts";
 import {
   brainOptions,
   claudeCandidates,
@@ -28,6 +30,7 @@ import {
   runtimePath,
   stderrTail,
   toRuntimeModels,
+  turnEvents,
 } from "../src/claude-code.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-claude-"));
@@ -356,5 +359,32 @@ describe("a Claude Code turn that fails", () => {
 
     expect(tail.length).toBeLessThanOrEqual(100);
     expect(tail.endsWith("x\nthe end")).toBe(true);
+  });
+});
+
+describe("reading a Claude Code turn", () => {
+  const stream = (event: unknown) => ({ type: "stream_event", parent_tool_use_id: null, event }) as SDKMessage;
+
+  it("[TC-CH-096] shows each thinking block as a step that ends when the block stops", () => {
+    const read = turnEvents();
+    expect(read(stream({ type: "content_block_start", index: 0, content_block: { type: "thinking" } }))).toEqual([
+      { _tag: "StepStarted", id: "thinking-1", kind: "thinking", label: "Thinking" },
+    ]);
+    expect(read(stream({ type: "content_block_start", index: 1, content_block: { type: "text" } }))).toEqual([]);
+    expect(read(stream({ type: "content_block_stop", index: 0 }))).toEqual([{ _tag: "StepEnded", id: "thinking-1" }]);
+    // A block left open ends with its message, and the next message counts on.
+    read(stream({ type: "content_block_start", index: 0, content_block: { type: "redacted_thinking" } }));
+    expect(read(stream({ type: "message_stop" }))).toEqual([{ _tag: "StepEnded", id: "thinking-2" }]);
+  });
+
+  it("[TC-CH-097] ends the turn at a rejected rate limit, with when it resets, unless overage covers it", () => {
+    const read = turnEvents();
+    const limit = (info: Record<string, unknown>) =>
+      ({ type: "rate_limit_event", rate_limit_info: info, uuid: "u", session_id: "s" }) as unknown as SDKMessage;
+    expect(read(limit({ status: "allowed_warning" }))).toEqual([]);
+    expect(read(limit({ status: "rejected", overageStatus: "allowed" }))).toEqual([]);
+    expect(() => read(limit({ status: "rejected", resetsAt: 1_800_000_000 }))).toThrow(
+      new RuntimeLimitReached({ resetsAt: new Date(1_800_000_000_000).toISOString() }),
+    );
   });
 });

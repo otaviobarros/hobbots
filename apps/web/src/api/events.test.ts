@@ -3,6 +3,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { activityQuery } from "./activity.ts";
 import { applyEvent } from "./events.ts";
+import { setSteps } from "./live.ts";
 import { queryKeys } from "./queries.ts";
 
 const threadId = ThreadId.make("t1");
@@ -167,5 +168,17 @@ describe("applyEvent", () => {
       "m1",
       "q2",
     ]);
+  });
+
+  it("replaces a reply's steps with each update, which carries the whole list", () => {
+    const client = new QueryClient();
+    const messageId = MessageId.make("m-steps");
+    const threadId = ThreadId.make("t-steps");
+    const thinking = { id: "thinking-1", kind: "thinking", label: "Thinking" } as const;
+    applyEvent(client, { _tag: "MessageSteps", threadId, messageId, steps: [{ ...thinking, state: "running" }] });
+    applyEvent(client, { _tag: "MessageSteps", threadId, messageId, steps: [{ ...thinking, state: "done" }] });
+    expect(client.getQueryData(["steps", messageId])).toEqual([{ ...thinking, state: "done" }]);
+    setSteps(client, messageId, []);
+    expect(client.getQueryData(["steps", messageId])).toEqual([]);
   });
 });

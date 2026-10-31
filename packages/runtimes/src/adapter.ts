@@ -9,6 +9,14 @@ export type RuntimeEvent =
       readonly billing: string | null;
     }
   | { readonly _tag: "TextDelta"; readonly text: string }
+  /** The runtime began something other than writing, such as thinking. `id` is unique within the turn. */
+  | {
+      readonly _tag: "StepStarted";
+      readonly id: string;
+      readonly kind: "thinking" | "tool";
+      readonly label: string;
+    }
+  | { readonly _tag: "StepEnded"; readonly id: string }
   | {
       readonly _tag: "Completed";
       readonly sessionId: string;
@@ -17,6 +25,12 @@ export type RuntimeEvent =
 
 export class RuntimeError extends Schema.TaggedError<RuntimeError>()("RuntimeError", {
   message: Schema.String,
+}) {}
+
+/** The provider refused the turn because its usage limit was reached. */
+export class RuntimeLimitReached extends Schema.TaggedError<RuntimeLimitReached>()("RuntimeLimitReached", {
+  /** When the allowance refills (ISO 8601), if the provider said. */
+  resetsAt: Schema.NullOr(Schema.String),
 }) {}
 
 export interface PromptRequest {
@@ -35,7 +49,7 @@ export interface RuntimeAdapterShape {
   /** Models a hob can choose, from the runtime when it reports them, otherwise a documented list. */
   readonly models: Effect.Effect<RuntimeModels>;
   /** Runs one turn. Interrupting the stream cancels the turn. */
-  readonly sendPrompt: (request: PromptRequest) => Stream.Stream<RuntimeEvent, RuntimeError>;
+  readonly sendPrompt: (request: PromptRequest) => Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached>;
 }
 
 export class RuntimeAdapter extends Context.Service<RuntimeAdapter, RuntimeAdapterShape>()(

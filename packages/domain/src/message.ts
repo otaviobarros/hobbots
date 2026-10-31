@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { ConfigVersion } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
 import { Revision } from "./revision.ts";
@@ -11,7 +11,9 @@ export type MessageRole = typeof MessageRole.Type;
  * - `streaming`: the hob is writing this reply.
  * - `stopping`: the user asked to stop; the reply still counts as in progress until the runtime confirms.
  * - `stopped`: the runtime confirmed the turn ended after a stop request; the partial text is kept.
- * - `interrupted`: Hobbots ended the turn itself (a restart, pause or retirement), not the user.
+ * - `interrupted`: the reply was cut off, not by the user: Hobbots ended the turn (a restart, pause or
+ *   retirement), or the runtime stopped after it had started writing (`error` says why). Continue resumes it.
+ * - `limited`: the provider's usage limit ended the turn; `resetsAt` says when it refills, if known.
  */
 export const MessageStatus = Schema.Literals([
   "queued",
@@ -21,11 +23,15 @@ export const MessageStatus = Schema.Literals([
   "failed",
   "stopped",
   "interrupted",
+  "limited",
 ]);
 export type MessageStatus = typeof MessageStatus.Type;
 
 /** A reply whose turn has not ended yet, so its thread is busy. */
 export const isInProgress = (status: MessageStatus): boolean => status === "streaming" || status === "stopping";
+
+/** A reply that ended early and that Continue can resume in place. */
+export const isResumable = (status: MessageStatus): boolean => status === "interrupted" || status === "limited";
 
 export class Message extends Schema.Class<Message>("Message")({
   id: MessageId,
@@ -36,6 +42,11 @@ export class Message extends Schema.Class<Message>("Message")({
   error: Schema.NullOr(Schema.String),
   /** For an assistant message, the hob configuration version that produced it; null for the user's. */
   configVersion: Schema.NullOr(ConfigVersion),
+  /** For a `limited` reply, when the provider's allowance refills (ISO 8601), if it said. */
+  resetsAt: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   createdAt: Schema.String,
   revision: Revision,
 }) {}
@@ -72,6 +83,24 @@ export const MessageTransitions = {
 
   fail: (message: Message, error: string): Message | InvalidMessageTransition =>
     requireInProgress(message, "fail") ?? new Message({ ...message, status: "failed", error }),
+
+  /**
+   * The runtime failed. A reply that had started writing was cut off, so it keeps its text and can
+   * be continued; one that had written nothing failed.
+   */
+  cutOff: (message: Message, error: string): Message | InvalidMessageTransition =>
+    requireInProgress(message, "cutOff") ??
+    new Message({ ...message, status: message.content.length > 0 ? "interrupted" : "failed", error }),
+
+  /** The provider's usage limit ended the turn; the text so far is kept. */
+  limit: (message: Message, resetsAt: string | null): Message | InvalidMessageTransition =>
+    requireInProgress(message, "limit") ?? new Message({ ...message, status: "limited", error: null, resetsAt }),
+
+  /** Continue: a reply that ended early streams again, appending to the text it kept. */
+  resume: (message: Message): Message | InvalidMessageTransition =>
+    message.role === "assistant" && isResumable(message.status)
+      ? new Message({ ...message, status: "streaming", error: null, resetsAt: null })
+      : new InvalidMessageTransition({ messageId: message.id, from: message.status, action: "resume" }),
 
   /** Records the user's stop request. Asking again while stopping changes nothing. */
   requestStop: (message: Message): Message | InvalidMessageTransition =>

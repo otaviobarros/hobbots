@@ -1,13 +1,13 @@
-import type { EventEnvelope, MessageDelta } from "@hobbots/domain";
+import type { EventEnvelope, TransientEvent } from "@hobbots/domain";
 import { Context, Effect, Layer, PubSub, type Scope, Stream } from "effect";
 
-/** What the bus carries: a committed journal entry, or a transient reply chunk (ADR 013). */
+/** What the bus carries: a committed journal entry, or a transient reply chunk or step list (ADR 013). */
 export type BusEvent =
   | { readonly _tag: "Journaled"; readonly entry: EventEnvelope }
-  | { readonly _tag: "Transient"; readonly event: MessageDelta };
+  | { readonly _tag: "Transient"; readonly event: TransientEvent };
 
 /**
- * In-process fan-out of journal entries that are already committed, plus transient reply chunks.
+ * In-process fan-out of journal entries that are already committed, plus transient reply events.
  * A wake-up signal, not a durable queue: the event journal is the record and decides the order.
  */
 export class EventBus extends Context.Service<
@@ -15,7 +15,7 @@ export class EventBus extends Context.Service<
   {
     /** Announces entries a write committed, in sequence order. */
     readonly publish: (entries: ReadonlyArray<EventEnvelope>) => Effect.Effect<void>;
-    readonly publishTransient: (event: MessageDelta) => Effect.Effect<void>;
+    readonly publishTransient: (event: TransientEvent) => Effect.Effect<void>;
     /** Every event from now on; it ends once the bus closes. */
     readonly stream: Stream.Stream<BusEvent>;
     /** Subscribes now, so nothing published from here on is missed by a reader that starts later. */

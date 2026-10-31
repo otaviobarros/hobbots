@@ -94,7 +94,11 @@ describe("event journal", () => {
     // The bus carries exactly the committed entries, then the transient chunk.
     const journaled = result.published.flatMap((e) => (e._tag === "Journaled" ? [e.entry] : []));
     expect(journaled).toEqual(result.beforeCrash.filter((e) => e.sequence > 1));
-    expect(result.published.filter((e) => e._tag === "Transient").map((e) => e.event.delta)).toEqual(["Partial"]);
+    expect(
+      result.published.flatMap((e) =>
+        e._tag === "Transient" && e.event._tag === "MessageDelta" ? [e.event.delta] : [],
+      ),
+    ).toEqual(["Partial"]);
     // The checkpoint kept the reply streaming at the revision of its last journaled change.
     expect(result.checkpointed.status).toBe("streaming");
     expect(result.checkpointed.revision).toBe(result.assistantMessage?.revision);
