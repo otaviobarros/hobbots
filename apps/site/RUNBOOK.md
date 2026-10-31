@@ -102,6 +102,7 @@ Deploys use an account API token with only these permissions, under Manage Accou
 | Account › D1 › Edit               | Apply migrations                           |
 | Account › Account Settings › Read | Read the account when Wrangler starts      |
 - Make one token for each environment, named `hobbots-site-staging-deploy` and `hobbots-site-production-deploy`, so each can be revoked alone.
+- Never reuse the production token for staging. Pull request previews from branches in this repository run with the staging token. A Cloudflare token cannot be limited to one Worker, so while both environments share an account, the staging token could still deploy production without the approval. Only branches by people with write access can use it. For full isolation, move staging to its own Cloudflare account.
 - Set an expiry date, at most a year out, and note it where you track renewals.
 - The token needs no zone, R2 or Turnstile permission. If a deploy fails with an authentication error, check the error before adding a permission, and add it to this table in the same pull request.
 
