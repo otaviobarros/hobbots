@@ -31,6 +31,7 @@ import {
 } from "../api/queries.ts";
 import { runtimeProblem } from "../api/runtime-health.ts";
 import { sendErrorText } from "../lib/send-error.ts";
+import { ReplyApprovals } from "./approvals/reply-approvals.tsx";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
 import { MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
@@ -251,7 +252,9 @@ export function ChatView({
                 ? { pending: resume.isPending, onContinue: () => resume.mutate(message.id) }
                 : undefined
             }
-          />
+          >
+            <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={current} />
+          </MessageRow>
         ))}
         {queued.map((message) => (
           <QueuedRow

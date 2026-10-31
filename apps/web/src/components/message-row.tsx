@@ -1,6 +1,7 @@
 import { type Agent, isInProgress, type Message } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
+import type { ReactNode } from "react";
 import { formatTime, refillText } from "../lib/time.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
@@ -17,17 +18,22 @@ const focusRing = "outline-2 outline-offset-4 outline-lantern";
 /** Continuing a reply that was cut off: offered on the thread's latest reply only. */
 export type ContinueReply = { readonly pending: boolean; readonly onContinue: () => void };
 
-/** One message; `focused` marks the one a search result opened. */
+/**
+ * One message; `focused` marks the one a search result opened. A reply shows `children` under its
+ * steps, such as the approval cards its tool calls are waiting on.
+ */
 export function MessageRow({
   message,
   hob,
   focused = false,
   resume,
+  children,
 }: {
   message: Message;
   hob: Agent;
   focused?: boolean;
   resume?: ContinueReply | undefined;
+  children?: ReactNode;
 }) {
   const id = messageElementId(message.id);
   if (message.role === "user") {
@@ -44,7 +50,11 @@ export function MessageRow({
     );
   }
 
-  return <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume} />;
+  return (
+    <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume}>
+      {children}
+    </ReplyRow>
+  );
 }
 
 // complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
@@ -54,12 +64,14 @@ function ReplyRow({
   id,
   focused,
   resume,
+  children,
 }: {
   message: Message;
   hob: Agent;
   id: string;
   focused: boolean;
   resume: ContinueReply | undefined;
+  children: ReactNode;
 }) {
   const streaming = isInProgress(message.status);
   const writing = message.status === "streaming";
@@ -71,6 +83,7 @@ function ReplyRow({
           <b className="font-pixel text-sm text-moonlight">{hob.name}</b> {formatTime(message.createdAt)}
         </span>
         <ReplySteps steps={message.steps} inProgress={streaming} />
+        {children}
         {writing && message.content.length === 0 ? (
           message.steps.length === 0 && <Thinking name={hob.name} />
         ) : (

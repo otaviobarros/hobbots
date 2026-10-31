@@ -1,7 +1,8 @@
-import { Agent, AgentId, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, ApprovalId, ApprovalRequest, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { activityQuery } from "./activity.ts";
+import { approvalsKey } from "./approvals.ts";
 import { applyEvent } from "./events.ts";
 import { queryKeys } from "./queries.ts";
 
@@ -184,5 +185,43 @@ describe("applyEvent", () => {
     // An older entry arriving late changes nothing.
     applyEvent(client, { _tag: "MessageUpserted", message: new Message({ ...reply("streaming", ""), revision: 3 }) });
     expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]?.steps).toEqual([edit]);
+  });
+});
+
+describe("approval events", () => {
+  const approval = (state: ApprovalRequest["state"], revision: number) =>
+    new ApprovalRequest({
+      id: ApprovalId.make("a1"),
+      agentId: AgentId.make("pip"),
+      threadId,
+      messageId: MessageId.make("m1"),
+      stepId: "s1",
+      tool: "Bash",
+      operation: "push",
+      targets: [],
+      arguments: { command: "git push" },
+      label: "Running git push",
+      reason: "Pushing asks.",
+      actionDigest: "d1",
+      policyVersion: "p1",
+      state,
+      denyReason: null,
+      createdAt: now,
+      decidedAt: null,
+      revision,
+    });
+
+  it("adds a new request to a loaded list and keeps the newest state", () => {
+    const client = new QueryClient();
+    applyEvent(client, { _tag: "ApprovalRequested", approval: approval("pending", 1) });
+    expect(client.getQueryData(approvalsKey(threadId))).toBeUndefined();
+    client.setQueryData(approvalsKey(threadId), []);
+    applyEvent(client, { _tag: "ApprovalRequested", approval: approval("pending", 1) });
+    applyEvent(client, { _tag: "ApprovalResolved", approval: approval("denied", 2) });
+    // A late copy of the older version changes nothing.
+    applyEvent(client, { _tag: "ApprovalRequested", approval: approval("pending", 1) });
+    expect(client.getQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(threadId))?.map((a) => a.state)).toEqual([
+      "denied",
+    ]);
   });
 });
