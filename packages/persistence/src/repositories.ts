@@ -3,6 +3,7 @@ import {
   AgentConfiguration,
   type AgentId,
   AgentStatus,
+  type HobPolicy,
   type JournaledEvent,
   Message,
   type MessageId,
@@ -17,13 +18,34 @@ import { type Committed, makeJournalWriter } from "./journal.ts";
 // Rows use snake_case columns; the client transforms them to the camelCase domain fields.
 // Where SQLite and PostgreSQL differ, the query chooses explicitly (ADR 011).
 
+interface AgentRow {
+  readonly lookSeed?: unknown;
+  readonly revision?: unknown;
+  readonly ownFolders?: unknown;
+  readonly hiddenSharedFolders?: unknown;
+  readonly policyOverrides?: unknown;
+}
+
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every look seed and revision fits a number.
-const agentRows = (rows: ReadonlyArray<{ readonly lookSeed?: unknown; readonly revision?: unknown }>) =>
-  rows.map((row) => ({
+// The policy's three JSON text columns (migration 0015) become the hob's one `policy` field.
+const agentRows = (rows: ReadonlyArray<AgentRow>) =>
+  rows.map(({ ownFolders, hiddenSharedFolders, policyOverrides, ...row }) => ({
     ...row,
     lookSeed: Number(row.lookSeed),
     ...(row.revision === undefined ? {} : { revision: Number(row.revision) }),
+    policy: {
+      ownFolders: JSON.parse(String(ownFolders)),
+      hiddenSharedFolders: JSON.parse(String(hiddenSharedFolders)),
+      overrides: JSON.parse(String(policyOverrides)),
+    },
   }));
+
+// The columns that store a hob's policy.
+const policyColumns = (policy: HobPolicy) => ({
+  own_folders: JSON.stringify(policy.ownFolders),
+  hidden_shared_folders: JSON.stringify(policy.hiddenSharedFolders),
+  policy_overrides: JSON.stringify(policy.overrides),
+});
 const revisedRows = (rows: ReadonlyArray<{ readonly revision?: unknown }>) =>
   rows.map((row) => ({ ...row, revision: Number(row.revision) }));
 
@@ -175,6 +197,7 @@ export class HobbotsRepository extends Context.Service<
           tool: agent.tool,
           voice: agent.voice,
           length: agent.length,
+          ...policyColumns(agent.policy),
           model: agent.model,
           effort: agent.effort,
           instructions: agent.instructions,
@@ -229,6 +252,7 @@ export class HobbotsRepository extends Context.Service<
               tool: agent.tool,
               voice: agent.voice,
               length: agent.length,
+              ...policyColumns(agent.policy),
               runtime: agent.runtime,
               model: agent.model,
               effort: agent.effort,
@@ -252,6 +276,7 @@ export class HobbotsRepository extends Context.Service<
         journaled(1, (revision) =>
           Effect.gen(function* () {
             const agent = new Agent({ ...input, revision });
+            const policy = policyColumns(agent.policy);
             const updated = yield* sql`UPDATE agents SET
                 role = ${agent.role},
                 role_title = ${agent.roleTitle},
@@ -260,6 +285,9 @@ export class HobbotsRepository extends Context.Service<
                 tool = ${agent.tool},
                 voice = ${agent.voice},
                 length = ${agent.length},
+                own_folders = ${policy.own_folders},
+                hidden_shared_folders = ${policy.hidden_shared_folders},
+                policy_overrides = ${policy.policy_overrides},
                 model = ${agent.model},
                 effort = ${agent.effort},
                 instructions = ${agent.instructions},

@@ -1,5 +1,5 @@
 import { Agent, AgentId, type HobbotsEvent } from "@hobbots/domain";
-import { HobbotsRepository } from "@hobbots/persistence";
+import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Deferred, Effect, Exit, Fiber, Layer, Option, Stream } from "effect";
@@ -86,7 +86,16 @@ const run = <A, E>(test: (gate: Gate, events: Array<HobbotsEvent>) => Effect.Eff
     ).pipe(Layer.provide(HobAdmission.layer));
     const App = HobLifecycle.layer.pipe(
       Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)),
-      Layer.provideMerge(Layer.mergeAll(repository, bus, admission, FakeRuntimeLayer({ delay: "40 millis" }))),
+      Layer.provideMerge(
+        Layer.mergeAll(
+          repository,
+          // Only per-hob policy changes read the setup; none of these races make one.
+          SetupRepository.layer.pipe(Layer.provide(TestDatabase)),
+          bus,
+          admission,
+          FakeRuntimeLayer({ delay: "40 millis" }),
+        ),
+      ),
     );
     return yield* Effect.gen(function* () {
       yield* (yield* HobbotsRepository).insertAgent(

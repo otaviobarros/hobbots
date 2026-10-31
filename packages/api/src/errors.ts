@@ -1,4 +1,4 @@
-import { AgentId, AgentStatus, MessageId, ThreadId } from "@hobbots/domain";
+import { AgentId, AgentStatus, MessageId, PolicyOperation, SafetyPreset, ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 
 export class AgentNotFound extends Schema.TaggedError<AgentNotFound>()(
@@ -44,5 +44,15 @@ export class InvalidHob extends Schema.TaggedError<InvalidHob>()(
 export class InvalidFolder extends Schema.TaggedError<InvalidFolder>()(
   "InvalidFolder",
   { folder: Schema.String, message: Schema.String },
+  { httpApiStatus: 400 },
+) {}
+
+/**
+ * A per-hob override that would allow more than the installation's preset. Overrides only narrow;
+ * a widening needs a separately recorded user grant (ADR 014).
+ */
+export class OverrideWidens extends Schema.TaggedError<OverrideWidens>()(
+  "OverrideWidens",
+  { preset: SafetyPreset, operations: Schema.Array(PolicyOperation), message: Schema.String },
   { httpApiStatus: 400 },
 ) {}

@@ -1,12 +1,14 @@
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { checkFolder } from "../src/folders.ts";
 
-const home = mkdtempSync(join(tmpdir(), "hobbots-home-"));
+// Canonical, since the hub stores folders with symlinks resolved (on macOS the temp folder is one).
+const home = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-home-")));
 mkdirSync(join(home, "code"));
+symlinkSync(join(home, "code"), join(home, "link"));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 const check = (typed: string) => Effect.runPromiseExit(checkFolder(typed, home));
@@ -22,5 +24,10 @@ describe("checking a folder on the hub", () => {
     for (const typed of ["code", "~someone/code", join(home, "nope")]) {
       expect(Exit.isFailure(await check(typed))).toBe(true);
     }
+  });
+
+  it("stores a folder reached through a symlink as the folder it points at", async () => {
+    expect(await check("~/link")).toEqual(Exit.succeed(join(home, "code")));
+    expect(await check(`${home}/link/../link`)).toEqual(Exit.succeed(join(home, "code")));
   });
 });
