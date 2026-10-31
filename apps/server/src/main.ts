@@ -2,9 +2,23 @@ import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
-import { ChatService, HobAdmission, HobLifecycle, HobService, PermissionSummary } from "@hobbots/agents";
+import {
+  ApprovalService,
+  ChatService,
+  HobAdmission,
+  HobLifecycle,
+  HobService,
+  PermissionSummary,
+} from "@hobbots/agents";
 import { PolicyEngine } from "@hobbots/permissions";
-import { EventJournal, HobbotsRepositoryLive, SearchIndex, SetupRepository, SqliteLive } from "@hobbots/persistence";
+import {
+  ApprovalRepositoryLive,
+  EventJournal,
+  HobbotsRepositoryLive,
+  SearchIndex,
+  SetupRepository,
+  SqliteLive,
+} from "@hobbots/persistence";
 import { ClaudeCodeLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
@@ -38,6 +52,7 @@ const ServerLive = Layer.unwrap(
     // Search reads the same file from a worker thread, so a long search never blocks the server.
     const Persistence = Layer.mergeAll(
       HobbotsRepositoryLive,
+      ApprovalRepositoryLive,
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
@@ -63,6 +78,8 @@ const ServerLive = Layer.unwrap(
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))
+      // Before the chat service, so turns can ask, and after a restart the requests left pending expire.
+      .pipe(Layer.provideMerge(ApprovalService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
       .pipe(Layer.provideMerge(CanonicalSharedFolders))

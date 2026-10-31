@@ -2,6 +2,7 @@ import { type AgentNotFound, HobUnavailable } from "@hobbots/api";
 import { type Agent, type AgentId, AgentTransitions, InvalidAgentTransition, type RetireWork } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission } from "./admission.ts";
+import { ApprovalService } from "./approvals.ts";
 import { ChatService } from "./chat.ts";
 import { foundAgent } from "./hobs.ts";
 import { EventPublisher } from "./ports.ts";
@@ -23,6 +24,7 @@ export class HobLifecycle extends Context.Service<
       const bus = yield* EventPublisher;
       const chat = yield* ChatService;
       const admission = yield* HobAdmission;
+      const approvals = yield* Effect.serviceOption(ApprovalService);
 
       const findAgent = (agentId: AgentId) => repo.findAgent(agentId).pipe(Effect.flatMap(foundAgent(agentId)));
 
@@ -66,6 +68,8 @@ export class HobLifecycle extends Context.Service<
               // Retiring is allowed from every state, so the transition cannot be refused.
               Effect.catchTag("HobUnavailable", Effect.die),
             );
+            // A reply left to finish gets no approval: what it waits for is refused.
+            if (Option.isSome(approvals)) yield* approvals.value.expireForAgent(agentId);
             if (activeWork === "stop") yield* chat.interruptAgent(agentId);
             return retired;
           }),

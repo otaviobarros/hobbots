@@ -2,6 +2,7 @@ import { ChatService, foundAgent, HobbotsRepository, HobLifecycle, HobService, R
 import { HobbotsApi, ThreadNotFound } from "@hobbots/api";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
+import { ApprovalsHandlers } from "./approvals.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { Installation } from "./installation.ts";
 import { PermissionsHandlers } from "./permissions.ts";
@@ -107,5 +108,6 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     RuntimesHandlers,
     SearchHandlers,
     PermissionsHandlers,
+    ApprovalsHandlers,
   ]),
 );

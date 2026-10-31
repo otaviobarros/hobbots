@@ -1,4 +1,5 @@
 import type {
+  ApprovalId,
   Effort,
   HobPolicy,
   PolicyOperation,
@@ -45,7 +46,7 @@ export type RuntimeEvent =
   | {
       readonly _tag: "ToolAwaitingApproval";
       readonly id: string;
-      readonly approvalId: string;
+      readonly approvalId: ApprovalId;
       readonly tool: string;
       readonly operation: PolicyOperation;
       readonly targets: ReadonlyArray<string>;
@@ -53,7 +54,7 @@ export type RuntimeEvent =
     }
   /** A started tool call ended; `failed` when the tool reported an error, a sandbox refusal included. */
   | { readonly _tag: "ToolFinished"; readonly id: string; readonly failed: boolean }
-  /** A tool call never ran: the policy refused it, or it needed an approval Hobbots cannot ask for yet. */
+  /** A tool call never ran: the policy refused it, the user denied it, or its approval expired. */
   | {
       readonly _tag: "ToolDenied";
       readonly id: string;
@@ -111,6 +112,45 @@ export interface ToolAccess {
   readonly runtimeFolder: string;
 }
 
+/** A tool call the policy answered Ask for, as an adapter asks the user about it (PE-003). */
+export interface ApprovalAction {
+  /** The runtime's id for the call, which is also its reply step's. */
+  readonly stepId: string;
+  readonly tool: string;
+  readonly operation: PolicyOperation;
+  readonly targets: ReadonlyArray<string>;
+  /** The call's concrete arguments, exactly as the runtime would run them. */
+  readonly arguments: Readonly<Record<string, unknown>>;
+  readonly label: string;
+  /** Why the policy asks. */
+  readonly reason: string;
+  /** The policy version the call was decided under. */
+  readonly policyVersion: string;
+}
+
+/**
+ * The user's answer. Approved names the action and policy it applies to, so the adapter can check
+ * both again just before the call runs (PE-008). Expired: the request can no longer be decided.
+ */
+export type ApprovalOutcome =
+  | { readonly _tag: "Approved"; readonly actionDigest: string; readonly policyVersion: string }
+  | { readonly _tag: "Denied"; readonly reason: string | null }
+  | { readonly _tag: "Expired" };
+
+/** A stored request and the wait for its decision. */
+export interface PendingApproval {
+  readonly approvalId: ApprovalId;
+  readonly decision: Effect.Effect<ApprovalOutcome>;
+}
+
+/** How a turn asks the user to approve a tool call and waits for the answer. */
+export interface TurnApprovals {
+  /** Stores a pending request for the action. A turn that has ended gets one that is already expired. */
+  readonly request: (action: ApprovalAction) => Effect.Effect<PendingApproval>;
+  /** The hob's tool access now, to decide an approved call again just before it runs (PE-008). */
+  readonly currentAccess: Effect.Effect<ToolAccess | null>;
+}
+
 export interface PromptRequest {
   readonly prompt: string;
   /** Runtime session to resume, or null to start a new one. */
@@ -127,6 +167,8 @@ export interface PromptRequest {
   readonly effort: Effort | null;
   /** Tools under the hob's policy; absent, null or without folders, the turn is chat-only. */
   readonly tools?: ToolAccess | null;
+  /** Asks the user about calls the policy answers Ask for; absent or null, those calls are refused. */
+  readonly approvals?: TurnApprovals | null;
 }
 
 export interface RuntimeAdapterShape {

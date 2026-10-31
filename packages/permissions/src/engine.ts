@@ -9,6 +9,7 @@ import {
   ruleEnforcement,
   type SafetyPreset,
   type SandboxState,
+  stableJson,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { isBlockedHost, normalizeHost } from "./hosts.ts";
@@ -120,15 +121,6 @@ export type ResolvedRequest =
     }
   | { readonly _tag: "Command"; readonly operation: typeof CommandOperation.Type; readonly cwd: ResolvedTarget }
   | Extract<PolicyRequest, { readonly _tag: "Push" | "Web" }>;
-
-const stableJson = (value: unknown): string => {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-};
 
 /** A digest of the rules version and every policy input, so an approval binds to the exact policy. */
 export const policyVersion = (context: PolicyContext): string =>
