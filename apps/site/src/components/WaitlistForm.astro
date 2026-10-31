@@ -1,4 +1,6 @@
 ---
+import { TURNSTILE_SITE_KEY } from "astro:env/client";
+import { CONTACT } from "../data/copy.ts";
 import Hob from "./Hob.astro";
 import Sparks from "./Sparks.astro";
 
@@ -12,7 +14,7 @@ const id = `email-${place}`;
 ---
 
 <div class:list={["waitlist", place]} data-waitlist={place}>
-  <form data-join-form novalidate>
+  <form data-join-form data-source={place} novalidate>
     {
       place === "hero" ? (
         <label for={id} class="sr">
@@ -32,7 +34,7 @@ const id = `email-${place}`;
         type="email"
         autocomplete="email"
         placeholder="you@example.com"
-        aria-describedby={place === "hero" ? `${id}-error ${id}-help` : `${id}-error`}
+        aria-describedby={`${id}-error ${id}-help`}
         data-email
       />
       <button class="btn cut" type="submit" data-submit>
@@ -42,17 +44,22 @@ const id = `email-${place}`;
     <p id={`${id}-error`} role="alert" class="error" data-error></p>
     {
       place === "hero" && (
-        <>
-          <label class="check">
-            <input type="checkbox" name="wantsMorePlatforms" data-more />
-            Also tell me about the Windows and phone apps
-          </label>
-          <p id={`${id}-help`} class="help">
-            One email when Hobbots is ready for macOS and Linux. No spam.
-          </p>
-        </>
+        <label class="check">
+          <input type="checkbox" name="wantsMorePlatforms" data-more />
+          Also tell me about the Windows and phone apps
+        </label>
       )
     }
+    <p id={`${id}-help`} class="help">
+      One email when Hobbots is ready for macOS and Linux. No spam. To be removed, write to
+      <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+    </p>
+    <!-- Only bots fill this field; people never see it. -->
+    <div class="trap" aria-hidden="true">
+      <label>Website <input name="website" tabindex="-1" autocomplete="off" data-website /></label>
+    </div>
+    <!-- Turnstile shows a check here only when it is unsure the visitor is a person. -->
+    <div class="turnstile" data-turnstile data-sitekey={TURNSTILE_SITE_KEY}></div>
   </form>
   {
     place === "hero" ? (
@@ -131,6 +138,19 @@ const id = `email-${place}`;
     margin: 0;
     font-size: 15px;
     color: var(--color-secondary-text);
+  }
+  .roll .help {
+    text-align: left;
+  }
+  .trap {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+  .turnstile:empty {
+    display: none;
   }
   .joined {
     display: flex;

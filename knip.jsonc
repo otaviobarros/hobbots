@@ -9,6 +9,10 @@
     "apps/desktop": {
       // Passed to electron-builder with --config, so its plugin does not find it.
       "entry": ["electron-builder.config.mjs"]
+    },
+    "apps/site": {
+      // `cloudflare:workers` is a module of the Workers runtime, not a package.
+      "ignoreDependencies": ["cloudflare"]
     }
   },
   // macOS system tool the icon script calls.

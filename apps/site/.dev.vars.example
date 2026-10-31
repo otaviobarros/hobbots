@@ -1,5 +1,4 @@
 # Copy to .dev.vars for local development. .dev.vars is git-ignored.
-# These are Cloudflare's published Turnstile test keys: the widget always passes.
+# Cloudflare's published Turnstile test secret: every check passes.
 # https://developers.cloudflare.com/turnstile/troubleshooting/testing/
-TURNSTILE_SITE_KEY=1x00000000000000000000AA
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA

@@ -7,7 +7,8 @@ The website at hobbots.app: an [Astro](https://astro.build/) site that runs on C
 From the repository root, after `pnpm install`:
 
 ```sh
-cp apps/site/.dev.vars.example apps/site/.dev.vars   # Turnstile test keys, git-ignored
+cp apps/site/.dev.vars.example apps/site/.dev.vars   # Turnstile test secret, git-ignored
+pnpm --filter @hobbots/site exec wrangler d1 migrations apply WAITLIST_DB --local   # create the local wait-list table
 pnpm --filter @hobbots/site dev       # dev server on http://localhost:4321
 pnpm --filter @hobbots/site build     # static pages and the Worker in apps/site/dist
 pnpm --filter @hobbots/site preview   # serves the build in the local Workers runtime
@@ -16,6 +17,12 @@ pnpm --filter @hobbots/site test:e2e  # Playwright against the build, served by 
 ```
 
 The adapter reads [`wrangler.jsonc`](wrangler.jsonc), so the dev server and preview get a local D1 database (`WAITLIST_DB`) and rate limiter (`SIGNUP_LIMIT`) with no Cloudflare account. Local state lives in `apps/site/.wrangler/`, which is git-ignored.
+
+## The wait-list
+
+Both forms call the Astro Action `waitlist.join` in `src/actions/index.ts`. The rules are in `src/waitlist/join.ts`: the email is trimmed, lowercased and stored once in the `waitlist` table (`migrations/`), a filled honeypot field is answered as a success and stored nowhere, each IP address gets 5 tries a minute, and the Turnstile token is checked on the server with `TURNSTILE_SECRET_KEY`. A repeated email gets the same answer as a new one, so the form never reveals who is on the list. The action never logs the email or the IP address.
+
+Locally, the Turnstile widget uses Cloudflare's test site key and the server uses the test secret from `.dev.vars`, so every check passes. Both still call Cloudflare, so the form needs a network connection.
 
 ## The page
 
