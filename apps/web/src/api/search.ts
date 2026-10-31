@@ -6,7 +6,7 @@ import { call } from "./client.ts";
 /** How long typing must pause before the hub is asked. */
 const DEBOUNCE_MS = 150;
 
-export const searchQuery = (query: string) =>
+const searchQuery = (query: string) =>
   queryOptions({
     queryKey: ["search", query] as const,
     queryFn: () => call((c) => c.search.search({ query: { q: query } })),

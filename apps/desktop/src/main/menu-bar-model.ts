@@ -5,7 +5,7 @@
 import type { ServerState, ServerStatus } from "./server.ts";
 
 /** The chief of the hobs in 10 × 10 cells, as the design draws it for the menu bar; "." and "k" (eyes) are clear. */
-export const TRAY_CHIEF = [
+const TRAY_CHIEF = [
   ".g..g..g..",
   ".gggggggg.",
   "..hhhhhh.l",

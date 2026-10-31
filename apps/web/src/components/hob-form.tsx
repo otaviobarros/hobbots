@@ -8,12 +8,14 @@ import {
   type RoleId,
   type RoleTool,
   type RuntimeModel,
+  type RuntimeModels,
   starterRole,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
-import { useId, useState } from "react";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { type Dispatch, type SetStateAction, useEffect, useId, useMemo, useState } from "react";
 import {
   ALL_ROLES,
   type BrainChoice,
@@ -27,10 +29,11 @@ import {
   pickModel,
   pickRole,
   roleRequestUrl,
+  settleBrain,
   splitModels,
   thinksWith,
 } from "../api/first-hob.ts";
-import { HOB_COLORS } from "../art/look.ts";
+import { HOB_COLORS, hobLook } from "../art/look.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { RoleSigil } from "./role-sigil.tsx";
 
@@ -575,7 +578,7 @@ function EffortBars({ index, count, on }: { index: number; count: number; on: bo
  * The model and effort a hob thinks with, with what each model is for and what the effort costs.
  * The hob profile edits an existing hob's brain with it too.
  */
-export function Brain<D extends BrainChoice>({
+function Brain<D extends BrainChoice>({
   models,
   draft,
   onChange,
@@ -703,3 +706,54 @@ export function Brain<D extends BrainChoice>({
     </>
   );
 }
+
+/** The brain picker once the runtime has listed its models, with the wait and the failure before it. */
+export function ModelsBrain<D extends BrainChoice>({
+  models,
+  draft,
+  onChange,
+  waitingClassName = "py-1",
+}: {
+  models: UseQueryResult<RuntimeModels>;
+  draft: D;
+  onChange: (draft: D) => void;
+  waitingClassName?: string;
+}) {
+  if (models.isPending) {
+    return (
+      <span className={cn("text-sm text-lantern", waitingClassName)}>
+        Asking Claude Code for its models <span className="animate-hb-blink">•••</span>
+      </span>
+    );
+  }
+  if (models.isError) {
+    return (
+      <span role="alert" className="flex items-center gap-3 text-sm text-rose">
+        Hobbots could not get Claude Code's models.
+        <Button type="button" variant="outline" size="xs" onClick={() => void models.refetch()}>
+          Try again
+        </Button>
+      </span>
+    );
+  }
+  return <Brain models={models.data.models} draft={draft} onChange={onChange} />;
+}
+
+/** The look a draft's seed, color and gear give, worked out again only when one of them changes. */
+export const useDraftLook = (draft: FirstHobDraft) => {
+  const gear = gearOf(draft);
+  return useMemo(
+    () => hobLook(draft.lookSeed, draft.lookColor, { hat: gear.hat, tool: gear.tool }),
+    [draft.lookSeed, draft.lookColor, gear.hat, gear.tool],
+  );
+};
+
+/** Moves an unsent draft off a model the runtime no longer lists, each time the list arrives. */
+export const useSettledBrain = (
+  models: RuntimeModels | undefined,
+  setDraft: Dispatch<SetStateAction<FirstHobDraft>>,
+) => {
+  useEffect(() => {
+    if (models) setDraft((d) => (d.submitted ? d : settleBrain(d, models)));
+  }, [models, setDraft]);
+};

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChiefMark } from "./chief-mark.tsx";
 import { Stars } from "./scene.tsx";
 
-export const SETUP_STEPS = ["Providers", "First hob", "Safety", "Folders", "Ready"] as const;
+const SETUP_STEPS = ["Providers", "First hob", "Safety", "Folders", "Ready"] as const;
 
 /**
  * The frame every onboarding step shares: the Elder Hob guiding from the left with what is done

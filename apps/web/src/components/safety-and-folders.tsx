@@ -6,12 +6,9 @@ import { useId, useState } from "react";
 import { ApiError } from "../api/client.ts";
 import { addFolder, folderName, PRESETS, removeFolder, ruleColor } from "../api/safety.ts";
 import { useUpdateSetup } from "../api/setup.ts";
+import { focusWithin } from "./hob-form.tsx";
 
 const chooseFolder = globalThis.window?.hobbots?.chooseFolder;
-
-/** A focus ring drawn inside the pixel corners, which would clip one drawn outside. */
-const focusWithin =
-  "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight has-[:focus-visible]:-outline-offset-4";
 
 /**
  * The three safety presets as cards, one radio group. Picking one stores it on the hub at once,

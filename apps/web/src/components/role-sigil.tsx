@@ -21,7 +21,7 @@ const BADGE_SIZES: ReadonlyArray<BadgeSize> = [
 ];
 
 /** The sigil badge's size for an avatar this many pixels wide. */
-export const badgeSize = (avatar: number): BadgeSize =>
+const badgeSize = (avatar: number): BadgeSize =>
   BADGE_SIZES.find((size) => avatar >= size.from) ?? (BADGE_SIZES.at(-1) as BadgeSize);
 
 /**
