@@ -9,7 +9,7 @@
     },
     "@hobbots/site#build": {
       "dependsOn": ["^build"],
-      "env": ["CLOUDFLARE_ENV"],
+      "env": ["CLOUDFLARE_ENV", "TURNSTILE_SITE_KEY"],
       "outputs": ["dist/**", ".wrangler/deploy/**"]
     },
     "typecheck": {

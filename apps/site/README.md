@@ -7,7 +7,8 @@ The website at hobbots.app: an [Astro](https://astro.build/) site that runs on C
 From the repository root, after `pnpm install`:
 
 ```sh
-cp apps/site/.dev.vars.example apps/site/.dev.vars   # Turnstile test keys, git-ignored
+cp apps/site/.dev.vars.example apps/site/.dev.vars   # Turnstile test secret, git-ignored
+pnpm --filter @hobbots/site exec wrangler d1 migrations apply WAITLIST_DB --local   # create the local wait-list table
 pnpm --filter @hobbots/site dev       # dev server on http://localhost:4321
 pnpm --filter @hobbots/site build     # static pages and the Worker in apps/site/dist
 pnpm --filter @hobbots/site preview   # serves the build in the local Workers runtime
@@ -17,6 +18,12 @@ pnpm --filter @hobbots/site test:e2e  # Playwright against the build, served by 
 
 The adapter reads [`wrangler.jsonc`](wrangler.jsonc), so the dev server and preview get a local D1 database (`WAITLIST_DB`) and rate limiter (`SIGNUP_LIMIT`) with no Cloudflare account. Local state lives in `apps/site/.wrangler/`, which is git-ignored.
 
+## The wait-list
+
+Both forms call the Astro Action `waitlist.join` in `src/actions/index.ts`. The rules are in `src/waitlist/join.ts`: the email is trimmed, lowercased and stored once in the `waitlist` table (`migrations/`), a filled honeypot field is answered as a success and stored nowhere, each IP address gets 5 tries a minute, and the Turnstile token is checked on the server with `TURNSTILE_SECRET_KEY`. A repeated email gets the same answer as a new one, so the form never reveals who is on the list. The action never logs the email or the IP address, and `wrangler.jsonc` turns off Cloudflare's invocation logs, which record request metadata.
+
+Locally, the Turnstile widget uses Cloudflare's test site key and the server uses the test secret from `.dev.vars`, so every check passes. Both still call Cloudflare, so the form needs a network connection.
+
 ## The page
 
 `src/pages/index.astro` is the coming soon page from board 1 of the [design canvas](https://claude.ai/artifact/3WYsG82CcZps5toC8sEu6L), built from one component per section in `src/components`. The hobs, the chief and the moon come from [`@hobbots/art`](../../packages/art/README.md), the same drawings the app uses. The page's words and lists are in `src/data/copy.ts`, and the village layout and pixel icons in `src/data/scene.ts`.
@@ -25,7 +32,7 @@ Only the interactive parts run script, all from `src/scripts/page.ts`: clicking 
 
 ## Checks
 
-`pnpm check` lints, typechecks and unit-tests the site with the rest of the workspace. The [Site workflow](../../.github/workflows/site.yml) builds it and runs the end-to-end tests in `e2e/`, only when `apps/site`, `packages/art`, `pnpm-lock.yaml` or the workflow changes. Build before running `test:e2e` locally. Astro moves `astro preview` to the background when it detects a coding agent (`CLAUDECODE` or `AI_AGENT` set), which Playwright reads as a failed start; unset those variables for the run.
+`pnpm check` lints, typechecks and unit-tests the site with the rest of the workspace. The [Site workflow](../../.github/workflows/site.yml) builds it and runs the end-to-end tests in `e2e/`, only when `apps/site`, `packages/art`, `pnpm-lock.yaml` or the workflow changes. Build before running `test:e2e` locally, after copying `.dev.vars`: the build copies it into `dist/server`, where `astro preview` reads it. Astro moves `astro preview` to the background when it detects a coding agent (`CLAUDECODE` or `AI_AGENT` set), which Playwright reads as a failed start; unset those variables for the run.
 
 ## Teaser video
 

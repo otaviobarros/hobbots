@@ -43,9 +43,10 @@ jobs:
           node-version-file: package.json
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run build --filter=@hobbots/site
-      # Cloudflare's published Turnstile test keys; the local D1 database comes from wrangler.jsonc.
+      # Cloudflare's published Turnstile test secret; the local D1 database comes from wrangler.jsonc.
+      # Copied before the build, which puts .dev.vars into dist/server for astro preview.
       - run: cp apps/site/.dev.vars.example apps/site/.dev.vars
+      - run: pnpm turbo run build --filter=@hobbots/site
       - id: playwright
         name: Read the Playwright version
         run: echo "version=$(pnpm --filter @hobbots/site exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"

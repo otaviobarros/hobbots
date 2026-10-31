@@ -1,5 +1,5 @@
 import cloudflare from "@astrojs/cloudflare";
-import { defineConfig } from "astro/config";
+import { defineConfig, envField } from "astro/config";
 
 export default defineConfig({
   site: "https://hobbots.app",
@@ -9,4 +9,11 @@ export default defineConfig({
   session: false,
   // Images ship as they are, so no Cloudflare Images binding is needed.
   adapter: cloudflare({ imageService: "passthrough" }),
+  env: {
+    schema: {
+      // Public, read at build time. The default is Cloudflare's test key, which always passes;
+      // staging and production builds set their own (see RUNBOOK.md).
+      TURNSTILE_SITE_KEY: envField.string({ context: "client", access: "public", default: "1x00000000000000000000AA" }),
+    },
+  },
 });

@@ -7,7 +7,8 @@
   "main": "@astrojs/cloudflare/entrypoints/server",
   "compatibility_date": "2026-10-23",
   "assets": { "binding": "ASSETS" },
-  "observability": { "enabled": true },
+  // Console logs only. Invocation logs record request metadata, which can include the visitor's IP address.
+  "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false } },
   // The top level is local development. Bindings are not inherited, so each environment repeats them.
   "d1_databases": [{ "binding": "WAITLIST_DB", "database_name": "hobbots-waitlist-local" }],
   "ratelimits": [{ "name": "SIGNUP_LIMIT", "namespace_id": "1001", "simple": { "limit": 5, "period": 60 } }],
