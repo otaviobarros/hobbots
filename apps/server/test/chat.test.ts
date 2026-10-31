@@ -7,8 +7,8 @@ import {
   AgentId,
   EMPTY_HOB_POLICY,
   isInProgress,
+  type Message,
   type MessageId,
-  type MessageSteps,
   type ThreadId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -246,8 +246,8 @@ describe("tool calls in a reply", () => {
   );
 
   // covers CH-004, PE-002
-  it("[TC-CH-109] shows each tool call the policy allowed as a step of the reply, and no step for a refused one", async () => {
-    const steps = await Effect.gen(function* () {
+  it("[TC-CH-109] saves each tool call as a step of the reply, a refused one with its reason, and journals every change", async () => {
+    const { stored, journaled } = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const bus = yield* EventBus;
       const repo = yield* HobbotsRepository;
@@ -255,31 +255,59 @@ describe("tool calls in a reply", () => {
       const thread = yield* chat.createThread(HOB_ID);
       yield* chat.sendPrompt(
         thread.id,
-        `Fix it\nfake:tool Edit ${join(folder, "a.ts")}\nfake:tool Write ${join(root, "outside.txt")}`,
+        `Fix it\nfake:tool Edit ${join(folder, "a.ts")}\nfake:tool Bash pnpm test\nfake:tool Write ${join(root, "outside.txt")}`,
       );
-      yield* repo.listMessages(thread.id).pipe(
-        Effect.flatMap((messages) =>
-          messages.at(-1)?.role === "assistant" && !isInProgress(messages.at(-1)?.status ?? "streaming")
-            ? Effect.void
-            : Effect.fail("busy" as const),
-        ),
+      const reply = yield* repo.listMessages(thread.id).pipe(
+        Effect.flatMap((messages) => {
+          const last = messages.at(-1);
+          return last?.role === "assistant" && !isInProgress(last.status) ? Effect.succeed(last) : Effect.fail("busy");
+        }),
         Effect.retry(Schedule.spaced("5 millis")),
       );
       const events = yield* PubSub.takeAll(subscription);
-      return events.flatMap(
-        (event): ReadonlyArray<MessageSteps> =>
-          event._tag === "Transient" && event.event._tag === "MessageSteps" ? [event.event] : [],
+      // The reply's upserts carry its steps, so a client replaying the journal sees each change.
+      const upserts = events.flatMap(
+        (event): ReadonlyArray<Message> =>
+          event._tag === "Journaled" &&
+          event.entry.payload._tag === "MessageUpserted" &&
+          event.entry.payload.message.id === reply.id
+            ? [event.entry.payload.message]
+            : [],
       );
+      return { stored: reply.steps, journaled: upserts.map((m) => m.steps.map((step) => `${step.id}:${step.state}`)) };
     }).pipe(
       Effect.provide(testLayer(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)), tools)),
       Effect.scoped,
       Effect.runPromise,
     );
 
-    expect(steps.at(-1)?.steps).toEqual([
+    expect(stored).toEqual([
       { id: "thinking-1", kind: "thinking", label: "Thinking", state: "done" },
-      { id: "fake-tool-1", kind: "tool", label: "Editing a.ts", state: "done" },
+      {
+        id: "fake-tool-1",
+        kind: "tool",
+        label: "Editing a.ts",
+        state: "done",
+        call: { tool: "Edit", operation: "edit-files", targets: [join(folder, "a.ts")] },
+      },
+      {
+        id: "fake-tool-2",
+        kind: "tool",
+        label: "Running pnpm test",
+        state: "done",
+        call: { tool: "Bash", operation: "run-commands", targets: [folder] },
+      },
+      expect.objectContaining({
+        id: "fake-tool-3",
+        kind: "tool",
+        state: "denied",
+        decidedBy: "policy",
+        reason: expect.any(String),
+        call: expect.objectContaining({ tool: "Write", operation: "outside-folders" }),
+      }),
     ]);
+    expect(journaled).toContainEqual(["thinking-1:done", "fake-tool-1:running"]);
+    expect(journaled.at(-1)).toEqual(["thinking-1:done", "fake-tool-1:done", "fake-tool-2:done", "fake-tool-3:denied"]);
   });
 
   // covers PE-008

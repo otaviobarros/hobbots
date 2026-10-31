@@ -14,3 +14,7 @@ out/
 release/
 test-results/
 playwright-report/
+.dev.vars*
+!.dev.vars.example
+.wrangler/
+.astro/

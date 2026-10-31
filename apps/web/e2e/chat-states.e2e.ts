@@ -1,3 +1,5 @@
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
 
@@ -71,9 +73,51 @@ test("[TC-CH-090] a streaming reply shows the steps the runtime reports", async 
   const steps = page.getByRole("list", { name: "Reply steps" });
   await expect(steps.getByRole("listitem")).toHaveText(/Thinking/);
   await expect(steps.getByRole("listitem")).toHaveAttribute("data-state", "done");
-  // Steps are live only: the finished reply leaves none behind.
+  // A finished reply keeps its tool calls only, and this one made none.
   await expect(page.getByText(`Echo: ${LONG_PROMPT}`)).toBeVisible();
   await expect(steps).toBeHidden();
+});
+
+// covers CH-004, PE-002
+test("[TC-CH-111] a reply shows the tools it used, a refused one with its reason, and still does after a reload", async ({
+  page,
+}) => {
+  const work = realpathSync(mkdtempSync(`${dataDir}-work-`));
+  try {
+    const { current, pip } = await hubWithPip();
+    await api(current, "PATCH", "/api/setup", { safetyPreset: "balanced", approvedFolders: [work] });
+    await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+    await send(
+      page,
+      [
+        "Fix the cart and run the tests",
+        `fake:tool Edit ${join(work, "cart.ts")}`,
+        "fake:tool Bash pnpm test",
+        "fake:tool Write /etc/hobbots-e2e.txt",
+      ].join("\n"),
+    );
+    await expect(page).toHaveURL(/threads\//);
+    await expect.poll(async () => (await replies(current, page)).map((r) => r.status)).toEqual(["complete"]);
+
+    const shows = async () => {
+      const steps = page.getByRole("list", { name: "Reply steps" });
+      // A finished reply keeps its tool calls, not its thinking.
+      await expect(steps.getByRole("listitem")).toHaveCount(3);
+      await expect(steps.getByRole("button", { name: "Editing cart.ts done" })).toBeVisible();
+      await expect(steps.getByRole("button", { name: "Running pnpm test done" })).toBeVisible();
+      await expect(steps.getByText(/^Not allowed by the hob's permissions: /)).toBeVisible();
+      // Details on demand: the tool, the action and its target.
+      await steps.getByRole("button", { name: "Editing cart.ts done" }).click();
+      await expect(steps.getByText("Create and edit files")).toBeVisible();
+      await expect(steps.getByText(join(work, "cart.ts"))).toBeVisible();
+    };
+    await shows();
+    // The steps are saved with the reply, so a fresh page load shows them too.
+    await page.reload();
+    await shows();
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
 });
 
 // covers CH-004, CH-007

@@ -34,7 +34,7 @@ Labels use a `group: value` prefix so they sort together and filter cleanly. Eve
 | Group | Labels | Meaning |
 |---|---|---|
 | Type | `type: slice`, `type: task`, `type: bug`, `type: feature`, `type: docs`, `type: chore` | What kind of work it is. |
-| Area | `area: desktop`, `area: server`, `area: web`, `area: runtime`, `area: persistence`, `area: orchestration`, `area: permissions`, `area: devices`, `area: design`, `area: ci`, `area: docs` | Which part of Hobbots it touches. |
+| Area | `area: desktop`, `area: server`, `area: web`, `area: site`, `area: runtime`, `area: persistence`, `area: orchestration`, `area: permissions`, `area: devices`, `area: design`, `area: ci`, `area: docs` | Which part of Hobbots it touches. |
 | Priority | `priority: p0`, `priority: p1`, `priority: p2` | p0 is needed for the current milestone, p1 should follow soon, p2 is nice to have. |
 | Status | `status: triage`, `status: needs info`, `status: blocked` | Exceptions only. Day-to-day progress lives in the board's Status field. |
 | Community | `good first issue`, `help wanted` | Work that newcomers or contributors can pick up. |
