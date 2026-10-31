@@ -80,6 +80,7 @@ const EYES = [
  * The full chief with its eyes moved one cell to a side, or closed to a line for a blink. The skin
  * fills where the eyes were; every other cell stays as drawn.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 export const chiefFrame = (gaze: ChiefGaze): ReadonlyArray<string> => {
   if (gaze === "ahead") return CHIEF;
   const rows = CHIEF.map((row) => [...row]);

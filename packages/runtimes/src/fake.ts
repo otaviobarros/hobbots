@@ -89,6 +89,7 @@ export const scriptedToolEvents = (
   request: PromptRequest,
   engine: PolicyEngine["Service"] | undefined,
 ): Effect.Effect<ReadonlyArray<RuntimeEvent>> =>
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
   Effect.gen(function* () {
     // The fake pretends its sandbox started, so commands are decided as on a supported hub.
     const turn = engine ? toolTurn(request.tools, "on") : null;
@@ -154,6 +155,7 @@ export const scriptedToolEvents = (
 export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   const availability = options.availability ?? "ready";
   const sessions = new Map<string, string>();
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
   const sendPrompt = (request: PromptRequest): Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached> => {
     // A brain that is not ready cannot start a turn, as with the real runtime.
     if (availability !== "ready") {

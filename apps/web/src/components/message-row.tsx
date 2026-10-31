@@ -45,6 +45,7 @@ export function MessageRow({
   return <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume} />;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 function ReplyRow({
   message,
   hob,

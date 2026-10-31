@@ -41,6 +41,7 @@ const blockedIpv4 = ([a, b, c, d]: ReadonlyArray<number>): boolean =>
 const parseIpv6 = (address: string): ReadonlyArray<number> | null => {
   const halves = address.split("::");
   if (halves.length > 2) return null;
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
   const groups = (half: string | undefined): Array<number> | null => {
     if (half === undefined || half === "") return [];
     const out: Array<number> = [];

@@ -46,6 +46,7 @@ const BRAIN_PROBLEM: Record<NonNullable<ReturnType<typeof runtimeProblem>>, stri
 const IDEAS = ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"];
 
 /** The middle of the chat workspace. Without a thread id it is the empty "fresh page". */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 export function ChatView({
   hobId,
   threadId,

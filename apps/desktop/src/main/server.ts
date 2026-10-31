@@ -28,6 +28,7 @@ export type ServerEvent =
 export const initialStatus: ServerStatus = { state: "stopped", owned: false, stopping: false, problem: null };
 
 /** The supervisor's state machine, kept pure so every transition is testable. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 export const nextStatus = (status: ServerStatus, event: ServerEvent): ServerStatus => {
   switch (event.type) {
     case "launching":

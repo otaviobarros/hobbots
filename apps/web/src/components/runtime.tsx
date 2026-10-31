@@ -45,6 +45,7 @@ export function RuntimeChip() {
 }
 
 /** Provider health for the Workshop tab. Detail is never shown: it can carry account names. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 export function RuntimeCard() {
   const { pending, checking, claude, checkAgain } = useClaudeRuntime();
   const problem = runtimeProblem(claude);

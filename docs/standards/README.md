@@ -71,6 +71,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-ARCH-009 | Hobs run on existing runtimes through capability-aware adapters | Active |
 | STD-ARCH-010 | Every hob has the same capabilities | Active |
 | STD-ARCH-011 | One hub serves every client | Active |
+| STD-ARCH-012 | Functions stay under the complexity limit | Active |
 | STD-DUP-001 | Search before writing | Active |
 | STD-DUP-002 | Extract logic at its second real copy | Active |
 | STD-DUP-003 | Shared code lives in the layer that owns it | Active |

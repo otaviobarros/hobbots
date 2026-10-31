@@ -141,6 +141,7 @@ function Busy({ children }: { children: ReactNode }) {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 function ClaudeCard({
   state,
   claude,
@@ -245,6 +246,7 @@ function ClaudeCard({
  * connected provider is ready. Each problem shows its fix and Check again, so fixing it in a
  * terminal is enough, without restarting Hobbots.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 export function OnboardingProviders() {
   const navigate = useNavigate();
   const router = useRouter();

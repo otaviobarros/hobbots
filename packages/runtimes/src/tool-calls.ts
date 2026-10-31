@@ -54,6 +54,7 @@ const text = (input: Record<string, unknown>, key: string): string | undefined =
 };
 
 /** One shell command line split into simple commands, each as its words. Quotes are honored; anything subtler is not. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 export const simpleCommands = (command: string): ReadonlyArray<ReadonlyArray<string>> => {
   const commands: Array<Array<string>> = [];
   let words: Array<string> = [];
@@ -130,6 +131,7 @@ const pushRequest = (args: ReadonlyArray<string>): PolicyRequest => {
 };
 
 /** The requests one shell command makes: running it, plus any Git, push or delete it is recognized as. */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 export const commandRequests = (command: string, cwd: string): ReadonlyArray<PolicyRequest> => {
   const requests: Array<PolicyRequest> = [];
   const add = (request: PolicyRequest) => {

@@ -97,6 +97,14 @@ One hub server and one durable state model serve the browser, Electron and every
 - **Enforced by:** review.
 - **Applies to:** `apps/*`.
 
+### STD-ARCH-012 Functions stay under the complexity limit
+
+A function's cognitive complexity stays at 15 or below. Above that, split it into named steps or move a branch table into data. An older function over the limit keeps a `biome-ignore` comment until someone splits it. Add a new one only with a reason that says why the function cannot be split.
+
+- **Why:** a function that reads in one pass is easier to test and review, for people and coding agents alike.
+- **Enforced by:** Biome `complexity/noExcessiveCognitiveComplexity` (`maxAllowedComplexity: 15`) in `pnpm check`, configured in `biome.json`.
+- **Applies to:** all code Biome checks.
+
 ## Guidance
 
 - Add a DTO or a mapping layer only where a boundary needs a different shape. Pass Schemas through otherwise.

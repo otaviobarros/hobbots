@@ -208,6 +208,7 @@ export class HobService extends Context.Service<
             ? { ...edit, roleTitle: starterRole(edit.role).title }
             : edit;
         return yield* nextVersion(id, (agent) =>
+          // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
           Effect.gen(function* () {
             if (editableFields.every((field) => payload[field] === undefined || payload[field] === agent[field])) {
               return agent;
@@ -242,6 +243,7 @@ export class HobService extends Context.Service<
           ...new Set(yield* Effect.forEach(payload.hiddenSharedFolders, folders.identity)),
         ];
         return yield* nextVersion(id, (agent) =>
+          // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
           Effect.gen(function* () {
             // Read inside the retry, so each attempt checks against the setup as it is then.
             const { safetyPreset, approvedFolders } = yield* setup.get;

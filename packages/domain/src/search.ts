@@ -58,6 +58,7 @@ const wordsOf = (query: string, normalize: (word: string) => string): ReadonlyAr
  * The words around the first match in `content`, at most about `width` characters, with matching
  * words marked. Whitespace collapses to single spaces.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
 export const snippetOf = (content: string, terms: ReadonlyArray<string>, width = 120): Array<SnippetPart> => {
   const text = content.replace(/\s+/g, " ").trim();
   const ranges: Array<[number, number]> = [];

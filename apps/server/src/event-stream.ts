@@ -154,6 +154,7 @@ export class EventStream extends Context.Service<
             );
             const progress = Stream.concat(text, steps);
             const live = Stream.fromQueue(buffer).pipe(
+              // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: predates the complexity limit (STD-ARCH-012). Split it before adding more branches.
               Stream.flatMap((event): Stream.Stream<StreamFrame> => {
                 if (event._tag === "KeepAlive") return Stream.succeed(event);
                 if (event._tag === "Transient") return Stream.succeed({ _tag: "Transient", event: event.event });
