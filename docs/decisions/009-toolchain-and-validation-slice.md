@@ -4,7 +4,7 @@ Status: **Accepted.** Resolves the toolchain rows of [open questions](../product
 
 ## Decision
 
-- **Name:** the product is **Hobbots** (hobbots.ai). Code, package scope (`@hobbots/*`), environment variables (`HOBBOTS_*`), data folder and UI use it.
+- **Name:** the product is **Hobbots** (hobbots.app). Code, package scope (`@hobbots/*`), environment variables (`HOBBOTS_*`), data folder and UI use it.
 - **Monorepo:** pnpm workspaces orchestrated by Turborepo. Internal packages export TypeScript source directly; only apps build.
 - **Versions:** every dependency is installed from the registry at its latest stable release (`pnpm add <pkg>`), never a hand-typed version; release candidates are acceptable, alpha/beta/nightly are not. pnpm's default minimum release age (one day) is kept, so a release published within the last 24 hours is picked up on the next install. The lockfile is the record.
 - **Docs first:** library work starts from Context7 documentation, then official docs or the installed package's own docs.
