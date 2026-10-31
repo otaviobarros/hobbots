@@ -1,6 +1,6 @@
 # Site runbook
 
-One-time setup for hobbots.app that lives outside this repository, and the few tasks that need a Cloudflare login. Every value here is a placeholder in angle brackets, such as `<account-id>`. Real tokens, secrets and account IDs never go in this file. The plan is in [#182](https://github.com/otaviobarros/hobbots/issues/182).
+One-time setup for hobbots.app that lives outside this repository, and the few tasks that need a Cloudflare login. Every value here is a placeholder in angle brackets, such as `<account-id>`. Real tokens, secrets and account IDs never go in this file. A fork can follow the same steps with its own Cloudflare account, domain and GitHub Environments. The plan is in [#182](https://github.com/otaviobarros/hobbots/issues/182).
 
 ## Setting up from scratch
 
@@ -102,16 +102,16 @@ Deploys use an account API token with only these permissions, under Manage Accou
 | Account › D1 › Edit               | Apply migrations                           |
 | Account › Account Settings › Read | Read the account when Wrangler starts      |
 - Make one token for each environment, named `hobbots-site-staging-deploy` and `hobbots-site-production-deploy`, so each can be revoked alone.
-- Never reuse the production token for staging. Pull request previews from branches in this repository run with the staging token. A Cloudflare token cannot be limited to one Worker, so while both environments share an account, the staging token could still deploy production without the approval. Only branches by people with write access can use it. For full isolation, move staging to its own Cloudflare account.
+- Never reuse the production token for staging. For full isolation between the two, put staging in its own Cloudflare account.
 - Set an expiry date, at most a year out, and note it where you track renewals.
 - The token needs no zone, R2 or Turnstile permission. If a deploy fails with an authentication error, check the error before adding a permission, and add it to this table in the same pull request.
 
 The tokens live only in two GitHub Environments, under Settings › Environments:
 
-| Environment       | Secrets                                         | Variables            | Protection                                                                                                               |
-| ----------------- | ----------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `site-staging`    | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `TURNSTILE_SITE_KEY` | None. The workflow skips pull requests from forks and Dependabot.                                                        |
-| `site-production` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `TURNSTILE_SITE_KEY` | Required reviewer: a maintainer. Deployment tags: `site-v*`. "Prevent self-review" is off while there is one maintainer. |
+| Environment       | Secrets                                         | Variables            | Protection                                                        |
+| ----------------- | ----------------------------------------------- | -------------------- | ----------------------------------------------------------------- |
+| `site-staging`    | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `TURNSTILE_SITE_KEY` | None. The workflow skips pull requests from forks and Dependabot. |
+| `site-production` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `TURNSTILE_SITE_KEY` | Required reviewer: a maintainer. Deployment tags: `site-v*`.      |
 
 The account ID is on Account home, or in `wrangler whoami`. The release-please App needs nothing new.
 
