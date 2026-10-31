@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useId } from "react";
 import { ApiError } from "../api/client.ts";
+import { needsSandbox, sandboxState } from "../api/enforcement.ts";
 import { permissionsQuery, useUpdatePermissions } from "../api/queries.ts";
 import {
   ANSWER,
@@ -18,6 +19,8 @@ import {
   ruleColor,
 } from "../api/safety.ts";
 import { watchedSetupQuery } from "../api/setup.ts";
+import { NeedsSandbox } from "./enforcement.tsx";
+import { messages } from "./messages.ts";
 import { FolderList, LockedSwitch } from "./safety-and-folders.tsx";
 
 /** A focus ring drawn inside the segment, which the group's border would clip. */
@@ -29,7 +32,7 @@ const focusWithin =
  * version and with the setup's preset and shared folders, so all of those key the query, and the
  * setup is watched because another window may change it while the profile stays open.
  */
-const useHobPermissions = (hob: Agent) => {
+export const useHobPermissions = (hob: Agent) => {
   const setup = useQuery(watchedSetupQuery);
   const basis = [hob.configVersion, setup.data?.safetyPreset, ...(setup.data?.approvedFolders ?? [])];
   const permissions = useQuery({ ...permissionsQuery(hob.id, basis), enabled: setup.data !== undefined });
@@ -45,7 +48,7 @@ const useHobPermissions = (hob: Agent) => {
   };
 };
 
-function Loading({ name, failed, retry }: { name: string; failed: boolean; retry: () => void }) {
+export function Loading({ name, failed, retry }: { name: string; failed: boolean; retry: () => void }) {
   return failed ? (
     <p role="alert" className="m-0 flex items-center gap-3 text-sm text-rose">
       Hobbots could not read what {name} may do.
@@ -55,129 +58,6 @@ function Loading({ name, failed, retry }: { name: string; failed: boolean; retry
     </p>
   ) : (
     <span className="text-label">Loading…</span>
-  );
-}
-
-/** The runtime's own tools, grouped as the Charms tab lists them, with the operations each covers. */
-const BUILT_IN: ReadonlyArray<{
-  readonly mark: string;
-  readonly name: string;
-  readonly note: string;
-  readonly operations: ReadonlyArray<readonly [string, PolicyOperation]>;
-}> = [
-  {
-    mark: "F",
-    name: "Files",
-    note: "Reads, creates, edits and deletes files in its folders.",
-    operations: [
-      ["Read", "read-files"],
-      ["Edit", "edit-files"],
-      ["Delete", "delete-files"],
-    ],
-  },
-  {
-    mark: ">",
-    name: "Commands",
-    note: "Runs shell commands, tests and builds.",
-    operations: [["Run", "run-commands"]],
-  },
-  {
-    mark: "G",
-    name: "Local Git",
-    note: "Status, diff, branches and commits, on the hub.",
-    operations: [["Git", "local-git"]],
-  },
-  {
-    mark: "W",
-    name: "The web",
-    note: "Fetches pages and reaches hosts from commands, such as package installs.",
-    operations: [["Web", "use-web"]],
-  },
-];
-
-/**
- * What the hob can do (ADR 014): its runtime's own tools with each answer and how it is held, then
- * its Charms. The answers are changed on the Permissions tab.
- */
-export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: () => void }) {
-  const permissions = useHobPermissions(hob);
-  const data = permissions.data;
-  if (!data) {
-    return <Loading name={hob.name} failed={permissions.isError} retry={() => void permissions.refetch()} />;
-  }
-  return (
-    <div className="flex max-w-[760px] flex-col gap-2.5">
-      <span className="text-secondary-text">
-        What {hob.name} can do. Its own tools come with its runtime; Charms connect it to other apps.
-      </span>
-
-      <h2 className="lbl m-0 pt-2 text-xs text-label">Built in</h2>
-      <ul aria-label="Built-in tools" className="m-0 flex list-none flex-col gap-2.5 p-0">
-        {BUILT_IN.map((tool) => {
-          const checked = tool.operations.filter(([, op]) => enforcement(op, data.decisions) === "checked");
-          return (
-            <li key={tool.name} className="cut flex items-center gap-3.5 border-2 border-line bg-card px-4 py-3.5">
-              <span
-                aria-hidden
-                className="grid size-10 flex-none place-items-center bg-line font-pixel text-lg font-bold text-moonlight"
-              >
-                {tool.mark}
-              </span>
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="font-bold">{tool.name}</span>
-                <span className="text-[13px] text-secondary-text">{tool.note}</span>
-                <span className="text-[13px] text-label">
-                  {checked.length === 0
-                    ? "Held by the sandbox."
-                    : `${checked.map(([label]) => label).join(", ")} is checked by Hobbots, not held by the sandbox.`}
-                </span>
-              </div>
-              <span className="flex flex-none flex-wrap justify-end gap-1.5">
-                {tool.operations.map(([label, op]) => {
-                  const answer = ANSWER[data.decisions[op]];
-                  return (
-                    <span key={op} className="flex items-center gap-1 text-[13px]">
-                      {tool.operations.length > 1 && <span className="text-secondary-text">{label}</span>}
-                      <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(answer))}>
-                        {answer}
-                      </span>
-                    </span>
-                  );
-                })}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-
-      <h2 className="lbl m-0 pt-2 text-xs text-label">Charms</h2>
-      <div className="cut flex items-center gap-3.5 border-2 border-dashed border-line-2 px-4 py-3.5">
-        <span
-          aria-hidden
-          className="grid size-10 flex-none place-items-center bg-line font-pixel text-lg font-bold text-moonlight"
-        >
-          GH
-        </span>
-        <div className="flex flex-1 flex-col gap-0.5">
-          <span className="flex items-center gap-2 font-bold">
-            GitHub
-            <span className="bg-lantern px-1.5 text-xs font-normal text-ground">Later</span>
-          </span>
-          <span className="text-[13px] text-secondary-text">
-            Pushes {hob.name}'s commits. You connect GitHub once on the hub, then pick which hobs may push. Push is{" "}
-            {ANSWER[data.decisions.push]} for {hob.name}.
-          </span>
-        </div>
-      </div>
-      <span className="text-[13px] text-label">
-        Charms connect a hob to apps such as GitHub or Slack, and each action has its own Allow, Ask or Never.
-      </span>
-      <div>
-        <Button variant="outline" onClick={onPermissions}>
-          Change what {hob.name} may do
-        </Button>
-      </div>
-    </div>
   );
 }
 
@@ -234,12 +114,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
       />
 
       <h2 className="lbl m-0 pt-4 text-xs text-label">Sandbox</h2>
-      <LockedSwitch
-        label="Run in the sandbox"
-        note={`Commands, Git and the web run inside Hobbots' sandbox, which keeps ${hob.name} in its folders.`}
-        checked
-        later="Turning it off arrives in a later update."
-      />
+      <SandboxSwitch name={hob.name} sandbox={data.enforcement.processSandbox} />
 
       <h2 className="lbl m-0 pt-4 text-xs text-label">Rules</h2>
       <span className="text-[13px] text-secondary-text">
@@ -271,6 +146,23 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
         </p>
       )}
     </div>
+  );
+}
+
+/** The sandbox switch, which says so when the sandbox cannot start here, and why. */
+function SandboxSwitch({ name, sandbox }: { name: string; sandbox: HobPermissions["enforcement"]["processSandbox"] }) {
+  const unavailable = sandbox.status === "unsupported";
+  return (
+    <LockedSwitch
+      label={messages.enforcement.sandboxLabel}
+      note={
+        unavailable
+          ? messages.enforcement.sandboxUnavailable({ name, evidence: sandbox.evidence })
+          : messages.enforcement.sandboxOn({ name })
+      }
+      checked={!unavailable}
+      later="Turning it off arrives in a later update."
+    />
   );
 }
 
@@ -362,7 +254,9 @@ function Rule({
   const preset = PRESET_DECISIONS[permissions.preset][rule.operation];
   const allowed = answersWithin(preset);
   const current = shown ?? permissions.decisions[rule.operation];
-  const checked = enforcement(rule.operation, permissions.decisions) === "checked";
+  const blocked = needsSandbox(rule.operation, permissions.enforcement);
+  const checked =
+    !blocked && enforcement(rule.operation, permissions.decisions, sandboxState(permissions.enforcement)) === "checked";
   const narrowed = current !== preset;
   return (
     <div className="flex items-center gap-4 border-b-2 border-line py-3">
@@ -372,10 +266,12 @@ function Rule({
             {rule.label}
           </span>
           {checked && <span className="border-2 border-line-2 px-1.5 text-xs text-secondary-text">Checked</span>}
+          {blocked && <NeedsSandbox />}
         </span>
         <span id={noteId} className="text-[13px] text-secondary-text">
           {rule.note}
           {narrowed && ` Narrowed from ${ANSWER[preset]}.`}
+          {blocked && ` ${messages.enforcement.ruleBlocked}`}
         </span>
       </div>
       <div

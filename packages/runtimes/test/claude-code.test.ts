@@ -192,6 +192,18 @@ describe("Claude Code health before the runtime starts", () => {
     expect(Exit.isFailure(refused) && String(refused.cause)).toContain("could not be started");
   });
 
+  // covers PE-005
+  it("[TC-PE-041] declares the sandbox unsupported, with why, in its enforcement and its health", async () => {
+    const adapter = await Effect.runPromise(
+      makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable: join(newHome(), "missing", "claude") }),
+    );
+    const declared = await Effect.runPromise(adapter.enforcement);
+    expect(declared.processSandbox).toEqual({ status: "unsupported", evidence: "not needed for chat-only turns" });
+    expect(declared.toolInterception.status).toBe("verified");
+    // Health carries the same declaration whatever the runtime's availability.
+    expect((await Effect.runPromise(adapter.health)).enforcement).toEqual(declared);
+  });
+
   it("reports a binary that prints no version as unavailable", async () => {
     const adapter = await Effect.runPromise(adapterFor("#!/bin/sh\necho nope\n"));
     const health = await Effect.runPromise(adapter.health);

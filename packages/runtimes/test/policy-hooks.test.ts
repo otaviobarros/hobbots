@@ -46,8 +46,13 @@ const access = (hob: HobPolicy = EMPTY_HOB_POLICY): ToolAccess => ({
 });
 
 /** Runs one tool call through the hooks as Claude Code would, with what each hook reported. */
-const call = async (tool: string, toolInput: Record<string, unknown>, outcome: "success" | "failure" = "success") => {
-  const turn = toolTurn(access(), "on");
+const call = async (
+  tool: string,
+  toolInput: Record<string, unknown>,
+  outcome: "success" | "failure" = "success",
+  sandbox: "on" | "unavailable" = "on",
+) => {
+  const turn = toolTurn(access(), sandbox);
   if (turn === null) throw new Error("expected a tool turn");
   const events: Array<RuntimeEvent> = [];
   const { hooks } = policyHooks(engine, turn, (event) => events.push(event));
@@ -121,6 +126,23 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(result.decision).toBe("deny");
     expect(result.events[0]).toMatchObject({ _tag: "ToolDenied", operation: "push" });
     expect(result.events[0]?._tag === "ToolDenied" && result.events[0].reason).toContain("cannot ask you");
+  });
+
+  // covers PE-005
+  it("[TC-PE-040] blocks shell commands where the sandbox cannot start, and says why", async () => {
+    // Bash is not offered at all, while file tools still work through the hook.
+    const turn = toolTurn(access(), "unavailable");
+    expect(turn?.tools).not.toContain("Bash");
+    expect(turn?.tools).toContain("Edit");
+    // A command that reached the hook anyway is refused with the reason, never run unsandboxed.
+    for (const command of ["pnpm test", "git status", "git push origin feature"]) {
+      const result = await call("Bash", { command }, "success", "unavailable");
+      expect(result.decision).toBe("deny");
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0]).toMatchObject({ _tag: "ToolDenied", decidedBy: "policy" });
+      expect(result.events[0]?._tag === "ToolDenied" && result.events[0].reason).toContain("sandbox cannot start");
+    }
+    expect((await call("Edit", { file_path: join(project, "a.ts") }, "success", "unavailable")).decision).toBe("allow");
   });
 
   it("refuses a tool Hobbots does not know", async () => {
