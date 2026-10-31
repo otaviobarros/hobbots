@@ -38,5 +38,5 @@ A deliberate, user-directed design change updates the design specification and t
 The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
 
 - A new installation goes from Welcome to Home and opens on Home afterwards: `[TC-OP-015]`.
-- Home and chat show each hob's real state, and a provider shows as working only when it is connected and healthy: `[TC-AG-009]`, `[TC-AG-010]`, `[TC-CH-093]`.
+- A provider that is missing or signed out says so and shows its fix, in onboarding and in chat: `[TC-AG-009]`, `[TC-AG-010]`, `[TC-CH-093]`.
 - Approvals offer once, for this Quest and always, and a high-risk action offers once with a confirmation. Not proven yet: [#134](https://github.com/otaviobarros/hobbots/issues/134).

@@ -30,4 +30,4 @@ The scenarios that would show this decision holds. Each names the test case or e
 
 - `pnpm check` passes on a fresh clone with the pinned versions, and CI runs it on every pull request.
 - `pnpm package:mac` builds `Hobbots.app` and a `.dmg` per architecture, and the packaged app starts and answers `/api/health`: [the background service record](../evidence/2026-10-29-background-service.md). The release workflow on a version tag is not proven yet: [#34](https://github.com/otaviobarros/hobbots/issues/34).
-- The packaged app finds Claude Code installed on the host, including on a shell-only `PATH`: `[TC-GEN-003]`, and reports it signed out or missing with its fix: `[TC-AG-009]`, `[TC-AG-010]`.
+- The desktop app reads the `PATH` of the user's login shell: `[TC-GEN-003]`, a unit test with `/bin/sh`. A missing or signed-out Claude Code blocks setup with its fix, in a browser against a hub from source: `[TC-AG-009]`, `[TC-AG-010]`. The packaged app finding Claude Code on a shell-only `PATH` is not proven yet: no test or recorded run covers it.

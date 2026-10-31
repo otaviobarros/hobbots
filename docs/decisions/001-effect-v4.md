@@ -22,6 +22,6 @@ A deliberate user-directed change should update the relevant specification and s
 
 The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
 
-- A server boot with SQLite runs every migration through the Effect migrator and serves the API: `[TC-DP-003]`.
+- Every migration applies in order through the Effect migrator on an empty database: `[TC-DP-003]`.
 - A reply that a process exit interrupts is recovered as interrupted on the next start, not left running: `[TC-CH-004]`.
 - Invalid input to the API returns a typed error and changes nothing: `[TC-AG-003]`.

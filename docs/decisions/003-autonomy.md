@@ -22,7 +22,7 @@ A deliberate user-directed change should update the relevant specification and s
 
 The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
 
-- Under Balanced, a hob edits files and runs tests in its folders without asking: `[TC-PE-012]`.
-- A call outside the hob's folders is refused whatever the prompt says: `[TC-PE-013]`, `[TC-PE-020]`.
+- Under Balanced, the policy hook lets a hob edit files and run tests in its folders without asking: `[TC-PE-012]`.
+- A call outside the hob's folders is refused whatever the prompt says: `[TC-PE-013]`. A sandboxed command that writes or reads a closed folder fails: `[TC-PE-020]`, which runs only on macOS, so CI on Ubuntu skips it.
 - An Ask operation waits for the user's decision in chat. Not proven yet: [#133](https://github.com/otaviobarros/hobbots/issues/133), [#137](https://github.com/otaviobarros/hobbots/issues/137).
 - Delegation narrows authority and a hob cannot approve on the user's behalf. Not proven yet: [#10](https://github.com/otaviobarros/hobbots/issues/10).

@@ -22,6 +22,6 @@ A deliberate user-directed change should update the relevant specification and s
 
 The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
 
-- A hob on the Claude Code installed on the host streams a reply and resumes its session on the next turn: `[TC-CH-001]`, and [the multi-hob record](../evidence/2026-10-30-multi-hob.md) on real Claude Code.
-- A missing, outdated or signed-out runtime blocks the hob and shows its fix: `[TC-AG-009]`, `[TC-AG-010]`.
+- A turn streams, completes and stores its session, and the next turn resumes it: `[TC-CH-001]`, with the fake runtime. On the Claude Code installed on the host, hobs replied and resumed their threads in [the multi-hob record](../evidence/2026-10-30-multi-hob.md), a manual run.
+- A missing or signed-out Claude Code blocks setup and shows its fix, in a browser against a hub from source: `[TC-AG-009]`, `[TC-AG-010]`. An outdated Claude Code is not proven yet: no test covers it.
 - A second runtime (Codex) runs a hob through the same adapter contract, with its own verified capabilities. Not proven yet: [#12](https://github.com/otaviobarros/hobbots/issues/12).

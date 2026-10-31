@@ -102,5 +102,5 @@ Journaling in the same transaction is the smallest change that makes events surv
 The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
 
 - A client that resumes after a cursor gets exactly the missed entries, in order: `[TC-CH-071]`, `[TC-CH-073]`.
-- A missing, foreign or expired cursor starts fresh with a visible refetch, never silent loss: `[TC-CH-072]`, `[TC-CH-078]`.
+- A missing, malformed, foreign or future cursor starts fresh at the head: `[TC-CH-072]`. A fresh `Ready` makes the client fetch again: `[TC-CH-078]`. An expired cursor is not proven yet: [#118](https://github.com/otaviobarros/hobbots/issues/118).
 - A crash between commit and publish, a minute offline and a reconnect mid-reply lose nothing and duplicate nothing. Not proven yet: [#118](https://github.com/otaviobarros/hobbots/issues/118).
