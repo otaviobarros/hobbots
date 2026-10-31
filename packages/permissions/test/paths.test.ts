@@ -61,4 +61,21 @@ describe("canonical paths", () => {
       expect(hook.reason.code).toBe("protected-path");
     }
   });
+
+  // covers PE-002
+  it("[TC-PE-006] is not fooled into case folding by a link whose name differs only in case", async (ctx) => {
+    const dir = path.join(home.root, "case");
+    await fs.mkdir(path.join(dir, "project"), { recursive: true });
+    const sensitive = await fs.mkdir(path.join(dir, "Project")).then(
+      () => true,
+      () => false,
+    );
+    if (!sensitive) ctx.skip("needs a case-sensitive volume");
+    await fs.symlink(path.join(dir, "project"), path.join(dir, "PROJECT"));
+    await fs.writeFile(path.join(dir, "Project", "secret.txt"), "");
+    const context = contextFor(home, "trusting", { sharedFolders: [path.join(dir, "project")] });
+    const verdict = await decide(context, files("read-files", "/", path.join(dir, "Project", "secret.txt")));
+    expect(verdict).toMatchObject({ decision: "deny", reason: { code: "outside-folders" } });
+    expect((await canonicalize(path.join(dir, "project", "a.txt"))).caseSensitive).toBe(true);
+  });
 });

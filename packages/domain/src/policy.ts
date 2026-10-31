@@ -70,7 +70,12 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
   },
 };
 
-/** Rules Hobbots recognizes and decides but a permitted command could perform another way (ADR 014). */
+/**
+ * Rules Hobbots recognizes and decides but a permitted command could always perform another way
+ * (ADR 014). Push is also checked where Run commands and Use the web are both Allow, since a command
+ * can push to a remote that needs no credentials, and every rule is checked for an unsandboxed hob.
+ * Each verdict's `enforcement` says which applies.
+ */
 export const CHECKED_OPERATIONS: ReadonlyArray<PolicyOperation> = ["delete-files"];
 
 /** Per-hob answers. Each may only narrow the preset; a widening needs a separately recorded user grant. */

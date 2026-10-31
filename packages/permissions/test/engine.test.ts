@@ -275,11 +275,73 @@ describe("policy engine", () => {
       decision: "deny",
       enforcement: "checked",
     });
-    expect((await decide(off, requests(home).push)).enforcement).toBe("enforced");
+    expect((await decide(off, requests(home).push)).enforcement).toBe("checked");
 
     const on = contextFor(home, "trusting");
     expect((await decide(on, requests(home)["delete-files"])).enforcement).toBe("checked");
     expect((await decide(on, requests(home)["edit-files"])).enforcement).toBe("enforced");
+  });
+
+  it("marks Push checked where a command could push to a remote that needs no credentials", async () => {
+    expect((await decide(contextFor(home, "careful"), requests(home).push)).enforcement).toBe("enforced");
+    expect((await decide(contextFor(home, "balanced"), requests(home).push)).enforcement).toBe("checked");
+    expect((await decide(contextFor(home, "trusting"), requests(home).push)).enforcement).toBe("checked");
+    const noWeb = contextFor(home, "trusting", { restrictions: [{ "use-web": "ask" }] });
+    expect((await decide(noWeb, requests(home).push)).enforcement).toBe("enforced");
+    const noSandbox = contextFor(home, "trusting", { sandbox: "unavailable" });
+    expect((await decide(noSandbox, requests(home).push)).enforcement).toBe("enforced");
+  });
+
+  // covers PE-002
+  it("[TC-PE-004] keeps Git hooks and config read-only wherever the folder starts and wherever hooks link", async () => {
+    const context = contextFor(home, "trusting", { sharedFolders: [home.repo, path.join(home.repo, ".git")] });
+    const insideGit = contextFor(home, "balanced", {
+      sharedFolders: [path.join(home.repo, ".git"), path.join(home.repo, "custom-hooks")],
+    });
+    for (const [ctx, cwd, target] of [
+      [insideGit, path.join(home.repo, ".git"), "config"],
+      [insideGit, path.join(home.repo, ".git"), "hooks/pre-commit"],
+      [context, home.repo, ".git/hooks/pre-commit"],
+      [context, home.repo, "custom-hooks/pre-commit"],
+      [context, home.repo, "custom-hooks"],
+    ] as const) {
+      for (const operation of ["edit-files", "delete-files"] as const) {
+        const verdict = await decide(ctx, files(operation, cwd, target));
+        expect({ target, operation, decision: verdict.decision, code: verdict.reason.code }).toEqual({
+          target,
+          operation,
+          decision: "deny",
+          code: "protected-path",
+        });
+      }
+    }
+    expect((await decide(context, files("read-files", home.repo, "custom-hooks/pre-commit"))).decision).toBe("allow");
+    expect((await decide(context, files("edit-files", home.repo, "docs/readme.md"))).decision).toBe("allow");
+  });
+
+  // covers PE-002
+  it("[TC-PE-005] refuses changing a folder that holds the data folder or a repository's hooks and config", async () => {
+    const context = contextFor(home, "trusting", { sharedFolders: [home.project, home.repo] });
+    for (const [cwd, target, code] of [
+      [home.project, ".", "data-folder"],
+      [home.project, ".git", "protected-path"],
+      [home.repo, ".", "protected-path"],
+      [home.repo, ".git", "protected-path"],
+    ] as const) {
+      for (const operation of ["edit-files", "delete-files"] as const) {
+        const verdict = await decide(context, files(operation, cwd, target));
+        expect({ cwd, target, operation, decision: verdict.decision, code: verdict.reason.code }).toEqual({
+          cwd,
+          target,
+          operation,
+          decision: "deny",
+          code,
+        });
+      }
+    }
+    expect((await decide(context, files("delete-files", home.project, "src"))).decision).toBe("allow");
+    expect((await decide(context, files("delete-files", home.repo, "docs"))).decision).toBe("allow");
+    expect((await decide(context, files("read-files", home.project, "."))).decision).toBe("allow");
   });
 });
 

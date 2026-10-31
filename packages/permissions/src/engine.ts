@@ -10,7 +10,7 @@ import {
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { isBlockedHost, normalizeHost } from "./hosts.ts";
-import { type CanonicalPath, isInside, PathResolver, segmentsBelow } from "./paths.ts";
+import { type CanonicalPath, isInside, PathResolver } from "./paths.ts";
 
 /**
  * The policy engine of ADR 014: Allow, Ask or Deny for a normalized operation on a concrete
@@ -102,6 +102,11 @@ export interface ResolvedScope {
 export interface ResolvedTarget {
   readonly input: string;
   readonly canonical: CanonicalPath | null;
+  /**
+   * For a change, the canonical Git hooks folders and config files it could touch (see
+   * `PathResolver.protectedGitPaths`). A directory target covers everything beneath it.
+   */
+  readonly protectedPaths?: ReadonlyArray<string>;
 }
 
 /** A request whose paths are already canonical, for the pure evaluation. */
@@ -189,14 +194,6 @@ const deny = (operation: PolicyOperation, code: ReasonCode, message: string): An
   message,
 });
 
-const isProtected = (segments: ReadonlyArray<string>, caseSensitive: boolean): boolean => {
-  const same = (a: string | undefined, b: string) =>
-    a !== undefined && (caseSensitive ? a === b : a.toLowerCase() === b);
-  return segments.some(
-    (segment, i) => same(segment, ".git") && (same(segments[i + 1], "hooks") || same(segments[i + 1], "config")),
-  );
-};
-
 /** Places a canonical target in the hob's scope: inside a folder (and which), or why not. */
 const locate = (scope: ResolvedScope, target: ResolvedTarget): Located | Answer => {
   if (target.canonical === null) {
@@ -238,12 +235,23 @@ const fileTarget = (
   // Every preset answers Deny outside the folders, and the narrowing layers cannot widen it.
   if (!located(place)) return place;
   if (operation !== "read-files") {
-    const below = segmentsBelow(place.canonical, place.folder) ?? [];
-    if (isProtected(below, place.canonical.caseSensitive)) {
+    const { canonical } = place;
+    // Changing a folder changes everything in it, so a protected path below the target counts too.
+    const overlaps = (protectedPath: string) =>
+      isInside(canonical, protectedPath) ||
+      isInside({ path: protectedPath, caseSensitive: canonical.caseSensitive }, canonical.path);
+    if (overlaps(scope.dataFolder)) {
+      return deny(
+        operation,
+        "data-folder",
+        `${canonical.path} holds Hobbots' own data folder, which hobs never reach.`,
+      );
+    }
+    if ((target.protectedPaths ?? []).some(overlaps)) {
       return deny(
         operation,
         "protected-path",
-        `${place.canonical.path} is a Git hook or config, which hobs can only read.`,
+        `${canonical.path} is or holds a Git hook or config, which hobs can only read.`,
       );
     }
   }
@@ -271,8 +279,16 @@ const needsSandbox = (context: PolicyContext, operation: PolicyOperation): Answe
     : null;
 
 const enforcementOf = (context: PolicyContext, operation: PolicyOperation): PolicyVerdict["enforcement"] => {
-  if (operation === "push") return "enforced"; // The Push Charm runs on the hub and holds the credentials.
   if (operation === "delete-files" || context.sandbox === "off") return "checked";
+  if (operation === "push") {
+    // The Push Charm holds the credentials, but where commands and the web are both allowed a
+    // command can push to a remote that accepts pushes without them (ADR 014).
+    const bypass =
+      context.sandbox === "on" &&
+      layered(context, "run-commands").decision === "allow" &&
+      layered(context, "use-web").decision === "allow";
+    return bypass ? "checked" : "enforced";
+  }
   return "enforced";
 };
 
@@ -369,6 +385,15 @@ export class PolicyEngine extends Context.Service<
           Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
         );
       const folder = (input: string) => resolve(input, "/");
+      const resolveChange = (input: string, base: string) =>
+        resolver.canonicalize(input, base).pipe(
+          Effect.flatMap((canonical) =>
+            resolver
+              .protectedGitPaths(canonical)
+              .pipe(Effect.map((protectedPaths): ResolvedTarget => ({ input, canonical, protectedPaths }))),
+          ),
+          Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
+        );
 
       const scopeOf = Effect.fnUntraced(function* (context: PolicyContext) {
         const shared = yield* Effect.forEach(context.sharedFolders, folder);
@@ -389,9 +414,9 @@ export class PolicyEngine extends Context.Service<
       const resolveRequest = (request: PolicyRequest): Effect.Effect<ResolvedRequest> => {
         switch (request._tag) {
           case "Files":
-            return Effect.forEach(request.paths, (p) => resolve(p, request.cwd)).pipe(
-              Effect.map((targets) => ({ _tag: "Files", operation: request.operation, targets }) as const),
-            );
+            return Effect.forEach(request.paths, (p) =>
+              request.operation === "read-files" ? resolve(p, request.cwd) : resolveChange(p, request.cwd),
+            ).pipe(Effect.map((targets) => ({ _tag: "Files", operation: request.operation, targets }) as const));
           case "Command":
             return resolve(request.cwd, "/").pipe(
               Effect.map((cwd) => ({ _tag: "Command", operation: request.operation, cwd }) as const),

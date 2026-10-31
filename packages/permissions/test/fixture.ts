@@ -18,6 +18,8 @@ export interface Home {
   readonly notes: string;
   readonly data: string;
   readonly secret: string;
+  /** A repository whose `.git/hooks` is a link to `custom-hooks` beside it. */
+  readonly repo: string;
 }
 
 export const useHome = (): Home => {
@@ -28,6 +30,7 @@ export const useHome = (): Home => {
     home.notes = path.join(home.root, "notes");
     home.data = path.join(home.project, ".hobbots-data");
     home.secret = path.join(home.root, "secret.txt");
+    home.repo = path.join(home.root, "repo");
     await fs.mkdir(path.join(home.project, "src"), { recursive: true });
     await fs.mkdir(path.join(home.project, ".git", "hooks"), { recursive: true });
     await fs.mkdir(home.data, { recursive: true });
@@ -37,6 +40,11 @@ export const useHome = (): Home => {
     await fs.writeFile(path.join(home.project, ".git", "config"), "");
     await fs.writeFile(path.join(home.data, "hobbots.db"), "");
     await fs.writeFile(home.secret, "");
+    await fs.mkdir(path.join(home.repo, ".git"), { recursive: true });
+    await fs.mkdir(path.join(home.repo, "custom-hooks"));
+    await fs.mkdir(path.join(home.repo, "docs"));
+    await fs.writeFile(path.join(home.repo, ".git", "config"), "");
+    await fs.symlink(path.join(home.repo, "custom-hooks"), path.join(home.repo, ".git", "hooks"));
     await fs.symlink(home.secret, path.join(home.project, "secret-link"));
     await fs.symlink(path.join(home.root, "private"), path.join(home.project, "private-link"));
     await fs.symlink(path.join(home.root, "missing.txt"), path.join(home.project, "dangling"));
