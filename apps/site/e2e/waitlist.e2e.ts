@@ -16,12 +16,30 @@ const storedRows = (email: string): { wants_more_platforms: number; source: stri
   return JSON.parse(output)[0].results;
 };
 
+// What the page reported, printed when a test fails: Turnstile and the action run outside the test's view.
+const notes = new WeakMap<object, string[]>();
+
 // Each test signs up from its own IP address, so the limit of 5 sign-ups a minute applies per test.
 test.beforeEach(async ({ page }) => {
+  const seen: string[] = [];
+  notes.set(page, seen);
+  page.on("console", (message) => {
+    if (message.type() === "error" || message.type() === "warning")
+      seen.push(`console ${message.type()}: ${message.text()}`);
+  });
+  page.on("response", (response) => {
+    if (response.url().includes("/_actions/")) seen.push(`action ${response.status()}`);
+  });
   const ip = `198.51.100.${randomInt(1, 255)}`;
   await page.route("**/_actions/**", (route) =>
     route.continue({ headers: { ...route.request().headers(), "cf-connecting-ip": ip } }),
   );
+});
+
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const alerts = await page.getByRole("alert").allTextContents();
+  console.log([...(notes.get(page) ?? []), `alerts: ${JSON.stringify(alerts.filter(Boolean))}`].join("\n"));
 });
 
 test("[TC-GEN-008] joins the wait-list from the hero form", async ({ page }) => {
