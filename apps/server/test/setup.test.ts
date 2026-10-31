@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
@@ -17,7 +17,8 @@ import { Installation } from "../src/installation.ts";
 import { HobLifecycle } from "../src/lifecycle.ts";
 
 // Folders are checked on the hub, so the tests make real ones.
-const temp = mkdtempSync(join(tmpdir(), "hobbots-setup-"));
+// Canonical, since the hub stores folders with symlinks resolved (on macOS the temp folder is one).
+const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-setup-")));
 const code = join(temp, "code");
 const notes = join(temp, "notes");
 mkdirSync(code);

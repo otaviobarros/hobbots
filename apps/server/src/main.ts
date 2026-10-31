@@ -11,6 +11,7 @@ import { ChatService } from "./chat.ts";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
+import { CanonicalSharedFolders } from "./folders.ts";
 import { HobService } from "./hobs.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
@@ -52,6 +53,8 @@ const ServerLive = Layer.unwrap(
     const App = HobLifecycle.layer
       .pipe(Layer.provideMerge(Layer.mergeAll(EventStream.layer, HobService.layer, JournalCompaction)))
       .pipe(Layer.provideMerge(ChatService.layer))
+      // Before any request, so every hob's hidden folders compare against canonical shared folders.
+      .pipe(Layer.provideMerge(CanonicalSharedFolders))
       .pipe(Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, HobAdmission.layer, Runtime, identity)));
 
     if (!existsSync(join(config.webDir, "index.html"))) {

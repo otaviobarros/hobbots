@@ -7,6 +7,7 @@ import { ChatService } from "./chat.ts";
 import { HobInputErrorsLayer, HobService } from "./hobs.ts";
 import { Installation } from "./installation.ts";
 import { HobLifecycle } from "./lifecycle.ts";
+import { PermissionsHandlers } from "./permissions.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
 
@@ -104,5 +105,13 @@ const RuntimesHandlers = HttpApiBuilder.group(HobbotsApi, "runtimes", (handlers)
 );
 
 export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
-  Layer.provide([AgentsHandlers, ThreadsHandlers, SystemHandlers, SetupHandlers, RuntimesHandlers, SearchHandlers]),
+  Layer.provide([
+    AgentsHandlers,
+    ThreadsHandlers,
+    SystemHandlers,
+    SetupHandlers,
+    RuntimesHandlers,
+    SearchHandlers,
+    PermissionsHandlers,
+  ]),
 );
