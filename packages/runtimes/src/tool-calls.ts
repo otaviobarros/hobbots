@@ -54,6 +54,7 @@ const text = (input: Record<string, unknown>, key: string): string | undefined =
 };
 
 /** One shell command line split into simple commands, each as its words. Quotes are honored; anything subtler is not. */
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export const simpleCommands = (command: string): ReadonlyArray<ReadonlyArray<string>> => {
   const commands: Array<Array<string>> = [];
   let words: Array<string> = [];

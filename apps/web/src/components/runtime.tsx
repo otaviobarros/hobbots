@@ -45,6 +45,7 @@ export function RuntimeChip() {
 }
 
 /** Provider health for the Workshop tab. Detail is never shown: it can carry account names. */
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export function RuntimeCard() {
   const { pending, checking, claude, checkAgain } = useClaudeRuntime();
   const problem = runtimeProblem(claude);

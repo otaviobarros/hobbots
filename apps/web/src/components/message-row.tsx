@@ -45,6 +45,7 @@ export function MessageRow({
   return <ReplyRow message={message} hob={hob} id={id} focused={focused} resume={resume} />;
 }
 
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 function ReplyRow({
   message,
   hob,

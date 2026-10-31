@@ -465,6 +465,7 @@ export const turnEvents = () => {
     return ended;
   };
 
+  // complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
   return (message: SDKMessage): ReadonlyArray<RuntimeEvent> => {
     switch (message.type) {
       case "system":

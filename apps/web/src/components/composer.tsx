@@ -13,6 +13,7 @@ export interface PausedHob {
   readonly canQueue: boolean;
 }
 
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export function Composer({
   placeholder,
   draft,

@@ -28,6 +28,7 @@ export type ServerEvent =
 export const initialStatus: ServerStatus = { state: "stopped", owned: false, stopping: false, problem: null };
 
 /** The supervisor's state machine, kept pure so every transition is testable. */
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export const nextStatus = (status: ServerStatus, event: ServerEvent): ServerStatus => {
   switch (event.type) {
     case "launching":

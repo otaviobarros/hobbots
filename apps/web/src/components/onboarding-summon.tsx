@@ -48,6 +48,7 @@ const reducedMotion = () => globalThis.matchMedia?.("(prefers-reduced-motion: re
  * Onboarding step 5: the summon. It creates the first hob from the draft, marks setup complete
  * and, once the circle is lit, shows the hob with its chat and Home one click away.
  */
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export function OnboardingReady() {
   const navigate = useNavigate();
   const router = useRouter();

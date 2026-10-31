@@ -81,6 +81,7 @@ interface Retired {
   readonly busy: boolean;
 }
 
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 function Profile({
   hob,
   retired,
@@ -250,6 +251,7 @@ function Tabs({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
  * The hob's role, instructions and brain on one page, saved together as one new configuration
  * version from the bar at the bottom.
  */
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 function ProfileTab({ hob }: { hob: Agent }) {
   const models = useQuery(modelsQuery(hob.runtime));
   const update = useUpdateHob(hob.id);

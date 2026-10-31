@@ -186,6 +186,7 @@ export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: (
  * change is saved at once as the hob's next configuration version. Answers only narrow the preset,
  * so wider ones are not offered.
  */
+// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export function PermissionsTab({ hob }: { hob: Agent }) {
   const permissions = useHobPermissions(hob);
   const update = useUpdatePermissions(hob.id);
