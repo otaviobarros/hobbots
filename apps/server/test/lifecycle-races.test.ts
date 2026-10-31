@@ -9,6 +9,7 @@ import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { HobService } from "../src/hobs.ts";
 import { HobLifecycle } from "../src/lifecycle.ts";
+import { HobTools } from "../src/tools.ts";
 
 // Each case holds one request at a chosen repository call and releases it only after a second
 // request has asked for the same hob, so the overlap happens on every run. The short pause after
@@ -85,7 +86,7 @@ const run = <A, E>(test: (gate: Gate, events: Array<HobbotsEvent>) => Effect.Eff
       }),
     ).pipe(Layer.provide(HobAdmission.layer));
     const App = HobLifecycle.layer.pipe(
-      Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)),
+      Layer.provideMerge(Layer.mergeAll(ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)), HobService.layer)),
       Layer.provideMerge(
         Layer.mergeAll(
           repository,

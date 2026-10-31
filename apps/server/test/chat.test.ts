@@ -1,12 +1,25 @@
-import { Agent, AgentId, isInProgress, type MessageId, type ThreadId } from "@hobbots/domain";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  Agent,
+  AgentId,
+  EMPTY_HOB_POLICY,
+  isInProgress,
+  type MessageId,
+  type MessageSteps,
+  type ThreadId,
+} from "@hobbots/domain";
+import { PolicyEngine } from "@hobbots/permissions";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FAKE_DIRECTIVES, FakeRuntimeLayer, fakeCutOffError } from "@hobbots/runtimes";
-import { Effect, Layer, Option, Schedule } from "effect";
-import { describe, expect, it } from "vitest";
+import { FAKE_DIRECTIVES, FakeRuntimeLayer, fakeCutOffError, type ToolAccess } from "@hobbots/runtimes";
+import { Deferred, Effect, Fiber, Layer, Option, PubSub, Schedule } from "effect";
+import { afterAll, describe, expect, it } from "vitest";
 import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
+import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("aldric");
 
@@ -31,17 +44,19 @@ const summonHob = Effect.gen(function* () {
 });
 
 const Persistence = HobbotsRepository.layer.pipe(Layer.provideMerge(TestDatabase));
-const testLayer = (runtime = FakeRuntimeLayer()) =>
-  ChatService.layer.pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)),
-        EventBus.layer,
-        HobAdmission.layer,
-        runtime,
+const testLayer = (runtime = FakeRuntimeLayer(), tools = HobTools.chatOnly) =>
+  ChatService.layer
+    .pipe(Layer.provide(tools))
+    .pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)),
+          EventBus.layer,
+          HobAdmission.layer,
+          runtime,
+        ),
       ),
-    ),
-  );
+    );
 const TestLayer = testLayer();
 
 describe("ChatService", () => {
@@ -206,5 +221,166 @@ describe("a reply that ends early", () => {
       return yield* chat.continueReply(thread.id, cut.id).pipe(Effect.flip);
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
     expect(error._tag).toBe("ReplyNotResumable");
+  });
+});
+
+describe("tool calls in a reply", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-chat-tools-")));
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const folder = join(root, "work");
+  mkdirSync(folder);
+  const tools = Layer.succeed(
+    HobTools,
+    HobTools.of({
+      access: () =>
+        Effect.succeed({
+          policy: {
+            preset: "balanced",
+            sharedFolders: [folder],
+            hob: EMPTY_HOB_POLICY,
+            dataFolder: join(root, "data"),
+            restrictions: [],
+          },
+          folders: [folder],
+          runtimeFolder: join(root, "runtimes", HOB_ID),
+        }),
+    }),
+  );
+
+  // covers CH-004, PE-002
+  it("[TC-CH-109] shows each tool call the policy allowed as a step of the reply, and no step for a refused one", async () => {
+    const steps = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const bus = yield* EventBus;
+      const repo = yield* HobbotsRepository;
+      const subscription = yield* bus.subscribe;
+      const thread = yield* chat.createThread(HOB_ID);
+      yield* chat.sendPrompt(
+        thread.id,
+        `Fix it\nfake:tool Edit ${join(folder, "a.ts")}\nfake:tool Write ${join(root, "outside.txt")}`,
+      );
+      yield* repo.listMessages(thread.id).pipe(
+        Effect.flatMap((messages) =>
+          messages.at(-1)?.role === "assistant" && !isInProgress(messages.at(-1)?.status ?? "streaming")
+            ? Effect.void
+            : Effect.fail("busy" as const),
+        ),
+        Effect.retry(Schedule.spaced("5 millis")),
+      );
+      const events = yield* PubSub.takeAll(subscription);
+      return events.flatMap(
+        (event): ReadonlyArray<MessageSteps> =>
+          event._tag === "Transient" && event.event._tag === "MessageSteps" ? [event.event] : [],
+      );
+    }).pipe(
+      Effect.provide(testLayer(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)), tools)),
+      Effect.scoped,
+      Effect.runPromise,
+    );
+
+    expect(steps.at(-1)?.steps).toEqual([
+      { id: "thinking-1", kind: "thinking", label: "Thinking", state: "done" },
+      { id: "fake-tool-1", kind: "tool", label: "Editing a.ts", state: "done" },
+    ]);
+  });
+
+  // covers PE-008
+  it("[TC-PE-021] stops a running turn once its hob's policy narrows, and keeps it when the policy widens", async () => {
+    // The policy as saved right now; each case changes it while the turn runs.
+    let restrictions: ToolAccess["policy"]["restrictions"] = [{ "edit-files": "ask" }];
+    let folders = [folder];
+    const changing = Layer.succeed(
+      HobTools,
+      HobTools.of({
+        access: () =>
+          Effect.sync(() => ({
+            policy: {
+              preset: "balanced" as const,
+              sharedFolders: folders,
+              hob: EMPTY_HOB_POLICY,
+              dataFolder: join(root, "data"),
+              restrictions,
+            },
+            folders,
+            runtimeFolder: join(root, "runtimes", HOB_ID),
+          })),
+      }),
+    );
+    const statusAfter = (change: () => void) =>
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const thread = yield* chat.createThread(HOB_ID);
+        yield* chat.sendPrompt(thread.id, "one two three four five six seven eight nine ten");
+        const reply = repo.listMessages(thread.id).pipe(Effect.map((messages) => messages.at(-1)));
+        // Text is streaming, so the turn already holds what it was given.
+        yield* chat.streamingReplies.pipe(
+          Effect.flatMap((replies) => (replies.some((m) => m.content !== "") ? Effect.void : Effect.fail("waiting"))),
+          Effect.retry(Schedule.spaced("5 millis")),
+        );
+        change();
+        yield* chat.reviewAuthority(HOB_ID);
+        return (yield* reply)?.status;
+      }).pipe(
+        Effect.provide(testLayer(FakeRuntimeLayer({ delay: "40 millis" }), changing)),
+        Effect.scoped,
+        Effect.runPromise,
+      );
+
+    // Narrower: an operation's answer, or a folder taken away. The turn has ended when review returns.
+    expect(await statusAfter(() => (restrictions = [{ "edit-files": "deny" }]))).toBe("interrupted");
+    restrictions = [];
+    expect(await statusAfter(() => (folders = []))).toBe("interrupted");
+    // Wider or the same: the turn goes on.
+    folders = [folder];
+    restrictions = [{ "edit-files": "ask" }];
+    expect(await statusAfter(() => (restrictions = []))).toBe("streaming");
+  });
+
+  // covers PE-008
+  it("[TC-PE-022] stops a turn whose grant was still being read when the policy narrowed", async () => {
+    let restrictions: ToolAccess["policy"]["restrictions"] = [];
+    const status = await Effect.gen(function* () {
+      const reading = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const policy = (current: typeof restrictions): ToolAccess => ({
+        policy: {
+          preset: "balanced",
+          sharedFolders: [folder],
+          hob: EMPTY_HOB_POLICY,
+          dataFolder: join(root, "data"),
+          restrictions: current,
+        },
+        folders: [folder],
+        runtimeFolder: join(root, "runtimes", HOB_ID),
+      });
+      // The turn's grant reads the policy, then holds on until released.
+      const slow = Layer.succeed(
+        HobTools,
+        HobTools.of({
+          access: () =>
+            Effect.gen(function* () {
+              const read = policy(restrictions);
+              if (yield* Deferred.succeed(reading, undefined)) yield* Deferred.await(release);
+              return read;
+            }),
+        }),
+      );
+      return yield* Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const thread = yield* chat.createThread(HOB_ID);
+        yield* chat.sendPrompt(thread.id, "one two three four five six seven eight nine ten");
+        yield* Deferred.await(reading);
+        // The narrower policy is saved while the grant still holds the older one.
+        restrictions = [{ "edit-files": "deny" }];
+        const review = yield* Effect.forkChild(chat.reviewAuthority(HOB_ID));
+        yield* Effect.sleep("20 millis");
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(review);
+        return (yield* repo.listMessages(thread.id)).at(-1)?.status;
+      }).pipe(Effect.provide(testLayer(FakeRuntimeLayer({ delay: "40 millis" }), slow)));
+    }).pipe(Effect.scoped, Effect.runPromise);
+    expect(status).toBe("interrupted");
   });
 });

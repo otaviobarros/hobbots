@@ -2,8 +2,9 @@ import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
+import { PolicyEngine } from "@hobbots/permissions";
 import { EventJournal, HobbotsRepository, SearchIndex, SetupRepository, SqliteLive } from "@hobbots/persistence";
-import { ClaudeCodeLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
+import { ClaudeCodeLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { HobAdmission } from "./admission.ts";
@@ -19,6 +20,7 @@ import { JournalCompaction } from "./journal-compaction.ts";
 import { HobLifecycle } from "./lifecycle.ts";
 import { IPv6Loopback } from "./loopback.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
+import { HobTools } from "./tools.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
 
 const ServerLive = Layer.unwrap(
@@ -43,16 +45,19 @@ const ServerLive = Layer.unwrap(
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
     ).pipe(Layer.provideMerge(SqliteLive(database)));
-    const Runtime =
+    // One policy engine for the hub, so its index of the folders' Git repositories is built once.
+    const Runtime = (
       config.runtime === "fake"
         ? FakeRuntimeLayer({ delay: "40 millis", stopDelay: "600 millis", availability: config.fakeAvailability })
         : ClaudeCodeLayer({
             workspaceDir: join(config.dataDir, "workspaces", "default"),
             executable: Option.getOrUndefined(config.claudeExecutable),
-          });
+          }).pipe(Layer.provide(ProcessSandbox.layer))
+    ).pipe(Layer.provide(PolicyEngine.node));
     const App = HobLifecycle.layer
       .pipe(Layer.provideMerge(Layer.mergeAll(EventStream.layer, HobService.layer, JournalCompaction)))
       .pipe(Layer.provideMerge(ChatService.layer))
+      .pipe(Layer.provideMerge(HobTools.layer))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
       .pipe(Layer.provideMerge(CanonicalSharedFolders))
       .pipe(Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, HobAdmission.layer, Runtime, identity)));

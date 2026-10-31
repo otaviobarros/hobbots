@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
+import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("wren");
 const NOW = "2026-01-01T00:00:00.000Z";
@@ -61,16 +62,21 @@ const run = <A, E>(
       subscribe: Effect.die("unused"),
       close: Effect.void,
     });
-    const layer = ChatService.layer.pipe(
-      Layer.provideMerge(
-        Layer.mergeAll(
-          Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(HobbotsRepository.layer), Layer.provide(TestDatabase)),
-          bus,
-          HobAdmission.layer,
-          makeSlowRuntime(confirm),
+    const layer = ChatService.layer
+      .pipe(Layer.provide(HobTools.chatOnly))
+      .pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(
+            Layer.effectDiscard(summonHob).pipe(
+              Layer.provideMerge(HobbotsRepository.layer),
+              Layer.provide(TestDatabase),
+            ),
+            bus,
+            HobAdmission.layer,
+            makeSlowRuntime(confirm),
+          ),
         ),
-      ),
-    );
+      );
     return yield* test(events, confirm).pipe(Effect.provide(layer));
   }).pipe(Effect.scoped, Effect.runPromise);
 
@@ -216,7 +222,7 @@ describe("Stopping a reply", () => {
 
       // The hub starts again over the same database.
       yield* Layer.build(
-        ChatService.layer.pipe(
+        ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)).pipe(
           Layer.provide(
             Layer.mergeAll(
               Layer.succeed(EventBus, {

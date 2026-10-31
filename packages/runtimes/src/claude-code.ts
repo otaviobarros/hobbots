@@ -1,11 +1,15 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { accessSync, constants, mkdirSync, statSync } from "node:fs";
+import { accessSync, constants, lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
 import { promisify } from "node:util";
 import {
   type AccountInfo,
+  type CanUseTool,
+  type HookCallback,
+  type HookJSONOutput,
   type ModelInfo,
   type Options,
   query,
@@ -13,9 +17,20 @@ import {
   type SDKRateLimitInfo,
   type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import { RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
-import { Clock, DateTime, Duration, Effect, Layer, Stream } from "effect";
-import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent, RuntimeLimitReached } from "./adapter.ts";
+import { RuntimeHealth, RuntimeModel, RuntimeModels, type SandboxState } from "@hobbots/domain";
+import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
+import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
+import {
+  type EnforcementDeclaration,
+  type PromptRequest,
+  RuntimeAdapter,
+  RuntimeError,
+  type RuntimeEvent,
+  RuntimeLimitReached,
+  type ToolAccess,
+} from "./adapter.ts";
+import { CLAUDE_CODE_MODEL_HOSTS, ProcessSandbox } from "./sandbox.ts";
+import { narrowestVerdict, offeredTools, operationDecision, toolLabel, toolRequests } from "./tool-calls.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
@@ -57,6 +72,172 @@ const runtimeEnv = (binary: string): NodeJS.ProcessEnv => ({
 });
 
 const execFileAsync = promisify(execFile);
+
+/** The user's own Claude Code configuration folder, which the sandbox keeps closed. */
+const userConfigFolder = () => process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+
+/** The keychain item where Claude Code keeps a claude.ai login on macOS, for the default config folder. */
+const KEYCHAIN_LOGIN = "Claude Code-credentials";
+// Claude Code cannot refresh a login inside the sandbox, so the hub tries to before a turn when this
+// close to expiry. Claude Code refreshes only an expired login, so a turn may still start with less.
+const LOGIN_REFRESH_MS = 10 * 60_000;
+// A turn never starts with a login that ends sooner than this.
+const LOGIN_MINIMUM_MS = 60_000;
+
+/** The access token and its expiry from Claude Code's keychain item, or null without a usable one. */
+export const parseKeychainLogin = (secret: string): { readonly token: string; readonly expiresAt: number } | null => {
+  try {
+    const login = (JSON.parse(secret) as { claudeAiOauth?: { accessToken?: unknown; expiresAt?: unknown } })
+      .claudeAiOauth;
+    return typeof login?.accessToken === "string" && typeof login.expiresAt === "number"
+      ? { token: login.accessToken, expiresAt: login.expiresAt }
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The sign-in a sandboxed Claude Code turn gets in its environment (ADR 014). The sandbox has no
+ * keychain access, since through it any command could read every credential a trusted helper such
+ * as `git credential-osxkeychain` or `gh` can. A key or token in the hub's environment passes through
+ * as it is; otherwise the hub reads the claude.ai login's short-lived access token, never the refresh
+ * token, and asks Claude Code to refresh it first when it is close to expiry. A turn that outlives the token
+ * fails with Claude Code's own sign-in error.
+ */
+const sandboxLogin = (binary: string): Effect.Effect<Record<string, string>, RuntimeError> =>
+  Effect.gen(function* () {
+    // A token from the hub's environment passes through as it is. An API key never does (ADR 009).
+    if (process.env.CLAUDE_CODE_OAUTH_TOKEN) return {};
+    const read = Effect.promise(() =>
+      (process.platform === "darwin"
+        ? execFileAsync("security", ["find-generic-password", "-s", KEYCHAIN_LOGIN, "-w"], { timeout: 10_000 }).then(
+            ({ stdout }) => stdout,
+          )
+        : readFile(join(userConfigFolder(), ".credentials.json"), "utf8")
+      ).then(
+        (secret) => parseKeychainLogin(secret.trim()),
+        () => null,
+      ),
+    );
+    let login = yield* read;
+    if (login === null) return {};
+    if (login.expiresAt - Date.now() < LOGIN_REFRESH_MS) {
+      // Outside the sandbox Claude Code refreshes an expired login whenever it checks it.
+      yield* Effect.promise(() =>
+        execFileAsync(binary, ["auth", "status"], { timeout: 30_000, env: runtimeEnv(binary) }).catch(() => undefined),
+      );
+      login = yield* read;
+    }
+    if (login === null || login.expiresAt - Date.now() < LOGIN_MINIMUM_MS)
+      return yield* new RuntimeError({
+        message: "Claude Code's sign-in has expired. Open Claude Code to sign in again, then try again.",
+      });
+    return { CLAUDE_CODE_OAUTH_TOKEN: login.token };
+  });
+
+/**
+ * Copies one transcript between configuration folders, run in its own process. It enters each
+ * folder on the way and checks where it really landed, so a link anywhere on the path is refused,
+ * and then reads and writes only by name inside the folder it holds. A command that swaps a folder
+ * for a link meanwhile cannot redirect it: the folder it entered stays where it was checked.
+ * Arguments: source root, target root, project, transcript file, then older projects to clear.
+ */
+const COPY_TRANSCRIPT = `
+const fs = require("node:fs");
+const { join } = require("node:path");
+const { O_RDONLY, O_WRONLY, O_CREAT, O_EXCL, O_NOFOLLOW } = fs.constants;
+const [source, target, project, file, ...older] = process.argv.slice(1);
+const enter = (root, parts, create) => {
+  process.chdir(root);
+  let here = root;
+  if (process.cwd() !== here) throw new Error("moved");
+  for (const part of parts) {
+    if (create) try { fs.mkdirSync(part, { mode: 0o700 }); } catch (error) { if (error.code !== "EEXIST") throw error; }
+    process.chdir(part);
+    here = join(here, part);
+    if (process.cwd() !== here) throw new Error("linked");
+  }
+};
+enter(source, ["projects", project], false);
+const from = fs.openSync(file, O_RDONLY | O_NOFOLLOW);
+if (!fs.fstatSync(from).isFile()) throw new Error("not a file");
+const transcript = fs.readFileSync(from);
+fs.closeSync(from);
+for (const old of older) {
+  try { enter(target, ["projects", old], false); fs.rmSync(file, { force: true }); } catch {}
+}
+enter(target, ["projects", project], true);
+const partial = "." + file + ".partial";
+fs.rmSync(partial, { force: true });
+const to = fs.openSync(partial, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600);
+fs.writeFileSync(to, transcript);
+fs.closeSync(to);
+fs.renameSync(partial, file);
+`;
+
+/**
+ * Makes `target` hold the latest copy of a session, by copying its transcript in from whichever
+ * configuration folder last wrote it. Claude Code keeps a session's id on resume and appends where
+ * the turn ran, so a thread whose turns move between folders keeps its whole history this way. A
+ * session no folder has is left for Claude Code to report. A hob's commands can write its runtime
+ * folder, even while this runs, so the copy itself runs in COPY_TRANSCRIPT. Only the transcript
+ * moves: what a session keeps beside it, such as subagent runs, stays where it was written.
+ */
+export const adoptSession = async (target: string, sources: ReadonlyArray<string>, sessionId: string) => {
+  const file = `${sessionId}.jsonl`;
+  const copiesIn = (folder: string) => {
+    try {
+      return readdirSync(join(folder, "projects")).flatMap((project) => {
+        const transcript = lstatSync(join(folder, "projects", project, file), { throwIfNoEntry: false });
+        return transcript?.isFile() ? [{ folder, project, written: transcript.mtimeMs }] : [];
+      });
+    } catch {
+      return [];
+    }
+  };
+  const held = copiesIn(target);
+  const latest = [...held, ...sources.flatMap(copiesIn)].reduce<(typeof held)[number] | undefined>(
+    (best, copy) => (best === undefined || copy.written > best.written ? copy : best),
+    undefined,
+  );
+  if (latest === undefined || latest.folder === target) return;
+  try {
+    // An older copy left in another project folder would compete with the new one.
+    const older = held.filter((copy) => copy.project !== latest.project).map((copy) => copy.project);
+    // The folder itself is the hub's: commands cannot replace it, only what is inside.
+    mkdirSync(target, { recursive: true, mode: 0o700 });
+    await promisify(execFile)(
+      process.execPath,
+      [
+        "-e",
+        COPY_TRANSCRIPT,
+        "--",
+        realpathSync.native(latest.folder),
+        realpathSync.native(target),
+        latest.project,
+        file,
+        ...older,
+      ],
+      // Electron runs the script as Node does.
+      { env: { ELECTRON_RUN_AS_NODE: "1" }, timeout: 30_000 },
+    );
+  } catch {
+    // Claude Code reports a session it cannot resume.
+  }
+};
+
+/** A bare binary name as the absolute path the runtime's PATH finds it at. */
+const resolveBinary = (binary: string): Effect.Effect<string, RuntimeError> => {
+  if (isAbsolute(binary)) return Effect.succeed(binary);
+  const found = runtimePath(binary, process.env, homedir())
+    .split(delimiter)
+    .map((dir) => join(dir, binary))
+    .find((path) => isAbsolute(path) && isExecutable(path));
+  return found
+    ? Effect.succeed(found)
+    : Effect.fail(new RuntimeError({ message: `Could not find ${binary} on PATH, so the sandbox cannot start it.` }));
+};
 
 const isExecutable = (path: string) => {
   try {
@@ -116,7 +297,7 @@ export const isSignedOut = (account: AccountInfo): boolean =>
   account.subscriptionType === undefined &&
   (account.tokenSource ?? "none") === "none";
 
-// Chat-only until the permission broker exists: no built-in tools, nothing auto-approved,
+// Chat-only unless the turn has tools (see `toolOptions`): no built-in tools, nothing auto-approved,
 // no user/project settings or MCP servers loaded from disk.
 // ANTHROPIC_API_KEY is removed so Claude Code always uses the claude.ai login (the subscription).
 const baseOptions = (config: ClaudeCodeConfig, executable: string): Options => ({
@@ -188,6 +369,15 @@ export const exited = (child: ChildProcess, grace: Duration.Input = shutdownGrac
       orElse: () => Effect.sync(() => child.kill("SIGKILL")).pipe(Effect.andThen(waitForExit(child))),
     }),
   );
+
+/** Ends what a sandboxed turn left running, which would otherwise keep its rules after the turn. */
+const killGroup = (pid: number) => {
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    // The group has already ended.
+  }
+};
 
 /** The hob's brain for one turn; a null model or effort leaves Claude Code's own default. */
 export const brainOptions = (request: Pick<PromptRequest, "model" | "effort">): Pick<Options, "model" | "effort"> => ({
@@ -362,6 +552,158 @@ export const turnPrompt = (
       ].join("\n")
     : request.prompt;
 
+/** A turn with tools: the context every call is decided under, its folders and the tools offered. */
+export interface ToolTurn {
+  readonly context: PolicyContext;
+  /** Canonical and existing; the first is where Claude Code starts. */
+  readonly folders: ReadonlyArray<string>;
+  readonly tools: ReadonlyArray<string>;
+  /** Claude Code's configuration folder for this hob. */
+  readonly runtimeFolder: string;
+}
+
+/**
+ * The turn's tools, or null for a chat-only turn: no access, no folder that exists, reading the
+ * folders denied (Claude Code cannot start in a folder it cannot read), or no tool open.
+ */
+export const toolTurn = (access: ToolAccess | null | undefined, sandbox: SandboxState): ToolTurn | null => {
+  if (!access) return null;
+  const folders = [
+    ...new Set(
+      access.folders.flatMap((folder) => {
+        try {
+          return [realpathSync(folder)];
+        } catch {
+          return [];
+        }
+      }),
+    ),
+  ];
+  if (folders.length === 0) return null;
+  const context: PolicyContext = { ...access.policy, sandbox, modelHosts: CLAUDE_CODE_MODEL_HOSTS };
+  if (operationDecision(context, "read-files") === "deny") return null;
+  const tools = offeredTools(context);
+  return tools.length === 0 ? null : { context, folders, tools, runtimeFolder: access.runtimeFolder };
+};
+
+export const UNKNOWN_TOOL = (tool: string) => `Hobbots does not know the ${tool} tool, so it stays closed.`;
+
+/** Why a call did not run, in words for the model and the person. */
+export const refusal = (verdict: PolicyVerdict): string =>
+  verdict.decision === "ask"
+    ? `${verdict.reason.message} Hobbots cannot ask you for approval yet, so the call did not run.`
+    : verdict.reason.message;
+
+/**
+ * The hooks that put every tool call before the policy engine (ADR 014). PreToolUse decides the
+ * call and reports it; a call that is not allowed never runs, whatever the prompt says. The
+ * permission callback decides again, for any call that reaches it without the hook's answer.
+ */
+export const policyHooks = (
+  engine: PolicyEngine["Service"],
+  turn: ToolTurn,
+  report: (event: RuntimeEvent) => void,
+): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
+  const decide = (tool: string, input: Record<string, unknown>, cwd: string) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests = toolRequests(tool, input, cwd);
+        if (requests === null) return undefined;
+        return narrowestVerdict(yield* Effect.forEach(requests, (request) => engine.decide(turn.context, request)));
+      }),
+    );
+  const started = new Set<string>();
+
+  const preToolUse: HookCallback = async (input): Promise<HookJSONOutput> => {
+    if (input.hook_event_name !== "PreToolUse") return {};
+    const tool = input.tool_name;
+    const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
+    const label = toolLabel(tool, toolInput);
+    const verdict = await decide(tool, toolInput, input.cwd || (turn.folders[0] as string)).catch(() => undefined);
+    if (verdict?.decision === "allow") {
+      started.add(input.tool_use_id);
+      report({
+        _tag: "ToolStarted",
+        id: input.tool_use_id,
+        tool,
+        operation: verdict.operation,
+        targets: verdict.targets,
+        label,
+      });
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+          permissionDecisionReason: verdict.reason.message,
+        },
+      };
+    }
+    const reason = verdict === undefined ? UNKNOWN_TOOL(tool) : refusal(verdict);
+    report({
+      _tag: "ToolDenied",
+      id: input.tool_use_id,
+      tool,
+      // An unknown tool is refused as anything outside what the hob may do.
+      operation: verdict?.operation ?? "outside-folders",
+      targets: verdict?.targets ?? [],
+      label,
+      reason,
+      decidedBy: "policy",
+    });
+    return {
+      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason },
+    };
+  };
+
+  const finished =
+    (failed: boolean): HookCallback =>
+    async (input) => {
+      if (
+        (input.hook_event_name === "PostToolUse" || input.hook_event_name === "PostToolUseFailure") &&
+        started.delete(input.tool_use_id)
+      ) {
+        report({ _tag: "ToolFinished", id: input.tool_use_id, failed });
+      }
+      return {};
+    };
+
+  const canUseTool: CanUseTool = async (tool, input) => {
+    const verdict = await decide(tool, input, turn.folders[0] as string).catch(() => undefined);
+    if (verdict?.decision === "allow") return { behavior: "allow", updatedInput: input };
+    return { behavior: "deny", message: verdict === undefined ? UNKNOWN_TOOL(tool) : refusal(verdict) };
+  };
+
+  return {
+    hooks: {
+      PreToolUse: [{ hooks: [preToolUse] }],
+      PostToolUse: [{ hooks: [finished(false)] }],
+      PostToolUseFailure: [{ hooks: [finished(true)] }],
+    },
+    canUseTool,
+  };
+};
+
+/**
+ * Claude Code's options for a turn with tools: only the offered built-in tools, started in the hob's
+ * first folder with the others added, and every call decided by the hooks. Nothing is loaded from
+ * settings or MCP configuration on disk, and no traffic beyond the model API is sent.
+ */
+export const toolOptions = (
+  turn: ToolTurn,
+  policy: ReturnType<typeof policyHooks>,
+  env: Options["env"],
+): Partial<Options> => ({
+  cwd: turn.folders[0] as string,
+  env: { ...env, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" },
+  additionalDirectories: turn.folders.slice(1),
+  tools: [...turn.tools],
+  disallowedTools: [],
+  permissionMode: "default",
+  strictMcpConfig: true,
+  hooks: policy.hooks,
+  canUseTool: policy.canUseTool,
+});
+
 const errorMessage = (error: unknown) =>
   error instanceof RuntimeError || error instanceof RuntimeLimitReached
     ? error
@@ -371,6 +713,8 @@ const errorMessage = (error: unknown) =>
 
 export const makeClaudeCode = (config: ClaudeCodeConfig) =>
   Effect.gen(function* () {
+    const engine = yield* PolicyEngine;
+    const sandbox = yield* ProcessSandbox;
     yield* Effect.sync(() => mkdirSync(config.workspaceDir, { recursive: true }));
 
     // `claude --version` per binary, rerun when the file changes (as `claude update` does).
@@ -421,18 +765,61 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
     });
 
     const sendPrompt = (request: PromptRequest) =>
-      Stream.unwrap(
+      Stream.callback<RuntimeEvent, RuntimeError | RuntimeLimitReached>((queue) =>
         Effect.gen(function* () {
           const binary = yield* executable;
+          const tools = toolTurn(request.tools, sandbox.state);
+          const sandboxed = tools !== null && sandbox.state === "on";
+          // The sandbox opens the binary's folder, so it must be a real path, never the hub's own folder.
+          const absoluteBinary = sandboxed ? yield* resolveBinary(binary) : binary;
+          const login = sandboxed ? yield* sandboxLogin(binary) : {};
+          // A sandboxed turn keeps its sessions in the hob's runtime folder, and one without tools in the
+          // user's own, so a thread resumes wherever its last turn ran.
+          const { sessionId } = request;
+          if (sessionId && request.tools) {
+            const [target, source] = sandboxed
+              ? [tools.runtimeFolder, userConfigFolder()]
+              : [userConfigFolder(), request.tools.runtimeFolder];
+            yield* Effect.promise(() => adoptSession(target, [source], sessionId));
+          }
+          const prepared = sandboxed
+            ? yield* Effect.acquireRelease(
+                sandbox.prepare({
+                  folders: tools.folders,
+                  // What any call the policy lets through may need; a denied operation stays closed.
+                  folderAccess: {
+                    read: operationDecision(tools.context, "read-files") !== "deny",
+                    write: operationDecision(tools.context, "edit-files") !== "deny",
+                  },
+                  dataFolder: tools.context.dataFolder,
+                  binary: absoluteBinary,
+                  runtimeFolder: tools.runtimeFolder,
+                  allowedHosts: CLAUDE_CODE_MODEL_HOSTS,
+                  decideHost: (host) =>
+                    Effect.runPromise(
+                      engine
+                        .decide(tools.context, { _tag: "Web", host, addresses: [] })
+                        .pipe(Effect.map((verdict) => (verdict.decision === "allow" ? true : refusal(verdict)))),
+                    ),
+                }),
+                (prepared) => Effect.sync(prepared.release),
+              )
+            : null;
+          const base = baseOptions(config, binary);
           const abortController = new AbortController();
           // Hobbots starts the process itself so it can tell when it has really exited.
           let child: ChildProcess | undefined;
           let stderr: ReturnType<typeof stderrTail> | undefined;
-          const spawnClaudeCodeProcess = ({ command, args, cwd, env, signal }: SpawnOptions) => {
+          const spawnClaudeCodeProcess = (options: SpawnOptions) => {
+            const { command, args, env } = prepared
+              ? prepared.spawnArgs(options.command, options.args, { ...options.env, ...login })
+              : options;
             const spawned = spawn(command, args, {
-              cwd,
+              cwd: options.cwd,
               env,
-              signal,
+              signal: options.signal,
+              // Its own process group, so what its commands leave running ends with the turn.
+              detached: prepared !== null,
               stdio: ["pipe", "pipe", "pipe"],
               windowsHide: true,
             });
@@ -445,7 +832,14 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               query({
                 prompt: turnPrompt(request),
                 options: {
-                  ...baseOptions(config, binary),
+                  ...base,
+                  ...(tools
+                    ? toolOptions(
+                        tools,
+                        policyHooks(engine, tools, (event) => Queue.offerUnsafe(queue, event)),
+                        base.env,
+                      )
+                    : {}),
                   abortController,
                   spawnClaudeCodeProcess,
                   includePartialMessages: true,
@@ -465,10 +859,14 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               Effect.sync(() => {
                 abortController.abort();
                 turn.close();
-              }).pipe(Effect.andThen(child ? exited(child) : Effect.void)),
+              }).pipe(
+                Effect.andThen(child ? exited(child) : Effect.void),
+                Effect.andThen(Effect.sync(() => prepared && child?.pid && killGroup(child.pid))),
+              ),
           );
           const toEvents = turnEvents();
-          return Stream.fromAsyncIterable(turn, errorMessage).pipe(
+          // Tool events arrive from the hooks while the turn runs, so the turn's own events share their queue.
+          yield* Stream.fromAsyncIterable(turn, errorMessage).pipe(
             Stream.mapEffect((message) => Effect.try({ try: () => toEvents(message), catch: errorMessage })),
             Stream.flattenIterable,
             Stream.catch((error) =>
@@ -478,7 +876,9 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                 ),
               ),
             ),
+            Stream.runForEach((event) => Queue.offer(queue, event)),
           );
+          yield* Queue.end(queue);
         }),
       );
 
@@ -569,7 +969,31 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       );
     });
 
-    return RuntimeAdapter.of({ health, models, sendPrompt });
+    const sandboxed = sandbox.state === "on";
+    const enforcement = Effect.succeed<EnforcementDeclaration>({
+      toolInterception: {
+        status: "verified",
+        evidence:
+          "Every built-in tool call passes the PreToolUse hook; settings and MCP servers on disk are not loaded.",
+      },
+      processSandbox: !sandboxed
+        ? { status: "unsupported", evidence: sandbox.evidence }
+        : process.platform === "darwin"
+          ? { status: "verified", evidence: `Claude Code starts inside ${sandbox.evidence}.` }
+          : { status: "unverified", evidence: `Claude Code starts inside ${sandbox.evidence}, not yet checked here.` },
+      hubTools: { status: "unsupported", evidence: "Charms and coordination tools are not served yet." },
+      toolEvents: {
+        status: "verified",
+        evidence: "PreToolUse, PostToolUse and PostToolUseFailure hooks report each call.",
+      },
+      toolInterruption: {
+        status: "verified",
+        evidence: "Cancelling the turn aborts Claude Code and waits for it to exit.",
+      },
+    });
+
+    return RuntimeAdapter.of({ health, models, enforcement, sendPrompt });
   });
 
+/** Claude Code with tools under the hub's policy engine and process sandbox. */
 export const ClaudeCodeLayer = (config: ClaudeCodeConfig) => Layer.effect(RuntimeAdapter, makeClaudeCode(config));

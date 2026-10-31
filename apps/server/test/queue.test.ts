@@ -9,6 +9,7 @@ import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { HobLifecycle } from "../src/lifecycle.ts";
+import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("aldric");
 const THREAD_ID = ThreadId.make("t-queued");
@@ -84,7 +85,7 @@ const crashedAfterStart = Effect.gen(function* () {
 
 const testLayer = (seed: Effect.Effect<void, never, HobbotsRepository> = Effect.void) =>
   HobLifecycle.layer.pipe(
-    Layer.provideMerge(ChatService.layer),
+    Layer.provideMerge(ChatService.layer.pipe(Layer.provide(HobTools.chatOnly))),
     Layer.provideMerge(
       Layer.mergeAll(
         Layer.effectDiscard(Effect.andThen(summonHob, seed)).pipe(
