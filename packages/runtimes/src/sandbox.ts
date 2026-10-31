@@ -223,10 +223,10 @@ export interface ProcessSandboxShape {
 // wrap is prepared before the runtime's arguments are known. The shell removes it before running them.
 const COMMAND_VARIABLE = "HOBBOTS_SANDBOXED_COMMAND";
 /**
- * Where each turn's temporary folder goes. Claude Code puts its sockets under `$CLAUDE_CODE_TMPDIR`
- * and, when that path is too long for a Unix socket (about 30 bytes), gives commands `/tmp/claude`
- * instead, which the sandbox does not let them write: Git then cannot commit. macOS's own temporary
- * folder is too long, so `/tmp` is used there (`/private/tmp/hb-XXXXXX`, 22 bytes).
+ * Where each turn's temporary folder goes. Claude Code puts its sockets under
+ * `$CLAUDE_CODE_TMPDIR/claude-<uid>` and, when that is longer than 44 bytes, gives its commands a
+ * temporary folder outside the turn's, which the sandbox does not let them write. macOS's own
+ * temporary folder is too long, so `/tmp` is used there (`/private/tmp/hb-XXXXXX`, 22 bytes).
  */
 export const TEMP_BASE = platform() === "darwin" ? "/tmp" : tmpdir();
 
@@ -239,7 +239,10 @@ export const UNSIGNED_GIT = {
   GIT_CONFIG_VALUE_1: "false",
 } as const;
 
-const LAUNCHER = `c=$${COMMAND_VARIABLE}; unset ${COMMAND_VARIABLE}; eval "exec $c"`;
+// sandbox-runtime puts `TMPDIR=` ahead of the sandbox in the wrapped command line, from the hub's own
+// environment (`/tmp/claude` when it has no CLAUDE_CODE_TMPDIR), which overrides the turn's. That folder
+// is often missing and cannot be made inside the sandbox, so the shell takes the turn's back first.
+const LAUNCHER = `[ -n "$CLAUDE_CODE_TMPDIR" ] && export TMPDIR="$CLAUDE_CODE_TMPDIR"; c=$${COMMAND_VARIABLE}; unset ${COMMAND_VARIABLE}; eval "exec $c"`;
 
 export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandboxShape>()(
   "@hobbots/runtimes/ProcessSandbox",
