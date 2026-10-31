@@ -1,6 +1,6 @@
 # Architecture decisions
 
-These ADRs record decisions. They are not evidence of implemented runtime capabilities.
+These ADRs record decisions. They are not evidence of implemented runtime capabilities. Each ADR ends with a Validation section that lists the scenarios that would prove it (STD-DOCS-009), and the [status page](../STATUS.md) says which are proven.
 
 - [001 — Effect TS v4 application foundation](001-effect-v4.md)
 - [002 — Host existing agent runtimes](002-existing-runtimes.md)

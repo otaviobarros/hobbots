@@ -83,9 +83,11 @@ Workflow selection: **Default for matching tasks** (selected by the maintainer d
 | knip and jscpd block unused and copied code in `pnpm check` | Accepted | Issue #170; STD-DUP-005, STD-DUP-006 | Whole repository; tests and generated files are outside jscpd |
 | A script blocks functions above cyclomatic complexity 15 in `pnpm check` | Accepted | Issue #161; STD-ARCH-012 | Whole repository; older offenders carry a `complexity-ignore` comment until split |
 | CI running `pnpm check` on SQLite and the persistence and server suites on PostgreSQL | Established | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [ADR 011](decisions/011-sqlite-storage.md) | Every pull request and push to `main` |
+| Status page and dated evidence records for each end-to-end proof | Accepted | Issue #160; STD-DOCS-009, STD-DOCS-010; [Status](STATUS.md) | `docs/STATUS.md`, `docs/evidence/`, every ADR |
 | Agent-engineering default routing | Accepted | Setup interview; [AGENTS.md](../AGENTS.md#workflow) | Guidance, not enforcement |
 
 ## Known gaps
 
+- The [status page](STATUS.md) lists every proven item and every gap; this section keeps only gaps in the workflow itself.
 - The background service of [ADR 012](decisions/012-macos-hub-service.md) is proven end to end only on packaged builds, by the release workflow's smoke test ([`apps/desktop/scripts/background-service.e2e.ts`](../apps/desktop/scripts/background-service.e2e.ts)); pull-request CI does not package the app. Opening at login after logging out and in stays a manual check on a real Mac.
 - No `.env.example` or `CODEOWNERS`. Release Please proposes versions and creates the `v*` tags ([Releases](contributing/releases.md)); releases are built from those tags by [`.github/workflows/release.yml`](../.github/workflows/release.yml), described in the [desktop README](../apps/desktop/README.md).

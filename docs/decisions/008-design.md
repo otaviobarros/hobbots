@@ -32,3 +32,11 @@ The chief replaced the earlier crest at the user's direction (#41) so the app ic
 ## Change control
 
 A deliberate, user-directed design change updates the design specification and this ADR, or supersedes it with a new ADR.
+
+## Validation
+
+The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
+
+- A new installation goes from Welcome to Home and opens on Home afterwards: `[TC-OP-015]`.
+- A provider that is missing or signed out says so and shows its fix, in onboarding and in chat: `[TC-AG-009]`, `[TC-AG-010]`, `[TC-CH-093]`.
+- Approvals offer once, for this Quest and always, and a high-risk action offers once with a confirmation. Not proven yet: [#134](https://github.com/otaviobarros/hobbots/issues/134).

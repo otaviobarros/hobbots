@@ -96,3 +96,11 @@ Journaling in the same transaction is the smallest change that makes events surv
 - **#116 Chat states:** "Reconnecting" is the time between losing the stream and the next `Ready`; an interrupted reply shows its checkpointed text.
 - **#117 Search:** emits no events. Index updates belong in the transaction that writes the message, not in a journal consumer.
 - **#118 End to end:** prove a crash between commit and publish, a minute offline, a reconnect mid-reply, an expired cursor, a delayed query (a messages response that read a reply as streaming, held back until after the reply's completion event, must leave the reply complete), a queued message removed while the client is offline past retention (it must disappear after reconnecting), and a backup restore (the client must show the restored state, not its cache). Measure the chunk rate and the text lost in a crash.
+
+## Validation
+
+The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
+
+- A client that resumes after a cursor gets exactly the missed entries, in order: `[TC-CH-071]`, `[TC-CH-073]`.
+- A missing, malformed, foreign or future cursor starts fresh at the head: `[TC-CH-072]`. A fresh `Ready` makes the client fetch again: `[TC-CH-078]`. An expired cursor is not proven yet: [#118](https://github.com/otaviobarros/hobbots/issues/118).
+- A crash between commit and publish, a minute offline and a reconnect mid-reply lose nothing and duplicate nothing. Not proven yet: [#118](https://github.com/otaviobarros/hobbots/issues/118).

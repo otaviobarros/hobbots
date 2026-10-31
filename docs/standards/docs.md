@@ -65,3 +65,20 @@ Do the work the task asks for. Raise a material contradiction between the task a
 - **Why:** unrequested changes are hard to review and can override a decision.
 - **Enforced by:** review.
 - **Applies to:** all changes.
+
+### STD-DOCS-009 An ADR ends with the scenarios that validate it
+
+Every ADR ends with a `## Validation` section: a list of scenarios that would show the decision holds. Each scenario names the test case or evidence record that checks it, or says "Not proven yet" and links the issue that will. Write the proof issues for a slice from these scenarios.
+
+- **Why:** a decision nobody can check drifts from the code without anyone noticing.
+- **Enforced by:** `scripts/check-standards.mjs` in `pnpm check` (the section exists and lists at least one scenario), and review.
+- **Applies to:** `docs/decisions/`.
+
+### STD-DOCS-010 A proof leaves a dated evidence record
+
+A pull request that proves a slice end to end, or records a manual run, adds an [evidence record](../evidence/README.md) with its date, issue, pull request, commit, setup and result. In the same pull request it updates the [status page](../STATUS.md): the item moves to "What works", or its gaps go under "Not proven yet".
+
+- **Why:** without a dated record of what ran where, nobody can tell what is proven and what only compiles.
+- **Enforced by:** `scripts/check-standards.mjs` in `pnpm check` (each record has its fields and the status page links it), and review.
+- **Applies to:** `docs/evidence/`, `docs/STATUS.md`, and pull requests that close a "Prove …" issue.
+

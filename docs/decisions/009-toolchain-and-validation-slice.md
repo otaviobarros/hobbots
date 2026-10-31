@@ -23,3 +23,11 @@ One seeded agent (Aldric) on Claude Code, many threads, streaming chat persisted
 ## Consequences
 
 Event delivery is in-process after commit; there is no journal cursor or replay yet, so clients refetch after reconnecting. A turn interrupted by a process exit is marked interrupted on the next start. These are accepted limits of the validation slice, not of the MVP contracts.
+
+## Validation
+
+The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
+
+- `pnpm check` passes on a fresh clone with the pinned versions, and CI runs it on every pull request.
+- `pnpm package:mac` builds `Hobbots.app` and a `.dmg` per architecture, and the packaged app starts and answers `/api/health`: [the background service record](../evidence/2026-10-29-background-service.md). The release workflow on a version tag is not proven yet: [#34](https://github.com/otaviobarros/hobbots/issues/34).
+- The desktop app reads the `PATH` of the user's login shell: `[TC-GEN-003]`, a unit test with `/bin/sh`. A missing or signed-out Claude Code blocks setup with its fix, in a browser against a hub from source: `[TC-AG-009]`, `[TC-AG-010]`. The packaged app finding Claude Code on a shell-only `PATH` is not proven yet: no test or recorded run covers it.
