@@ -1,6 +1,6 @@
 # packages/persistence
 
-Validation slice implemented ([ADR 009](../../docs/decisions/009-toolchain-and-validation-slice.md)): SQLite client, migrations and the repository for agents, threads and messages.
+Validation slice implemented ([ADR 009](../../docs/decisions/009-toolchain-and-validation-slice.md)): SQLite client, migrations and `HobbotsRepositoryLive`, which implements the `HobbotsRepository` port of `@hobbots/agents` for hobs, threads and messages.
 
 SQLite/PostgreSQL repositories, transactions, journal, outbox and migrations.
 

@@ -109,6 +109,12 @@ export class EventEnvelope extends Schema.Class<EventEnvelope>("EventEnvelope")(
   payload: JournaledEvent,
 }) {}
 
+/** A committed write: what it stored, and the journal entries it appended, in sequence order. */
+export interface Committed<A> {
+  readonly value: A;
+  readonly entries: ReadonlyArray<EventEnvelope>;
+}
+
 /** The events a saved message produces: always its upsert, then that it queued or any stop outcome it records. */
 export const messageEvents = (message: Message): ReadonlyArray<JournaledEvent> => {
   const ids = { threadId: message.threadId, messageId: message.id };

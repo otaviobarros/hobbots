@@ -1,5 +1,12 @@
-import type { Effort, PolicyOperation, RuntimeHealth, RuntimeModels } from "@hobbots/domain";
-import type { PolicyContext } from "@hobbots/permissions";
+import type {
+  Effort,
+  HobPolicy,
+  PolicyOperation,
+  PolicyOverrides,
+  RuntimeHealth,
+  RuntimeModels,
+  SafetyPreset,
+} from "@hobbots/domain";
 import { Context, type Effect, Schema, type Stream } from "effect";
 
 /** Normalized runtime output. Vendor message shapes stay inside each adapter. */
@@ -59,12 +66,28 @@ export class RuntimeLimitReached extends Schema.TaggedError<RuntimeLimitReached>
   /** When the allowance refills (ISO 8601), if the provider said. */
   resetsAt: Schema.NullOr(Schema.String),
 }) {}
+
+/**
+ * The policy a turn's tools run under: the policy engine's context without what only the adapter
+ * knows (its sandbox and its model API's hosts).
+ */
+export interface ToolPolicy {
+  readonly preset: SafetyPreset;
+  /** Folders approved in setup, which every hob can work in unless it hides one. */
+  readonly sharedFolders: ReadonlyArray<string>;
+  readonly hob: HobPolicy;
+  /** Hobbots' own data folder, never reachable even when a shared folder contains it. */
+  readonly dataFolder: string;
+  /** Narrowing added by the thread, Quest, task or delegation. Each may only narrow. */
+  readonly restrictions: ReadonlyArray<PolicyOverrides>;
+}
+
 /**
  * What a hob may do with tools this turn (ADR 014). The adapter adds what only it knows: whether
  * its sandbox can start and which hosts its model API needs.
  */
 export interface ToolAccess {
-  readonly policy: Omit<PolicyContext, "sandbox" | "modelHosts">;
+  readonly policy: ToolPolicy;
   /** The hob's effective folders, canonical; the first is where the runtime starts. */
   readonly folders: ReadonlyArray<string>;
   /**
@@ -123,5 +146,5 @@ export interface RuntimeAdapterShape {
 }
 
 export class RuntimeAdapter extends Context.Service<RuntimeAdapter, RuntimeAdapterShape>()(
-  "@hobbots/runtimes/RuntimeAdapter",
+  "@hobbots/agents/RuntimeAdapter",
 ) {}

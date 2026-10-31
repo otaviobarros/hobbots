@@ -1,6 +1,6 @@
+import { RuntimeError, RuntimeLimitReached } from "@hobbots/agents";
 import { Effect, Exit, Stream } from "effect";
 import { describe, expect, it } from "vitest";
-import { RuntimeError, RuntimeLimitReached } from "../src/adapter.ts";
 import { FAKE_DIRECTIVES, fakeCutOffError, fakeInstructionsPrompt, makeFakeRuntime } from "../src/fake.ts";
 
 const request = (prompt: string) => ({

@@ -17,20 +17,21 @@ import {
   type SDKRateLimitInfo,
   type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import { RuntimeHealth, RuntimeModel, RuntimeModels, type SandboxState } from "@hobbots/domain";
-import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
-import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
 import {
   type EnforcementDeclaration,
+  operationDecision,
   type PromptRequest,
   RuntimeAdapter,
   RuntimeError,
   type RuntimeEvent,
   RuntimeLimitReached,
   type ToolAccess,
-} from "./adapter.ts";
+} from "@hobbots/agents";
+import { RuntimeHealth, RuntimeModel, RuntimeModels, type SandboxState } from "@hobbots/domain";
+import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
+import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
 import { CLAUDE_CODE_MODEL_HOSTS, ProcessSandbox } from "./sandbox.ts";
-import { narrowestVerdict, offeredTools, operationDecision, toolLabel, toolRequests } from "./tool-calls.ts";
+import { narrowestVerdict, offeredTools, toolLabel, toolRequests } from "./tool-calls.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */

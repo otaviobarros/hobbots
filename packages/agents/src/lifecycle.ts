@@ -1,11 +1,11 @@
 import { type AgentNotFound, HobUnavailable } from "@hobbots/api";
 import { type Agent, type AgentId, AgentTransitions, InvalidAgentTransition, type RetireWork } from "@hobbots/domain";
-import { HobbotsRepository } from "@hobbots/persistence";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { ChatService } from "./chat.ts";
-import { EventBus } from "./event-bus.ts";
 import { foundAgent } from "./hobs.ts";
+import { EventPublisher } from "./ports.ts";
+import { HobbotsRepository } from "./repository.ts";
 
 /** Pauses, wakes and retires hobs (AG-006). Nothing here deletes a hob or its threads. */
 export class HobLifecycle extends Context.Service<
@@ -15,12 +15,12 @@ export class HobLifecycle extends Context.Service<
     readonly wake: (agentId: AgentId) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;
     readonly retire: (agentId: AgentId, activeWork: RetireWork) => Effect.Effect<Agent, AgentNotFound>;
   }
->()("@hobbots/server/HobLifecycle") {
+>()("@hobbots/agents/HobLifecycle") {
   static readonly layer = Layer.effect(
     HobLifecycle,
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
-      const bus = yield* EventBus;
+      const bus = yield* EventPublisher;
       const chat = yield* ChatService;
       const admission = yield* HobAdmission;
 

@@ -1,13 +1,15 @@
+import { HobbotsRepository } from "@hobbots/agents";
 import { Agent, AgentId } from "@hobbots/domain";
+import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepository, SetupRepository } from "../src/index.ts";
+import { SetupRepository } from "../src/index.ts";
 import installationSetup from "../src/migrations/0004_installation_setup.ts";
 import connectedProviders from "../src/migrations/0006_connected_providers.ts";
 import { TestDatabase } from "../src/testing.ts";
 
-const TestLayer = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer).pipe(Layer.provideMerge(TestDatabase));
+const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, SetupRepository.layer).pipe(Layer.provideMerge(TestDatabase));
 
 const aldric = new Agent({
   id: AgentId.make("aldric"),

@@ -1,13 +1,18 @@
+import {
+  ChatService,
+  EventPublisher,
+  HobAdmission,
+  HobbotsRepository,
+  HobTools,
+  RuntimeAdapter,
+  type RuntimeEvent,
+} from "@hobbots/agents";
 import { Agent, AgentId, type HobbotsEvent, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
-import { HobbotsRepository } from "@hobbots/persistence";
+import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer, RuntimeAdapter, type RuntimeEvent } from "@hobbots/runtimes";
+import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Deferred, Effect, Layer, Schedule, Stream } from "effect";
 import { describe, expect, it } from "vitest";
-import { HobAdmission } from "../src/admission.ts";
-import { ChatService } from "../src/chat.ts";
-import { EventBus } from "../src/event-bus.ts";
-import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("wren");
 const NOW = "2026-01-01T00:00:00.000Z";
@@ -55,22 +60,16 @@ const run = <A, E>(
   Effect.gen(function* () {
     const confirm = yield* Deferred.make<void>();
     const events: Array<HobbotsEvent> = [];
-    const bus = Layer.succeed(EventBus, {
+    const bus = Layer.succeed(EventPublisher, {
       publish: (entries) => Effect.sync(() => void events.push(...entries.map((entry) => entry.payload))),
       publishTransient: (event) => Effect.sync(() => void events.push(event)),
-      stream: Stream.empty,
-      subscribe: Effect.die("unused"),
-      close: Effect.void,
     });
     const layer = ChatService.layer
       .pipe(Layer.provide(HobTools.chatOnly))
       .pipe(
         Layer.provideMerge(
           Layer.mergeAll(
-            Layer.effectDiscard(summonHob).pipe(
-              Layer.provideMerge(HobbotsRepository.layer),
-              Layer.provide(TestDatabase),
-            ),
+            Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(HobbotsRepositoryLive), Layer.provide(TestDatabase)),
             bus,
             HobAdmission.layer,
             makeSlowRuntime(confirm),
@@ -225,12 +224,9 @@ describe("Stopping a reply", () => {
         ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)).pipe(
           Layer.provide(
             Layer.mergeAll(
-              Layer.succeed(EventBus, {
+              Layer.succeed(EventPublisher, {
                 publish: (entries) => Effect.sync(() => void events.push(...entries.map((entry) => entry.payload))),
                 publishTransient: (event) => Effect.sync(() => void events.push(event)),
-                stream: Stream.empty,
-                subscribe: Effect.die("unused"),
-                close: Effect.void,
               }),
               HobAdmission.layer,
               FakeRuntimeLayer(),
@@ -241,7 +237,7 @@ describe("Stopping a reply", () => {
       return { messages: yield* repo.listMessages(threadId), events: stopEvents(events) };
     }).pipe(
       Effect.provide(
-        Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(HobbotsRepository.layer), Layer.provide(TestDatabase)),
+        Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(HobbotsRepositoryLive), Layer.provide(TestDatabase)),
       ),
       Effect.scoped,
       Effect.runPromise,

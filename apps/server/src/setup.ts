@@ -1,8 +1,8 @@
+import { ChatService } from "@hobbots/agents";
 import { HobbotsApi } from "@hobbots/api";
 import { SetupRepository } from "@hobbots/persistence";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { ChatService } from "./chat.ts";
 import { checkFolder } from "./folders.ts";
 
 export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers) =>

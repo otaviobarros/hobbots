@@ -1,10 +1,11 @@
+import { HobbotsRepository } from "@hobbots/agents";
 import { Agent, AgentId, Message, MessageId, roleFields, Thread, ThreadId } from "@hobbots/domain";
+import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepository } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
-const TestLayer = HobbotsRepository.layer.pipe(Layer.provide(TestDatabase));
+const TestLayer = HobbotsRepositoryLive.pipe(Layer.provide(TestDatabase));
 const now = "2026-10-28T00:00:00.000Z";
 const agentId = AgentId.make("aldric");
 const threadId = ThreadId.make("t1");

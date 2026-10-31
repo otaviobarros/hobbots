@@ -2,20 +2,17 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
-import { HobbotsRepository, SearchIndex, SetupRepository } from "@hobbots/persistence";
+import { ChatService, HobAdmission, HobLifecycle, HobService, HobTools, PermissionSummary } from "@hobbots/agents";
+import { HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Layer } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
-import { HobAdmission } from "../src/admission.ts";
-import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
-import { HobService } from "../src/hobs.ts";
+import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
-import { HobLifecycle } from "../src/lifecycle.ts";
-import { HobTools } from "../src/tools.ts";
 
 // Folders are checked on the hub, so the tests make real ones.
 // Canonical, since the hub stores folders with symlinks resolved (on macOS the temp folder is one).
@@ -32,12 +29,18 @@ let dispose: () => Promise<void>;
 
 // A fresh database per test: the whole API over the test database, without seeded hobs.
 beforeEach(() => {
-  const Persistence = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer, SearchIndex.layer).pipe(
+  const Persistence = Layer.mergeAll(HobbotsRepositoryLive, SetupRepository.layer, SearchIndex.layer).pipe(
     Layer.provideMerge(TestDatabase),
   );
   const App = HobLifecycle.layer
     .pipe(
-      Layer.provideMerge(Layer.mergeAll(ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)), HobService.layer)),
+      Layer.provideMerge(
+        Layer.mergeAll(
+          ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
+          HobService.layer,
+          PermissionSummary.layer,
+        ),
+      ),
     )
     .pipe(
       Layer.provideMerge(
@@ -45,6 +48,7 @@ beforeEach(() => {
           Persistence,
           EventBus.layer,
           HobAdmission.layer,
+          NodeFolderChecks,
           FakeRuntimeLayer(),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/data" }),
         ),

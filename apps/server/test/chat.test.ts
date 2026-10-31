@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ChatService, HobAdmission, HobbotsRepository, HobTools, type ToolAccess } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
@@ -11,15 +12,12 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { HobbotsRepository } from "@hobbots/persistence";
+import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FAKE_DIRECTIVES, FakeRuntimeLayer, fakeCutOffError, type ToolAccess } from "@hobbots/runtimes";
+import { FAKE_DIRECTIVES, FakeRuntimeLayer, fakeCutOffError } from "@hobbots/runtimes";
 import { Deferred, Effect, Fiber, Layer, Option, PubSub, Schedule } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import { HobAdmission } from "../src/admission.ts";
-import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
-import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("aldric");
 
@@ -43,7 +41,7 @@ const summonHob = Effect.gen(function* () {
   );
 });
 
-const Persistence = HobbotsRepository.layer.pipe(Layer.provideMerge(TestDatabase));
+const Persistence = HobbotsRepositoryLive.pipe(Layer.provideMerge(TestDatabase));
 const testLayer = (runtime = FakeRuntimeLayer(), tools = HobTools.chatOnly) =>
   ChatService.layer
     .pipe(Layer.provide(tools))

@@ -1,8 +1,9 @@
+import { HobbotsRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentConfiguration,
-  type AgentId,
   AgentStatus,
+  type Committed,
   type HobPolicy,
   type JournaledEvent,
   Message,
@@ -11,9 +12,9 @@ import {
   Thread,
   ThreadId,
 } from "@hobbots/domain";
-import { Context, Data, DateTime, Effect, Layer, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, type SqlError, SqlSchema } from "effect/sql";
-import { type Committed, makeJournalWriter } from "./journal.ts";
+import { makeJournalWriter } from "./journal.ts";
 
 // Rows use snake_case columns; the client transforms them to the camelCase domain fields.
 // Where SQLite and PostgreSQL differ, the query chooses explicitly (ADR 011).
@@ -68,340 +69,287 @@ const revisedRows = (rows: ReadonlyArray<{ readonly revision?: unknown }>) =>
 // A conditional write found nothing to change; its transaction rolls back, releasing its sequences.
 class NothingChanged extends Data.TaggedError("NothingChanged") {}
 
-export class HobbotsRepository extends Context.Service<
+/** The SQL store of hobs, threads and messages, for SQLite and PostgreSQL (ADR 011). */
+export const HobbotsRepositoryLive = Layer.effect(
   HobbotsRepository,
-  {
-    readonly listAgents: Effect.Effect<ReadonlyArray<Agent>>;
-    /** Hobs in any of the given lifecycle states, oldest first. */
-    readonly listAgentsWithStatus: (statuses: ReadonlyArray<AgentStatus>) => Effect.Effect<ReadonlyArray<Agent>>;
-    readonly findAgent: (id: AgentId) => Effect.Effect<Option.Option<Agent>>;
-    /**
-     * Saves the hob's lifecycle fields (status and retirement time) from `next`. None, and nothing
-     * changed, when its stored status is no longer `from` (another change landed first).
-     */
-    readonly setAgentStatus: (next: Agent, from: AgentStatus) => Effect.Effect<Option.Option<Committed<Agent>>>;
-    /** Inserts the hob and its first configuration unless one with its id exists; none when it was not inserted. */
-    readonly insertAgent: (agent: Agent) => Effect.Effect<Option.Option<Committed<Agent>>>;
-    readonly findAgentConfig: (id: AgentId, version: number) => Effect.Effect<Option.Option<AgentConfiguration>>;
-    /**
-     * Stores the hob's next configuration version and makes it current. None, and nothing stored,
-     * when the hob's current version is no longer the one before it (another edit landed first).
-     */
-    readonly updateAgentConfig: (agent: Agent) => Effect.Effect<Option.Option<Committed<Agent>>>;
-    readonly listThreads: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Thread>>;
-    readonly findThread: (id: ThreadId) => Effect.Effect<Option.Option<Thread>>;
-    readonly upsertThread: (thread: Thread) => Effect.Effect<Committed<Thread>>;
-    readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;
-    /** Saves the message with the events it produces (`messageEvents`). */
-    readonly upsertMessage: (message: Message) => Effect.Effect<Committed<Message>>;
-    /**
-     * Saves a reply's text while it is in progress, without journaling or a new revision (ADR 013),
-     * so a crash keeps what had streamed by then. Does nothing once the reply has ended.
-     */
-    readonly checkpointMessage: (message: Message) => Effect.Effect<void>;
-    /** Assistant replies whose turn has not ended (streaming or stopping), across every thread. */
-    readonly listUnfinishedMessages: Effect.Effect<ReadonlyArray<Message>>;
-    /** The thread's queued message that has waited longest, if any (CH-008). */
-    readonly nextQueuedMessage: (threadId: ThreadId) => Effect.Effect<Option.Option<Message>>;
-    /** Threads with at least one queued message. */
-    readonly threadsWithQueuedMessages: Effect.Effect<ReadonlyArray<ThreadId>>;
-    /**
-     * Saves a queued message that started and its streaming reply in one transaction: the message
-     * moves after every message in the thread and the reply follows it, so a crash leaves either a
-     * queued message or a reply that recovery marks interrupted. None, and nothing changed, when
-     * the message is no longer queued.
-     */
-    readonly startQueuedMessage: (
-      message: Message,
-      reply: Message,
-    ) => Effect.Effect<Option.Option<Committed<{ readonly message: Message; readonly reply: Message }>>>;
-    /** Deletes a message that is still queued in the thread; none, and nothing deleted, when it is not. */
-    readonly removeQueuedMessage: (threadId: ThreadId, id: MessageId) => Effect.Effect<Option.Option<Committed<void>>>;
-  }
->()("@hobbots/persistence/HobbotsRepository") {
-  static readonly layer = Layer.effect(
-    HobbotsRepository,
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const journal = makeJournalWriter(sql);
-      // Text sort keys compare byte by byte: SQLite's default, PostgreSQL's "C" collation.
-      // ISO-8601 timestamps sort the same under either collation.
-      const bytewise = (column: string) =>
-        sql.onDialectOrElse({
-          pg: () => sql.literal(`${column} COLLATE "C"`),
-          orElse: () => sql.literal(column),
-        });
-      // Ties break on the id.
-      const byId = bytewise("id");
-
-      const listAgents = SqlSchema.findAll({
-        Request: Schema.Void,
-        Result: Agent,
-        execute: () => sql`SELECT * FROM agents ORDER BY created_at, ${byId}`.pipe(Effect.map(agentRows)),
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const journal = makeJournalWriter(sql);
+    // Text sort keys compare byte by byte: SQLite's default, PostgreSQL's "C" collation.
+    // ISO-8601 timestamps sort the same under either collation.
+    const bytewise = (column: string) =>
+      sql.onDialectOrElse({
+        pg: () => sql.literal(`${column} COLLATE "C"`),
+        orElse: () => sql.literal(column),
       });
-      const listAgentsWithStatus = SqlSchema.findAll({
-        Request: Schema.Array(AgentStatus),
-        Result: Agent,
-        execute: (statuses) =>
-          sql`SELECT * FROM agents WHERE ${sql.in("status", statuses)} ORDER BY created_at, ${byId}`.pipe(
-            Effect.map(agentRows),
-          ),
-      });
-      const findAgent = SqlSchema.findOneOption({
-        Request: Schema.String,
-        Result: Agent,
-        execute: (id) => sql`SELECT * FROM agents WHERE id = ${id}`.pipe(Effect.map(agentRows)),
-      });
-      const findAgentConfig = SqlSchema.findOneOption({
-        Request: Schema.Struct({ agentId: Schema.String, version: Schema.Number }),
-        Result: AgentConfiguration,
-        execute: ({ agentId, version }) =>
-          sql`SELECT * FROM agent_config_versions WHERE agent_id = ${agentId} AND version = ${version}`.pipe(
-            Effect.map(agentRows),
-          ),
-      });
-      const listThreads = SqlSchema.findAll({
-        Request: Schema.String,
-        Result: Thread,
-        execute: (agentId) =>
-          sql`SELECT * FROM threads WHERE agent_id = ${agentId} ORDER BY updated_at DESC, ${byId}`.pipe(
-            Effect.map(revisedRows),
-          ),
-      });
-      const findThread = SqlSchema.findOneOption({
-        Request: Schema.String,
-        Result: Thread,
-        execute: (id) => sql`SELECT * FROM threads WHERE id = ${id}`.pipe(Effect.map(revisedRows)),
-      });
-      const listMessages = SqlSchema.findAll({
-        Request: Schema.String,
-        Result: Message,
-        execute: (threadId) =>
-          sql`SELECT * FROM messages WHERE thread_id = ${threadId} ORDER BY seq`.pipe(Effect.map(revisedRows)),
-      });
-      const nextQueuedMessage = SqlSchema.findOneOption({
-        Request: Schema.String,
-        Result: Message,
-        execute: (threadId) =>
-          sql`SELECT * FROM messages WHERE thread_id = ${threadId} AND status = 'queued' ORDER BY seq LIMIT 1`.pipe(
-            Effect.map(revisedRows),
-          ),
-      });
-      const threadsWithQueuedMessages = SqlSchema.findAll({
-        Request: Schema.Void,
-        Result: Schema.Struct({ threadId: ThreadId }),
-        execute: () =>
-          sql`SELECT thread_id FROM messages WHERE status = 'queued' GROUP BY thread_id ORDER BY ${bytewise("thread_id")}`,
-      });
-      const unfinishedMessages = SqlSchema.findAll({
-        Request: Schema.Void,
-        Result: Message,
-        execute: () =>
-          sql`SELECT * FROM messages WHERE status IN ('streaming', 'stopping') ORDER BY ${bytewise("thread_id")}, seq`.pipe(
-            Effect.map(revisedRows),
-          ),
-      });
+    // Ties break on the id.
+    const byId = bytewise("id");
 
-      const insertConfig = (agent: Agent, createdAt: string) =>
-        sql`INSERT INTO agent_config_versions ${sql.insert({
-          agent_id: agent.id,
-          version: agent.configVersion,
-          ...configColumns(agent),
-          created_at: createdAt,
-        })}`;
-
-      // Runs a change in one transaction with the journal sequences its events take, from `first`,
-      // reserved before it writes, and appends its events before commit: the journal is the outbox
-      // (ADR 013). A change that returns null wrote nothing, and rolls back.
-      const journaled = <A>(
-        count: number,
-        write: (
-          first: number,
-        ) => Effect.Effect<
-          { readonly value: A; readonly events: ReadonlyArray<JournaledEvent> } | null,
-          SqlError.SqlError
-        >,
-      ): Effect.Effect<Option.Option<Committed<A>>> =>
-        Effect.gen(function* () {
-          const first = yield* journal.reserve(count);
-          const change = yield* write(first);
-          if (change === null) return yield* new NothingChanged();
-          if (change.events.length !== count) {
-            return yield* Effect.die(
-              new Error(`Reserved ${count} journal sequences for ${change.events.length} events`),
-            );
-          }
-          return { value: change.value, entries: yield* journal.append(first, change.events) };
-        }).pipe(
-          sql.withTransaction,
-          Effect.map(Option.some),
-          Effect.catchTag("NothingChanged", () => Effect.succeed(Option.none())),
-          Effect.orDie,
-        );
-      // For changes that always apply.
-      const always = <A>(effect: Effect.Effect<Option.Option<Committed<A>>>) =>
-        effect.pipe(Effect.map(Option.getOrThrow));
-
-      const insertAgent = (input: Agent) =>
-        journaled(1, (revision) =>
-          Effect.gen(function* () {
-            const agent = new Agent({ ...input, revision });
-            const inserted = yield* sql`INSERT INTO agents ${sql.insert({
-              id: agent.id,
-              name: agent.name,
-              ...configColumns(agent),
-              runtime: agent.runtime,
-              config_version: agent.configVersion,
-              status: agent.status,
-              retired_at: agent.retiredAt,
-              created_at: agent.createdAt,
-              revision,
-            })} ON CONFLICT (id) DO NOTHING RETURNING id`;
-            if (inserted.length === 0) return null;
-            yield* insertConfig(agent, agent.createdAt);
-            return { value: agent, events: [{ _tag: "AgentUpserted", agent }] };
-          }),
-        );
-
-      // The version check makes concurrent edits of one hob land one at a time.
-      const updateAgentConfig = (input: Agent, createdAt: string) =>
-        journaled(1, (revision) =>
-          Effect.gen(function* () {
-            const agent = new Agent({ ...input, revision });
-            const columns = { ...configColumns(agent), config_version: agent.configVersion, revision };
-            const updated = yield* sql`UPDATE agents SET ${sql.update(columns)}
-              WHERE id = ${agent.id} AND config_version = ${agent.configVersion - 1}
-              RETURNING id`;
-            if (updated.length === 0) return null;
-            yield* insertConfig(agent, createdAt);
-            return { value: agent, events: [{ _tag: "AgentUpserted", agent }] };
-          }),
-        );
-
-      const setAgentStatus = (input: Agent, from: AgentStatus) =>
-        journaled(1, (revision) =>
-          Effect.gen(function* () {
-            const agent = new Agent({ ...input, revision });
-            const updated = yield* sql`UPDATE agents
-              SET status = ${agent.status}, retired_at = ${agent.retiredAt}, revision = ${revision}
-              WHERE id = ${agent.id} AND status = ${from} RETURNING id`;
-            if (updated.length === 0) return null;
-            return { value: agent, events: [{ _tag: "AgentUpserted", agent }] };
-          }),
-        );
-
-      const upsertThread = (input: Thread) =>
-        journaled(1, (revision) =>
-          Effect.gen(function* () {
-            const thread = new Thread({ ...input, revision });
-            yield* sql`INSERT INTO threads ${sql.insert({
-              id: thread.id,
-              agent_id: thread.agentId,
-              title: thread.title,
-              runtime_session_id: thread.runtimeSessionId,
-              created_at: thread.createdAt,
-              updated_at: thread.updatedAt,
-              revision,
-            })} ON CONFLICT (id) DO UPDATE SET
-              title = excluded.title,
-              runtime_session_id = excluded.runtime_session_id,
-              updated_at = excluded.updated_at,
-              revision = excluded.revision`;
-            return { value: thread, events: [{ _tag: "ThreadUpserted", thread }] };
-          }),
-        );
-
-      // Writes the message row only; the caller journals its events in the same transaction.
-      const writeMessage = (message: Message) =>
-        sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, resets_at, created_at, revision, seq)
-          VALUES (
-            ${message.id}, ${message.threadId}, ${message.role}, ${message.content},
-            ${message.status}, ${message.error}, ${message.configVersion}, ${message.resetsAt}, ${message.createdAt}, ${message.revision},
-            (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE thread_id = ${message.threadId})
-          )
-          ON CONFLICT (id) DO UPDATE SET
-            content = excluded.content,
-            status = excluded.status,
-            error = excluded.error,
-            config_version = excluded.config_version,
-            resets_at = excluded.resets_at,
-            revision = excluded.revision`;
-
-      // The message's revision is its MessageUpserted entry, the first of its events.
-      const upsertMessage = (input: Message) =>
-        journaled(messageEvents(input).length, (revision) =>
-          Effect.gen(function* () {
-            const message = new Message({ ...input, revision });
-            yield* writeMessage(message);
-            return { value: message, events: messageEvents(message) };
-          }),
-        );
-
-      // The new sequence is read in the same statement, as an insert's is. Events: the started
-      // message, its dequeue, then the reply's.
-      const startQueuedMessage = (input: Message, inputReply: Message) =>
-        journaled(2 + messageEvents(inputReply).length, (first) =>
-          Effect.gen(function* () {
-            const message = new Message({ ...input, revision: first });
-            const reply = new Message({ ...inputReply, revision: first + 2 });
-            const started = yield* sql`UPDATE messages SET
-                status = ${message.status},
-                revision = ${message.revision},
-                seq = (SELECT MAX(seq) + 1 FROM messages WHERE thread_id = ${message.threadId})
-              WHERE id = ${message.id} AND status = 'queued'
-              RETURNING id`;
-            if (started.length === 0) return null;
-            yield* writeMessage(reply);
-            const events: ReadonlyArray<JournaledEvent> = [
-              { _tag: "MessageUpserted", message },
-              { _tag: "MessageDequeued", threadId: message.threadId, messageId: message.id, reason: "started" },
-              ...messageEvents(reply),
-            ];
-            return { value: { message, reply }, events };
-          }),
-        );
-
-      const removeQueuedMessage = (threadId: ThreadId, messageId: MessageId) =>
-        journaled(1, () =>
-          sql`DELETE FROM messages WHERE id = ${messageId} AND thread_id = ${threadId} AND status = 'queued' RETURNING id`.pipe(
-            Effect.map((rows) =>
-              rows.length === 0
-                ? null
-                : {
-                    value: undefined,
-                    events: [{ _tag: "MessageDequeued", threadId, messageId, reason: "removed" } as const],
-                  },
-            ),
-          ),
-        );
-
-      return HobbotsRepository.of({
-        listAgents: listAgents().pipe(Effect.orDie),
-        listAgentsWithStatus: (statuses) =>
-          statuses.length === 0 ? Effect.succeed([]) : listAgentsWithStatus(statuses).pipe(Effect.orDie),
-        findAgent: (id) => findAgent(id).pipe(Effect.orDie),
-        setAgentStatus,
-        insertAgent,
-        findAgentConfig: (agentId, version) => findAgentConfig({ agentId, version }).pipe(Effect.orDie),
-        updateAgentConfig: (agent) =>
-          DateTime.now.pipe(Effect.flatMap((now) => updateAgentConfig(agent, DateTime.formatIso(now)))),
-        listThreads: (agentId) => listThreads(agentId).pipe(Effect.orDie),
-        findThread: (id) => findThread(id).pipe(Effect.orDie),
-        upsertThread: (thread) => always(upsertThread(thread)),
-        listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),
-        upsertMessage: (message) => always(upsertMessage(message)),
-        checkpointMessage: (message) =>
-          sql`UPDATE messages SET content = ${message.content}
-            WHERE id = ${message.id} AND status IN ('streaming', 'stopping')`.pipe(Effect.asVoid, Effect.orDie),
-        listUnfinishedMessages: unfinishedMessages().pipe(Effect.orDie),
-        nextQueuedMessage: (threadId) => nextQueuedMessage(threadId).pipe(Effect.orDie),
-        threadsWithQueuedMessages: threadsWithQueuedMessages().pipe(
-          Effect.map((rows) => rows.map((row) => row.threadId)),
-          Effect.orDie,
+    const listAgents = SqlSchema.findAll({
+      Request: Schema.Void,
+      Result: Agent,
+      execute: () => sql`SELECT * FROM agents ORDER BY created_at, ${byId}`.pipe(Effect.map(agentRows)),
+    });
+    const listAgentsWithStatus = SqlSchema.findAll({
+      Request: Schema.Array(AgentStatus),
+      Result: Agent,
+      execute: (statuses) =>
+        sql`SELECT * FROM agents WHERE ${sql.in("status", statuses)} ORDER BY created_at, ${byId}`.pipe(
+          Effect.map(agentRows),
         ),
-        startQueuedMessage,
-        removeQueuedMessage,
-      });
-    }),
-  );
-}
+    });
+    const findAgent = SqlSchema.findOneOption({
+      Request: Schema.String,
+      Result: Agent,
+      execute: (id) => sql`SELECT * FROM agents WHERE id = ${id}`.pipe(Effect.map(agentRows)),
+    });
+    const findAgentConfig = SqlSchema.findOneOption({
+      Request: Schema.Struct({ agentId: Schema.String, version: Schema.Number }),
+      Result: AgentConfiguration,
+      execute: ({ agentId, version }) =>
+        sql`SELECT * FROM agent_config_versions WHERE agent_id = ${agentId} AND version = ${version}`.pipe(
+          Effect.map(agentRows),
+        ),
+    });
+    const listThreads = SqlSchema.findAll({
+      Request: Schema.String,
+      Result: Thread,
+      execute: (agentId) =>
+        sql`SELECT * FROM threads WHERE agent_id = ${agentId} ORDER BY updated_at DESC, ${byId}`.pipe(
+          Effect.map(revisedRows),
+        ),
+    });
+    const findThread = SqlSchema.findOneOption({
+      Request: Schema.String,
+      Result: Thread,
+      execute: (id) => sql`SELECT * FROM threads WHERE id = ${id}`.pipe(Effect.map(revisedRows)),
+    });
+    const listMessages = SqlSchema.findAll({
+      Request: Schema.String,
+      Result: Message,
+      execute: (threadId) =>
+        sql`SELECT * FROM messages WHERE thread_id = ${threadId} ORDER BY seq`.pipe(Effect.map(revisedRows)),
+    });
+    const nextQueuedMessage = SqlSchema.findOneOption({
+      Request: Schema.String,
+      Result: Message,
+      execute: (threadId) =>
+        sql`SELECT * FROM messages WHERE thread_id = ${threadId} AND status = 'queued' ORDER BY seq LIMIT 1`.pipe(
+          Effect.map(revisedRows),
+        ),
+    });
+    const threadsWithQueuedMessages = SqlSchema.findAll({
+      Request: Schema.Void,
+      Result: Schema.Struct({ threadId: ThreadId }),
+      execute: () =>
+        sql`SELECT thread_id FROM messages WHERE status = 'queued' GROUP BY thread_id ORDER BY ${bytewise("thread_id")}`,
+    });
+    const unfinishedMessages = SqlSchema.findAll({
+      Request: Schema.Void,
+      Result: Message,
+      execute: () =>
+        sql`SELECT * FROM messages WHERE status IN ('streaming', 'stopping') ORDER BY ${bytewise("thread_id")}, seq`.pipe(
+          Effect.map(revisedRows),
+        ),
+    });
+
+    const insertConfig = (agent: Agent, createdAt: string) =>
+      sql`INSERT INTO agent_config_versions ${sql.insert({
+        agent_id: agent.id,
+        version: agent.configVersion,
+        ...configColumns(agent),
+        created_at: createdAt,
+      })}`;
+
+    // Runs a change in one transaction with the journal sequences its events take, from `first`,
+    // reserved before it writes, and appends its events before commit: the journal is the outbox
+    // (ADR 013). A change that returns null wrote nothing, and rolls back.
+    const journaled = <A>(
+      count: number,
+      write: (
+        first: number,
+      ) => Effect.Effect<
+        { readonly value: A; readonly events: ReadonlyArray<JournaledEvent> } | null,
+        SqlError.SqlError
+      >,
+    ): Effect.Effect<Option.Option<Committed<A>>> =>
+      Effect.gen(function* () {
+        const first = yield* journal.reserve(count);
+        const change = yield* write(first);
+        if (change === null) return yield* new NothingChanged();
+        if (change.events.length !== count) {
+          return yield* Effect.die(new Error(`Reserved ${count} journal sequences for ${change.events.length} events`));
+        }
+        return { value: change.value, entries: yield* journal.append(first, change.events) };
+      }).pipe(
+        sql.withTransaction,
+        Effect.map(Option.some),
+        Effect.catchTag("NothingChanged", () => Effect.succeed(Option.none())),
+        Effect.orDie,
+      );
+    // For changes that always apply.
+    const always = <A>(effect: Effect.Effect<Option.Option<Committed<A>>>) =>
+      effect.pipe(Effect.map(Option.getOrThrow));
+
+    const insertAgent = (input: Agent) =>
+      journaled(1, (revision) =>
+        Effect.gen(function* () {
+          const agent = new Agent({ ...input, revision });
+          const inserted = yield* sql`INSERT INTO agents ${sql.insert({
+            id: agent.id,
+            name: agent.name,
+            ...configColumns(agent),
+            runtime: agent.runtime,
+            config_version: agent.configVersion,
+            status: agent.status,
+            retired_at: agent.retiredAt,
+            created_at: agent.createdAt,
+            revision,
+          })} ON CONFLICT (id) DO NOTHING RETURNING id`;
+          if (inserted.length === 0) return null;
+          yield* insertConfig(agent, agent.createdAt);
+          return { value: agent, events: [{ _tag: "AgentUpserted", agent }] };
+        }),
+      );
+
+    // The version check makes concurrent edits of one hob land one at a time.
+    const updateAgentConfig = (input: Agent, createdAt: string) =>
+      journaled(1, (revision) =>
+        Effect.gen(function* () {
+          const agent = new Agent({ ...input, revision });
+          const columns = { ...configColumns(agent), config_version: agent.configVersion, revision };
+          const updated = yield* sql`UPDATE agents SET ${sql.update(columns)}
+            WHERE id = ${agent.id} AND config_version = ${agent.configVersion - 1}
+            RETURNING id`;
+          if (updated.length === 0) return null;
+          yield* insertConfig(agent, createdAt);
+          return { value: agent, events: [{ _tag: "AgentUpserted", agent }] };
+        }),
+      );
+
+    const setAgentStatus = (input: Agent, from: AgentStatus) =>
+      journaled(1, (revision) =>
+        Effect.gen(function* () {
+          const agent = new Agent({ ...input, revision });
+          const updated = yield* sql`UPDATE agents
+            SET status = ${agent.status}, retired_at = ${agent.retiredAt}, revision = ${revision}
+            WHERE id = ${agent.id} AND status = ${from} RETURNING id`;
+          if (updated.length === 0) return null;
+          return { value: agent, events: [{ _tag: "AgentUpserted", agent }] };
+        }),
+      );
+
+    const upsertThread = (input: Thread) =>
+      journaled(1, (revision) =>
+        Effect.gen(function* () {
+          const thread = new Thread({ ...input, revision });
+          yield* sql`INSERT INTO threads ${sql.insert({
+            id: thread.id,
+            agent_id: thread.agentId,
+            title: thread.title,
+            runtime_session_id: thread.runtimeSessionId,
+            created_at: thread.createdAt,
+            updated_at: thread.updatedAt,
+            revision,
+          })} ON CONFLICT (id) DO UPDATE SET
+            title = excluded.title,
+            runtime_session_id = excluded.runtime_session_id,
+            updated_at = excluded.updated_at,
+            revision = excluded.revision`;
+          return { value: thread, events: [{ _tag: "ThreadUpserted", thread }] };
+        }),
+      );
+
+    // Writes the message row only; the caller journals its events in the same transaction.
+    const writeMessage = (message: Message) =>
+      sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, resets_at, created_at, revision, seq)
+        VALUES (
+          ${message.id}, ${message.threadId}, ${message.role}, ${message.content},
+          ${message.status}, ${message.error}, ${message.configVersion}, ${message.resetsAt}, ${message.createdAt}, ${message.revision},
+          (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE thread_id = ${message.threadId})
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          content = excluded.content,
+          status = excluded.status,
+          error = excluded.error,
+          config_version = excluded.config_version,
+          resets_at = excluded.resets_at,
+          revision = excluded.revision`;
+
+    // The message's revision is its MessageUpserted entry, the first of its events.
+    const upsertMessage = (input: Message) =>
+      journaled(messageEvents(input).length, (revision) =>
+        Effect.gen(function* () {
+          const message = new Message({ ...input, revision });
+          yield* writeMessage(message);
+          return { value: message, events: messageEvents(message) };
+        }),
+      );
+
+    // The new sequence is read in the same statement, as an insert's is. Events: the started
+    // message, its dequeue, then the reply's.
+    const startQueuedMessage = (input: Message, inputReply: Message) =>
+      journaled(2 + messageEvents(inputReply).length, (first) =>
+        Effect.gen(function* () {
+          const message = new Message({ ...input, revision: first });
+          const reply = new Message({ ...inputReply, revision: first + 2 });
+          const started = yield* sql`UPDATE messages SET
+              status = ${message.status},
+              revision = ${message.revision},
+              seq = (SELECT MAX(seq) + 1 FROM messages WHERE thread_id = ${message.threadId})
+            WHERE id = ${message.id} AND status = 'queued'
+            RETURNING id`;
+          if (started.length === 0) return null;
+          yield* writeMessage(reply);
+          const events: ReadonlyArray<JournaledEvent> = [
+            { _tag: "MessageUpserted", message },
+            { _tag: "MessageDequeued", threadId: message.threadId, messageId: message.id, reason: "started" },
+            ...messageEvents(reply),
+          ];
+          return { value: { message, reply }, events };
+        }),
+      );
+
+    const removeQueuedMessage = (threadId: ThreadId, messageId: MessageId) =>
+      journaled(1, () =>
+        sql`DELETE FROM messages WHERE id = ${messageId} AND thread_id = ${threadId} AND status = 'queued' RETURNING id`.pipe(
+          Effect.map((rows) =>
+            rows.length === 0
+              ? null
+              : {
+                  value: undefined,
+                  events: [{ _tag: "MessageDequeued", threadId, messageId, reason: "removed" } as const],
+                },
+          ),
+        ),
+      );
+
+    return HobbotsRepository.of({
+      listAgents: listAgents().pipe(Effect.orDie),
+      listAgentsWithStatus: (statuses) =>
+        statuses.length === 0 ? Effect.succeed([]) : listAgentsWithStatus(statuses).pipe(Effect.orDie),
+      findAgent: (id) => findAgent(id).pipe(Effect.orDie),
+      setAgentStatus,
+      insertAgent,
+      findAgentConfig: (agentId, version) => findAgentConfig({ agentId, version }).pipe(Effect.orDie),
+      updateAgentConfig: (agent) =>
+        DateTime.now.pipe(Effect.flatMap((now) => updateAgentConfig(agent, DateTime.formatIso(now)))),
+      listThreads: (agentId) => listThreads(agentId).pipe(Effect.orDie),
+      findThread: (id) => findThread(id).pipe(Effect.orDie),
+      upsertThread: (thread) => always(upsertThread(thread)),
+      listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),
+      upsertMessage: (message) => always(upsertMessage(message)),
+      checkpointMessage: (message) =>
+        sql`UPDATE messages SET content = ${message.content}
+          WHERE id = ${message.id} AND status IN ('streaming', 'stopping')`.pipe(Effect.asVoid, Effect.orDie),
+      listUnfinishedMessages: unfinishedMessages().pipe(Effect.orDie),
+      nextQueuedMessage: (threadId) => nextQueuedMessage(threadId).pipe(Effect.orDie),
+      threadsWithQueuedMessages: threadsWithQueuedMessages().pipe(
+        Effect.map((rows) => rows.map((row) => row.threadId)),
+        Effect.orDie,
+      ),
+      startQueuedMessage,
+      removeQueuedMessage,
+    });
+  }),
+);

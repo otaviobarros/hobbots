@@ -15,11 +15,11 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
+import type { RuntimeEvent, ToolAccess } from "@hobbots/agents";
 import { EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
-import type { RuntimeEvent, ToolAccess } from "../src/adapter.ts";
 import { adoptSession, parseKeychainLogin, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { makeFakeRuntime } from "../src/fake.ts";
 import { decideForLiveTurns, ProcessSandbox, sandboxEnv, sandboxFilesystem } from "../src/sandbox.ts";
