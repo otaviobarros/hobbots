@@ -140,7 +140,33 @@ export class ApprovalService extends Context.Service<
       const expired = (approval: ApprovalRequest) =>
         Effect.map(nowIso, (now) => new ApprovalRequest({ ...approval, state: "expired", decidedAt: now }));
 
-      // Expires a pending request and lets its turn go on, refused. Runs under the lock.
+      // What a decided request tells the turn waiting on it.
+      const outcomeOf = (approval: ApprovalRequest): ApprovalOutcome | undefined => {
+        switch (approval.state) {
+          case "approved":
+            return { _tag: "Approved", actionDigest: approval.actionDigest, policyVersion: approval.policyVersion };
+          case "denied":
+            return { _tag: "Denied", reason: approval.denyReason };
+          case "expired":
+            return { _tag: "Expired" };
+          case "pending":
+            return undefined;
+        }
+      };
+
+      // Lets the turn waiting on a request that is no longer pending go on with its outcome. Runs
+      // under the lock. Also reconciles a turn a stored decision has not reached yet.
+      const wake = (approval: ApprovalRequest) =>
+        Effect.suspend(() => {
+          const waiter = waiters.get(approval.id);
+          const outcome = outcomeOf(approval);
+          if (waiter === undefined || outcome === undefined) return Effect.void;
+          waiters.delete(approval.id);
+          return Deferred.succeed(waiter.decision, outcome).pipe(Effect.asVoid);
+        });
+
+      // Expires a pending request and lets its turn go on, refused. Runs under the lock, and is not
+      // interrupted between storing the expiry and waking the turn.
       const expire = (id: ApprovalId) =>
         Effect.gen(function* () {
           const waiter = waiters.get(id);
@@ -150,7 +176,7 @@ export class ApprovalService extends Context.Service<
             yield* settle(yield* expired(approval.value));
           }
           if (waiter) yield* Deferred.succeed(waiter.decision, { _tag: "Expired" });
-        });
+        }).pipe(Effect.uninterruptible);
 
       // A previous process may have died while turns waited; those turns are gone, so their requests expire.
       for (const approval of yield* repo.listPending) yield* settle(yield* expired(approval));
@@ -198,7 +224,10 @@ export class ApprovalService extends Context.Service<
                         Effect.onInterrupt(() => Semaphore.withPermit(lock, expire(saved.id))),
                       ),
                     } satisfies PendingApproval;
-                  }),
+                  }).pipe(
+                    // A stored request is always registered, so its turn's close can expire it.
+                    Effect.uninterruptible,
+                  ),
                 ),
             },
             close: Semaphore.withPermit(
@@ -221,6 +250,8 @@ export class ApprovalService extends Context.Service<
             if (Option.isNone(found)) return yield* new ApprovalNotFound({ approvalId: id });
             const approval = found.value;
             const state = decidedState(input.decision);
+            // Already decided: a turn the stored decision did not reach yet goes on now.
+            if (approval.state !== "pending") yield* wake(approval);
             if (approval.state === state) return approval;
             if (approval.state !== "pending")
               return yield* new ApprovalClosed({ approvalId: id, state: approval.state });
@@ -238,15 +269,12 @@ export class ApprovalService extends Context.Service<
             const next = new ApprovalRequest({ ...approval, state, denyReason, decidedAt: yield* nowIso });
             const saved = yield* settle(next);
             if (Option.isNone(saved)) return yield* new ApprovalClosed({ approvalId: id, state: "expired" });
-            waiters.delete(id);
-            yield* Deferred.succeed(
-              waiter.decision,
-              input.decision === "approve"
-                ? { _tag: "Approved", actionDigest: approval.actionDigest, policyVersion: approval.policyVersion }
-                : { _tag: "Denied", reason: denyReason },
-            );
+            yield* wake(saved.value);
             return saved.value;
-          }),
+          }).pipe(
+            // A cancelled request must not store a decision without waking the turn that waits for it.
+            Effect.uninterruptible,
+          ),
         );
       });
 

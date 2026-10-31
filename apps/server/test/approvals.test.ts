@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  ApprovalRepository,
   ApprovalService,
   ChatService,
   HobAdmission,
@@ -24,7 +25,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { ApprovalRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Effect, Exit, Layer, PubSub, Schedule, type Scope } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, type Scope } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 
@@ -350,6 +351,67 @@ describe("Ask decisions", () => {
     expect(result.second.policyVersion).not.toBe(result.first.policyVersion);
     expect(result.second.actionDigest).toBe(result.first.actionDigest);
     expect(result.done.status).toBe("complete");
+  });
+
+  // covers PE-003
+  it("[TC-PE-053] wakes the waiting turn even when the decision's request is cancelled while it is stored", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const thread = yield* chat.createThread(HOB_ID);
+      const sent = yield* chat.sendPrompt(thread.id, "hello");
+      yield* settled(thread.id);
+      const messageId = (sent.assistantMessage as Message).id;
+      // A store whose decision write holds at the commit until the test lets it go.
+      const reached = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const Gated = Layer.effect(
+        ApprovalRepository,
+        Effect.map(ApprovalRepository, (live) =>
+          ApprovalRepository.of({
+            ...live,
+            resolve: (next, from) =>
+              live
+                .resolve(next, from)
+                .pipe(
+                  Effect.tap(() => Deferred.succeed(reached, undefined).pipe(Effect.andThen(Deferred.await(release)))),
+                ),
+          }),
+        ),
+      ).pipe(Layer.provide(ApprovalRepositoryLive));
+      return yield* Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const turn = yield* approvals.forTurn(
+          { agentId: HOB_ID, threadId: thread.id, messageId },
+          Effect.succeed(null),
+        );
+        const pending = yield* turn.approvals.request({
+          stepId: "s1",
+          tool: "Bash",
+          operation: "push",
+          targets: ["origin main"],
+          arguments: { command: "git push origin main" },
+          label: "Running git push origin main",
+          reason: "Pushing asks first.",
+          policyVersion: "r1-test",
+        });
+        const [request] = yield* approvals.listForThread(thread.id);
+        const decision = { decision: "approve", actionDigest: (request as ApprovalRequest).actionDigest } as const;
+        const deciding = yield* Effect.forkChild(approvals.decide(pending.approvalId, decision));
+        yield* Deferred.await(reached);
+        // The client gives up on its request while the decision is being stored.
+        const cancelling = yield* Effect.forkChild(Fiber.interrupt(deciding));
+        // Lets the interruption reach the decision before its write is let go.
+        yield* Effect.sleep("50 millis");
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(cancelling);
+        const outcome = yield* pending.decision.pipe(Effect.timeout("2 seconds"));
+        const retried = yield* approvals.decide(pending.approvalId, decision);
+        return { outcome, retried };
+      }).pipe(Effect.provide(Layer.fresh(ApprovalService.layer).pipe(Layer.provide(Gated))));
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    expect(result.outcome._tag).toBe("Approved");
+    expect(result.retried.state).toBe("approved");
   });
 
   // covers PE-007
