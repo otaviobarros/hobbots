@@ -18,7 +18,7 @@ The adapter reads [`wrangler.jsonc`](wrangler.jsonc), so the dev server and prev
 
 ## Environments
 
-`wrangler.jsonc` has a top level for local development and two environments, `staging` and `production`. Bindings are not inherited, so each environment declares its own. Build for one with `CLOUDFLARE_ENV=staging pnpm --filter @hobbots/site build`.
+`wrangler.jsonc` has a top level for local development and two environments, `staging` and `production`. Bindings are not inherited, so each environment declares its own. Build for one with `CLOUDFLARE_ENV=staging pnpm --filter @hobbots/site build`. The environment is fixed at build time, so `wrangler deploy` afterwards takes no `--env`.
 
 ## Secrets
 
