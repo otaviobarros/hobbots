@@ -78,6 +78,8 @@ const ServerLive = Layer.unwrap(
 
     // Loopback only, on both IPv4 and IPv6: other machines on the network cannot connect.
     const server = createServer();
+    // Each provided layer is built before the ones above it. App comes last so the server listens
+    // only once the routes can answer: a request that arrives earlier is never answered.
     return StopWithoutWaitingForClients(server).pipe(
       Layer.provideMerge(
         HttpRouter.serve(
@@ -90,9 +92,9 @@ const ServerLive = Layer.unwrap(
           ),
         ),
       ),
-      Layer.provide(App),
       Layer.provideMerge(IPv6Loopback(server, config.port)),
       Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: config.port })),
+      Layer.provide(App),
     );
   }),
 );
