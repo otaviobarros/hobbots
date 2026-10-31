@@ -105,11 +105,11 @@ export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: (
 const holdingLine = (holding: ToolHolding): string => {
   switch (holding.kind) {
     case "needs-sandbox":
-      return messages.enforcement.toolBlocked;
+      return messages.enforcement.toolBlocked[holding.gap];
     case "checked":
       return messages.enforcement.toolChecked({ labels: holding.labels.join(", ") });
     case "held":
-      return holding.verified ? messages.enforcement.toolHeld : messages.enforcement.toolHeldUnverified;
+      return messages.enforcement.toolHeld;
   }
 };
 

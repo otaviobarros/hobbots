@@ -39,6 +39,14 @@ export const ENFORCEMENT_CAPABILITIES = [
   "toolInterruption",
 ] as const satisfies ReadonlyArray<keyof RuntimeEnforcement>;
 
+/**
+ * The sandbox state the policy decides under, from what the adapter declares. A sandbox that is
+ * unsupported or not yet verified on this hub counts as missing (ADR 014), so commands, local Git
+ * and the web are blocked until it is verified.
+ */
+export const policySandbox = (enforcement: RuntimeEnforcement): "on" | "unavailable" =>
+  enforcement.processSandbox.status === "verified" ? "on" : "unavailable";
+
 export class RuntimeHealth extends Schema.Class<RuntimeHealth>("RuntimeHealth")({
   runtime: RuntimeKind,
   availability: RuntimeAvailability,

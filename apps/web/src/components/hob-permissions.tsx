@@ -1,12 +1,18 @@
 import type { HobPermissions, UpdateHobPermissionsPayload } from "@hobbots/api";
-import { type Agent, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS } from "@hobbots/domain";
+import {
+  type Agent,
+  type PolicyDecision,
+  type PolicyOperation,
+  PRESET_DECISIONS,
+  policySandbox,
+} from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useId } from "react";
 import { ApiError } from "../api/client.ts";
-import { needsSandbox, sandboxState } from "../api/enforcement.ts";
+import { needsSandbox, sandboxGap } from "../api/enforcement.ts";
 import { permissionsQuery, useUpdatePermissions } from "../api/queries.ts";
 import {
   ANSWER,
@@ -149,18 +155,18 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
   );
 }
 
-/** The sandbox switch, which says so when the sandbox cannot start here, and why. */
+/** The sandbox switch, which says so when the sandbox is missing or not yet verified here, and why. */
 function SandboxSwitch({ name, sandbox }: { name: string; sandbox: HobPermissions["enforcement"]["processSandbox"] }) {
-  const unavailable = sandbox.status === "unsupported";
+  const gap = sandbox.status === "verified" ? null : sandbox.status;
   return (
     <LockedSwitch
       label={messages.enforcement.sandboxLabel}
       note={
-        unavailable
-          ? messages.enforcement.sandboxUnavailable({ name, evidence: sandbox.evidence })
-          : messages.enforcement.sandboxOn({ name })
+        gap === null
+          ? messages.enforcement.sandboxOn({ name })
+          : messages.enforcement.sandboxMissing[gap]({ name, evidence: sandbox.evidence })
       }
-      checked={!unavailable}
+      checked={gap === null}
       later="Turning it off arrives in a later update."
     />
   );
@@ -254,9 +260,12 @@ function Rule({
   const preset = PRESET_DECISIONS[permissions.preset][rule.operation];
   const allowed = answersWithin(preset);
   const current = shown ?? permissions.decisions[rule.operation];
-  const blocked = needsSandbox(rule.operation, permissions.enforcement);
+  // Why the rule is blocked whatever its answer, or null when the hub can hold it.
+  const gap = needsSandbox(rule.operation, permissions.enforcement) ? sandboxGap(permissions.enforcement) : null;
+  const blocked = gap !== null;
   const checked =
-    !blocked && enforcement(rule.operation, permissions.decisions, sandboxState(permissions.enforcement)) === "checked";
+    !blocked &&
+    enforcement(rule.operation, permissions.decisions, policySandbox(permissions.enforcement)) === "checked";
   const narrowed = current !== preset;
   return (
     <div className="flex items-center gap-4 border-b-2 border-line py-3">
@@ -271,7 +280,7 @@ function Rule({
         <span id={noteId} className="text-[13px] text-secondary-text">
           {rule.note}
           {narrowed && ` Narrowed from ${ANSWER[preset]}.`}
-          {blocked && ` ${messages.enforcement.ruleBlocked}`}
+          {gap !== null && ` ${messages.enforcement.ruleBlocked[gap]}`}
         </span>
       </div>
       <div

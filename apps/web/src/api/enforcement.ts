@@ -1,5 +1,5 @@
 import type { HobPermissions } from "@hobbots/api";
-import type { PolicyOperation, SandboxState } from "@hobbots/domain";
+import { type PolicyOperation, policySandbox } from "@hobbots/domain";
 import { enforcement as ruleHolding } from "./safety.ts";
 
 /**
@@ -12,31 +12,36 @@ type Declaration = HobPermissions["enforcement"];
 /** The operations that run inside the sandbox, so the hub blocks them where it cannot start. */
 const SANDBOX_OPERATIONS: ReadonlyArray<PolicyOperation> = ["run-commands", "local-git", "use-web"];
 
-/**
- * The sandbox state the hub decides under. Only an unsupported sandbox blocks: an unverified one
- * still starts, and is shown as not yet verified.
- */
-export const sandboxState = (declaration: Declaration): SandboxState =>
-  declaration.processSandbox.status === "unsupported" ? "unavailable" : "on";
+/** Why the sandbox counts as missing, or null where it is verified and holds. */
+export const sandboxGap = (declaration: Declaration): "unsupported" | "unverified" | null => {
+  const { status } = declaration.processSandbox;
+  return status === "verified" ? null : status;
+};
 
-/** Whether the hub blocks the operation because the sandbox cannot start, whatever its answer says. */
+/**
+ * Whether the hub blocks the operation because the sandbox is missing or not yet verified, whatever
+ * its answer says (ADR 014: an unverified capability counts as missing).
+ */
 export const needsSandbox = (operation: PolicyOperation, declaration: Declaration): boolean =>
-  sandboxState(declaration) === "unavailable" && SANDBOX_OPERATIONS.includes(operation);
+  policySandbox(declaration) === "unavailable" && SANDBOX_OPERATIONS.includes(operation);
 
 /** How a built-in tool's operations are held on this hub, for its line on the Charms tab. */
 export type ToolHolding =
-  | { readonly kind: "needs-sandbox" }
+  | { readonly kind: "needs-sandbox"; readonly gap: "unsupported" | "unverified" }
   | { readonly kind: "checked"; readonly labels: ReadonlyArray<string> }
-  | { readonly kind: "held"; readonly verified: boolean };
+  | { readonly kind: "held" };
 
 export const toolHolding = (
   operations: ReadonlyArray<readonly [string, PolicyOperation]>,
   permissions: Pick<HobPermissions, "decisions" | "enforcement">,
 ): ToolHolding => {
   const { decisions, enforcement: declaration } = permissions;
-  if (operations.some(([, operation]) => needsSandbox(operation, declaration))) return { kind: "needs-sandbox" };
-  const sandbox = sandboxState(declaration);
+  const gap = sandboxGap(declaration);
+  if (gap !== null && operations.some(([, operation]) => needsSandbox(operation, declaration))) {
+    return { kind: "needs-sandbox", gap };
+  }
+  const sandbox = policySandbox(declaration);
   const checked = operations.filter(([, operation]) => ruleHolding(operation, decisions, sandbox) === "checked");
   if (checked.length > 0) return { kind: "checked", labels: checked.map(([label]) => label) };
-  return { kind: "held", verified: declaration.processSandbox.status === "verified" };
+  return { kind: "held" };
 };
