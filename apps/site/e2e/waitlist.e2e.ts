@@ -82,6 +82,31 @@ test("[TC-GEN-012] joins from the roll form with the hero's platforms box ticked
   expect(storedRows(email)).toEqual([{ wants_more_platforms: 1, source: "roll" }]);
 });
 
+test("[TC-GEN-013] saves and confirms the platforms choice made at submit, even if it changes while saving", async ({
+  page,
+}) => {
+  // covers #185: the stored choice matches the success message
+  const email = `pip-${randomUUID()}@example.com`;
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.goto("/");
+  // Registered last, so it runs first and holds the request before it reaches the server.
+  await page.route("**/_actions/**", async (route) => {
+    await held;
+    await route.fallback();
+  });
+  await page.getByLabel("Email address").fill(email);
+  await page.getByRole("button", { name: "Join the wait-list" }).click();
+  await page.waitForRequest("**/_actions/**");
+  await page.getByLabel("Also tell me about the Windows and phone apps").check();
+  release();
+  await expect(page.getByText("You're on the list!")).toBeVisible();
+  await expect(page.getByText(`We'll write to ${email} when the lantern is lit.`)).toBeVisible();
+  expect(storedRows(email)).toEqual([{ wants_more_platforms: 0, source: "hero" }]);
+});
+
 test("[TC-GEN-009] refuses an invalid email and says why", async ({ page }) => {
   // covers #182: the form checks the email
   await page.goto("/");

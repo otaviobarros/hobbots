@@ -64,12 +64,12 @@ export const initWaitlist = () => {
     });
   }
 
-  const join = (form: HTMLFormElement, email: string) => {
+  const join = (form: HTMLFormElement, email: string, wantsMorePlatforms: boolean) => {
     for (const form of forms) form.hidden = true;
     for (const element of joined) element.hidden = false;
     if (sign) sign.hidden = true;
     if (joinedBody) {
-      const also = more?.checked ? ", and again when the Windows and phone apps are ready" : "";
+      const also = wantsMorePlatforms ? ", and again when the Windows and phone apps are ready" : "";
       joinedBody.textContent = `${getMine().name} will keep your spot. We'll write to ${email} when the lantern is lit${also}.`;
     }
     const sprite = document.querySelector(".joined-sprite");
@@ -97,7 +97,7 @@ export const initWaitlist = () => {
   };
 
   /** Saves the sign-up and returns what went wrong, or "" when it was saved. */
-  const save = async (form: HTMLFormElement, email: string) => {
+  const save = async (form: HTMLFormElement, email: string, wantsMorePlatforms: boolean) => {
     const container = form.querySelector<HTMLElement>("[data-turnstile]");
     let turnstileToken: string;
     try {
@@ -109,8 +109,7 @@ export const initWaitlist = () => {
     try {
       const { error } = await actions.waitlist.join({
         email,
-        // One checkbox, in the hero form, serves both forms, as the success message does.
-        wantsMorePlatforms: more?.checked ?? false,
+        wantsMorePlatforms,
         source: form.dataset.source === "roll" ? "roll" : "hero",
         website: form.querySelector<HTMLInputElement>("[data-website]")?.value ?? "",
         turnstileToken,
@@ -133,11 +132,14 @@ export const initWaitlist = () => {
       clearErrors();
       busy = true;
       submit?.setAttribute("aria-disabled", "true");
-      const problem = await save(form, email);
+      // Read once: the box stays editable while the save is pending, and the message must match what was saved.
+      // One checkbox, in the hero form, serves both forms.
+      const wantsMorePlatforms = more?.checked ?? false;
+      const problem = await save(form, email, wantsMorePlatforms);
       busy = false;
       submit?.removeAttribute("aria-disabled");
       if (problem) showError(form, problem, false);
-      else join(form, email.toLowerCase());
+      else join(form, email.toLowerCase(), wantsMorePlatforms);
     });
   }
 

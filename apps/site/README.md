@@ -20,7 +20,7 @@ The adapter reads [`wrangler.jsonc`](wrangler.jsonc), so the dev server and prev
 
 ## The wait-list
 
-Both forms call the Astro Action `waitlist.join` in `src/actions/index.ts`. The rules are in `src/waitlist/join.ts`: the email is trimmed, lowercased and stored once in the `waitlist` table (`migrations/`), a filled honeypot field is answered as a success and stored nowhere, each IP address gets 5 tries a minute, and the Turnstile token is checked on the server with `TURNSTILE_SECRET_KEY`. A repeated email gets the same answer as a new one, so the form never reveals who is on the list. The action never logs the email or the IP address.
+Both forms call the Astro Action `waitlist.join` in `src/actions/index.ts`. The rules are in `src/waitlist/join.ts`: the email is trimmed, lowercased and stored once in the `waitlist` table (`migrations/`), a filled honeypot field is answered as a success and stored nowhere, each IP address gets 5 tries a minute, and the Turnstile token is checked on the server with `TURNSTILE_SECRET_KEY`. A repeated email gets the same answer as a new one, so the form never reveals who is on the list. The action never logs the email or the IP address, and `wrangler.jsonc` turns off Cloudflare's invocation logs, which record request metadata.
 
 Locally, the Turnstile widget uses Cloudflare's test site key and the server uses the test secret from `.dev.vars`, so every check passes. Both still call Cloudflare, so the form needs a network connection.
 
