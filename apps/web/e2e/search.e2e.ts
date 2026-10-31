@@ -29,10 +29,14 @@ const api = async <T>(current: Hub, method: string, path: string, body?: unknown
 const chat = async (current: Hub, threadId: string, ...contents: ReadonlyArray<string>) => {
   for (const content of contents) await api(current, "POST", `/threads/${threadId}/messages`, { content });
   await expect
-    .poll(async () => {
-      const messages = await api<Array<{ status: string }>>(current, "GET", `/threads/${threadId}/messages`);
-      return messages.length === contents.length * 2 && messages.every((m) => m.status === "complete");
-    })
+    .poll(
+      async () => {
+        const messages = await api<Array<{ status: string }>>(current, "GET", `/threads/${threadId}/messages`);
+        return messages.length === contents.length * 2 && messages.every((m) => m.status === "complete");
+      },
+      // The thirteen turns of the history take about five seconds, the default poll timeout.
+      { timeout: 20_000 },
+    )
     .toBe(true);
 };
 

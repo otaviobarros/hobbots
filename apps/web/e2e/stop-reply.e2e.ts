@@ -78,5 +78,5 @@ test("[TC-CH-005] Stop shows Stopping, then Stopped with the partial reply kept,
   // The thread and Pip take the next message as usual.
   await composer.fill("next");
   await composer.press("Enter");
-  await expect(page.getByText("Echo: next")).toBeVisible();
+  await expect(page.getByText("Echo: next", { exact: true })).toBeVisible();
 });

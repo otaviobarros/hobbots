@@ -77,7 +77,7 @@ test("[TC-CH-011] messages sent during a reply queue and run in order, also afte
   await current.stop();
   hub = await startHub(dataDir);
   await page.reload();
-  await expect(page.getByText("Echo: three")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Echo: three", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("region", { name: "Queued message" })).toHaveCount(0);
   await expectReplies(page, ["Echo: two", "Echo: three"]);
 });
@@ -97,7 +97,7 @@ test("[TC-CH-012] a queued message can be removed, and Send now stops the reply 
 
   await queued(page, "urgent").getByRole("button", { name: "Send now and interrupt" }).click();
   await expect(page.getByText(/You stopped this reply\./)).toBeVisible();
-  await expect(page.getByText("Echo: later")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Echo: later", { exact: true })).toBeVisible({ timeout: 15_000 });
   await expectReplies(page, ["Echo: urgent", "Echo: later"]);
   await expect(page.getByText("Echo: three")).toHaveCount(0);
 });

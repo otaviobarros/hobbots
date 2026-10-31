@@ -44,3 +44,4 @@ What this run did not prove, each with the issue that tracks it.
 - [2026-10-30 First launch](2026-10-30-first-launch.md)
 - [2026-10-30 Three hobs chat, edit and retire independently](2026-10-30-multi-hob.md)
 - [2026-10-31 Hob edits reach existing threads](2026-10-31-hob-edits-existing-threads.md)
+- [2026-10-31 Reliable chat survives a crash, time offline, an expired cursor and a restored backup](2026-10-31-reliable-chat.md)

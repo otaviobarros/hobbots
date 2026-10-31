@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
 
 const web = resolve(import.meta.dirname, "..");
@@ -18,6 +19,8 @@ export interface Hub {
   readonly dataDir: string;
   /** Stops the server and waits for it to exit; the data folder stays. */
   readonly stop: () => Promise<void>;
+  /** Kills the server at once, as a crash or a force quit would, and waits for it to exit. */
+  readonly kill: () => Promise<void>;
 }
 
 /** A new, empty data folder for one test. */
@@ -34,7 +37,8 @@ export const removeDataDir = (dataDir: string) => rmSync(dataDir, { recursive: t
  * Fails when another hub answers on the port, so a test never acts on someone else's data.
  */
 export const startHub = async (dataDir: string, env: Record<string, string> = {}): Promise<Hub> => {
-  const child = spawn(join(server, "node_modules", ".bin", "tsx"), ["src/main.ts"], {
+  // Node runs the server itself, with tsx as a loader rather than a parent process, so a kill reaches it.
+  const child = spawn(process.execPath, ["--import", "tsx", "src/main.ts"], {
     cwd: server,
     env: {
       ...process.env,
@@ -73,15 +77,61 @@ export const startHub = async (dataDir: string, env: Record<string, string> = {}
     if (Date.now() > deadline) return fail(`The hub did not answer on ${url} within 30s:`);
     await new Promise((done) => setTimeout(done, 200));
   }
-  return { url, dataDir, stop: () => stopProcess(child) };
+  return { url, dataDir, stop: () => stopProcess(child), kill: () => stopProcess(child, "SIGKILL") };
 };
 
-const stopProcess = (child: ChildProcess) =>
+const stopProcess = (child: ChildProcess, signal: NodeJS.Signals = "SIGTERM") =>
   new Promise<void>((done) => {
     if (child.exitCode !== null || child.signalCode !== null) return done();
     child.once("exit", () => done());
-    child.kill("SIGTERM");
+    child.kill(signal);
   });
+
+/** A network path between a page and the hub that a test can cut and restore, as a dropped Wi-Fi would. */
+export interface Relay {
+  /** Where the page opens the hub through this relay. */
+  readonly url: string;
+  /** Drops every open connection and refuses new ones until `restore`. */
+  readonly cut: () => void;
+  readonly restore: () => void;
+  readonly close: () => Promise<void>;
+}
+
+/** Relays TCP connections to the hub's port, on the next port up from the worker's hub port. */
+export const startRelay = async (): Promise<Relay> => {
+  const relayPort = port + 1000;
+  const open = new Set<Socket>();
+  let accepting = true;
+  const server = createServer((client) => {
+    if (!accepting) return client.destroy();
+    const upstream = createConnection({ host: "127.0.0.1", port });
+    for (const socket of [client, upstream]) {
+      open.add(socket);
+      socket.on("close", () => open.delete(socket));
+      socket.on("error", () => {
+        client.destroy();
+        upstream.destroy();
+      });
+    }
+    client.pipe(upstream).pipe(client);
+  });
+  await new Promise<void>((done) => server.listen(relayPort, "127.0.0.1", done));
+  return {
+    url: `http://127.0.0.1:${relayPort}`,
+    cut: () => {
+      accepting = false;
+      for (const socket of open) socket.destroy();
+    },
+    restore: () => {
+      accepting = true;
+    },
+    close: () =>
+      new Promise<void>((done) => {
+        for (const socket of open) socket.destroy();
+        server.close(() => done());
+      }),
+  };
+};
 
 /**
  * A stand-in Claude Code that is installed but signed out: it prints a version and answers the
