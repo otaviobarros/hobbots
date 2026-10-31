@@ -5,7 +5,13 @@ import {
   type RuntimeEvent,
   RuntimeLimitReached,
 } from "@hobbots/agents";
-import { type RuntimeAvailability, RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
+import {
+  type RuntimeAvailability,
+  type RuntimeEnforcement,
+  RuntimeHealth,
+  RuntimeModel,
+  RuntimeModels,
+} from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Clock, Effect, Exit, Layer, Option, Stream } from "effect";
 import { refusal, toolTurn, UNKNOWN_TOOL } from "./claude-code.ts";
@@ -43,9 +49,26 @@ export interface FakeRuntimeOptions {
   readonly stopDelay?: string;
   /** What the health check reports, to show a brain that cannot think (ready by default). */
   readonly availability?: RuntimeAvailability;
+  /** Whether the fake pretends its sandbox started ("on", the default) or cannot start on this hub. */
+  readonly sandbox?: "on" | "unavailable";
   /** Decides scripted tool calls; without it a turn has no tools. */
   readonly engine?: PolicyEngine["Service"];
 }
+
+/** What the fake runtime claims to enforce. Nothing is run, so its claims are about decisions only. */
+export const fakeEnforcement = (sandbox: "on" | "unavailable"): RuntimeEnforcement => ({
+  toolInterception: {
+    status: "verified",
+    evidence: "The fake decides every scripted tool call with the policy engine.",
+  },
+  processSandbox:
+    sandbox === "on"
+      ? { status: "verified", evidence: "The fake pretends its sandbox started." }
+      : { status: "unsupported", evidence: "The fake pretends the sandbox cannot start on this hub." },
+  hubTools: { status: "unsupported", evidence: "Charms and coordination tools are not served yet." },
+  toolEvents: { status: "verified", evidence: "The fake reports each scripted call's start, finish or denial." },
+  toolInterruption: { status: "verified", evidence: "Cancelling the turn ends the fake's stream." },
+});
 
 /**
  * Prompts that make the fake runtime end a turn the way a provider can, so every chat state can be
@@ -88,10 +111,11 @@ const scriptedInput = (tool: string, argument: string): Record<string, unknown> 
 export const scriptedToolEvents = (
   request: PromptRequest,
   engine: PolicyEngine["Service"] | undefined,
+  sandbox: "on" | "unavailable" = "on",
 ): Effect.Effect<ReadonlyArray<RuntimeEvent>> =>
   Effect.gen(function* () {
-    // The fake pretends its sandbox started, so commands are decided as on a supported hub.
-    const turn = engine ? toolTurn(request.tools, "on") : null;
+    // Commands are decided as on a hub where the sandbox started, or where it cannot start.
+    const turn = engine ? toolTurn(request.tools, sandbox) : null;
     if (engine === undefined || turn === null) return [];
     const calls = request.prompt
       .split("\n")
@@ -153,6 +177,8 @@ export const scriptedToolEvents = (
  */
 export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   const availability = options.availability ?? "ready";
+  const sandbox = options.sandbox ?? "on";
+  const enforcement = fakeEnforcement(sandbox);
   const sessions = new Map<string, string>();
   const sendPrompt = (request: PromptRequest): Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached> => {
     // A brain that is not ready cannot start a turn, as with the real runtime.
@@ -189,7 +215,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
             )
           : Stream.empty;
     const stream = Stream.unwrap(
-      Effect.map(scriptedToolEvents(request, options.engine), (tools) =>
+      Effect.map(scriptedToolEvents(request, options.engine, sandbox), (tools) =>
         // Tool calls come after the thinking step, before the reply is written.
         Stream.fromIterable([...events.slice(0, 3), ...tools, ...events.slice(3)]),
       ),
@@ -213,9 +239,11 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
         version: "fake",
         detail: "Fake runtime (no model calls)",
         checkedAt: null,
+        enforcement,
       }),
     ),
     models: Effect.succeed(fakeModels),
+    enforcement: Effect.succeed(enforcement),
     sendPrompt,
   });
 };

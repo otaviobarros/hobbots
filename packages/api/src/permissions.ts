@@ -5,6 +5,7 @@ import {
   PolicyDecision,
   PolicyOperation,
   PolicyOverrides,
+  RuntimeEnforcement,
   SafetyPreset,
 } from "@hobbots/domain";
 import { Schema } from "effect";
@@ -27,6 +28,11 @@ export const HobPermissions = Schema.Struct({
   folders: Schema.Array(Schema.String),
   /** Per operation, the narrower of the preset and the hob's override. */
   decisions: Schema.Record(PolicyOperation, PolicyDecision),
+  /**
+   * What the hob's runtime enforces on this hub. Where the process sandbox is unsupported, commands,
+   * local Git and the web are blocked whatever the decisions say.
+   */
+  enforcement: RuntimeEnforcement,
 });
 export type HobPermissions = typeof HobPermissions.Type;
 

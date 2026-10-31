@@ -12,6 +12,7 @@ import {
 import { Context, Effect, Layer } from "effect";
 import { sameFolderIn } from "./folders.ts";
 import { FolderChecks, type FolderChecksShape, InstallationSettings } from "./ports.ts";
+import { RuntimeAdapter } from "./runtime.ts";
 
 /**
  * The folders a hob works in: the shared folders it does not hide, then its own (ADR 014). A shared
@@ -41,7 +42,10 @@ const effectiveDecisions = (
     }),
   ) as Record<PolicyOperation, PolicyDecision>;
 
-/** A hob's policy with what it adds up to under the installation's current preset and shared folders. */
+/**
+ * A hob's policy with what it adds up to under the installation's current preset and shared folders,
+ * and what its runtime enforces on this hub, so the profile never shows an unheld rule as safe (PE-005).
+ */
 export class PermissionSummary extends Context.Service<
   PermissionSummary,
   { readonly of: (agent: Agent) => Effect.Effect<HobPermissions> }
@@ -51,6 +55,7 @@ export class PermissionSummary extends Context.Service<
     Effect.gen(function* () {
       const setup = yield* InstallationSettings;
       const folders = yield* FolderChecks;
+      const runtime = yield* RuntimeAdapter;
       return PermissionSummary.of({
         of: (agent) =>
           Effect.gen(function* () {
@@ -63,6 +68,7 @@ export class PermissionSummary extends Context.Service<
               policy: agent.policy,
               folders: yield* effectiveFolders(folders, approvedFolders, agent.policy),
               decisions: effectiveDecisions(safetyPreset, agent.policy.overrides),
+              enforcement: yield* runtime.enforcement,
             } satisfies HobPermissions;
           }),
       });

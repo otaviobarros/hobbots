@@ -3,6 +3,7 @@ import type {
   HobPolicy,
   PolicyOperation,
   PolicyOverrides,
+  RuntimeEnforcement,
   RuntimeHealth,
   RuntimeModels,
   SafetyPreset,
@@ -128,32 +129,12 @@ export interface PromptRequest {
   readonly tools?: ToolAccess | null;
 }
 
-/** Whether an enforcement capability holds for the installed runtime on this hub (ADR 014). */
-export interface CapabilityStatus {
-  readonly status: "verified" | "unsupported" | "unverified";
-  readonly evidence: string;
-}
-
-/** What an adapter enforces. An unverified capability counts as missing. */
-export interface EnforcementDeclaration {
-  /** Every tool call reaches the policy hook first, and nothing is loaded from settings on disk. */
-  readonly toolInterception: CapabilityStatus;
-  /** The runtime starts inside Hobbots' sandbox. Without it, commands and the web are blocked. */
-  readonly processSandbox: CapabilityStatus;
-  /** Charms and coordination tools served over the runtime's control channel. */
-  readonly hubTools: CapabilityStatus;
-  /** Tool start, finish and denial are reported. */
-  readonly toolEvents: CapabilityStatus;
-  /** A running tool can be stopped. */
-  readonly toolInterruption: CapabilityStatus;
-}
-
 export interface RuntimeAdapterShape {
   readonly health: Effect.Effect<RuntimeHealth>;
   /** Models a hob can choose, from the runtime when it reports them, otherwise a documented list. */
   readonly models: Effect.Effect<RuntimeModels>;
-  /** What this adapter enforces on this hub, as evidence for health and the docs; absent, it claims nothing. */
-  readonly enforcement?: Effect.Effect<EnforcementDeclaration>;
+  /** What this adapter enforces on this hub, for the hob profile; health reports the same. */
+  readonly enforcement: Effect.Effect<RuntimeEnforcement>;
   /** Runs one turn. Interrupting the stream cancels the turn. */
   readonly sendPrompt: (request: PromptRequest) => Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached>;
 }

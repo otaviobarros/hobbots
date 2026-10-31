@@ -40,6 +40,7 @@ const HangingRuntime = Layer.succeed(
   RuntimeAdapter.of({
     health: Effect.die("unused"),
     models: Effect.die("unused"),
+    enforcement: Effect.die("unused"),
     sendPrompt: () =>
       Stream.fromIterable<RuntimeEvent>([
         { _tag: "SessionStarted", sessionId: "hanging", billing: "fake" },

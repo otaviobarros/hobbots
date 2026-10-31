@@ -46,6 +46,7 @@ const makeSlowRuntime = (confirm: Deferred.Deferred<void>) =>
     RuntimeAdapter.of({
       health: Effect.die("unused"),
       models: Effect.die("unused"),
+      enforcement: Effect.die("unused"),
       sendPrompt: () =>
         Stream.fromIterable<RuntimeEvent>([
           { _tag: "SessionStarted", sessionId: "slow", billing: "fake" },
