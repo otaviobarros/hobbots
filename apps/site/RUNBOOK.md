@@ -123,7 +123,10 @@ The site should cost nothing or close to it. Cloudflare has no hard spending cap
 - **R2** bills storage and operations past its free tier, and egress is free. Keep only the current teaser in the bucket.
 - **Budget alert.** Under Billing › Billable Usage, add a budget alert at a small amount, such as 5 USD, sent to the maintainer's email. It warns and does not stop anything.
 - **Usage notifications.** Under Notifications › Add, add a Billable Usage notification for each product the site uses that the list offers, such as Workers and R2, at a threshold well above normal traffic.
-- If an alert fires, check Workers & Pages and R2 for the traffic. To stop costs at once, remove the custom domain from the Worker or the bucket.
+- If an alert fires, find the product that is billing under Billing › Billable Usage, then act on that product:
+  - **Worker requests:** remove the custom domain from `hobbots-site-production`. That stops requests to the site, not to `media.hobbots.app`.
+  - **R2 operations:** remove the custom domain from `hobbots-media`. That stops public reads of the media.
+  - **R2 storage:** removing a domain changes nothing. Only deleting objects with `wrangler r2 object delete` lowers it.
 
 ## Common tasks
 
@@ -142,12 +145,18 @@ The file holds personal data. Keep it out of the repository and delete it once i
 
 ### Remove someone from the wait-list
 
+`d1 execute` cannot bind parameters, so the address goes into the SQL text. Read it with `read -r`, so the shell takes it as typed, and double each `'`, so an address such as `o'brien@example.com` stays one SQL string:
+
 ```sh
+read -r -p "Email to remove: " EMAIL
+SQL_EMAIL=$(printf '%s' "$EMAIL" | sed "s/'/''/g")
 wrangler d1 execute hobbots-waitlist-production --env production --remote \
-  --command "DELETE FROM waitlist WHERE email = lower(trim('<email>'))"
+  --command "SELECT email FROM waitlist WHERE email = lower(trim('$SQL_EMAIL'))"
+wrangler d1 execute hobbots-waitlist-production --env production --remote \
+  --command "DELETE FROM waitlist WHERE email = lower(trim('$SQL_EMAIL'))"
 ```
 
-Emails are stored trimmed and lowercased, so this matches however the person typed it. Remove them from any exported CSV too.
+The `SELECT` shows the row first. If it returns nothing, check the address before deleting. Emails are stored trimmed and lowercased, so this matches however the person typed it. Remove them from any exported CSV too.
 
 ### Rotate a deploy token
 
