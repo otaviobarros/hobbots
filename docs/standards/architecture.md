@@ -14,7 +14,7 @@ Code belongs to one of four layers. A layer imports only from the layers inside 
 Composition imports adapters, adapters import application code, and application code imports the domain. `packages/api` holds the HTTP contract as Schemas, so both the server and the clients may import it.
 
 - **Why:** inner layers stay testable without I/O, and a change to an adapter never ripples into the domain.
-- **Enforced by:** each package's `package.json` declares only the workspace packages its layer allows, and pnpm blocks undeclared imports. Review covers imports inside a package.
+- **Enforced by:** `scripts/check-layers.mjs` in `pnpm check` (`pnpm lint:layers`) fails when a package declares a workspace package its layer does not allow. The table in `scripts/layers.mjs` is the source of truth for each package's layer, and an exception there carries a comment with its reason. pnpm blocks imports a package does not declare. Biome `noNodejsModules` in `biome.json` keeps browser code off Node modules, with or without the `node:` prefix. `scripts/layers.test.mjs` and `scripts/import-rules.test.mjs` prove these checks. Review covers imports inside a package.
 - **Applies to:** `apps/*`, `packages/*`.
 
 ### STD-ARCH-002 Domain code is pure
@@ -22,7 +22,7 @@ Composition imports adapters, adapters import application code, and application 
 Domain code does no I/O and imports nothing except `effect` and other domain modules. It never imports `node:*`, SQL clients, runtime SDKs, React or another workspace package.
 
 - **Why:** every other layer depends on the domain, so it must run anywhere and stay deterministic.
-- **Enforced by:** review.
+- **Enforced by:** Biome `noRestrictedImports` on `packages/domain/src` in `biome.json` allows only `effect` and relative imports, and `noNodejsModules` rejects Node modules. `scripts/layers.mjs` allows only `effect` as a runtime dependency of `@hobbots/domain`.
 - **Applies to:** `packages/domain`.
 
 ### STD-ARCH-003 Use cases reach the outside world through ports
@@ -30,7 +30,7 @@ Domain code does no I/O and imports nothing except `effect` and other domain mod
 A use case reaches storage, runtimes, the clock or the network only through a **port**. A port is an Effect service whose interface the application layer defines, for example `ThreadRepository` or `RuntimeAdapter`. A use case never imports a concrete adapter.
 
 - **Why:** a test swaps the port for a fake, and an adapter can change without touching the use case.
-- **Enforced by:** review.
+- **Enforced by:** Biome `noNodejsModules` and `noRestrictedImports` on `packages/agents/src` block Node, platform and runtime SDK imports, and `scripts/check-layers.mjs` blocks adapter packages. Review covers ports in `apps/server`.
 - **Applies to:** application code in feature packages and in `apps/server`.
 
 ### STD-ARCH-004 Adapters own all I/O
