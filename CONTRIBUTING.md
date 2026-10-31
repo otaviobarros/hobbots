@@ -3,7 +3,7 @@
 Thanks for helping build Hobbots. Start here:
 
 - **Issues and planning:** [how issues, labels, triage and the project board work](docs/contributing/issues-and-board.md).
-- **Code and architecture:** [AGENTS.md](AGENTS.md) lists the docs to read and the rules every change follows, for people and coding agents alike.
+- **Code and architecture:** the [engineering standards](docs/standards/README.md) hold the rules every change follows, each with a stable ID. [AGENTS.md](AGENTS.md) lists the docs to read for each area, for people and coding agents alike.
 - **Running it:** see [Run from source](README.md#run-from-source) in the README, and run `pnpm check` before opening a pull request.
 - **Commits:** use [Conventional Commits](https://www.conventionalcommits.org/); they decide the next version, as [Releases](docs/contributing/releases.md) explains.
 
