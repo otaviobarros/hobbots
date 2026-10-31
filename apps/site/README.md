@@ -36,9 +36,9 @@ Only the interactive parts run script, all from `src/scripts/page.ts`: clicking 
 
 ## Share card and search
 
-`src/components/Meta.astro` writes the page's title, description, canonical URL (always `https://hobbots.app/`), Open Graph and X card tags, and icon links; the words are `SHARE` in `src/data/copy.ts`. The card image, `public/og.png`, is the teaser poster cropped to 1280 × 672 and scaled to 1200 × 630. `public/robots.txt` and `public/sitemap.xml` point crawlers at the one page.
+`src/components/Meta.astro` writes the page's title, description, canonical URL (always `https://hobbots.app/`), Open Graph and X card tags, and icon links; the words are `SHARE` in `src/data/copy.ts`. The card image, `public/og.png`, is the teaser poster cropped to 1280 × 672 and scaled to 1200 × 630: `magick public/teaser/poster.webp -crop 1280x672+0+0 +repage -filter Lanczos -resize 1200x630! -strip public/og.png`. Card checkers such as opengraph.xyz and X read `https://hobbots.app`, so check the card once production is live. `public/robots.txt` and `public/sitemap.xml` point crawlers at the one page.
 
-Only a build with `CLOUDFLARE_ENV=production` may be indexed. Every other build (local, staging, pull request previews) adds `<meta name="robots" content="noindex, nofollow">`, so never build a preview with `CLOUDFLARE_ENV=production`.
+Only a build with `CLOUDFLARE_ENV=production` may be indexed. Every other build (local, staging, pull request previews) adds `<meta name="robots" content="noindex, nofollow">`, so never build a preview with `CLOUDFLARE_ENV=production`. A production build served from its `workers.dev` or version preview URL is not noindex; its canonical URL still points at hobbots.app.
 
 The favicons in `public/` (`favicon.svg`, `favicon.ico` and the 180 px `apple-touch-icon.png`) are drawn from the app icon's grid in `apps/desktop/scripts/app-icon.ts`. Run `pnpm --filter @hobbots/site icons` after changing the art.
 

@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 const content = (page: import("@playwright/test").Page, selector: string) =>
   page.locator(selector).getAttribute("content");
 
-// The share card, icons and crawler files that #186 adds. The local build has no CLOUDFLARE_ENV, like a preview.
 test("[TC-GEN-014] shows the share card and icons, and serves every file they name", async ({ page, request }) => {
+  // covers #186
   await page.goto("/");
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://hobbots.app/");
   expect(await content(page, 'meta[name="twitter:card"]')).toBe("summary_large_image");
@@ -32,6 +32,7 @@ test("[TC-GEN-014] shows the share card and icons, and serves every file they na
 });
 
 test("[TC-GEN-015] keeps a build that is not for production out of search results", async ({ page }) => {
+  // covers #186. The local build has no CLOUDFLARE_ENV, like a pull request preview.
   await page.goto("/");
   expect(await content(page, 'meta[name="robots"]')).toBe("noindex, nofollow");
 });

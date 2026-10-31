@@ -1,7 +1,16 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { iconIco, iconSvg, touchIcon } from "../scripts/icons.ts";
 
+const published = (name: string) => readFileSync(new URL(`../public/${name}`, import.meta.url));
+
 describe("site icons", () => {
+  it("publishes the icons the script draws from the current art", () => {
+    expect(published("favicon.svg").toString("utf8")).toBe(iconSvg());
+    expect(published("favicon.ico")).toEqual(iconIco([16, 32]));
+    expect(published("apple-touch-icon.png")).toEqual(touchIcon());
+  });
+
   it("draws the favicon on the app icon's 32-cell grid", () => {
     const svg = iconSvg();
     expect(svg).toContain('viewBox="0 0 32 32"');
