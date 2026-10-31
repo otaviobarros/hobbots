@@ -34,11 +34,21 @@ export interface FakeRuntimeOptions {
   readonly stopDelay?: string;
 }
 
-/** Deterministic adapter for tests and UI work without model usage. */
+/** Asked this, the fake runtime answers with the instructions its session follows instead of an echo. */
+export const fakeInstructionsPrompt = "/instructions";
+
+/**
+ * Deterministic adapter for tests and UI work without model usage. Like Claude Code, a resumed session
+ * keeps the instructions it started with unless the turn carries changed ones.
+ */
 export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
+  const sessions = new Map<string, string>();
   const sendPrompt = (request: PromptRequest) => {
     const sessionId = request.sessionId ?? `fake-${crypto.randomUUID()}`;
-    const reply = `Echo: ${request.prompt}`;
+    const known = sessions.get(sessionId);
+    const followed = known === undefined || request.instructionsChanged ? request.instructions : known;
+    sessions.set(sessionId, followed);
+    const reply = request.prompt === fakeInstructionsPrompt ? followed : `Echo: ${request.prompt}`;
     const words = reply.split(/(?<= )/);
     const events: Array<RuntimeEvent> = [
       { _tag: "SessionStarted", sessionId, billing: "fake" },

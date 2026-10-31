@@ -27,6 +27,8 @@ Each adapter also declares its enforcement capabilities (tool interception, proc
 
 Classify each capability as verified supported, unsupported, conditional or unverified, with runtime version, test date and evidence. All live capability entries are currently **unverified**. The selected integration strategy is not proof that a runtime supports every product feature.
 
+Evidence so far: a resumed Claude Code session (2.1.301) keeps the system prompt it started with and ignores the one passed with a new turn, including `--append-system-prompt`, a full `--system-prompt` and `--fork-session`. So when a hob's instructions change after a thread's session started, the adapter carries the new instructions inside the next turn instead of the system prompt, which keeps the session's context.
+
 Expose unsupported previews and unavailable safe policies honestly. A text URL is not a live browser. A process exit is not necessarily a closed Quest. Cancellation acknowledgement and session resume must be checked rather than inferred.
 
 ## Verification strategy
