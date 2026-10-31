@@ -29,7 +29,14 @@ import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { adoptSession, parseKeychainLogin, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { makeFakeRuntime } from "../src/fake.ts";
-import { decideForLiveTurns, ProcessSandbox, sandboxEnv, sandboxFilesystem, sandboxGitConfig } from "../src/sandbox.ts";
+import {
+  decideForLiveTurns,
+  ProcessSandbox,
+  readGitIdentity,
+  sandboxEnv,
+  sandboxFilesystem,
+  sandboxGitConfig,
+} from "../src/sandbox.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hooks-")));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -581,6 +588,20 @@ describe("the process sandbox", () => {
     expect(sandboxGitConfig({ name: 'Ada "x"\\\n[core]\nhooksPath = /tmp' })).toBe(
       '[user]\n\tname = "Ada \\"x\\"\\\\[core]hooksPath = /tmp"\n',
     );
+  });
+
+  it("reads the user's Git identity from a file their global config includes", async () => {
+    const home = mkdtempSync(join(tmpdir(), "hobbots-git-home-"));
+    try {
+      writeFileSync(join(home, "identity.gitconfig"), "[user]\n\tname = Ada Lovelace\n\temail = ada@example.com\n");
+      writeFileSync(join(home, ".gitconfig"), `[include]\n\tpath = ${join(home, "identity.gitconfig")}\n`);
+      const { GIT_CONFIG_GLOBAL: _global, ...env } = process.env;
+      expect(
+        await readGitIdentity({ ...env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), GIT_CONFIG_NOSYSTEM: "1" }),
+      ).toEqual({ name: "Ada Lovelace", email: "ada@example.com" });
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it("reaches a host only when every live turn may reach it", async () => {

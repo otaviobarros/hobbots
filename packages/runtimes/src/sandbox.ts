@@ -179,10 +179,13 @@ export const sandboxGitConfig = (identity: GitIdentity): string => {
   return entries.length === 0 ? "" : `[user]\n${entries.join("\n")}\n`;
 };
 
-/** Reads the user's Git identity on the hub, outside the sandbox. Missing Git or settings give none. */
-export const readGitIdentity = async (): Promise<GitIdentity> => {
+/**
+ * Reads the user's Git identity on the hub, outside the sandbox. Missing Git or settings give none.
+ * Files the global config includes count, since many people keep their identity in one.
+ */
+export const readGitIdentity = async (env: NodeJS.ProcessEnv = process.env): Promise<GitIdentity> => {
   const read = (key: string) =>
-    promisify(execFile)("git", ["config", "--global", "--get", key], { timeout: 5_000 }).then(
+    promisify(execFile)("git", ["config", "--global", "--includes", "--get", key], { timeout: 5_000, env }).then(
       ({ stdout }) => stdout.trim() || undefined,
       () => undefined,
     );
@@ -292,7 +295,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
         });
       }
       // Read once for the hub, so the user's Git runs once rather than on every turn.
-      const gitIdentity = yield* Effect.promise(readGitIdentity);
+      const gitIdentity = yield* Effect.promise(() => readGitIdentity());
       // The live turns' host rules, by the id their processes present to the proxy.
       const liveTurns = new Map<string, HostDecider>();
       const started = yield* Effect.acquireRelease(
