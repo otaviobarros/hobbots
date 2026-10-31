@@ -124,6 +124,18 @@ describe("tools offered for a turn", () => {
   it("keeps a tool a restriction only narrows to Ask, since each call is still decided", () => {
     expect(offeredTools(context({ restrictions: [{ "edit-files": "ask" }] }))).toContain("Edit");
   });
+
+  it("[TC-PE-019] leaves out commands unless the hob may read and edit its folders without asking", () => {
+    // covers PE-005
+    // A command reads and writes files without a call per file, so it would get past the narrower answer.
+    for (const restriction of [
+      { "edit-files": "ask" },
+      { "edit-files": "deny" },
+      { "read-files": "ask" },
+      { "read-files": "deny" },
+    ] as const)
+      expect(offeredTools(context({ restrictions: [restriction] }))).not.toContain("Bash");
+  });
 });
 
 describe("combining verdicts", () => {

@@ -2,11 +2,13 @@ import { HobbotsApi } from "@hobbots/api";
 import { SetupRepository } from "@hobbots/persistence";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
+import { ChatService } from "./chat.ts";
 import { checkFolder } from "./folders.ts";
 
 export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers) =>
   Effect.gen(function* () {
     const setup = yield* SetupRepository;
+    const chat = yield* ChatService;
     return handlers.handleAll({
       get: () => setup.get,
       // Folders are checked on the hub and stored resolved. A folder or provider added twice is
@@ -16,11 +18,14 @@ export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers
           const folders =
             payload.approvedFolders &&
             (yield* Effect.forEach(payload.approvedFolders, (folder) => checkFolder(folder)));
-          return yield* setup.update({
+          const updated = yield* setup.update({
             ...payload,
             ...(folders && { approvedFolders: [...new Set(folders)] }),
             ...(payload.connectedProviders && { connectedProviders: [...new Set(payload.connectedProviders)] }),
           });
+          // A narrower preset or a removed folder also reaches the turns already running (PE-008).
+          yield* chat.reviewAuthority();
+          return updated;
         }),
     });
   }),

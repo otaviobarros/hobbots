@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -150,6 +151,12 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(toolTurn(null, "on")).toBeNull();
     expect(toolTurn({ ...access(), folders: [join(root, "missing")] }, "on")).toBeNull();
   });
+
+  it("keeps a turn chat-only when the hob may not read its folders", () => {
+    // covers PE-005
+    // Claude Code cannot start in a folder it cannot read, and no tool works without reading it.
+    expect(toolTurn(access({ ...EMPTY_HOB_POLICY, overrides: { "read-files": "deny" } }), "on")).toBeNull();
+  });
 });
 
 describe("scripted tool calls in the fake runtime", () => {
@@ -241,12 +248,49 @@ describe("sessions across configuration folders", () => {
     expect(readFileSync(join(user, "projects", "-work", "s3.jsonl"), "utf8")).toBe("one\n");
     expect(existsSync(join(user, "projects", "-work", "s3", "agent.jsonl"))).toBe(false);
   });
+
+  it("[TC-PE-018] never follows a linked folder on the way to a session", () => {
+    // covers PE-005
+    const elsewhere = join(outside, "elsewhere");
+    mkdirSync(join(elsewhere, "-work"), { recursive: true });
+    writeFileSync(join(elsewhere, "-work", "s4.jsonl"), "outside\n");
+    // A hob's project folder that points outside is not a copy to take.
+    const hob = join(runtimes, "hob-linked-source");
+    mkdirSync(join(hob, "projects"), { recursive: true });
+    symlinkSync(join(elsewhere, "-work"), join(hob, "projects", "-work"));
+    const user = join(root, "user-claude-4");
+    adoptSession(user, [hob], "s4");
+    expect(existsSync(join(user, "projects", "-work", "s4.jsonl"))).toBe(false);
+    // Nor a place to write: the copy is refused when the target's folder, or its projects, is a link.
+    const writer = join(root, "user-claude-5");
+    mkdirSync(join(writer, "projects", "-work"), { recursive: true });
+    writeFileSync(join(writer, "projects", "-work", "s5.jsonl"), "mine\n");
+    for (const linked of ["-work", "projects"]) {
+      const target = join(runtimes, `hob-linked-${linked}`);
+      mkdirSync(join(target, "projects"), { recursive: true });
+      if (linked === "projects") {
+        rmSync(join(target, "projects"), { recursive: true });
+        symlinkSync(elsewhere, join(target, "projects"));
+      } else symlinkSync(join(elsewhere, "-work"), join(target, "projects", "-work"));
+      adoptSession(target, [writer], "s5");
+      expect(existsSync(join(elsewhere, "-work", "s5.jsonl"))).toBe(false);
+    }
+    // A link where the transcript goes is replaced, not written through.
+    const replaced = join(runtimes, "hob-linked-file");
+    mkdirSync(join(replaced, "projects", "-work"), { recursive: true });
+    symlinkSync(join(elsewhere, "-work", "s5.jsonl"), join(replaced, "projects", "-work", "s5.jsonl"));
+    adoptSession(replaced, [writer], "s5");
+    expect(readFileSync(join(replaced, "projects", "-work", "s5.jsonl"), "utf8")).toBe("mine\n");
+    expect(lstatSync(join(replaced, "projects", "-work", "s5.jsonl")).isFile()).toBe(true);
+    expect(existsSync(join(elsewhere, "-work", "s5.jsonl"))).toBe(false);
+  });
 });
 
 describe("the process sandbox", () => {
   it("closes the home folder, the user's Claude Code state and other hobs' except the hob's own", () => {
     const rules = sandboxFilesystem({
       folders: ["/Volumes/Work/app"],
+      folderAccess: { read: true, write: true },
       dataFolder: "/Users/me/Library/Hobbots",
       binary: "/Users/me/.local/bin/claude",
       runtimeFolder: "/Users/me/Library/Hobbots-runtimes/hob-1",
@@ -283,6 +327,24 @@ describe("the process sandbox", () => {
       "/private/var/folders/xy/T/turn",
     ]);
     expect(rules.denyWrite).toEqual(expect.arrayContaining(["/Users/me/Library/Hobbots"]));
+  });
+
+  it("closes the folders to processes where the policy denies reading or editing them", () => {
+    const rules = (folderAccess: { read: boolean; write: boolean }) =>
+      sandboxFilesystem({
+        folders: ["/Volumes/Work/app"],
+        folderAccess,
+        dataFolder: "/Users/me/Library/Hobbots",
+        binary: "/usr/bin/claude",
+        runtimeFolder: "/Users/me/Library/Hobbots-runtimes/hob-1",
+        tempFolder: "/private/var/folders/xy/T/turn",
+        allowedHosts: [],
+        home: "/Users/me",
+        path: "/usr/bin",
+      });
+    expect(rules({ read: true, write: false }).allowWrite).not.toContain("/Volumes/Work/app");
+    expect(rules({ read: true, write: false }).allowRead).toContain("/Volumes/Work/app");
+    expect(rules({ read: false, write: false }).allowRead).not.toContain("/Volumes/Work/app");
   });
 
   it("lets only the variables a runtime needs into the sandbox", () => {
@@ -322,6 +384,7 @@ describe("the process sandbox", () => {
         expect(sandbox.state).toBe("on");
         const prepared = yield* sandbox.prepare({
           folders: [project],
+          folderAccess: { read: true, write: true },
           dataFolder: data,
           binary: "/bin/sh",
           runtimeFolder: join(runtimes, "hob-1"),
@@ -372,6 +435,45 @@ describe("the process sandbox", () => {
         } finally {
           prepared.release();
         }
+      }).pipe(Effect.provide(ProcessSandbox.layer), Effect.scoped, Effect.runPromise);
+    },
+    30_000,
+  );
+
+  // covers PE-005
+  it.runIf(process.platform === "darwin")(
+    "[TC-PE-020] fails a command that writes or reads a folder the policy closes to it",
+    async () => {
+      await Effect.gen(function* () {
+        const sandbox = yield* ProcessSandbox;
+        const run = (folderAccess: { read: boolean; write: boolean }, script: string) =>
+          Effect.acquireUseRelease(
+            sandbox.prepare({
+              folders: [project],
+              folderAccess,
+              dataFolder: data,
+              binary: "/bin/sh",
+              runtimeFolder: join(runtimes, "hob-1"),
+              allowedHosts: [],
+            }),
+            (prepared) =>
+              Effect.sync(() => {
+                const { command, args, env } = prepared.spawnArgs("/bin/sh", ["-c", script], { PATH: "/usr/bin:/bin" });
+                return spawnSync(command, [...args], { cwd: runtimes, env, encoding: "utf8" });
+              }),
+            (prepared) => Effect.sync(prepared.release),
+          );
+        writeFileSync(join(project, "kept.txt"), "kept\n");
+        // Editing denied: a command cannot change a file, while reading it still works.
+        expect(
+          (yield* run({ read: true, write: false }, `printf changed > ${join(project, "kept.txt")}`)).status,
+        ).not.toBe(0);
+        expect(readFileSync(join(project, "kept.txt"), "utf8")).toBe("kept\n");
+        expect((yield* run({ read: true, write: false }, `cat ${join(project, "kept.txt")}`)).stdout).toBe("kept\n");
+        // Reading denied too: a command cannot read it either.
+        const read = yield* run({ read: false, write: false }, `cat ${join(project, "kept.txt")}`);
+        expect(read.status).not.toBe(0);
+        expect(read.stdout).not.toContain("kept");
       }).pipe(Effect.provide(ProcessSandbox.layer), Effect.scoped, Effect.runPromise);
     },
     30_000,

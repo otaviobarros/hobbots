@@ -32,11 +32,15 @@ export const operationDecision = (
 
 /**
  * The tools offered to the runtime this turn. A tool whose operations are all denied is left out,
- * so the model does not try it; Bash also needs the sandbox. Every call is still decided one by one.
+ * so the model does not try it. Bash also needs the sandbox, and since a command reads and writes
+ * the folders without asking file by file, it is offered only when the hob may do both without
+ * asking. Every call is still decided one by one.
  */
 export const offeredTools = (context: Pick<PolicyContext, "preset" | "hob" | "restrictions" | "sandbox">) => {
   const open = (...operations: ReadonlyArray<PolicyOperation>) =>
     operations.some((operation) => operationDecision(context, operation) !== "deny");
+  const free = (...operations: ReadonlyArray<PolicyOperation>) =>
+    operations.every((operation) => operationDecision(context, operation) === "allow");
   return CLAUDE_CODE_TOOLS.filter((tool) => {
     switch (tool) {
       case "Read":
@@ -44,7 +48,9 @@ export const offeredTools = (context: Pick<PolicyContext, "preset" | "hob" | "re
       case "Grep":
         return open("read-files");
       case "Bash":
-        return context.sandbox !== "unavailable" && open("run-commands", "local-git");
+        return (
+          context.sandbox !== "unavailable" && open("run-commands", "local-git") && free("read-files", "edit-files")
+        );
       default:
         return open("edit-files");
     }

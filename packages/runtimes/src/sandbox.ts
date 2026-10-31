@@ -38,6 +38,11 @@ const DENIED_ADDRESSES = [
 /** What one turn may touch. Every path is absolute; folders are canonical. */
 export interface SandboxScope {
   readonly folders: ReadonlyArray<string>;
+  /**
+   * Whether the turn's processes may read, and write, the folders at all. Closed where the policy
+   * denies the operation, so no process reaches past a denial (STD-SEC-002).
+   */
+  readonly folderAccess: { readonly read: boolean; readonly write: boolean };
   /** Hobbots' data folder, which stays closed even inside a folder. */
   readonly dataFolder: string;
   /** The runtime's binary, absolute, whose folder (and its real location) must stay readable. */
@@ -114,8 +119,16 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
         ...userClaudeCode(home),
       ]),
     ],
-    allowRead: [...new Set([...scope.folders, scope.runtimeFolder, scope.tempFolder, ...binaryDirs, ...homeTools])],
-    allowWrite: [...scope.folders, scope.runtimeFolder, scope.tempFolder],
+    allowRead: [
+      ...new Set([
+        ...(scope.folderAccess.read ? scope.folders : []),
+        scope.runtimeFolder,
+        scope.tempFolder,
+        ...binaryDirs,
+        ...homeTools,
+      ]),
+    ],
+    allowWrite: [...(scope.folderAccess.write ? scope.folders : []), scope.runtimeFolder, scope.tempFolder],
     denyWrite: [
       scope.dataFolder,
       // Loaded later by the user's own Claude Code, outside any policy.

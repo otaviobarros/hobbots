@@ -18,11 +18,11 @@ import {
   titleFromPrompt,
 } from "@hobbots/domain";
 import { type Committed, HobbotsRepository } from "@hobbots/persistence";
-import { RuntimeAdapter, type RuntimeEvent } from "@hobbots/runtimes";
+import { RuntimeAdapter, type RuntimeEvent, type ToolAccess } from "@hobbots/runtimes";
 import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { EventBus } from "./event-bus.ts";
-import { HobTools } from "./tools.ts";
+import { HobTools, narrows } from "./tools.ts";
 
 interface Reply {
   readonly current: Ref.Ref<Message>;
@@ -82,6 +82,12 @@ export class ChatService extends Context.Service<
     ) => Effect.Effect<Message, ThreadNotFound | HobUnavailable | ReplyNotResumable>;
     /** Stops every turn the hob has in progress and waits until each has ended (stopped if the user had asked, otherwise interrupted). */
     readonly interruptAgent: (agentId: AgentId) => Effect.Effect<void>;
+    /**
+     * Stops, and waits for, every running turn of the hob (or of every hob) whose tools the current
+     * policy narrows: a folder removed, the tools taken away, or an operation's answer narrowed
+     * (PE-008). Call it once a change to the policy is saved.
+     */
+    readonly reviewAuthority: (agentId?: AgentId) => Effect.Effect<void>;
     /** Starts the hob's queued messages in threads with no turn running, as when it wakes. */
     readonly drainAgent: (agentId: AgentId) => Effect.Effect<void>;
     /** Threads with a turn in progress in this process. */
@@ -218,7 +224,28 @@ export class ChatService extends Context.Service<
           return false;
         });
 
+      // What each running turn was given to work with, so a narrower policy stops it. Reading a grant
+      // and reviewing them take turns, so no change to the policy lands between the two unseen.
+      const authority = yield* Semaphore.make(1);
+      const granted = new Map<ThreadId, { readonly agentId: AgentId; readonly access: ToolAccess | null }>();
+      const currentAccess = (agentId: AgentId) =>
+        repo
+          .findAgent(agentId)
+          .pipe(
+            Effect.flatMap(
+              Option.match({ onNone: () => Effect.succeed(null), onSome: (agent) => hobTools.access(agent) }),
+            ),
+          );
+      const grant = (threadId: ThreadId, agent: Agent) =>
+        Semaphore.withPermit(
+          authority,
+          currentAccess(agent.id).pipe(
+            Effect.tap((access) => Effect.sync(() => granted.set(threadId, { agentId: agent.id, access }))),
+          ),
+        );
+
       // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
+      // Its tools are the exception: a narrower policy stops it (reviewAuthority).
       const runTurn = (
         agent: Agent,
         config: AgentConfiguration,
@@ -315,7 +342,7 @@ export class ChatService extends Context.Service<
               instructionsChanged: changed,
               model: config.model,
               effort: config.effort,
-              tools: yield* hobTools.access(agent),
+              tools: yield* grant(thread.id, agent),
             })
             .pipe(
               Stream.runForEach(handle),
@@ -334,6 +361,7 @@ export class ChatService extends Context.Service<
           Effect.ensuring(
             Effect.sync(() => {
               if (replies.get(thread.id) === reply) replies.delete(thread.id);
+              granted.delete(thread.id);
             }),
           ),
         );
@@ -583,6 +611,18 @@ export class ChatService extends Context.Service<
         }
       });
 
+      const reviewAuthority = Effect.fn("ChatService.reviewAuthority")(function* (agentId?: AgentId) {
+        const narrowed = yield* Semaphore.withPermit(
+          authority,
+          Effect.filter(
+            Array.from(granted).filter(([, turn]) => agentId === undefined || turn.agentId === agentId),
+            ([, turn]) => Effect.map(currentAccess(turn.agentId), (access) => narrows(turn.access, access)),
+          ),
+        );
+        // Outside the permit: a turn that is stopping may still be reading its grant.
+        yield* Effect.forEach(narrowed, ([threadId]) => FiberMap.remove(turns, threadId), { discard: true });
+      });
+
       const drainAgent = Effect.fn("ChatService.drainAgent")(function* (agentId: AgentId) {
         const threads = yield* repo.threadsWithQueuedMessages;
         const own = yield* Effect.filter(threads, (threadId) =>
@@ -602,6 +642,7 @@ export class ChatService extends Context.Service<
         stop,
         continueReply,
         interruptAgent,
+        reviewAuthority,
         drainAgent,
         activeThreads,
         streamingReplies,

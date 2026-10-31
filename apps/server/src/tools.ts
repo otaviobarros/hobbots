@@ -1,8 +1,8 @@
 import { realpathSync } from "node:fs";
 import { basename, dirname, join, sep } from "node:path";
-import type { Agent } from "@hobbots/domain";
+import { type Agent, isNarrowerOrEqual, POLICY_OPERATIONS } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
-import type { ToolAccess } from "@hobbots/runtimes";
+import { operationDecision, type ToolAccess } from "@hobbots/runtimes";
 import { Context, Effect, Layer } from "effect";
 import { Installation } from "./installation.ts";
 import { effectiveFolders } from "./permissions.ts";
@@ -18,9 +18,26 @@ const holds = (folder: string, path: string) =>
   path === folder || path.startsWith(folder.endsWith(sep) ? folder : `${folder}${sep}`);
 
 /**
+ * Whether `after` takes away anything `before` gave: a folder, the tools altogether, or an operation
+ * whose answer gets narrower. A turn granted `before` must then stop, since its calls and commands
+ * already run under what it was given (PE-008).
+ */
+export const narrows = (before: ToolAccess | null, after: ToolAccess | null): boolean => {
+  if (before === null) return false;
+  if (after === null || after.policy.dataFolder !== before.policy.dataFolder) return true;
+  if (before.folders.some((folder) => !after.folders.includes(folder))) return true;
+  return POLICY_OPERATIONS.some((operation) => {
+    const was = operationDecision(before.policy, operation);
+    const is = operationDecision(after.policy, operation);
+    return is !== was && isNarrowerOrEqual(is, was);
+  });
+};
+
+/**
  * What a hob may do with tools on its next turn (ADR 014): the installation's preset and shared
  * folders, the hob's own policy and folders, and Hobbots' data folder, which stays closed. Read at
- * the start of every turn, so a change applies from the next one.
+ * the start of every turn. A change applies from the next one, and a narrower one also stops the
+ * turns already running (see `narrows`).
  */
 export class HobTools extends Context.Service<
   HobTools,

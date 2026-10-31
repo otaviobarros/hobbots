@@ -2,11 +2,13 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import {
   accessSync,
   constants,
+  copyFileSync,
   cpSync,
   lstatSync,
   mkdirSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
 } from "node:fs";
@@ -40,7 +42,7 @@ import {
   type ToolAccess,
 } from "./adapter.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, ProcessSandbox } from "./sandbox.ts";
-import { narrowestVerdict, offeredTools, toolLabel, toolRequests } from "./tool-calls.ts";
+import { narrowestVerdict, offeredTools, operationDecision, toolLabel, toolRequests } from "./tool-calls.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
@@ -154,11 +156,14 @@ const sandboxLogin = (binary: string): Effect.Effect<Record<string, string>, Run
  */
 export const adoptSession = (target: string, sources: ReadonlyArray<string>, sessionId: string) => {
   const file = `${sessionId}.jsonl`;
+  // A hob's commands can write its runtime folder, so any part of a session's path there may be a
+  // link. Only real folders and files are followed, or a copy could read or write wherever one points.
+  const isFolder = (path: string) => lstatSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
   const copiesIn = (folder: string) => {
+    if (!isFolder(join(folder, "projects"))) return [];
     try {
       return readdirSync(join(folder, "projects")).flatMap((project) => {
-        // Only a regular file: a hob's commands can write its folder, and a link there would make an
-        // unsandboxed turn write wherever it points.
+        if (!isFolder(join(folder, "projects", project))) return [];
         const transcript = lstatSync(join(folder, "projects", project, file), { throwIfNoEntry: false });
         return transcript?.isFile() ? [{ folder, project, written: transcript.mtimeMs }] : [];
       });
@@ -172,18 +177,27 @@ export const adoptSession = (target: string, sources: ReadonlyArray<string>, ses
     undefined,
   );
   if (latest === undefined || latest.folder === target) return;
+  const from = join(latest.folder, "projects", latest.project);
+  const to = join(target, "projects", latest.project);
   try {
+    for (const path of [join(target, "projects"), to])
+      if (lstatSync(path, { throwIfNoEntry: false }) !== undefined && !isFolder(path)) return;
     // An older copy left in another project folder would compete with the new one.
     for (const old of held) {
       rmSync(join(target, "projects", old.project, file), { force: true });
       rmSync(join(target, "projects", old.project, sessionId), { recursive: true, force: true });
     }
-    const from = join(latest.folder, "projects", latest.project);
-    const to = join(target, "projects", latest.project);
     mkdirSync(to, { recursive: true, mode: 0o700 });
-    cpSync(join(from, file), join(to, file));
+    if (realpathSync(to) !== join(realpathSync(target), "projects", latest.project)) return;
+    // Copied beside the transcript and renamed over it, which replaces a link there instead of
+    // writing through it.
+    const partial = join(to, `.${file}.${process.pid}.partial`);
+    rmSync(partial, { force: true });
+    copyFileSync(join(from, file), partial, constants.COPYFILE_EXCL);
+    renameSync(partial, join(to, file));
     // Some sessions keep more beside the transcript, such as subagent runs.
-    if (lstatSync(join(from, sessionId), { throwIfNoEntry: false })?.isDirectory())
+    rmSync(join(to, sessionId), { recursive: true, force: true });
+    if (isFolder(join(from, sessionId)))
       cpSync(join(from, sessionId), join(to, sessionId), {
         recursive: true,
         filter: (path) => !lstatSync(path).isSymbolicLink(),
@@ -528,7 +542,10 @@ export interface ToolTurn {
   readonly runtimeFolder: string;
 }
 
-/** The turn's tools, or null for a chat-only turn: no access, no folder that exists, or no tool open. */
+/**
+ * The turn's tools, or null for a chat-only turn: no access, no folder that exists, reading the
+ * folders denied (Claude Code cannot start in a folder it cannot read), or no tool open.
+ */
 export const toolTurn = (access: ToolAccess | null | undefined, sandbox: SandboxState): ToolTurn | null => {
   if (!access) return null;
   const folders = [
@@ -544,6 +561,7 @@ export const toolTurn = (access: ToolAccess | null | undefined, sandbox: Sandbox
   ];
   if (folders.length === 0) return null;
   const context: PolicyContext = { ...access.policy, sandbox, modelHosts: CLAUDE_CODE_MODEL_HOSTS };
+  if (operationDecision(context, "read-files") === "deny") return null;
   const tools = offeredTools(context);
   return tools.length === 0 ? null : { context, folders, tools, runtimeFolder: access.runtimeFolder };
 };
@@ -745,6 +763,11 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
             ? yield* Effect.acquireRelease(
                 sandbox.prepare({
                   folders: tools.folders,
+                  // What any call the policy lets through may need; a denied operation stays closed.
+                  folderAccess: {
+                    read: operationDecision(tools.context, "read-files") !== "deny",
+                    write: operationDecision(tools.context, "edit-files") !== "deny",
+                  },
                   dataFolder: tools.context.dataFolder,
                   binary: absoluteBinary,
                   runtimeFolder: tools.runtimeFolder,

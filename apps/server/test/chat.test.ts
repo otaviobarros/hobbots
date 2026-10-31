@@ -13,7 +13,7 @@ import {
 import { PolicyEngine } from "@hobbots/permissions";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FAKE_DIRECTIVES, FakeRuntimeLayer, fakeCutOffError } from "@hobbots/runtimes";
+import { FAKE_DIRECTIVES, FakeRuntimeLayer, fakeCutOffError, type ToolAccess } from "@hobbots/runtimes";
 import { Effect, Layer, Option, PubSub, Schedule } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { HobAdmission } from "../src/admission.ts";
@@ -282,5 +282,58 @@ describe("tool calls in a reply", () => {
       { id: "thinking-1", kind: "thinking", label: "Thinking", state: "done" },
       { id: "fake-tool-1", kind: "tool", label: "Editing a.ts", state: "done" },
     ]);
+  });
+
+  // covers PE-008
+  it("[TC-PE-021] stops a running turn once its hob's policy narrows, and keeps it when the policy widens", async () => {
+    // The policy as saved right now; each case changes it while the turn runs.
+    let restrictions: ToolAccess["policy"]["restrictions"] = [{ "edit-files": "ask" }];
+    let folders = [folder];
+    const changing = Layer.succeed(
+      HobTools,
+      HobTools.of({
+        access: () =>
+          Effect.sync(() => ({
+            policy: {
+              preset: "balanced" as const,
+              sharedFolders: folders,
+              hob: EMPTY_HOB_POLICY,
+              dataFolder: join(root, "data"),
+              restrictions,
+            },
+            folders,
+            runtimeFolder: join(root, "runtimes", HOB_ID),
+          })),
+      }),
+    );
+    const statusAfter = (change: () => void) =>
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const thread = yield* chat.createThread(HOB_ID);
+        yield* chat.sendPrompt(thread.id, "one two three four five six seven eight nine ten");
+        const reply = repo.listMessages(thread.id).pipe(Effect.map((messages) => messages.at(-1)));
+        // Text is streaming, so the turn already holds what it was given.
+        yield* chat.streamingReplies.pipe(
+          Effect.flatMap((replies) => (replies.some((m) => m.content !== "") ? Effect.void : Effect.fail("waiting"))),
+          Effect.retry(Schedule.spaced("5 millis")),
+        );
+        change();
+        yield* chat.reviewAuthority(HOB_ID);
+        return (yield* reply)?.status;
+      }).pipe(
+        Effect.provide(testLayer(FakeRuntimeLayer({ delay: "40 millis" }), changing)),
+        Effect.scoped,
+        Effect.runPromise,
+      );
+
+    // Narrower: an operation's answer, or a folder taken away. The turn has ended when review returns.
+    expect(await statusAfter(() => (restrictions = [{ "edit-files": "deny" }]))).toBe("interrupted");
+    restrictions = [];
+    expect(await statusAfter(() => (folders = []))).toBe("interrupted");
+    // Wider or the same: the turn goes on.
+    folders = [folder];
+    restrictions = [{ "edit-files": "ask" }];
+    expect(await statusAfter(() => (restrictions = []))).toBe("streaming");
   });
 });
