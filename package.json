@@ -16,10 +16,11 @@
     "lint": "biome check .",
     "lint:unused": "knip",
     "lint:dup": "jscpd",
+    "lint:layers": "node scripts/check-layers.mjs",
     "lint:complexity": "node scripts/check-complexity.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "format": "biome check --write .",
-    "check": "node scripts/check-standards.mjs && node scripts/check-complexity.mjs && node --test \"scripts/*.test.mjs\" && knip && jscpd && biome check . && turbo run typecheck test"
+    "check": "node scripts/check-standards.mjs && node scripts/check-layers.mjs && node scripts/check-complexity.mjs && node --test \"scripts/*.test.mjs\" && knip && jscpd && biome check . && turbo run typecheck test"
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {

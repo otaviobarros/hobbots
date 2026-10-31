@@ -40,5 +40,107 @@
     "parser": {
       "tailwindDirectives": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["packages/domain/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["**", "!effect", "!./**", "!../**"],
+                    "message": "Domain code is pure and imports only effect (STD-ARCH-002)."
+                  }
+                ]
+              }
+            }
+          },
+          "correctness": {
+            "noNodejsModules": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/agents/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*", "@effect/*", "@anthropic-ai/*"],
+                    "message": "Only adapters do I/O (STD-ARCH-004). Reach it through a port."
+                  },
+                  {
+                    "group": ["effect/*"],
+                    "message": "Use cases import only effect core. Transports and SQL belong to adapters (STD-ARCH-003)."
+                  }
+                ]
+              }
+            }
+          },
+          "correctness": {
+            "noNodejsModules": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/api/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*", "@effect/*", "@anthropic-ai/*"],
+                    "message": "Only adapters do I/O (STD-ARCH-004). Reach it through a port."
+                  },
+                  {
+                    "group": ["react", "react-dom", "react-dom/*"],
+                    "message": "The API contract holds Schemas only (STD-ARCH-001)."
+                  }
+                ]
+              }
+            }
+          },
+          "correctness": {
+            "noNodejsModules": "error"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["apps/web/src/**", "packages/ui/src/**", "packages/art/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["node:*"],
+                    "message": "Browser code cannot import Node modules (STD-ARCH-001)."
+                  }
+                ]
+              }
+            }
+          },
+          "correctness": {
+            "noNodejsModules": "error"
+          }
+        }
+      }
+    }
+  ]
 }
