@@ -9,7 +9,7 @@ import { OnboardingFrame } from "./onboarding-frame.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
 
 const SAFETY_GUIDE = "A good hob always asks before doing something you cannot undo. How careful should yours be?";
-const FOLDERS_GUIDE = "Pick the folders hobs may open once they can work with files. For now they only chat.";
+const FOLDERS_GUIDE = "Pick the folders your hobs share. You can give one hob more of its own later, from its profile.";
 
 /** The first hob as chosen on the step before, read back from storage. */
 export const useFirstHobDraft = (): FirstHobDraft => {
@@ -54,8 +54,7 @@ export function OnboardingSafety() {
       <div className="flex animate-hb-in flex-col gap-1.5">
         <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">How much should {name} ask first?</h1>
         <p className="m-0 mb-3.5 text-secondary-text">
-          For now hobs only chat: they cannot open files, browse or send anything yet. Hobbots saves this choice and
-          follows it once they can.
+          Hobs read, edit, run and browse inside the folders you pick next. Pick how often they ask you first.
         </p>
         {setup.data ? (
           <PresetPicker
@@ -111,8 +110,8 @@ export function OnboardingFolders() {
       <div className="flex max-w-[780px] animate-hb-in flex-col gap-1.5">
         <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">Where can hobs work?</h1>
         <p className="m-0 mb-2.5 text-secondary-text">
-          Hobbots saves these for when hobs can work with files. Today hobs only chat, so they cannot open any folder
-          yet, these included.
+          Every hob can work in these folders, and nowhere else on this computer. You can give one hob more folders of
+          its own from its profile.
         </p>
         {setup.data ? (
           <FolderPicker folders={folders} />
