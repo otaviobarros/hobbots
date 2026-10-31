@@ -92,11 +92,16 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
   const [saved] = await api<ReadonlyArray<Hob>>(current, "GET", "/api/agents");
   expect(saved).toMatchObject({ instructions: "Write long answers.", configVersion: 2 });
   const [thread] = await api<ReadonlyArray<{ id: string }>>(current, "GET", `/api/agents/${pip.id}/threads`);
-  const messages = await api<ReadonlyArray<Message>>(current, "GET", `/api/threads/${thread?.id}/messages`);
-  expect(messages.filter((m) => m.role === "assistant").map((m) => [m.content, m.configVersion])).toEqual([
-    ["Echo: first", 1],
-    ["Echo: second", 2],
-  ]);
+  // The page shows the reply while it streams; it is stored once it completes.
+  await expect
+    .poll(async () => {
+      const messages = await api<ReadonlyArray<Message>>(current, "GET", `/api/threads/${thread?.id}/messages`);
+      return messages.filter((m) => m.role === "assistant").map((m) => [m.content, m.configVersion]);
+    })
+    .toEqual([
+      ["Echo: first", 1],
+      ["Echo: second", 2],
+    ]);
 });
 
 // covers AG-006
