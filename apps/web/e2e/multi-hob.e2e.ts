@@ -130,6 +130,10 @@ test("[TC-AG-098] three hobs with different models chat at once in the app, an e
     ],
     [["complete", 1]],
   ]);
+  // Pip's resumed session follows the edit, not the instructions it started with (#164).
+  await send(pipChat.page, "Pip", "/instructions");
+  await expect(pipChat.page.getByText("Write long answers.")).toBeVisible();
+  await expect(pipChat.page.getByText("Write short answers.")).toHaveCount(0);
   for (const { hob, thread } of all) {
     const threadList = await api<ReadonlyArray<{ id: string }>>(current, "GET", `/agents/${hob.id}/threads`);
     expect(threadList.map((t) => t.id)).toEqual([thread]);

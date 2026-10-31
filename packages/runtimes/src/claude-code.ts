@@ -293,6 +293,25 @@ const toEvents = (message: SDKMessage): ReadonlyArray<RuntimeEvent> => {
   }
 };
 
+/**
+ * The prompt Claude Code receives. On resume Claude Code keeps the system prompt the session started
+ * with, so changed instructions come first in the turn itself, where they outrank the old ones.
+ */
+export const turnPrompt = (
+  request: Pick<PromptRequest, "prompt" | "sessionId" | "instructions" | "instructionsChanged">,
+) =>
+  request.sessionId && request.instructionsChanged
+    ? [
+        "<hob-instructions-update>",
+        "The user changed your instructions. From now on, follow these in place of the ones in your system prompt:",
+        "",
+        request.instructions,
+        "</hob-instructions-update>",
+        "",
+        request.prompt,
+      ].join("\n")
+    : request.prompt;
+
 const errorMessage = (error: unknown) =>
   error instanceof RuntimeError
     ? error
@@ -374,7 +393,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const turn = yield* Effect.acquireRelease(
             Effect.sync(() =>
               query({
-                prompt: request.prompt,
+                prompt: turnPrompt(request),
                 options: {
                   ...baseOptions(config, binary),
                   abortController,

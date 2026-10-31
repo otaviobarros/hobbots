@@ -28,6 +28,7 @@ import {
   runtimePath,
   stderrTail,
   toRuntimeModels,
+  turnPrompt,
 } from "../src/claude-code.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-claude-"));
@@ -118,7 +119,14 @@ describe("Claude Code health before the runtime starts", () => {
   const turn = (adapter: Effect.Success<ReturnType<typeof makeClaudeCode>>) =>
     Effect.runPromiseExit(
       Stream.runDrain(
-        adapter.sendPrompt({ prompt: "hi", sessionId: null, instructions: "", model: null, effort: null }),
+        adapter.sendPrompt({
+          prompt: "hi",
+          sessionId: null,
+          instructions: "",
+          instructionsChanged: false,
+          model: null,
+          effort: null,
+        }),
       ),
     );
 
@@ -239,6 +247,21 @@ const until = async (check: () => boolean, ms = 5000) => {
   return check();
 };
 
+describe("a hob's instructions on a resumed Claude Code session", () => {
+  const request = { prompt: "hi", instructions: "Be thorough.", instructionsChanged: true };
+
+  it("carries changed instructions in the turn, since Claude Code keeps a resumed session's system prompt", () => {
+    expect(turnPrompt({ ...request, sessionId: "s1" })).toBe(
+      "<hob-instructions-update>\nThe user changed your instructions. From now on, follow these in place of the ones in your system prompt:\n\nBe thorough.\n</hob-instructions-update>\n\nhi",
+    );
+  });
+
+  it("sends the prompt alone to a new session or when the instructions are unchanged", () => {
+    expect(turnPrompt({ ...request, sessionId: null })).toBe("hi");
+    expect(turnPrompt({ ...request, sessionId: "s1", instructionsChanged: false })).toBe("hi");
+  });
+});
+
 describe("asking Claude Code for its models", () => {
   // covers AG-005
   it("[TC-AG-005] closes a Claude Code that never answers when the check times out", async () => {
@@ -303,7 +326,14 @@ describe("stopping a Claude Code turn", () => {
     const adapter = await Effect.runPromise(makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable }));
     const turn = Effect.runFork(
       Stream.runDrain(
-        adapter.sendPrompt({ prompt: "hi", sessionId: null, instructions: "", model: null, effort: null }),
+        adapter.sendPrompt({
+          prompt: "hi",
+          sessionId: null,
+          instructions: "",
+          instructionsChanged: false,
+          model: null,
+          effort: null,
+        }),
       ),
     );
     expect(await until(() => existsSync(pidFile))).toBe(true);
@@ -339,7 +369,14 @@ describe("a Claude Code turn that fails", () => {
 
     const exit = await Effect.runPromiseExit(
       Stream.runDrain(
-        adapter.sendPrompt({ prompt: "hi", sessionId: null, instructions: "", model: null, effort: null }),
+        adapter.sendPrompt({
+          prompt: "hi",
+          sessionId: null,
+          instructions: "",
+          instructionsChanged: false,
+          model: null,
+          effort: null,
+        }),
       ),
     );
 

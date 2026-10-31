@@ -167,8 +167,30 @@ export class ChatService extends Context.Service<
           }),
         );
 
+      // Claude Code keeps a resumed session's first instructions, so a turn after an edit carries the
+      // new ones. The session last received those of its last completed reply, or of the reply that
+      // started it; sending them again after a stopped or failed turn does no harm.
+      const instructionsChanged = (thread: Thread, agent: Agent, instructions: string) =>
+        Effect.gen(function* () {
+          if (thread.runtimeSessionId === null) return false;
+          const replies = (yield* repo.listMessages(thread.id)).filter(
+            (m) => m.role === "assistant" && m.configVersion !== null,
+          );
+          const received = replies.findLast((m) => m.status === "complete") ?? replies[0];
+          if (received?.configVersion == null) return false;
+          const config = yield* repo.findAgentConfig(agent.id, received.configVersion);
+          return Option.isNone(config) || systemInstructions(agent.name, config.value) !== instructions;
+        });
+
       // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
-      const runTurn = (name: string, config: AgentConfiguration, thread: Thread, prompt: string, reply: Reply) =>
+      const runTurn = (
+        name: string,
+        config: AgentConfiguration,
+        thread: Thread,
+        prompt: string,
+        reply: Reply,
+        changed: boolean,
+      ) =>
         Effect.gen(function* () {
           const threadRef = yield* Ref.make(thread);
           // Saves the streamed text about once a second without journaling it, so a crash keeps
@@ -226,6 +248,7 @@ export class ChatService extends Context.Service<
               prompt,
               sessionId: thread.runtimeSessionId,
               instructions: systemInstructions(name, config),
+              instructionsChanged: changed,
               model: config.model,
               effort: config.effort,
             })
@@ -258,6 +281,7 @@ export class ChatService extends Context.Service<
       ) =>
         Effect.gen(function* () {
           const config = yield* repo.findAgentConfig(agent.id, agent.configVersion).pipe(Effect.map(Option.getOrThrow));
+          const changed = yield* instructionsChanged(thread, agent, systemInstructions(agent.name, config));
           const now = yield* nowIso;
           const assistantMessage = new Message({
             id: MessageId.make(crypto.randomUUID()),
@@ -286,7 +310,7 @@ export class ChatService extends Context.Service<
           yield* FiberMap.run(
             turns,
             thread.id,
-            runTurn(agent.name, config, updated, prompt, reply).pipe(
+            runTurn(agent.name, config, updated, prompt, reply, changed).pipe(
               Effect.ensuring(Effect.forkIn(drain(thread.id), scope)),
             ),
           );

@@ -10,7 +10,7 @@ import {
 } from "@hobbots/domain";
 import { HobbotsRepository, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/runtimes";
+import { fakeInstructionsPrompt, makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -279,6 +279,12 @@ describe("editing hobs", () => {
       ["user", "second", null],
       ["assistant", "Echo: second", 2],
     ]);
+    // The resumed session follows the edit, which only the turn after it carried (#164).
+    expect(prompts.map((p) => p.instructionsChanged)).toEqual([false, true]);
+    await request("POST", `/api/threads/${thread.id}/messages`, { content: fakeInstructionsPrompt });
+    await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === 6);
+    expect((await messages()).findLast((m) => m.role === "assistant")?.content).toBe(told("Write long answers."));
+    expect(prompts.at(-1)?.instructionsChanged).toBe(false);
     expect((await request("GET", "/api/agents")).body).toEqual([edited.body]);
   });
 
@@ -490,6 +496,20 @@ describe("several hobs at once", () => {
       ["first for Ash", null],
       ["Echo: first for Ash", 1],
     ]);
+
+    // Wren's resumed session follows the edit and Moss's keeps its own instructions (#164).
+    await request("POST", `/api/threads/${threads.wren}/messages`, { content: fakeInstructionsPrompt });
+    await request("POST", `/api/threads/${threads.moss}/messages`, { content: fakeInstructionsPrompt });
+    await waitFor(
+      async () => (await messages(threads.wren)).length === 6 && (await messages(threads.moss)).length === 6,
+    );
+    await settled();
+    expect((await messages(threads.wren)).findLast((m) => m.role === "assistant")?.content).toBe(
+      told("Write long answers."),
+    );
+    expect((await messages(threads.moss)).findLast((m) => m.role === "assistant")?.content).toBe(
+      told("Tidy files.", "Moss"),
+    );
 
     // Retiring Ash refuses its new work and keeps its chat; the other hobs carry on.
     expect((await request("POST", `/api/agents/${ash.id}/retire`, { activeWork: "finish" })).status).toBe(200);
