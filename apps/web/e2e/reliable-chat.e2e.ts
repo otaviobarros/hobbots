@@ -231,15 +231,17 @@ test("[TC-CH-122] a page away past the journal's retention loads the thread agai
   page,
 }) => {
   const { current, threadId } = await openThread(page);
-  const network = await offline(page);
-  const refetched = refetches(page, threadId);
-
-  // While the page is away: a long reply runs, a message queued behind it is taken back, another is answered.
+  // A long reply runs, and a message queued behind it reaches the page before the page goes away.
   await call(current, "POST", `/threads/${threadId}/messages`, { content: LONG_PROMPT });
   const queued = await call<{ userMessage: Message }>(current, "POST", `/threads/${threadId}/messages`, {
     content: "taken back",
   });
   expect(queued.userMessage.status).toBe("queued");
+  await expect(shown(page, "taken back")).toHaveCount(1);
+
+  const network = await offline(page);
+  const refetched = refetches(page, threadId);
+  // While the page is away: the queued message is taken back before it starts, and another is answered.
   await call(current, "DELETE", `/threads/${threadId}/messages/${queued.userMessage.id}`);
   await call(current, "POST", `/threads/${threadId}/messages`, { content: "still here" });
   const messages = await settled(current, threadId);
@@ -250,6 +252,7 @@ test("[TC-CH-122] a page away past the journal's retention loads the thread agai
   await expect(reconnecting(page)).toBeHidden();
   await expect(shown(page, "Echo: still here")).toBeVisible();
   await expect.poll(refetched).toBeGreaterThan(0);
+  // The page had the queued message cached; the hub's state, where it was taken back, replaces it.
   await expect(shown(page, "taken back")).toHaveCount(0);
   await showsExactly(page, messages);
   expect(messages.map((m) => m.content)).toEqual([
