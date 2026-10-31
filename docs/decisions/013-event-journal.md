@@ -37,7 +37,7 @@ Every journaled event is stored and sent in one envelope:
 | `causationId` | The event ID that caused this one, or null. |
 | `payload` | A variant of the `HobbotsEvent` union in `@hobbots/domain`. Secrets are redacted before it is written. |
 
-New event types are added as variants of `HobbotsEvent` with a past-tense name (`TurnStopped`, `MessageQueued`). A payload carries the IDs it affects, or the whole entity for an `…Upserted` event. A new event is journaled unless it is a high-rate progress signal whose content is already in durable state or is deliberately live only, and a transient event needs an idempotent form like the delta's offset. `MessageSteps` (#116), a running reply's steps, is the second transient event: each carries the whole list, and the progress frames sent on connect include it after the text.
+New event types are added as variants of `HobbotsEvent` with a past-tense name (`TurnStopped`, `MessageQueued`). A payload carries the IDs it affects, or the whole entity for an `…Upserted` event. A new event is journaled unless it is a high-rate progress signal whose content is already in durable state or is deliberately live only, and a transient event needs an idempotent form like the delta's offset. A reply's steps (thinking and tool calls) are not transient: #116 first sent them live only, as `MessageSteps`, but a tool call is something the hob did and must survive a reconnect and the reply itself (STD-UI-008). Since #132 they are part of the message, saved with it, and each change journals the reply's `MessageUpserted` (version 3), which carries the text written so far too. Steps change a few times a turn, not per token, so this costs little.
 
 An incompatible payload change bumps that type's `schemaVersion`. The server decodes every version still in retention (upcasting old ones), or the migration rotates the journal epoch, which expires every cursor. A client that meets an unknown type or a newer version than it knows resyncs instead of guessing, so a browser tab left open across an upgrade recovers by itself.
 
@@ -103,4 +103,5 @@ The scenarios that would show this decision holds. Each names the test case or e
 
 - A client that resumes after a cursor gets exactly the missed entries, in order: `[TC-CH-071]`, `[TC-CH-073]`.
 - A missing, malformed, foreign or future cursor starts fresh at the head: `[TC-CH-072]`. A fresh `Ready` makes the client fetch again: `[TC-CH-078]`. An expired cursor is not proven yet: [#118](https://github.com/otaviobarros/hobbots/issues/118).
+- A reply's steps replay to a client that reconnects after they ran, and stay after a reload: `[TC-CH-110]`, `[TC-CH-111]`.
 - A crash between commit and publish, a minute offline and a reconnect mid-reply lose nothing and duplicate nothing. Not proven yet: [#118](https://github.com/otaviobarros/hobbots/issues/118).

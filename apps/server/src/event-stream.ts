@@ -50,10 +50,8 @@ export const encodeFrame = (frame: StreamFrame): string => {
       return `id: ${frame.cursor}\nevent: ${STREAM_FRAME.ready}\ndata: ${JSON.stringify({ cursor: frame.cursor, resumed: frame.resumed })}\n\n`;
     case "Entry":
       return `id: ${frame.cursor}\ndata: ${JSON.stringify(encodeEnvelope(frame.entry))}\n\n`;
-    case "Transient": {
-      const name = frame.event._tag === "MessageDelta" ? STREAM_FRAME.delta : STREAM_FRAME.steps;
-      return `event: ${name}\ndata: ${JSON.stringify(frame.event)}\n\n`;
-    }
+    case "Transient":
+      return `event: ${STREAM_FRAME.delta}\ndata: ${JSON.stringify(frame.event)}\n\n`;
     case "KeepAlive":
       return ": keep-alive\n\n";
   }
@@ -61,7 +59,7 @@ export const encodeFrame = (frame: StreamFrame): string => {
 
 /**
  * One client's view of the event stream: `Ready`, then every journal entry after its cursor in
- * sequence order, then the text and steps of each reply still streaming, then live events with no gap. The
+ * sequence order, then the text of each reply still streaming, then live events with no gap. The
  * bus only wakes the connection; the journal decides the order and fills any gap.
  */
 export class EventStream extends Context.Service<
@@ -134,7 +132,7 @@ export class EventStream extends Context.Service<
                   ),
               ),
             );
-            // The full text of each reply still streaming, as a chunk at offset 0, then the steps of each.
+            // The full text of each reply still streaming, as a chunk at offset 0. Steps are in the journal.
             const text = Stream.fromIterableEffect(chat.streamingReplies).pipe(
               Stream.map(
                 (message): StreamFrame => ({
@@ -149,10 +147,6 @@ export class EventStream extends Context.Service<
                 }),
               ),
             );
-            const steps = Stream.fromIterableEffect(chat.streamingSteps).pipe(
-              Stream.map((event): StreamFrame => ({ _tag: "Transient", event })),
-            );
-            const progress = Stream.concat(text, steps);
             const live = Stream.fromQueue(buffer).pipe(
               Stream.flatMap((event): Stream.Stream<StreamFrame> => {
                 if (event._tag === "KeepAlive") return Stream.succeed(event);
@@ -169,7 +163,7 @@ export class EventStream extends Context.Service<
               cursor: formatCursor(head.epoch, sent),
               resumed: resumeAfter !== null,
             };
-            return Stream.succeed(ready).pipe(Stream.concat(catchUp), Stream.concat(progress), Stream.concat(live));
+            return Stream.succeed(ready).pipe(Stream.concat(catchUp), Stream.concat(text), Stream.concat(live));
           }),
         );
 

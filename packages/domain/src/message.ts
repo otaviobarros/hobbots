@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 import { ConfigVersion } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
+import { PolicyOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 
 export const MessageRole = Schema.Literals(["user", "assistant"]);
@@ -33,6 +34,47 @@ export const isInProgress = (status: MessageStatus): boolean => status === "stre
 /** A reply that ended early and that Continue can resume in place. */
 export const isResumable = (status: MessageStatus): boolean => status === "interrupted" || status === "limited";
 
+/**
+ * - `running`: under way; for a tool call, the policy allowed it and it started.
+ * - `awaiting`: a tool call paused on Ask until the user decides (`approvalId`).
+ * - `done`: ended; a tool call ended without an error.
+ * - `failed`: a tool call ended with an error, a sandbox refusal included.
+ * - `denied`: a tool call never ran; `reason` says why and `decidedBy` who refused it.
+ * - `unfinished`: its turn ended while it was running or awaiting, so its outcome is unknown. Final:
+ *   Continue starts new steps and never revives it.
+ */
+export const ReplyStepState = Schema.Literals(["running", "awaiting", "done", "failed", "denied", "unfinished"]);
+export type ReplyStepState = typeof ReplyStepState.Type;
+
+/** A tool call the step stands for, as the policy decided it (ADR 014). */
+export const ToolCall = Schema.Struct({
+  /** The runtime's own name for the tool, such as `Bash` or `Edit`. */
+  tool: Schema.String,
+  operation: PolicyOperation,
+  /** The canonical paths, the command's folder, or the remote the call was decided on. */
+  targets: Schema.Array(Schema.String),
+});
+export type ToolCall = typeof ToolCall.Type;
+
+/** What a reply did besides writing, as the runtime reported it: thinking, or a tool call. */
+export const ReplyStep = Schema.Struct({
+  /** Unique within its reply, which keeps the steps of its earlier turns when Continue resumes it. */
+  id: Schema.String,
+  kind: Schema.Literals(["thinking", "tool"]),
+  /** Short words for the step, such as "Thinking" or "Running pnpm test". */
+  label: Schema.String,
+  state: ReplyStepState,
+  /** For a tool step: the call. */
+  call: Schema.optionalKey(ToolCall),
+  /** For an `awaiting` step: the approval it waits on. */
+  approvalId: Schema.optionalKey(Schema.String),
+  /** For a `denied` step: why the call was refused. */
+  reason: Schema.optionalKey(Schema.String),
+  /** For a `denied` step: the policy hook refused it, the user denied its Ask, or the OS sandbox did. */
+  decidedBy: Schema.optionalKey(Schema.Literals(["policy", "user", "sandbox"])),
+});
+export type ReplyStep = typeof ReplyStep.Type;
+
 export class Message extends Schema.Class<Message>("Message")({
   id: MessageId,
   threadId: ThreadId,
@@ -47,6 +89,11 @@ export class Message extends Schema.Class<Message>("Message")({
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
+  /** For an assistant message, its steps in order. Saved with the reply, so they replay and outlast it. */
+  steps: Schema.Array(ReplyStep).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
   createdAt: Schema.String,
   revision: Revision,
 }) {}
@@ -55,6 +102,16 @@ export class InvalidMessageTransition extends Schema.TaggedError<InvalidMessageT
   "InvalidMessageTransition",
   { messageId: MessageId, from: MessageStatus, action: Schema.String },
 ) {}
+
+/** A turn's end: every step still running or awaiting is left unfinished, so it never reads as active again. */
+const endTurn = (message: Message, fields: Partial<Message>): Message =>
+  new Message({
+    ...message,
+    ...fields,
+    steps: message.steps.map((step) =>
+      step.state === "running" || step.state === "awaiting" ? { ...step, state: "unfinished" as const } : step,
+    ),
+  });
 
 const requireInProgress = (message: Message, action: string) =>
   isInProgress(message.status)
@@ -75,14 +132,10 @@ export const MessageTransitions = {
 
   complete: (message: Message, finalContent?: string): Message | InvalidMessageTransition =>
     requireInProgress(message, "complete") ??
-    new Message({
-      ...message,
-      content: finalContent ?? message.content,
-      status: "complete",
-    }),
+    endTurn(message, { content: finalContent ?? message.content, status: "complete" }),
 
   fail: (message: Message, error: string): Message | InvalidMessageTransition =>
-    requireInProgress(message, "fail") ?? new Message({ ...message, status: "failed", error }),
+    requireInProgress(message, "fail") ?? endTurn(message, { status: "failed", error }),
 
   /**
    * The runtime failed. A reply that had started writing was cut off, so it keeps its text and can
@@ -90,17 +143,21 @@ export const MessageTransitions = {
    */
   cutOff: (message: Message, error: string): Message | InvalidMessageTransition =>
     requireInProgress(message, "cutOff") ??
-    new Message({ ...message, status: message.content.length > 0 ? "interrupted" : "failed", error }),
+    endTurn(message, { status: message.content.length > 0 ? "interrupted" : "failed", error }),
 
   /** The provider's usage limit ended the turn; the text so far is kept. */
   limit: (message: Message, resetsAt: string | null): Message | InvalidMessageTransition =>
-    requireInProgress(message, "limit") ?? new Message({ ...message, status: "limited", error: null, resetsAt }),
+    requireInProgress(message, "limit") ?? endTurn(message, { status: "limited", error: null, resetsAt }),
 
   /** Continue: a reply that ended early streams again, appending to the text it kept. */
   resume: (message: Message): Message | InvalidMessageTransition =>
     message.role === "assistant" && isResumable(message.status)
       ? new Message({ ...message, status: "streaming", error: null, resetsAt: null })
       : new InvalidMessageTransition({ messageId: message.id, from: message.status, action: "resume" }),
+
+  /** Replaces the steps of a reply in progress, as the runtime reports them. */
+  setSteps: (message: Message, steps: ReadonlyArray<ReplyStep>): Message | InvalidMessageTransition =>
+    requireInProgress(message, "setSteps") ?? new Message({ ...message, steps }),
 
   /** Records the user's stop request. Asking again while stopping changes nothing. */
   requestStop: (message: Message): Message | InvalidMessageTransition =>
@@ -109,7 +166,7 @@ export const MessageTransitions = {
   /** The turn ended: stopped when the user asked for it, otherwise interrupted by Hobbots. */
   interrupt: (message: Message): Message | InvalidMessageTransition =>
     requireInProgress(message, "interrupt") ??
-    new Message({ ...message, status: message.status === "stopping" ? "stopped" : "interrupted" }),
+    endTurn(message, { status: message.status === "stopping" ? "stopped" : "interrupted" }),
 };
 
 /** Pure transitions for a user message waiting in its thread's queue (CH-008). */
