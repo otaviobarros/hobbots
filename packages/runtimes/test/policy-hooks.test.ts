@@ -29,15 +29,8 @@ import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { adoptSession, parseKeychainLogin, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { makeFakeRuntime } from "../src/fake.ts";
-import {
-  decideForLiveTurns,
-  ProcessSandbox,
-  readGitIdentity,
-  sandboxEnv,
-  sandboxEnvFile,
-  sandboxFilesystem,
-  sandboxGitConfig,
-} from "../src/sandbox.ts";
+import { gitConfigAccess } from "../src/git-config.ts";
+import { decideForLiveTurns, ProcessSandbox, sandboxEnv, sandboxFilesystem } from "../src/sandbox.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hooks-")));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -514,6 +507,7 @@ describe("the process sandbox", () => {
       allowedHosts: [],
       home: "/Users/me",
       path: "/usr/bin:/Users/me/.volta/bin:relative",
+      gitConfigFiles: ["/Users/me/.gitconfig"],
     });
     expect(rules.denyRead).toEqual(
       expect.arrayContaining([
@@ -532,6 +526,7 @@ describe("the process sandbox", () => {
         "/private/var/folders/xy/T/turn",
         "/Users/me/.local/bin",
         "/Users/me/.volta/bin",
+        "/Users/me/.gitconfig",
       ]),
     );
     expect(rules.allowRead).not.toContain("/Users/me/.claude");
@@ -578,39 +573,6 @@ describe("the process sandbox", () => {
         CLAUDE_CODE_MEMORY_API_TOKEN: "secret",
       }),
     ).toEqual({ PATH: "/usr/bin", HOME: "/Users/me", LC_ALL: "C", CLAUDE_CODE_OAUTH_TOKEN: "t" });
-  });
-
-  it("gives Git only the user's identity, quoted, in place of their own config", () => {
-    expect(sandboxGitConfig({})).toBe("");
-    expect(sandboxGitConfig({ name: "Ada Lovelace", email: "ada@example.com" })).toBe(
-      '[user]\n\tname = "Ada Lovelace"\n\temail = "ada@example.com"\n',
-    );
-    // A value cannot end its quotes or start another setting.
-    expect(sandboxGitConfig({ name: 'Ada "x"\\\n[core]\nhooksPath = /tmp' })).toBe(
-      '[user]\n\tname = "Ada \\"x\\"\\\\[core]hooksPath = /tmp"\n',
-    );
-  });
-
-  it("sets Git's config again for Claude Code's commands, whose scrub drops it", () => {
-    expect(sandboxEnvFile("/private/tmp/hobbots-turn-a b/gitconfig")).toBe(
-      "export GIT_CONFIG_GLOBAL='/private/tmp/hobbots-turn-a b/gitconfig'\n",
-    );
-    expect(sandboxEnvFile("/tmp/it's/gitconfig")).toBe("export GIT_CONFIG_GLOBAL='/tmp/it'\\''s/gitconfig'\n");
-  });
-
-  // covers PE-001, PE-005
-  it("[TC-PE-077] reads the user's Git identity from a file their global config includes", async () => {
-    const home = mkdtempSync(join(tmpdir(), "hobbots-git-home-"));
-    try {
-      writeFileSync(join(home, "identity.gitconfig"), "[user]\n\tname = Ada Lovelace\n\temail = ada@example.com\n");
-      writeFileSync(join(home, ".gitconfig"), `[include]\n\tpath = ${join(home, "identity.gitconfig")}\n`);
-      const { GIT_CONFIG_GLOBAL: _global, ...env } = process.env;
-      expect(
-        await readGitIdentity({ ...env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), GIT_CONFIG_NOSYSTEM: "1" }),
-      ).toEqual({ name: "Ada Lovelace", email: "ada@example.com" });
-    } finally {
-      rmSync(home, { recursive: true, force: true });
-    }
   });
 
   it("reaches a host only when every live turn may reach it", async () => {
@@ -681,16 +643,15 @@ describe("the process sandbox", () => {
           expect(run('echo "[$GH_TOKEN]"').stdout.trim()).toBe("[]");
           expect(run('echo "$CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"').stdout.trim()).toBe("1");
           expect(run('echo "$CLAUDE_CONFIG_DIR"').stdout.trim()).toBe(join(runtimes, "hob-1"));
-          // Git runs although the user's own config is closed: on macOS it stops when it cannot read it.
+          // Git runs: on macOS it stops when it cannot read the user's config, which opens read-only
+          // unless it looks like it holds a secret.
           const gitProject = join(project, "repo");
           spawnSync("git", ["init", "-q", gitProject]);
           const status = run(`git -C ${gitProject} status --short`);
-          expect(status.stderr).not.toContain("unable to access");
-          expect(status.status).toBe(0);
-          // Claude Code's scrub drops the variable; its env file sets it again before each command.
-          const scrubbed = run(`unset GIT_CONFIG_GLOBAL; . "$CLAUDE_ENV_FILE"; git -C ${gitProject} status --short`);
-          expect(scrubbed.stderr).not.toContain("unable to access");
-          expect(scrubbed.status).toBe(0);
+          if (gitConfigAccess(homedir())._tag === "Open") expect(status.status).toBe(0);
+          else expect(status.stderr).toContain("unable to access");
+          // Open or not, the config stays read-only.
+          expect(run(`echo "# x" >> ${join(homedir(), ".gitconfig")}`).status).not.toBe(0);
         } finally {
           prepared.release();
         }

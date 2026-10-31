@@ -1,13 +1,12 @@
-import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { homedir, platform, tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
-import { promisify } from "node:util";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
 import { RuntimeError } from "@hobbots/agents";
 import type { SandboxState } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
+import { gitConfigAccess } from "./git-config.ts";
 
 /**
  * The OS sandbox a runtime with tools starts in (ADR 014). Commands, and the runtime itself, run
@@ -60,6 +59,8 @@ export interface SandboxScope {
   readonly allowedHosts: ReadonlyArray<string>;
   /** Decides any other host the turn's processes try to reach. */
   readonly decideHost?: HostDecider;
+  /** The user's own Git config files, opened read-only so Git runs (see `gitConfigAccess`). */
+  readonly gitConfigFiles?: ReadonlyArray<string>;
   readonly home?: string;
   readonly path?: string;
   /** The closed places outside the home folder; USER_DATA_ROOTS that exist by default. */
@@ -128,6 +129,7 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
         scope.tempFolder,
         ...binaryDirs,
         ...homeTools,
+        ...(scope.gitConfigFiles ?? []),
       ]),
     ],
     allowWrite: [...(scope.folderAccess.write ? scope.folders : []), scope.runtimeFolder, scope.tempFolder],
@@ -151,47 +153,9 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
   };
 };
 
-/** The user's Git identity, which commands in the sandbox commit with. */
-export interface GitIdentity {
-  readonly name?: string;
-  readonly email?: string;
-}
-
-// Quoted for a Git config file: control characters dropped, `"` and `\` escaped.
-const gitConfigValue = (value: string) => {
-  const printable = Array.from(value)
-    .filter((c) => c.charCodeAt(0) >= 0x20 && c !== "\u007f")
-    .join("");
-  return `"${printable.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
-};
-
-/**
- * The global Git config a turn's commands read instead of the user's own. The home folder is closed,
- * and on macOS Git stops when it cannot read `~/.gitconfig` ("Operation not permitted"), so every
- * command needs this file. The user's own config can hold credentials and include other files, so
- * only the identity is carried over, for commits.
- */
-export const sandboxGitConfig = (identity: GitIdentity): string => {
-  const entries = [
-    ...(identity.name ? [`\tname = ${gitConfigValue(identity.name)}`] : []),
-    ...(identity.email ? [`\temail = ${gitConfigValue(identity.email)}`] : []),
-  ];
-  return entries.length === 0 ? "" : `[user]\n${entries.join("\n")}\n`;
-};
-
-/**
- * Reads the user's Git identity on the hub, outside the sandbox. Missing Git or settings give none.
- * Files the global config includes count, since many people keep their identity in one.
- */
-export const readGitIdentity = async (env: NodeJS.ProcessEnv = process.env): Promise<GitIdentity> => {
-  const read = (key: string) =>
-    promisify(execFile)("git", ["config", "--global", "--includes", "--get", key], { timeout: 5_000, env }).then(
-      ({ stdout }) => stdout.trim() || undefined,
-      () => undefined,
-    );
-  const [name, email] = await Promise.all([read("user.name"), read("user.email")]);
-  return { ...(name ? { name } : {}), ...(email ? { email } : {}) };
-};
+/** The Git config files a turn opens: all of them, or none when one looks like it holds a secret. */
+export const gitConfigFilesFor = (access: ReturnType<typeof gitConfigAccess>): ReadonlyArray<string> =>
+  access._tag === "Open" ? access.files : [];
 
 /** Whether a turn may reach a host it has no rule for: true, or the reason it may not. */
 export type HostDecider = (host: string) => Promise<true | string>;
@@ -235,13 +199,6 @@ export const sandboxEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
 
 /** Quotes a word for a POSIX shell. */
 export const shellQuote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
-
-/**
- * The script Claude Code runs before each of its commands (`CLAUDE_ENV_FILE`). Its credential scrub
- * (`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`) also drops `GIT_CONFIG_GLOBAL` from the commands' environment,
- * so the variable is set again here, after the scrub.
- */
-export const sandboxEnvFile = (gitConfig: string): string => `export GIT_CONFIG_GLOBAL=${shellQuote(gitConfig)}\n`;
 
 /** A sandbox prepared for one turn: how to start a process in it, and what to undo afterwards. */
 export interface PreparedSandbox {
@@ -301,8 +258,6 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
           prepare: () => Effect.fail(new RuntimeError({ message: evidence })),
         });
       }
-      // Read once for the hub, so the user's Git runs once rather than on every turn.
-      const gitIdentity = yield* Effect.promise(() => readGitIdentity());
       // The live turns' host rules, by the id their processes present to the proxy.
       const liveTurns = new Map<string, HostDecider>();
       const started = yield* Effect.acquireRelease(
@@ -339,16 +294,12 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
             const tempFolder = realOrSelf(mkdtempSync(join(tmpdir(), "hobbots-turn-")));
             // The proxy knows the turn by this id alone, so it must be unguessable (128 bits or more).
             const commandId = randomBytes(16).toString("base64url");
-            const gitConfig = join(tempFolder, "gitconfig");
-            const envFile = join(tempFolder, "env.sh");
             const release = () => {
               liveTurns.delete(commandId);
               SandboxManager.unregisterCommandNetworkLists(commandId);
               rmSync(tempFolder, { recursive: true, force: true });
             };
             try {
-              writeFileSync(gitConfig, sandboxGitConfig(gitIdentity), { mode: 0o600 });
-              writeFileSync(envFile, sandboxEnvFile(gitConfig), { mode: 0o600 });
               SandboxManager.registerCommandNetworkLists(commandId, { allowedDomains: [...scope.allowedHosts] });
               liveTurns.set(commandId, scope.decideHost ?? (async (host) => `${host} is not allowed for this hob.`));
               const wrapped = await SandboxManager.wrapWithSandboxArgv(
@@ -358,6 +309,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                   filesystem: sandboxFilesystem({
                     ...scope,
                     tempFolder,
+                    gitConfigFiles: gitConfigFilesFor(gitConfigAccess(homedir())),
                     roots: USER_DATA_ROOTS.filter((root) => existsSync(root)),
                   }),
                 },
@@ -384,10 +336,6 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                     TMPDIR: tempFolder,
                     // Claude Code keeps its own temporary files under /tmp otherwise, outside the sandbox's reach.
                     CLAUDE_CODE_TMPDIR: tempFolder,
-                    // Git reads this instead of the user's own config, which the sandbox closes. Claude Code's
-                    // commands get it from the env file, since its scrub drops the variable itself.
-                    GIT_CONFIG_GLOBAL: gitConfig,
-                    CLAUDE_ENV_FILE: envFile,
                     // Claude Code keeps its sign-in to itself: commands, hooks and MCP servers start without it.
                     CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
                     [COMMAND_VARIABLE]: [command, ...args].map(shellQuote).join(" "),
