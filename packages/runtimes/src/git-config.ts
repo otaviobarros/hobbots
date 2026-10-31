@@ -15,23 +15,54 @@ export type GitConfigAccess =
   | { readonly _tag: "Open"; readonly files: ReadonlyArray<string> }
   | { readonly _tag: "Closed"; readonly file: string; readonly reason: string };
 
-// Keys whose values are credentials, such as `http.extraHeader = Authorization: Bearer …`.
-const SECRET_KEY = /^\s*[\w.-]*(?:token|password|passwd|secret|extraheader|authorization|apikey|api-key)\s*=/im;
-// A URL carrying a password, such as `url.https://user:token@github.com/.insteadOf`.
-const URL_PASSWORD = /[a-z][a-z\d+.-]*:\/\/[^\s/@:"]+:[^\s/@"]+@/i;
+// Parts of key names that hold credentials, such as `http.extraHeader = Authorization: Bearer …`.
+const SECRET_KEY_PARTS = ["token", "password", "passwd", "secret", "extraheader", "authorization", "apikey", "api-key"];
 // Token shapes that can sit anywhere: GitHub, GitLab and Slack tokens, AWS access keys.
 const TOKEN_SHAPE =
   /\b(?:gh[pousr]_[A-Za-z\d]{20,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[\w-]{10,}|AKIA[A-Z\d]{16})\b/;
 
+// Plain string scans rather than backtracking patterns, since the files are the user's to shape.
+const isSpace = (c: string | undefined) => c === " " || c === "\t" || c === "\r";
+
+/** A line without its comment: `#` or `;` at its start or after a space. */
+const withoutComment = (line: string) => {
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"' && line[i - 1] !== "\\") quoted = !quoted;
+    else if (!quoted && (c === "#" || c === ";") && (i === 0 || isSpace(line[i - 1]))) return line.slice(0, i);
+  }
+  return line;
+};
+
+/** A `key = value` line's key, lowercased, or null for a section header or a line without one. */
+const keyOf = (line: string) => {
+  const eq = line.indexOf("=");
+  return eq === -1 || line.trimStart().startsWith("[") ? null : line.slice(0, eq).trim().toLowerCase();
+};
+
+/** Whether a line holds a URL with a password, such as `https://user:token@github.com/`. */
+const hasUrlPassword = (line: string) => {
+  let from = 0;
+  for (;;) {
+    const at = line.indexOf("://", from);
+    if (at === -1) return false;
+    let end = at + 3;
+    while (end < line.length && !isSpace(line[end]) && line[end] !== "/" && line[end] !== '"') end++;
+    const authority = line.slice(at + 3, end);
+    const userinfo = authority.lastIndexOf("@");
+    if (userinfo > 0 && authority.slice(0, userinfo).includes(":")) return true;
+    from = end;
+  }
+};
+
 /** Why a config file's text looks like it holds a secret, or null when it does not. */
 export const secretIn = (text: string): string | null => {
-  const lines = text
-    .split("\n")
-    .filter((line) => !/^\s*[#;]/.test(line))
-    .join("\n");
-  if (SECRET_KEY.test(lines)) return "it sets a token, password or authorization header";
-  if (URL_PASSWORD.test(lines)) return "it holds a URL with a password";
-  if (TOKEN_SHAPE.test(lines)) return "it holds what looks like an access token";
+  const lines = text.split("\n").map(withoutComment);
+  if (lines.some((line) => SECRET_KEY_PARTS.some((part) => keyOf(line)?.includes(part))))
+    return "it sets a token, password or authorization header";
+  if (lines.some(hasUrlPassword)) return "it holds a URL with a password";
+  if (lines.some((line) => TOKEN_SHAPE.test(line))) return "it holds what looks like an access token";
   return null;
 };
 
@@ -39,7 +70,16 @@ const unquote = (value: string) => {
   const trimmed = value.trim();
   return trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2
     ? trimmed.slice(1, -1).replace(/\\(["\\])/g, "$1")
-    : trimmed.replace(/\s[#;].*$/, "");
+    : withoutComment(trimmed).trim();
+};
+
+/** A section header's name, lowercased, such as `includeif` for `[includeIf "gitdir:~/work/"]`. */
+const sectionOf = (line: string) => {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("[")) return null;
+  let end = 1;
+  while (end < trimmed.length && !isSpace(trimmed[end]) && trimmed[end] !== "]" && trimmed[end] !== '"') end++;
+  return trimmed.slice(1, end).toLowerCase();
 };
 
 /**
@@ -50,15 +90,13 @@ export const includedFiles = (text: string, file: string, home: string): Readonl
   const found: Array<string> = [];
   let inInclude = false;
   for (const line of text.split("\n")) {
-    const section = /^\s*\[\s*([^\]\s"]+)(?:\s+"[^"]*")?\s*\]/.exec(line);
-    if (section) {
-      const name = (section[1] as string).toLowerCase();
-      inInclude = name === "include" || name === "includeif";
+    const section = sectionOf(line);
+    if (section !== null) {
+      inInclude = section === "include" || section === "includeif";
       continue;
     }
-    const path = inInclude ? /^\s*path\s*=\s*(.+)$/i.exec(line) : null;
-    if (!path) continue;
-    const value = unquote(path[1] as string);
+    if (!inInclude || keyOf(line) !== "path") continue;
+    const value = unquote(line.slice(line.indexOf("=") + 1));
     if (value === "") continue;
     if (value === "~" || value.startsWith("~/")) found.push(join(home, value.slice(1)));
     else found.push(isAbsolute(value) ? value : resolve(dirname(file), value));

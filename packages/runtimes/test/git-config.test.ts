@@ -34,18 +34,33 @@ describe("the user's Git config in the sandbox", () => {
     expect(secretIn("[alias]\n\tx = !echo ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).not.toBeNull();
   });
 
+  it("tells a URL with a password from one with a user name only", () => {
+    expect(secretIn('[url "ssh://git@github.com/"]\n\tinsteadOf = https://github.com/')).toBeNull();
+  });
+
+  it("scans long hostile lines in linear time", () => {
+    const started = performance.now();
+    for (const line of ["a".repeat(50_000), " #".repeat(50_000), `path=${" ".repeat(50_000)}`, ":/".repeat(50_000)]) {
+      secretIn(line);
+      includedFiles(`[include]\n${line}`, "/Users/me/.gitconfig", home);
+    }
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it("lists the files a config includes, under any condition", () => {
     const text = [
       "[include]",
       "\tpath = ~/.gitconfig.local",
       '[includeIf "gitdir:~/work/"]',
       '\tpath = "work/config"',
+      "\tpath = ~/.gitconfig.extra # kept here",
       "[user]",
       "\tpath = not-an-include",
     ].join("\n");
     expect(includedFiles(text, "/Users/me/.gitconfig", home)).toEqual([
       "/Users/me/.gitconfig.local",
       "/Users/me/work/config",
+      "/Users/me/.gitconfig.extra",
     ]);
   });
 
