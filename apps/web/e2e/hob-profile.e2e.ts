@@ -302,3 +302,22 @@ test("[TC-PE-031] hiding a shared folder still works after another hidden one st
     .toMatchObject({ folders: [], policy: { hiddenSharedFolders: [kept] } });
   await expect(page.getByRole("alert")).toHaveCount(0);
 });
+
+// covers PE-001, PE-002
+test("[TC-PE-033] an open Permissions tab follows a safety change made in another window", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  const shared = realpathSync(mkdtempSync(`${dataDir}-shared-`));
+  extraDirs.push(shared);
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  const commands = page.getByRole("radiogroup", { name: "Run commands" });
+  await expect(commands.getByRole("radio", { name: "Allow" })).toBeChecked();
+
+  // Another window picks Careful and shares a folder; nothing tells this hob about it.
+  await api(current, "PATCH", "/api/setup", { safetyPreset: "careful", approvedFolders: [shared] });
+
+  await expect(commands.getByRole("radio", { name: "Ask" })).toBeChecked({ timeout: 10_000 });
+  await expect(commands.getByRole("radio", { name: "Allow" })).toBeDisabled();
+  await expect(page.getByRole("list", { name: "Shared folders" })).toContainText(shared);
+});

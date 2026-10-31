@@ -17,7 +17,7 @@ import {
   RULES,
   ruleColor,
 } from "../api/safety.ts";
-import { setupQuery } from "../api/setup.ts";
+import { watchedSetupQuery } from "../api/setup.ts";
 import { FolderList, LockedSwitch } from "./safety-and-folders.tsx";
 
 /** A focus ring drawn inside the segment, which the group's border would clip. */
@@ -26,17 +26,22 @@ const focusWithin =
 
 /**
  * The hob's permissions as the hub works them out. They change with the hob's configuration
- * version and with the setup's preset and shared folders, so all of those key the query.
+ * version and with the setup's preset and shared folders, so all of those key the query, and the
+ * setup is watched because another window may change it while the profile stays open.
  */
 const useHobPermissions = (hob: Agent) => {
-  const setup = useQuery(setupQuery);
+  const setup = useQuery(watchedSetupQuery);
   const basis = [hob.configVersion, setup.data?.safetyPreset, ...(setup.data?.approvedFolders ?? [])];
   const permissions = useQuery({ ...permissionsQuery(hob.id, basis), enabled: setup.data !== undefined });
+  const data = permissions.data;
   return {
-    data: permissions.data,
+    data,
     // Without the setup the permissions query never starts, so a failed setup read fails both.
     isError: permissions.isError || setup.isError,
     refetch: () => (setup.isError ? setup.refetch() : permissions.refetch()),
+    // An answer for an older version or setup is shown while the current one is read, but a change
+    // built on it could undo a newer one, so nothing can be changed until the hub answers.
+    outdated: permissions.isPlaceholderData || (data !== undefined && data.configVersion < hob.configVersion),
   };
 };
 
@@ -189,6 +194,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
     return <Loading name={hob.name} failed={permissions.isError} retry={() => void permissions.refetch()} />;
   }
   const sending = update.isPending ? update.variables : undefined;
+  const locked = update.isPending || permissions.outdated;
   const save = (payload: UpdateHobPermissionsPayload, onSaved?: () => void) =>
     update.mutate(payload, { onSuccess: () => onSaved?.() });
   const foldersError = update.variables?.ownFolders !== undefined ? update.error : null;
@@ -210,7 +216,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
         // Built from what the hub shows rather than the stored list, so a hidden folder that is no
         // longer shared, or was stored with another spelling, never makes the next change fail.
         hidden={sending?.hiddenSharedFolders ?? data.sharedFolders.filter((folder) => !data.folders.includes(folder))}
-        pending={update.isPending}
+        pending={locked}
         onChange={(hiddenSharedFolders) => save({ hiddenSharedFolders })}
       />
       <span className="pt-2 text-sm font-bold">{hob.name}'s own folders</span>
@@ -221,7 +227,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
         label={`${hob.name}'s own folders`}
         folders={data.policy.ownFolders}
         saving={sending?.ownFolders}
-        pending={update.isPending}
+        pending={locked}
         error={foldersError}
         onSave={(ownFolders, onSaved) => save({ ownFolders }, onSaved)}
       />
@@ -245,7 +251,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
           rule={rule}
           permissions={data}
           shown={sending?.overrides ? shownAnswer(data, sending.overrides, rule.operation) : undefined}
-          pending={update.isPending}
+          pending={locked}
           onPick={(answer) =>
             save({ overrides: pickAnswer(data.policy.overrides, rule.operation, answer, data.preset) })
           }

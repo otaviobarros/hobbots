@@ -115,16 +115,34 @@ export const permissionsQuery = (agentId: AgentId, basis: ReadonlyArray<unknown>
   });
 
 /**
+ * Stores a saved answer without going back in time. Another window may have saved a later version
+ * whose read finished first, so the answer replaces only older ones; reads still on their way are
+ * cancelled and every version is read again, so the hub decides what shows.
+ */
+export const storeSavedPermissions = async (
+  queryClient: QueryClient,
+  agentId: AgentId,
+  permissions: HobPermissions,
+) => {
+  const queryKey = queryKeys.permissions(agentId);
+  await queryClient.cancelQueries({ queryKey });
+  queryClient.setQueriesData<HobPermissions>({ queryKey }, (current) =>
+    current !== undefined && current.configVersion > permissions.configVersion ? current : permissions,
+  );
+  await queryClient.invalidateQueries({ queryKey });
+};
+
+/**
  * Changes a hob's folders or overrides; each change is its next configuration version. The answer
- * shows at once; the hob list hears of the new version from its event, which reads them again.
+ * shows at once unless a later one already does; the hob list hears of the new version from its
+ * event, which reads them again.
  */
 export const useUpdatePermissions = (agentId: AgentId) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: UpdateHobPermissionsPayload) =>
       call((c) => c.permissions.update({ params: { agentId }, payload })),
-    onSuccess: (permissions) =>
-      queryClient.setQueriesData<HobPermissions>({ queryKey: queryKeys.permissions(agentId) }, () => permissions),
+    onSuccess: (permissions) => storeSavedPermissions(queryClient, agentId, permissions),
   });
 };
 
