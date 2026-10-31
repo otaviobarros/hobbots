@@ -22,7 +22,6 @@ Do these in order. Staging works after step 8, and production after step 9.
 - Open Workers & Pages once and pick the account's `workers.dev` subdomain. The first deploy runs in CI and cannot answer that prompt.
 - Run Wrangler from `apps/site` after `pnpm install`, so it reads [`wrangler.jsonc`](wrangler.jsonc) and uses the pinned version. `pnpm exec wrangler login` opens a browser to log in. `pnpm exec wrangler whoami` shows the account and its ID.
 - The commands below write `wrangler` for `pnpm exec wrangler`.
-- Run them before building the site, or after deleting `dist` and `.wrangler/deploy`. A build can leave a generated config there that makes Wrangler refuse `--env`.
 
 ## GitHub repository settings
 
