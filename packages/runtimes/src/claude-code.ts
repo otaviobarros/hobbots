@@ -74,8 +74,11 @@ const execFileAsync = promisify(execFile);
 
 /** The keychain item where Claude Code keeps a claude.ai login on macOS, for the default config folder. */
 const KEYCHAIN_LOGIN = "Claude Code-credentials";
-// A turn starts only with a sign-in that stays valid this long; Claude Code cannot refresh it in the sandbox.
-const LOGIN_MARGIN_MS = 10 * 60_000;
+// Claude Code cannot refresh a login inside the sandbox, so the hub tries to before a turn when this
+// close to expiry. Claude Code refreshes only an expired login, so a turn may still start with less.
+const LOGIN_REFRESH_MS = 10 * 60_000;
+// A turn never starts with a login that ends sooner than this.
+const LOGIN_MINIMUM_MS = 60_000;
 
 /** The access token and its expiry from Claude Code's keychain item, or null without a usable one. */
 export const parseKeychainLogin = (secret: string): { readonly token: string; readonly expiresAt: number } | null => {
@@ -95,7 +98,8 @@ export const parseKeychainLogin = (secret: string): { readonly token: string; re
  * keychain access, since through it any command could read every credential a trusted helper such
  * as `git credential-osxkeychain` or `gh` can. A key or token in the hub's environment passes through
  * as it is; otherwise the hub reads the claude.ai login's short-lived access token, never the refresh
- * token, and asks Claude Code to refresh it first when it would expire during the turn.
+ * token, and asks Claude Code to refresh it first when it is close to expiry. A turn that outlives the token
+ * fails with Claude Code's own sign-in error.
  */
 const sandboxLogin = (binary: string): Effect.Effect<Record<string, string>, RuntimeError> =>
   Effect.gen(function* () {
@@ -109,14 +113,14 @@ const sandboxLogin = (binary: string): Effect.Effect<Record<string, string>, Run
     );
     let login = yield* read;
     if (login === null) return {};
-    if (login.expiresAt - Date.now() < LOGIN_MARGIN_MS) {
-      // Outside the sandbox Claude Code refreshes a login about to expire whenever it checks it.
+    if (login.expiresAt - Date.now() < LOGIN_REFRESH_MS) {
+      // Outside the sandbox Claude Code refreshes an expired login whenever it checks it.
       yield* Effect.promise(() =>
         execFileAsync(binary, ["auth", "status"], { timeout: 30_000, env: runtimeEnv(binary) }).catch(() => undefined),
       );
       login = yield* read;
     }
-    if (login === null || login.expiresAt - Date.now() < LOGIN_MARGIN_MS)
+    if (login === null || login.expiresAt - Date.now() < LOGIN_MINIMUM_MS)
       return yield* new RuntimeError({
         message: "Claude Code's sign-in has expired. Open Claude Code to sign in again, then try again.",
       });
