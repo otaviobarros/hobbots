@@ -17,3 +17,10 @@ Apply the same contracts and limits to all agents. Role labels and avatars do no
 ## Change control
 
 A deliberate user-directed change should update the relevant specification and supersede this ADR with rationale.
+
+## Validation
+
+The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
+
+- Any hob, not only a designated orchestrator, can work directly, delegate and continue from the result. Not proven yet: [#10](https://github.com/otaviobarros/hobbots/issues/10).
+- A hob's role is told to the runtime on each turn: `[TC-AG-083]`. That a role grants no authority is checked by review only: the policy engine in `packages/permissions` takes no role as input.

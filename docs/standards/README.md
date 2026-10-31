@@ -54,7 +54,9 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 - the index lists an active rule that no area file defines,
 - a title differs between the index and the rule,
 - a retired ID comes back,
-- a rule sits in the wrong area file.
+- a rule sits in the wrong area file,
+- an ADR does not end with a Validation section that lists scenarios (STD-DOCS-009),
+- an evidence record misses a field or the status page does not link it (STD-DOCS-010).
 
 ## Index
 
@@ -126,3 +128,5 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-DOCS-006 | Dependencies take the latest stable release, pinned exactly | Active |
 | STD-DOCS-007 | Docs use short, plain sentences | Active |
 | STD-DOCS-008 | Work stays inside the requested scope | Active |
+| STD-DOCS-009 | An ADR ends with the scenarios that validate it | Active |
+| STD-DOCS-010 | A proof leaves a dated evidence record | Active |

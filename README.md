@@ -6,7 +6,9 @@ Hobbots does not build a new model or agent engine. It hosts existing runtimes s
 
 ## Status
 
-**Early validation build.** The code is a first slice ([ADR 009](docs/decisions/009-toolchain-and-validation-slice.md)): one hob on Claude Code, persistent threads and streaming chat, in the browser and in an Electron app. Delegation, inboxes, Quests, permissions and other providers are MVP work that is not built yet.
+**Early build.** Hobbots runs in the browser and as a Mac app: several hobs on Claude Code, persistent threads with streaming chat, and tools within the folders you choose. Delegation, inboxes, Quests, approvals and other runtimes are MVP work that is not built yet.
+
+The [status page](docs/STATUS.md) lists what has been proven end to end, on which setup, and what is not proven yet.
 
 ## Install the Mac app
 

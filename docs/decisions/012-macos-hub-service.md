@@ -44,3 +44,12 @@ What changes for the slice 3 issues:
 - **#46** registers the login item, starts hidden when `wasOpenedAtLogin` is true, adds the switch and shows the registration status.
 - **#47** adds the single-instance lock, the `second-instance` and `activate` handling and the identity check.
 - **#48** serves the web client from the server, and the packaged window loads it from the server as described above.
+
+## Validation
+
+The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
+
+- Closing the window while a reply streams leaves the app, the server and the reply running: `[TC-EX-008]`.
+- The app registers as a login item on first start and reports what macOS made of it: `[TC-GEN-004]`, `[TC-GEN-006]`, unit tests with a fake macOS. On a packaged build, `[TC-EX-009]` reads the state back and records the status without requiring it, and [the background service record](../evidence/2026-10-29-background-service.md) shows `enabled`.
+- After logging out and in, Hobbots starts with no window, the menu-bar icon shows Running and `/api/health` answers. Not proven yet: [the background service record](../evidence/2026-10-29-background-service.md#gaps).
+- Quit stops the server the app launched and leaves no process behind: `[TC-EX-010]`.
