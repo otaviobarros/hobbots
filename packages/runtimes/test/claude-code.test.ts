@@ -250,13 +250,13 @@ const until = async (check: () => boolean, ms = 5000) => {
 describe("a hob's instructions on a resumed Claude Code session", () => {
   const request = { prompt: "hi", instructions: "Be thorough.", instructionsChanged: true };
 
-  it("carries changed instructions in the turn, since Claude Code keeps a resumed session's system prompt", () => {
+  it("carries the instructions in the turn when the session may follow others, since Claude Code keeps a resumed session's system prompt", () => {
     expect(turnPrompt({ ...request, sessionId: "s1" })).toBe(
-      "<hob-instructions-update>\nThe user changed your instructions. From now on, follow these in place of the ones in your system prompt:\n\nBe thorough.\n</hob-instructions-update>\n\nhi",
+      "<current-instructions>\nThese are your current instructions. Follow them in place of the ones in your system prompt and any earlier ones:\n\nBe thorough.\n</current-instructions>\n\nhi",
     );
   });
 
-  it("sends the prompt alone to a new session or when the instructions are unchanged", () => {
+  it("sends the prompt alone to a new session or one that follows them", () => {
     expect(turnPrompt({ ...request, sessionId: null })).toBe("hi");
     expect(turnPrompt({ ...request, sessionId: "s1", instructionsChanged: false })).toBe("hi");
   });

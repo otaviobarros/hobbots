@@ -25,7 +25,7 @@ export interface PromptRequest {
   readonly sessionId: string | null;
   readonly instructions: string;
   /**
-   * The instructions differ from those the resumed session last received. Claude Code keeps a resumed
+   * The resumed session may follow other instructions, as after an edit. Claude Code keeps a resumed
    * session's first system prompt, so an adapter then delivers them inside the turn.
    */
   readonly instructionsChanged: boolean;

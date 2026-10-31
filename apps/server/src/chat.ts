@@ -167,19 +167,23 @@ export class ChatService extends Context.Service<
           }),
         );
 
-      // Claude Code keeps a resumed session's first instructions, so a turn after an edit carries the
-      // new ones. The session last received those of its last completed reply, or of the reply that
-      // started it; sending them again after a stopped or failed turn does no harm.
+      // Claude Code keeps a resumed session's first instructions, so a turn whose session may follow
+      // others carries them. Which a session follows is not stored: a stopped or failed turn may or may
+      // not have delivered its own, and threads from before #164 never received theirs. So a thread
+      // whose replies all ran on the current instructions needs nothing, and any other carries them.
       const instructionsChanged = (thread: Thread, agent: Agent, instructions: string) =>
         Effect.gen(function* () {
           if (thread.runtimeSessionId === null) return false;
-          const replies = (yield* repo.listMessages(thread.id)).filter(
-            (m) => m.role === "assistant" && m.configVersion !== null,
+          const versions = new Set(
+            (yield* repo.listMessages(thread.id)).flatMap((m) =>
+              m.role === "assistant" && m.configVersion !== null ? [m.configVersion] : [],
+            ),
           );
-          const received = replies.findLast((m) => m.status === "complete") ?? replies[0];
-          if (received?.configVersion == null) return false;
-          const config = yield* repo.findAgentConfig(agent.id, received.configVersion);
-          return Option.isNone(config) || systemInstructions(agent.name, config.value) !== instructions;
+          for (const version of versions) {
+            const config = yield* repo.findAgentConfig(agent.id, version);
+            if (Option.isNone(config) || systemInstructions(agent.name, config.value) !== instructions) return true;
+          }
+          return false;
         });
 
       // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.

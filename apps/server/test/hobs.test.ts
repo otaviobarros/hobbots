@@ -42,6 +42,8 @@ let prompts: Array<PromptRequest>;
 let sessions: Map<string, string>;
 // Each turn waits for this before the runtime replies, so a test can act while a reply is running.
 let replyGate: Promise<void>;
+// While set, turns reach the runtime as they did before #164: never carrying the instructions.
+let beforeFix: boolean;
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
@@ -49,11 +51,13 @@ beforeEach(() => {
   prompts = [];
   sessions = new Map();
   replyGate = Promise.resolve();
+  beforeFix = false;
   const fake = makeFakeRuntime();
   const runtime = Layer.succeed(RuntimeAdapter, {
     ...fake,
-    sendPrompt: (request) => {
-      prompts.push(request);
+    sendPrompt: (sent) => {
+      prompts.push(sent);
+      const request = beforeFix ? { ...sent, instructionsChanged: false } : sent;
       const gate = replyGate;
       return Stream.fromEffect(Effect.promise(() => gate)).pipe(
         Stream.drain,
@@ -284,8 +288,63 @@ describe("editing hobs", () => {
     await request("POST", `/api/threads/${thread.id}/messages`, { content: fakeInstructionsPrompt });
     await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === 6);
     expect((await messages()).findLast((m) => m.role === "assistant")?.content).toBe(told("Write long answers."));
-    expect(prompts.at(-1)?.instructionsChanged).toBe(false);
+    // Which instructions a session follows is not stored, so a thread that spans an edit keeps carrying them.
+    expect(prompts.at(-1)?.instructionsChanged).toBe(true);
     expect((await request("GET", "/api/agents")).body).toEqual([edited.body]);
+  });
+
+  // covers AG-002
+  it("[TC-AG-099] restores the earlier instructions after a stopped turn that may have delivered the edit", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const replies = async () => (await messages()).filter((m) => m.role === "assistant");
+    const ask = async (content: string, count: number) => {
+      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await waitFor(async () => (await replies()).filter((m) => m.status !== "streaming").length === count);
+      return (await replies()).at(-1);
+    };
+    await ask("first", 1);
+
+    // The edited turn reaches the runtime, which takes its instructions, and is stopped before it completes.
+    await request("PATCH", `/api/agents/${agent.id}`, { instructions: "Write long answers." });
+    replyGate = new Promise(() => {});
+    await request("POST", `/api/threads/${thread.id}/messages`, { content: "second" });
+    await waitFor(async () => prompts.length === 2);
+    await request("POST", `/api/threads/${thread.id}/interrupt`);
+    await waitFor(async () => (await replies()).at(-1)?.status === "stopped");
+    expect(prompts.at(-1)?.instructionsChanged).toBe(true);
+
+    // Restoring the first instructions reaches the session, though its last completed reply ran on them.
+    replyGate = Promise.resolve();
+    await request("PATCH", `/api/agents/${agent.id}`, { instructions: hob.instructions });
+    expect((await ask(fakeInstructionsPrompt, 3))?.content).toBe(told("Write short answers."));
+    expect(prompts.at(-1)?.instructionsChanged).toBe(true);
+  });
+
+  // covers AG-002
+  it("[TC-AG-100] brings a thread edited before #164 back to its hob's current instructions", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const replies = async () =>
+      ((await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>).filter(
+        (m) => m.role === "assistant",
+      );
+    const ask = async (content: string, count: number) => {
+      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await waitFor(async () => (await replies()).filter((m) => m.status === "complete").length === count);
+      return (await replies()).at(-1)?.content;
+    };
+
+    // Before the fix, the edit was recorded on the reply but never reached the session.
+    beforeFix = true;
+    await ask("first", 1);
+    await request("PATCH", `/api/agents/${agent.id}`, { instructions: "Write long answers." });
+    expect(await ask(fakeInstructionsPrompt, 2)).toBe(told("Write short answers."));
+    expect((await replies()).map((m) => m.configVersion)).toEqual([1, 2]);
+
+    beforeFix = false;
+    expect(await ask(fakeInstructionsPrompt, 3)).toBe(told("Write long answers."));
   });
 
   // covers AG-002
