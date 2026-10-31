@@ -34,7 +34,7 @@ const request = (id: string) =>
 
 describe("ApprovalRepository", () => {
   // covers PE-003, PE-007
-  it("[TC-PE-050] stores a request with its exact action and moves it out of pending only once", async () => {
+  it("[TC-PE-070] stores a request with its exact action and moves it out of pending only once", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const approvals = yield* ApprovalRepository;

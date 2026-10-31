@@ -18,7 +18,6 @@ import {
   type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import {
-  type EnforcementDeclaration,
   operationDecision,
   type PromptRequest,
   RuntimeAdapter,
@@ -28,7 +27,15 @@ import {
   type ToolAccess,
   type TurnApprovals,
 } from "@hobbots/agents";
-import { RuntimeHealth, RuntimeModel, RuntimeModels, type SandboxState, stableJson } from "@hobbots/domain";
+import {
+  policySandbox,
+  type RuntimeEnforcement,
+  RuntimeHealth,
+  RuntimeModel,
+  RuntimeModels,
+  type SandboxState,
+  stableJson,
+} from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
 import { type CallDecision, decideCall, refusal, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
@@ -796,11 +803,39 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       }
     });
 
+    const sandboxed = sandbox.state === "on";
+    const declared: RuntimeEnforcement = {
+      toolInterception: {
+        status: "verified",
+        evidence:
+          "Every built-in tool call passes the PreToolUse hook; settings and MCP servers on disk are not loaded.",
+      },
+      processSandbox: !sandboxed
+        ? { status: "unsupported", evidence: sandbox.evidence }
+        : process.platform === "darwin"
+          ? { status: "verified", evidence: `Claude Code starts inside ${sandbox.evidence}.` }
+          : {
+              status: "unverified",
+              evidence: `Claude Code starts inside ${sandbox.evidence}, not yet verified on this platform.`,
+            },
+      hubTools: { status: "unsupported", evidence: "Charms and coordination tools are not served yet." },
+      toolEvents: {
+        status: "verified",
+        evidence: "PreToolUse, PostToolUse and PostToolUseFailure hooks report each call.",
+      },
+      toolInterruption: {
+        status: "verified",
+        evidence: "Cancelling the turn aborts Claude Code and waits for it to exit.",
+      },
+    };
+
     const sendPrompt = (request: PromptRequest) =>
       Stream.callback<RuntimeEvent, RuntimeError | RuntimeLimitReached>((queue) =>
         Effect.gen(function* () {
           const binary = yield* executable;
-          const tools = toolTurn(request.tools, sandbox.state);
+          // Tools are decided as if the sandbox were missing until it is verified here (ADR 014), but a
+          // sandbox that starts still wraps the runtime.
+          const tools = toolTurn(request.tools, policySandbox(declared));
           const sandboxed = tools !== null && sandbox.state === "on";
           // The sandbox opens the binary's folder, so it must be a real path, never the hub's own folder.
           const absoluteBinary = sandboxed ? yield* resolveBinary(binary) : binary;
@@ -915,7 +950,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       );
 
     const runtimeHealth = (fields: Pick<RuntimeHealth, "availability" | "version" | "detail" | "checkedAt">) =>
-      new RuntimeHealth({ runtime: "claude-code", billing: null, ...fields });
+      new RuntimeHealth({ runtime: "claude-code", billing: null, enforcement: declared, ...fields });
 
     const checkTimeout = config.checkTimeout ?? "30 seconds";
 
@@ -951,6 +986,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           version,
           detail: account.email ?? null,
           checkedAt,
+          enforcement: declared,
         });
       }).pipe(
         Effect.catch((error) =>
@@ -1001,30 +1037,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       );
     });
 
-    const sandboxed = sandbox.state === "on";
-    const enforcement = Effect.succeed<EnforcementDeclaration>({
-      toolInterception: {
-        status: "verified",
-        evidence:
-          "Every built-in tool call passes the PreToolUse hook; settings and MCP servers on disk are not loaded.",
-      },
-      processSandbox: !sandboxed
-        ? { status: "unsupported", evidence: sandbox.evidence }
-        : process.platform === "darwin"
-          ? { status: "verified", evidence: `Claude Code starts inside ${sandbox.evidence}.` }
-          : { status: "unverified", evidence: `Claude Code starts inside ${sandbox.evidence}, not yet checked here.` },
-      hubTools: { status: "unsupported", evidence: "Charms and coordination tools are not served yet." },
-      toolEvents: {
-        status: "verified",
-        evidence: "PreToolUse, PostToolUse and PostToolUseFailure hooks report each call.",
-      },
-      toolInterruption: {
-        status: "verified",
-        evidence: "Cancelling the turn aborts Claude Code and waits for it to exit.",
-      },
-    });
-
-    return RuntimeAdapter.of({ health, models, enforcement, sendPrompt });
+    return RuntimeAdapter.of({ health, models, enforcement: Effect.succeed(declared), sendPrompt });
   });
 
 /** Claude Code with tools under the hub's policy engine and process sandbox. */

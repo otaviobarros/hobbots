@@ -15,7 +15,7 @@ import {
 import { type Agent, type Message, PRESET_DECISIONS, roleFields } from "@hobbots/domain";
 import { ApprovalRepositoryLive, HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { makeFakeRuntime } from "@hobbots/runtimes";
+import { fakeEnforcement, makeFakeRuntime } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -59,9 +59,9 @@ let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
 // Starts the hub; `legacyFolders` are shared folders stored as an earlier version saved them, as typed.
-const start = (legacyFolders?: ReadonlyArray<string>) => {
+const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailable" = "on") => {
   replyGate = Promise.resolve();
-  const fake = makeFakeRuntime();
+  const fake = makeFakeRuntime({ sandbox });
   const runtime = Layer.succeed(RuntimeAdapter, {
     ...fake,
     sendPrompt: (request) => {
@@ -160,6 +160,7 @@ describe("a hob's folders", () => {
         policy: { ownFolders: [], hiddenSharedFolders: [], overrides: {} },
         folders: [shared, notes],
         decisions: PRESET_DECISIONS.balanced,
+        enforcement: fakeEnforcement("on"),
       },
     });
 
@@ -341,5 +342,23 @@ describe("a hob's overrides", () => {
     // Saving them again is checked against the preset as it is now.
     const again = await request("PATCH", permissions(agent), { overrides: { "use-web": "allow" } });
     expect(again).toMatchObject({ status: 400, body: { _tag: "OverrideWidens", preset: "careful" } });
+  });
+});
+
+describe("unsupported enforcement", () => {
+  // covers PE-005
+  it("[TC-PE-042] reports a sandbox that cannot start in the hob's permissions and in provider health", async () => {
+    await dispose();
+    start(undefined, "unavailable");
+    const agent = await newHob();
+    const { body } = await request("GET", permissions(agent));
+    expect(body.enforcement.processSandbox).toEqual({
+      status: "unsupported",
+      evidence: "The fake pretends the sandbox cannot start on this hub.",
+    });
+    // The answers stay the preset's; the hub blocks what needs the sandbox whatever they say.
+    expect(body.decisions["run-commands"]).toBe("allow");
+    const [health] = (await request("GET", "/api/runtimes")).body;
+    expect(health.enforcement).toEqual(body.enforcement);
   });
 });

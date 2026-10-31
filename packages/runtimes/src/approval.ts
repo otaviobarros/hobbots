@@ -1,5 +1,5 @@
 import { actionDigest, type RuntimeEvent, type TurnApprovals } from "@hobbots/agents";
-import type { PolicyContext, PolicyEngine, PolicyVerdict } from "@hobbots/permissions";
+import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
 
@@ -43,7 +43,12 @@ export type CallDecision =
 
 const decideIn = (engine: PolicyEngine["Service"], context: PolicyContext, call: ToolCall) =>
   Effect.gen(function* () {
-    const requests = toolRequests(call.tool, call.input, call.cwd);
+    // Without the sandbox Bash is never offered. A command that reaches the hook anyway is decided
+    // as a command, so it is refused with the reason (PE-005); a `git push` alone is never let through.
+    const requests: ReadonlyArray<PolicyRequest> | null =
+      call.tool === "Bash" && context.sandbox === "unavailable"
+        ? [{ _tag: "Command", operation: "run-commands", cwd: call.cwd }]
+        : toolRequests(call.tool, call.input, call.cwd);
     if (requests === null) return undefined;
     return narrowestVerdict(yield* Effect.forEach(requests, (request) => engine.decide(context, request)));
   });

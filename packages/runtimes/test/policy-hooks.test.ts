@@ -53,8 +53,13 @@ const access = (hob: HobPolicy = EMPTY_HOB_POLICY): ToolAccess => ({
 });
 
 /** Runs one tool call through the hooks as Claude Code would, with what each hook reported. */
-const call = async (tool: string, toolInput: Record<string, unknown>, outcome: "success" | "failure" = "success") => {
-  const turn = toolTurn(access(), "on");
+const call = async (
+  tool: string,
+  toolInput: Record<string, unknown>,
+  outcome: "success" | "failure" = "success",
+  sandbox: "on" | "unavailable" = "on",
+) => {
+  const turn = toolTurn(access(), sandbox);
   if (turn === null) throw new Error("expected a tool turn");
   const events: Array<RuntimeEvent> = [];
   const { hooks } = policyHooks(engine, turn, (event) => events.push(event));
@@ -185,7 +190,7 @@ describe("Claude Code tool calls under the policy hook", () => {
   };
 
   // covers PE-003
-  it("[TC-PE-047] asks the user about a call that needs approval and runs it only once approved", async () => {
+  it("[TC-PE-067] asks the user about a call that needs approval and runs it only once approved", async () => {
     const { asked, approvals } = approvalsAnswering(approve);
     const { hook, result, events } = await askedCall(approvals);
     expect(hook).toBe("ask");
@@ -203,7 +208,7 @@ describe("Claude Code tool calls under the policy hook", () => {
   });
 
   // covers PE-003
-  it("[TC-PE-048] gives the hob the user's reason when they deny the call", async () => {
+  it("[TC-PE-068] gives the hob the user's reason when they deny the call", async () => {
     const { approvals } = approvalsAnswering(() => Effect.succeed({ _tag: "Denied", reason: "Not today" }));
     const { result, events } = await askedCall(approvals);
     expect(result).toMatchObject({ behavior: "deny", message: expect.stringContaining("Not today") });
@@ -212,7 +217,7 @@ describe("Claude Code tool calls under the policy hook", () => {
   });
 
   // covers PE-008
-  it("[TC-PE-049] decides an approved call again under the policy as it is now", async () => {
+  it("[TC-PE-069] decides an approved call again under the policy as it is now", async () => {
     // Pushing became Never while the user decided.
     const narrower = approvalsAnswering(approve, access({ ...EMPTY_HOB_POLICY, overrides: { push: "deny" } }));
     const refused = await askedCall(narrower.approvals);
@@ -231,7 +236,7 @@ describe("Claude Code tool calls under the policy hook", () => {
   });
 
   // covers PE-003, PE-008
-  it("[TC-PE-051] asks about the call in the folder the hook saw, and refuses one whose arguments changed", async () => {
+  it("[TC-PE-071] asks about the call in the folder the hook saw, and refuses one whose arguments changed", async () => {
     const turn = toolTurn(access(), "on");
     if (turn === null) throw new Error("expected a tool turn");
     const { asked, approvals } = approvalsAnswering(approve);
@@ -262,6 +267,23 @@ describe("Claude Code tool calls under the policy hook", () => {
     await hook("t2", "rm -rf build");
     expect(await canUseTool("Bash", { command: "rm -rf /" }, options("t2"))).toMatchObject({ behavior: "deny" });
     expect(asked).toHaveLength(1);
+  });
+
+  // covers PE-005
+  it("[TC-PE-040] blocks shell commands where the sandbox cannot start, and says why", async () => {
+    // Bash is not offered at all, while file tools still work through the hook.
+    const turn = toolTurn(access(), "unavailable");
+    expect(turn?.tools).not.toContain("Bash");
+    expect(turn?.tools).toContain("Edit");
+    // A command that reached the hook anyway is refused with the reason, never run unsandboxed.
+    for (const command of ["pnpm test", "git status", "git push origin feature"]) {
+      const result = await call("Bash", { command }, "success", "unavailable");
+      expect(result.decision).toBe("deny");
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0]).toMatchObject({ _tag: "ToolDenied", decidedBy: "policy" });
+      expect(result.events[0]?._tag === "ToolDenied" && result.events[0].reason).toContain("sandbox cannot start");
+    }
+    expect((await call("Edit", { file_path: join(project, "a.ts") }, "success", "unavailable")).decision).toBe("allow");
   });
 
   it("refuses a tool Hobbots does not know", async () => {

@@ -152,7 +152,7 @@ const run = <A, E>(
 
 describe("Ask decisions", () => {
   // covers PE-003
-  it("[TC-PE-040] pauses the turn on an Ask action until the user approves it, then runs it", async () => {
+  it("[TC-PE-060] pauses the turn on an Ask action until the user approves it, then runs it", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -199,7 +199,7 @@ describe("Ask decisions", () => {
   });
 
   // covers PE-003, PE-007
-  it("[TC-PE-041] runs the action once when it is approved twice", async () => {
+  it("[TC-PE-061] runs the action once when it is approved twice", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -232,7 +232,7 @@ describe("Ask decisions", () => {
   });
 
   // covers PE-003
-  it("[TC-PE-042] denies with the user's reason, which goes back to the hob, and refuses a later approval", async () => {
+  it("[TC-PE-062] denies with the user's reason, which goes back to the hob, and refuses a later approval", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -266,7 +266,7 @@ describe("Ask decisions", () => {
   });
 
   // covers PE-007
-  it("[TC-PE-043] expires the request when the reply is stopped, so it cannot be approved late", async () => {
+  it("[TC-PE-063] expires the request when the reply is stopped, so it cannot be approved late", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -290,7 +290,7 @@ describe("Ask decisions", () => {
   });
 
   // covers PE-007, AG-006
-  it("[TC-PE-052] expires the request when its hob retires, even with its reply left to finish", async () => {
+  it("[TC-PE-072] expires the request when its hob retires, even with its reply left to finish", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -314,7 +314,7 @@ describe("Ask decisions", () => {
   });
 
   // covers PE-003
-  it("[TC-PE-044] refuses a decision for another action than the one shown", async () => {
+  it("[TC-PE-064] refuses a decision for another action than the one shown", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -335,7 +335,7 @@ describe("Ask decisions", () => {
   });
 
   // covers PE-008
-  it("[TC-PE-045] asks again when the policy changes before an approved action runs", async () => {
+  it("[TC-PE-065] asks again when the policy changes before an approved action runs", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
@@ -359,7 +359,7 @@ describe("Ask decisions", () => {
   });
 
   // covers PE-003
-  it("[TC-PE-053] wakes the waiting turn even when the decision's request is cancelled while it is stored", async () => {
+  it("[TC-PE-073] wakes the waiting turn even when the decision's request is cancelled while it is stored", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const thread = yield* chat.createThread(HOB_ID);
@@ -420,7 +420,7 @@ describe("Ask decisions", () => {
   });
 
   // covers PE-007
-  it("[TC-PE-046] expires requests left pending when the server restarts", async () => {
+  it("[TC-PE-066] expires requests left pending when the server restarts", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const thread = yield* chat.createThread(HOB_ID);

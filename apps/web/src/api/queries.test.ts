@@ -2,6 +2,7 @@ import type { HobPermissions } from "@hobbots/api";
 import { type AgentId, PRESET_DECISIONS } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
+import { enforcementFixture } from "../test/enforcement.ts";
 import { queryKeys, storeSavedPermissions } from "./queries.ts";
 
 const agentId = "pip" as AgentId;
@@ -14,6 +15,7 @@ const version = (configVersion: number): HobPermissions => ({
   policy: { ownFolders: [], hiddenSharedFolders: [], overrides: configVersion > 2 ? { "run-commands": "ask" } : {} },
   folders: [],
   decisions: PRESET_DECISIONS.balanced,
+  enforcement: enforcementFixture(),
 });
 
 // The profile keys its read on the hob's version and the setup, as `permissionsQuery` does.

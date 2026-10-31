@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { RuntimeLimitReached } from "@hobbots/agents";
+import { policySandbox } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -190,6 +191,20 @@ describe("Claude Code health before the runtime starts", () => {
     expect(health.version).toBeNull();
     const refused = await turn(adapter);
     expect(Exit.isFailure(refused) && String(refused.cause)).toContain("could not be started");
+  });
+
+  // covers PE-005
+  it("[TC-PE-041] declares the sandbox unsupported, with why, in its enforcement and its health", async () => {
+    const adapter = await Effect.runPromise(
+      makeClaudeCode({ workspaceDir: join(temp, "workspace"), executable: join(newHome(), "missing", "claude") }),
+    );
+    const declared = await Effect.runPromise(adapter.enforcement);
+    expect(declared.processSandbox).toEqual({ status: "unsupported", evidence: "not needed for chat-only turns" });
+    expect(declared.toolInterception.status).toBe("verified");
+    // Health carries the same declaration whatever the runtime's availability.
+    expect((await Effect.runPromise(adapter.health)).enforcement).toEqual(declared);
+    // Tools are then decided as without the sandbox: commands, local Git and the web are blocked.
+    expect(policySandbox(declared)).toBe("unavailable");
   });
 
   it("reports a binary that prints no version as unavailable", async () => {

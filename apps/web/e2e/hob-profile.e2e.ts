@@ -41,8 +41,8 @@ const api = async <A>(current: Hub, method: string, path: string, body?: unknown
 };
 
 /** A hub past onboarding with one hob, Pip, made through the API as Summon makes it. */
-const hubWithPip = async (): Promise<{ current: Hub; pip: Hob }> => {
-  const current = await startHub(dataDir);
+const hubWithPip = async (env: Record<string, string> = {}): Promise<{ current: Hub; pip: Hob }> => {
+  const current = await startHub(dataDir, env);
   await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
   const pip = await api<Hob>(current, "POST", "/api/agents", {
     name: "Pip",
@@ -320,4 +320,45 @@ test("[TC-PE-033] an open Permissions tab follows a safety change made in anothe
   await expect(commands.getByRole("radio", { name: "Ask" })).toBeChecked({ timeout: 10_000 });
   await expect(commands.getByRole("radio", { name: "Allow" })).toBeDisabled();
   await expect(page.getByRole("list", { name: "Shared folders" })).toContainText(shared);
+});
+
+// covers PE-005
+test("[TC-PE-043] where the sandbox cannot start, the profile and provider health say commands are blocked and why", async ({
+  page,
+}) => {
+  const { current, pip } = await hubWithPip({ HOBBOTS_FAKE_SANDBOX: "unavailable" });
+  hub = current;
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+
+  // Charms shows commands, Git and the web as needing the sandbox, never as allowed and held.
+  await page.getByRole("tab", { name: "Charms" }).click();
+  for (const name of ["Commands", "Local Git", "The web"]) {
+    const tool = page
+      .getByRole("list", { name: "Built-in tools" })
+      .getByRole("listitem")
+      .filter({ has: page.getByText(name, { exact: true }) });
+    await expect(tool).toContainText("Needs the sandbox");
+    await expect(tool).toContainText("Blocked, because the sandbox cannot start on this hub.");
+    await expect(tool.getByText("Allow", { exact: true })).toHaveCount(0);
+  }
+  // File tools still work through the policy hook.
+  await expect(page.getByRole("listitem").filter({ hasText: "Files" })).not.toContainText("Needs the sandbox");
+  const held = page.getByRole("list", { name: "Enforcement on this hub" });
+  await expect(held.getByRole("listitem").filter({ hasText: "Process sandbox" })).toContainText("Unsupported");
+
+  // Permissions explains why, and marks each blocked rule.
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  await expect(
+    page.getByText("The sandbox cannot start on this hub, so Pip's commands, local Git and the web are blocked."),
+  ).toBeVisible();
+  await expect(page.getByText("Why: The fake pretends the sandbox cannot start on this hub.")).toBeVisible();
+  // Without the sandbox no command can push past the Push Charm, so Push is not merely checked.
+  await expect(page.getByText("Checked", { exact: true })).toHaveCount(1);
+  await expect(page.getByRole("switch", { name: "Run in the sandbox" })).not.toBeChecked();
+  await expect(page.getByText("Blocked until the sandbox can start on this hub.")).toHaveCount(3);
+
+  // Settings shows the same declaration under the provider.
+  await page.goto(`${current.url}/#/settings`);
+  const provider = page.getByRole("list", { name: "Enforcement on this hub" });
+  await expect(provider.getByRole("listitem").filter({ hasText: "Process sandbox" })).toContainText("Unsupported");
 });
