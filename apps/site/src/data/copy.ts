@@ -100,3 +100,17 @@ export const TRUST = [
  * Upload a new cut with `wrangler r2 object put hobbots-media/teaser/night-shift-60s.mp4 --file … --remote`.
  */
 export const TEASER_URL = "https://media.hobbots.app/teaser/night-shift-60s.mp4";
+
+/** The page's title and description, and the card that X, Slack and others show for a shared link. */
+export const SHARE = {
+  title: "Hobbots: little helpers that do your chores while you sleep",
+  description:
+    "Stop being the messenger between your AIs. Summon hobs, give them a job, and they split the work, talk to each other and ask you before anything risky. Coming soon to macOS and Linux.",
+  /** The teaser's own words, also shown above the video. */
+  teaser:
+    "Hand one job to Aldric before bed. While you sleep, the hobs split it up, pass notes and ask before anything risky. In the morning it is done, tested and verified.",
+  /** 1200 × 630, cropped from the teaser poster. */
+  image: "/og.png",
+  imageAlt:
+    "Hobbots, coming soon at hobbots.app: the chief of the hobs with a lantern staff and five hobs under a starry sky.",
+} as const;
