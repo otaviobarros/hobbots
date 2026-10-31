@@ -36,8 +36,8 @@ Write each state machine as a pure function that takes the current state and an 
 
 ### STD-EFFECT-005 Effect packages share one exact version
 
-Every `effect` and `@effect/*` dependency uses the same exact version, with no `^` or `~` range. Upgrade them together and run `pnpm check`. Isolate an unstable API behind a module of your own, so an upgrade changes one place.
+Every `effect` and `@effect/*` dependency is declared as `catalog:`. The `catalog` in `pnpm-workspace.yaml` holds one exact version for each, all at the same release. Add a new one with `pnpm add <pkg>@catalog:` after you add it to the catalog. Upgrade them together in the catalog and run `pnpm check`. Isolate an unstable API behind a module of your own, so an upgrade changes one place.
 
 - **Why:** Effect v4 packages move together, and a mixed set fails in ways the types do not show.
-- **Enforced by:** review.
+- **Enforced by:** the workspace catalog, and review.
 - **Applies to:** every `package.json`.
