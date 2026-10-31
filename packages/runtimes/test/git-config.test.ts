@@ -54,6 +54,8 @@ describe("the user's Git config in the sandbox", () => {
       '[includeIf "gitdir:~/work/"]',
       '\tpath = "work/config"',
       "\tpath = ~/.gitconfig.extra # kept here",
+      "[core]",
+      "\texcludesFile = ~/.gitignore_global",
       "[user]",
       "\tpath = not-an-include",
     ].join("\n");
@@ -61,6 +63,7 @@ describe("the user's Git config in the sandbox", () => {
       "/Users/me/.gitconfig.local",
       "/Users/me/work/config",
       "/Users/me/.gitconfig.extra",
+      "/Users/me/.gitignore_global",
     ]);
   });
 
@@ -78,9 +81,16 @@ describe("the user's Git config in the sandbox", () => {
       _tag: "Open",
       files: ["/Users/me/.gitconfig", "/Users/me/dotfiles/gitconfig", "/Users/me/dotfiles/identity"],
     });
-    expect(gitConfigAccess(home, { XDG_CONFIG_HOME: "/x" }, files({ "/x/git/config": "[core]" }), same)).toEqual({
+    expect(
+      gitConfigAccess(
+        home,
+        { XDG_CONFIG_HOME: "/x" },
+        files({ "/x/git/config": "[core]", "/x/git/ignore": ".DS_Store" }),
+        same,
+      ),
+    ).toEqual({
       _tag: "Open",
-      files: ["/x/git/config"],
+      files: ["/x/git/config", "/x/git/ignore"],
     });
   });
 

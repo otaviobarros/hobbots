@@ -83,19 +83,21 @@ const sectionOf = (line: string) => {
 };
 
 /**
- * The files a config includes through `include.path` or `includeIf.<condition>.path`, absolute.
- * Conditions are not evaluated: any of them may apply in some repository, so all count.
+ * The other files a config makes Git read, absolute: those it includes through `include.path` or
+ * `includeIf.<condition>.path`, and the ignore and attributes files `core.excludesFile` and
+ * `core.attributesFile` name. Conditions are not evaluated: any of them may apply in some
+ * repository, so all count.
  */
 export const includedFiles = (text: string, file: string, home: string): ReadonlyArray<string> => {
   const found: Array<string> = [];
-  let inInclude = false;
+  let section: string | null = null;
   for (const line of text.split("\n")) {
-    const section = sectionOf(line);
-    if (section !== null) {
-      inInclude = section === "include" || section === "includeif";
-      continue;
-    }
-    if (!inInclude || keyOf(line) !== "path") continue;
+    section = sectionOf(line) ?? section;
+    const key = keyOf(line);
+    const names =
+      ((section === "include" || section === "includeif") && key === "path") ||
+      (section === "core" && (key === "excludesfile" || key === "attributesfile"));
+    if (!names) continue;
     const value = unquote(line.slice(line.indexOf("=") + 1));
     if (value === "") continue;
     if (value === "~" || value.startsWith("~/")) found.push(join(home, value.slice(1)));
@@ -104,11 +106,11 @@ export const includedFiles = (text: string, file: string, home: string): Readonl
   return found;
 };
 
-/** Where Git looks for the user's global config: `~/.gitconfig` and the XDG one. */
-export const userGitConfigFiles = (home: string, env: NodeJS.ProcessEnv): ReadonlyArray<string> => [
-  join(home, ".gitconfig"),
-  join(env.XDG_CONFIG_HOME || join(home, ".config"), "git", "config"),
-];
+/** Where Git looks for the user's own files: `~/.gitconfig` and the XDG config, ignore and attributes. */
+export const userGitConfigFiles = (home: string, env: NodeJS.ProcessEnv): ReadonlyArray<string> => {
+  const xdg = join(env.XDG_CONFIG_HOME || join(home, ".config"), "git");
+  return [join(home, ".gitconfig"), join(xdg, "config"), join(xdg, "ignore"), join(xdg, "attributes")];
+};
 
 const realOrSelf = (path: string) => {
   try {
