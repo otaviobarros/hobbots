@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { type BusEvent, EventBus } from "../src/event-bus.ts";
+import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("odo");
 
@@ -44,9 +45,9 @@ const HangingRuntime = Layer.succeed(
 );
 
 // A hub process: its own bus and chat service over the shared database.
-const hub = ChatService.layer.pipe(
-  Layer.provideMerge(Layer.mergeAll(EventBus.layer, HobAdmission.layer, HangingRuntime)),
-);
+const hub = ChatService.layer
+  .pipe(Layer.provide(HobTools.chatOnly))
+  .pipe(Layer.provideMerge(Layer.mergeAll(EventBus.layer, HobAdmission.layer, HangingRuntime)));
 
 describe("event journal", () => {
   // covers DP-003, CH-002

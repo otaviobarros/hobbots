@@ -17,7 +17,7 @@ ACP describes client/agent interactions; it does not supply Hobbots' multi-agent
 
 `detect`, `listModels`, `createSession`, `resumeSession`, `sendPrompt`, `subscribeEvents`, `respondToApproval`, `cancel`, `getCapabilities`, `close`. These are Hobbots interface concepts, not claims that vendor APIs expose identical methods. Detect installation/version/authentication availability without reading or logging credentials.
 
-Normalize text/tool/status/approval/result events into Hobbots envelopes while retaining useful runtime provenance. Record terminal outcome and uncertainty. Effect scopes own process/connection cleanup; closing one client must not kill unrelated work.
+Normalize text/tool/status/approval/result events into Hobbots envelopes while retaining useful runtime provenance. Tool calls become `ToolStarted` (id, the runtime's tool name, the policy operation, its targets and a short label), `ToolFinished` (whether the tool failed) and `ToolDenied` (the reason, and whether the policy or the sandbox refused it). Record terminal outcome and uncertainty. Effect scopes own process/connection cleanup; closing one client must not kill unrelated work.
 
 ## Capability matrix to fill with evidence
 
@@ -25,7 +25,7 @@ For each runtime/version/executor, verify native session persistence/resumption 
 
 Each adapter also declares its enforcement capabilities (tool interception, process sandbox, hub tools, tool events, tool interruption) and what is blocked without each; [ADR 014](../decisions/014-tool-policy-and-enforcement.md) owns that table. Hobbots wraps the whole runtime process in its own sandbox and turns the runtime's sandbox off inside it, so a runtime's native sandbox modes are not part of the contract.
 
-Classify each capability as verified supported, unsupported, conditional or unverified, with runtime version, test date and evidence. All live capability entries are currently **unverified**. The selected integration strategy is not proof that a runtime supports every product feature.
+Classify each capability as verified supported, unsupported, conditional or unverified, with runtime version, test date and evidence. The Claude Code adapter's enforcement capabilities were verified on macOS in October 2026 (Claude Code 2.1.301, sandbox-runtime 0.0.81): tool interception, the process sandbox, tool events and tool interruption; hub tools are unsupported until Charms land. The evidence is in ADR 014. Every other live capability entry is still **unverified**. The selected integration strategy is not proof that a runtime supports every product feature.
 
 Evidence so far: a resumed Claude Code session (2.1.301) keeps the system prompt it started with and ignores the one passed with a new turn, including `--append-system-prompt`, a full `--system-prompt` and `--fork-session`. So when a hob's instructions change after a thread's session started, the adapter carries the new instructions inside the next turn instead of the system prompt, which keeps the session's context.
 

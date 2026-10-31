@@ -1,11 +1,14 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { accessSync, constants, mkdirSync, statSync } from "node:fs";
+import { accessSync, constants, mkdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
 import { promisify } from "node:util";
 import {
   type AccountInfo,
+  type CanUseTool,
+  type HookCallback,
+  type HookJSONOutput,
   type ModelInfo,
   type Options,
   query,
@@ -13,9 +16,20 @@ import {
   type SDKRateLimitInfo,
   type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import { RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
-import { Clock, DateTime, Duration, Effect, Layer, Stream } from "effect";
-import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent, RuntimeLimitReached } from "./adapter.ts";
+import { RuntimeHealth, RuntimeModel, RuntimeModels, type SandboxState } from "@hobbots/domain";
+import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
+import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
+import {
+  type EnforcementDeclaration,
+  type PromptRequest,
+  RuntimeAdapter,
+  RuntimeError,
+  type RuntimeEvent,
+  RuntimeLimitReached,
+  type ToolAccess,
+} from "./adapter.ts";
+import { CLAUDE_CODE_MODEL_HOSTS, ProcessSandbox } from "./sandbox.ts";
+import { narrowestVerdict, offeredTools, toolLabel, toolRequests } from "./tool-calls.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
@@ -57,6 +71,57 @@ const runtimeEnv = (binary: string): NodeJS.ProcessEnv => ({
 });
 
 const execFileAsync = promisify(execFile);
+
+/** The keychain item where Claude Code keeps a claude.ai login on macOS, for the default config folder. */
+const KEYCHAIN_LOGIN = "Claude Code-credentials";
+// A turn starts only with a sign-in that stays valid this long; Claude Code cannot refresh it in the sandbox.
+const LOGIN_MARGIN_MS = 10 * 60_000;
+
+/** The access token and its expiry from Claude Code's keychain item, or null without a usable one. */
+export const parseKeychainLogin = (secret: string): { readonly token: string; readonly expiresAt: number } | null => {
+  try {
+    const login = (JSON.parse(secret) as { claudeAiOauth?: { accessToken?: unknown; expiresAt?: unknown } })
+      .claudeAiOauth;
+    return typeof login?.accessToken === "string" && typeof login.expiresAt === "number"
+      ? { token: login.accessToken, expiresAt: login.expiresAt }
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * The sign-in a sandboxed Claude Code turn gets in its environment (ADR 014). The sandbox has no
+ * keychain access, since through it any command could read every credential a trusted helper such
+ * as `git credential-osxkeychain` or `gh` can. A key or token in the hub's environment passes through
+ * as it is; otherwise the hub reads the claude.ai login's short-lived access token, never the refresh
+ * token, and asks Claude Code to refresh it first when it would expire during the turn.
+ */
+const sandboxLogin = (binary: string): Effect.Effect<Record<string, string>, RuntimeError> =>
+  Effect.gen(function* () {
+    if (process.platform !== "darwin" || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_OAUTH_TOKEN)
+      return {};
+    const read = Effect.promise(() =>
+      execFileAsync("security", ["find-generic-password", "-s", KEYCHAIN_LOGIN, "-w"], { timeout: 10_000 }).then(
+        ({ stdout }) => parseKeychainLogin(stdout.trim()),
+        () => null,
+      ),
+    );
+    let login = yield* read;
+    if (login === null) return {};
+    if (login.expiresAt - Date.now() < LOGIN_MARGIN_MS) {
+      // Outside the sandbox Claude Code refreshes a login about to expire whenever it checks it.
+      yield* Effect.promise(() =>
+        execFileAsync(binary, ["auth", "status"], { timeout: 30_000, env: runtimeEnv(binary) }).catch(() => undefined),
+      );
+      login = yield* read;
+    }
+    if (login === null || login.expiresAt - Date.now() < LOGIN_MARGIN_MS)
+      return yield* new RuntimeError({
+        message: "Claude Code's sign-in has expired. Open Claude Code to sign in again, then try again.",
+      });
+    return { CLAUDE_CODE_OAUTH_TOKEN: login.token };
+  });
 
 const isExecutable = (path: string) => {
   try {
@@ -116,7 +181,7 @@ export const isSignedOut = (account: AccountInfo): boolean =>
   account.subscriptionType === undefined &&
   (account.tokenSource ?? "none") === "none";
 
-// Chat-only until the permission broker exists: no built-in tools, nothing auto-approved,
+// Chat-only unless the turn has tools (see `toolOptions`): no built-in tools, nothing auto-approved,
 // no user/project settings or MCP servers loaded from disk.
 // ANTHROPIC_API_KEY is removed so Claude Code always uses the claude.ai login (the subscription).
 const baseOptions = (config: ClaudeCodeConfig, executable: string): Options => ({
@@ -362,6 +427,152 @@ export const turnPrompt = (
       ].join("\n")
     : request.prompt;
 
+/** A turn with tools: the context every call is decided under, its folders and the tools offered. */
+export interface ToolTurn {
+  readonly context: PolicyContext;
+  /** Canonical and existing; the first is where Claude Code starts. */
+  readonly folders: ReadonlyArray<string>;
+  readonly tools: ReadonlyArray<string>;
+}
+
+/** The turn's tools, or null for a chat-only turn: no access, no folder that exists, or no tool open. */
+export const toolTurn = (access: ToolAccess | null | undefined, sandbox: SandboxState): ToolTurn | null => {
+  if (!access) return null;
+  const folders = [
+    ...new Set(
+      access.folders.flatMap((folder) => {
+        try {
+          return [realpathSync(folder)];
+        } catch {
+          return [];
+        }
+      }),
+    ),
+  ];
+  if (folders.length === 0) return null;
+  const context: PolicyContext = { ...access.policy, sandbox, modelHosts: CLAUDE_CODE_MODEL_HOSTS };
+  const tools = offeredTools(context);
+  return tools.length === 0 ? null : { context, folders, tools };
+};
+
+const UNKNOWN_TOOL = (tool: string) => `Hobbots does not know the ${tool} tool, so it stays closed.`;
+
+/** Why a call did not run, in words for the model and the person. */
+export const refusal = (verdict: PolicyVerdict): string =>
+  verdict.decision === "ask"
+    ? `${verdict.reason.message} Hobbots cannot ask you for approval yet, so the call did not run.`
+    : verdict.reason.message;
+
+/**
+ * The hooks that put every tool call before the policy engine (ADR 014). PreToolUse decides the
+ * call and reports it; a call that is not allowed never runs, whatever the prompt says. The
+ * permission callback decides again, for any call that reaches it without the hook's answer.
+ */
+export const policyHooks = (
+  engine: PolicyEngine["Service"],
+  turn: ToolTurn,
+  report: (event: RuntimeEvent) => void,
+): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
+  const decide = (tool: string, input: Record<string, unknown>, cwd: string) =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const requests = toolRequests(tool, input, cwd);
+        if (requests === null) return undefined;
+        return narrowestVerdict(yield* Effect.forEach(requests, (request) => engine.decide(turn.context, request)));
+      }),
+    );
+  const started = new Set<string>();
+
+  const preToolUse: HookCallback = async (input): Promise<HookJSONOutput> => {
+    if (input.hook_event_name !== "PreToolUse") return {};
+    const tool = input.tool_name;
+    const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
+    const label = toolLabel(tool, toolInput);
+    const verdict = await decide(tool, toolInput, input.cwd || (turn.folders[0] as string)).catch(() => undefined);
+    if (verdict?.decision === "allow") {
+      started.add(input.tool_use_id);
+      report({
+        _tag: "ToolStarted",
+        id: input.tool_use_id,
+        tool,
+        operation: verdict.operation,
+        targets: verdict.targets,
+        label,
+      });
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+          permissionDecisionReason: verdict.reason.message,
+        },
+      };
+    }
+    const reason = verdict === undefined ? UNKNOWN_TOOL(tool) : refusal(verdict);
+    report({
+      _tag: "ToolDenied",
+      id: input.tool_use_id,
+      tool,
+      // An unknown tool is refused as anything outside what the hob may do.
+      operation: verdict?.operation ?? "outside-folders",
+      targets: verdict?.targets ?? [],
+      label,
+      reason,
+      decidedBy: "policy",
+    });
+    return {
+      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason },
+    };
+  };
+
+  const finished =
+    (failed: boolean): HookCallback =>
+    async (input) => {
+      if (
+        (input.hook_event_name === "PostToolUse" || input.hook_event_name === "PostToolUseFailure") &&
+        started.delete(input.tool_use_id)
+      ) {
+        report({ _tag: "ToolFinished", id: input.tool_use_id, failed });
+      }
+      return {};
+    };
+
+  const canUseTool: CanUseTool = async (tool, input) => {
+    const verdict = await decide(tool, input, turn.folders[0] as string).catch(() => undefined);
+    if (verdict?.decision === "allow") return { behavior: "allow", updatedInput: input };
+    return { behavior: "deny", message: verdict === undefined ? UNKNOWN_TOOL(tool) : refusal(verdict) };
+  };
+
+  return {
+    hooks: {
+      PreToolUse: [{ hooks: [preToolUse] }],
+      PostToolUse: [{ hooks: [finished(false)] }],
+      PostToolUseFailure: [{ hooks: [finished(true)] }],
+    },
+    canUseTool,
+  };
+};
+
+/**
+ * Claude Code's options for a turn with tools: only the offered built-in tools, started in the hob's
+ * first folder with the others added, and every call decided by the hooks. Nothing is loaded from
+ * settings or MCP configuration on disk, and no traffic beyond the model API is sent.
+ */
+export const toolOptions = (
+  turn: ToolTurn,
+  policy: ReturnType<typeof policyHooks>,
+  env: Options["env"],
+): Partial<Options> => ({
+  cwd: turn.folders[0] as string,
+  env: { ...env, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" },
+  additionalDirectories: turn.folders.slice(1),
+  tools: [...turn.tools],
+  disallowedTools: [],
+  permissionMode: "default",
+  strictMcpConfig: true,
+  hooks: policy.hooks,
+  canUseTool: policy.canUseTool,
+});
+
 const errorMessage = (error: unknown) =>
   error instanceof RuntimeError || error instanceof RuntimeLimitReached
     ? error
@@ -371,6 +582,8 @@ const errorMessage = (error: unknown) =>
 
 export const makeClaudeCode = (config: ClaudeCodeConfig) =>
   Effect.gen(function* () {
+    const engine = yield* PolicyEngine;
+    const sandbox = yield* ProcessSandbox;
     yield* Effect.sync(() => mkdirSync(config.workspaceDir, { recursive: true }));
 
     // `claude --version` per binary, rerun when the file changes (as `claude update` does).
@@ -421,18 +634,42 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
     });
 
     const sendPrompt = (request: PromptRequest) =>
-      Stream.unwrap(
+      Stream.callback<RuntimeEvent, RuntimeError | RuntimeLimitReached>((queue) =>
         Effect.gen(function* () {
           const binary = yield* executable;
+          const tools = toolTurn(request.tools, sandbox.state);
+          const sandboxed = tools !== null && sandbox.state === "on";
+          const login = sandboxed ? yield* sandboxLogin(binary) : {};
+          const prepared = sandboxed
+            ? yield* Effect.acquireRelease(
+                sandbox.prepare({
+                  folders: tools.folders,
+                  dataFolder: tools.context.dataFolder,
+                  binary,
+                  allowedHosts: CLAUDE_CODE_MODEL_HOSTS,
+                  decideHost: (host) =>
+                    Effect.runPromise(
+                      engine
+                        .decide(tools.context, { _tag: "Web", host, addresses: [] })
+                        .pipe(Effect.map((verdict) => (verdict.decision === "allow" ? true : refusal(verdict)))),
+                    ),
+                }),
+                (prepared) => Effect.sync(prepared.release),
+              )
+            : null;
+          const base = baseOptions(config, binary);
           const abortController = new AbortController();
           // Hobbots starts the process itself so it can tell when it has really exited.
           let child: ChildProcess | undefined;
           let stderr: ReturnType<typeof stderrTail> | undefined;
-          const spawnClaudeCodeProcess = ({ command, args, cwd, env, signal }: SpawnOptions) => {
+          const spawnClaudeCodeProcess = (options: SpawnOptions) => {
+            const { command, args, env } = prepared
+              ? prepared.spawnArgs(options.command, options.args, { ...options.env, ...login })
+              : options;
             const spawned = spawn(command, args, {
-              cwd,
+              cwd: options.cwd,
               env,
-              signal,
+              signal: options.signal,
               stdio: ["pipe", "pipe", "pipe"],
               windowsHide: true,
             });
@@ -445,7 +682,14 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               query({
                 prompt: turnPrompt(request),
                 options: {
-                  ...baseOptions(config, binary),
+                  ...base,
+                  ...(tools
+                    ? toolOptions(
+                        tools,
+                        policyHooks(engine, tools, (event) => Queue.offerUnsafe(queue, event)),
+                        base.env,
+                      )
+                    : {}),
                   abortController,
                   spawnClaudeCodeProcess,
                   includePartialMessages: true,
@@ -468,7 +712,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               }).pipe(Effect.andThen(child ? exited(child) : Effect.void)),
           );
           const toEvents = turnEvents();
-          return Stream.fromAsyncIterable(turn, errorMessage).pipe(
+          // Tool events arrive from the hooks while the turn runs, so the turn's own events share their queue.
+          yield* Stream.fromAsyncIterable(turn, errorMessage).pipe(
             Stream.mapEffect((message) => Effect.try({ try: () => toEvents(message), catch: errorMessage })),
             Stream.flattenIterable,
             Stream.catch((error) =>
@@ -478,7 +723,9 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                 ),
               ),
             ),
+            Stream.runForEach((event) => Queue.offer(queue, event)),
           );
+          yield* Queue.end(queue);
         }),
       );
 
@@ -569,7 +816,31 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       );
     });
 
-    return RuntimeAdapter.of({ health, models, sendPrompt });
+    const sandboxed = sandbox.state === "on";
+    const enforcement = Effect.succeed<EnforcementDeclaration>({
+      toolInterception: {
+        status: "verified",
+        evidence:
+          "Every built-in tool call passes the PreToolUse hook; settings and MCP servers on disk are not loaded.",
+      },
+      processSandbox: !sandboxed
+        ? { status: "unsupported", evidence: sandbox.evidence }
+        : process.platform === "darwin"
+          ? { status: "verified", evidence: `Claude Code starts inside ${sandbox.evidence}.` }
+          : { status: "unverified", evidence: `Claude Code starts inside ${sandbox.evidence}, not yet checked here.` },
+      hubTools: { status: "unsupported", evidence: "Charms and coordination tools are not served yet." },
+      toolEvents: {
+        status: "verified",
+        evidence: "PreToolUse, PostToolUse and PostToolUseFailure hooks report each call.",
+      },
+      toolInterruption: {
+        status: "verified",
+        evidence: "Cancelling the turn aborts Claude Code and waits for it to exit.",
+      },
+    });
+
+    return RuntimeAdapter.of({ health, models, enforcement, sendPrompt });
   });
 
+/** Claude Code with tools under the hub's policy engine and process sandbox. */
 export const ClaudeCodeLayer = (config: ClaudeCodeConfig) => Layer.effect(RuntimeAdapter, makeClaudeCode(config));

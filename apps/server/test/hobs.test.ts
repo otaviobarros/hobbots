@@ -21,6 +21,7 @@ import { checkBrain, HobService } from "../src/hobs.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
 import { HobLifecycle } from "../src/lifecycle.ts";
+import { HobTools } from "../src/tools.ts";
 
 const hob = {
   name: "Wren",
@@ -74,7 +75,9 @@ beforeEach(() => {
     },
   });
   const App = HobLifecycle.layer
-    .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)))
+    .pipe(
+      Layer.provideMerge(Layer.mergeAll(ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)), HobService.layer)),
+    )
     .pipe(
       Layer.provideMerge(
         Layer.mergeAll(

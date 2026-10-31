@@ -22,6 +22,7 @@ import { RuntimeAdapter, type RuntimeEvent } from "@hobbots/runtimes";
 import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { EventBus } from "./event-bus.ts";
+import { HobTools } from "./tools.ts";
 
 interface Reply {
   readonly current: Ref.Ref<Message>;
@@ -98,6 +99,7 @@ export class ChatService extends Context.Service<
       const bus = yield* EventBus;
       const runtime = yield* RuntimeAdapter;
       const admission = yield* HobAdmission;
+      const hobTools = yield* HobTools;
       const turns = yield* FiberMap.make<ThreadId>();
       const scope = yield* Effect.scope;
       // The reply each running turn is writing, so a stop request can reach it.
@@ -218,7 +220,7 @@ export class ChatService extends Context.Service<
 
       // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
       const runTurn = (
-        name: string,
+        agent: Agent,
         config: AgentConfiguration,
         thread: Thread,
         prompt: string,
@@ -226,6 +228,7 @@ export class ChatService extends Context.Service<
         changed: boolean,
       ) =>
         Effect.gen(function* () {
+          const name = agent.name;
           const threadRef = yield* Ref.make(thread);
           // Saves the streamed text about once a second without journaling it, so a crash keeps
           // all but the last moment of it (ADR 013). Ending the reply saves it in full.
@@ -294,6 +297,13 @@ export class ChatService extends Context.Service<
                 );
               case "Completed":
                 return update((m) => MessageTransitions.complete(m, reply.prefix + event.text));
+              // A tool call is one of the reply's steps; a refused one never ran, and the reply says why.
+              case "ToolStarted":
+                return handle({ _tag: "StepStarted", id: event.id, kind: "tool", label: event.label });
+              case "ToolFinished":
+                return handle({ _tag: "StepEnded", id: event.id });
+              case "ToolDenied":
+                return Effect.void;
             }
           };
 
@@ -305,6 +315,7 @@ export class ChatService extends Context.Service<
               instructionsChanged: changed,
               model: config.model,
               effort: config.effort,
+              tools: yield* hobTools.access(agent),
             })
             .pipe(
               Stream.runForEach(handle),
@@ -379,7 +390,7 @@ export class ChatService extends Context.Service<
           yield* FiberMap.run(
             turns,
             thread.id,
-            runTurn(agent.name, config, thread, prompt, reply, changed).pipe(
+            runTurn(agent, config, thread, prompt, reply, changed).pipe(
               Effect.ensuring(Effect.forkIn(drain(thread.id), scope)),
             ),
           );

@@ -12,19 +12,21 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
 import { RuntimeLimitReached } from "../src/adapter.ts";
 import {
   brainOptions,
+  type ClaudeCodeConfig,
   claudeCandidates,
   exited,
   expiringCache,
   fallbackModels,
   findClaudeCode,
   isAtLeast,
-  makeClaudeCode,
+  makeClaudeCode as makeAdapter,
   modelListMaxAge,
   parseVersion,
   runtimePath,
@@ -33,6 +35,13 @@ import {
   turnEvents,
   turnPrompt,
 } from "../src/claude-code.ts";
+import { ProcessSandbox } from "../src/sandbox.ts";
+
+// These turns are chat-only, so the adapter runs without a sandbox.
+const makeClaudeCode = (config: ClaudeCodeConfig) =>
+  makeAdapter(config).pipe(
+    Effect.provide(Layer.mergeAll(PolicyEngine.node, ProcessSandbox.unavailable("not needed for chat-only turns"))),
+  );
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-claude-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));

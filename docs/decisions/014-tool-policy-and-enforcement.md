@@ -118,6 +118,18 @@ A sandbox that cannot start never falls back silently to running without it: the
 
 **Changing authority mid-turn.** File tools and new hosts are re-decided on every call. A change that narrows what the running sandbox allows (a removed folder, a narrowed network rule) applies through sandbox-runtime's live configuration update where #131 verifies it works, and otherwise stops the hob's running reply with the reason, so the next turn starts with the narrower sandbox.
 
+### What #131 verified
+
+Checked on macOS with Claude Code 2.1.301, the Claude Agent SDK 0.3.311 and sandbox-runtime 0.0.81; Linux and Windows are not verified yet.
+
+- Under Balanced a real hob fixed a file and ran `npm test` in its folder without asking. A command writing outside the folder failed with "operation not permitted", and so did a read of a dotfile in the home folder, whatever the prompt said.
+- The policy hook sees every call, including reads in the working directory. A call that would need an approval is refused with the reason until #133 adds asking.
+- Claude Code needs three things inside the sandbox: its state folder (`~/.claude`, `~/.claude.json`), its temporary files in the turn's own folder (`CLAUDE_CODE_TMPDIR`; it uses `/tmp` otherwise), and only the model API hosts when `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set. Claude Code's settings, hooks, commands, agents, skills and plugins stay read-only, since a later run would load them outside any policy.
+- **The keychain stays closed.** Opening the macOS keychain services to the sandbox lets any command read every credential a trusted helper can: `git credential-osxkeychain` returned the user's GitHub password and `gh auth token` succeeded. So the sandbox gets no keychain access, and the runtime gets its sign-in in its environment instead: an API key or `CLAUDE_CODE_OAUTH_TOKEN` from the hub's environment as they are, or else the claude.ai login's short-lived access token, read on the hub. The refresh token never enters the sandbox. Claude Code cannot refresh that token from inside, so a turn starts only while it stays valid for a while; a long-lived token from `claude setup-token` avoids this, and a hub-side way to keep it is a follow-up. The token is readable by commands, as the runtime's stored login already was.
+- sandbox-runtime protects `.git/hooks` and `.git/config` only under the hub's own working folder on macOS, so Hobbots adds them, in each folder and in any repository below it, to the turn's write denies.
+- The proxy asks about a new host without saying which turn's command asked, so Hobbots answers for every live turn at once: a host is reached only when the policy of each live turn allows it. The model API hosts are allowed per turn through sandbox-runtime's per-command lists. Commands of two hobs running at once with different web rules both get the narrower one.
+- Not done in #131: the Push Charm and its hub-side Git credentials (a `git push` command is decided as Push by the hook: under Careful and Balanced it asks first, so it is refused until #133; under Trusting it runs, and fails against a remote that needs credentials, since none are in the sandbox), credential masking, live configuration updates when authority narrows mid-turn (the next turn gets the narrower sandbox), and the per-hob sandbox switch.
+
 ### Charms
 
 A **Charm** is a connection that gives a hob abilities beyond its runtime's own tools: an integration with another app or service that lets it reach tools, do additional work and create things there. GitHub, Slack, Google Drive, Notion, Figma, any MCP server, and later web search, computer use, purchases or phone calls are all Charms.

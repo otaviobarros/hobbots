@@ -1,6 +1,9 @@
 import { type RuntimeAvailability, RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
-import { Clock, Effect, Exit, Layer, Stream } from "effect";
+import { PolicyEngine } from "@hobbots/permissions";
+import { Clock, Effect, Exit, Layer, Option, Stream } from "effect";
 import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent, RuntimeLimitReached } from "./adapter.ts";
+import { toolTurn } from "./claude-code.ts";
+import { narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
 
 /**
  * The fake runtime's models: a main one with every effort level, and one behind "More models"
@@ -34,6 +37,8 @@ export interface FakeRuntimeOptions {
   readonly stopDelay?: string;
   /** What the health check reports, to show a brain that cannot think (ready by default). */
   readonly availability?: RuntimeAvailability;
+  /** Decides scripted tool calls; without it a turn has no tools. */
+  readonly engine?: PolicyEngine["Service"];
 }
 
 /**
@@ -52,6 +57,75 @@ export const fakeCutOffError = "Claude stopped responding";
 
 /** Asked this, the fake runtime answers with the instructions its session follows instead of an echo. */
 export const fakeInstructionsPrompt = "/instructions";
+
+/** A prompt line `fake:tool <Tool> <argument>` asks the fake runtime to make that tool call. */
+export const FAKE_TOOL_DIRECTIVE = "fake:tool";
+
+const scriptedInput = (tool: string, argument: string): Record<string, unknown> => {
+  switch (tool) {
+    case "Bash":
+      return { command: argument };
+    case "Glob":
+    case "Grep":
+      return { pattern: argument };
+    case "NotebookEdit":
+      return { notebook_path: argument };
+    default:
+      return { file_path: argument };
+  }
+};
+
+/**
+ * The tool calls a prompt scripts, decided by the policy engine as Claude Code's would be: each is
+ * reported as started and finished, or denied. Nothing is read, written or run.
+ */
+export const scriptedToolEvents = (
+  request: PromptRequest,
+  engine: PolicyEngine["Service"] | undefined,
+): Effect.Effect<ReadonlyArray<RuntimeEvent>> =>
+  Effect.gen(function* () {
+    // The fake pretends its sandbox started, so commands are decided as on a supported hub.
+    const turn = engine ? toolTurn(request.tools, "on") : null;
+    if (engine === undefined || turn === null) return [];
+    const calls = request.prompt
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith(`${FAKE_TOOL_DIRECTIVE} `))
+      .map((line) => {
+        const [tool = "", ...rest] = line
+          .slice(FAKE_TOOL_DIRECTIVE.length + 1)
+          .trim()
+          .split(" ");
+        return { tool, input: scriptedInput(tool, rest.join(" ")) };
+      });
+    const events: Array<RuntimeEvent> = [];
+    for (const [index, { tool, input }] of calls.entries()) {
+      if (!turn.tools.includes(tool)) continue;
+      const id = `fake-tool-${index + 1}`;
+      const label = toolLabel(tool, input);
+      const requests = toolRequests(tool, input, turn.folders[0] as string) ?? [];
+      const verdict = narrowestVerdict(yield* Effect.forEach(requests, (r) => engine.decide(turn.context, r)));
+      if (verdict === undefined) continue;
+      if (verdict.decision === "allow") {
+        events.push(
+          { _tag: "ToolStarted", id, tool, operation: verdict.operation, targets: verdict.targets, label },
+          { _tag: "ToolFinished", id, failed: false },
+        );
+      } else {
+        events.push({
+          _tag: "ToolDenied",
+          id,
+          tool,
+          operation: verdict.operation,
+          targets: verdict.targets,
+          label,
+          reason: verdict.reason.message,
+          decidedBy: "policy",
+        });
+      }
+    }
+    return events;
+  });
 
 /**
  * Deterministic adapter for tests and UI work without model usage. Like Claude Code, a resumed session
@@ -94,7 +168,11 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
               ),
             )
           : Stream.empty;
-    const stream = Stream.fromIterable(events).pipe(Stream.concat(failure));
+    const stream = Stream.unwrap(
+      Effect.map(scriptedToolEvents(request, options.engine), (tools) =>
+        Stream.fromIterable([...events.slice(0, 1), ...tools, ...events.slice(1)]),
+      ),
+    ).pipe(Stream.concat(failure));
     const paced = options.delay ? stream.pipe(Stream.tap(() => Effect.sleep(options.delay as "10 millis"))) : stream;
     return options.stopDelay
       ? paced.pipe(
@@ -121,5 +199,11 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   });
 };
 
+/** The fake runtime, deciding scripted tool calls with the hub's policy engine when there is one. */
 export const FakeRuntimeLayer = (options?: FakeRuntimeOptions) =>
-  Layer.succeed(RuntimeAdapter, makeFakeRuntime(options));
+  Layer.effect(
+    RuntimeAdapter,
+    Effect.map(Effect.serviceOption(PolicyEngine), (engine) =>
+      makeFakeRuntime({ ...options, ...(Option.isSome(engine) ? { engine: engine.value } : {}) }),
+    ),
+  );

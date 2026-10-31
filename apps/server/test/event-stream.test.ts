@@ -16,6 +16,7 @@ import {
   resumePoint,
   type StreamFrame,
 } from "../src/event-stream.ts";
+import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("odo");
 
@@ -50,7 +51,7 @@ const makeHub = Effect.gen(function* () {
     }),
   );
   const layer = EventStream.layer.pipe(
-    Layer.provideMerge(ChatService.layer),
+    Layer.provideMerge(ChatService.layer.pipe(Layer.provide(HobTools.chatOnly))),
     Layer.provideMerge(Layer.mergeAll(EventBus.layer, HobAdmission.layer, runtime)),
     Layer.provideMerge(
       Layer.effectDiscard(summonHob).pipe(

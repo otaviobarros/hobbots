@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
+import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("aldric");
 
@@ -32,16 +33,18 @@ const summonHob = Effect.gen(function* () {
 
 const Persistence = HobbotsRepository.layer.pipe(Layer.provideMerge(TestDatabase));
 const testLayer = (runtime = FakeRuntimeLayer()) =>
-  ChatService.layer.pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)),
-        EventBus.layer,
-        HobAdmission.layer,
-        runtime,
+  ChatService.layer
+    .pipe(Layer.provide(HobTools.chatOnly))
+    .pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)),
+          EventBus.layer,
+          HobAdmission.layer,
+          runtime,
+        ),
       ),
-    ),
-  );
+    );
 const TestLayer = testLayer();
 
 describe("ChatService", () => {
