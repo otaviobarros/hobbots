@@ -9,6 +9,21 @@ test("[TC-GEN-008] joins the wait-list from the hero form", async ({ page }) => 
   await expect(page.getByText(/We'll write to pip@example.com/)).toBeVisible();
 });
 
+test("[TC-GEN-011] joins again with the same email and shows the same message", async ({ page }) => {
+  // covers #182: joining again shows the same success message (storing once is #185)
+  await page.goto("/");
+  const joinWith = async () => {
+    await page.getByLabel("Email address").fill("pip@example.com");
+    await page.getByRole("button", { name: "Join the wait-list" }).click();
+    await expect(page.getByText("You're on the list!")).toBeVisible();
+    return page.getByText(/We'll write to pip@example.com/).textContent();
+  };
+  const first = await joinWith();
+  await page.getByRole("button", { name: "Use a different email" }).click();
+  await expect(page.getByLabel("Email address")).toBeFocused();
+  expect(await joinWith()).toBe(first);
+});
+
 test("[TC-GEN-009] refuses an invalid email and says why", async ({ page }) => {
   // covers #182: the form checks the email
   await page.goto("/");

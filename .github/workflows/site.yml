@@ -9,12 +9,16 @@ on:
       - apps/site/**
       - packages/art/**
       - .github/workflows/site.yml
+      # Dependency bumps, such as wrangler or workerd, change only the lockfile.
+      - pnpm-lock.yaml
   push:
     branches: [main]
     paths:
       - apps/site/**
       - packages/art/**
       - .github/workflows/site.yml
+      # Dependency bumps, such as wrangler or workerd, change only the lockfile.
+      - pnpm-lock.yaml
 
 permissions:
   contents: read
