@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { type PolicyDecision, PolicyOperation, PRESET_DECISIONS, SafetyPreset } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { evaluate, type PolicyRequest, policyVersion, type ResolvedScope } from "../src/index.ts";
-import { contextFor, decide, engineWithLimit, files, type Home, useHome } from "./fixture.ts";
+import { contextFor, decide, engineWithLimit, files, type Home, lastingEngine, useHome } from "./fixture.ts";
 
 const home: Home = useHome();
 
@@ -322,34 +322,69 @@ describe("policy engine", () => {
 
   // covers PE-002
   it("[TC-PE-007] keeps Git hooks read-only when they link into another approved folder", async () => {
-    const linked = path.join(home.root, "linked-repo");
+    const outer = path.join(home.root, "linked-repo");
+    const nested = path.join(outer, "packages", "nested");
     const other = path.join(home.root, "other");
-    await fs.mkdir(path.join(linked, ".git"), { recursive: true });
+    await fs.mkdir(path.join(outer, ".git"), { recursive: true });
     await fs.mkdir(path.join(other, "hooks"), { recursive: true });
+    await fs.mkdir(path.join(other, "nested-hooks"));
     await fs.mkdir(path.join(other, "docs"));
-    await fs.writeFile(path.join(linked, ".git", "config"), "");
-    await fs.symlink(path.join(other, "hooks"), path.join(linked, ".git", "hooks"));
-    for (const preset of ["balanced", "trusting"] as const) {
-      const context = contextFor(home, preset, { sharedFolders: [linked, other] });
-      for (const [cwd, target] of [
-        [linked, ".git/hooks/pre-commit"],
-        [other, "hooks/pre-commit"],
-        [other, "hooks"],
-        [other, "."],
-      ] as const) {
-        for (const operation of ["edit-files", "delete-files"] as const) {
-          const verdict = await decide(context, files(operation, cwd, target));
-          expect({ preset, target, operation, decision: verdict.decision, code: verdict.reason.code }).toEqual({
-            preset,
-            target,
-            operation,
-            decision: "deny",
-            code: "protected-path",
-          });
+    await fs.writeFile(path.join(outer, ".git", "config"), "");
+    await fs.symlink(path.join(other, "hooks"), path.join(outer, ".git", "hooks"));
+    const engine = lastingEngine();
+    try {
+      const decideBoth = async (preset: SafetyPreset, cwd: string, target: string) => {
+        const context = contextFor(home, preset, { sharedFolders: [outer, other] });
+        return Promise.all(
+          (["edit-files", "delete-files"] as const).map((operation) =>
+            engine.decide(context, files(operation, cwd, target)).then((verdict) => ({
+              preset,
+              target,
+              operation,
+              decision: verdict.decision,
+              code: verdict.reason.code,
+            })),
+          ),
+        );
+      };
+      const denied = (preset: SafetyPreset, target: string) =>
+        (["edit-files", "delete-files"] as const).map((operation) => ({
+          preset,
+          target,
+          operation,
+          decision: "deny",
+          code: "protected-path",
+        }));
+      for (const preset of ["balanced", "trusting"] as const) {
+        expect((await decideBoth(preset, other, "nested-hooks/pre-commit")).map((v) => v.decision)).not.toContain(
+          "deny",
+        );
+        // A repository nested in another's working tree, created after the engine last looked.
+        await fs.mkdir(path.join(nested, ".git"), { recursive: true });
+        await fs.rm(path.join(nested, ".git", "hooks"), { force: true });
+        await fs.symlink(path.join(other, "nested-hooks"), path.join(nested, ".git", "hooks"));
+        for (const [cwd, target] of [
+          [outer, ".git/hooks/pre-commit"],
+          [other, "hooks/pre-commit"],
+          [other, "hooks"],
+          [other, "."],
+          [nested, ".git/hooks/pre-commit"],
+          [other, "nested-hooks/pre-commit"],
+          [other, "nested-hooks"],
+        ] as const) {
+          expect(await decideBoth(preset, cwd, target)).toEqual(denied(preset, target));
         }
+        const context = contextFor(home, preset, { sharedFolders: [outer, other] });
+        expect((await engine.decide(context, files("edit-files", other, "docs/readme.md"))).decision).not.toBe("deny");
+        expect((await engine.decide(context, files("read-files", other, "hooks/pre-commit"))).decision).toBe("allow");
+        // Once the nested repository is gone its former hooks folder is ordinary again.
+        await fs.rm(nested, { recursive: true });
+        expect((await decideBoth(preset, other, "nested-hooks/pre-commit")).map((v) => v.decision)).not.toContain(
+          "deny",
+        );
       }
-      expect((await decide(context, files("edit-files", other, "docs/readme.md"))).decision).not.toBe("deny");
-      expect((await decide(context, files("read-files", other, "hooks/pre-commit"))).decision).toBe("allow");
+    } finally {
+      await engine.dispose();
     }
   });
 
@@ -363,19 +398,14 @@ describe("policy engine", () => {
       await fs.writeFile(path.join(big, `file-${i}.txt`), "");
       await fs.writeFile(path.join(bigRepo, `file-${i}.txt`), "");
     }
-    const limited = engineWithLimit(5);
-    const context = (preset: SafetyPreset) =>
-      contextFor(home, preset, { sharedFolders: [big, bigRepo, path.join(home.project, "src")] });
-    // A repository is not searched below its root, however large, and a folder inside one not at all.
-    for (const [cwd, target] of [
-      [bigRepo, "file-1.txt"],
-      [path.join(home.project, "src"), "index.ts"],
-    ] as const) {
-      expect((await decide(context("trusting"), files("edit-files", cwd, target), limited)).decision).toBe("allow");
-    }
-    expect(
-      (await decide(context("trusting"), files("edit-files", bigRepo, ".git/hooks/pre-commit"), limited)).reason.code,
-    ).toBe("protected-path");
+    const limited = engineWithLimit(15);
+    const context = (preset: SafetyPreset) => contextFor(home, preset, { sharedFolders: [big] });
+    const small = contextFor(home, "trusting", { sharedFolders: [bigRepo, path.join(home.project, "src")] });
+    expect((await decide(small, files("edit-files", bigRepo, "file-1.txt"), limited)).decision).toBe("allow");
+    expect((await decide(small, files("edit-files", bigRepo, ".git/hooks/pre-commit"), limited)).reason.code).toBe(
+      "protected-path",
+    );
+    for (let i = 10; i < 20; i++) await fs.writeFile(path.join(big, `file-${i}.txt`), "");
     // Past the limit a change asks rather than locking the folder; a folder too large to search is refused.
     for (const preset of ["balanced", "trusting"] as const) {
       expect(await decide(context(preset), files("edit-files", big, "file-1.txt"), limited)).toMatchObject({

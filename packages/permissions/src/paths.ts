@@ -151,8 +151,11 @@ const probeCaseSensitivity = async (dir: string, cache: Map<number, boolean>): P
   return result;
 };
 
-/** The most entries searched below a folder for Git repositories before giving up closed. */
-export const MAX_SEARCHED_ENTRIES = 50_000;
+/**
+ * The most entries searched below a folder for Git repositories before giving up closed. A large
+ * checkout with its dependencies installed holds a few hundred thousand.
+ */
+export const MAX_SEARCHED_ENTRIES = 1_000_000;
 
 /** The Git resources inside a repository folder that hobs can only read (ADR 014). */
 const GIT_PROTECTED = [path.join(".git", "hooks"), path.join(".git", "config")];
@@ -163,6 +166,30 @@ export interface ScopeGitResources {
   readonly paths: ReadonlyArray<string>;
   /** Folders too large to search, where an unseen repository could link its hooks. */
   readonly unsearched: ReadonlyArray<string>;
+}
+
+/** Coarser than any timestamp precision the hub's file systems have (FAT keeps two seconds). */
+const RACY_MS = 2_000;
+
+interface IndexedDir {
+  readonly mtimeMs: number;
+  /** When it was listed: a change within the file system's timestamp precision of that may not show. */
+  readonly listedAt: number;
+  readonly ino: number;
+  readonly entries: number;
+  readonly repository: boolean;
+  readonly children: ReadonlyArray<string>;
+}
+
+/**
+ * Every directory below a folder, without following links or entering `.git`, and which of them
+ * are repositories. Kept between decisions and brought up to date by re-listing only directories
+ * whose modification time changed, since adding, removing or renaming an entry (a new `.git`, a
+ * moved repository) changes its parent's.
+ */
+interface FolderIndex {
+  readonly dirs: Map<string, IndexedDir>;
+  entries: number;
 }
 
 export interface PathResolverOptions {
@@ -183,7 +210,8 @@ export class PathResolver extends Context.Service<
     /**
      * The canonical Git resources of every repository at, above or below the given folders,
      * wherever their links point, so a hooks folder linked into another folder is protected when
-     * reached directly. A repository's own working tree is not searched for further repositories.
+     * reached directly, including repositories nested in another's working tree. A folder with
+     * more entries than the limit is reported unsearched.
      */
     readonly protectedGitPathsIn: (
       folders: ReadonlyArray<CanonicalPath>,
@@ -255,6 +283,90 @@ export class PathResolver extends Context.Service<
         }
         return found;
       };
+      const indexes = new Map<string, FolderIndex>();
+      const listDir = async (dir: string, caseSensitive: boolean) => {
+        const stats = await fs.lstat(dir);
+        // A directory replaced by a link is gone from the index; `readdir` would follow the link.
+        if (!stats.isDirectory()) return null;
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        const repository = entries.some((e) => comparable(e.name, caseSensitive) === ".git");
+        const children = entries
+          .filter((e) => e.isDirectory() && comparable(e.name, caseSensitive) !== ".git")
+          .map((e) => path.join(dir, e.name));
+        return {
+          mtimeMs: stats.mtimeMs,
+          listedAt: Date.now(),
+          ino: stats.ino,
+          entries: entries.length,
+          repository,
+          children,
+        };
+      };
+      const forget = (index: FolderIndex, dir: string) => {
+        const known = index.dirs.get(dir);
+        if (known === undefined) return;
+        index.dirs.delete(dir);
+        index.entries -= known.entries;
+        for (const child of known.children) forget(index, child);
+      };
+      /** Lists `dirs` and every new directory below them; false once past the entry limit. */
+      const visit = async (index: FolderIndex, dirs: Array<string>, caseSensitive: boolean): Promise<boolean> => {
+        for (let dir = dirs.pop(); dir !== undefined; dir = dirs.pop()) {
+          let listed: IndexedDir | null;
+          try {
+            listed = await listDir(dir, caseSensitive);
+          } catch (error) {
+            if (!isMissing(error)) throw error;
+            listed = null;
+          }
+          if (listed === null) {
+            forget(index, dir);
+            continue;
+          }
+          const known = index.dirs.get(dir);
+          index.entries += listed.entries - (known?.entries ?? 0);
+          if (index.entries > options.maxSearchedEntries) return false;
+          index.dirs.set(dir, listed);
+          const kept = new Set(listed.children);
+          for (const child of known?.children ?? []) if (!kept.has(child)) forget(index, child);
+          for (const child of listed.children) if (!index.dirs.has(child)) dirs.push(child);
+        }
+        return true;
+      };
+      /** The repositories at or below `folder`, or null when it holds more entries than the limit. */
+      const repositoriesIn = async (folder: CanonicalPath): Promise<ReadonlyArray<string> | null> => {
+        const key = `${folder.caseSensitive}:${folder.path}`;
+        let index = indexes.get(key);
+        let changed: Array<string>;
+        if (index === undefined) {
+          index = { dirs: new Map(), entries: 0 };
+          changed = [folder.path];
+        } else {
+          const known = [...index.dirs];
+          const current = await Promise.all(known.map(([dir]) => fs.lstat(dir).catch(() => null)));
+          changed = known.flatMap(([dir, entry], i) => {
+            const stats = current[i];
+            const unchanged =
+              stats?.isDirectory() &&
+              stats.mtimeMs === entry.mtimeMs &&
+              stats.ino === entry.ino &&
+              // Like Git's racy index entries, a listing too close to the last change is redone.
+              entry.listedAt - entry.mtimeMs > RACY_MS;
+            return unchanged ? [] : [dir];
+          });
+          // A replaced directory is listed afresh, along with whatever is new below it.
+          for (const dir of changed) {
+            const entry = index.dirs.get(dir);
+            if (entry !== undefined) index.dirs.set(dir, { ...entry, mtimeMs: Number.NaN });
+          }
+        }
+        if (!(await visit(index, changed, folder.caseSensitive))) {
+          indexes.delete(key);
+          return null;
+        }
+        indexes.set(key, index);
+        return [...index.dirs].flatMap(([dir, entry]) => (entry.repository ? [dir] : []));
+      };
       return {
         canonicalize: (input, base) =>
           Effect.tryPromise({
@@ -288,8 +400,7 @@ export class PathResolver extends Context.Service<
               for (const folder of folders) {
                 const above: Array<string> = [];
                 for (const dir of ancestorsOf(folder.path)) if (await isRepository(dir)) above.push(dir);
-                // Inside a working tree the walk up from each target finds the repository.
-                const below = above.length > 0 ? [] : await repositoriesBelow(folder.path, folder.caseSensitive);
+                const below = await repositoriesIn(folder);
                 if (below === null) unsearched.push(folder.path);
                 for (const repository of [...above, ...(below ?? [])]) repositories.add(repository);
               }

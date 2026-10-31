@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { EMPTY_HOB_POLICY, type SafetyPreset } from "@hobbots/domain";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterAll, beforeAll } from "vitest";
 import {
   PathResolver,
@@ -83,6 +83,21 @@ export const decide = (
     const engine = yield* PolicyEngine;
     return yield* engine.decide(context, request);
   }).pipe(Effect.provide(engineLayer), Effect.runPromise);
+
+/** One engine kept across several decisions, so they share what it has learned about the disk. */
+export const lastingEngine = (engineLayer: Layer.Layer<PolicyEngine> = PolicyEngine.node) => {
+  const runtime = ManagedRuntime.make(engineLayer);
+  return {
+    decide: (context: PolicyContext, request: PolicyRequest): Promise<PolicyVerdict> =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const engine = yield* PolicyEngine;
+          return yield* engine.decide(context, request);
+        }),
+      ),
+    dispose: () => runtime.dispose(),
+  };
+};
 
 /** An engine whose repository search gives up after `maxSearchedEntries`, to exercise the limit. */
 export const engineWithLimit = (maxSearchedEntries: number): Layer.Layer<PolicyEngine> =>
