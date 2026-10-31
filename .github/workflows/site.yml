@@ -1,0 +1,69 @@
+name: Site
+
+# `pnpm check` in ci.yml already lints, typechecks and tests apps/site on every change.
+# This workflow builds the site and drives the wait-list form, only when the site can have changed.
+# It uses no secrets, so it runs the same for pull requests from forks.
+on:
+  pull_request:
+    paths:
+      - apps/site/**
+      - packages/art/**
+      - .github/workflows/site.yml
+      # Dependency bumps, such as wrangler or workerd, change only the lockfile.
+      - pnpm-lock.yaml
+  push:
+    branches: [main]
+    paths:
+      - apps/site/**
+      - packages/art/**
+      - .github/workflows/site.yml
+      # Dependency bumps, such as wrangler or workerd, change only the lockfile.
+      - pnpm-lock.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  build-and-e2e:
+    name: Site build and wait-list form
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build --filter=@hobbots/site
+      # Cloudflare's published Turnstile test keys; the local D1 database comes from wrangler.jsonc.
+      - run: cp apps/site/.dev.vars.example apps/site/.dev.vars
+      - id: playwright
+        name: Read the Playwright version
+        run: echo "version=$(pnpm --filter @hobbots/site exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - id: browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @hobbots/site exec playwright install --with-deps --only-shell chromium
+      - if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter @hobbots/site exec playwright install-deps chromium
+      - run: pnpm --filter @hobbots/site test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: site-e2e-report
+          path: |
+            apps/site/playwright-report/
+            apps/site/test-results/
+          retention-days: 7
