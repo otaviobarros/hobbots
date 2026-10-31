@@ -4,7 +4,7 @@ Hobbots runs AI agents on your machine with access to the folders, commands and 
 
 ## Report a vulnerability
 
-Report it through GitHub's private vulnerability reporting: open the repository's [Security tab](https://github.com/otaviobarros/hobbots/security) and choose **Report a vulnerability**. Only you and the maintainer can see the report.
+Report it through GitHub's private vulnerability reporting: open the repository's [Security tab](https://github.com/otaviobarros/hobbots/security) and choose **Report a vulnerability**. The report stays private to you, the maintainer and any collaborators they invite to the advisory.
 
 Do not report a vulnerability in a public issue, pull request or discussion.
 
