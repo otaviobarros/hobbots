@@ -6,7 +6,9 @@ import {
   PolicyOperation,
   type PolicyOverrides,
   PRESET_DECISIONS,
+  ruleEnforcement,
   type SafetyPreset,
+  type SandboxState,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { isBlockedHost, normalizeHost } from "./hosts.ts";
@@ -21,10 +23,6 @@ import { type CanonicalPath, isInside, PathResolver, type ScopeGitResources } fr
 
 /** Bumped whenever the rules below change meaning, so older decisions name the rules they followed. */
 export const RULES_VERSION = 1;
-
-/** Whether the runtime runs inside Hobbots' sandbox, was let out of it, or the sandbox cannot start. */
-export const SandboxState = Schema.Literals(["on", "off", "unavailable"]);
-export type SandboxState = typeof SandboxState.Type;
 
 /** Everything a decision depends on. Folders are canonical as stored; the engine resolves them again. */
 export interface PolicyContext {
@@ -294,19 +292,8 @@ const needsSandbox = (context: PolicyContext, operation: PolicyOperation): Answe
       )
     : null;
 
-const enforcementOf = (context: PolicyContext, operation: PolicyOperation): PolicyVerdict["enforcement"] => {
-  if (operation === "delete-files" || context.sandbox === "off") return "checked";
-  if (operation === "push") {
-    // The Push Charm holds the credentials, but where commands and the web are both allowed a
-    // command can push to a remote that accepts pushes without them (ADR 014).
-    const bypass =
-      context.sandbox === "on" &&
-      layered(context, "run-commands").decision === "allow" &&
-      layered(context, "use-web").decision === "allow";
-    return bypass ? "checked" : "enforced";
-  }
-  return "enforced";
-};
+const enforcementOf = (context: PolicyContext, operation: PolicyOperation): PolicyVerdict["enforcement"] =>
+  ruleEnforcement(operation, (other) => layered(context, other).decision, context.sandbox);
 
 /** Decides a request whose paths are already canonical. Pure: the same inputs give the same verdict. */
 export const evaluate = (context: PolicyContext, scope: ResolvedScope, request: ResolvedRequest): PolicyVerdict => {
