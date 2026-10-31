@@ -2,8 +2,8 @@
 
 - **Date:** 2026-10-31
 - **Issue:** [#118](https://github.com/otaviobarros/hobbots/issues/118)
-- **Pull request:** [#PR](https://github.com/otaviobarros/hobbots/pull/PR)
-- **Commit:** not yet on `main` (ran on the pull request branch at `COMMIT`)
+- **Pull request:** [#194](https://github.com/otaviobarros/hobbots/pull/194)
+- **Commit:** not yet on `main` (ran on the pull request branch at `1b50ecc`)
 - **Setup:** Automated only, with the fake runtime, which writes one word every 40 ms (25 chunks a second). Linux x86_64, Node 22.23.4. The hub-level cases ran on SQLite in memory and on PostgreSQL 16; CI runs them on SQLite and PostgreSQL 18. The browser cases ran with Playwright 1.64.1 and Chromium 153 against a hub from source on a SQLite file, since the hub stores its data only in SQLite. The browser reaches the hub through a TCP relay the test can cut, so a dropped connection is a real one.
 - **Result:** Passed with gaps. A crash mid-reply, a reconnect mid-reply, time offline, an expired cursor and a restored backup each end with every message shown once and the text the hub stored. The packaged app and real Claude Code were not part of this run.
 
