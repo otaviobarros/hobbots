@@ -378,6 +378,126 @@ describe("editing hobs", () => {
   });
 });
 
+describe("several hobs at once", () => {
+  // covers AG-001, AG-002, AG-006
+  it("[TC-AG-097] three hobs with different models chat at once, an edit mid-reply reaches only the next reply, and a retired hob refuses messages but stays readable", async () => {
+    const create = async (fields: Record<string, unknown>) =>
+      (await request("POST", "/api/agents", { ...hob, ...fields })).body as Agent;
+    const wren = await create({});
+    const moss = await create({ name: "Moss", model: "fake-quick", effort: null, instructions: "Tidy files." });
+    // A hob with no model chats on the runtime's default.
+    const ash = await create({
+      name: "Ash",
+      ...roleFields("qa"),
+      model: null,
+      effort: null,
+      instructions: "Find bugs.",
+    });
+    const threadOf = async (agent: Agent) =>
+      (await request("POST", `/api/agents/${agent.id}/threads`)).body.id as string;
+    const threads = { wren: await threadOf(wren), moss: await threadOf(moss), ash: await threadOf(ash) };
+    const messages = async (threadId: string) =>
+      (await request("GET", `/api/threads/${threadId}/messages`)).body as Array<Message>;
+    const settled = () =>
+      waitFor(async () => {
+        for (const id of Object.values(threads)) {
+          if ((await messages(id)).some((m) => m.status !== "complete")) return false;
+        }
+        return true;
+      });
+
+    // All three replies are running at the same time.
+    let release = () => {};
+    replyGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await request("POST", `/api/threads/${threads.wren}/messages`, { content: "first for Wren" });
+    await request("POST", `/api/threads/${threads.moss}/messages`, { content: "first for Moss" });
+    await request("POST", `/api/threads/${threads.ash}/messages`, { content: "first for Ash" });
+    await waitFor(async () => prompts.length === 3);
+
+    // Editing Wren while its reply runs makes a new version of Wren only.
+    const edited = await request("PATCH", `/api/agents/${wren.id}`, { instructions: "Write long answers." });
+    expect(edited.body).toMatchObject({ id: wren.id, configVersion: 2 });
+    for (const id of Object.values(threads)) {
+      expect((await messages(id)).map((m) => m.status)).toEqual(["complete", "streaming"]);
+    }
+    release();
+    await settled();
+
+    await request("POST", `/api/threads/${threads.wren}/messages`, { content: "second for Wren" });
+    await request("POST", `/api/threads/${threads.moss}/messages`, { content: "second for Moss" });
+    await settled();
+
+    // Each turn ran with its own hob's model, effort and instructions; only Wren's next turn took the edit.
+    const byPrompt = new Map(prompts.map((p) => [p.prompt, p]));
+    expect(
+      ["first for Wren", "first for Moss", "first for Ash", "second for Wren", "second for Moss"].map((prompt) => {
+        const p = byPrompt.get(prompt);
+        return [prompt, p?.model, p?.effort, p?.instructions];
+      }),
+    ).toEqual([
+      ["first for Wren", "fake-thinker", "high", told("Write short answers.")],
+      ["first for Moss", "fake-quick", null, told("Tidy files.", "Moss")],
+      ["first for Ash", null, null, told("Find bugs.", "Ash", "qa")],
+      ["second for Wren", "fake-thinker", "high", told("Write long answers.")],
+      ["second for Moss", "fake-quick", null, told("Tidy files.", "Moss")],
+    ]);
+    // A second turn resumes its own thread's runtime session, never another hob's.
+    const session = (prompt: string) => byPrompt.get(prompt)?.sessionId;
+    expect([session("first for Wren"), session("first for Moss"), session("first for Ash")]).toEqual([
+      null,
+      null,
+      null,
+    ]);
+    expect(session("second for Wren")).toEqual(expect.any(String));
+    expect(session("second for Moss")).toEqual(expect.any(String));
+    expect(session("second for Wren")).not.toBe(session("second for Moss"));
+
+    // Each thread holds only its own hob's messages, marked with the version that wrote each reply.
+    const transcript = async (threadId: string) =>
+      (await messages(threadId)).map((m) => [m.content, m.configVersion] as const);
+    expect(await transcript(threads.wren)).toEqual([
+      ["first for Wren", null],
+      ["Echo: first for Wren", 1],
+      ["second for Wren", null],
+      ["Echo: second for Wren", 2],
+    ]);
+    expect(await transcript(threads.moss)).toEqual([
+      ["first for Moss", null],
+      ["Echo: first for Moss", 1],
+      ["second for Moss", null],
+      ["Echo: second for Moss", 1],
+    ]);
+    expect(await transcript(threads.ash)).toEqual([
+      ["first for Ash", null],
+      ["Echo: first for Ash", 1],
+    ]);
+
+    // Retiring Ash refuses its new work and keeps its chat; the other hobs carry on.
+    expect((await request("POST", `/api/agents/${ash.id}/retire`, { activeWork: "finish" })).status).toBe(200);
+    expect(await request("POST", `/api/threads/${threads.ash}/messages`, { content: "again" })).toMatchObject({
+      status: 409,
+      body: { _tag: "HobUnavailable", status: "retired" },
+    });
+    expect(await transcript(threads.ash)).toEqual([
+      ["first for Ash", null],
+      ["Echo: first for Ash", 1],
+    ]);
+    expect((await request("GET", `/api/agents/${ash.id}/threads`)).body).toMatchObject([{ id: threads.ash }]);
+    expect((await request("GET", "/api/agents?status=retired")).body).toMatchObject([{ id: ash.id }]);
+    expect((await request("GET", "/api/agents")).body.map((a: Agent) => [a.name, a.configVersion]).sort()).toEqual([
+      ["Moss", 1],
+      ["Wren", 2],
+    ]);
+    expect((await request("POST", `/api/threads/${threads.moss}/messages`, { content: "third for Moss" })).status).toBe(
+      200,
+    );
+    await settled();
+    expect((await transcript(threads.moss)).at(-1)).toEqual(["Echo: third for Moss", 1]);
+  });
+});
+
 describe("checking a hob's brain", () => {
   const offered = new RuntimeModels({
     runtime: "claude-code",
