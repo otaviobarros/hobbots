@@ -1,0 +1,147 @@
+---
+import { PLATFORMS, PROVIDERS } from "../data/copy.ts";
+import { osIcon } from "../data/scene.ts";
+import Companion from "./Companion.astro";
+import PixelArt from "./PixelArt.astro";
+---
+
+<section id="everywhere" class="section" aria-labelledby="every-title">
+  <Companion />
+  <div class="wrap">
+    <div class="intro">
+      <span class="eyebrow">Your AI, your computer</span>
+      <h2 id="every-title" class="h2">Not tied to one AI, or one computer</h2>
+      <p class="lede">
+        Hobbots launches on macOS and Linux, with Windows and a phone app after that. It starts with Claude and opens up
+        to more AI providers, so each hob can pick its own brain.
+      </p>
+    </div>
+    <div class="osgrid">
+      {
+        PLATFORMS.map((os) => (
+          <div class="card cut platform">
+            <div class="platform-top">
+              <PixelArt {...osIcon(os.icon)} size={40} />
+              <span class="tag" style={`--fg: ${os.fg}`}>
+                {os.state}
+              </span>
+            </div>
+            <h3 class="h3">{os.name}</h3>
+            <p class="lede">{os.body}</p>
+          </div>
+        ))
+      }
+    </div>
+    <div class="card cut providers">
+      <div class="providers-top">
+        <h3 class="h3">AI providers</h3>
+        <span>Claude first. Each hob can use a different one.</span>
+      </div>
+      <ul class="chips">
+        {
+          PROVIDERS.map((provider) => (
+            <li>
+              <span class="pxf letter" style={`background: ${provider.color}`} aria-hidden="true">
+                {provider.letter}
+              </span>
+              <span class="provider">{provider.name}</span>
+              <span class="tag" style={`--fg: ${provider.fg}`}>
+                {provider.state}
+              </span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </div>
+</section>
+
+<style>
+  section {
+    background: var(--color-ground);
+  }
+  .wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  .osgrid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+  }
+  @media (max-width: 1100px) {
+    .osgrid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 640px) {
+    .osgrid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .platform,
+  .providers {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 22px;
+  }
+  .providers {
+    gap: 16px;
+  }
+  .platform .h3,
+  .providers .h3 {
+    font-size: 22px;
+  }
+  .platform .lede {
+    font-size: 16px;
+  }
+  .platform-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .providers-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px 20px;
+    color: var(--color-secondary-text);
+    font-size: 15px;
+  }
+  .chips {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--color-panel);
+    border: 2px solid var(--color-line);
+  }
+  .letter {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    color: var(--color-ground);
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .provider {
+    flex-grow: 1;
+    min-width: 0;
+    font-size: 16px;
+  }
+</style>

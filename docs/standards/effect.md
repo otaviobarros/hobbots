@@ -8,7 +8,7 @@ Write server code, the HTTP API and shared contracts with Effect v4. Contracts a
 
 - **Why:** one runtime gives typed errors, dependency injection, resource safety and interruption in every package.
 - **Enforced by:** review.
-- **Applies to:** `apps/server` and every package except `packages/ui`.
+- **Applies to:** `apps/server` and every package except `packages/ui` and `packages/art`.
 
 ### STD-EFFECT-002 Expected failures are typed errors
 

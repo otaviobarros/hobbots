@@ -1,0 +1,45 @@
+---
+/** The burst of sparks when a hob is happy: joining the list, or an allowed request. */
+interface Props {
+  /** Where the burst starts inside its hob, in pixels. */
+  x: number;
+  y: number;
+  hidden?: boolean;
+  "data-approval-sparks"?: string;
+}
+
+const { x, y, ...rest } = Astro.props;
+const COLORS = ["var(--color-moonlight)", "var(--color-mint)", "var(--color-lantern)", "var(--color-text)"];
+const SPARKS = [
+  [-26, -24],
+  [26, -26],
+  [-34, 4],
+  [34, 2],
+  [-16, -38],
+  [16, -40],
+  [0, -46],
+  [-6, 20],
+];
+---
+
+<span class="sparks" aria-hidden="true" {...rest}>
+  {
+    SPARKS.map(([dx, dy], i) => (
+      <span
+        class="spark"
+        style={`left: ${x}px; top: ${y}px; --dx: ${dx}px; --dy: ${dy}px; background: ${COLORS[i % 4]}; animation-delay: ${(i % 3) * 0.05}s`}
+      />
+    ))
+  }
+</span>
+
+<style>
+  .sparks[hidden] {
+    display: none;
+  }
+  .spark {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+  }
+</style>

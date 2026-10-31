@@ -1,0 +1,365 @@
+---
+import { DREAMS, QUEST, REPORT } from "../data/copy.ts";
+import { VILLAGE_HOBS } from "../data/scene.ts";
+import Companion from "./Companion.astro";
+import Hob from "./Hob.astro";
+import Sparks from "./Sparks.astro";
+
+const [, bramble, tinker] = VILLAGE_HOBS;
+---
+
+<section id="coming" class="section" aria-labelledby="coming-title">
+  <Companion />
+  <div class="wrap">
+    <div class="intro">
+      <span class="eyebrow">What's coming</span>
+      <h2 id="coming-title" class="h2">A whole workshop of helpers, not one more chat box</h2>
+      <p class="lede">
+        Each hob has its own name, look, instructions and threads. They run on your own computer with the AI you already
+        use.
+      </p>
+    </div>
+
+    <div class="cards">
+      <article class="card cut">
+        <div class="stage team" aria-hidden="true">
+          <div class="floor"></div>
+          {
+            VILLAGE_HOBS.map((hob) => (
+              <div class="member">
+                <div class="hb-bob" style={`animation-delay: ${hob.bob}s`}>
+                  <Hob seed={hob.seed} color={hob.color} size={56} />
+                </div>
+                <span class="pxf name">{hob.name}</span>
+              </div>
+            ))
+          }
+        </div>
+        <h3 class="h3">Summon your own hobs</h3>
+        <p class="lede">
+          Give each hob a name, a look and a job: a scribe for email, a researcher, a coder. Every hob keeps its own
+          threads, so you pick up where you left off.
+        </p>
+      </article>
+
+      <article class="card cut">
+        <div class="stage" aria-hidden="true">
+          <div class="floor"></div>
+          <div class="quest">
+            {
+              VILLAGE_HOBS.map((hob, i) => (
+                <div class="quest-hob">
+                  <span class="tag" style={`--fg: ${QUEST[i]?.fg}`}>
+                    {QUEST[i]?.state}
+                  </span>
+                  <Hob seed={hob.seed} color={hob.color} size={52} class={QUEST[i]?.motion} />
+                </div>
+              ))
+            }
+          </div>
+          <span class="pass note" style="left: 20%"></span>
+          <span class="pass note" style="left: 53%; animation-delay: 1.6s"></span>
+        </div>
+        <h3 class="h3">Hobs hand work to each other</h3>
+        <p class="lede">
+          Ask Aldric for something big. He passes parts to Rook, Sage and Pip, and the Quest shows who is doing what and
+          who is waiting on whom. No copy-pasting between chats.
+        </p>
+      </article>
+
+      <article class="card cut">
+        <div class="stage approval">
+          <div class="ask" data-approval>
+            <div class="ask-hob">
+              <div data-approval-hop>
+                <Hob seed={tinker?.seed ?? 42} color={tinker?.color ?? "amber"} size={48} />
+              </div>
+              <Sparks x={22} y={16} hidden data-approval-sparks="" />
+            </div>
+            <div class="ask-body">
+              <span class="ask-text"
+                ><span class="pxf who">Tinker</span> wants to run <code>pnpm test</code> in hobbots/</span
+              >
+              <div class="ask-actions" data-approval-open>
+                <button type="button" class="mint cut" data-allow>Allow once</button>
+                <button type="button" class="rose cut" data-deny>Deny</button>
+              </div>
+              <div class="ask-done">
+                <span role="status"><span class="tag" data-approval-label hidden></span></span>
+                <button type="button" class="quiet" data-approval-reset hidden>Try again</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <h3 class="h3">Nothing risky without you</h3>
+        <p class="lede">
+          Set each action to Allow, Ask or Never, and every hob works inside a sandbox. Anything set to Ask comes to you
+          as a plain request: what, where and who asked. Try it above.
+        </p>
+      </article>
+
+      <article class="card cut">
+        <div class="stage morning" aria-hidden="true">
+          <div class="sleeper">
+            <Hob seed={bramble?.seed ?? 27} color={bramble?.color ?? "moss"} size={56} />
+            <span class="zz pxf z1">z</span>
+            <span class="zz pxf z2">z</span>
+          </div>
+          <div class="report">
+            {
+              REPORT.map((line) => (
+                <div class="rise line" style={`animation-delay: ${line.delay}s`}>
+                  <span class:list={["box", { done: line.done }]} />
+                  <span>{line.text}</span>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+        <h3 class="h3">Wake up to finished chores</h3>
+        <p class="lede">
+          Close the window and Hobbots keeps going from the menu bar or system tray. In the morning, Home shows what got
+          done, what is still running and what needs you.
+        </p>
+      </article>
+    </div>
+
+    <div class="dreams">
+      <h3 class="h3 dreams-title">…and what the hobs are dreaming of next</h3>
+      <ul>
+        {
+          DREAMS.map((dream) => (
+            <li class="cut">
+              <div class="dream-top">
+                <span class="swatch" style={`background: ${dream.color}`} aria-hidden="true" />
+                <span class="tag">Later</span>
+              </div>
+              <span class="pxf dream-title">{dream.title}</span>
+              <span class="dream-body">{dream.body}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </div>
+</section>
+
+<style>
+  section {
+    background: var(--color-panel);
+  }
+  .wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 36px;
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr));
+    gap: 20px;
+  }
+  article {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 22px;
+  }
+  .stage {
+    position: relative;
+    box-sizing: border-box;
+    height: 150px;
+    overflow: hidden;
+    background: var(--color-deep);
+  }
+  .floor {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 22px;
+    background: var(--color-line);
+  }
+  .team {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 30px;
+    padding-bottom: 22px;
+  }
+  .member,
+  .quest-hob {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .name {
+    color: var(--color-moonlight);
+    font-size: 14px;
+  }
+  .quest {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 22px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+  }
+  .quest-hob {
+    width: 96px;
+  }
+  .note {
+    position: absolute;
+    bottom: 52px;
+    width: 14px;
+    height: 10px;
+    background: var(--color-moonlight);
+    box-shadow: inset 0 -3px 0 var(--color-lantern);
+    --run: 120px;
+  }
+  .approval {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px;
+  }
+  .ask {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    max-width: 440px;
+  }
+  .ask-hob {
+    position: relative;
+    flex-shrink: 0;
+  }
+  [data-approval-open][hidden],
+  .ask-done [hidden] {
+    display: none;
+  }
+  .ask-body {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    gap: 8px;
+    min-width: 0;
+  }
+  .ask-text {
+    font-size: 15px;
+  }
+  .who {
+    color: var(--color-moonlight);
+  }
+  code {
+    padding: 1px 6px;
+    background: var(--color-card);
+  }
+  .ask-actions,
+  .ask-done {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+  }
+  .ask-done .tag {
+    font-size: 14px;
+    padding: 2px 10px;
+  }
+  .ask-done .quiet {
+    padding: 0 4px;
+    font-size: 14px;
+  }
+  .morning {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    padding: 14px 20px;
+  }
+  .sleeper {
+    position: relative;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+  .zz {
+    position: absolute;
+    top: -6px;
+    color: var(--color-label);
+  }
+  .z1 {
+    left: 48px;
+    font-size: 16px;
+  }
+  .z2 {
+    left: 52px;
+    font-size: 14px;
+    animation-delay: 1.2s;
+  }
+  .report {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    font-size: 15px;
+  }
+  .line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .box {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border: 3px solid var(--color-lantern);
+  }
+  .box.done {
+    border-color: var(--color-mint);
+    background: var(--color-mint);
+  }
+  .dreams {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-top: 12px;
+  }
+  .dreams-title {
+    font-size: 28px;
+  }
+  ul {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  li {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 18px;
+    background: var(--color-ground);
+    border: 2px solid var(--color-line-2);
+  }
+  .dream-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .swatch {
+    width: 14px;
+    height: 14px;
+  }
+  .dream-title {
+    color: var(--color-moonlight);
+    font-size: 20px;
+  }
+  .dream-body {
+    color: var(--color-secondary-text);
+    font-size: 15px;
+  }
+</style>

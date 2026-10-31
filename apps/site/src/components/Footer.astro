@@ -1,0 +1,47 @@
+---
+import { CHIEF, CHIEF_PALETTE } from "@hobbots/art/chief";
+import { CONTACT, GITHUB } from "../data/copy.ts";
+import PixelArt from "./PixelArt.astro";
+---
+
+<footer>
+  <div class="wrap">
+    <div class="mark">
+      <PixelArt rows={CHIEF} palette={CHIEF_PALETTE} size={28} />
+      <span>hobbots.app · Apache 2.0 · Free forever</span>
+    </div>
+    <a href={`mailto:${CONTACT}`}>{CONTACT}</a>
+    <a href={GITHUB}>GitHub</a>
+    <a href={`${GITHUB}/blob/main/CONTRIBUTING.md`}>Contribute</a>
+  </div>
+</footer>
+
+<style>
+  footer {
+    padding-block: 28px;
+    background: var(--color-deep);
+    border-top: 2px solid var(--color-line);
+    font-size: 15px;
+  }
+  .wrap {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px 28px;
+  }
+  .mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-right: auto;
+    color: var(--color-secondary-text);
+  }
+  a {
+    color: var(--color-secondary-text);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--color-moonlight);
+    text-decoration: underline;
+  }
+</style>

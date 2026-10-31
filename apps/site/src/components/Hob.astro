@@ -1,0 +1,27 @@
+---
+import type { HobColor } from "@hobbots/art/look";
+import { hobLook } from "@hobbots/art/look";
+import PixelArt from "./PixelArt.astro";
+
+interface Props {
+  seed: number;
+  color: HobColor;
+  size: number;
+  label?: string | undefined;
+  class?: string | undefined;
+  /** Marks the visitor's rolled hob, which the page script redraws after each roll. */
+  mine?: boolean;
+}
+
+const { seed, color, size, label, class: className, mine } = Astro.props;
+const look = hobLook(seed, color);
+---
+
+<PixelArt
+  rows={look.rows}
+  palette={look.palette}
+  size={size}
+  label={label}
+  class={className}
+  data-mine={mine ? "" : undefined}
+/>

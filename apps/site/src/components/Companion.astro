@@ -1,0 +1,37 @@
+---
+import Hob from "./Hob.astro";
+
+/** The visitor's rolled hob, which walks into this section when it scrolls into view. */
+---
+
+<div class="comp" data-companion hidden>
+  <div class="walkin">
+    <button type="button" class="hobbtn" aria-label="Say hi to Pip" data-companion-button data-mine-label>
+      <span class="bub bub-side" aria-hidden="true" data-bubble hidden></span>
+      <div class="spr" data-hop>
+        <Hob seed={11} color="violet" size={56} class="hb-bob comp-sprite" mine />
+      </div>
+    </button>
+  </div>
+</div>
+
+<style>
+  .comp {
+    position: absolute;
+    top: -64px;
+    right: max(16px, calc(50% - 560px));
+    z-index: 3;
+  }
+  .comp[hidden] {
+    display: none;
+  }
+  .walkin {
+    animation: hb-walkin 1.2s steps(10) both;
+  }
+  @media (max-width: 640px) {
+    .comp :global(.comp-sprite) {
+      width: 44px;
+      height: 44px;
+    }
+  }
+</style>

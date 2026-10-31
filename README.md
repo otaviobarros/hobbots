@@ -83,7 +83,7 @@ pnpm test:e2e      # builds the web client, then runs apps/web/e2e in parallel, 
 ## Repository
 
 - `apps/`: `server` (Effect TS v4 HTTP API and SSE), `web` (React client), `desktop` (Electron), `site` (the hobbots.app website, Astro on Cloudflare Workers).
-- `packages/`: `domain`, `api`, `persistence`, `runtimes` and `ui` are implemented; the other packages are planned boundaries.
+- `packages/`: `domain`, `api`, `persistence`, `runtimes`, `ui` and `art` are implemented; the other packages are planned boundaries.
 - `docs/product/`: vision, MVP requirements and open questions.
 - `docs/architecture/`: contracts for conversations, inbox, orchestration, lifecycle, permissions, runtime adapters, persistence, API and deployment.
 - `docs/decisions/`: architecture decision records.

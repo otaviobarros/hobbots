@@ -1,5 +1,3 @@
-import { PixelArt } from "@hobbots/ui/components/pixel-art";
-import { cn } from "@hobbots/ui/lib/utils";
 import {
   CHIEF_BEACON,
   CHIEF_BEACON_PALETTE,
@@ -9,7 +7,9 @@ import {
   CHIEF_STAFF,
   chiefBody,
   chiefFrame,
-} from "../art/chief.ts";
+} from "@hobbots/art/chief";
+import { PixelArt } from "@hobbots/ui/components/pixel-art";
+import { cn } from "@hobbots/ui/lib/utils";
 
 /**
  * What the chief shows: `idle` stays still, `working` lights the lantern softly while any hob

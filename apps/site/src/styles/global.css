@@ -1,12 +1,303 @@
-/* The app's night palette and type, from the @theme block in apps/web/src/styles.css. */
+/* The app's night palette, type and stepped motion, from the @theme block in apps/web/src/styles.css.
+   Tailwind's @theme is not plain CSS, so the site keeps the values it uses here under the same names. */
 :root {
   --color-ground: #141228;
+  --color-deep: #0d0c1c;
+  --color-panel: #1b1835;
+  --color-card: #1f1c3e;
+  --color-hover: #25224a;
+  --color-line: #2c2a5a;
+  --color-line-2: #3a3666;
+  --color-control: #7770c4;
   --color-text: #ece8ff;
+  --color-secondary-text: #c9c3e8;
+  --color-label: #a9a2e0;
   --color-moonlight: #f3e9b5;
+  --color-lantern: #f2a541;
+  --color-lantern-hover: #ffb75c;
+  --color-lantern-light: #ffc477;
+  --color-lantern-shadow: #9a5f16;
+  --color-mint: #7fd1b9;
+  --color-mint-deep: #3f8a75;
+  --color-rose: #ee9292;
+  --color-rose-ground: #2a1f33;
+  --color-star: #cfc8ff;
+  --color-wood: #7a5b3a;
+  --color-wood-dark: #5a3f27;
+  --color-sky: #8fb4f0;
+  --color-lilac: #b79be8;
+
+  /* The village: hills, ground and houses. */
+  --color-hill-far: #1b1835;
+  --color-hill-near: #221d44;
+  --color-house: #3d2f52;
+  --color-roof: #5b3f5e;
+  --color-chimney: #4a3a6a;
+  --color-smoke: #6a6390;
+  --color-door: #241c33;
+
   --font-sans: "Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif;
   --font-pixel: "Pixelify Sans Variable", "Pixelify Sans", system-ui, sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
+
+  /* Pixel corners and the press edge of buttons and cards. */
+  --cut: polygon(
+    4px 0,
+    calc(100% - 4px) 0,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    0 calc(100% - 4px),
+    0 4px
+  );
 
   color-scheme: dark;
+}
+
+/* Motion is stepped, like pixel art. */
+@keyframes hb-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+@keyframes hb-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+@keyframes hb-hop {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-14px);
+  }
+  85% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes hb-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+@keyframes hb-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 0.8;
+  }
+  70% {
+    opacity: 0.95;
+  }
+}
+@keyframes hb-drop {
+  0% {
+    transform: translateY(-56px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(6px);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes hb-walk {
+  from {
+    transform: translateX(-360px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes hb-walkin {
+  from {
+    transform: translateX(180px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes hb-light {
+  from {
+    opacity: 0.1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes hb-in {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes hb-shoot {
+  0% {
+    transform: translate(0, 0) rotate(-28deg);
+    opacity: 0;
+  }
+  3% {
+    opacity: 1;
+  }
+  12%,
+  100% {
+    transform: translate(-560px, 300px) rotate(-28deg);
+    opacity: 0;
+  }
+}
+@keyframes hb-firefly {
+  0%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 0.15;
+  }
+  25% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(16px, -12px);
+    opacity: 0.5;
+  }
+  75% {
+    transform: translate(-8px, -22px);
+    opacity: 1;
+  }
+}
+@keyframes hb-smoke {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate(10px, -46px);
+    opacity: 0;
+  }
+}
+@keyframes hb-spark {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--dx), var(--dy)) scale(0.4);
+    opacity: 0;
+  }
+}
+@keyframes hb-poof {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+@keyframes hb-pass {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  42% {
+    transform: translateX(var(--run));
+    opacity: 1;
+  }
+  50%,
+  100% {
+    transform: translateX(var(--run));
+    opacity: 0;
+  }
+}
+@keyframes hb-float {
+  0% {
+    transform: translate(0, 0);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(14px, -34px);
+    opacity: 0;
+  }
+}
+@keyframes hb-blink {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes hb-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.7;
+  }
+}
+@keyframes hb-pop {
+  0% {
+    opacity: 0;
+    margin-bottom: -8px;
+  }
+  100% {
+    opacity: 1;
+    margin-bottom: 0;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -15,9 +306,352 @@ body {
   background: var(--color-ground);
   color: var(--color-text);
   font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.5;
+  overflow-x: hidden;
 }
 
-h1 {
+a {
+  color: var(--color-lantern);
+}
+a:hover {
+  color: var(--color-lantern-light);
+}
+button {
+  font: inherit;
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 3px solid var(--color-moonlight);
+  outline-offset: 2px;
+}
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+code {
+  font-family: var(--font-mono);
+}
+
+.wrap {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding-inline: clamp(16px, 4vw, 40px);
+}
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.cut {
+  clip-path: var(--cut);
+}
+/* The clip would cut an outside ring away, so clipped controls draw focus inset. */
+.cut:focus-visible {
+  outline-offset: -3px;
+}
+.pxf {
   font-family: var(--font-pixel);
+  font-variant-ligatures: none;
+}
+.pixels {
+  display: block;
+  flex-shrink: 0;
+}
+@media (max-width: 760px) {
+  .hide-sm {
+    /* biome-ignore lint/complexity/noImportantStyles: hides decoration whatever display a component sets. */
+    display: none !important;
+  }
+}
+
+/* Sections */
+.section {
+  position: relative;
+  padding-block: clamp(56px, 8vw, 96px);
+  border-bottom: 8px solid var(--color-line);
+}
+.eyebrow {
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  color: var(--color-lantern);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.h2 {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: clamp(32px, 4.4vw, 48px);
+  line-height: 1.1;
   color: var(--color-moonlight);
+}
+.h3 {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: 24px;
+  color: var(--color-moonlight);
+}
+.lede {
+  margin: 0;
+  color: var(--color-secondary-text);
+}
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 700px;
+}
+.card {
+  background: var(--color-card);
+  border: 2px solid var(--color-line);
+}
+.tag {
+  font-size: 13px;
+  padding: 1px 8px;
+  color: var(--fg, var(--color-secondary-text));
+  border: 2px solid var(--fg, var(--color-line-2));
+  white-space: nowrap;
+}
+
+/* Buttons and inputs */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 12px 24px;
+  border: 0;
+  background: var(--color-lantern);
+  color: var(--color-ground);
+  box-shadow: 0 4px 0 var(--color-lantern-shadow);
+  font-weight: 700;
+  font-size: 17px;
+  text-decoration: none;
+  transition: transform 0.08s steps(2);
+}
+.btn:hover {
+  background: var(--color-lantern-hover);
+  color: var(--color-ground);
+}
+.btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--color-lantern-shadow);
+}
+.btn2 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 2px solid var(--color-control);
+  background: var(--color-ground);
+  color: var(--color-text);
+  font-size: 16px;
+  text-decoration: none;
+}
+.btn2:hover {
+  background: var(--color-hover);
+}
+.mint {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 0;
+  background: var(--color-mint);
+  color: var(--color-ground);
+  box-shadow: 0 4px 0 var(--color-mint-deep);
+  font-weight: 700;
+}
+.mint:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--color-mint-deep);
+}
+.rose {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 2px solid var(--color-rose);
+  background: transparent;
+  color: var(--color-rose);
+}
+.rose:hover {
+  background: var(--color-rose-ground);
+}
+.quiet {
+  min-height: 44px;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: var(--color-lantern);
+  text-decoration: underline;
+  font-size: 15px;
+}
+.inp {
+  flex: 1 1 220px;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 2px solid var(--color-control);
+  background: var(--color-deep);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 16px;
+}
+.inp::placeholder {
+  color: var(--color-label);
+}
+
+/* Hobs and their speech bubbles */
+.hobbtn {
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.hobbtn:hover .spr {
+  animation: hb-hop 0.7s steps(6) 1;
+}
+.bub {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  z-index: 5;
+  transform: translateX(-50%);
+  padding: 5px 10px;
+  background: var(--color-text);
+  color: var(--color-ground);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: hb-pop 0.3s steps(3) both;
+}
+.bub::after,
+.bub::before {
+  content: "";
+  position: absolute;
+  background: var(--color-text);
+}
+.bub::after {
+  top: 100%;
+  left: calc(50% - 4px);
+  width: 8px;
+  height: 4px;
+}
+.bub::before {
+  top: calc(100% + 4px);
+  left: calc(50% - 2px);
+  width: 4px;
+  height: 4px;
+}
+.bub[hidden] {
+  display: none;
+}
+.bub-side {
+  top: 10px;
+  right: calc(100% + 12px);
+  bottom: auto;
+  left: auto;
+  transform: none;
+}
+.bub-side::after {
+  top: 10px;
+  left: 100%;
+  width: 4px;
+  height: 8px;
+}
+.bub-side::before {
+  top: 12px;
+  left: calc(100% + 4px);
+}
+
+.hb-star {
+  animation: hb-twinkle 3s steps(3) infinite;
+}
+.hb-bob {
+  animation: hb-bob 1.2s steps(2) infinite;
+}
+.hb-glow {
+  animation: hb-flicker 2.4s steps(4) infinite;
+}
+.fx-hop {
+  animation: hb-hop 0.7s steps(6) 1;
+}
+.fx-shake {
+  animation: hb-shake 0.45s steps(5) 1;
+}
+.drop {
+  display: inline-block;
+  animation: hb-drop 0.7s steps(7) both;
+}
+.walk {
+  animation: hb-walk 2.4s steps(18) both;
+}
+.light {
+  animation: hb-light 0.4s steps(2) both;
+}
+.rise {
+  animation: hb-in 0.6s steps(5) both;
+}
+.shoot {
+  opacity: 0;
+  animation: hb-shoot 7s steps(60) 2.5s infinite;
+}
+.ff {
+  animation: hb-firefly 5s steps(10) infinite;
+}
+.smoke {
+  animation: hb-smoke 3s steps(8) infinite;
+}
+.spark {
+  animation: hb-spark 0.9s steps(6) both;
+}
+.poof {
+  animation: hb-poof 0.6s steps(5) both;
+}
+.pass {
+  animation: hb-pass 3.2s steps(12) infinite;
+}
+.zz {
+  animation: hb-float 2.4s steps(8) infinite;
+}
+.blink {
+  animation: hb-blink 1.2s steps(2) infinite;
+}
+.pulse {
+  animation: hb-pulse 1.6s steps(4) infinite;
+}
+
+/* Every animation stops with Reduce motion; effects that only move are hidden. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: Reduce motion has to win over every component's animation. */
+    animation: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: as above, for transitions. */
+    transition: none !important;
+  }
+  .shoot,
+  .poof,
+  .spark,
+  .zz {
+    display: none;
+  }
 }

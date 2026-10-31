@@ -25,6 +25,7 @@ Put shared code where its layer says (STD-ARCH-001):
 - Schemas and types go in `packages/domain`.
 - HTTP contracts go in `packages/api`.
 - UI primitives go in `packages/ui`.
+- Pixel art that the app and the site both draw goes in `packages/art`.
 - Other helpers go inside the package that owns them.
 
 Name a module after what it does. A grab-bag module or package named `utils`, `helpers`, `common` or `shared` has no owner. The shadcn `cn` helper in `packages/ui/src/lib/utils.ts` is the one exception, because the shadcn CLI expects that path.

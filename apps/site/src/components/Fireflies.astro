@@ -1,0 +1,24 @@
+---
+import type { Firefly } from "../data/scene.ts";
+
+interface Props {
+  flies: ReadonlyArray<Firefly>;
+}
+
+const { flies } = Astro.props;
+---
+
+{
+  flies.map((fly) => (
+    <span class="ff fly" style={`left: ${fly.x}%; top: ${fly.y}px; animation-delay: ${fly.delay}s`} aria-hidden="true" />
+  ))
+}
+
+<style>
+  .fly {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: var(--color-moonlight);
+  }
+</style>

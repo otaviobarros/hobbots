@@ -1,0 +1,67 @@
+---
+import { TEASER_URL } from "../data/copy.ts";
+---
+
+<section id="teaser" class="section" aria-labelledby="teaser-title">
+  <div class="wrap">
+    <div class="intro">
+      <span class="eyebrow">Watch the teaser</span>
+      <h2 id="teaser-title" class="h2">One night in the workshop</h2>
+      <p class="lede">
+        Hand one job to Aldric before bed. While you sleep, the hobs split it up, pass notes and ask before anything
+        risky. In the morning it is done, tested and verified.
+      </p>
+    </div>
+    <div class="frame cut">
+      <!-- biome-ignore lint/a11y/useMediaCaption: the captions are burned into the video, so it needs no track. -->
+      <video
+        src={TEASER_URL}
+        poster="/teaser/poster.webp"
+        controls
+        preload="none"
+        playsinline
+        width="1920"
+        height="1080"
+        aria-label="Hobbots teaser, 60 seconds, with on-screen captions"
+      ></video>
+    </div>
+    <p class="note">60 seconds · captions on screen, so it works with the sound off</p>
+  </div>
+</section>
+
+<style>
+  section {
+    background: var(--color-deep);
+  }
+  .wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    text-align: center;
+  }
+  .intro {
+    align-items: center;
+    max-width: 720px;
+  }
+  .frame {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 1000px;
+    padding: 8px;
+    background: var(--color-line);
+    box-shadow: 0 8px 0 var(--color-hill-far);
+  }
+  video {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    background: var(--color-ground);
+  }
+  .note {
+    margin: 0;
+    color: var(--color-label);
+    font-size: 15px;
+  }
+</style>

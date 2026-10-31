@@ -1,0 +1,360 @@
+---
+import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
+import { HERO_FIREFLIES, HERO_STARS, HOUSES, VILLAGE_HOBS } from "../data/scene.ts";
+import Fireflies from "./Fireflies.astro";
+import Hob from "./Hob.astro";
+import PixelArt from "./PixelArt.astro";
+import WaitlistForm from "./WaitlistForm.astro";
+
+const LETTERS = [..."Hobbots"].map((letter, i) => ({ letter, delay: 0.2 + i * 0.09 }));
+---
+
+<section id="hero" aria-labelledby="hero-title">
+  {
+    HERO_STARS.map((star) => (
+      <span
+        class="hb-star star"
+        style={`left: ${star.x}%; top: ${star.y}px; width: ${star.size}px; height: ${star.size}px; animation-delay: ${star.delay}s`}
+        aria-hidden="true"
+      />
+    ))
+  }
+  <span class="shoot" aria-hidden="true"></span>
+  <PixelArt rows={MOON} palette={MOON_PALETTE} size={84} class="hb-glow moon" />
+
+  <div class="wrap head">
+    <span class="rise badge" style="animation-delay: 0.1s">
+      <span class="blink dot" aria-hidden="true"></span>Coming soon to macOS and Linux
+    </span>
+    <h1 id="hero-title" class="pxf">
+      <span class="sr">Hobbots</span>
+      {
+        LETTERS.map(({ letter, delay }) => (
+          <span class="drop" style={`animation-delay: ${delay}s`} aria-hidden="true">
+            {letter}
+          </span>
+        ))
+      }
+    </h1>
+    <p class="rise tagline" style="animation-delay: 1.2s">Little helpers that do your chores while you sleep.</p>
+    <p class="rise pitch" style="animation-delay: 1.35s">
+      Stop being the messenger between your AIs. Summon hobs, give them a job, and they split the work, talk to each
+      other and ask you before anything risky. Open source and free forever.
+    </p>
+
+    <div id="join" class="rise join" style="animation-delay: 1.6s">
+      <div class="signhob" aria-hidden="true" data-sign>
+        <div class="signpost" data-sign-post>
+          <span class="pxf sign" data-sign-text>Save my spot!</span>
+          <span class="pole"></span>
+          <Hob seed={11} color="violet" size={52} class="sign-sprite" mine />
+        </div>
+      </div>
+      <WaitlistForm place="hero" />
+    </div>
+    <a class="rise watch" href="#teaser" style="animation-delay: 1.8s">
+      <svg width="16" height="16" viewBox="0 0 8 8" aria-hidden="true" shape-rendering="crispEdges"
+        ><path d="M1 0h2v1h1v1h1v1h1v2h-1v1h-1v1h-1v1h-2z" fill="currentColor"></path></svg
+      >
+      Watch the 60-second teaser
+    </a>
+  </div>
+
+  <div class="village">
+    <div class="hill far" aria-hidden="true"></div>
+    <div class="hill near" aria-hidden="true"></div>
+    <div class="ground" aria-hidden="true"></div>
+    <div class="path" aria-hidden="true"></div>
+    {
+      HOUSES.map((house) => (
+        <div
+          class:list={["house", { "hide-sm": house.wide }]}
+          style={`left: ${house.x}%; width: ${house.width}px; height: ${house.height}px`}
+          aria-hidden="true"
+        >
+          <div class="roof" style={`top: -${house.roof}px; height: ${house.roof}px`} />
+          <div class="chimney" style={`top: -${house.chimney}px; height: ${house.chimney}px`} />
+          <span
+            class="smoke puff"
+            style={`top: -${house.chimney + 14}px; animation-delay: ${house.smoke[0]}s`}
+          />
+          <span
+            class="smoke puff small"
+            style={`top: -${house.chimney + 14}px; animation-delay: ${house.smoke[1]}s`}
+          />
+          <span class="light window left" style={`animation-delay: ${house.lights[0]}s`} />
+          <span class="light window right" style={`animation-delay: ${house.lights[1]}s`} />
+          <span class="door" />
+        </div>
+      ))
+    }
+    <Fireflies flies={HERO_FIREFLIES} />
+    <div class="hobs">
+      {
+        VILLAGE_HOBS.map((hob) => (
+          <div class="walk" style={`animation-delay: ${hob.walk}s`}>
+            <button
+              type="button"
+              class="hobbtn"
+              aria-label={`Say hi to ${hob.name}`}
+              data-hob={hob.id}
+              data-lines={JSON.stringify(hob.lines)}
+              data-chirp={JSON.stringify(hob.chirp)}
+            >
+              <span class="bub" aria-hidden="true" data-bubble hidden />
+              <div class="spr" data-hop>
+                <div class="hb-bob" style={`animation-delay: ${hob.bob}s`}>
+                  <Hob seed={hob.seed} color={hob.color} size={70} />
+                </div>
+              </div>
+            </button>
+          </div>
+        ))
+      }
+    </div>
+    <p class="hint">
+      Click a hob to say hi.
+      <button class="quiet sound" type="button" data-sound>Sound: off</button>
+    </p>
+  </div>
+</section>
+
+<style>
+  section {
+    position: relative;
+    overflow: hidden;
+    background: var(--color-ground);
+  }
+  .star {
+    position: absolute;
+    background: var(--color-star);
+  }
+  .shoot {
+    position: absolute;
+    left: 82%;
+    top: 70px;
+    width: 56px;
+    height: 3px;
+    background: var(--color-moonlight);
+  }
+  :global(.moon) {
+    position: absolute;
+    top: 30px;
+    right: max(16px, calc(50% - 680px));
+  }
+  @media (max-width: 900px) {
+    :global(.moon) {
+      top: 14px;
+      right: 16px;
+      width: 42px;
+      height: 35px;
+    }
+  }
+  .head {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    padding-top: clamp(48px, 8vw, 88px);
+    text-align: center;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 14px;
+    background: var(--color-card);
+    border: 2px solid var(--color-line-2);
+    color: var(--color-moonlight);
+    font-size: 15px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    background: var(--color-lantern);
+  }
+  h1 {
+    margin: 0;
+    color: var(--color-moonlight);
+    font-size: clamp(60px, 11vw, 112px);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+  .tagline {
+    max-width: 720px;
+    margin: 0;
+    font-size: clamp(20px, 2.4vw, 26px);
+  }
+  .pitch {
+    max-width: 640px;
+    margin: 0;
+    color: var(--color-secondary-text);
+    font-size: 18px;
+  }
+  .join {
+    position: relative;
+    width: 100%;
+    max-width: 560px;
+    padding-top: 10px;
+  }
+  .signhob {
+    position: absolute;
+    top: -22px;
+    right: -176px;
+    pointer-events: none;
+  }
+  .signhob[hidden] {
+    display: none;
+  }
+  .signpost {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .sign {
+    padding: 3px 8px;
+    background: var(--color-wood);
+    border: 3px solid var(--color-wood-dark);
+    color: var(--color-moonlight);
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .pole {
+    width: 4px;
+    height: 16px;
+    background: var(--color-wood-dark);
+  }
+  :global(.sign-sprite) {
+    margin-top: -6px;
+  }
+  @media (max-width: 1180px) {
+    .signhob {
+      display: none;
+    }
+  }
+  .watch {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    font-size: 17px;
+  }
+
+  .village {
+    position: relative;
+    height: 380px;
+    margin-top: 24px;
+  }
+  .hill,
+  .ground,
+  .path {
+    position: absolute;
+    left: 0;
+    right: 0;
+  }
+  .far {
+    top: 40px;
+    bottom: 0;
+    background: var(--color-hill-far);
+  }
+  .near {
+    top: 140px;
+    bottom: 0;
+    background: var(--color-hill-near);
+  }
+  .ground {
+    bottom: 0;
+    height: 118px;
+    background: var(--color-line);
+    border-top: 8px solid var(--color-line-2);
+  }
+  .path {
+    bottom: 42px;
+    height: 20px;
+    background: var(--color-line-2);
+  }
+  .house {
+    position: absolute;
+    bottom: 118px;
+    background: var(--color-house);
+  }
+  .roof {
+    position: absolute;
+    left: -16px;
+    right: -16px;
+    background: var(--color-roof);
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  }
+  .chimney {
+    position: absolute;
+    right: 24px;
+    width: 20px;
+    background: var(--color-chimney);
+  }
+  .puff {
+    position: absolute;
+    right: 28px;
+    width: 10px;
+    height: 10px;
+    background: var(--color-smoke);
+  }
+  .puff.small {
+    right: 26px;
+    width: 8px;
+    height: 8px;
+  }
+  .window {
+    position: absolute;
+    top: 30px;
+    width: 34px;
+    height: 30px;
+    background: var(--color-lantern);
+  }
+  .window.left {
+    left: 22px;
+  }
+  .window.right {
+    right: 22px;
+  }
+  .door {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 36px;
+    height: 52px;
+    margin-left: -18px;
+    background: var(--color-door);
+  }
+  .hobs {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 104px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: clamp(20px, 4vw, 44px);
+  }
+  .hint {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px 12px;
+    margin: 0;
+    color: var(--color-secondary-text);
+    font-size: 14px;
+  }
+  .sound {
+    min-height: 32px;
+    padding: 6px 4px;
+    font-size: 14px;
+  }
+</style>

@@ -6,17 +6,20 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "typecheck": "astro check"
+    "typecheck": "astro check",
+    "test": "vitest run"
   },
   "dependencies": {
     "@astrojs/cloudflare": "14.4.3",
     "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
     "@fontsource-variable/pixelify-sans": "5.3.0",
+    "@hobbots/art": "workspace:*",
     "astro": "7.4.4"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
     "typescript": "6.0.3",
+    "vitest": "5.0.5",
     "wrangler": "4.156.0"
   }
 }
