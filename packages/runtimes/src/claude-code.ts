@@ -1,17 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import {
-  accessSync,
-  constants,
-  copyFileSync,
-  cpSync,
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  realpathSync,
-  renameSync,
-  rmSync,
-  statSync,
-} from "node:fs";
+import { accessSync, constants, lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
@@ -149,21 +137,58 @@ const sandboxLogin = (binary: string): Effect.Effect<Record<string, string>, Run
   });
 
 /**
+ * Copies one transcript between configuration folders, run in its own process. It enters each
+ * folder on the way and checks where it really landed, so a link anywhere on the path is refused,
+ * and then reads and writes only by name inside the folder it holds. A command that swaps a folder
+ * for a link meanwhile cannot redirect it: the folder it entered stays where it was checked.
+ * Arguments: source root, target root, project, transcript file, then older projects to clear.
+ */
+const COPY_TRANSCRIPT = `
+const fs = require("node:fs");
+const { join } = require("node:path");
+const { O_RDONLY, O_WRONLY, O_CREAT, O_EXCL, O_NOFOLLOW } = fs.constants;
+const [source, target, project, file, ...older] = process.argv.slice(1);
+const enter = (root, parts, create) => {
+  process.chdir(root);
+  let here = root;
+  if (process.cwd() !== here) throw new Error("moved");
+  for (const part of parts) {
+    if (create) try { fs.mkdirSync(part, { mode: 0o700 }); } catch (error) { if (error.code !== "EEXIST") throw error; }
+    process.chdir(part);
+    here = join(here, part);
+    if (process.cwd() !== here) throw new Error("linked");
+  }
+};
+enter(source, ["projects", project], false);
+const from = fs.openSync(file, O_RDONLY | O_NOFOLLOW);
+if (!fs.fstatSync(from).isFile()) throw new Error("not a file");
+const transcript = fs.readFileSync(from);
+fs.closeSync(from);
+for (const old of older) {
+  try { enter(target, ["projects", old], false); fs.rmSync(file, { force: true }); } catch {}
+}
+enter(target, ["projects", project], true);
+const partial = "." + file + ".partial";
+fs.rmSync(partial, { force: true });
+const to = fs.openSync(partial, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600);
+fs.writeFileSync(to, transcript);
+fs.closeSync(to);
+fs.renameSync(partial, file);
+`;
+
+/**
  * Makes `target` hold the latest copy of a session, by copying its transcript in from whichever
  * configuration folder last wrote it. Claude Code keeps a session's id on resume and appends where
  * the turn ran, so a thread whose turns move between folders keeps its whole history this way. A
- * session no folder has is left for Claude Code to report.
+ * session no folder has is left for Claude Code to report. A hob's commands can write its runtime
+ * folder, even while this runs, so the copy itself runs in COPY_TRANSCRIPT. Only the transcript
+ * moves: what a session keeps beside it, such as subagent runs, stays where it was written.
  */
-export const adoptSession = (target: string, sources: ReadonlyArray<string>, sessionId: string) => {
+export const adoptSession = async (target: string, sources: ReadonlyArray<string>, sessionId: string) => {
   const file = `${sessionId}.jsonl`;
-  // A hob's commands can write its runtime folder, so any part of a session's path there may be a
-  // link. Only real folders and files are followed, or a copy could read or write wherever one points.
-  const isFolder = (path: string) => lstatSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
   const copiesIn = (folder: string) => {
-    if (!isFolder(join(folder, "projects"))) return [];
     try {
       return readdirSync(join(folder, "projects")).flatMap((project) => {
-        if (!isFolder(join(folder, "projects", project))) return [];
         const transcript = lstatSync(join(folder, "projects", project, file), { throwIfNoEntry: false });
         return transcript?.isFile() ? [{ folder, project, written: transcript.mtimeMs }] : [];
       });
@@ -177,31 +202,26 @@ export const adoptSession = (target: string, sources: ReadonlyArray<string>, ses
     undefined,
   );
   if (latest === undefined || latest.folder === target) return;
-  const from = join(latest.folder, "projects", latest.project);
-  const to = join(target, "projects", latest.project);
   try {
-    for (const path of [join(target, "projects"), to])
-      if (lstatSync(path, { throwIfNoEntry: false }) !== undefined && !isFolder(path)) return;
     // An older copy left in another project folder would compete with the new one.
-    for (const old of held) {
-      rmSync(join(target, "projects", old.project, file), { force: true });
-      rmSync(join(target, "projects", old.project, sessionId), { recursive: true, force: true });
-    }
-    mkdirSync(to, { recursive: true, mode: 0o700 });
-    if (realpathSync(to) !== join(realpathSync(target), "projects", latest.project)) return;
-    // Copied beside the transcript and renamed over it, which replaces a link there instead of
-    // writing through it.
-    const partial = join(to, `.${file}.${process.pid}.partial`);
-    rmSync(partial, { force: true });
-    copyFileSync(join(from, file), partial, constants.COPYFILE_EXCL);
-    renameSync(partial, join(to, file));
-    // Some sessions keep more beside the transcript, such as subagent runs.
-    rmSync(join(to, sessionId), { recursive: true, force: true });
-    if (isFolder(join(from, sessionId)))
-      cpSync(join(from, sessionId), join(to, sessionId), {
-        recursive: true,
-        filter: (path) => !lstatSync(path).isSymbolicLink(),
-      });
+    const older = held.filter((copy) => copy.project !== latest.project).map((copy) => copy.project);
+    // The folder itself is the hub's: commands cannot replace it, only what is inside.
+    mkdirSync(target, { recursive: true, mode: 0o700 });
+    await promisify(execFile)(
+      process.execPath,
+      [
+        "-e",
+        COPY_TRANSCRIPT,
+        "--",
+        realpathSync.native(latest.folder),
+        realpathSync.native(target),
+        latest.project,
+        file,
+        ...older,
+      ],
+      // Electron runs the script as Node does.
+      { env: { ELECTRON_RUN_AS_NODE: "1" }, timeout: 30_000 },
+    );
   } catch {
     // Claude Code reports a session it cannot resume.
   }
@@ -755,9 +775,12 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const login = sandboxed ? yield* sandboxLogin(binary) : {};
           // A sandboxed turn keeps its sessions in the hob's runtime folder, and one without tools in the
           // user's own, so a thread resumes wherever its last turn ran.
-          if (request.sessionId && request.tools) {
-            if (sandboxed) adoptSession(tools.runtimeFolder, [userConfigFolder()], request.sessionId);
-            else adoptSession(userConfigFolder(), [request.tools.runtimeFolder], request.sessionId);
+          const { sessionId } = request;
+          if (sessionId && request.tools) {
+            const [target, source] = sandboxed
+              ? [tools.runtimeFolder, userConfigFolder()]
+              : [userConfigFolder(), request.tools.runtimeFolder];
+            yield* Effect.promise(() => adoptSession(target, [source], sessionId));
           }
           const prepared = sandboxed
             ? yield* Effect.acquireRelease(

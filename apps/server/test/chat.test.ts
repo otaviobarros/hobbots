@@ -14,7 +14,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FAKE_DIRECTIVES, FakeRuntimeLayer, fakeCutOffError, type ToolAccess } from "@hobbots/runtimes";
-import { Effect, Layer, Option, PubSub, Schedule } from "effect";
+import { Deferred, Effect, Fiber, Layer, Option, PubSub, Schedule } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
@@ -335,5 +335,52 @@ describe("tool calls in a reply", () => {
     folders = [folder];
     restrictions = [{ "edit-files": "ask" }];
     expect(await statusAfter(() => (restrictions = []))).toBe("streaming");
+  });
+
+  // covers PE-008
+  it("[TC-PE-022] stops a turn whose grant was still being read when the policy narrowed", async () => {
+    let restrictions: ToolAccess["policy"]["restrictions"] = [];
+    const status = await Effect.gen(function* () {
+      const reading = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const policy = (current: typeof restrictions): ToolAccess => ({
+        policy: {
+          preset: "balanced",
+          sharedFolders: [folder],
+          hob: EMPTY_HOB_POLICY,
+          dataFolder: join(root, "data"),
+          restrictions: current,
+        },
+        folders: [folder],
+        runtimeFolder: join(root, "runtimes", HOB_ID),
+      });
+      // The turn's grant reads the policy, then holds on until released.
+      const slow = Layer.succeed(
+        HobTools,
+        HobTools.of({
+          access: () =>
+            Effect.gen(function* () {
+              const read = policy(restrictions);
+              if (yield* Deferred.succeed(reading, undefined)) yield* Deferred.await(release);
+              return read;
+            }),
+        }),
+      );
+      return yield* Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const thread = yield* chat.createThread(HOB_ID);
+        yield* chat.sendPrompt(thread.id, "one two three four five six seven eight nine ten");
+        yield* Deferred.await(reading);
+        // The narrower policy is saved while the grant still holds the older one.
+        restrictions = [{ "edit-files": "deny" }];
+        const review = yield* Effect.forkChild(chat.reviewAuthority(HOB_ID));
+        yield* Effect.sleep("20 millis");
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(review);
+        return (yield* repo.listMessages(thread.id)).at(-1)?.status;
+      }).pipe(Effect.provide(testLayer(FakeRuntimeLayer({ delay: "40 millis" }), slow)));
+    }).pipe(Effect.scoped, Effect.runPromise);
+    expect(status).toBe("interrupted");
   });
 });

@@ -612,11 +612,14 @@ export class ChatService extends Context.Service<
       });
 
       const reviewAuthority = Effect.fn("ChatService.reviewAuthority")(function* (agentId?: AgentId) {
+        // The grants are listed once the permit is held, so a grant that was being read is listed too.
         const narrowed = yield* Semaphore.withPermit(
           authority,
-          Effect.filter(
-            Array.from(granted).filter(([, turn]) => agentId === undefined || turn.agentId === agentId),
-            ([, turn]) => Effect.map(currentAccess(turn.agentId), (access) => narrows(turn.access, access)),
+          Effect.suspend(() =>
+            Effect.filter(
+              Array.from(granted).filter(([, turn]) => agentId === undefined || turn.agentId === agentId),
+              ([, turn]) => Effect.map(currentAccess(turn.agentId), (access) => narrows(turn.access, access)),
+            ),
           ),
         );
         // Outside the permit: a turn that is stopping may still be reading its grant.

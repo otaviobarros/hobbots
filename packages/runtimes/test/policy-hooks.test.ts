@@ -1,9 +1,10 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -195,24 +196,25 @@ describe("scripted tool calls in the fake runtime", () => {
 });
 
 describe("sessions across configuration folders", () => {
-  it("copies a session into the folder a turn resumes it from, when that folder's copy is older", () => {
+  it("copies a session into the folder a turn resumes it from, when that folder's copy is older", async () => {
     const user = join(root, "user-claude");
     const hob = join(runtimes, "hob-adopt");
     mkdirSync(join(user, "projects", "-work", "s1"), { recursive: true });
     writeFileSync(join(user, "projects", "-work", "s1.jsonl"), "first\n");
     writeFileSync(join(user, "projects", "-work", "s1", "agent.jsonl"), "sub\n");
-    adoptSession(hob, [user], "s1");
+    await adoptSession(hob, [user], "s1");
     expect(readFileSync(join(hob, "projects", "-work", "s1.jsonl"), "utf8")).toBe("first\n");
-    expect(readFileSync(join(hob, "projects", "-work", "s1", "agent.jsonl"), "utf8")).toBe("sub\n");
+    // Only the transcript moves; a session's subagent runs stay where they were written.
+    expect(existsSync(join(hob, "projects", "-work", "s1"))).toBe(false);
     // The hob's own copy moves on from here, so a later turn leaves it alone.
     writeFileSync(join(hob, "projects", "-work", "s1.jsonl"), "first\nsecond\n");
-    adoptSession(hob, [user], "s1");
+    await adoptSession(hob, [user], "s1");
     expect(readFileSync(join(hob, "projects", "-work", "s1.jsonl"), "utf8")).toBe("first\nsecond\n");
-    adoptSession(hob, [user], "missing");
+    await adoptSession(hob, [user], "missing");
     expect(existsSync(join(hob, "projects", "-work", "missing.jsonl"))).toBe(false);
   });
 
-  it("keeps a thread's whole history when its turns move between folders", () => {
+  it("keeps a thread's whole history when its turns move between folders", async () => {
     const user = join(root, "user-claude-2");
     const hob = join(runtimes, "hob-move");
     const transcript = (folder: string, project: string) => join(folder, "projects", project, "s2.jsonl");
@@ -222,34 +224,77 @@ describe("sessions across configuration folders", () => {
     writeFileSync(transcript(hob, "-other"), "one\n");
     utimesSync(transcript(hob, "-other"), new Date(1_000), new Date(1_000));
     writeFileSync(transcript(user, "-work"), "one\ntwo\n");
-    adoptSession(hob, [user], "s2");
+    await adoptSession(hob, [user], "s2");
     expect(readFileSync(transcript(hob, "-work"), "utf8")).toBe("one\ntwo\n");
     expect(existsSync(transcript(hob, "-other"))).toBe(false);
     // And back: the hob's turn wrote on, so a later chat-only turn takes its copy.
     writeFileSync(transcript(hob, "-work"), "one\ntwo\nthree\n");
     utimesSync(transcript(user, "-work"), new Date(2_000), new Date(2_000));
-    adoptSession(user, [hob], "s2");
+    await adoptSession(user, [hob], "s2");
     expect(readFileSync(transcript(user, "-work"), "utf8")).toBe("one\ntwo\nthree\n");
   });
 
-  it("never copies a link a hob's command left in its folder", () => {
+  it("never copies a link a hob's command left in its folder", async () => {
     const user = join(root, "user-claude-3");
     const hob = join(runtimes, "hob-link");
     const target = join(outside, "user-file.json");
     writeFileSync(target, "{}\n");
     mkdirSync(join(hob, "projects", "-work", "s3"), { recursive: true });
     symlinkSync(target, join(hob, "projects", "-work", "s3.jsonl"));
-    adoptSession(user, [hob], "s3");
+    await adoptSession(user, [hob], "s3");
     expect(existsSync(join(user, "projects", "-work", "s3.jsonl"))).toBe(false);
     rmSync(join(hob, "projects", "-work", "s3.jsonl"));
     writeFileSync(join(hob, "projects", "-work", "s3.jsonl"), "one\n");
     symlinkSync(target, join(hob, "projects", "-work", "s3", "agent.jsonl"));
-    adoptSession(user, [hob], "s3");
+    await adoptSession(user, [hob], "s3");
     expect(readFileSync(join(user, "projects", "-work", "s3.jsonl"), "utf8")).toBe("one\n");
     expect(existsSync(join(user, "projects", "-work", "s3", "agent.jsonl"))).toBe(false);
   });
 
-  it("[TC-PE-018] never follows a linked folder on the way to a session", () => {
+  it("[TC-PE-023] writes nowhere outside while a command swaps the hob's folders for links", async () => {
+    // covers PE-005
+    // A command of another thread of the same hob keeps swapping its project folder for a link outside.
+    const user = join(root, "user-claude-6");
+    const hob = join(runtimes, "hob-swapping");
+    const elsewhere = join(outside, "swapped");
+    mkdirSync(join(user, "projects", "-work"), { recursive: true });
+    mkdirSync(join(hob, "projects"), { recursive: true });
+    mkdirSync(elsewhere, { recursive: true });
+    writeFileSync(join(user, "projects", "-work", "s6.jsonl"), "mine\n");
+    const work = join(hob, "projects", "-work");
+    // Swaps the project folder for a link outside and back, as fast as it can.
+    const swapper = spawn(
+      process.execPath,
+      [
+        "-e",
+        `const fs = require("node:fs");
+        const [work, elsewhere] = process.argv.slice(1);
+        for (;;) {
+          try { fs.renameSync(work, work + ".aside"); } catch {}
+          try { fs.symlinkSync(elsewhere, work); fs.unlinkSync(work); } catch {}
+          try { fs.renameSync(work + ".aside", work); } catch {}
+        }`,
+        "--",
+        work,
+        elsewhere,
+      ],
+      { stdio: "ignore" },
+    );
+    try {
+      // Each round starts a copy process; 200 rounds catch a copy that follows a swapped link.
+      for (let round = 0; round < Number(process.env.SWAP_ROUNDS ?? 200); round++) {
+        utimesSync(join(user, "projects", "-work", "s6.jsonl"), new Date(), new Date(Date.now() + round * 1_000));
+        await adoptSession(hob, [user], "s6");
+      }
+    } finally {
+      const exited = new Promise((resolve) => swapper.once("exit", resolve));
+      swapper.kill();
+      await exited;
+    }
+    expect(readdirSync(elsewhere)).toEqual([]);
+  }, 60_000);
+
+  it("[TC-PE-018] never follows a linked folder on the way to a session", async () => {
     // covers PE-005
     const elsewhere = join(outside, "elsewhere");
     mkdirSync(join(elsewhere, "-work"), { recursive: true });
@@ -259,7 +304,7 @@ describe("sessions across configuration folders", () => {
     mkdirSync(join(hob, "projects"), { recursive: true });
     symlinkSync(join(elsewhere, "-work"), join(hob, "projects", "-work"));
     const user = join(root, "user-claude-4");
-    adoptSession(user, [hob], "s4");
+    await adoptSession(user, [hob], "s4");
     expect(existsSync(join(user, "projects", "-work", "s4.jsonl"))).toBe(false);
     // Nor a place to write: the copy is refused when the target's folder, or its projects, is a link.
     const writer = join(root, "user-claude-5");
@@ -272,14 +317,14 @@ describe("sessions across configuration folders", () => {
         rmSync(join(target, "projects"), { recursive: true });
         symlinkSync(elsewhere, join(target, "projects"));
       } else symlinkSync(join(elsewhere, "-work"), join(target, "projects", "-work"));
-      adoptSession(target, [writer], "s5");
+      await adoptSession(target, [writer], "s5");
       expect(existsSync(join(elsewhere, "-work", "s5.jsonl"))).toBe(false);
     }
     // A link where the transcript goes is replaced, not written through.
     const replaced = join(runtimes, "hob-linked-file");
     mkdirSync(join(replaced, "projects", "-work"), { recursive: true });
     symlinkSync(join(elsewhere, "-work", "s5.jsonl"), join(replaced, "projects", "-work", "s5.jsonl"));
-    adoptSession(replaced, [writer], "s5");
+    await adoptSession(replaced, [writer], "s5");
     expect(readFileSync(join(replaced, "projects", "-work", "s5.jsonl"), "utf8")).toBe("mine\n");
     expect(lstatSync(join(replaced, "projects", "-work", "s5.jsonl")).isFile()).toBe(true);
     expect(existsSync(join(elsewhere, "-work", "s5.jsonl"))).toBe(false);
