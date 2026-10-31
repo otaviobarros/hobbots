@@ -38,6 +38,8 @@ const told = (instructions: string, name = "Wren", role: "writer" | "qa" = "writ
   `## About you\nYou are ${name}, a hob in Hobbots. Your role is ${starterRole(role).title}: ${starterRole(role).note.toLowerCase()}\n\n## Your instructions, from the user\n${instructions}`;
 
 let prompts: Array<PromptRequest>;
+// The runtime session each prompt's turn started or resumed, as the runtime reported it.
+let sessions: Map<string, string>;
 // Each turn waits for this before the runtime replies, so a test can act while a reply is running.
 let replyGate: Promise<void>;
 let handler: (request: Request) => Promise<Response>;
@@ -45,6 +47,7 @@ let dispose: () => Promise<void>;
 
 beforeEach(() => {
   prompts = [];
+  sessions = new Map();
   replyGate = Promise.resolve();
   const fake = makeFakeRuntime();
   const runtime = Layer.succeed(RuntimeAdapter, {
@@ -52,7 +55,18 @@ beforeEach(() => {
     sendPrompt: (request) => {
       prompts.push(request);
       const gate = replyGate;
-      return Stream.fromEffect(Effect.promise(() => gate)).pipe(Stream.drain, Stream.concat(fake.sendPrompt(request)));
+      return Stream.fromEffect(Effect.promise(() => gate)).pipe(
+        Stream.drain,
+        Stream.concat(
+          fake
+            .sendPrompt(request)
+            .pipe(
+              Stream.tap((event) =>
+                Effect.sync(() => event._tag === "SessionStarted" && sessions.set(request.prompt, event.sessionId)),
+              ),
+            ),
+        ),
+      );
     },
   });
   const App = HobLifecycle.layer
@@ -443,16 +457,17 @@ describe("several hobs at once", () => {
       ["second for Wren", "fake-thinker", "high", told("Write long answers.")],
       ["second for Moss", "fake-quick", null, told("Tidy files.", "Moss")],
     ]);
-    // A second turn resumes its own thread's runtime session, never another hob's.
-    const session = (prompt: string) => byPrompt.get(prompt)?.sessionId;
-    expect([session("first for Wren"), session("first for Moss"), session("first for Ash")]).toEqual([
+    // Each first turn starts its own runtime session, and each second turn resumes its own thread's.
+    const resumed = (prompt: string) => byPrompt.get(prompt)?.sessionId;
+    expect([resumed("first for Wren"), resumed("first for Moss"), resumed("first for Ash")]).toEqual([
       null,
       null,
       null,
     ]);
-    expect(session("second for Wren")).toEqual(expect.any(String));
-    expect(session("second for Moss")).toEqual(expect.any(String));
-    expect(session("second for Wren")).not.toBe(session("second for Moss"));
+    const started = ["first for Wren", "first for Moss", "first for Ash"].map((prompt) => sessions.get(prompt));
+    expect(new Set(started).size).toBe(3);
+    expect(started).toEqual([expect.any(String), expect.any(String), expect.any(String)]);
+    expect([resumed("second for Wren"), resumed("second for Moss")]).toEqual([started[0], started[1]]);
 
     // Each thread holds only its own hob's messages, marked with the version that wrote each reply.
     const transcript = async (threadId: string) =>
