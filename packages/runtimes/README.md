@@ -8,7 +8,7 @@ Tools follow [ADR 014](../../docs/decisions/014-tool-policy-and-enforcement.md):
 
 - `tool-calls.ts` turns Claude Code's tool calls into policy requests, from the call's own arguments.
 - `claude-code.ts` puts every call before the policy engine through a `PreToolUse` hook, works in the hob's folders and reports tool events. A turn without folders stays chat-only.
-- `sandbox.ts` starts the runtime inside sandbox-runtime, once per hub, with each turn's folders and hosts. The keychain stays closed inside it; the runtime gets its sign-in in its environment.
+- `sandbox.ts` starts the runtime inside sandbox-runtime, once per hub, with each turn's folders and hosts. The keychain, the user's own Claude Code folder and other data folders stay closed inside it; the runtime gets its sign-in in its environment, a configuration folder of its own per hob, and only named environment variables.
 - The fake runtime plays a prompt line `fake:tool <Tool> <path or command>` as a tool call decided by the policy engine, so tests need no model.
 
 Read the [architecture overview](../../docs/architecture/overview.md) and relevant specifications before implementation. Credentials are never stored here.

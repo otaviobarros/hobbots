@@ -1,5 +1,6 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { accessSync, constants, mkdirSync, realpathSync, statSync } from "node:fs";
+import { accessSync, constants, cpSync, existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { Readable } from "node:stream";
@@ -72,6 +73,9 @@ const runtimeEnv = (binary: string): NodeJS.ProcessEnv => ({
 
 const execFileAsync = promisify(execFile);
 
+/** The user's own Claude Code configuration folder, which the sandbox keeps closed. */
+const userConfigFolder = () => process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+
 /** The keychain item where Claude Code keeps a claude.ai login on macOS, for the default config folder. */
 const KEYCHAIN_LOGIN = "Claude Code-credentials";
 // Claude Code cannot refresh a login inside the sandbox, so the hub tries to before a turn when this
@@ -103,11 +107,16 @@ export const parseKeychainLogin = (secret: string): { readonly token: string; re
  */
 const sandboxLogin = (binary: string): Effect.Effect<Record<string, string>, RuntimeError> =>
   Effect.gen(function* () {
-    if (process.platform !== "darwin" || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_OAUTH_TOKEN)
-      return {};
+    // A token from the hub's environment passes through as it is. An API key never does (ADR 009).
+    if (process.env.CLAUDE_CODE_OAUTH_TOKEN) return {};
     const read = Effect.promise(() =>
-      execFileAsync("security", ["find-generic-password", "-s", KEYCHAIN_LOGIN, "-w"], { timeout: 10_000 }).then(
-        ({ stdout }) => parseKeychainLogin(stdout.trim()),
+      (process.platform === "darwin"
+        ? execFileAsync("security", ["find-generic-password", "-s", KEYCHAIN_LOGIN, "-w"], { timeout: 10_000 }).then(
+            ({ stdout }) => stdout,
+          )
+        : readFile(join(userConfigFolder(), ".credentials.json"), "utf8")
+      ).then(
+        (secret) => parseKeychainLogin(secret.trim()),
         () => null,
       ),
     );
@@ -126,6 +135,52 @@ const sandboxLogin = (binary: string): Effect.Effect<Record<string, string>, Run
       });
     return { CLAUDE_CODE_OAUTH_TOKEN: login.token };
   });
+
+/**
+ * Makes a session Claude Code started in another configuration folder resumable from `target`, by
+ * copying its transcript in. Threads from before a hob had tools, or from turns without them, keep
+ * their history this way. A session the target already has, or that cannot be found, is left alone.
+ */
+export const adoptSession = (target: string, sources: ReadonlyArray<string>, sessionId: string) => {
+  const file = `${sessionId}.jsonl`;
+  const projectsWith = (folder: string) => {
+    try {
+      return readdirSync(join(folder, "projects")).filter((project) =>
+        existsSync(join(folder, "projects", project, file)),
+      );
+    } catch {
+      return [];
+    }
+  };
+  if (projectsWith(target).length > 0) return;
+  for (const source of sources) {
+    const [project] = projectsWith(source);
+    if (project === undefined) continue;
+    try {
+      const from = join(source, "projects", project);
+      const to = join(target, "projects", project);
+      mkdirSync(to, { recursive: true, mode: 0o700 });
+      cpSync(join(from, file), join(to, file));
+      // Some sessions keep more beside the transcript, such as subagent runs.
+      if (existsSync(join(from, sessionId))) cpSync(join(from, sessionId), join(to, sessionId), { recursive: true });
+    } catch {
+      // Claude Code reports a session it cannot resume.
+    }
+    return;
+  }
+};
+
+/** A bare binary name as the absolute path the runtime's PATH finds it at. */
+const resolveBinary = (binary: string): Effect.Effect<string, RuntimeError> => {
+  if (isAbsolute(binary)) return Effect.succeed(binary);
+  const found = runtimePath(binary, process.env, homedir())
+    .split(delimiter)
+    .map((dir) => join(dir, binary))
+    .find((path) => isAbsolute(path) && isExecutable(path));
+  return found
+    ? Effect.succeed(found)
+    : Effect.fail(new RuntimeError({ message: `Could not find ${binary} on PATH, so the sandbox cannot start it.` }));
+};
 
 const isExecutable = (path: string) => {
   try {
@@ -257,6 +312,15 @@ export const exited = (child: ChildProcess, grace: Duration.Input = shutdownGrac
       orElse: () => Effect.sync(() => child.kill("SIGKILL")).pipe(Effect.andThen(waitForExit(child))),
     }),
   );
+
+/** Ends what a sandboxed turn left running, which would otherwise keep its rules after the turn. */
+const killGroup = (pid: number) => {
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {
+    // The group has already ended.
+  }
+};
 
 /** The hob's brain for one turn; a null model or effort leaves Claude Code's own default. */
 export const brainOptions = (request: Pick<PromptRequest, "model" | "effort">): Pick<Options, "model" | "effort"> => ({
@@ -437,6 +501,8 @@ export interface ToolTurn {
   /** Canonical and existing; the first is where Claude Code starts. */
   readonly folders: ReadonlyArray<string>;
   readonly tools: ReadonlyArray<string>;
+  /** Claude Code's configuration folder for this hob. */
+  readonly runtimeFolder: string;
 }
 
 /** The turn's tools, or null for a chat-only turn: no access, no folder that exists, or no tool open. */
@@ -456,10 +522,10 @@ export const toolTurn = (access: ToolAccess | null | undefined, sandbox: Sandbox
   if (folders.length === 0) return null;
   const context: PolicyContext = { ...access.policy, sandbox, modelHosts: CLAUDE_CODE_MODEL_HOSTS };
   const tools = offeredTools(context);
-  return tools.length === 0 ? null : { context, folders, tools };
+  return tools.length === 0 ? null : { context, folders, tools, runtimeFolder: access.runtimeFolder };
 };
 
-const UNKNOWN_TOOL = (tool: string) => `Hobbots does not know the ${tool} tool, so it stays closed.`;
+export const UNKNOWN_TOOL = (tool: string) => `Hobbots does not know the ${tool} tool, so it stays closed.`;
 
 /** Why a call did not run, in words for the model and the person. */
 export const refusal = (verdict: PolicyVerdict): string =>
@@ -643,13 +709,22 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const binary = yield* executable;
           const tools = toolTurn(request.tools, sandbox.state);
           const sandboxed = tools !== null && sandbox.state === "on";
+          // The sandbox opens the binary's folder, so it must be a real path, never the hub's own folder.
+          const absoluteBinary = sandboxed ? yield* resolveBinary(binary) : binary;
           const login = sandboxed ? yield* sandboxLogin(binary) : {};
+          // A sandboxed turn keeps its sessions in the hob's runtime folder, and one without tools in the
+          // user's own, so a thread resumes wherever its last turn ran.
+          if (request.sessionId && request.tools) {
+            if (sandboxed) adoptSession(tools.runtimeFolder, [userConfigFolder()], request.sessionId);
+            else adoptSession(userConfigFolder(), [request.tools.runtimeFolder], request.sessionId);
+          }
           const prepared = sandboxed
             ? yield* Effect.acquireRelease(
                 sandbox.prepare({
                   folders: tools.folders,
                   dataFolder: tools.context.dataFolder,
-                  binary,
+                  binary: absoluteBinary,
+                  runtimeFolder: tools.runtimeFolder,
                   allowedHosts: CLAUDE_CODE_MODEL_HOSTS,
                   decideHost: (host) =>
                     Effect.runPromise(
@@ -674,6 +749,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               cwd: options.cwd,
               env,
               signal: options.signal,
+              // Its own process group, so what its commands leave running ends with the turn.
+              detached: prepared !== null,
               stdio: ["pipe", "pipe", "pipe"],
               windowsHide: true,
             });
@@ -713,7 +790,10 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               Effect.sync(() => {
                 abortController.abort();
                 turn.close();
-              }).pipe(Effect.andThen(child ? exited(child) : Effect.void)),
+              }).pipe(
+                Effect.andThen(child ? exited(child) : Effect.void),
+                Effect.andThen(Effect.sync(() => prepared && child?.pid && killGroup(child.pid))),
+              ),
           );
           const toEvents = turnEvents();
           // Tool events arrive from the hooks while the turn runs, so the turn's own events share their queue.

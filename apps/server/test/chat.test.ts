@@ -1,9 +1,21 @@
-import { Agent, AgentId, isInProgress, type MessageId, type ThreadId } from "@hobbots/domain";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  Agent,
+  AgentId,
+  EMPTY_HOB_POLICY,
+  isInProgress,
+  type MessageId,
+  type MessageSteps,
+  type ThreadId,
+} from "@hobbots/domain";
+import { PolicyEngine } from "@hobbots/permissions";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FAKE_DIRECTIVES, FakeRuntimeLayer, fakeCutOffError } from "@hobbots/runtimes";
-import { Effect, Layer, Option, Schedule } from "effect";
-import { describe, expect, it } from "vitest";
+import { Effect, Layer, Option, PubSub, Schedule } from "effect";
+import { afterAll, describe, expect, it } from "vitest";
 import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
@@ -32,9 +44,9 @@ const summonHob = Effect.gen(function* () {
 });
 
 const Persistence = HobbotsRepository.layer.pipe(Layer.provideMerge(TestDatabase));
-const testLayer = (runtime = FakeRuntimeLayer()) =>
+const testLayer = (runtime = FakeRuntimeLayer(), tools = HobTools.chatOnly) =>
   ChatService.layer
-    .pipe(Layer.provide(HobTools.chatOnly))
+    .pipe(Layer.provide(tools))
     .pipe(
       Layer.provideMerge(
         Layer.mergeAll(
@@ -209,5 +221,66 @@ describe("a reply that ends early", () => {
       return yield* chat.continueReply(thread.id, cut.id).pipe(Effect.flip);
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
     expect(error._tag).toBe("ReplyNotResumable");
+  });
+});
+
+describe("tool calls in a reply", () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-chat-tools-")));
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const folder = join(root, "work");
+  mkdirSync(folder);
+  const tools = Layer.succeed(
+    HobTools,
+    HobTools.of({
+      access: () =>
+        Effect.succeed({
+          policy: {
+            preset: "balanced",
+            sharedFolders: [folder],
+            hob: EMPTY_HOB_POLICY,
+            dataFolder: join(root, "data"),
+            restrictions: [],
+          },
+          folders: [folder],
+          runtimeFolder: join(root, "runtimes", HOB_ID),
+        }),
+    }),
+  );
+
+  // covers CH-004, PE-002
+  it("[TC-CH-109] shows each tool call the policy allowed as a step of the reply, and no step for a refused one", async () => {
+    const steps = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const bus = yield* EventBus;
+      const repo = yield* HobbotsRepository;
+      const subscription = yield* bus.subscribe;
+      const thread = yield* chat.createThread(HOB_ID);
+      yield* chat.sendPrompt(
+        thread.id,
+        `Fix it\nfake:tool Edit ${join(folder, "a.ts")}\nfake:tool Write ${join(root, "outside.txt")}`,
+      );
+      yield* repo.listMessages(thread.id).pipe(
+        Effect.flatMap((messages) =>
+          messages.at(-1)?.role === "assistant" && !isInProgress(messages.at(-1)?.status ?? "streaming")
+            ? Effect.void
+            : Effect.fail("busy" as const),
+        ),
+        Effect.retry(Schedule.spaced("5 millis")),
+      );
+      const events = yield* PubSub.takeAll(subscription);
+      return events.flatMap(
+        (event): ReadonlyArray<MessageSteps> =>
+          event._tag === "Transient" && event.event._tag === "MessageSteps" ? [event.event] : [],
+      );
+    }).pipe(
+      Effect.provide(testLayer(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)), tools)),
+      Effect.scoped,
+      Effect.runPromise,
+    );
+
+    expect(steps.at(-1)?.steps).toEqual([
+      { id: "thinking-1", kind: "thinking", label: "Thinking", state: "done" },
+      { id: "fake-tool-1", kind: "tool", label: "Editing a.ts", state: "done" },
+    ]);
   });
 });

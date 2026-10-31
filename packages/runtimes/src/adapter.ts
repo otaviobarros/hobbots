@@ -67,6 +67,11 @@ export interface ToolAccess {
   readonly policy: Omit<PolicyContext, "sandbox" | "modelHosts">;
   /** The hob's effective folders, canonical; the first is where the runtime starts. */
   readonly folders: ReadonlyArray<string>;
+  /**
+   * Where the runtime keeps this hob's own state, such as its sessions, when it runs with tools. Its
+   * parent holds every hob's and stays closed to the others.
+   */
+  readonly runtimeFolder: string;
 }
 
 export interface PromptRequest {
@@ -111,7 +116,7 @@ export interface RuntimeAdapterShape {
   readonly health: Effect.Effect<RuntimeHealth>;
   /** Models a hob can choose, from the runtime when it reports them, otherwise a documented list. */
   readonly models: Effect.Effect<RuntimeModels>;
-  /** What this adapter enforces on this hub; an adapter without it enforces nothing, so stays chat-only. */
+  /** What this adapter enforces on this hub, as evidence for health and the docs; absent, it claims nothing. */
   readonly enforcement?: Effect.Effect<EnforcementDeclaration>;
   /** Runs one turn. Interrupting the stream cancels the turn. */
   readonly sendPrompt: (request: PromptRequest) => Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached>;

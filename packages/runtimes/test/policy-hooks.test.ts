@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
@@ -8,16 +8,17 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import type { RuntimeEvent, ToolAccess } from "../src/adapter.ts";
-import { parseKeychainLogin, policyHooks, toolTurn } from "../src/claude-code.ts";
+import { adoptSession, parseKeychainLogin, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { makeFakeRuntime } from "../src/fake.ts";
-import { decideForLiveTurns, ProcessSandbox, sandboxFilesystem } from "../src/sandbox.ts";
+import { decideForLiveTurns, ProcessSandbox, sandboxEnv, sandboxFilesystem } from "../src/sandbox.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hooks-")));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const project = join(root, "project");
 const outside = join(root, "outside");
 const data = join(root, "data");
-for (const dir of [project, outside, data]) mkdirSync(dir);
+const runtimes = join(root, "runtimes");
+for (const dir of [project, outside, data, runtimes]) mkdirSync(dir);
 writeFileSync(join(project, "a.ts"), "export {};\n");
 
 const engine = Effect.runSync(
@@ -29,6 +30,7 @@ const engine = Effect.runSync(
 const access = (hob: HobPolicy = EMPTY_HOB_POLICY): ToolAccess => ({
   policy: { preset: "balanced", sharedFolders: [project], hob, dataFolder: data, restrictions: [] },
   folders: [project],
+  runtimeFolder: join(runtimes, "hob-1"),
 });
 
 /** Runs one tool call through the hooks as Claude Code would, with what each hook reported. */
@@ -165,34 +167,88 @@ describe("scripted tool calls in the fake runtime", () => {
     expect(events[2]).toMatchObject({ operation: "outside-folders", label: "Writing b.txt" });
   });
 
+  it("refuses a tool Hobbots does not know, as the hook does", async () => {
+    const events = await turn("fake:tool WebFetch https://example.com", access());
+    expect(events).toEqual([expect.objectContaining({ _tag: "ToolDenied", tool: "WebFetch", decidedBy: "policy" })]);
+  });
+
   it("makes no tool calls in a chat-only turn", async () => {
     expect(await turn(`fake:tool Edit ${join(project, "a.ts")}`, null)).toEqual([]);
   });
 });
 
+describe("sessions across configuration folders", () => {
+  it("copies a session into the folder a turn resumes it from, once", () => {
+    const user = join(root, "user-claude");
+    const hob = join(runtimes, "hob-adopt");
+    mkdirSync(join(user, "projects", "-work", "s1"), { recursive: true });
+    writeFileSync(join(user, "projects", "-work", "s1.jsonl"), "first\n");
+    writeFileSync(join(user, "projects", "-work", "s1", "agent.jsonl"), "sub\n");
+    adoptSession(hob, [user], "s1");
+    expect(readFileSync(join(hob, "projects", "-work", "s1.jsonl"), "utf8")).toBe("first\n");
+    expect(readFileSync(join(hob, "projects", "-work", "s1", "agent.jsonl"), "utf8")).toBe("sub\n");
+    // The hob's own copy moves on from here, so a later turn leaves it alone.
+    writeFileSync(join(hob, "projects", "-work", "s1.jsonl"), "first\nsecond\n");
+    adoptSession(hob, [user], "s1");
+    expect(readFileSync(join(hob, "projects", "-work", "s1.jsonl"), "utf8")).toBe("first\nsecond\n");
+    adoptSession(hob, [user], "missing");
+    expect(existsSync(join(hob, "projects", "-work", "missing.jsonl"))).toBe(false);
+  });
+});
+
 describe("the process sandbox", () => {
-  it("closes the home folder except the hob's folders and Claude Code's own state", () => {
+  it("closes the home folder, the user's Claude Code state and other hobs' except the hob's own", () => {
     const rules = sandboxFilesystem({
-      folders: ["/Users/me/work"],
+      folders: ["/Volumes/Work/app"],
       dataFolder: "/Users/me/Library/Hobbots",
       binary: "/Users/me/.local/bin/claude",
-      tempFolder: "/tmp/turn",
+      runtimeFolder: "/Users/me/Library/Hobbots-runtimes/hob-1",
+      tempFolder: "/private/var/folders/xy/T/turn",
       allowedHosts: [],
       home: "/Users/me",
       path: "/usr/bin:/Users/me/.volta/bin:relative",
     });
-    expect(rules.denyRead).toEqual(["/Users/me", "/Users/me/Library/Hobbots"]);
-    expect(rules.allowRead).toEqual(
-      expect.arrayContaining(["/Users/me/work", "/Users/me/.claude", "/Users/me/.local/bin", "/Users/me/.volta/bin"]),
-    );
-    expect(rules.allowWrite).toEqual(["/Users/me/work", "/Users/me/.claude", "/tmp/turn"]);
-    expect(rules.denyWrite).toEqual(
+    expect(rules.denyRead).toEqual(
       expect.arrayContaining([
+        "/Users/me",
+        "/Volumes",
+        "/tmp",
+        "/private/var/folders",
         "/Users/me/Library/Hobbots",
-        "/Users/me/.claude/settings.json",
-        "/Users/me/.claude/hooks",
+        "/Users/me/Library/Hobbots-runtimes",
       ]),
     );
+    expect(rules.allowRead).toEqual(
+      expect.arrayContaining([
+        "/Volumes/Work/app",
+        "/Users/me/Library/Hobbots-runtimes/hob-1",
+        "/private/var/folders/xy/T/turn",
+        "/Users/me/.local/bin",
+        "/Users/me/.volta/bin",
+      ]),
+    );
+    expect(rules.allowRead).not.toContain("/Users/me/.claude");
+    expect(rules.allowWrite).toEqual([
+      "/Volumes/Work/app",
+      "/Users/me/Library/Hobbots-runtimes/hob-1",
+      "/private/var/folders/xy/T/turn",
+    ]);
+    expect(rules.denyWrite).toEqual(expect.arrayContaining(["/Users/me/Library/Hobbots"]));
+  });
+
+  it("lets only the variables a runtime needs into the sandbox", () => {
+    expect(
+      sandboxEnv({
+        PATH: "/usr/bin",
+        HOME: "/Users/me",
+        LC_ALL: "C",
+        CLAUDE_CODE_OAUTH_TOKEN: "t",
+        GH_TOKEN: "secret",
+        AWS_SECRET_ACCESS_KEY: "secret",
+        SSH_AUTH_SOCK: "/tmp/agent",
+        ANTHROPIC_API_KEY: "secret",
+      }),
+    ).toEqual({ PATH: "/usr/bin", HOME: "/Users/me", LC_ALL: "C", CLAUDE_CODE_OAUTH_TOKEN: "t" });
   });
 
   it("reaches a host only when every live turn may reach it", async () => {
@@ -217,11 +273,15 @@ describe("the process sandbox", () => {
           folders: [project],
           dataFolder: data,
           binary: "/bin/sh",
+          runtimeFolder: join(runtimes, "hob-1"),
           allowedHosts: [],
         });
         try {
           const run = (script: string) => {
-            const { command, args, env } = prepared.spawnArgs("/bin/sh", ["-c", script], { PATH: "/usr/bin:/bin" });
+            const { command, args, env } = prepared.spawnArgs("/bin/sh", ["-c", script], {
+              PATH: "/usr/bin:/bin",
+              GH_TOKEN: "not-for-commands",
+            });
             return spawnSync(command, [...args], { cwd: project, env, encoding: "utf8" });
           };
           expect(run(`echo ok > ${join(project, "inside.txt")}`).status).toBe(0);
@@ -229,6 +289,15 @@ describe("the process sandbox", () => {
           expect(escaped.status).not.toBe(0);
           expect(escaped.stderr).toContain("Operation not permitted");
           expect(run(`echo no > ${join(data, "x")}`).status).not.toBe(0);
+          // Reads outside the folders fail too, outside the home folder included, as do other hobs' state.
+          writeFileSync(join(outside, "secret.txt"), "secret\n");
+          mkdirSync(join(runtimes, "hob-2"), { recursive: true });
+          writeFileSync(join(runtimes, "hob-2", "session.jsonl"), "{}\n");
+          expect(run(`cat ${join(outside, "secret.txt")}`).status).not.toBe(0);
+          expect(run(`cat ${join(runtimes, "hob-2", "session.jsonl")}`).status).not.toBe(0);
+          expect(run(`echo ok > ${join(runtimes, "hob-1", "state.json")}`).status).toBe(0);
+          // The user's own Claude Code state stays closed: its memory and settings load outside any policy.
+          expect(run(`ls ${join(homedir(), ".claude")}`).status).not.toBe(0);
           // Git's hooks and config stay read-only, since the user's own Git would run them unsandboxed.
           mkdirSync(join(project, ".git", "hooks"), { recursive: true });
           writeFileSync(join(project, ".git", "config"), "[core]\n");
@@ -238,6 +307,9 @@ describe("the process sandbox", () => {
           // The keychain stays closed, so no command reaches the credentials Git or gh keep there.
           const helper = run("printf 'protocol=https\\nhost=github.com\\n\\n' | git credential-osxkeychain get");
           expect(helper.stdout).not.toContain("password=");
+          // Credentials in the hub's environment stay out, and the runtime keeps state in its own folder.
+          expect(run('echo "[$GH_TOKEN]"').stdout.trim()).toBe("[]");
+          expect(run('echo "$CLAUDE_CONFIG_DIR"').stdout.trim()).toBe(join(runtimes, "hob-1"));
         } finally {
           prepared.release();
         }

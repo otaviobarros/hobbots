@@ -2,7 +2,7 @@ import { type RuntimeAvailability, RuntimeHealth, RuntimeModel, RuntimeModels } 
 import { PolicyEngine } from "@hobbots/permissions";
 import { Clock, Effect, Exit, Layer, Option, Stream } from "effect";
 import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent, RuntimeLimitReached } from "./adapter.ts";
-import { toolTurn } from "./claude-code.ts";
+import { refusal, toolTurn, UNKNOWN_TOOL } from "./claude-code.ts";
 import { narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
 
 /**
@@ -100,10 +100,24 @@ export const scriptedToolEvents = (
       });
     const events: Array<RuntimeEvent> = [];
     for (const [index, { tool, input }] of calls.entries()) {
-      if (!turn.tools.includes(tool)) continue;
       const id = `fake-tool-${index + 1}`;
       const label = toolLabel(tool, input);
-      const requests = toolRequests(tool, input, turn.folders[0] as string) ?? [];
+      const requests = toolRequests(tool, input, turn.folders[0] as string);
+      // Like Claude Code, an unknown tool is refused, and a known one not offered this turn is never called.
+      if (requests === null) {
+        events.push({
+          _tag: "ToolDenied",
+          id,
+          tool,
+          operation: "outside-folders",
+          targets: [],
+          label,
+          reason: UNKNOWN_TOOL(tool),
+          decidedBy: "policy",
+        });
+        continue;
+      }
+      if (!turn.tools.includes(tool)) continue;
       const verdict = narrowestVerdict(yield* Effect.forEach(requests, (r) => engine.decide(turn.context, r)));
       if (verdict === undefined) continue;
       if (verdict.decision === "allow") {
@@ -119,7 +133,7 @@ export const scriptedToolEvents = (
           operation: verdict.operation,
           targets: verdict.targets,
           label,
-          reason: verdict.reason.message,
+          reason: refusal(verdict),
           decidedBy: "policy",
         });
       }
@@ -170,7 +184,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
           : Stream.empty;
     const stream = Stream.unwrap(
       Effect.map(scriptedToolEvents(request, options.engine), (tools) =>
-        Stream.fromIterable([...events.slice(0, 1), ...tools, ...events.slice(1)]),
+        // Tool calls come after the thinking step, before the reply is written.
+        Stream.fromIterable([...events.slice(0, 3), ...tools, ...events.slice(3)]),
       ),
     ).pipe(Stream.concat(failure));
     const paced = options.delay ? stream.pipe(Stream.tap(() => Effect.sleep(options.delay as "10 millis"))) : stream;

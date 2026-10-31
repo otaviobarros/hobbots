@@ -1,9 +1,16 @@
+import { join } from "node:path";
 import type { Agent } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import type { ToolAccess } from "@hobbots/runtimes";
 import { Context, Effect, Layer } from "effect";
 import { Installation } from "./installation.ts";
 import { effectiveFolders } from "./permissions.ts";
+
+/**
+ * Where runtimes keep each hob's own state when it has tools, beside the data folder rather than in
+ * it, since the data folder stays closed to every hob.
+ */
+export const runtimeFolders = (dataDir: string) => `${dataDir}-runtimes`;
 
 /**
  * What a hob may do with tools on its next turn (ADR 014): the installation's preset and shared
@@ -33,6 +40,7 @@ export class HobTools extends Context.Service<
                 restrictions: [],
               },
               folders: yield* effectiveFolders(approvedFolders, agent.policy),
+              runtimeFolder: join(runtimeFolders(dataDir), agent.id),
             };
           }).pipe(
             // Without its policy the hob gets no tools: closed, never open.

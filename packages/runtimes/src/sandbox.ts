@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { homedir, platform, tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
@@ -40,8 +40,13 @@ export interface SandboxScope {
   readonly folders: ReadonlyArray<string>;
   /** Hobbots' data folder, which stays closed even inside a folder. */
   readonly dataFolder: string;
-  /** The runtime's binary, whose folder (and its real location) must stay readable. */
+  /** The runtime's binary, absolute, whose folder (and its real location) must stay readable. */
   readonly binary: string;
+  /**
+   * The runtime's own state for this hob, such as Claude Code's configuration folder. The folder that
+   * holds every hob's stays closed, and so does the user's own runtime state.
+   */
+  readonly runtimeFolder: string;
   /** The turn's own temporary folder. */
   readonly tempFolder: string;
   /** Hosts the turn always reaches, such as its model API. */
@@ -50,6 +55,8 @@ export interface SandboxScope {
   readonly decideHost?: HostDecider;
   readonly home?: string;
   readonly path?: string;
+  /** The closed places outside the home folder; USER_DATA_ROOTS that exist by default. */
+  readonly roots?: ReadonlyArray<string>;
 }
 
 const realOrSelf = (path: string) => {
@@ -61,22 +68,40 @@ const realOrSelf = (path: string) => {
 };
 
 /**
- * The turn's filesystem rules. The home folder is closed except for the folders, Claude Code's own
- * state and the tools on PATH, so other projects, keys and dotfiles stay out of reach. Claude Code's
- * settings, hooks and memory stay read-only, since a later run would load them outside any policy.
+ * Where people keep files outside the home folder: other users, volumes, shared and temporary
+ * folders (other turns' included). Closed for reading like the home folder, apart from the folders.
+ */
+export const USER_DATA_ROOTS: ReadonlyArray<string> = [
+  "/Users",
+  "/home",
+  "/Volumes",
+  "/media",
+  "/mnt",
+  "/srv",
+  "/tmp",
+  "/private/tmp",
+  "/var/tmp",
+  "/private/var/tmp",
+  "/var/folders",
+  "/private/var/folders",
+];
+
+/**
+ * The turn's filesystem rules. The home folder and the other places people keep files are closed
+ * except for the folders, the hob's runtime state and the tools on PATH, so other projects, keys,
+ * dotfiles and the user's own Claude Code state stay out of reach.
  */
 export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["filesystem"] => {
   const home = scope.home ?? homedir();
-  const claudeDir = join(home, ".claude");
   const binaryDirs = [dirname(scope.binary), dirname(realOrSelf(scope.binary))];
   // Tools installed under the home folder (version managers, ~/.local/bin) stay readable, not writable.
   const homeTools = (scope.path ?? process.env.PATH ?? "")
     .split(delimiter)
     .filter((dir) => isAbsolute(dir) && dir.startsWith(`${home}/`));
   return {
-    denyRead: [home, scope.dataFolder],
-    allowRead: [...new Set([...scope.folders, claudeDir, join(home, ".claude.json"), ...binaryDirs, ...homeTools])],
-    allowWrite: [...scope.folders, claudeDir, scope.tempFolder],
+    denyRead: [...new Set([...(scope.roots ?? USER_DATA_ROOTS), home, scope.dataFolder, dirname(scope.runtimeFolder)])],
+    allowRead: [...new Set([...scope.folders, scope.runtimeFolder, scope.tempFolder, ...binaryDirs, ...homeTools])],
+    allowWrite: [...scope.folders, scope.runtimeFolder, scope.tempFolder],
     denyWrite: [
       scope.dataFolder,
       // Git's hooks and config, in each folder and in any repository below it: the user's own Git
@@ -88,10 +113,6 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
         `${folder}/**/.git/hooks/**`,
         `${folder}/**/.git/config`,
       ]),
-      join(claudeDir, "settings.json"),
-      join(claudeDir, "settings.local.json"),
-      join(claudeDir, "CLAUDE.md"),
-      ...["hooks", "commands", "agents", "skills", "plugins", "output-styles"].map((dir) => join(claudeDir, dir)),
     ],
   };
 };
@@ -114,6 +135,20 @@ export const decideForLiveTurns = async (
   const refusal = answers.find((answer) => answer !== true);
   return refusal === undefined ? true : { allow: false, reason: refusal };
 };
+
+// Variables that pass into the sandbox as they are. Anything else, such as a token the hub was
+// started with or an SSH agent socket, stays out, so commands cannot use the hub's credentials.
+const PASSED_VARIABLES = new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "COLORTERM", "TZ"]);
+const PASSED_PREFIXES = ["LC_", "CLAUDE_CODE_", "CLAUDE_AGENT_SDK_"];
+
+/** The part of an environment that enters the sandbox. */
+export const sandboxEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
+  Object.fromEntries(
+    Object.entries(env).filter(
+      ([key, value]) =>
+        value !== undefined && (PASSED_VARIABLES.has(key) || PASSED_PREFIXES.some((prefix) => key.startsWith(prefix))),
+    ),
+  );
 
 /** Quotes a word for a POSIX shell. */
 export const shellQuote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
@@ -208,6 +243,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
       const prepare: ProcessSandboxShape["prepare"] = (scope) =>
         Effect.tryPromise({
           try: async (): Promise<PreparedSandbox> => {
+            mkdirSync(scope.runtimeFolder, { recursive: true, mode: 0o700 });
             const tempFolder = realOrSelf(mkdtempSync(join(tmpdir(), "hobbots-turn-")));
             // The proxy knows the turn by this id alone, so it must be unguessable (128 bits or more).
             const commandId = randomBytes(16).toString("base64url");
@@ -222,7 +258,13 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
               const wrapped = await SandboxManager.wrapWithSandboxArgv(
                 LAUNCHER,
                 undefined,
-                { filesystem: sandboxFilesystem({ ...scope, tempFolder }) },
+                {
+                  filesystem: sandboxFilesystem({
+                    ...scope,
+                    tempFolder,
+                    roots: USER_DATA_ROOTS.filter((root) => existsSync(root)),
+                  }),
+                },
                 undefined,
                 // The protected Git paths are found from here and the allowed folders.
                 scope.folders[0],
@@ -239,8 +281,10 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                   command: shell as string,
                   args: shellArgs,
                   env: {
-                    ...env,
+                    ...sandboxEnv(env),
                     ...added,
+                    // The runtime keeps its state for this hob there, never in the user's own.
+                    CLAUDE_CONFIG_DIR: scope.runtimeFolder,
                     TMPDIR: tempFolder,
                     // Claude Code keeps its own temporary files under /tmp otherwise, outside the sandbox's reach.
                     CLAUDE_CODE_TMPDIR: tempFolder,
