@@ -34,6 +34,7 @@ import {
   ProcessSandbox,
   readGitIdentity,
   sandboxEnv,
+  sandboxEnvFile,
   sandboxFilesystem,
   sandboxGitConfig,
 } from "../src/sandbox.ts";
@@ -590,6 +591,13 @@ describe("the process sandbox", () => {
     );
   });
 
+  it("sets Git's config again for Claude Code's commands, whose scrub drops it", () => {
+    expect(sandboxEnvFile("/private/tmp/hobbots-turn-a b/gitconfig")).toBe(
+      "export GIT_CONFIG_GLOBAL='/private/tmp/hobbots-turn-a b/gitconfig'\n",
+    );
+    expect(sandboxEnvFile("/tmp/it's/gitconfig")).toBe("export GIT_CONFIG_GLOBAL='/tmp/it'\\''s/gitconfig'\n");
+  });
+
   // covers PE-001, PE-005
   it("[TC-PE-077] reads the user's Git identity from a file their global config includes", async () => {
     const home = mkdtempSync(join(tmpdir(), "hobbots-git-home-"));
@@ -679,6 +687,10 @@ describe("the process sandbox", () => {
           const status = run(`git -C ${gitProject} status --short`);
           expect(status.stderr).not.toContain("unable to access");
           expect(status.status).toBe(0);
+          // Claude Code's scrub drops the variable; its env file sets it again before each command.
+          const scrubbed = run(`unset GIT_CONFIG_GLOBAL; . "$CLAUDE_ENV_FILE"; git -C ${gitProject} status --short`);
+          expect(scrubbed.stderr).not.toContain("unable to access");
+          expect(scrubbed.status).toBe(0);
         } finally {
           prepared.release();
         }

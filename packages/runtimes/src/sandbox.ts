@@ -236,6 +236,13 @@ export const sandboxEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
 /** Quotes a word for a POSIX shell. */
 export const shellQuote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 
+/**
+ * The script Claude Code runs before each of its commands (`CLAUDE_ENV_FILE`). Its credential scrub
+ * (`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`) also drops `GIT_CONFIG_GLOBAL` from the commands' environment,
+ * so the variable is set again here, after the scrub.
+ */
+export const sandboxEnvFile = (gitConfig: string): string => `export GIT_CONFIG_GLOBAL=${shellQuote(gitConfig)}\n`;
+
 /** A sandbox prepared for one turn: how to start a process in it, and what to undo afterwards. */
 export interface PreparedSandbox {
   /** The spawn arguments that run `command` inside the sandbox. */
@@ -333,6 +340,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
             // The proxy knows the turn by this id alone, so it must be unguessable (128 bits or more).
             const commandId = randomBytes(16).toString("base64url");
             const gitConfig = join(tempFolder, "gitconfig");
+            const envFile = join(tempFolder, "env.sh");
             const release = () => {
               liveTurns.delete(commandId);
               SandboxManager.unregisterCommandNetworkLists(commandId);
@@ -340,6 +348,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
             };
             try {
               writeFileSync(gitConfig, sandboxGitConfig(gitIdentity), { mode: 0o600 });
+              writeFileSync(envFile, sandboxEnvFile(gitConfig), { mode: 0o600 });
               SandboxManager.registerCommandNetworkLists(commandId, { allowedDomains: [...scope.allowedHosts] });
               liveTurns.set(commandId, scope.decideHost ?? (async (host) => `${host} is not allowed for this hob.`));
               const wrapped = await SandboxManager.wrapWithSandboxArgv(
@@ -375,8 +384,10 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                     TMPDIR: tempFolder,
                     // Claude Code keeps its own temporary files under /tmp otherwise, outside the sandbox's reach.
                     CLAUDE_CODE_TMPDIR: tempFolder,
-                    // Git reads this instead of the user's own config, which the sandbox closes.
+                    // Git reads this instead of the user's own config, which the sandbox closes. Claude Code's
+                    // commands get it from the env file, since its scrub drops the variable itself.
                     GIT_CONFIG_GLOBAL: gitConfig,
+                    CLAUDE_ENV_FILE: envFile,
                     // Claude Code keeps its sign-in to itself: commands, hooks and MCP servers start without it.
                     CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
                     [COMMAND_VARIABLE]: [command, ...args].map(shellQuote).join(" "),
