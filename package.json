@@ -21,13 +21,13 @@
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {
-    "@biomejs/biome": "^2.6.3",
-    "@types/node": "^26.6.5",
-    "jscpd": "^5.4.2",
-    "knip": "^6.44.0",
-    "turbo": "^2.11.10",
-    "typescript": "^7.0.2",
-    "vitest": "^5.0.5"
+    "@biomejs/biome": "2.6.3",
+    "@types/node": "26.6.5",
+    "jscpd": "5.4.2",
+    "knip": "6.44.0",
+    "turbo": "2.11.10",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
   },
   "engines": {
     "node": ">=22.12"

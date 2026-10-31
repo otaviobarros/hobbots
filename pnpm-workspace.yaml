@@ -1,6 +1,14 @@
 packages:
   - apps/*
   - packages/*
+# `pnpm add` records the exact version it installed, never a range (STD-DOCS-006).
+saveExact: true
+# Every Effect package moves together at one exact version (STD-EFFECT-005).
+catalog:
+  "@effect/platform-node": 4.1.1
+  "@effect/sql-pg": 4.1.1
+  "@effect/sql-sqlite-node": 4.1.1
+  effect: 4.1.1
 allowBuilds:
   electron: true
   esbuild: true
@@ -9,3 +17,9 @@ allowBuilds:
 permissions:
   "@tanstack/react-router":
     skills: true
+minimumReleaseAgeExclude:
+  - "@effect/platform-node-shared@4.1.1"
+  - "@effect/platform-node@4.1.1"
+  - "@effect/sql-pg@4.1.1"
+  - "@effect/sql-sqlite-node@4.1.1"
+  - effect@4.1.1
