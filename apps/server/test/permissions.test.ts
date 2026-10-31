@@ -12,6 +12,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HobAdmission } from "../src/admission.ts";
 import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
+import { CanonicalSharedFolders } from "../src/folders.ts";
 import { HobService } from "../src/hobs.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
@@ -27,6 +28,8 @@ mkdirSync(shared);
 mkdirSync(notes);
 mkdirSync(own);
 symlinkSync(own, join(temp, "own-link"));
+const sharedLink = join(temp, "shared-link");
+symlinkSync(shared, sharedLink);
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 
 const hob = {
@@ -45,7 +48,8 @@ let replyGate: Promise<void>;
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
-beforeEach(() => {
+// Starts the hub; `legacyFolders` are shared folders stored as an earlier version saved them, as typed.
+const start = (legacyFolders?: ReadonlyArray<string>) => {
   replyGate = Promise.resolve();
   const fake = makeFakeRuntime();
   const runtime = Layer.succeed(RuntimeAdapter, {
@@ -55,13 +59,25 @@ beforeEach(() => {
       return Stream.fromEffect(Effect.promise(() => gate)).pipe(Stream.drain, Stream.concat(fake.sendPrompt(request)));
     },
   });
+  const legacy = Layer.effectDiscard(
+    Effect.gen(function* () {
+      if (legacyFolders === undefined) return;
+      const setup = yield* SetupRepository;
+      yield* setup.update({ safetyPreset: "balanced", approvedFolders: legacyFolders });
+    }),
+  );
   const App = HobLifecycle.layer
     .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer)))
+    .pipe(Layer.provideMerge(CanonicalSharedFolders))
     .pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer, SearchIndex.layer).pipe(
-            Layer.provideMerge(TestDatabase),
+          legacy.pipe(
+            Layer.provideMerge(
+              Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer, SearchIndex.layer).pipe(
+                Layer.provideMerge(TestDatabase),
+              ),
+            ),
           ),
           EventBus.layer,
           HobAdmission.layer,
@@ -76,7 +92,8 @@ beforeEach(() => {
   );
   handler = (request) => web.handler(request);
   dispose = web.dispose;
-});
+};
+beforeEach(() => start());
 afterEach(() => dispose());
 
 const request = async (method: string, path: string, body?: unknown) => {
@@ -184,6 +201,36 @@ describe("a hob's folders", () => {
     release();
     await waitFor(async () => (await messages()).every((m) => m.status !== "streaming"));
     expect((await messages()).map((m) => m.configVersion)).toEqual([null, 1]);
+  });
+});
+
+describe("a hob's hidden folders", () => {
+  // covers AG-004, PE-001
+  it("[TC-AG-095] keeps a shared folder saved by an earlier version as a symlink hidden after setup is saved again", async () => {
+    await dispose();
+    start([sharedLink, notes]);
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+
+    // The hub stores the shared folders canonical when it starts.
+    expect((await request("GET", permissions(agent))).body).toMatchObject({
+      sharedFolders: [shared, notes],
+      folders: [shared, notes],
+    });
+
+    // Hiding the folder by the spelling the user saved it with hides the folder itself.
+    const hidden = await request("PATCH", permissions(agent), { hiddenSharedFolders: [sharedLink] });
+    expect(hidden).toMatchObject({
+      status: 200,
+      body: { configVersion: 2, policy: { hiddenSharedFolders: [shared] }, folders: [notes] },
+    });
+
+    // Saving the unchanged setup again does not show it.
+    await request("PATCH", "/api/setup", { approvedFolders: [sharedLink, notes] });
+    expect((await request("GET", permissions(agent))).body).toMatchObject({
+      configVersion: 2,
+      sharedFolders: [shared, notes],
+      folders: [notes],
+    });
   });
 });
 

@@ -248,15 +248,22 @@ export class HobService extends Context.Service<
         const ownFolders = payload.ownFolders && [
           ...new Set(yield* Effect.forEach(payload.ownFolders, (folder) => checkFolder(folder))),
         ];
+        // A hidden folder is compared by its canonical form too, so any spelling of a shared folder
+        // hides it. One that no longer exists on the hub keeps its spelling, to match the stored one.
+        const hiddenSharedFolders = payload.hiddenSharedFolders && [
+          ...new Set(
+            yield* Effect.forEach(payload.hiddenSharedFolders, (folder) =>
+              checkFolder(folder).pipe(Effect.orElseSucceed(() => folder)),
+            ),
+          ),
+        ];
         return yield* nextVersion(id, (agent) =>
           Effect.gen(function* () {
             // Read inside the retry, so each attempt checks against the setup as it is then.
             const { safetyPreset, approvedFolders } = yield* setup.get;
             const policy: HobPolicy = {
               ownFolders: ownFolders ?? agent.policy.ownFolders,
-              hiddenSharedFolders: payload.hiddenSharedFolders
-                ? [...new Set(payload.hiddenSharedFolders)]
-                : agent.policy.hiddenSharedFolders,
+              hiddenSharedFolders: hiddenSharedFolders ?? agent.policy.hiddenSharedFolders,
               overrides: payload.overrides ?? agent.policy.overrides,
             };
             if (samePolicy(policy, agent.policy)) return agent;
@@ -271,7 +278,7 @@ export class HobService extends Context.Service<
                 });
               }
             }
-            if (payload.hiddenSharedFolders !== undefined) {
+            if (hiddenSharedFolders !== undefined) {
               const unknown = policy.hiddenSharedFolders.find((folder) => !approvedFolders.includes(folder));
               if (unknown !== undefined) {
                 return yield* new InvalidFolder({ folder: unknown, message: `${unknown} is not a shared folder` });

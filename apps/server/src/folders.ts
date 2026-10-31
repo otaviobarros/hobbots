@@ -2,7 +2,8 @@ import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { InvalidFolder } from "@hobbots/api";
-import { Effect } from "effect";
+import { SetupRepository } from "@hobbots/persistence";
+import { Effect, Layer } from "effect";
 
 /**
  * A folder the user lets hobs work in, as the hub stores it: `~` expanded to the hub user's home,
@@ -33,3 +34,26 @@ export const checkFolder = (typed: string, home: string = homedir()): Effect.Eff
     ),
   );
 };
+
+/**
+ * Stores the shared folders canonical when the hub starts. Folders saved before they were stored
+ * canonical may be symlink spellings; a hob's hidden folders compare by the canonical form, so
+ * without this a later save of the unchanged setup would rewrite a hidden folder's spelling and
+ * show it again (ADR 014). A folder missing from the hub keeps its spelling; duplicates are kept once.
+ */
+export const CanonicalSharedFolders = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const setup = yield* SetupRepository;
+    const { approvedFolders } = yield* setup.get;
+    const canonical = [
+      ...new Set(
+        yield* Effect.forEach(approvedFolders, (folder) =>
+          checkFolder(folder).pipe(Effect.orElseSucceed(() => folder)),
+        ),
+      ),
+    ];
+    if (canonical.join("\0") !== approvedFolders.join("\0")) {
+      yield* setup.update({ approvedFolders: canonical });
+    }
+  }),
+);
