@@ -17,6 +17,7 @@ import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HobLifecycle } from "./lifecycle.ts";
 import { IPv6Loopback } from "./loopback.ts";
+import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
 
 const ServerLive = Layer.unwrap(
@@ -64,15 +65,18 @@ const ServerLive = Layer.unwrap(
 
     // Loopback only, on both IPv4 and IPv6: other machines on the network cannot connect.
     const server = createServer();
-    return HttpRouter.serve(
-      Layer.mergeAll(
-        ApiRoutes,
-        EventStreamRoute,
-        WebClientRoutes(config.webDir),
-        LoopbackHostOnly,
-        HttpRouter.cors({ allowedOrigins: config.allowedOrigins }),
+    return StopWithoutWaitingForClients(server).pipe(
+      Layer.provideMerge(
+        HttpRouter.serve(
+          Layer.mergeAll(
+            ApiRoutes,
+            EventStreamRoute,
+            WebClientRoutes(config.webDir),
+            LoopbackHostOnly,
+            HttpRouter.cors({ allowedOrigins: config.allowedOrigins }),
+          ),
+        ),
       ),
-    ).pipe(
       Layer.provide(App),
       Layer.provideMerge(IPv6Loopback(server, config.port)),
       Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: config.port })),

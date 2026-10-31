@@ -73,6 +73,7 @@ const run = <A, E>(test: (gate: Gate, events: Array<HobbotsEvent>) => Effect.Eff
       publishTransient: (event) => Effect.sync(() => void events.push(event)),
       stream: Stream.empty,
       subscribe: Effect.die("unused"),
+      close: Effect.void,
     });
     const admission = Layer.effect(
       HobAdmission,

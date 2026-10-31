@@ -59,6 +59,7 @@ const run = <A, E>(
       publishTransient: (event) => Effect.sync(() => void events.push(event)),
       stream: Stream.empty,
       subscribe: Effect.die("unused"),
+      close: Effect.void,
     });
     const layer = ChatService.layer.pipe(
       Layer.provideMerge(
@@ -223,6 +224,7 @@ describe("Stopping a reply", () => {
                 publishTransient: (event) => Effect.sync(() => void events.push(event)),
                 stream: Stream.empty,
                 subscribe: Effect.die("unused"),
+                close: Effect.void,
               }),
               HobAdmission.layer,
               FakeRuntimeLayer(),
