@@ -16,6 +16,8 @@ const badgeVariants = cva(
         done: "bg-mint text-ground",
         queued: "bg-line-2 text-text",
         cancelled: "bg-line-2 text-secondary-text",
+        // An action blocked because the enforcement it needs is missing, such as "Needs the sandbox".
+        blocked: "bg-line-2 text-secondary-text",
         failed: "bg-rose text-ground",
         live: "bg-rose text-ground",
         later: "bg-lantern text-ground",

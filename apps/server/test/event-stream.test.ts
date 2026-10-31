@@ -52,6 +52,7 @@ const makeHub = Effect.gen(function* () {
     RuntimeAdapter.of({
       health: Effect.die("unused"),
       models: Effect.die("unused"),
+      enforcement: Effect.die("unused"),
       sendPrompt: () => Stream.fromQueue(turn),
     }),
   );
@@ -462,6 +463,7 @@ describe("reliable chat (#118)", () => {
                   RuntimeAdapter.of({
                     health: Effect.die("unused"),
                     models: Effect.die("unused"),
+                    enforcement: Effect.die("unused"),
                     sendPrompt: () => Stream.never,
                   }),
                 ),

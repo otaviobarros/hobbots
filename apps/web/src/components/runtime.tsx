@@ -4,6 +4,8 @@ import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { runtimesQuery } from "../api/queries.ts";
 import { claudeInstallGuide, runtimeProblem } from "../api/runtime-health.ts";
+import { EnforcementList } from "./enforcement.tsx";
+import { messages } from "./messages.ts";
 
 const useClaudeRuntime = () => {
   const runtimes = useQuery(runtimesQuery);
@@ -68,6 +70,12 @@ export function RuntimeCard() {
           <dt className="text-label">Version</dt>
           <dd className="m-0">{claude.version ?? "—"}</dd>
         </dl>
+      )}
+      {claude && (
+        <>
+          <h3 className="lbl mt-3 mb-1.5 text-xs text-label">{messages.enforcement.providerHeading}</h3>
+          <EnforcementList enforcement={claude.enforcement} />
+        </>
       )}
       {problem === "outdated" && (
         <p className="mt-2 mb-0 text-sm text-lantern">

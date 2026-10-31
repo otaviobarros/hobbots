@@ -1,5 +1,6 @@
 import { RuntimeHealth } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
+import { enforcementFixture } from "../test/enforcement.ts";
 import { canContinueSetup, runtimeProblem, runtimeStaleTime } from "./runtime-health.ts";
 
 const health = (availability: RuntimeHealth["availability"], version: string | null) =>
@@ -10,6 +11,7 @@ const health = (availability: RuntimeHealth["availability"], version: string | n
     version,
     detail: null,
     checkedAt: "2026-10-28T12:00:00.000Z",
+    enforcement: enforcementFixture(),
   });
 
 describe("runtimeProblem", () => {

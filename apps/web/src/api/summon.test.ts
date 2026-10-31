@@ -1,5 +1,6 @@
 import { RuntimeHealth } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
+import { enforcementFixture } from "../test/enforcement.ts";
 import { firstHobPayload, kindLine, pickRole, sampleChores, submitDraft } from "./first-hob.ts";
 import { newSummonDraft, openSummonDraft, providerNotice, summonProblem } from "./summon.ts";
 
@@ -51,7 +52,15 @@ describe("a summoned hob's draft", () => {
 });
 
 const health = (availability: RuntimeHealth["availability"], version: string | null = "2.1.301") =>
-  new RuntimeHealth({ runtime: "claude-code", availability, billing: null, version, detail: null, checkedAt: null });
+  new RuntimeHealth({
+    runtime: "claude-code",
+    availability,
+    billing: null,
+    version,
+    detail: null,
+    checkedAt: null,
+    enforcement: enforcementFixture(),
+  });
 
 describe("the provider a summoned hob thinks with", () => {
   it("is offered only when Claude Code is ready", () => {
