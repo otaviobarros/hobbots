@@ -29,7 +29,7 @@ import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { adoptSession, parseKeychainLogin, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { makeFakeRuntime } from "../src/fake.ts";
-import { decideForLiveTurns, ProcessSandbox, sandboxEnv, sandboxFilesystem } from "../src/sandbox.ts";
+import { decideForLiveTurns, ProcessSandbox, sandboxEnv, sandboxFilesystem, sandboxGitConfig } from "../src/sandbox.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hooks-")));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -572,6 +572,17 @@ describe("the process sandbox", () => {
     ).toEqual({ PATH: "/usr/bin", HOME: "/Users/me", LC_ALL: "C", CLAUDE_CODE_OAUTH_TOKEN: "t" });
   });
 
+  it("gives Git only the user's identity, quoted, in place of their own config", () => {
+    expect(sandboxGitConfig({})).toBe("");
+    expect(sandboxGitConfig({ name: "Ada Lovelace", email: "ada@example.com" })).toBe(
+      '[user]\n\tname = "Ada Lovelace"\n\temail = "ada@example.com"\n',
+    );
+    // A value cannot end its quotes or start another setting.
+    expect(sandboxGitConfig({ name: 'Ada "x"\\\n[core]\nhooksPath = /tmp' })).toBe(
+      '[user]\n\tname = "Ada \\"x\\"\\\\[core]hooksPath = /tmp"\n',
+    );
+  });
+
   it("reaches a host only when every live turn may reach it", async () => {
     const open = async () => true as const;
     const closed = async (host: string) => `${host} is closed.`;
@@ -640,6 +651,12 @@ describe("the process sandbox", () => {
           expect(run('echo "[$GH_TOKEN]"').stdout.trim()).toBe("[]");
           expect(run('echo "$CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"').stdout.trim()).toBe("1");
           expect(run('echo "$CLAUDE_CONFIG_DIR"').stdout.trim()).toBe(join(runtimes, "hob-1"));
+          // Git runs although the user's own config is closed: on macOS it stops when it cannot read it.
+          const gitProject = join(project, "repo");
+          spawnSync("git", ["init", "-q", gitProject]);
+          const status = run(`git -C ${gitProject} status --short`);
+          expect(status.stderr).not.toContain("unable to access");
+          expect(status.status).toBe(0);
         } finally {
           prepared.release();
         }

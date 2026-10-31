@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, platform, tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
+import { promisify } from "node:util";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
 import { RuntimeError } from "@hobbots/agents";
 import type { SandboxState } from "@hobbots/domain";
@@ -149,6 +151,45 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
   };
 };
 
+/** The user's Git identity, which commands in the sandbox commit with. */
+export interface GitIdentity {
+  readonly name?: string;
+  readonly email?: string;
+}
+
+// Quoted for a Git config file: control characters dropped, `"` and `\` escaped.
+const gitConfigValue = (value: string) => {
+  const printable = Array.from(value)
+    .filter((c) => c.charCodeAt(0) >= 0x20 && c !== "\u007f")
+    .join("");
+  return `"${printable.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+};
+
+/**
+ * The global Git config a turn's commands read instead of the user's own. The home folder is closed,
+ * and on macOS Git stops when it cannot read `~/.gitconfig` ("Operation not permitted"), so every
+ * command needs this file. The user's own config can hold credentials and include other files, so
+ * only the identity is carried over, for commits.
+ */
+export const sandboxGitConfig = (identity: GitIdentity): string => {
+  const entries = [
+    ...(identity.name ? [`\tname = ${gitConfigValue(identity.name)}`] : []),
+    ...(identity.email ? [`\temail = ${gitConfigValue(identity.email)}`] : []),
+  ];
+  return entries.length === 0 ? "" : `[user]\n${entries.join("\n")}\n`;
+};
+
+/** Reads the user's Git identity on the hub, outside the sandbox. Missing Git or settings give none. */
+export const readGitIdentity = async (): Promise<GitIdentity> => {
+  const read = (key: string) =>
+    promisify(execFile)("git", ["config", "--global", "--get", key], { timeout: 5_000 }).then(
+      ({ stdout }) => stdout.trim() || undefined,
+      () => undefined,
+    );
+  const [name, email] = await Promise.all([read("user.name"), read("user.email")]);
+  return { ...(name ? { name } : {}), ...(email ? { email } : {}) };
+};
+
 /** Whether a turn may reach a host it has no rule for: true, or the reason it may not. */
 export type HostDecider = (host: string) => Promise<true | string>;
 
@@ -250,6 +291,8 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
           prepare: () => Effect.fail(new RuntimeError({ message: evidence })),
         });
       }
+      // Read once for the hub, so the user's Git runs once rather than on every turn.
+      const gitIdentity = yield* Effect.promise(readGitIdentity);
       // The live turns' host rules, by the id their processes present to the proxy.
       const liveTurns = new Map<string, HostDecider>();
       const started = yield* Effect.acquireRelease(
@@ -286,12 +329,14 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
             const tempFolder = realOrSelf(mkdtempSync(join(tmpdir(), "hobbots-turn-")));
             // The proxy knows the turn by this id alone, so it must be unguessable (128 bits or more).
             const commandId = randomBytes(16).toString("base64url");
+            const gitConfig = join(tempFolder, "gitconfig");
             const release = () => {
               liveTurns.delete(commandId);
               SandboxManager.unregisterCommandNetworkLists(commandId);
               rmSync(tempFolder, { recursive: true, force: true });
             };
             try {
+              writeFileSync(gitConfig, sandboxGitConfig(gitIdentity), { mode: 0o600 });
               SandboxManager.registerCommandNetworkLists(commandId, { allowedDomains: [...scope.allowedHosts] });
               liveTurns.set(commandId, scope.decideHost ?? (async (host) => `${host} is not allowed for this hob.`));
               const wrapped = await SandboxManager.wrapWithSandboxArgv(
@@ -327,6 +372,8 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                     TMPDIR: tempFolder,
                     // Claude Code keeps its own temporary files under /tmp otherwise, outside the sandbox's reach.
                     CLAUDE_CODE_TMPDIR: tempFolder,
+                    // Git reads this instead of the user's own config, which the sandbox closes.
+                    GIT_CONFIG_GLOBAL: gitConfig,
                     // Claude Code keeps its sign-in to itself: commands, hooks and MCP servers start without it.
                     CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
                     [COMMAND_VARIABLE]: [command, ...args].map(shellQuote).join(" "),
