@@ -182,7 +182,7 @@ function Profile({
           <ProfileTab hob={hob} />
         </div>
         {tab !== "profile" && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
+          <div className="relative min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
             {tab === "charms" && <CharmsTab hob={hob} onPermissions={() => setTab("permissions")} />}
             {tab === "permissions" && <PermissionsTab hob={hob} />}
           </div>
@@ -315,7 +315,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
 
   return (
     <form onSubmit={save} className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
+      <div className="relative min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
         <div className="flex max-w-[880px] flex-col gap-6">
           <section aria-labelledby="hob-role" className="flex flex-col gap-2">
             <h2 id="hob-role" className="lbl m-0 text-moonlight">
