@@ -10,12 +10,14 @@ import { HobAdmission } from "./admission.ts";
 import { ChatService } from "./chat.ts";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
+import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { HobService } from "./hobs.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HobLifecycle } from "./lifecycle.ts";
 import { IPv6Loopback } from "./loopback.ts";
+import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
 
 const ServerLive = Layer.unwrap(
@@ -48,7 +50,8 @@ const ServerLive = Layer.unwrap(
             executable: Option.getOrUndefined(config.claudeExecutable),
           });
     const App = HobLifecycle.layer
-      .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer, JournalCompaction)))
+      .pipe(Layer.provideMerge(Layer.mergeAll(EventStream.layer, HobService.layer, JournalCompaction)))
+      .pipe(Layer.provideMerge(ChatService.layer))
       .pipe(Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, HobAdmission.layer, Runtime, identity)));
 
     if (!existsSync(join(config.webDir, "index.html"))) {
@@ -62,14 +65,18 @@ const ServerLive = Layer.unwrap(
 
     // Loopback only, on both IPv4 and IPv6: other machines on the network cannot connect.
     const server = createServer();
-    return HttpRouter.serve(
-      Layer.mergeAll(
-        ApiRoutes,
-        WebClientRoutes(config.webDir),
-        LoopbackHostOnly,
-        HttpRouter.cors({ allowedOrigins: config.allowedOrigins }),
+    return StopWithoutWaitingForClients(server).pipe(
+      Layer.provideMerge(
+        HttpRouter.serve(
+          Layer.mergeAll(
+            ApiRoutes,
+            EventStreamRoute,
+            WebClientRoutes(config.webDir),
+            LoopbackHostOnly,
+            HttpRouter.cors({ allowedOrigins: config.allowedOrigins }),
+          ),
+        ),
       ),
-    ).pipe(
       Layer.provide(App),
       Layer.provideMerge(IPv6Loopback(server, config.port)),
       Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: config.port })),

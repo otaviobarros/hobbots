@@ -3,7 +3,6 @@ import {
   AgentId,
   AgentStatus,
   Effort,
-  HobbotsEvent,
   HobColor,
   LookSeed,
   Message,
@@ -21,7 +20,7 @@ import {
   Voice,
 } from "@hobbots/domain";
 import { Schema } from "effect";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/http-api";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware } from "effect/http-api";
 import { AgentNotFound, HobUnavailable, InvalidHob, MessageNotQueued, ThreadNotFound } from "./errors.ts";
 import { PermissionsGroup } from "./permissions.ts";
 import { SearchGroup } from "./search.ts";
@@ -209,9 +208,6 @@ export class SystemGroup extends HttpApiGroup.make("system")
     HttpApiEndpoint.get("activity", "/activity", { success: Activity }),
     HttpApiEndpoint.get("runtimes", "/runtimes", {
       success: Schema.Array(RuntimeHealth),
-    }),
-    HttpApiEndpoint.get("events", "/events", {
-      success: HttpApiSchema.StreamSse({ data: HobbotsEvent }),
     }),
   )
   .prefix("/api") {}
