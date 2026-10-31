@@ -254,6 +254,8 @@ describe("editing hobs", () => {
     await settled();
 
     await request("POST", `/api/threads/${thread.id}/messages`, { content: "second" });
+    // The second message may wait in the queue before its reply exists, so wait for it to start.
+    await waitFor(async () => prompts.length === 2);
     await settled();
 
     expect(prompts.map((p) => p.instructions)).toEqual([told("Write short answers."), told("Write long answers.")]);
