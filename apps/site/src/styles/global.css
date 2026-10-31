@@ -355,6 +355,10 @@ code {
 .cut {
   clip-path: var(--cut);
 }
+/* The clip would cut an outside ring away, so clipped controls draw focus inset. */
+.cut:focus-visible {
+  outline-offset: -3px;
+}
 .pxf {
   font-family: var(--font-pixel);
   font-variant-ligatures: none;
@@ -603,7 +607,7 @@ code {
 }
 .shoot {
   opacity: 0;
-  animation: hb-shoot 7s linear 2.5s infinite;
+  animation: hb-shoot 7s steps(60) 2.5s infinite;
 }
 .ff {
   animation: hb-firefly 5s steps(10) infinite;
