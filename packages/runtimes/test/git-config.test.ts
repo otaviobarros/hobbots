@@ -1,0 +1,144 @@
+import { describe, expect, it } from "vitest";
+import { gitConfigAccess, includedFiles, secretIn } from "../src/git-config.ts";
+
+const home = "/Users/me";
+const files =
+  (contents: Record<string, string>) =>
+  (path: string): string | null =>
+    contents[path] ?? null;
+const same = (path: string) => path;
+
+describe("the user's Git config in the sandbox", () => {
+  it("finds no secret in an ordinary config", () => {
+    expect(
+      secretIn(
+        [
+          "[user]",
+          "\tsigningkey = ~/.ssh/id_ed25519.pub",
+          "[core]",
+          "\teditor = vim",
+          "[alias]",
+          "\tst = status",
+          "[credential]",
+          "\thelper = osxkeychain",
+          "# work identity",
+        ].join("\n"),
+      ),
+    ).toBeNull();
+  });
+
+  it("finds tokens, passwords and authorization headers", () => {
+    expect(secretIn('[http]\n\textraHeader = "Authorization: Bearer abc"')).not.toBeNull();
+    expect(secretIn('[url "https://me:s3cret@github.com/"]\n\tinsteadOf = https://github.com/')).not.toBeNull();
+    expect(secretIn("[github]\n\ttoken = abc")).not.toBeNull();
+    expect(secretIn("[alias]\n\tx = !echo ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).not.toBeNull();
+  });
+
+  it("finds secrets in comments and inline credential helpers, since the file opens as it is", () => {
+    expect(secretIn("[core]\n\teditor = vim\n# ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).not.toBeNull();
+    expect(secretIn("; old: https://me:s3cret@github.com/")).not.toBeNull();
+    expect(secretIn("# password = hunter2")).not.toBeNull();
+    expect(secretIn('[credential]\n\thelper = "!f() { echo username=me; echo password=hunter2; }; f"')).not.toBeNull();
+  });
+
+  it("opens a config that names a password manager's programs by path", () => {
+    const signing = [
+      "[user]",
+      "\tsigningkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBzbW9tZWtleWRhdGFoZXJl",
+      "[gpg]",
+      "\tformat = ssh",
+      '[gpg "ssh"]',
+      '\tprogram = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign"',
+      "[commit]",
+      "\tgpgsign = true",
+      "[credential]",
+      "\thelper = ~/bin/git-credential-password-store",
+    ].join("\n");
+    expect(secretIn(signing)).toBeNull();
+    expect(secretIn('[gpg "ssh"]\n\tprogram=/Applications/1Password.app/Contents/MacOS/op-ssh-sign')).toBeNull();
+    // Words outside a path, or a path holding an assignment, still count.
+    expect(secretIn("[credential]\n\thelper = /usr/bin/helper --password=hunter2")).not.toBeNull();
+    expect(secretIn("[credential]\n\thelper = /tmp/x/password=hunter2")).not.toBeNull();
+    expect(secretIn("# 1Password vault: work")).not.toBeNull();
+  });
+
+  it("reads pattern lists for token shapes and URL passwords only", () => {
+    expect(secretIn("secrets/\n*.token\n.env", "list")).toBeNull();
+    expect(secretIn("ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "list")).not.toBeNull();
+  });
+
+  it("tells a URL with a password from one with a user name only", () => {
+    expect(secretIn('[url "ssh://git@github.com/"]\n\tinsteadOf = https://github.com/')).toBeNull();
+  });
+
+  it("scans long hostile lines in linear time", () => {
+    const started = performance.now();
+    for (const line of ["a".repeat(50_000), " #".repeat(50_000), `path=${" ".repeat(50_000)}`, ":/".repeat(50_000)]) {
+      secretIn(line);
+      includedFiles(`[include]\n${line}`, "/Users/me/.gitconfig", home);
+    }
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
+  it("lists the files a config includes, under any condition", () => {
+    const text = [
+      "[include]",
+      "\tpath = ~/.gitconfig.local",
+      '[includeIf "gitdir:~/work/"]',
+      '\tpath = "work/config"',
+      "\tpath = ~/.gitconfig.extra # kept here",
+      '\tpath = "config.local" # work identity',
+      "[core]",
+      "\texcludesFile = ~/.gitignore_global",
+      "[user]",
+      "\tpath = not-an-include",
+    ].join("\n");
+    expect(includedFiles(text, "/Users/me/.gitconfig", home)).toEqual([
+      { file: "/Users/me/.gitconfig.local", kind: "config" },
+      { file: "/Users/me/work/config", kind: "config" },
+      { file: "/Users/me/.gitconfig.extra", kind: "config" },
+      { file: "/Users/me/config.local", kind: "config" },
+      { file: "/Users/me/.gitignore_global", kind: "list" },
+    ]);
+  });
+
+  it("opens the config files that exist, with their includes and real locations", () => {
+    const access = gitConfigAccess(
+      home,
+      {},
+      files({
+        "/Users/me/.gitconfig": "[include]\n\tpath = ~/dotfiles/identity\n[include]\n\tpath = ~/.gitconfig",
+        "/Users/me/dotfiles/identity": "[user]\n\tname = Ada",
+      }),
+      (path) => (path === "/Users/me/.gitconfig" ? "/Users/me/dotfiles/gitconfig" : path),
+    );
+    expect(access).toEqual({
+      _tag: "Open",
+      files: ["/Users/me/.gitconfig", "/Users/me/dotfiles/gitconfig", "/Users/me/dotfiles/identity"],
+    });
+    expect(
+      gitConfigAccess(
+        home,
+        { XDG_CONFIG_HOME: "/x" },
+        files({ "/x/git/config": "[core]", "/x/git/ignore": ".DS_Store\nsecrets/" }),
+        same,
+      ),
+    ).toEqual({
+      _tag: "Open",
+      files: ["/x/git/config", "/x/git/ignore"],
+    });
+  });
+
+  it("keeps every file closed when one of them holds a secret", () => {
+    const access = gitConfigAccess(
+      home,
+      {},
+      files({
+        "/Users/me/.gitconfig": "[include]\n\tpath = ~/.gitconfig.local",
+        "/Users/me/.gitconfig.local": "[github]\n\ttoken = abc",
+      }),
+      same,
+    );
+    expect(access).toMatchObject({ _tag: "Closed", file: "/Users/me/.gitconfig.local" });
+  });
+});

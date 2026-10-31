@@ -6,6 +6,7 @@ import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox
 import { RuntimeError } from "@hobbots/agents";
 import type { SandboxState } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
+import { gitConfigAccess } from "./git-config.ts";
 
 /**
  * The OS sandbox a runtime with tools starts in (ADR 014). Commands, and the runtime itself, run
@@ -58,6 +59,8 @@ export interface SandboxScope {
   readonly allowedHosts: ReadonlyArray<string>;
   /** Decides any other host the turn's processes try to reach. */
   readonly decideHost?: HostDecider;
+  /** The user's own Git config files, opened read-only so Git runs (see `gitConfigAccess`). */
+  readonly gitConfigFiles?: ReadonlyArray<string>;
   readonly home?: string;
   readonly path?: string;
   /** The closed places outside the home folder; USER_DATA_ROOTS that exist by default. */
@@ -126,6 +129,7 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
         scope.tempFolder,
         ...binaryDirs,
         ...homeTools,
+        ...(scope.gitConfigFiles ?? []),
       ]),
     ],
     allowWrite: [...(scope.folderAccess.write ? scope.folders : []), scope.runtimeFolder, scope.tempFolder],
@@ -148,6 +152,10 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
     ],
   };
 };
+
+/** The Git config files a turn opens: all of them, or none when one looks like it holds a secret. */
+export const gitConfigFilesFor = (access: ReturnType<typeof gitConfigAccess>): ReadonlyArray<string> =>
+  access._tag === "Open" ? access.files : [];
 
 /** Whether a turn may reach a host it has no rule for: true, or the reason it may not. */
 export type HostDecider = (host: string) => Promise<true | string>;
@@ -214,7 +222,27 @@ export interface ProcessSandboxShape {
 // The runtime's command line reaches the wrapped shell in this variable, already quoted, because the
 // wrap is prepared before the runtime's arguments are known. The shell removes it before running them.
 const COMMAND_VARIABLE = "HOBBOTS_SANDBOXED_COMMAND";
-const LAUNCHER = `c=$${COMMAND_VARIABLE}; unset ${COMMAND_VARIABLE}; eval "exec $c"`;
+/**
+ * Where each turn's temporary folder goes. Claude Code puts its sockets under
+ * `$CLAUDE_CODE_TMPDIR/claude-<uid>` and, when that is longer than 44 bytes, gives its commands a
+ * temporary folder outside the turn's, which the sandbox does not let them write. macOS's own
+ * temporary folder is too long, so `/tmp` is used there (`/private/tmp/hb-XXXXXX`, 22 bytes).
+ */
+export const TEMP_BASE = platform() === "darwin" ? "/tmp" : tmpdir();
+
+/** Turns commit and tag signing off for commands, through variables Claude Code's scrub keeps. */
+export const UNSIGNED_GIT = {
+  GIT_CONFIG_COUNT: "2",
+  GIT_CONFIG_KEY_0: "commit.gpgsign",
+  GIT_CONFIG_VALUE_0: "false",
+  GIT_CONFIG_KEY_1: "tag.gpgsign",
+  GIT_CONFIG_VALUE_1: "false",
+} as const;
+
+// sandbox-runtime puts `TMPDIR=` ahead of the sandbox in the wrapped command line, from the hub's own
+// environment (`/tmp/claude` when it has no CLAUDE_CODE_TMPDIR), which overrides the turn's. That folder
+// is often missing and cannot be made inside the sandbox, so the shell takes the turn's back first.
+const LAUNCHER = `[ -n "$CLAUDE_CODE_TMPDIR" ] && export TMPDIR="$CLAUDE_CODE_TMPDIR"; c=$${COMMAND_VARIABLE}; unset ${COMMAND_VARIABLE}; eval "exec $c"`;
 
 export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandboxShape>()(
   "@hobbots/runtimes/ProcessSandbox",
@@ -283,7 +311,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
         Effect.tryPromise({
           try: async (): Promise<PreparedSandbox> => {
             mkdirSync(scope.runtimeFolder, { recursive: true, mode: 0o700 });
-            const tempFolder = realOrSelf(mkdtempSync(join(tmpdir(), "hobbots-turn-")));
+            const tempFolder = realOrSelf(mkdtempSync(join(TEMP_BASE, "hb-")));
             // The proxy knows the turn by this id alone, so it must be unguessable (128 bits or more).
             const commandId = randomBytes(16).toString("base64url");
             const release = () => {
@@ -301,6 +329,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                   filesystem: sandboxFilesystem({
                     ...scope,
                     tempFolder,
+                    gitConfigFiles: gitConfigFilesFor(gitConfigAccess(scope.home ?? homedir())),
                     roots: USER_DATA_ROOTS.filter((root) => existsSync(root)),
                   }),
                 },
@@ -329,6 +358,9 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                     CLAUDE_CODE_TMPDIR: tempFolder,
                     // Claude Code keeps its sign-in to itself: commands, hooks and MCP servers start without it.
                     CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
+                    // Signing cannot reach the user's keys or agent inside the sandbox, so a config that
+                    // asks for it (`commit.gpgsign`) would stop every commit. The scrub keeps these.
+                    ...UNSIGNED_GIT,
                     [COMMAND_VARIABLE]: [command, ...args].map(shellQuote).join(" "),
                   },
                 }),
