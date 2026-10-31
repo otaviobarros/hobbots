@@ -1,9 +1,16 @@
 import { Effect, Exit, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import { RuntimeError, RuntimeLimitReached } from "../src/adapter.ts";
-import { FAKE_DIRECTIVES, fakeCutOffError, makeFakeRuntime } from "../src/fake.ts";
+import { FAKE_DIRECTIVES, fakeCutOffError, fakeInstructionsPrompt, makeFakeRuntime } from "../src/fake.ts";
 
-const request = (prompt: string) => ({ prompt, sessionId: null, instructions: "", model: null, effort: null });
+const request = (prompt: string) => ({
+  prompt,
+  sessionId: null,
+  instructions: "",
+  instructionsChanged: false,
+  model: null,
+  effort: null,
+});
 
 describe("fake runtime", () => {
   it("starts a session, streams deltas and completes with the full text", async () => {
@@ -37,5 +44,28 @@ describe("fake runtime", () => {
     expect((await Effect.runPromise(runtime.health)).availability).toBe("signedOut");
     const exit = await runtime.sendPrompt(request("hi")).pipe(Stream.runCollect, Effect.runPromiseExit);
     expect(Exit.isFailure(exit)).toBe(true);
+  });
+
+  it("keeps a resumed session's first instructions unless the turn carries changed ones", async () => {
+    const fake = makeFakeRuntime();
+    const ask = (sessionId: string | null, instructions: string, instructionsChanged = false) =>
+      fake
+        .sendPrompt({
+          prompt: fakeInstructionsPrompt,
+          sessionId,
+          instructions,
+          instructionsChanged,
+          model: null,
+          effort: null,
+        })
+        .pipe(Stream.runCollect, Effect.runPromise)
+        .then(
+          (events) => Array.from(events).flatMap((e) => (e._tag === "Completed" ? [[e.sessionId, e.text]] : []))[0],
+        );
+    const [session, first] = (await ask(null, "Be brief.")) ?? [];
+    expect(first).toBe("Be brief.");
+    expect(await ask(session ?? null, "Be thorough.")).toEqual([session, "Be brief."]);
+    expect(await ask(session ?? null, "Be thorough.", true)).toEqual([session, "Be thorough."]);
+    expect(await ask(session ?? null, "Be thorough.")).toEqual([session, "Be thorough."]);
   });
 });

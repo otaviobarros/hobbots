@@ -10,7 +10,7 @@ import {
 } from "@hobbots/domain";
 import { HobbotsRepository, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/runtimes";
+import { fakeInstructionsPrompt, makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -38,21 +38,39 @@ const told = (instructions: string, name = "Wren", role: "writer" | "qa" = "writ
   `## About you\nYou are ${name}, a hob in Hobbots. Your role is ${starterRole(role).title}: ${starterRole(role).note.toLowerCase()}\n\n## Your instructions, from the user\n${instructions}`;
 
 let prompts: Array<PromptRequest>;
+// The runtime session each prompt's turn started or resumed, as the runtime reported it.
+let sessions: Map<string, string>;
 // Each turn waits for this before the runtime replies, so a test can act while a reply is running.
 let replyGate: Promise<void>;
+// While set, turns reach the runtime as they did before #164: never carrying the instructions.
+let beforeFix: boolean;
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
 beforeEach(() => {
   prompts = [];
+  sessions = new Map();
   replyGate = Promise.resolve();
+  beforeFix = false;
   const fake = makeFakeRuntime();
   const runtime = Layer.succeed(RuntimeAdapter, {
     ...fake,
-    sendPrompt: (request) => {
-      prompts.push(request);
+    sendPrompt: (sent) => {
+      prompts.push(sent);
+      const request = beforeFix ? { ...sent, instructionsChanged: false } : sent;
       const gate = replyGate;
-      return Stream.fromEffect(Effect.promise(() => gate)).pipe(Stream.drain, Stream.concat(fake.sendPrompt(request)));
+      return Stream.fromEffect(Effect.promise(() => gate)).pipe(
+        Stream.drain,
+        Stream.concat(
+          fake
+            .sendPrompt(request)
+            .pipe(
+              Stream.tap((event) =>
+                Effect.sync(() => event._tag === "SessionStarted" && sessions.set(request.prompt, event.sessionId)),
+              ),
+            ),
+        ),
+      );
     },
   });
   const App = HobLifecycle.layer
@@ -265,7 +283,68 @@ describe("editing hobs", () => {
       ["user", "second", null],
       ["assistant", "Echo: second", 2],
     ]);
+    // The resumed session follows the edit, which only the turn after it carried (#164).
+    expect(prompts.map((p) => p.instructionsChanged)).toEqual([false, true]);
+    await request("POST", `/api/threads/${thread.id}/messages`, { content: fakeInstructionsPrompt });
+    await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === 6);
+    expect((await messages()).findLast((m) => m.role === "assistant")?.content).toBe(told("Write long answers."));
+    // Which instructions a session follows is not stored, so a thread that spans an edit keeps carrying them.
+    expect(prompts.at(-1)?.instructionsChanged).toBe(true);
     expect((await request("GET", "/api/agents")).body).toEqual([edited.body]);
+  });
+
+  // covers AG-002
+  it("[TC-AG-099] restores the earlier instructions after a stopped turn that may have delivered the edit", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const replies = async () => (await messages()).filter((m) => m.role === "assistant");
+    const ask = async (content: string, count: number) => {
+      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await waitFor(async () => (await replies()).filter((m) => m.status !== "streaming").length === count);
+      return (await replies()).at(-1);
+    };
+    await ask("first", 1);
+
+    // The edited turn reaches the runtime, which takes its instructions, and is stopped before it completes.
+    await request("PATCH", `/api/agents/${agent.id}`, { instructions: "Write long answers." });
+    replyGate = new Promise(() => {});
+    await request("POST", `/api/threads/${thread.id}/messages`, { content: "second" });
+    await waitFor(async () => prompts.length === 2);
+    await request("POST", `/api/threads/${thread.id}/interrupt`);
+    await waitFor(async () => (await replies()).at(-1)?.status === "stopped");
+    expect(prompts.at(-1)?.instructionsChanged).toBe(true);
+
+    // Restoring the first instructions reaches the session, though its last completed reply ran on them.
+    replyGate = Promise.resolve();
+    await request("PATCH", `/api/agents/${agent.id}`, { instructions: hob.instructions });
+    expect((await ask(fakeInstructionsPrompt, 3))?.content).toBe(told("Write short answers."));
+    expect(prompts.at(-1)?.instructionsChanged).toBe(true);
+  });
+
+  // covers AG-002
+  it("[TC-AG-100] brings a thread edited before #164 back to its hob's current instructions", async () => {
+    const agent: Agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const replies = async () =>
+      ((await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>).filter(
+        (m) => m.role === "assistant",
+      );
+    const ask = async (content: string, count: number) => {
+      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await waitFor(async () => (await replies()).filter((m) => m.status === "complete").length === count);
+      return (await replies()).at(-1)?.content;
+    };
+
+    // Before the fix, the edit was recorded on the reply but never reached the session.
+    beforeFix = true;
+    await ask("first", 1);
+    await request("PATCH", `/api/agents/${agent.id}`, { instructions: "Write long answers." });
+    expect(await ask(fakeInstructionsPrompt, 2)).toBe(told("Write short answers."));
+    expect((await replies()).map((m) => m.configVersion)).toEqual([1, 2]);
+
+    beforeFix = false;
+    expect(await ask(fakeInstructionsPrompt, 3)).toBe(told("Write long answers."));
   });
 
   // covers AG-002
@@ -377,6 +456,141 @@ describe("editing hobs", () => {
       told("Write short answers."),
       told("Write short answers.").replace("\n\n## Your", `\n\n## How you talk\n${tone}\n\n## Your`),
     ]);
+  });
+});
+
+describe("several hobs at once", () => {
+  // covers AG-001, AG-002, AG-006
+  it("[TC-AG-097] three hobs with different models chat at once, an edit mid-reply reaches only the next reply, and a retired hob refuses messages but stays readable", async () => {
+    const create = async (fields: Record<string, unknown>) =>
+      (await request("POST", "/api/agents", { ...hob, ...fields })).body as Agent;
+    const wren = await create({});
+    const moss = await create({ name: "Moss", model: "fake-quick", effort: null, instructions: "Tidy files." });
+    // A hob with no model chats on the runtime's default.
+    const ash = await create({
+      name: "Ash",
+      ...roleFields("qa"),
+      model: null,
+      effort: null,
+      instructions: "Find bugs.",
+    });
+    const threadOf = async (agent: Agent) =>
+      (await request("POST", `/api/agents/${agent.id}/threads`)).body.id as string;
+    const threads = { wren: await threadOf(wren), moss: await threadOf(moss), ash: await threadOf(ash) };
+    const messages = async (threadId: string) =>
+      (await request("GET", `/api/threads/${threadId}/messages`)).body as Array<Message>;
+    const settled = () =>
+      waitFor(async () => {
+        for (const id of Object.values(threads)) {
+          if ((await messages(id)).some((m) => m.status !== "complete")) return false;
+        }
+        return true;
+      });
+
+    // All three replies are running at the same time.
+    let release = () => {};
+    replyGate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await request("POST", `/api/threads/${threads.wren}/messages`, { content: "first for Wren" });
+    await request("POST", `/api/threads/${threads.moss}/messages`, { content: "first for Moss" });
+    await request("POST", `/api/threads/${threads.ash}/messages`, { content: "first for Ash" });
+    await waitFor(async () => prompts.length === 3);
+
+    // Editing Wren while its reply runs makes a new version of Wren only.
+    const edited = await request("PATCH", `/api/agents/${wren.id}`, { instructions: "Write long answers." });
+    expect(edited.body).toMatchObject({ id: wren.id, configVersion: 2 });
+    for (const id of Object.values(threads)) {
+      expect((await messages(id)).map((m) => m.status)).toEqual(["complete", "streaming"]);
+    }
+    release();
+    await settled();
+
+    await request("POST", `/api/threads/${threads.wren}/messages`, { content: "second for Wren" });
+    await request("POST", `/api/threads/${threads.moss}/messages`, { content: "second for Moss" });
+    await settled();
+
+    // Each turn ran with its own hob's model, effort and instructions; only Wren's next turn took the edit.
+    const byPrompt = new Map(prompts.map((p) => [p.prompt, p]));
+    expect(
+      ["first for Wren", "first for Moss", "first for Ash", "second for Wren", "second for Moss"].map((prompt) => {
+        const p = byPrompt.get(prompt);
+        return [prompt, p?.model, p?.effort, p?.instructions];
+      }),
+    ).toEqual([
+      ["first for Wren", "fake-thinker", "high", told("Write short answers.")],
+      ["first for Moss", "fake-quick", null, told("Tidy files.", "Moss")],
+      ["first for Ash", null, null, told("Find bugs.", "Ash", "qa")],
+      ["second for Wren", "fake-thinker", "high", told("Write long answers.")],
+      ["second for Moss", "fake-quick", null, told("Tidy files.", "Moss")],
+    ]);
+    // Each first turn starts its own runtime session, and each second turn resumes its own thread's.
+    const resumed = (prompt: string) => byPrompt.get(prompt)?.sessionId;
+    expect([resumed("first for Wren"), resumed("first for Moss"), resumed("first for Ash")]).toEqual([
+      null,
+      null,
+      null,
+    ]);
+    const started = ["first for Wren", "first for Moss", "first for Ash"].map((prompt) => sessions.get(prompt));
+    expect(new Set(started).size).toBe(3);
+    expect(started).toEqual([expect.any(String), expect.any(String), expect.any(String)]);
+    expect([resumed("second for Wren"), resumed("second for Moss")]).toEqual([started[0], started[1]]);
+
+    // Each thread holds only its own hob's messages, marked with the version that wrote each reply.
+    const transcript = async (threadId: string) =>
+      (await messages(threadId)).map((m) => [m.content, m.configVersion] as const);
+    expect(await transcript(threads.wren)).toEqual([
+      ["first for Wren", null],
+      ["Echo: first for Wren", 1],
+      ["second for Wren", null],
+      ["Echo: second for Wren", 2],
+    ]);
+    expect(await transcript(threads.moss)).toEqual([
+      ["first for Moss", null],
+      ["Echo: first for Moss", 1],
+      ["second for Moss", null],
+      ["Echo: second for Moss", 1],
+    ]);
+    expect(await transcript(threads.ash)).toEqual([
+      ["first for Ash", null],
+      ["Echo: first for Ash", 1],
+    ]);
+
+    // Wren's resumed session follows the edit and Moss's keeps its own instructions (#164).
+    await request("POST", `/api/threads/${threads.wren}/messages`, { content: fakeInstructionsPrompt });
+    await request("POST", `/api/threads/${threads.moss}/messages`, { content: fakeInstructionsPrompt });
+    await waitFor(
+      async () => (await messages(threads.wren)).length === 6 && (await messages(threads.moss)).length === 6,
+    );
+    await settled();
+    expect((await messages(threads.wren)).findLast((m) => m.role === "assistant")?.content).toBe(
+      told("Write long answers."),
+    );
+    expect((await messages(threads.moss)).findLast((m) => m.role === "assistant")?.content).toBe(
+      told("Tidy files.", "Moss"),
+    );
+
+    // Retiring Ash refuses its new work and keeps its chat; the other hobs carry on.
+    expect((await request("POST", `/api/agents/${ash.id}/retire`, { activeWork: "finish" })).status).toBe(200);
+    expect(await request("POST", `/api/threads/${threads.ash}/messages`, { content: "again" })).toMatchObject({
+      status: 409,
+      body: { _tag: "HobUnavailable", status: "retired" },
+    });
+    expect(await transcript(threads.ash)).toEqual([
+      ["first for Ash", null],
+      ["Echo: first for Ash", 1],
+    ]);
+    expect((await request("GET", `/api/agents/${ash.id}/threads`)).body).toMatchObject([{ id: threads.ash }]);
+    expect((await request("GET", "/api/agents?status=retired")).body).toMatchObject([{ id: ash.id }]);
+    expect((await request("GET", "/api/agents")).body.map((a: Agent) => [a.name, a.configVersion]).sort()).toEqual([
+      ["Moss", 1],
+      ["Wren", 2],
+    ]);
+    expect((await request("POST", `/api/threads/${threads.moss}/messages`, { content: "third for Moss" })).status).toBe(
+      200,
+    );
+    await settled();
+    expect((await transcript(threads.moss)).at(-1)).toEqual(["Echo: third for Moss", 1]);
   });
 });
 

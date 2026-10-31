@@ -50,16 +50,26 @@ export const FAKE_DIRECTIVES = {
 /** What the fake says when it cuts a reply off. */
 export const fakeCutOffError = "Claude stopped responding";
 
-/** Deterministic adapter for tests and UI work without model usage. */
+/** Asked this, the fake runtime answers with the instructions its session follows instead of an echo. */
+export const fakeInstructionsPrompt = "/instructions";
+
+/**
+ * Deterministic adapter for tests and UI work without model usage. Like Claude Code, a resumed session
+ * keeps the instructions it started with unless the turn carries changed ones.
+ */
 export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   const availability = options.availability ?? "ready";
+  const sessions = new Map<string, string>();
   const sendPrompt = (request: PromptRequest): Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached> => {
     // A brain that is not ready cannot start a turn, as with the real runtime.
     if (availability !== "ready") {
       return Stream.fail(new RuntimeError({ message: `Fake runtime is ${availability}` }));
     }
     const sessionId = request.sessionId ?? `fake-${crypto.randomUUID()}`;
-    const reply = `Echo: ${request.prompt}`;
+    const known = sessions.get(sessionId);
+    const followed = known === undefined || request.instructionsChanged ? request.instructions : known;
+    sessions.set(sessionId, followed);
+    const reply = request.prompt === fakeInstructionsPrompt ? followed : `Echo: ${request.prompt}`;
     const words = reply.split(/(?<= )/);
     const ending = request.prompt.startsWith(FAKE_DIRECTIVES.cutOff)
       ? "cutOff"

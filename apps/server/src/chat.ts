@@ -197,8 +197,34 @@ export class ChatService extends Context.Service<
           }),
         );
 
+      // Claude Code keeps a resumed session's first instructions, so a turn whose session may follow
+      // others carries them. Which a session follows is not stored: a stopped or failed turn may or may
+      // not have delivered its own, and threads from before #164 never received theirs. So a thread
+      // whose replies all ran on the current instructions needs nothing, and any other carries them.
+      const instructionsChanged = (thread: Thread, agent: Agent, instructions: string) =>
+        Effect.gen(function* () {
+          if (thread.runtimeSessionId === null) return false;
+          const versions = new Set(
+            (yield* repo.listMessages(thread.id)).flatMap((m) =>
+              m.role === "assistant" && m.configVersion !== null ? [m.configVersion] : [],
+            ),
+          );
+          for (const version of versions) {
+            const config = yield* repo.findAgentConfig(agent.id, version);
+            if (Option.isNone(config) || systemInstructions(agent.name, config.value) !== instructions) return true;
+          }
+          return false;
+        });
+
       // The turn runs with the configuration it started with; edits made meanwhile apply to the next turn.
-      const runTurn = (name: string, config: AgentConfiguration, thread: Thread, prompt: string, reply: Reply) =>
+      const runTurn = (
+        name: string,
+        config: AgentConfiguration,
+        thread: Thread,
+        prompt: string,
+        reply: Reply,
+        changed: boolean,
+      ) =>
         Effect.gen(function* () {
           const threadRef = yield* Ref.make(thread);
           // Saves the streamed text about once a second without journaling it, so a crash keeps
@@ -276,6 +302,7 @@ export class ChatService extends Context.Service<
               prompt,
               sessionId: thread.runtimeSessionId,
               instructions: systemInstructions(name, config),
+              instructionsChanged: changed,
               model: config.model,
               effort: config.effort,
             })
@@ -337,6 +364,7 @@ export class ChatService extends Context.Service<
       // Runs a turn for a reply that is already saved as streaming. Runs under the hob's lock.
       const launch = (agent: Agent, config: AgentConfiguration, thread: Thread, prompt: string, saved: Message) =>
         Effect.gen(function* () {
+          const changed = yield* instructionsChanged(thread, agent, systemInstructions(agent.name, config));
           busy.add(thread.id);
           // Registered before the turn starts, so a stop sent right away still reaches it.
           const reply: Reply = {
@@ -351,7 +379,7 @@ export class ChatService extends Context.Service<
           yield* FiberMap.run(
             turns,
             thread.id,
-            runTurn(agent.name, config, thread, prompt, reply).pipe(
+            runTurn(agent.name, config, thread, prompt, reply, changed).pipe(
               Effect.ensuring(Effect.forkIn(drain(thread.id), scope)),
             ),
           );

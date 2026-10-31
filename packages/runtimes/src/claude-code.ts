@@ -342,6 +342,26 @@ export const turnEvents = () => {
   };
 };
 
+/**
+ * The prompt Claude Code receives. On resume Claude Code keeps the system prompt the session started
+ * with, so instructions it may not follow come first in the turn itself. The block may repeat on
+ * later turns, so it states the current instructions rather than announcing a change.
+ */
+export const turnPrompt = (
+  request: Pick<PromptRequest, "prompt" | "sessionId" | "instructions" | "instructionsChanged">,
+) =>
+  request.sessionId && request.instructionsChanged
+    ? [
+        "<current-instructions>",
+        "These are your current instructions. Follow them in place of the ones in your system prompt and any earlier ones:",
+        "",
+        request.instructions,
+        "</current-instructions>",
+        "",
+        request.prompt,
+      ].join("\n")
+    : request.prompt;
+
 const errorMessage = (error: unknown) =>
   error instanceof RuntimeError || error instanceof RuntimeLimitReached
     ? error
@@ -423,7 +443,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const turn = yield* Effect.acquireRelease(
             Effect.sync(() =>
               query({
-                prompt: request.prompt,
+                prompt: turnPrompt(request),
                 options: {
                   ...baseOptions(config, binary),
                   abortController,

@@ -78,6 +78,26 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
  */
 export const CHECKED_OPERATIONS: ReadonlyArray<PolicyOperation> = ["delete-files"];
 
+/** Whether the runtime runs inside Hobbots' sandbox, was let out of it, or the sandbox cannot start. */
+export const SandboxState = Schema.Literals(["on", "off", "unavailable"]);
+export type SandboxState = typeof SandboxState.Type;
+
+/**
+ * Whether a rule is enforced by a runtime or OS boundary or only checked by Hobbots (ADR 014), given
+ * each operation's answer. Push is checked where commands and the web are both allowed in the
+ * sandbox, since a command can then push to a remote that needs no credentials, bypassing the Push
+ * Charm. Every rule is checked for a hob let out of the sandbox.
+ */
+export const ruleEnforcement = (
+  operation: PolicyOperation,
+  answer: (operation: PolicyOperation) => PolicyDecision,
+  sandbox: SandboxState,
+): "enforced" | "checked" => {
+  if (sandbox === "off" || CHECKED_OPERATIONS.includes(operation)) return "checked";
+  const bypass = sandbox === "on" && answer("run-commands") === "allow" && answer("use-web") === "allow";
+  return operation === "push" && bypass ? "checked" : "enforced";
+};
+
 /** Per-hob answers. Each may only narrow the preset; a widening needs a separately recorded user grant. */
 export const PolicyOverrides = Schema.Struct({
   "read-files": Schema.optionalKey(PolicyDecision),

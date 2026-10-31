@@ -1,4 +1,4 @@
-import type { CreateAgentPayload, UpdateAgentPayload } from "@hobbots/api";
+import type { CreateAgentPayload, HobPermissions, UpdateAgentPayload, UpdateHobPermissionsPayload } from "@hobbots/api";
 import type { Agent, AgentId, Message, MessageId, RetireWork, RuntimeKind, Thread, ThreadId } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
@@ -12,6 +12,7 @@ export const queryKeys = {
   messages: (threadId: ThreadId) => ["threads", threadId, "messages"] as const,
   runtimes: ["runtimes"] as const,
   models: (runtime: RuntimeKind) => ["runtimes", runtime, "models"] as const,
+  permissions: (agentId: AgentId) => ["agents", agentId, "permissions"] as const,
 };
 
 /** The hobs that are not retired. */
@@ -101,6 +102,49 @@ export const useRetireHob = (agentId: AgentId) =>
   useHobChange((activeWork: RetireWork) =>
     call((c) => c.agents.retire({ params: { agentId }, payload: { activeWork } })),
   );
+
+/**
+ * What a hob may touch. The answer depends on the hob's configuration version and on the setup's
+ * preset and shared folders, so `basis` names those and a change to any of them reads it again.
+ */
+export const permissionsQuery = (agentId: AgentId, basis: ReadonlyArray<unknown>) =>
+  queryOptions({
+    queryKey: [...queryKeys.permissions(agentId), ...basis],
+    queryFn: () => call((c) => c.permissions.get({ params: { agentId } })),
+    placeholderData: (previous: HobPermissions | undefined) => previous,
+  });
+
+/**
+ * Stores a saved answer without going back in time. Another window may have saved a later version
+ * whose read finished first, so the answer replaces only older ones; reads still on their way are
+ * cancelled and every version is read again, so the hub decides what shows.
+ */
+export const storeSavedPermissions = async (
+  queryClient: QueryClient,
+  agentId: AgentId,
+  permissions: HobPermissions,
+) => {
+  const queryKey = queryKeys.permissions(agentId);
+  await queryClient.cancelQueries({ queryKey });
+  queryClient.setQueriesData<HobPermissions>({ queryKey }, (current) =>
+    current !== undefined && current.configVersion > permissions.configVersion ? current : permissions,
+  );
+  await queryClient.invalidateQueries({ queryKey });
+};
+
+/**
+ * Changes a hob's folders or overrides; each change is its next configuration version. The answer
+ * shows at once unless a later one already does; the hob list hears of the new version from its
+ * event, which reads them again.
+ */
+export const useUpdatePermissions = (agentId: AgentId) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: UpdateHobPermissionsPayload) =>
+      call((c) => c.permissions.update({ params: { agentId }, payload })),
+    onSuccess: (permissions) => storeSavedPermissions(queryClient, agentId, permissions),
+  });
+};
 
 /** Inserts or replaces by id, keeping the list order stable for existing items. */
 export const upsertById = <T extends { readonly id: string }>(

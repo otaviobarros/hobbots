@@ -38,6 +38,11 @@ export interface PromptRequest {
   /** Runtime session to resume, or null to start a new one. */
   readonly sessionId: string | null;
   readonly instructions: string;
+  /**
+   * The resumed session may follow other instructions, as after an edit. Claude Code keeps a resumed
+   * session's first system prompt, so an adapter then delivers them inside the turn.
+   */
+  readonly instructionsChanged: boolean;
   /** The hob's model, or null for the runtime's default. */
   readonly model: string | null;
   /** The hob's effort, or null for the model's default. */

@@ -107,8 +107,8 @@ function PermissionSettings() {
   return (
     <>
       <p className="m-0 text-secondary-text">
-        How much hobs will ask first, and where they will work. Hobbots saves your choice; today hobs only chat, so none
-        of it applies yet.
+        How much hobs ask first, and the folders every hob can work in. You can make one hob more careful, or give it
+        folders of its own, from its profile.
       </p>
       <PresetPicker label="Safety preset" value={setup.data.safetyPreset} />
       <span className="lbl pt-2 text-label">Folders hobs may open</span>
