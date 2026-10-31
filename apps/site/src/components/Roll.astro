@@ -1,0 +1,192 @@
+---
+import type { HobColor } from "@hobbots/art/look";
+import { HOB_COLORS, hobLook } from "@hobbots/art/look";
+import { ROLL_FIREFLIES, ROLL_STARS } from "../data/scene.ts";
+import Fireflies from "./Fireflies.astro";
+import Hob from "./Hob.astro";
+import WaitlistForm from "./WaitlistForm.astro";
+
+const colors = Object.entries(HOB_COLORS) as Array<[HobColor, (typeof HOB_COLORS)[HobColor]]>;
+const first = hobLook(11, "violet");
+---
+
+<section id="roll" aria-labelledby="roll-title">
+  {
+    ROLL_STARS.map((star) => (
+      <span
+        class="hb-star star"
+        style={`left: ${star.x}%; top: ${star.y}px; animation-delay: ${star.delay}s`}
+        aria-hidden="true"
+      />
+    ))
+  }
+  <div class="wrap">
+    <div class="pitch">
+      <span class="eyebrow">Roll your first hob</span>
+      <h2 id="roll-title" class="h2">Every hob is one of a kind</h2>
+      <p class="lede">
+        Hats, gear, faces and beards come from a seed, so your hob looks the same on every device. Roll until one feels
+        right, then save its spot.
+      </p>
+      <WaitlistForm place="roll" />
+    </div>
+
+    <div class="card cut roller">
+      <div class="stage">
+        <div class="floor" aria-hidden="true"></div>
+        <Fireflies flies={ROLL_FIREFLIES} />
+        <div class="spot">
+          <span class="poof-cloud" aria-hidden="true" data-poof></span>
+          <span class="bub" aria-hidden="true" data-bubble hidden></span>
+          <div data-roll-hop>
+            <Hob seed={11} color="violet" size={112} class="hb-bob" label={`Pip, with ${first.recipe}`} mine />
+          </div>
+        </div>
+      </div>
+      <div class="who" aria-live="polite">
+        <span class="pxf name" data-mine-name>Pip</span>
+        <span class="look" data-mine-look>{first.recipe}</span>
+      </div>
+      <div role="radiogroup" aria-label="Hob color" class="colors">
+        {
+          colors.map(([id, color]) => (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={id === "violet" ? "true" : "false"}
+              aria-label={color.label}
+              tabindex={id === "violet" ? 0 : -1}
+              data-color={id}
+            >
+              <span style={`background: ${color.hat}`} />
+            </button>
+          ))
+        }
+      </div>
+      <div class="actions">
+        <button type="button" class="btn cut" data-roll>
+          <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" shape-rendering="crispEdges">
+            <rect x="1" y="1" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"></rect>
+            <rect x="4" y="4" width="3" height="3" fill="currentColor"></rect>
+            <rect x="11" y="11" width="3" height="3" fill="currentColor"></rect>
+            <rect x="7.5" y="7.5" width="3" height="3" fill="currentColor"></rect>
+          </svg>
+          Roll a new hob
+        </button>
+        <button type="button" class="btn2 cut" data-rename>New name</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  section {
+    position: relative;
+    overflow: hidden;
+    padding-block: clamp(56px, 8vw, 96px);
+    background: var(--color-ground);
+  }
+  .star {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: var(--color-star);
+  }
+  .wrap {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 40px;
+  }
+  .pitch {
+    display: flex;
+    flex: 1 1 340px;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .roller {
+    display: flex;
+    flex: 1 1 380px;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    padding: 28px 22px;
+  }
+  .stage {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    width: 100%;
+    height: 220px;
+    overflow: hidden;
+    background: var(--color-deep);
+  }
+  .floor {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 34px;
+    background: var(--color-line);
+    border-top: 6px solid var(--color-line-2);
+  }
+  .spot {
+    position: relative;
+    margin-bottom: 30px;
+  }
+  .poof-cloud {
+    position: absolute;
+    top: -14px;
+    left: -14px;
+    width: 140px;
+    height: 140px;
+    background: var(--color-secondary-text);
+    opacity: 0;
+    clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+  }
+  .who {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    text-align: center;
+  }
+  .name {
+    color: var(--color-moonlight);
+    font-size: 28px;
+  }
+  .look {
+    color: var(--color-secondary-text);
+    font-size: 15px;
+  }
+  .colors,
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  .actions {
+    gap: 10px;
+  }
+  .actions .btn {
+    font-size: 16px;
+  }
+  [role="radio"] {
+    width: 44px;
+    height: 44px;
+    padding: 6px;
+    border: 0;
+    background: var(--color-line);
+  }
+  [role="radio"][aria-checked="true"] {
+    background: var(--color-moonlight);
+  }
+  [role="radio"] span {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+</style>

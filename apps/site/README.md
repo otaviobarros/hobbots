@@ -16,6 +16,23 @@ pnpm --filter @hobbots/site typecheck # astro check
 
 The adapter reads [`wrangler.jsonc`](wrangler.jsonc), so the dev server and preview get a local D1 database (`WAITLIST_DB`) and rate limiter (`SIGNUP_LIMIT`) with no Cloudflare account. Local state lives in `apps/site/.wrangler/`, which is git-ignored.
 
+## The page
+
+`src/pages/index.astro` is the coming soon page from board 1 of the [design canvas](https://claude.ai/artifact/3WYsG82CcZps5toC8sEu6L), built from one component per section in `src/components`. The hobs, the chief and the moon come from [`@hobbots/art`](../../packages/art/README.md), the same drawings the app uses. The page's words and lists are in `src/data/copy.ts`, and the village layout and pixel icons in `src/data/scene.ts`.
+
+Only the interactive parts run script, all from `src/scripts/page.ts`: clicking the hobs, the sound switch, rolling a hob, the approval demo, the hob that follows you down the page and the wait-list forms. Every animation is stepped and stops with Reduce motion.
+
+## Teaser video
+
+The teaser is not in this repository. It is served from the public R2 bucket `hobbots-media` at `https://media.hobbots.app` (`TEASER_URL` in `src/data/copy.ts`); only its poster, `public/teaser/poster.webp`, is here. To publish a new cut, compress it to an H.264 MP4 with `-movflags +faststart` and upload it from a machine logged in to Cloudflare:
+
+```sh
+wrangler r2 bucket create hobbots-media   # once
+wrangler r2 object put hobbots-media/teaser/night-shift-60s.mp4 --file night-shift-60s.mp4 --content-type video/mp4 --remote
+```
+
+The bucket's custom domain, `media.hobbots.app`, is set once on Cloudflare under R2 › hobbots-media › Settings › Custom domains.
+
 ## Environments
 
 `wrangler.jsonc` has a top level for local development and two environments, `staging` and `production`. Bindings are not inherited, so each environment declares its own. Build for one with `CLOUDFLARE_ENV=staging pnpm --filter @hobbots/site build`. The environment is fixed at build time, so `wrangler deploy` afterwards takes no `--env`.

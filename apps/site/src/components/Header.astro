@@ -1,0 +1,58 @@
+---
+import { CHIEF, CHIEF_PALETTE } from "@hobbots/art/chief";
+import { NAV } from "../data/copy.ts";
+import PixelArt from "./PixelArt.astro";
+---
+
+<header class="top">
+  <nav aria-label="Main" class="wrap">
+    <a href="#top" class="brand">
+      <PixelArt rows={CHIEF} palette={CHIEF_PALETTE} size={36} />
+      <span class="pxf">Hobbots</span>
+    </a>
+    {NAV.map((link) => <a class="navlink hide-sm" href={link.href}>{link.label}</a>)}
+    <a class="btn cut navcta" href="#join">Join the wait-list</a>
+  </nav>
+</header>
+
+<style>
+  .top {
+    position: relative;
+    z-index: 3;
+    background: var(--color-deep);
+    border-bottom: 4px solid var(--color-line);
+  }
+  nav {
+    display: flex;
+    align-items: center;
+    gap: 12px 20px;
+    padding-block: 12px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-right: auto;
+    text-decoration: none;
+  }
+  .brand span {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--color-moonlight);
+  }
+  .navlink {
+    padding: 10px 6px;
+    color: var(--color-secondary-text);
+    font-size: 16px;
+    text-decoration: none;
+  }
+  .navlink:hover {
+    color: var(--color-moonlight);
+  }
+  .navcta {
+    min-height: 44px;
+    padding: 8px 18px;
+    font-size: 16px;
+    white-space: nowrap;
+  }
+</style>

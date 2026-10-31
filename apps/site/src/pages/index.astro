@@ -2,18 +2,40 @@
 import "@fontsource-variable/atkinson-hyperlegible-next";
 import "@fontsource-variable/pixelify-sans";
 import "../styles/global.css";
+import Coming from "../components/Coming.astro";
+import Everywhere from "../components/Everywhere.astro";
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import Hero from "../components/Hero.astro";
+import Roll from "../components/Roll.astro";
+import Teaser from "../components/Teaser.astro";
+import Trust from "../components/Trust.astro";
 ---
 
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hobbots</title>
+    <meta name="theme-color" content="#141228" />
+    <title>Hobbots: little helpers that do your chores while you sleep</title>
+    <meta
+      name="description"
+      content="Stop being the messenger between your AIs. Summon hobs, give them a job, and they split the work, talk to each other and ask you before anything risky. Coming soon to macOS and Linux."
+    />
   </head>
   <body>
-    <main>
-      <h1>Hobbots</h1>
-      <p>Coming soon.</p>
+    <Header />
+    <main id="top">
+      <Hero />
+      <Teaser />
+      <Coming />
+      <Everywhere />
+      <Roll />
+      <Trust />
     </main>
+    <Footer />
+    <script>
+      import "../scripts/page.ts";
+    </script>
   </body>
 </html>

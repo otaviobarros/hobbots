@@ -1,0 +1,33 @@
+---
+import { type PixelPalette, type PixelRows, pixelPaths } from "@hobbots/art/pixels";
+
+interface Props {
+  rows: PixelRows;
+  palette: PixelPalette;
+  /** Width in pixels; the height follows the drawing. */
+  size: number;
+  /** Names the drawing for screen readers. Without one it is decorative. */
+  label?: string | undefined;
+  class?: string | undefined;
+  /** Marks a drawing the page script redraws, such as the visitor's rolled hob. */
+  "data-mine"?: string | undefined;
+}
+
+const { rows, palette, size, label, class: className, ...rest } = Astro.props;
+const width = Math.max(...rows.map((row) => row.length));
+const paths = [...pixelPaths(rows, palette)];
+---
+
+<svg
+  class:list={["pixels", className]}
+  viewBox={`0 0 ${width} ${rows.length}`}
+  width={size}
+  height={(size * rows.length) / width}
+  shape-rendering="crispEdges"
+  role={label ? "img" : undefined}
+  aria-label={label}
+  aria-hidden={label ? undefined : "true"}
+  {...rest}
+>
+  {paths.map(([fill, d]) => <path d={d} fill={fill} />)}
+</svg>

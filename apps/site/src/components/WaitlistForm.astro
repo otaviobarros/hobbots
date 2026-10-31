@@ -1,0 +1,176 @@
+---
+import Hob from "./Hob.astro";
+import Sparks from "./Sparks.astro";
+
+interface Props {
+  /** Where the form sits: the hero, or beside the hob roller. */
+  place: "hero" | "roll";
+}
+
+const { place } = Astro.props;
+const id = `email-${place}`;
+---
+
+<div class:list={["waitlist", place]} data-waitlist={place}>
+  <form data-join-form novalidate>
+    {
+      place === "hero" ? (
+        <label for={id} class="sr">
+          Email address
+        </label>
+      ) : (
+        <label for={id} class="label">
+          Email for the wait-list
+        </label>
+      )
+    }
+    <div class="row">
+      <input
+        id={id}
+        name="email"
+        class="inp cut"
+        type="email"
+        autocomplete="email"
+        placeholder="you@example.com"
+        aria-describedby={place === "hero" ? `${id}-error ${id}-help` : `${id}-error`}
+        data-email
+      />
+      <button class="btn cut" type="submit" data-submit>
+        {place === "hero" ? "Join the wait-list" : <span data-save-label>Save Pip’s spot</span>}
+      </button>
+    </div>
+    <p id={`${id}-error`} role="alert" class="error" data-error></p>
+    {
+      place === "hero" && (
+        <>
+          <label class="check">
+            <input type="checkbox" name="wantsMorePlatforms" data-more />
+            Also tell me about the Windows and phone apps
+          </label>
+          <p id={`${id}-help`} class="help">
+            One email when Hobbots is ready for macOS and Linux. No spam.
+          </p>
+        </>
+      )
+    }
+  </form>
+  {
+    place === "hero" ? (
+      <div class="card cut joined" role="status" data-joined hidden>
+        <div class="joined-hob">
+          <Hob seed={11} color="violet" size={56} class="joined-sprite" mine />
+          <Sparks x={26} y={20} />
+        </div>
+        <div class="joined-text">
+          <span class="pxf joined-title" tabindex="-1" data-joined-focus>You're on the list!</span>
+          <span class="joined-body" data-joined-body />
+          <button type="button" class="quiet" data-reset>
+            Use a different email
+          </button>
+        </div>
+      </div>
+    ) : (
+      <p role="status" class="pxf saved" tabindex="-1" data-joined data-joined-focus hidden>
+        <span data-mine-name>Pip</span> is saved. See you at launch.
+      </p>
+    )
+  }
+</div>
+
+<style>
+  .waitlist {
+    position: relative;
+    width: 100%;
+  }
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .roll form {
+    padding-top: 6px;
+  }
+  .label {
+    font-size: 15px;
+    color: var(--color-secondary-text);
+  }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .row .btn {
+    flex: 1 0 auto;
+  }
+  .error {
+    margin: 0;
+    color: var(--color-rose);
+    font-size: 15px;
+    text-align: left;
+  }
+  .error:empty {
+    display: none;
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 44px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  .check input {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    accent-color: var(--color-lantern);
+  }
+  .help {
+    margin: 0;
+    font-size: 15px;
+    color: var(--color-secondary-text);
+  }
+  .joined {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 16px 20px;
+    text-align: left;
+  }
+  .joined[hidden],
+  form[hidden],
+  .saved[hidden] {
+    display: none;
+  }
+  .joined-hob {
+    position: relative;
+    flex-shrink: 0;
+  }
+  .joined-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .joined-title {
+    font-size: 20px;
+    color: var(--color-moonlight);
+  }
+  .joined-body {
+    overflow-wrap: anywhere;
+    font-size: 16px;
+    color: var(--color-secondary-text);
+  }
+  .joined .quiet {
+    align-self: flex-start;
+    min-height: 32px;
+    padding: 4px 0;
+  }
+  .saved {
+    margin: 0;
+    font-size: 20px;
+    color: var(--color-mint);
+  }
+</style>

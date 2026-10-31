@@ -1,0 +1,59 @@
+---
+import { TRUST } from "../data/copy.ts";
+import Companion from "./Companion.astro";
+---
+
+<section id="open" aria-label="Built in the open">
+  <Companion />
+  <div class="wrap">
+    {
+      TRUST.map((item) => (
+        <div class="item">
+          <span class="swatch" style={`background: ${item.color}`} aria-hidden="true" />
+          <div class="text">
+            <span class="pxf title">{item.title}</span>
+            <span class="body">{item.body}</span>
+          </div>
+        </div>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  section {
+    position: relative;
+    padding-block: 40px;
+    background: var(--color-deep);
+    border-top: 8px solid var(--color-line);
+  }
+  .wrap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    gap: 22px;
+  }
+  .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .swatch {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 6px;
+  }
+  .text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .title {
+    color: var(--color-moonlight);
+    font-size: 19px;
+  }
+  .body {
+    color: var(--color-secondary-text);
+    font-size: 16px;
+  }
+</style>
