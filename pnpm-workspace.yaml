@@ -5,10 +5,10 @@ packages:
 saveExact: true
 # Every Effect package moves together at one exact version (STD-EFFECT-005).
 catalog:
-  "@effect/platform-node": 4.1.1
-  "@effect/sql-pg": 4.1.1
-  "@effect/sql-sqlite-node": 4.1.1
-  effect: 4.1.1
+  "@effect/platform-node": 4.1.0
+  "@effect/sql-pg": 4.1.0
+  "@effect/sql-sqlite-node": 4.1.0
+  effect: 4.1.0
 allowBuilds:
   electron: true
   esbuild: true
@@ -17,9 +17,3 @@ allowBuilds:
 permissions:
   "@tanstack/react-router":
     skills: true
-minimumReleaseAgeExclude:
-  - "@effect/platform-node-shared@4.1.1"
-  - "@effect/platform-node@4.1.1"
-  - "@effect/sql-pg@4.1.1"
-  - "@effect/sql-sqlite-node@4.1.1"
-  - effect@4.1.1
