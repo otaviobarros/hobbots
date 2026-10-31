@@ -177,7 +177,7 @@ test("[TC-CH-094] while the hub is out of reach a message waits, then goes out w
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(page, "first");
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
 
   await current.stop();
   await expect(page.getByRole("status").filter({ hasText: "Reconnecting to Hobbots" })).toBeVisible();
@@ -188,7 +188,7 @@ test("[TC-CH-094] while the hub is out of reach a message waits, then goes out w
   await expect(page.getByRole("button", { name: "Try now" })).toBeVisible();
   hub = await startHub(dataDir);
   // The browser retries on its own; Try now only makes it sooner.
-  await expect(page.getByText("Echo: while away")).toBeVisible();
+  await expect(page.getByText("Echo: while away", { exact: true })).toBeVisible();
   await expect(waiting).toBeHidden();
   await expect(page.getByText(/Reconnecting to Hobbots/)).toBeHidden();
 });
@@ -211,7 +211,7 @@ test("[TC-CH-102] messages sent while the hub is away all go out, in the order t
 
   hub = await startHub(dataDir);
   // The first starts the thread; the rest follow it there.
-  await expect(page.getByText("Echo: three")).toBeVisible();
+  await expect(page.getByText("Echo: three", { exact: true })).toBeVisible();
   await expect(waiting).toHaveCount(0);
   expect((await replies(hub, page, "user")).map((m) => m.content)).toEqual(["one", "two", "three"]);
 });
@@ -221,7 +221,7 @@ test("[TC-CH-103] a waiting message the hub refuses stays until it is sent again
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(page, "first");
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
 
   await current.stop();
   await expect(page.getByRole("status").filter({ hasText: "Reconnecting to Hobbots" })).toBeVisible();
@@ -242,7 +242,7 @@ test("[TC-CH-103] a waiting message the hub refuses stays until it is sent again
 
   refuse = false;
   await waiting.nth(0).getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByText("Echo: after")).toBeVisible();
+  await expect(page.getByText("Echo: after", { exact: true })).toBeVisible();
   await expect(waiting).toHaveCount(0);
   const user = (await replies(hub, page, "user")).map((m) => m.content);
   expect(user).toEqual(["first", "keep me", "after"]);
@@ -253,7 +253,7 @@ test("[TC-CH-104] a refused waiting message can be edited back into the composer
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(page, "first");
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
 
   await current.stop();
   await expect(page.getByRole("status").filter({ hasText: "Reconnecting to Hobbots" })).toBeVisible();
@@ -314,7 +314,7 @@ test("[TC-CH-106] a message edited while the one before it starts the thread sta
   creating.release();
 
   await expect(page).toHaveURL(/threads\//);
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
   await expect(composer).toHaveValue("second, edited");
   await expect(waiting).toHaveCount(0);
   expect((await replies(hub, page, "user")).map((m) => m.content)).toEqual(["first"]);
@@ -335,7 +335,7 @@ test("[TC-CH-107] waiting messages survive a full resync and still go out", asyn
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(page, "first");
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
 
   await goOffline(current, page);
   await send(page, "after the resync");
@@ -363,7 +363,7 @@ test("[TC-CH-107] waiting messages survive a full resync and still go out", asyn
 
   refuse = false;
   await waiting.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByText("Echo: after the resync")).toBeVisible();
+  await expect(page.getByText("Echo: after the resync", { exact: true })).toBeVisible();
   await expect(waiting).toHaveCount(0);
 });
 
@@ -372,7 +372,7 @@ test("[TC-CH-108] leaving a thread while its waiting message is on its way sends
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(page, "first");
-  await expect(page.getByText("Echo: first")).toBeVisible();
+  await expect(page.getByText("Echo: first", { exact: true })).toBeVisible();
   const threadUrl = page.url();
 
   await goOffline(current, page);
@@ -398,7 +398,7 @@ test("[TC-CH-108] leaving a thread while its waiting message is on its way sends
   await page.evaluate((hash) => {
     window.location.hash = hash;
   }, threadHash);
-  await expect(page.getByText("Echo: only once")).toBeVisible();
+  await expect(page.getByText("Echo: only once", { exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Waiting to send" })).toHaveCount(0);
   await page.waitForTimeout(500);
   expect(await userMessages()).toEqual(["first", "only once"]);

@@ -22,7 +22,7 @@ function Page({
   children: React.ReactNode;
 }) {
   return (
-    <main className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-9 py-8">
+    <main className="relative flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto px-9 py-8">
       <header className="flex items-center gap-3.5">
         <PixelArt rows={ICONS[icon]} palette={iconPalette(true)} size={40} />
         <div className="flex flex-col gap-0.5">

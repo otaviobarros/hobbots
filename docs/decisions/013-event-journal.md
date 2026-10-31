@@ -102,6 +102,7 @@ Journaling in the same transaction is the smallest change that makes events surv
 The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
 
 - A client that resumes after a cursor gets exactly the missed entries, in order: `[TC-CH-071]`, `[TC-CH-073]`.
-- A missing, malformed, foreign or future cursor starts fresh at the head: `[TC-CH-072]`. A fresh `Ready` makes the client fetch again: `[TC-CH-078]`. An expired cursor is not proven yet: [#118](https://github.com/otaviobarros/hobbots/issues/118).
+- A missing, malformed, foreign or future cursor starts fresh at the head: `[TC-CH-072]`. A fresh `Ready` makes the client fetch again: `[TC-CH-078]`. An expired cursor starts fresh while the cursor right before the oldest kept entry still resumes: `[TC-CH-124]`, and in the browser `[TC-CH-122]`, which also drops a queued message taken back while the page was away.
 - A reply's steps replay to a client that reconnects after they ran, and stay after a reload: `[TC-CH-110]`, `[TC-CH-111]`.
-- A crash between commit and publish, a minute offline and a reconnect mid-reply lose nothing and duplicate nothing. Not proven yet: [#118](https://github.com/otaviobarros/hobbots/issues/118).
+- A crash between commit and publish loses nothing: `[TC-CH-073]`. A crash mid-reply leaves the reply interrupted with its saved text, about 0.6 seconds of text lost, and a client resuming from before it gets each entry once: `[TC-CH-120]`, `[TC-CH-125]`, [evidence](../evidence/2026-10-31-reliable-chat.md).
+- A reconnect mid-reply and time offline replay exactly what was missed and fetch nothing again: `[TC-CH-071]`, `[TC-CH-121]`. A delayed messages response leaves a finished reply complete: `[TC-CH-076]`. A restored backup shows the restored state, not the cache: `[TC-CH-123]`.

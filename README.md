@@ -1,8 +1,35 @@
-# Hobbots
+<p align="center">
+  <img src="docs/assets/readme-banner.svg" width="100%" alt="The word HOBBOTS in pixel letters over a village at night: two houses with lit windows, the chief of the hobs with a lantern staff, and three hobs.">
+</p>
 
-A personal, local-first, self-hostable workspace for AI agents ("hobs") that execute, delegate, communicate and close the loop on their own, within boundaries you trust. Learn more at [hobbots.ai](https://hobbots.ai).
+<h1 align="center">Hobbots</h1>
+
+<p align="center"><strong>Little helpers that do your chores while you sleep.</strong></p>
+
+<p align="center">
+  <a href="https://hobbots.app">hobbots.app</a> ·
+  <a href="#install-the-mac-app">Install</a> ·
+  <a href="#run-from-source">Run from source</a> ·
+  <a href="docs/STATUS.md">Status</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
+
+Hobbots is a personal, local-first, self-hostable workspace for AI agents. Each agent is a **hob**: a small helper with a name, a face and its own threads. Today your hobs chat, use tools in the folders you give them, and keep working after you close the window. Hobbots is being built so they can also delegate to each other, report back and close the loop on their own, within boundaries you trust.
 
 Hobbots does not build a new model or agent engine. It hosts existing runtimes such as Claude Code, Codex and ACP-compatible agents, and adds what they lack together: persistent identities and threads, durable delegation and inboxes, enforceable permissions and one view of all the work.
+
+## A field guide to the village
+
+- **Hob:** one agent, with its own name, look, instructions, model and permissions. Every hob is a 14 × 14 pixel sprite drawn from a seed, so it looks the same everywhere.
+- **The chief:** the Hobbots mark, an elder hob in a gem crown with a lantern staff. While any hob works, the lantern burns brighter.
+- **Thread:** a conversation with one hob that survives restarts. Each reply shows the tools the hob used as steps.
+- **Folders and the sandbox:** where a hob may work, and the OS sandbox that holds it there. Each rule is Allow, Ask or Never; answering an Ask from the app is not built yet.
+- **Hub:** the one computer that runs the hobs, their threads and every runtime. Hobs act only on the hub.
+- **Quest:** a goal that spans several hobs and threads, with who asked whom and what is still owed. _Not built yet._
+- **Inbox:** where hobs leave questions, approvals and results for you and for each other. _Not built yet._
+- **Charm:** a connection that gives a hob new abilities, such as GitHub with Push. _Not built yet._
+
+The [glossary](docs/product/glossary.md) has the full list.
 
 ## Status
 
@@ -61,6 +88,7 @@ pnpm test:e2e      # builds the web client, then runs apps/web/e2e in parallel, 
 - `docs/architecture/`: contracts for conversations, inbox, orchestration, lifecycle, permissions, runtime adapters, persistence, API and deployment.
 - `docs/decisions/`: architecture decision records.
 - `docs/design/`: the design specification and the screen inventory.
+- `docs/assets/`: the banner above, drawn from the app's own pixel art by `node scripts/readme-banner.mjs`.
 
 Contributors start with [CONTRIBUTING.md](CONTRIBUTING.md); coding agents with [AGENTS.md](AGENTS.md).
 

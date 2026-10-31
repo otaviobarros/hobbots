@@ -1,12 +1,13 @@
 import {
   AgentId,
+  type Committed,
   EVENT_SCHEMA_VERSIONS,
   type EventCorrelation,
   EventEnvelope,
   JournaledEvent,
   type JournaledEvent as JournaledEventType,
 } from "@hobbots/domain";
-import { Context, DateTime, Duration, Effect, Layer, Schema } from "effect";
+import { Context, Data, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 
 /** Where the journal stands: its epoch (new for every fresh database) and the last committed sequence. */
@@ -27,6 +28,13 @@ const correlationOf = (event: JournaledEventType): EventCorrelation => {
       return { agentId: event.agent.id, threadId: null, messageId: null };
     case "ThreadUpserted":
       return { agentId: event.thread.agentId, threadId: event.thread.id, messageId: null };
+    case "ApprovalRequested":
+    case "ApprovalResolved":
+      return {
+        agentId: event.approval.agentId,
+        threadId: event.approval.threadId,
+        messageId: event.approval.messageId,
+      };
     case "MessageUpserted":
     case "MessageQueued":
       return { agentId: null, threadId: event.message.threadId, messageId: event.message.id };
@@ -40,7 +48,7 @@ const correlationOf = (event: JournaledEventType): EventCorrelation => {
  * change needs before writing it, so the head row's lock orders concurrent writers on PostgreSQL,
  * then append the events once the change is written. Only for use within `sql.withTransaction`.
  */
-export const makeJournalWriter = (sql: SqlClient.SqlClient) => {
+const makeJournalWriter = (sql: SqlClient.SqlClient) => {
   /** Hands out the next `count` sequences and returns the first. */
   const reserve = (count: number): Effect.Effect<number, SqlError.SqlError> =>
     sql<{ readonly sequence: unknown }>`UPDATE event_journal_head SET sequence = sequence + ${count}
@@ -84,6 +92,42 @@ export const makeJournalWriter = (sql: SqlClient.SqlClient) => {
 
   return { reserve, append };
 };
+
+// A conditional write found nothing to change; its transaction rolls back, releasing its sequences.
+class NothingChanged extends Data.TaggedError("NothingChanged") {}
+
+/**
+ * Runs a change in one transaction with the journal sequences its events take, from `first`,
+ * reserved before it writes, and appends its events before commit: the journal is the outbox
+ * (ADR 013). A change that returns null wrote nothing, and rolls back.
+ */
+export const makeJournaled =
+  (sql: SqlClient.SqlClient) =>
+  <A>(
+    count: number,
+    write: (
+      first: number,
+    ) => Effect.Effect<
+      { readonly value: A; readonly events: ReadonlyArray<JournaledEventType> } | null,
+      SqlError.SqlError
+    >,
+  ): Effect.Effect<Option.Option<Committed<A>>> => {
+    const journal = makeJournalWriter(sql);
+    return Effect.gen(function* () {
+      const first = yield* journal.reserve(count);
+      const change = yield* write(first);
+      if (change === null) return yield* new NothingChanged();
+      if (change.events.length !== count) {
+        return yield* Effect.die(new Error(`Reserved ${count} journal sequences for ${change.events.length} events`));
+      }
+      return { value: change.value, entries: yield* journal.append(first, change.events) };
+    }).pipe(
+      sql.withTransaction,
+      Effect.map(Option.some),
+      Effect.catchTag("NothingChanged", () => Effect.succeed(Option.none())),
+      Effect.orDie,
+    );
+  };
 
 interface JournalRow {
   readonly sequence: unknown;

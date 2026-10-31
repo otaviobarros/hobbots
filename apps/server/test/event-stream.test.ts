@@ -6,10 +6,11 @@ import {
   RuntimeAdapter,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { EventJournal, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { Deferred, Effect, Exit, Fiber, Layer, Queue, Schedule, type Scope, Stream } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schedule, type Scope, Stream } from "effect";
+import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import {
@@ -68,7 +69,15 @@ const makeHub = Effect.gen(function* () {
   return { turn, layer };
 });
 
-type Services = EventStream | ChatService | HobbotsRepository | EventJournal | EventBus | Scope.Scope;
+type Services =
+  | EventStream
+  | ChatService
+  | HobbotsRepository
+  | EventJournal
+  | EventBus
+  | HobAdmission
+  | SqlClient.SqlClient
+  | Scope.Scope;
 
 const run = <A, E>(test: (turn: Queue.Queue<RuntimeEvent>) => Effect.Effect<A, E, Services>) =>
   Effect.gen(function* () {
@@ -77,9 +86,9 @@ const run = <A, E>(test: (turn: Queue.Queue<RuntimeEvent>) => Effect.Effect<A, E
   }).pipe(Effect.scoped, Effect.runPromise);
 
 // Opens a connection and records its frames until the returned fiber is interrupted (a disconnect).
-const connect = (cursor: string | undefined) =>
+const connect = (cursor: string | undefined, through?: EventStream["Service"]) =>
   Effect.gen(function* () {
-    const events = yield* EventStream;
+    const events = through ?? (yield* EventStream);
     const frames: Array<StreamFrame> = [];
     const fiber = yield* Stream.runForEach(events.connect(cursor), (frame) =>
       Effect.sync(() => void frames.push(frame)),
@@ -362,6 +371,136 @@ describe("event stream", () => {
     expect(Exit.hasInterrupts(result.exit)).toBe(true);
     expect(result.published).toBeGreaterThan(CONNECTION_BUFFER);
     expect(result.published).toBeLessThan(3 * CONNECTION_BUFFER);
+  });
+});
+
+describe("reliable chat (#118)", () => {
+  // covers CH-004, DP-003
+  it("[TC-CH-124] starts fresh for a cursor whose entries compaction removed, and still replays one right before the oldest kept", async () => {
+    const result = await run(() =>
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const journal = yield* EventJournal;
+        const sql = yield* SqlClient.SqlClient;
+        const expired = (yield* journal.head).sequence;
+        for (let i = 0; i < 3; i++) yield* chat.createThread(HOB_ID);
+        // Compaction keeps the latest entries; here the client's cursor and the one after it are gone.
+        yield* sql`DELETE FROM event_journal WHERE sequence <= ${expired + 1}`;
+        const head = yield* journal.head;
+        const oldest = (yield* journal.oldest) ?? 0;
+        const readies: Array<StreamFrame | undefined> = [];
+        const replayed: Array<ReadonlyArray<number>> = [];
+        for (const cursor of [formatCursor(head.epoch, expired), formatCursor(head.epoch, oldest - 1)]) {
+          const connection = yield* connect(cursor);
+          yield* waitFor(() => connection.frames.length > 0);
+          // Entries the connection replays arrive right after Ready.
+          yield* Effect.sleep("20 millis");
+          yield* Fiber.interrupt(connection.fiber);
+          readies.push(connection.frames[0]);
+          replayed.push(entries(connection.frames).map((e) => e.sequence));
+        }
+        return { readies, replayed, head, oldest };
+      }),
+    );
+    const { readies, replayed, head, oldest } = result;
+    // The expired cursor gets a fresh Ready at the head and no partial replay, so the client fetches again.
+    expect(readies[0]).toEqual({ _tag: "Ready", cursor: formatCursor(head.epoch, head.sequence), resumed: false });
+    expect(replayed[0]).toEqual([]);
+    // A cursor whose next entry is the oldest kept still replays every entry after it.
+    expect(readies[1]).toEqual({ _tag: "Ready", cursor: formatCursor(head.epoch, oldest - 1), resumed: true });
+    expect(replayed[1]).toEqual(Array.from({ length: head.sequence - oldest + 1 }, (_, i) => oldest + i));
+  });
+
+  // covers CH-004, DP-003
+  it("[TC-CH-125] after a crash mid-reply, a client resuming from before the crash gets each missed entry once, ending with the reply interrupted", async () => {
+    const result = await run(() =>
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        const journal = yield* EventJournal;
+        const before = yield* connect(undefined);
+        yield* waitFor(() => before.frames.length > 0);
+        const cursor = lastCursor(before.frames) ?? "";
+        yield* Fiber.interrupt(before.fiber);
+
+        // What a hub that dies mid-reply leaves behind: the prompt, and a reply still streaming
+        // with the text it last checkpointed. Each write was journaled as it happened.
+        const now = "2026-01-02T00:00:00.000Z";
+        const threadId = ThreadId.make("crashed");
+        yield* repo.upsertThread(
+          new Thread({
+            id: threadId,
+            agentId: HOB_ID,
+            title: "Crash",
+            runtimeSessionId: null,
+            createdAt: now,
+            updatedAt: now,
+          }),
+        );
+        const message = (id: string, role: "user" | "assistant", content: string, status: Message["status"]) =>
+          new Message({
+            id: MessageId.make(id),
+            threadId,
+            role,
+            content,
+            status,
+            error: null,
+            configVersion: role === "assistant" ? 1 : null,
+            createdAt: now,
+          });
+        yield* repo.upsertMessage(message("prompt", "user", "Tell me a story", "complete"));
+        yield* repo.upsertMessage(message("reply", "assistant", "Once upon", "streaming"));
+
+        // The hub starts again over the same database and recovers the reply. A new memo map builds
+        // new services instead of handing back the running hub's.
+        const restarted = yield* Layer.buildWithMemoMap(
+          EventStream.layer.pipe(
+            Layer.provideMerge(ChatService.layer.pipe(Layer.provide(HobTools.chatOnly))),
+            Layer.provideMerge(
+              Layer.mergeAll(
+                EventBus.layer,
+                Layer.succeed(
+                  RuntimeAdapter,
+                  RuntimeAdapter.of({
+                    health: Effect.die("unused"),
+                    models: Effect.die("unused"),
+                    enforcement: Effect.die("unused"),
+                    sendPrompt: () => Stream.never,
+                  }),
+                ),
+              ),
+            ),
+          ),
+          yield* Layer.makeMemoMap,
+          yield* Effect.scope,
+        );
+        const missed = yield* journal.readAfter(parseCursor(cursor)?.sequence ?? 0);
+        const after = yield* connect(cursor, Context.get(restarted, EventStream));
+        yield* waitFor(() => entries(after.frames).length === missed.length);
+        yield* Effect.sleep("20 millis");
+        return { cursor, missed, frames: after.frames, messages: yield* repo.listMessages(threadId) };
+      }),
+    );
+    const { cursor, missed, frames, messages } = result;
+    expect(frames[0]).toEqual({ _tag: "Ready", cursor, resumed: true });
+    const sent = entries(frames);
+    // Exactly the entries after the cursor, each once, in order, with nothing streaming afterwards.
+    expect(sent).toEqual(missed);
+    const from = parseCursor(cursor)?.sequence ?? 0;
+    expect(sent.map((e) => e.sequence)).toEqual(sent.map((_, index) => from + index + 1));
+    expect(deltas(frames)).toEqual([]);
+    const replyStates = sent.flatMap((e) =>
+      e.payload._tag === "MessageUpserted" && e.payload.message.id === "reply"
+        ? [[e.payload.message.status, e.payload.message.content]]
+        : [],
+    );
+    expect(replyStates).toEqual([
+      ["streaming", "Once upon"],
+      ["interrupted", "Once upon"],
+    ]);
+    expect(messages.map((m) => [m.id, m.status])).toEqual([
+      ["prompt", "complete"],
+      ["reply", "interrupted"],
+    ]);
   });
 });
 

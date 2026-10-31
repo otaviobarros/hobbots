@@ -1,4 +1,13 @@
-import { AgentId, AgentStatus, MessageId, PolicyOperation, SafetyPreset, ThreadId } from "@hobbots/domain";
+import {
+  AgentId,
+  AgentStatus,
+  ApprovalId,
+  ApprovalState,
+  MessageId,
+  PolicyOperation,
+  SafetyPreset,
+  ThreadId,
+} from "@hobbots/domain";
 import { Schema } from "effect";
 
 export class AgentNotFound extends Schema.TaggedError<AgentNotFound>()(
@@ -65,4 +74,28 @@ export class OverrideWidens extends Schema.TaggedError<OverrideWidens>()(
   "OverrideWidens",
   { preset: SafetyPreset, operations: Schema.Array(PolicyOperation), message: Schema.String },
   { httpApiStatus: 400 },
+) {}
+
+export class ApprovalNotFound extends Schema.TaggedError<ApprovalNotFound>()(
+  "ApprovalNotFound",
+  { approvalId: ApprovalId },
+  { httpApiStatus: 404 },
+) {}
+
+/**
+ * An approval request that can no longer take this decision: it expired (its reply stopped, its hob
+ * retired, the server restarted or the policy changed), or it was already decided the other way.
+ * Deciding it again the same way is not an error. `state` is where it stands.
+ */
+export class ApprovalClosed extends Schema.TaggedError<ApprovalClosed>()(
+  "ApprovalClosed",
+  { approvalId: ApprovalId, state: ApprovalState },
+  { httpApiStatus: 409 },
+) {}
+
+/** The decision names another action than the one the request is for, so it does not apply. */
+export class ApprovalActionChanged extends Schema.TaggedError<ApprovalActionChanged>()(
+  "ApprovalActionChanged",
+  { approvalId: ApprovalId },
+  { httpApiStatus: 409 },
 ) {}

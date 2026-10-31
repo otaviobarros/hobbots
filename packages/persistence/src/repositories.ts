@@ -12,9 +12,9 @@ import {
   Thread,
   ThreadId,
 } from "@hobbots/domain";
-import { Data, DateTime, Effect, Layer, Option, Schema } from "effect";
-import { SqlClient, type SqlError, SqlSchema } from "effect/sql";
-import { makeJournalWriter } from "./journal.ts";
+import { DateTime, Effect, Layer, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/sql";
+import { makeJournaled } from "./journal.ts";
 
 // Rows use snake_case columns; the client transforms them to the camelCase domain fields.
 // Where SQLite and PostgreSQL differ, the query chooses explicitly (ADR 011).
@@ -69,15 +69,12 @@ const revisedRows = (rows: ReadonlyArray<{ readonly revision?: unknown }>) =>
 const messageRows = (rows: ReadonlyArray<{ readonly revision?: unknown; readonly steps?: unknown }>) =>
   rows.map((row) => ({ ...row, revision: Number(row.revision), steps: JSON.parse(String(row.steps ?? "[]")) }));
 
-// A conditional write found nothing to change; its transaction rolls back, releasing its sequences.
-class NothingChanged extends Data.TaggedError("NothingChanged") {}
-
 /** The SQL store of hobs, threads and messages, for SQLite and PostgreSQL (ADR 011). */
 export const HobbotsRepositoryLive = Layer.effect(
   HobbotsRepository,
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    const journal = makeJournalWriter(sql);
+    const journaled = makeJournaled(sql);
     // Text sort keys compare byte by byte: SQLite's default, PostgreSQL's "C" collation.
     // ISO-8601 timestamps sort the same under either collation.
     const bytewise = (column: string) =>
@@ -164,32 +161,6 @@ export const HobbotsRepositoryLive = Layer.effect(
         created_at: createdAt,
       })}`;
 
-    // Runs a change in one transaction with the journal sequences its events take, from `first`,
-    // reserved before it writes, and appends its events before commit: the journal is the outbox
-    // (ADR 013). A change that returns null wrote nothing, and rolls back.
-    const journaled = <A>(
-      count: number,
-      write: (
-        first: number,
-      ) => Effect.Effect<
-        { readonly value: A; readonly events: ReadonlyArray<JournaledEvent> } | null,
-        SqlError.SqlError
-      >,
-    ): Effect.Effect<Option.Option<Committed<A>>> =>
-      Effect.gen(function* () {
-        const first = yield* journal.reserve(count);
-        const change = yield* write(first);
-        if (change === null) return yield* new NothingChanged();
-        if (change.events.length !== count) {
-          return yield* Effect.die(new Error(`Reserved ${count} journal sequences for ${change.events.length} events`));
-        }
-        return { value: change.value, entries: yield* journal.append(first, change.events) };
-      }).pipe(
-        sql.withTransaction,
-        Effect.map(Option.some),
-        Effect.catchTag("NothingChanged", () => Effect.succeed(Option.none())),
-        Effect.orDie,
-      );
     // For changes that always apply.
     const always = <A>(effect: Effect.Effect<Option.Option<Committed<A>>>) =>
       effect.pipe(Effect.map(Option.getOrThrow));

@@ -1,0 +1,2 @@
+# The README banner test compares the SVG byte for byte.
+docs/assets/*.svg text eol=lf

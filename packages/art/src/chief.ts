@@ -2,8 +2,9 @@
  * The chief of the hobs: an elder hob in a gem crown with a long beard, a royal robe and cape and a
  * lantern staff, built from the seeded hob generator's parts (`look.ts`) in the Violet hob colors.
  *
- * The one source of the Hobbots mark: the rail draws it, and `apps/desktop/scripts/app-icon.ts`
- * draws the app icon from it. Keep this file free of imports so that script can load it directly.
+ * The one source of the Hobbots mark: the rail draws it, `apps/desktop/scripts/app-icon.ts` draws
+ * the app icon from it and `scripts/readme-banner.mjs` the README banner. Keep this file free of
+ * imports so those scripts can load it directly.
  */
 
 /** One palette for both drawings; "." is transparent. */

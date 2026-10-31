@@ -18,6 +18,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
+import { ApprovalService } from "./approvals.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { RuntimeAdapter, type RuntimeEvent, type ToolAccess } from "./runtime.ts";
@@ -104,6 +105,8 @@ export class ChatService extends Context.Service<
       const runtime = yield* RuntimeAdapter;
       const admission = yield* HobAdmission;
       const hobTools = yield* HobTools;
+      // Without approvals, a call the policy answers Ask for is refused, as in hubs and tests that ask nothing.
+      const approvals = yield* Effect.serviceOption(ApprovalService);
       const turns = yield* FiberMap.make<ThreadId>();
       const scope = yield* Effect.scope;
       // The reply each running turn is writing, so a stop request can reach it.
@@ -311,6 +314,16 @@ export class ChatService extends Context.Service<
             }
           };
 
+          // A request still pending when the turn ends expires: a stopped reply is never approvable late.
+          const turnApprovals = Option.isSome(approvals)
+            ? yield* Effect.acquireRelease(
+                approvals.value.forTurn(
+                  { agentId: agent.id, threadId: thread.id, messageId: (yield* Ref.get(reply.current)).id },
+                  currentAccess(agent.id),
+                ),
+                (handle) => handle.close,
+              )
+            : null;
           yield* runtime
             .sendPrompt({
               prompt,
@@ -320,6 +333,7 @@ export class ChatService extends Context.Service<
               model: config.model,
               effort: config.effort,
               tools: yield* grant(thread.id, agent),
+              approvals: turnApprovals?.approvals ?? null,
             })
             .pipe(
               Stream.runForEach(handle),

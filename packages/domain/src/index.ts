@@ -1,4 +1,5 @@
 export * from "./agent.ts";
+export * from "./approval.ts";
 export * from "./events.ts";
 export * from "./ids.ts";
 export * from "./look.ts";

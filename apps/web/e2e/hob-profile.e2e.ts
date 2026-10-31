@@ -362,3 +362,24 @@ test("[TC-PE-043] where the sandbox cannot start, the profile and provider healt
   const provider = page.getByRole("list", { name: "Enforcement on this hub" });
   await expect(provider.getByRole("listitem").filter({ hasText: "Process sandbox" })).toContainText("Unsupported");
 });
+
+// Regression for #197: hidden radios in a scrolling panel stretched the page, so it scrolled too.
+test("[TC-UX-006] a profile or settings page taller than the window scrolls only its panel", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  await page.setViewportSize({ width: 1200, height: 640 });
+  const pageScrolls = () =>
+    page.evaluate(() => document.documentElement.scrollHeight > document.documentElement.clientHeight);
+
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+  await expect(page.getByRole("heading", { name: "Pip", exact: true })).toBeVisible();
+  expect(await pageScrolls()).toBe(false);
+
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  await expect(page.getByRole("radiogroup", { name: "Run commands" })).toBeVisible();
+  expect(await pageScrolls()).toBe(false);
+
+  await page.goto(`${current.url}/#/settings`);
+  await expect(page.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
+  expect(await pageScrolls()).toBe(false);
+});
