@@ -29,7 +29,6 @@ import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { adoptSession, parseKeychainLogin, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { makeFakeRuntime } from "../src/fake.ts";
-import { gitConfigAccess } from "../src/git-config.ts";
 import { decideForLiveTurns, ProcessSandbox, sandboxEnv, sandboxFilesystem } from "../src/sandbox.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hooks-")));
@@ -643,32 +642,72 @@ describe("the process sandbox", () => {
           expect(run('echo "[$GH_TOKEN]"').stdout.trim()).toBe("[]");
           expect(run('echo "$CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"').stdout.trim()).toBe("1");
           expect(run('echo "$CLAUDE_CONFIG_DIR"').stdout.trim()).toBe(join(runtimes, "hob-1"));
-          // Git runs: on macOS it stops when it cannot read the user's config, which opens read-only
-          // unless it looks like it holds a secret.
-          const gitProject = join(project, "repo");
-          spawnSync("git", ["init", "-q", gitProject]);
-          const status = run(`git -C ${gitProject} status --short`);
-          if (gitConfigAccess(homedir())._tag === "Open") {
-            expect(status.status).toBe(0);
-            // And commits: Git writes temporary files under $TMPDIR, which must stay short enough that
-            // Claude Code keeps it, and signing is off, since no key or agent is reachable here.
-            const commit = run(
-              `cd ${gitProject} && echo x > a && git add a && git -c user.name=Hob -c user.email=hob@example.com commit -qm a`,
-            );
-            // Apple's /usr/bin/git stub warns that xcrun cannot cache under the user's closed temp folder.
-            const errors = commit.stderr.split("\n").filter((line) => line !== "" && !line.includes("xcrun_db"));
-            expect(errors).toEqual([]);
-            expect(commit.status).toBe(0);
-          } else expect(status.stderr).toContain("unable to access");
           const temp = run('echo "$TMPDIR" && touch "$TMPDIR/probe"');
           expect(temp.status).toBe(0);
           expect(temp.stdout.trim().length).toBeLessThanOrEqual(30);
-          expect(run(`git -C ${gitProject} config --get commit.gpgsign`).stdout.trim()).toBe("false");
-          // Open or not, the config stays read-only.
+          // Signing is off, since no key or agent is reachable here.
+          expect(run("git config --get commit.gpgsign").stdout.trim()).toBe("false");
+          // The user's Git config stays read-only.
           expect(run(`echo "# x" >> ${join(homedir(), ".gitconfig")}`).status).not.toBe(0);
         } finally {
           prepared.release();
         }
+      }).pipe(Effect.provide(ProcessSandbox.layer), Effect.scoped, Effect.runPromise);
+    },
+    30_000,
+  );
+
+  // covers PE-005
+  it.runIf(process.platform === "darwin")(
+    "[TC-PE-074] lets Git read the user's config and the files it includes, unless one holds a secret",
+    async () => {
+      await Effect.gen(function* () {
+        const sandbox = yield* ProcessSandbox;
+        // A home of the test's own, which the sandbox closes like the user's: without the config
+        // files opened, Git stops on `~/.gitconfig` with "Operation not permitted".
+        const runAt = (home: string, script: string) =>
+          Effect.acquireUseRelease(
+            sandbox.prepare({
+              folders: [project],
+              folderAccess: { read: true, write: true },
+              dataFolder: data,
+              binary: "/bin/sh",
+              runtimeFolder: join(runtimes, "hob-1"),
+              allowedHosts: [],
+              home,
+            }),
+            (prepared) =>
+              Effect.sync(() => {
+                const { command, args, env } = prepared.spawnArgs("/bin/sh", ["-c", script], {
+                  PATH: "/usr/bin:/bin",
+                  HOME: home,
+                });
+                return spawnSync(command, [...args], { cwd: project, env, encoding: "utf8" });
+              }),
+            (prepared) => Effect.sync(prepared.release),
+          );
+        const repo = join(project, "repo-074");
+        spawnSync("git", ["init", "-q", repo]);
+
+        // The identity sits in a file the config includes, quoted and followed by a comment.
+        const open = join(root, "home-open");
+        mkdirSync(open);
+        writeFileSync(join(open, ".gitconfig"), '[include]\n\tpath = "identity.local" # work identity\n');
+        writeFileSync(join(open, "identity.local"), "[user]\n\tname = Hob\n\temail = hob@example.com\n");
+        const committed = yield* runAt(open, `cd ${repo} && echo x > a && git add a && git commit -qm a`);
+        // Apple's /usr/bin/git stub warns that xcrun cannot cache under the user's closed temp folder.
+        expect(committed.stderr.split("\n").filter((line) => line !== "" && !line.includes("xcrun_db"))).toEqual([]);
+        expect(committed.status).toBe(0);
+        expect((yield* runAt(open, `git -C ${repo} log -1 --format=%an`)).stdout.trim()).toBe("Hob");
+
+        // A token in a comment keeps the config closed, since the file would open as it is.
+        const secret = join(root, "home-secret");
+        mkdirSync(secret);
+        writeFileSync(join(secret, ".gitconfig"), `[user]\n\tname = Hob\n# ghp_${"a".repeat(36)}\n`);
+        const closed = yield* runAt(secret, `git -C ${repo} status --short`);
+        expect(closed.status).not.toBe(0);
+        expect(closed.stderr).toContain("unable to access");
+        expect((yield* runAt(secret, `cat ${join(secret, ".gitconfig")}`)).status).not.toBe(0);
       }).pipe(Effect.provide(ProcessSandbox.layer), Effect.scoped, Effect.runPromise);
     },
     30_000,

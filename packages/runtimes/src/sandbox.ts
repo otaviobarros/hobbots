@@ -329,7 +329,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                   filesystem: sandboxFilesystem({
                     ...scope,
                     tempFolder,
-                    gitConfigFiles: gitConfigFilesFor(gitConfigAccess(homedir())),
+                    gitConfigFiles: gitConfigFilesFor(gitConfigAccess(scope.home ?? homedir())),
                     roots: USER_DATA_ROOTS.filter((root) => existsSync(root)),
                   }),
                 },

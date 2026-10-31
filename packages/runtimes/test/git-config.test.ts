@@ -21,7 +21,7 @@ describe("the user's Git config in the sandbox", () => {
           "\tst = status",
           "[credential]",
           "\thelper = osxkeychain",
-          "# token = ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "# work identity",
         ].join("\n"),
       ),
     ).toBeNull();
@@ -32,6 +32,18 @@ describe("the user's Git config in the sandbox", () => {
     expect(secretIn('[url "https://me:s3cret@github.com/"]\n\tinsteadOf = https://github.com/')).not.toBeNull();
     expect(secretIn("[github]\n\ttoken = abc")).not.toBeNull();
     expect(secretIn("[alias]\n\tx = !echo ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).not.toBeNull();
+  });
+
+  it("finds secrets in comments and inline credential helpers, since the file opens as it is", () => {
+    expect(secretIn("[core]\n\teditor = vim\n# ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).not.toBeNull();
+    expect(secretIn("; old: https://me:s3cret@github.com/")).not.toBeNull();
+    expect(secretIn("# password = hunter2")).not.toBeNull();
+    expect(secretIn('[credential]\n\thelper = "!f() { echo username=me; echo password=hunter2; }; f"')).not.toBeNull();
+  });
+
+  it("reads pattern lists for token shapes and URL passwords only", () => {
+    expect(secretIn("secrets/\n*.token\n.env", "list")).toBeNull();
+    expect(secretIn("ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "list")).not.toBeNull();
   });
 
   it("tells a URL with a password from one with a user name only", () => {
@@ -54,16 +66,18 @@ describe("the user's Git config in the sandbox", () => {
       '[includeIf "gitdir:~/work/"]',
       '\tpath = "work/config"',
       "\tpath = ~/.gitconfig.extra # kept here",
+      '\tpath = "config.local" # work identity',
       "[core]",
       "\texcludesFile = ~/.gitignore_global",
       "[user]",
       "\tpath = not-an-include",
     ].join("\n");
     expect(includedFiles(text, "/Users/me/.gitconfig", home)).toEqual([
-      "/Users/me/.gitconfig.local",
-      "/Users/me/work/config",
-      "/Users/me/.gitconfig.extra",
-      "/Users/me/.gitignore_global",
+      { file: "/Users/me/.gitconfig.local", kind: "config" },
+      { file: "/Users/me/work/config", kind: "config" },
+      { file: "/Users/me/.gitconfig.extra", kind: "config" },
+      { file: "/Users/me/config.local", kind: "config" },
+      { file: "/Users/me/.gitignore_global", kind: "list" },
     ]);
   });
 
@@ -85,7 +99,7 @@ describe("the user's Git config in the sandbox", () => {
       gitConfigAccess(
         home,
         { XDG_CONFIG_HOME: "/x" },
-        files({ "/x/git/config": "[core]", "/x/git/ignore": ".DS_Store" }),
+        files({ "/x/git/config": "[core]", "/x/git/ignore": ".DS_Store\nsecrets/" }),
         same,
       ),
     ).toEqual({
