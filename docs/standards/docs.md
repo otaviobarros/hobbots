@@ -42,12 +42,12 @@ Before library-specific API or configuration work, fetch the current docs for th
 - **Enforced by:** review.
 - **Applies to:** all changes that touch a library API or config.
 
-### STD-DOCS-006 Dependencies come from the registry at their latest stable release
+### STD-DOCS-006 Dependencies take the latest stable release, pinned exactly
 
-Add a dependency with `pnpm add <pkg>`, which takes the latest stable release from the registry. Release candidates are allowed. Alpha, beta and nightly releases are not. Never type a version by hand. STD-EFFECT-005 adds the exact pin for Effect packages.
+Add a dependency with `pnpm add <pkg>`. It takes the latest stable release from the registry and records that exact version, with no `^` or `~` range. Release candidates are allowed. Alpha, beta and nightly releases are not. Never type a version by hand. To upgrade, run `pnpm add <pkg>` or `pnpm update --latest <pkg>` on purpose, then run `pnpm check`. Effect packages take their version from the workspace catalog (STD-EFFECT-005).
 
-- **Why:** current releases carry fixes, and hand-typed versions drift from the registry.
-- **Enforced by:** review.
+- **Why:** current releases carry fixes, and an exact version changes only when someone upgrades it, so packages never drift apart on a later install.
+- **Enforced by:** `saveExact` in `pnpm-workspace.yaml`, and review.
 - **Applies to:** every `package.json`.
 
 ### STD-DOCS-007 Docs use short, plain sentences

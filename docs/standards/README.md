@@ -123,6 +123,6 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-DOCS-003 | Public text links only public sources | Active |
 | STD-DOCS-004 | Commits follow Conventional Commits | Active |
 | STD-DOCS-005 | Library knowledge comes from current docs | Active |
-| STD-DOCS-006 | Dependencies come from the registry at their latest stable release | Active |
+| STD-DOCS-006 | Dependencies take the latest stable release, pinned exactly | Active |
 | STD-DOCS-007 | Docs use short, plain sentences | Active |
 | STD-DOCS-008 | Work stays inside the requested scope | Active |

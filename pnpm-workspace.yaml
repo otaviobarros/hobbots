@@ -1,6 +1,14 @@
 packages:
   - apps/*
   - packages/*
+# `pnpm add` records the exact version it installed, never a range (STD-DOCS-006).
+saveExact: true
+# Every Effect package moves together at one exact version (STD-EFFECT-005).
+catalog:
+  "@effect/platform-node": 4.1.0
+  "@effect/sql-pg": 4.1.0
+  "@effect/sql-sqlite-node": 4.1.0
+  effect: 4.1.0
 allowBuilds:
   electron: true
   esbuild: true
