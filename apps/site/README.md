@@ -34,6 +34,14 @@ Only the interactive parts run script, all from `src/scripts/page.ts`: clicking 
 
 `pnpm check` lints, typechecks and unit-tests the site with the rest of the workspace. The [Site workflow](../../.github/workflows/site.yml) builds it and runs the end-to-end tests in `e2e/`, only when `apps/site`, `packages/art`, `pnpm-lock.yaml` or the workflow changes. Build before running `test:e2e` locally, after copying `.dev.vars`: the build copies it into `dist/server`, where `astro preview` reads it. Astro moves `astro preview` to the background when it detects a coding agent (`CLAUDECODE` or `AI_AGENT` set), which Playwright reads as a failed start; unset those variables for the run.
 
+## Share card and search
+
+`src/components/Meta.astro` writes the page's title, description, canonical URL (always `https://hobbots.app/`), Open Graph and X card tags, and icon links; the words are `SHARE` in `src/data/copy.ts`. The card image, `public/og.png`, is the teaser poster cropped to 1280 × 672 and scaled to 1200 × 630. `public/robots.txt` and `public/sitemap.xml` point crawlers at the one page.
+
+Only a build with `CLOUDFLARE_ENV=production` may be indexed. Every other build (local, staging, pull request previews) adds `<meta name="robots" content="noindex, nofollow">`, so never build a preview with `CLOUDFLARE_ENV=production`.
+
+The favicons in `public/` (`favicon.svg`, `favicon.ico` and the 180 px `apple-touch-icon.png`) are drawn from the app icon's grid in `apps/desktop/scripts/app-icon.ts`. Run `pnpm --filter @hobbots/site icons` after changing the art.
+
 ## Teaser video
 
 The teaser is not in this repository. It is served from the public R2 bucket `hobbots-media` at `https://media.hobbots.app` (`TEASER_URL` in `src/data/copy.ts`); only its poster, `public/teaser/poster.webp`, is here. To publish a new cut, compress it to an H.264 MP4 with `-movflags +faststart` and upload it from a machine logged in to Cloudflare:
