@@ -15,8 +15,15 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { RuntimeEvent, ToolAccess } from "@hobbots/agents";
-import { EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
+import {
+  type ApprovalAction,
+  type ApprovalOutcome,
+  actionDigest,
+  type RuntimeEvent,
+  type ToolAccess,
+  type TurnApprovals,
+} from "@hobbots/agents";
+import { ApprovalId, EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
@@ -121,11 +128,145 @@ describe("Claude Code tool calls under the policy hook", () => {
   });
 
   // covers PE-003
-  it("[TC-PE-014] does not run a call that needs approval, since Hobbots cannot ask yet", async () => {
+  it("[TC-PE-014] does not run a call that needs approval on a turn that cannot ask", async () => {
     const result = await call("Bash", { command: "pnpm test && git push origin main" });
     expect(result.decision).toBe("deny");
     expect(result.events[0]).toMatchObject({ _tag: "ToolDenied", operation: "push" });
     expect(result.events[0]?._tag === "ToolDenied" && result.events[0].reason).toContain("cannot ask you");
+  });
+
+  /** Approvals that answer every request with `answer`, recording what was asked. */
+  const approvalsAnswering = (
+    answer: (action: ApprovalAction) => Effect.Effect<ApprovalOutcome>,
+    current: ToolAccess | null = access(),
+  ) => {
+    const asked: Array<ApprovalAction> = [];
+    const approvals: TurnApprovals = {
+      request: (action) =>
+        Effect.sync(() => {
+          asked.push(action);
+          return { approvalId: ApprovalId.make(`approval-${asked.length}`), decision: answer(action) };
+        }),
+      currentAccess: Effect.succeed(current),
+    };
+    return { asked, approvals };
+  };
+  const approve = (action: ApprovalAction) =>
+    Effect.map(
+      actionDigest(action),
+      (digest): ApprovalOutcome => ({
+        _tag: "Approved",
+        actionDigest: digest,
+        policyVersion: action.policyVersion,
+      }),
+    );
+
+  /** A push through the hook, then the permission callback, as Claude Code makes them. */
+  const askedCall = async (approvals: TurnApprovals) => {
+    const turn = toolTurn(access(), "on");
+    if (turn === null) throw new Error("expected a tool turn");
+    const events: Array<RuntimeEvent> = [];
+    const { hooks, canUseTool } = policyHooks(engine, turn, (event) => events.push(event), approvals);
+    const signal = new AbortController().signal;
+    const input = { command: "git push origin main" };
+    const [pre] = hooks.PreToolUse?.[0]?.hooks ?? [];
+    const output = await pre?.(
+      {
+        session_id: "s",
+        transcript_path: "",
+        cwd: project,
+        tool_name: "Bash",
+        tool_input: input,
+        tool_use_id: "t1",
+        hook_event_name: "PreToolUse",
+      } as HookInput,
+      "t1",
+      { signal },
+    );
+    const hook = (output as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput
+      ?.permissionDecision;
+    const result = await canUseTool("Bash", input, { signal, toolUseID: "t1" } as Parameters<typeof canUseTool>[2]);
+    return { hook, result, events };
+  };
+
+  // covers PE-003
+  it("[TC-PE-067] asks the user about a call that needs approval and runs it only once approved", async () => {
+    const { asked, approvals } = approvalsAnswering(approve);
+    const { hook, result, events } = await askedCall(approvals);
+    expect(hook).toBe("ask");
+    expect(result).toMatchObject({ behavior: "allow" });
+    expect(asked).toEqual([
+      expect.objectContaining({
+        stepId: "t1",
+        tool: "Bash",
+        operation: "push",
+        arguments: { command: "git push origin main" },
+      }),
+    ]);
+    expect(events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval", "ToolStarted"]);
+    expect(events[0]).toMatchObject({ id: "t1", approvalId: "approval-1", operation: "push" });
+  });
+
+  // covers PE-003
+  it("[TC-PE-068] gives the hob the user's reason when they deny the call", async () => {
+    const { approvals } = approvalsAnswering(() => Effect.succeed({ _tag: "Denied", reason: "Not today" }));
+    const { result, events } = await askedCall(approvals);
+    expect(result).toMatchObject({ behavior: "deny", message: expect.stringContaining("Not today") });
+    expect(events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval", "ToolDenied"]);
+    expect(events[1]).toMatchObject({ decidedBy: "user" });
+  });
+
+  // covers PE-008
+  it("[TC-PE-069] decides an approved call again under the policy as it is now", async () => {
+    // Pushing became Never while the user decided.
+    const narrower = approvalsAnswering(approve, access({ ...EMPTY_HOB_POLICY, overrides: { push: "deny" } }));
+    const refused = await askedCall(narrower.approvals);
+    expect(refused.result).toMatchObject({ behavior: "deny" });
+    expect(refused.events.at(-1)).toMatchObject({ _tag: "ToolDenied", operation: "push" });
+    // An approval for another action does not apply: the call asks again.
+    let round = 0;
+    const changed = approvalsAnswering((action) =>
+      ++round === 1
+        ? Effect.succeed({ _tag: "Approved", actionDigest: "other", policyVersion: action.policyVersion })
+        : approve(action),
+    );
+    const again = await askedCall(changed.approvals);
+    expect(changed.asked).toHaveLength(2);
+    expect(again.result).toMatchObject({ behavior: "allow" });
+  });
+
+  // covers PE-003, PE-008
+  it("[TC-PE-071] asks about the call in the folder the hook saw, and refuses one whose arguments changed", async () => {
+    const turn = toolTurn(access(), "on");
+    if (turn === null) throw new Error("expected a tool turn");
+    const { asked, approvals } = approvalsAnswering(approve);
+    const events: Array<RuntimeEvent> = [];
+    const { hooks, canUseTool } = policyHooks(engine, turn, (event) => events.push(event), approvals);
+    const signal = new AbortController().signal;
+    const [pre] = hooks.PreToolUse?.[0]?.hooks ?? [];
+    const sub = join(project, "sub");
+    mkdirSync(sub, { recursive: true });
+    const hook = (id: string, command: string) =>
+      pre?.(
+        {
+          session_id: "s",
+          transcript_path: "",
+          cwd: sub,
+          tool_name: "Bash",
+          tool_input: { command },
+          tool_use_id: id,
+          hook_event_name: "PreToolUse",
+        } as HookInput,
+        id,
+        { signal },
+      );
+    const options = (id: string) => ({ signal, toolUseID: id }) as Parameters<typeof canUseTool>[2];
+    await hook("t1", "rm -rf build");
+    expect(await canUseTool("Bash", { command: "rm -rf build" }, options("t1"))).toMatchObject({ behavior: "allow" });
+    expect(asked[0]?.targets).toEqual([join(sub, "build")]);
+    await hook("t2", "rm -rf build");
+    expect(await canUseTool("Bash", { command: "rm -rf /" }, options("t2"))).toMatchObject({ behavior: "deny" });
+    expect(asked).toHaveLength(1);
   });
 
   // covers PE-005

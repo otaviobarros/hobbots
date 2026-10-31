@@ -13,9 +13,10 @@ import {
   RuntimeModels,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { Clock, Effect, Exit, Layer, Option, Stream } from "effect";
-import { refusal, toolTurn, UNKNOWN_TOOL } from "./claude-code.ts";
-import { narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
+import { Clock, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
+import { decideCall } from "./approval.ts";
+import { toolTurn } from "./claude-code.ts";
+import { toolLabel, toolRequests } from "./tool-calls.ts";
 
 /**
  * The fake runtime's models: a main one with every effort level, and one behind "More models"
@@ -105,71 +106,66 @@ const scriptedInput = (tool: string, argument: string): Record<string, unknown> 
 };
 
 /**
- * The tool calls a prompt scripts, decided by the policy engine as Claude Code's would be: each is
- * reported as started and finished, or denied. Nothing is read, written or run.
+ * The tool calls a prompt scripts, decided as Claude Code's would be: by the policy engine, and for
+ * Ask by the user through the turn's approvals. Each is reported as started and finished, or denied.
+ * Nothing is read, written or run.
  */
 export const scriptedToolEvents = (
   request: PromptRequest,
   engine: PolicyEngine["Service"] | undefined,
   sandbox: "on" | "unavailable" = "on",
-): Effect.Effect<ReadonlyArray<RuntimeEvent>> =>
-  Effect.gen(function* () {
-    // Commands are decided as on a hub where the sandbox started, or where it cannot start.
-    const turn = engine ? toolTurn(request.tools, sandbox) : null;
-    if (engine === undefined || turn === null) return [];
-    const calls = request.prompt
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith(`${FAKE_TOOL_DIRECTIVE} `))
-      .map((line) => {
-        const [tool = "", ...rest] = line
-          .slice(FAKE_TOOL_DIRECTIVE.length + 1)
-          .trim()
-          .split(" ");
-        return { tool, input: scriptedInput(tool, rest.join(" ")) };
-      });
-    const events: Array<RuntimeEvent> = [];
-    for (const [index, { tool, input }] of calls.entries()) {
-      const id = `fake-tool-${index + 1}`;
-      const label = toolLabel(tool, input);
-      const requests = toolRequests(tool, input, turn.folders[0] as string);
-      // Like Claude Code, an unknown tool is refused, and a known one not offered this turn is never called.
-      if (requests === null) {
-        events.push({
-          _tag: "ToolDenied",
-          id,
-          tool,
-          operation: "outside-folders",
-          targets: [],
-          label,
-          reason: UNKNOWN_TOOL(tool),
-          decidedBy: "policy",
-        });
-        continue;
-      }
-      if (!turn.tools.includes(tool)) continue;
-      const verdict = narrowestVerdict(yield* Effect.forEach(requests, (r) => engine.decide(turn.context, r)));
-      if (verdict === undefined) continue;
-      if (verdict.decision === "allow") {
-        events.push(
-          { _tag: "ToolStarted", id, tool, operation: verdict.operation, targets: verdict.targets, label },
-          { _tag: "ToolFinished", id, failed: false },
-        );
-      } else {
-        events.push({
-          _tag: "ToolDenied",
-          id,
-          tool,
-          operation: verdict.operation,
-          targets: verdict.targets,
-          label,
-          reason: refusal(verdict),
-          decidedBy: "policy",
-        });
-      }
-    }
-    return events;
-  });
+): Stream.Stream<RuntimeEvent> => {
+  // Commands are decided as on a hub where the sandbox started, or where it cannot start.
+  const turn = engine ? toolTurn(request.tools, sandbox) : null;
+  if (engine === undefined || turn === null) return Stream.empty;
+  const calls = request.prompt
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith(`${FAKE_TOOL_DIRECTIVE} `))
+    .map((line, index) => {
+      const [tool = "", ...rest] = line
+        .slice(FAKE_TOOL_DIRECTIVE.length + 1)
+        .trim()
+        .split(" ");
+      return {
+        id: `fake-tool-${index + 1}`,
+        tool,
+        input: scriptedInput(tool, rest.join(" ")),
+        cwd: turn.folders[0] as string,
+      };
+    })
+    // Like Claude Code, a known tool not offered this turn is never called; an unknown one is refused.
+    .filter((call) => toolRequests(call.tool, call.input, call.cwd) === null || turn.tools.includes(call.tool));
+  return Stream.fromIterable(calls).pipe(
+    Stream.flatMap((call) =>
+      Stream.callback<RuntimeEvent>((queue) =>
+        Effect.gen(function* () {
+          const decision = yield* decideCall(engine, turn.context, request.approvals, call, (event) =>
+            Queue.offerUnsafe(queue, event),
+          );
+          const label = toolLabel(call.tool, call.input);
+          if (decision._tag === "Run") {
+            const { operation, targets } = decision.verdict;
+            yield* Queue.offer(queue, { _tag: "ToolStarted", id: call.id, tool: call.tool, operation, targets, label });
+            yield* Queue.offer(queue, { _tag: "ToolFinished", id: call.id, failed: false });
+          } else {
+            yield* Queue.offer(queue, {
+              _tag: "ToolDenied",
+              id: call.id,
+              tool: call.tool,
+              operation: decision.verdict?.operation ?? "outside-folders",
+              targets: decision.verdict?.targets ?? [],
+              label,
+              reason: decision.reason,
+              decidedBy: decision.decidedBy ?? "policy",
+            });
+          }
+          yield* Queue.end(queue);
+        }),
+      ),
+    ),
+  );
+};
 
 /**
  * Deterministic adapter for tests and UI work without model usage. Like Claude Code, a resumed session
@@ -214,12 +210,12 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
               ),
             )
           : Stream.empty;
-    const stream = Stream.unwrap(
-      Effect.map(scriptedToolEvents(request, options.engine, sandbox), (tools) =>
-        // Tool calls come after the thinking step, before the reply is written.
-        Stream.fromIterable([...events.slice(0, 3), ...tools, ...events.slice(3)]),
-      ),
-    ).pipe(Stream.concat(failure));
+    // Tool calls come after the thinking step, before the reply is written.
+    const stream = Stream.fromIterable(events.slice(0, 3)).pipe(
+      Stream.concat(scriptedToolEvents(request, options.engine, sandbox)),
+      Stream.concat(Stream.fromIterable(events.slice(3))),
+      Stream.concat(failure),
+    );
     const paced = options.delay ? stream.pipe(Stream.tap(() => Effect.sleep(options.delay as "10 millis"))) : stream;
     return options.stopDelay
       ? paced.pipe(
