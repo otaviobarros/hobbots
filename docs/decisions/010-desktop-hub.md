@@ -22,3 +22,12 @@ Installing once, turning on Tailscale and typing the hub's address on another de
 - The hub must be on and reachable for other devices to work.
 - Device tokens are separate from agent MCP credentials and runtime credentials, and a revoked device is refused at once.
 - The desktop app needs per-platform service installation, single-instance rules and an icon that shows server state.
+
+## Validation
+
+The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
+
+- Closing the window keeps the server and a running reply alive, and Quit stops it: `[TC-EX-008]`, `[TC-EX-010]`.
+- A second launch starts no second server: `[TC-DP-010]` in `background-service.e2e.ts`.
+- Another device on the tailnet connects only after it is allowed once, and a revoked device is refused at once. Not proven yet: [#14](https://github.com/otaviobarros/hobbots/issues/14), [#15](https://github.com/otaviobarros/hobbots/issues/15).
+- Hobs act only on the hub's files, never the connected device's. Not proven yet: [#15](https://github.com/otaviobarros/hobbots/issues/15).

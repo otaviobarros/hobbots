@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-// Checks that docs/standards/README.md indexes every rule in the area files, and nothing else.
+// Checks the rules that docs can be checked against:
+// - docs/standards/README.md indexes every rule in the area files, and nothing else.
+// - Every ADR ends with a Validation section that lists scenarios (STD-DOCS-009).
+// - Every evidence record has its fields, and docs/STATUS.md links it (STD-DOCS-010).
 // Usage: node scripts/check-standards.mjs
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -45,8 +48,41 @@ for (const [id, { status }] of index) {
   if (status === "Active" && !rules.has(id)) errors.push(`${id} is in the index but no area file defines it`);
 }
 
+const decisionsDir = fileURLToPath(new URL("../docs/decisions/", import.meta.url));
+const adrs = readdirSync(decisionsDir).filter((name) => /^\d{3}-.+\.md$/.test(name));
+for (const file of adrs) {
+  const sections = readFileSync(`${decisionsDir}${file}`, "utf8").split(/^## /m);
+  const last = sections.at(-1);
+  if (sections.length < 2 || !last.startsWith("Validation\n")) {
+    errors.push(`ADR ${file} must end with a "## Validation" section (STD-DOCS-009)`);
+  } else if (!/^- \S/m.test(last)) {
+    errors.push(`ADR ${file} lists no validation scenario (STD-DOCS-009)`);
+  }
+}
+
+const evidenceDir = fileURLToPath(new URL("../docs/evidence/", import.meta.url));
+const status = readFileSync(fileURLToPath(new URL("../docs/STATUS.md", import.meta.url)), "utf8");
+const evidenceFields = ["Date", "Issue", "Pull request", "Commit", "Setup", "Result"];
+const records = readdirSync(evidenceDir).filter((name) => name !== "README.md" && name.endsWith(".md"));
+for (const file of records) {
+  const date = file.match(/^(\d{4}-\d{2}-\d{2})-[a-z0-9-]+\.md$/);
+  if (!date) {
+    errors.push(`evidence record ${file} must be named YYYY-MM-DD-<short-name>.md (STD-DOCS-010)`);
+    continue;
+  }
+  const text = readFileSync(`${evidenceDir}${file}`, "utf8");
+  for (const field of evidenceFields) {
+    if (!text.includes(`\n- **${field}:** `))
+      errors.push(`evidence record ${file} is missing "${field}" (STD-DOCS-010)`);
+  }
+  if (!text.includes(`\n- **Date:** ${date[1]}\n`))
+    errors.push(`evidence record ${file} has a Date that differs from its name`);
+  if (!status.includes(`(evidence/${file}`))
+    errors.push(`docs/STATUS.md does not link evidence record ${file} (STD-DOCS-010)`);
+}
+
 if (errors.length > 0) {
-  console.error(`Standards index check failed:\n${errors.map((error) => `- ${error}`).join("\n")}`);
+  console.error(`Standards check failed:\n${errors.map((error) => `- ${error}`).join("\n")}`);
   process.exit(1);
 }
-console.log(`Standards index check passed: ${rules.size} rules.`);
+console.log(`Standards check passed: ${rules.size} rules, ${adrs.length} ADRs, ${records.length} evidence records.`);

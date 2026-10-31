@@ -17,3 +17,11 @@ Transactional delivery obligations, expected versions, leases and reconciliation
 ## Change control
 
 A deliberate user-directed change should update the relevant specification and supersede this ADR with rationale.
+
+## Validation
+
+The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
+
+- Hobs, threads and messages round-trip on SQLite and PostgreSQL: `[TC-DP-004]`, run on both in CI.
+- A reply interrupted by a process exit is shown as interrupted after a restart, and nothing is duplicated after reconnecting. Not proven yet: [#118](https://github.com/otaviobarros/hobbots/issues/118).
+- Messages queued before a restart start in order afterwards: `[TC-CH-007]`, `[TC-CH-013]`.

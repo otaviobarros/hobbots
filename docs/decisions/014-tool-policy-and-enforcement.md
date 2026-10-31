@@ -191,3 +191,13 @@ The preset table follows the contract's reference policy and PE-001 directly, an
 - **#135 Profile tabs:** the tabs become Profile, Charms and Permissions (Tools becomes Charms); folders and the sandbox switch move to Permissions; onboarding's Safety step uses the rows and wording above, plus the Trusting sandbox switch.
 - **#136 Unsupported enforcement:** the declaration table above, "Needs the sandbox" on Windows and wherever the sandbox cannot start, and the Unsandboxed label.
 - **#137 End to end:** add cases for symlink and `..` escapes, a command writing outside the folders, a `git push` from a command to a remote needing credentials and to a credential-free one, a hostile `core.hooksPath` during an approved Push, and an unsandboxed hob's label.
+
+## Validation
+
+The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
+
+- Each operation gets the answer the preset table gives it: `[TC-PE-001]`.
+- Under Balanced, a hob edits and runs tests in its folder without asking, and a command writing or reading outside it fails: `[TC-PE-012]`, `[TC-PE-020]`, and the macOS run under [What #131 verified](#what-131-verified).
+- Symlink and `..` escapes are refused under every preset: `[TC-PE-002]`.
+- An Ask call waits for the user's decision in chat, and an approved Push runs no workspace hook. Not proven yet: [#133](https://github.com/otaviobarros/hobbots/issues/133), [#137](https://github.com/otaviobarros/hobbots/issues/137).
+- An unsupported capability is blocked and labeled, and an unsandboxed hob shows Unsandboxed. Not proven yet: [#136](https://github.com/otaviobarros/hobbots/issues/136).

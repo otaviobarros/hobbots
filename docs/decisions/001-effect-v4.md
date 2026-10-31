@@ -17,3 +17,11 @@ Isolate unstable HttpApi/Workflow APIs behind internal modules, pin compatible v
 ## Change control
 
 A deliberate user-directed change should update the relevant specification and supersede this ADR with rationale.
+
+## Validation
+
+The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
+
+- A server boot with SQLite runs every migration through the Effect migrator and serves the API: `[TC-DP-003]`.
+- A reply that a process exit interrupts is recovered as interrupted on the next start, not left running: `[TC-CH-004]`.
+- Invalid input to the API returns a typed error and changes nothing: `[TC-AG-003]`.

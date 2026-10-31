@@ -20,3 +20,11 @@ The [hub model](010-desktop-hub.md) has one server writing one database, which S
 Search matches every word of the query as a prefix. SQLite ignores accents and PostgreSQL's `simple` configuration keeps them, so "Café" finds "Café" on both but "cafe" finds it only on SQLite. A separate search engine was not needed at hub scale.
 
 Backups use the SQLite online backup API plus the artifact folder. Moving data between installations is an export and import, not replication.
+
+## Validation
+
+The scenarios that would show this decision holds. Each names the test case or evidence that checks it, or the issue that will.
+
+- Every migration applies in order on an empty SQLite database and on PostgreSQL: `[TC-DP-003]`, run on both in CI.
+- Search finds a thread by a word from an old message, from a worker thread on SQLite: `[TC-CH-060]`, `[TC-CH-063]`, `[TC-CH-065]`.
+- An online backup restores the hub to the backed-up state. Not proven yet: [#16](https://github.com/otaviobarros/hobbots/issues/16).

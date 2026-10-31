@@ -6,7 +6,7 @@ The code is the first validation slice of [ADR 009](docs/decisions/009-toolchain
 
 ## Commands
 
-- `pnpm check` runs the standards index check, knip, jscpd, Biome, typecheck and tests. Run it before you hand work back.
+- `pnpm check` runs the standards check (rule index, ADR validation sections, evidence records), knip, jscpd, Biome, typecheck and tests. Run it before you hand work back.
 - `pnpm test:pg` runs the persistence and server suites on PostgreSQL. Run it when a change touches SQL, migrations or repositories. It needs Docker.
 - `pnpm add <pkg>` adds a dependency at its latest stable release, pinned exactly (STD-DOCS-006). Effect packages use the workspace catalog (STD-EFFECT-005).
 
@@ -23,7 +23,7 @@ Every change follows the [engineering standards](docs/standards/README.md). Befo
 | Storage and transport       | [data](docs/standards/data.md), [effect](docs/standards/effect.md)                           | [Persistence](docs/architecture/persistence.md), [API and events](docs/architecture/api-events.md), [deployment](docs/architecture/deployment.md)         |
 | UI                          | [react](docs/standards/react.md), [ui](docs/standards/ui.md), [i18n](docs/standards/i18n.md) | [Design specification](docs/design/ui-ux.md), [screen inventory](docs/design/screens-and-flows.md)                                                        |
 | Tests                       | [testing](docs/standards/testing.md)                                                         | [Project workflow guide](docs/agent-engineering.md#checks)                                                                                                |
-| Docs, commits and decisions | [docs](docs/standards/docs.md)                                                               | [ADRs](docs/decisions/README.md)                                                                                                                          |
+| Docs, commits and decisions | [docs](docs/standards/docs.md)                                                               | [ADRs](docs/decisions/README.md), [status](docs/STATUS.md)                                                                                                |
 
 Read the [MVP requirements](docs/product/mvp-requirements.md) and [open questions](docs/product/open-questions.md) before you plan.
 
