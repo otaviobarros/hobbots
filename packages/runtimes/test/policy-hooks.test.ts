@@ -590,7 +590,8 @@ describe("the process sandbox", () => {
     );
   });
 
-  it("reads the user's Git identity from a file their global config includes", async () => {
+  // covers PE-001, PE-005
+  it("[TC-PE-077] reads the user's Git identity from a file their global config includes", async () => {
     const home = mkdtempSync(join(tmpdir(), "hobbots-git-home-"));
     try {
       writeFileSync(join(home, "identity.gitconfig"), "[user]\n\tname = Ada Lovelace\n\temail = ada@example.com\n");
