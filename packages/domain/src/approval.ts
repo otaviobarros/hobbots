@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { PolicyOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
@@ -45,6 +45,14 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   actionDigest: Schema.String,
   /** Identifies the rules and policy inputs the call was decided under. */
   policyVersion: Schema.String,
+  /**
+   * A high-risk action, such as a force push or a push to the default branch: it is approved once
+   * only, and only with the user's confirmation (PE-007).
+   */
+  onceOnly: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(false)),
+    Schema.withConstructorDefault(Effect.succeed(false)),
+  ),
   state: ApprovalState,
   /** Why the user denied it, if they said. */
   denyReason: Schema.NullOr(Schema.String),

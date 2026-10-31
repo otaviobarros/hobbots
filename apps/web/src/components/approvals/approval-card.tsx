@@ -63,7 +63,12 @@ export function ApprovalCard({ approval, hob }: { approval: ApprovalRequest; hob
       </header>
       <ApprovalDetails approval={approval} hob={hob} />
       {pending && (
-        <ApprovalActions hob={hob} pending={decide.isPending} onDecide={(decision) => decide.mutate(decision)} />
+        <ApprovalActions
+          hob={hob}
+          onceOnly={approval.onceOnly}
+          pending={decide.isPending}
+          onDecide={(decision) => decide.mutate(decision)}
+        />
       )}
       {/* One live region for the card's whole life, so a screen reader hears each change to it. */}
       <span
@@ -100,20 +105,30 @@ function ApprovalDetails({ approval, hob }: { approval: ApprovalRequest; hob: Ag
       <dt className="text-label">{copy.why}</dt>
       <dd className="m-0">{approval.reason}</dd>
       <dt className="text-label">{copy.risk}</dt>
-      <dd className="m-0">{copy.riskOf[approval.operation]}</dd>
+      <dd className="m-0 flex flex-col gap-0.5">
+        {approval.onceOnly && <span className="font-bold text-rose">{copy.highRisk}</span>}
+        <span>{copy.riskOf[approval.operation]}</span>
+      </dd>
     </dl>
   );
 }
 
+/**
+ * Allow once and Deny. A high-risk request (`onceOnly`) needs the confirmation box ticked before
+ * Allow once can be pressed, and the hub checks the confirmation too (PE-007).
+ */
 function ApprovalActions({
   hob,
+  onceOnly,
   pending,
   onDecide,
 }: {
   hob: Agent;
+  onceOnly: boolean;
   pending: boolean;
   onDecide: (decision: Decision) => void;
 }) {
+  const [confirmed, setConfirmed] = useState(false);
   const [denying, setDenying] = useState(false);
   const [reason, setReason] = useState("");
   const denyButton = useRef<HTMLButtonElement>(null);
@@ -136,14 +151,45 @@ function ApprovalActions({
       onCancel={closeDeny}
     />
   ) : (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button variant="approve" aria-disabled={pending} onClick={() => send({ decision: "approve" })}>
-        {copy.allowOnce}
-      </Button>
-      <Button ref={denyButton} variant="deny" aria-disabled={pending} onClick={() => !pending && setDenying(true)}>
-        {copy.deny}
-      </Button>
+    <div className="flex flex-col gap-2">
+      {onceOnly && <ConfirmBox name={hob.name} checked={confirmed} onChange={setConfirmed} />}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="approve"
+          disabled={onceOnly && !confirmed}
+          aria-disabled={pending}
+          onClick={() => send({ decision: "approve", confirmed: onceOnly ? confirmed : undefined })}
+        >
+          {copy.allowOnce}
+        </Button>
+        <Button ref={denyButton} variant="deny" aria-disabled={pending} onClick={() => !pending && setDenying(true)}>
+          {copy.deny}
+        </Button>
+      </div>
     </div>
+  );
+}
+
+/** The check box a high-risk action needs before Allow once. */
+function ConfirmBox({
+  name,
+  checked,
+  onChange,
+}: {
+  name: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="size-4 accent-mint"
+      />
+      {copy.confirm({ name })}
+    </label>
   );
 }
 

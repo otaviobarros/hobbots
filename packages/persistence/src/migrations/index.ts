@@ -18,6 +18,7 @@ import hobPolicy from "./0015_hob_policy.ts";
 import messageResetsAt from "./0016_message_resets_at.ts";
 import messageSteps from "./0017_message_steps.ts";
 import approvalRequests from "./0018_approval_requests.ts";
+import approvalOnceOnly from "./0019_approval_once_only.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -43,4 +44,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0016_message_resets_at": messageResetsAt,
   "0017_message_steps": messageSteps,
   "0018_approval_requests": approvalRequests,
+  "0019_approval_once_only": approvalOnceOnly,
 };

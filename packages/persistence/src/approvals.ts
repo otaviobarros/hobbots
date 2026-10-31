@@ -8,15 +8,18 @@ interface ApprovalRow {
   readonly targets?: unknown;
   readonly arguments?: unknown;
   readonly revision?: unknown;
+  readonly onceOnly?: unknown;
 }
 
-// Targets and arguments are JSON text (migration 0018); the revision is a bigint on PostgreSQL.
+// Targets and arguments are JSON text (migration 0018); the revision is a bigint on PostgreSQL;
+// once_only is 0 or 1 (migration 0019).
 const approvalRows = (rows: ReadonlyArray<ApprovalRow>) =>
   rows.map((row) => ({
     ...row,
     targets: JSON.parse(String(row.targets)),
     arguments: JSON.parse(String(row.arguments)),
     revision: Number(row.revision),
+    onceOnly: Number(row.onceOnly) === 1,
   }));
 
 /** The SQL store of approval requests, for SQLite and PostgreSQL (ADR 011). */
@@ -71,6 +74,7 @@ export const ApprovalRepositoryLive = Layer.effect(
             reason: approval.reason,
             action_digest: approval.actionDigest,
             policy_version: approval.policyVersion,
+            once_only: approval.onceOnly ? 1 : 0,
             state: approval.state,
             deny_reason: approval.denyReason,
             created_at: approval.createdAt,

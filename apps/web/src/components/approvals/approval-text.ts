@@ -38,5 +38,6 @@ export const decisionErrorText = (error: unknown): string => {
   const tag = error instanceof ApiError ? error.tag : undefined;
   if (tag === "ApprovalClosed") return copy.closed;
   if (tag === "ApprovalActionChanged") return copy.changed;
+  if (tag === "ApprovalNotConfirmed") return copy.notConfirmed;
   return copy.failed;
 };

@@ -82,6 +82,7 @@ export const decideCall = (
         label,
         reason: asked.reason.message,
         policyVersion: asked.policyVersion,
+        onceOnly: asked.onceOnly,
       });
       report({
         _tag: "ToolAwaitingApproval",

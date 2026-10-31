@@ -11,7 +11,7 @@ const agentId = AgentId.make("aldric");
 const threadId = ThreadId.make("t1");
 const messageId = MessageId.make("m1");
 
-const request = (id: string) =>
+const request = (id: string, onceOnly = false) =>
   new ApprovalRequest({
     id: ApprovalId.make(id),
     agentId,
@@ -26,6 +26,7 @@ const request = (id: string) =>
     reason: "Pushing asks first.",
     actionDigest: "d".repeat(64),
     policyVersion: "r1-0123456789abcdef",
+    onceOnly,
     state: "pending",
     denyReason: null,
     createdAt: now,
@@ -68,7 +69,7 @@ describe("ApprovalRepository", () => {
           createdAt: now,
         }),
       );
-      const inserted = yield* approvals.insert(request("a1"));
+      const inserted = yield* approvals.insert(request("a1", true));
       yield* approvals.insert(request("a2"));
       const approved = new ApprovalRequest({ ...inserted.value, state: "approved", decidedAt: now });
       const first = yield* approvals.resolve(approved, "pending");
@@ -94,8 +95,12 @@ describe("ApprovalRepository", () => {
     expect(found.state).toBe("approved");
     expect(found.arguments).toEqual({ command: "git push origin main", nested: { b: 1, a: [true, null] } });
     expect(found.targets).toEqual(["origin main"]);
+    expect(found.onceOnly).toBe(true);
     expect(found.revision).toBe(Option.getOrThrow(result.first).value.revision);
-    expect(result.thread.map((a) => a.id)).toEqual(["a1", "a2"]);
+    expect(result.thread.map((a) => [a.id, a.onceOnly])).toEqual([
+      ["a1", true],
+      ["a2", false],
+    ]);
     expect(result.pending.map((a) => a.id)).toEqual(["a2"]);
   });
 });

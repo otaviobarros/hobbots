@@ -27,6 +27,8 @@ export const storeApproval = (queryClient: QueryClient, approval: ApprovalReques
 export interface Decision {
   readonly decision: ApprovalDecision;
   readonly reason?: string | undefined;
+  /** The user's confirmation of a high-risk action, which approving it needs. */
+  readonly confirmed?: boolean | undefined;
 }
 
 /**
@@ -37,7 +39,7 @@ export interface Decision {
 export const useDecideApproval = (approval: ApprovalRequest) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ decision, reason }: Decision) =>
+    mutationFn: ({ decision, reason, confirmed }: Decision) =>
       call((c) =>
         c.approvals.decide({
           params: { approvalId: approval.id },
@@ -45,6 +47,7 @@ export const useDecideApproval = (approval: ApprovalRequest) => {
             decision,
             actionDigest: approval.actionDigest,
             ...(reason !== undefined && reason.trim() !== "" && { reason: reason.trim() }),
+            ...(confirmed === true && { confirmed }),
           },
         }),
       ),
