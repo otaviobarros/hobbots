@@ -86,7 +86,20 @@ jobs:
           node-version-file: package.json
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @hobbots/web exec playwright install --with-deps chromium
+      - id: playwright
+        name: Read the Playwright version
+        run: echo "version=$(pnpm --filter @hobbots/web exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      # The tests run headless, so the headless shell is the only browser they need.
+      - id: browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: pnpm --filter @hobbots/web exec playwright install --with-deps --only-shell chromium
+      # The system libraries are not in the cache.
+      - if: steps.browsers.outputs.cache-hit == 'true'
+        run: pnpm --filter @hobbots/web exec playwright install-deps chromium
       - run: pnpm test:e2e
       - if: failure()
         uses: actions/upload-artifact@v7

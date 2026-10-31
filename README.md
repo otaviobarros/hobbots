@@ -48,7 +48,7 @@ The first-launch flow (Welcome, setup, first hob, Home, and a restart) runs in C
 
 ```sh
 pnpm --filter @hobbots/web exec playwright install chromium
-pnpm test:e2e      # builds the web client, then runs apps/web/e2e (HOBBOTS_E2E_PORT, default 4380)
+pnpm test:e2e      # builds the web client, then runs apps/web/e2e in parallel, one port per worker from HOBBOTS_E2E_PORT (default 4380)
 ```
 
 ## Repository

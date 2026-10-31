@@ -3,6 +3,7 @@ import type { Agent, AgentId, Message, MessageId, RetireWork, RuntimeKind, Threa
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
 import { runtimeStaleTime } from "./runtime-health.ts";
+import { syncedAgents, syncedMessages, syncedThreads } from "./sync.ts";
 
 export const queryKeys = {
   agents: ["agents"] as const,
@@ -16,13 +17,17 @@ export const queryKeys = {
 /** The hobs that are not retired. */
 export const agentsQuery = queryOptions({
   queryKey: queryKeys.agents,
-  queryFn: () => call((c) => c.agents.list({ query: {} })),
+  queryFn: syncedAgents(() => call((c) => c.agents.list({ query: {} })), false),
 });
 
 /** Archived hobs: the retired ones, most recently retired first. */
 export const archivedAgentsQuery = queryOptions({
   queryKey: queryKeys.archivedAgents,
-  queryFn: () => call((c) => c.agents.list({ query: { status: "retired" } })).then(sortArchived),
+  queryFn: syncedAgents(
+    () => call((c) => c.agents.list({ query: { status: "retired" } })),
+    true,
+    (hobs) => sortArchived(hobs),
+  ),
 });
 
 /** Most recently retired first; hobs retired before the time was recorded go last. */
@@ -32,13 +37,13 @@ export const sortArchived = (hobs: ReadonlyArray<Agent>): Array<Agent> =>
 export const threadsQuery = (agentId: AgentId) =>
   queryOptions({
     queryKey: queryKeys.threads(agentId),
-    queryFn: () => call((c) => c.agents.threads({ params: { agentId } })),
+    queryFn: syncedThreads(agentId, () => call((c) => c.agents.threads({ params: { agentId } })), sortThreads),
   });
 
 export const messagesQuery = (threadId: ThreadId) =>
   queryOptions({
     queryKey: queryKeys.messages(threadId),
-    queryFn: () => call((c) => c.threads.messages({ params: { threadId } })),
+    queryFn: syncedMessages(threadId, () => call((c) => c.threads.messages({ params: { threadId } })), upsertMessage),
   });
 
 export const runtimesQuery = queryOptions({
