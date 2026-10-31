@@ -1,3 +1,4 @@
+import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { type PolicyDecision, PolicyOperation, PRESET_DECISIONS, SafetyPreset } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
@@ -317,6 +318,39 @@ describe("policy engine", () => {
     }
     expect((await decide(context, files("read-files", home.repo, "custom-hooks/pre-commit"))).decision).toBe("allow");
     expect((await decide(context, files("edit-files", home.repo, "docs/readme.md"))).decision).toBe("allow");
+  });
+
+  // covers PE-002
+  it("[TC-PE-007] keeps Git hooks read-only when they link into another approved folder", async () => {
+    const linked = path.join(home.root, "linked-repo");
+    const other = path.join(home.root, "other");
+    await fs.mkdir(path.join(linked, ".git"), { recursive: true });
+    await fs.mkdir(path.join(other, "hooks"), { recursive: true });
+    await fs.mkdir(path.join(other, "docs"));
+    await fs.writeFile(path.join(linked, ".git", "config"), "");
+    await fs.symlink(path.join(other, "hooks"), path.join(linked, ".git", "hooks"));
+    for (const preset of ["balanced", "trusting"] as const) {
+      const context = contextFor(home, preset, { sharedFolders: [linked, other] });
+      for (const [cwd, target] of [
+        [linked, ".git/hooks/pre-commit"],
+        [other, "hooks/pre-commit"],
+        [other, "hooks"],
+        [other, "."],
+      ] as const) {
+        for (const operation of ["edit-files", "delete-files"] as const) {
+          const verdict = await decide(context, files(operation, cwd, target));
+          expect({ preset, target, operation, decision: verdict.decision, code: verdict.reason.code }).toEqual({
+            preset,
+            target,
+            operation,
+            decision: "deny",
+            code: "protected-path",
+          });
+        }
+      }
+      expect((await decide(context, files("edit-files", other, "docs/readme.md"))).decision).not.toBe("deny");
+      expect((await decide(context, files("read-files", other, "hooks/pre-commit"))).decision).toBe("allow");
+    }
   });
 
   // covers PE-002

@@ -169,6 +169,14 @@ export class PathResolver extends Context.Service<
      * itself, so it is treated as protected.
      */
     readonly protectedGitPaths: (target: CanonicalPath) => Effect.Effect<ReadonlyArray<string>, PathResolutionError>;
+    /**
+     * The canonical Git hooks folders and config files of every repository at, above or below the
+     * given folders, wherever their links point, so a hooks folder linked into another folder is
+     * protected when reached directly. A folder too large to search returns the folder itself.
+     */
+    readonly protectedGitPathsIn: (
+      folders: ReadonlyArray<CanonicalPath>,
+    ) => Effect.Effect<ReadonlyArray<string>, PathResolutionError>;
   }
 >()("@hobbots/permissions/PathResolver") {
   /** Resolves against the hub's own file system. */
@@ -183,11 +191,21 @@ export class PathResolver extends Context.Service<
           throw error;
         },
       );
+    const repositoryResources = (repository: string): Promise<ReadonlyArray<string>> =>
+      Promise.all(GIT_PROTECTED.map((r) => canonical(path.join(repository, r))));
     const resourcesOf = async (repository: string): Promise<ReadonlyArray<string>> =>
       (await exists(path.join(repository, ".git")))
-        ? Promise.all(GIT_PROTECTED.map((r) => canonical(path.join(repository, r))))
+        ? repositoryResources(repository)
         : // Not a repository yet: creating these would make one, so their plain spelling stays protected.
           GIT_PROTECTED.map((r) => path.join(repository, r));
+    const ancestorsOf = (p: string): Array<string> => {
+      const found: Array<string> = [];
+      for (let dir = p; path.dirname(dir) !== dir; ) {
+        dir = path.dirname(dir);
+        found.push(dir);
+      }
+      return found;
+    };
     /** Repositories below `dir`, without following links; null when there are too many entries. */
     const repositoriesBelow = async (dir: string, caseSensitive: boolean): Promise<Array<string> | null> => {
       const found: Array<string> = [];
@@ -223,11 +241,7 @@ export class PathResolver extends Context.Service<
       protectedGitPaths: (target) =>
         Effect.tryPromise({
           try: async () => {
-            const repositories: Array<string> = [];
-            for (let dir = target.path; path.dirname(dir) !== dir; ) {
-              dir = path.dirname(dir);
-              repositories.push(dir);
-            }
+            const repositories = ancestorsOf(target.path);
             const stats = await fs.lstat(target.path).catch(() => null);
             if (stats?.isDirectory()) {
               const below = await repositoriesBelow(target.path, target.caseSensitive);
@@ -238,6 +252,24 @@ export class PathResolver extends Context.Service<
             return (await Promise.all(repositories.map(resourcesOf))).flat();
           },
           catch: (error) => new PathResolutionError({ path: target.path, message: String(error) }),
+        }),
+      protectedGitPathsIn: (folders) =>
+        Effect.tryPromise({
+          try: async () => {
+            const repositories = new Set<string>();
+            const tooLarge: Array<string> = [];
+            for (const folder of folders) {
+              const below = await repositoriesBelow(folder.path, folder.caseSensitive);
+              if (below === null) tooLarge.push(folder.path);
+              for (const repository of [...ancestorsOf(folder.path), ...(below ?? [])]) {
+                if (await exists(path.join(repository, ".git"))) repositories.add(repository);
+              }
+            }
+            const resources = await Promise.all([...repositories].map(repositoryResources));
+            return [...tooLarge, ...resources.flat()];
+          },
+          catch: (error) =>
+            new PathResolutionError({ path: folders.map((f) => f.path).join(", "), message: String(error) }),
         }),
     };
   });

@@ -385,12 +385,13 @@ export class PolicyEngine extends Context.Service<
           Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
         );
       const folder = (input: string) => resolve(input, "/");
-      const resolveChange = (input: string, base: string) =>
+      /** `inScope` holds the Git resources found across the hob's folders (`protectedGitPathsIn`). */
+      const resolveChange = (input: string, base: string, inScope: ReadonlyArray<string>) =>
         resolver.canonicalize(input, base).pipe(
           Effect.flatMap((canonical) =>
             resolver
               .protectedGitPaths(canonical)
-              .pipe(Effect.map((protectedPaths): ResolvedTarget => ({ input, canonical, protectedPaths }))),
+              .pipe(Effect.map((own): ResolvedTarget => ({ input, canonical, protectedPaths: [...own, ...inScope] }))),
           ),
           Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
         );
@@ -406,17 +407,32 @@ export class PolicyEngine extends Context.Service<
           (s) => s.canonical !== null && !hidden.some((h) => same(s.canonical as CanonicalPath, h.canonical)),
         );
         // A folder that cannot be resolved is left out, so nothing is reachable through it.
-        const folders = [...visible, ...own].flatMap((f) => (f.canonical === null ? [] : [f.canonical.path]));
+        const canonicalFolders = [...visible, ...own].flatMap((f) => (f.canonical === null ? [] : [f.canonical]));
+        const folders = canonicalFolders.map((f) => f.path);
         // An unresolvable data folder keeps its stored form, which is still refused.
-        return { folders, dataFolder: data.canonical?.path ?? context.dataFolder } satisfies ResolvedScope;
+        const scope = { folders, dataFolder: data.canonical?.path ?? context.dataFolder } satisfies ResolvedScope;
+        return { scope, canonicalFolders };
       });
 
-      const resolveRequest = (request: PolicyRequest): Effect.Effect<ResolvedRequest> => {
+      const resolveRequest = (
+        request: PolicyRequest,
+        folders: ReadonlyArray<CanonicalPath>,
+      ): Effect.Effect<ResolvedRequest> => {
         switch (request._tag) {
-          case "Files":
-            return Effect.forEach(request.paths, (p) =>
-              request.operation === "read-files" ? resolve(p, request.cwd) : resolveChange(p, request.cwd),
-            ).pipe(Effect.map((targets) => ({ _tag: "Files", operation: request.operation, targets }) as const));
+          case "Files": {
+            const done = (targets: ReadonlyArray<ResolvedTarget>) =>
+              ({ _tag: "Files", operation: request.operation, targets }) as const;
+            if (request.operation === "read-files") {
+              return Effect.forEach(request.paths, (p) => resolve(p, request.cwd)).pipe(Effect.map(done));
+            }
+            return resolver.protectedGitPathsIn(folders).pipe(
+              Effect.flatMap((inScope) =>
+                Effect.forEach(request.paths, (p) => resolveChange(p, request.cwd, inScope)).pipe(Effect.map(done)),
+              ),
+              // Without the scope's Git resources nothing can be changed safely.
+              Effect.orElseSucceed(() => done(request.paths.map((input) => ({ input, canonical: null })))),
+            );
+          }
           case "Command":
             return resolve(request.cwd, "/").pipe(
               Effect.map((cwd) => ({ _tag: "Command", operation: request.operation, cwd }) as const),
@@ -428,8 +444,12 @@ export class PolicyEngine extends Context.Service<
 
       return {
         decide: (context, request) =>
-          Effect.all([scopeOf(context), resolveRequest(request)]).pipe(
-            Effect.map(([scope, resolved]) => evaluate(context, scope, resolved)),
+          scopeOf(context).pipe(
+            Effect.flatMap(({ scope, canonicalFolders }) =>
+              resolveRequest(request, canonicalFolders).pipe(
+                Effect.map((resolved) => evaluate(context, scope, resolved)),
+              ),
+            ),
           ),
       };
     }),
