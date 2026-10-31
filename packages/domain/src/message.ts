@@ -1,6 +1,7 @@
 import { Effect, Schema } from "effect";
 import { ConfigVersion } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
+import { PolicyOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 
 export const MessageRole = Schema.Literals(["user", "assistant"]);
@@ -33,6 +34,45 @@ export const isInProgress = (status: MessageStatus): boolean => status === "stre
 /** A reply that ended early and that Continue can resume in place. */
 export const isResumable = (status: MessageStatus): boolean => status === "interrupted" || status === "limited";
 
+/**
+ * - `running`: under way; for a tool call, the policy allowed it and it started.
+ * - `awaiting`: a tool call paused on Ask until the user decides (`approvalId`).
+ * - `done`: ended; a tool call ended without an error.
+ * - `failed`: a tool call ended with an error, a sandbox refusal included.
+ * - `denied`: a tool call never ran; `reason` says why and `decidedBy` who refused it.
+ */
+export const ReplyStepState = Schema.Literals(["running", "awaiting", "done", "failed", "denied"]);
+export type ReplyStepState = typeof ReplyStepState.Type;
+
+/** A tool call the step stands for, as the policy decided it (ADR 014). */
+export const ToolCall = Schema.Struct({
+  /** The runtime's own name for the tool, such as `Bash` or `Edit`. */
+  tool: Schema.String,
+  operation: PolicyOperation,
+  /** The canonical paths, the command's folder, or the remote the call was decided on. */
+  targets: Schema.Array(Schema.String),
+});
+export type ToolCall = typeof ToolCall.Type;
+
+/** What a reply did besides writing, as the runtime reported it: thinking, or a tool call. */
+export const ReplyStep = Schema.Struct({
+  /** Unique within its reply, which keeps the steps of its earlier turns when Continue resumes it. */
+  id: Schema.String,
+  kind: Schema.Literals(["thinking", "tool"]),
+  /** Short words for the step, such as "Thinking" or "Running pnpm test". */
+  label: Schema.String,
+  state: ReplyStepState,
+  /** For a tool step: the call. */
+  call: Schema.optionalKey(ToolCall),
+  /** For an `awaiting` step: the approval it waits on. */
+  approvalId: Schema.optionalKey(Schema.String),
+  /** For a `denied` step: why the call was refused. */
+  reason: Schema.optionalKey(Schema.String),
+  /** For a `denied` step: the policy hook refused it, or the OS sandbox around the runtime. */
+  decidedBy: Schema.optionalKey(Schema.Literals(["policy", "sandbox"])),
+});
+export type ReplyStep = typeof ReplyStep.Type;
+
 export class Message extends Schema.Class<Message>("Message")({
   id: MessageId,
   threadId: ThreadId,
@@ -46,6 +86,11 @@ export class Message extends Schema.Class<Message>("Message")({
   resetsAt: Schema.NullOr(Schema.String).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /** For an assistant message, its steps in order. Saved with the reply, so they replay and outlast it. */
+  steps: Schema.Array(ReplyStep).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
   ),
   createdAt: Schema.String,
   revision: Revision,
@@ -101,6 +146,10 @@ export const MessageTransitions = {
     message.role === "assistant" && isResumable(message.status)
       ? new Message({ ...message, status: "streaming", error: null, resetsAt: null })
       : new InvalidMessageTransition({ messageId: message.id, from: message.status, action: "resume" }),
+
+  /** Replaces the steps of a reply in progress, as the runtime reports them. */
+  setSteps: (message: Message, steps: ReadonlyArray<ReplyStep>): Message | InvalidMessageTransition =>
+    requireInProgress(message, "setSteps") ?? new Message({ ...message, steps }),
 
   /** Records the user's stop request. Asking again while stopping changes nothing. */
   requestStop: (message: Message): Message | InvalidMessageTransition =>

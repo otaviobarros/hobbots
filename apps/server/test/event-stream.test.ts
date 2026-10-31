@@ -159,6 +159,61 @@ describe("event stream", () => {
     }
   });
 
+  // covers CH-004, PE-002
+  it("[TC-CH-110] replays a reply's tool steps to a client that reconnects after they ran", async () => {
+    const result = await run((turn) =>
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const first = yield* connect(undefined);
+        yield* waitFor(() => first.frames.length > 0);
+        const thread = yield* chat.createThread(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "Fix the cart and run the tests");
+        yield* waitFor(() => entries(first.frames).some((e) => e.payload._tag === "MessageUpserted"));
+        const cursor = lastCursor(first.frames) ?? "";
+
+        // The client goes away; the hob edits a file and runs the tests meanwhile.
+        yield* Fiber.interrupt(first.fiber);
+        const call = { operation: "edit-files", targets: ["/work/src/cart.ts"] } as const;
+        yield* Queue.offerAll(turn, [
+          { _tag: "SessionStarted", sessionId: "s1", billing: "fake" },
+          { _tag: "ToolStarted", id: "t1", tool: "Edit", ...call, label: "Editing cart.ts" },
+          { _tag: "ToolFinished", id: "t1", failed: false },
+          {
+            _tag: "ToolStarted",
+            id: "t2",
+            tool: "Bash",
+            operation: "run-commands",
+            targets: ["/work"],
+            label: "Running pnpm test",
+          },
+          { _tag: "ToolFinished", id: "t2", failed: true },
+          { _tag: "Completed", sessionId: "s1", text: "Fixed; one test still fails." },
+        ]);
+        const repo = yield* HobbotsRepository;
+        yield* repo.listMessages(thread.id).pipe(
+          Effect.flatMap((messages) => (messages.at(-1)?.status === "complete" ? Effect.void : Effect.fail("busy"))),
+          Effect.retry(Schedule.spaced("5 millis")),
+        );
+
+        const second = yield* connect(cursor);
+        yield* waitFor(() =>
+          entries(second.frames).some(
+            (e) => e.payload._tag === "MessageUpserted" && e.payload.message.status === "complete",
+          ),
+        );
+        return { second: second.frames, replyId: assistantMessage?.id };
+      }),
+    );
+
+    const replayed = entries(result.second).flatMap((e) =>
+      e.payload._tag === "MessageUpserted" && e.payload.message.id === result.replyId ? [e.payload.message] : [],
+    );
+    expect(replayed.at(-1)?.steps.map((step) => [step.label, step.state])).toEqual([
+      ["Editing cart.ts", "done"],
+      ["Running pnpm test", "failed"],
+    ]);
+  });
+
   // covers CH-004
   it("[TC-CH-072] starts fresh at the head for a missing, malformed, foreign or future cursor", async () => {
     const result = await run(() =>

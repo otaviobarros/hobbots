@@ -37,6 +37,19 @@ export type RuntimeEvent =
       /** Short words for the step, such as "Running pnpm test". */
       readonly label: string;
     }
+  /**
+   * The policy answered Ask: the tool call waits for the user's decision on `approvalId`. It then
+   * starts with the same `id`, or is denied.
+   */
+  | {
+      readonly _tag: "ToolAwaitingApproval";
+      readonly id: string;
+      readonly approvalId: string;
+      readonly tool: string;
+      readonly operation: PolicyOperation;
+      readonly targets: ReadonlyArray<string>;
+      readonly label: string;
+    }
   /** A started tool call ended; `failed` when the tool reported an error, a sandbox refusal included. */
   | { readonly _tag: "ToolFinished"; readonly id: string; readonly failed: boolean }
   /** A tool call never ran: the policy refused it, or it needed an approval Hobbots cannot ask for yet. */
