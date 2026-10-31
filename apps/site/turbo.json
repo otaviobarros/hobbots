@@ -1,0 +1,9 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    // scripts/icons.ts draws the favicons from the desktop app icon's grid, so its tests depend on that file.
+    "test": { "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/desktop/scripts/app-icon.ts"] },
+    "typecheck": { "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/desktop/scripts/app-icon.ts"] }
+  }
+}
