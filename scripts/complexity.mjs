@@ -106,7 +106,8 @@ export const measure = (filename, source) => {
   const visit = (node, parentKey, parent) => {
     const scoped = startsScope(node, parentKey, parent);
     if (scoped) stack.push({ name: nameOf(node, parent), line: lineOf(starts, node.start), complexity: 1 });
-    else if (stack.length > 0 && isBranch(node)) stack[stack.length - 1].complexity++;
+    // A field initializer is both the scope and its first node, so its own branch counts too.
+    if (stack.length > 0 && isBranch(node)) stack[stack.length - 1].complexity++;
     for (const key of visitorKeys[node.type] ?? []) {
       const child = node[key];
       if (Array.isArray(child)) {

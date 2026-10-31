@@ -97,3 +97,11 @@ test("a marker separated by code does not apply", () => {
     { line: 3, message: "big has a complexity of 4 (max 3)" },
   ]);
 });
+
+test("a branching class field initializer counts its outermost branch", () => {
+  const ternaries = (count) => Array.from({ length: count }, (_, i) => `n === ${i} ? ${i} :`).join(" ");
+  const source = (count) => `class Box { n = 0; pick = ${ternaries(count)} -1; logic = a && b; chain = a?.b; }`;
+  assert.deepEqual(complexities(source(14)), { n: 1, pick: 15, logic: 2, chain: 2 });
+  assert.deepEqual(check("probe.ts", source(14), 15), []);
+  assert.deepEqual(check("probe.ts", source(15), 15), [{ line: 1, message: "pick has a complexity of 16 (max 15)" }]);
+});
