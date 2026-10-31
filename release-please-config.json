@@ -6,6 +6,7 @@
   "bump-patch-for-minor-pre-major": true,
   "draft": true,
   "force-tag-creation": true,
+  "separate-pull-requests": true,
   "changelog-sections": [
     {
       "type": "feat",
@@ -69,7 +70,15 @@
           "path": "apps/desktop/package.json",
           "jsonpath": "$.version"
         }
-      ]
+      ],
+      "exclude-paths": ["apps/site"]
+    },
+    "apps/site": {
+      "package-name": "site",
+      "component": "site",
+      "include-component-in-tag": true,
+      "draft": false,
+      "changelog-path": "CHANGELOG.md"
     }
   }
 }

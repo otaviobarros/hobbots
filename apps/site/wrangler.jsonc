@@ -1,6 +1,6 @@
 // Cloudflare Worker for hobbots.app. Everything here is public: binding names, IDs and limits.
 // Secrets such as TURNSTILE_SECRET_KEY are set with `wrangler secret put`, never in this file.
-// D1 database IDs are added once the databases exist; until then the bindings work only locally.
+// Remote commands look up each D1 database by database_name, so the bindings need no database_id.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "hobbots-site",
@@ -15,11 +15,17 @@
   "env": {
     "staging": {
       "name": "hobbots-site-staging",
+      // Served on workers.dev. Pull request previews are versions of this Worker with their own URLs.
+      "workers_dev": true,
+      "preview_urls": true,
       "d1_databases": [{ "binding": "WAITLIST_DB", "database_name": "hobbots-waitlist-staging" }],
       "ratelimits": [{ "name": "SIGNUP_LIMIT", "namespace_id": "1002", "simple": { "limit": 5, "period": 60 } }]
     },
     "production": {
       "name": "hobbots-site-production",
+      // Served only on hobbots.app, a custom domain attached in the Cloudflare dashboard.
+      "workers_dev": false,
+      "preview_urls": false,
       "d1_databases": [{ "binding": "WAITLIST_DB", "database_name": "hobbots-waitlist-production" }],
       "ratelimits": [{ "name": "SIGNUP_LIMIT", "namespace_id": "1003", "simple": { "limit": 5, "period": 60 } }]
     }

@@ -57,6 +57,8 @@ The bucket's custom domain, `media.hobbots.app`, is set once on Cloudflare under
 
 `wrangler.jsonc` has a top level for local development and two environments, `staging` and `production`. Bindings are not inherited, so each environment declares its own. Build for one with `CLOUDFLARE_ENV=staging pnpm --filter @hobbots/site build`. The environment is fixed at build time, so `wrangler deploy` afterwards takes no `--env`.
 
+The [Site deploy workflow](../../.github/workflows/site-deploy.yml) runs the D1 migrations and deploys: a push to `main` deploys `staging`, and a `site-v*` tag from release-please deploys `production` after a maintainer approves. A pull request from this repository uploads a preview version of the staging Worker and comments its URL; previews share the staging database and run no migrations. A `feat` or `fix` commit that touches `apps/site` opens the site release pull request, which tags `site-v*`. Commits that change only `apps/site` are excluded from desktop releases.
+
 ## Secrets
 
 The settings and values kept outside the repository are listed in the [runbook](RUNBOOK.md).

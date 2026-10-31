@@ -1,0 +1,120 @@
+name: Site deploy
+
+# Deploys apps/site to Cloudflare Workers. Pull requests from this repository upload a preview
+# version of the staging Worker, pushes to main deploy staging, and site-v* tags from release-please
+# deploy production. Cloudflare credentials live in the GitHub Environments site-staging and
+# site-production (see apps/site/RUNBOOK.md); production waits for a maintainer's approval.
+on:
+  pull_request:
+    paths:
+      - apps/site/**
+      - packages/art/**
+      - pnpm-lock.yaml
+      - .github/workflows/site-deploy.yml
+  push:
+    branches: [main]
+    # Path filters are not evaluated for tag pushes, so every site-v* tag deploys.
+    tags: ["site-v*"]
+    paths:
+      - apps/site/**
+      - packages/art/**
+      - pnpm-lock.yaml
+      - .github/workflows/site-deploy.yml
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  preview:
+    name: Preview version
+    # Forks and Dependabot get no environment secrets, so their pull requests start no job here.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: site-staging
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: site-preview-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The environment is fixed at build time; later wrangler commands read the generated config.
+      - run: pnpm turbo run build --filter=@hobbots/site
+        env:
+          CLOUDFLARE_ENV: staging
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+      # A version is not deployed: staging traffic stays on main. Previews share the staging
+      # database and run no migrations.
+      - id: upload
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: pnpm
+          workingDirectory: apps/site
+          command: versions upload --preview-alias pr-${{ github.event.pull_request.number }}
+      - name: Comment the preview URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          URL: ${{ steps.upload.outputs.deployment-url }}
+        run: |
+          marker="<!-- site-preview -->"
+          body="$marker"$'\n'"Site preview for ${SHA:0:7}: $URL"
+          id=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
+            --jq "map(select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\")))) | .[0].id // empty" | head -n1)
+          if [[ -n "$id" ]]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh api "repos/$GH_REPO/issues/$PR/comments" -f body="$body" >/dev/null
+          fi
+
+  deploy:
+    name: Deploy
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # main deploys staging; a site-v* tag deploys production.
+    environment: ${{ github.ref_type == 'tag' && 'site-production' || 'site-staging' }}
+    # One deploy at a time per environment, never cancelled halfway through a migration.
+    concurrency:
+      group: site-deploy-${{ github.ref_type == 'tag' && 'production' || 'staging' }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build --filter=@hobbots/site
+        env:
+          CLOUDFLARE_ENV: ${{ github.ref_type == 'tag' && 'production' || 'staging' }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+      # Migrations run before the code that needs them goes live.
+      - uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: pnpm
+          workingDirectory: apps/site
+          command: |
+            d1 migrations apply WAITLIST_DB --remote
+            deploy
