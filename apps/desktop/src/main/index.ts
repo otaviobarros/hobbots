@@ -24,7 +24,7 @@ if (!primary) app.quit();
 app.setAboutPanelOptions({
   applicationName: "Hobbots",
   applicationVersion: app.getVersion(),
-  credits: "Free and open-source software under the Apache License 2.0. See hobbots.ai.",
+  credits: "Free and open-source software under the Apache License 2.0. See hobbots.app.",
 });
 
 const port = Number(process.env.HOBBOTS_PORT ?? 4317);
