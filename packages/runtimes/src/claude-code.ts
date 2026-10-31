@@ -1,5 +1,15 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { accessSync, constants, cpSync, existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
@@ -137,36 +147,43 @@ const sandboxLogin = (binary: string): Effect.Effect<Record<string, string>, Run
   });
 
 /**
- * Makes a session Claude Code started in another configuration folder resumable from `target`, by
- * copying its transcript in. Threads from before a hob had tools, or from turns without them, keep
- * their history this way. A session the target already has, or that cannot be found, is left alone.
+ * Makes `target` hold the latest copy of a session, by copying its transcript in from whichever
+ * configuration folder last wrote it. Claude Code keeps a session's id on resume and appends where
+ * the turn ran, so a thread whose turns move between folders keeps its whole history this way. A
+ * session no folder has is left for Claude Code to report.
  */
 export const adoptSession = (target: string, sources: ReadonlyArray<string>, sessionId: string) => {
   const file = `${sessionId}.jsonl`;
-  const projectsWith = (folder: string) => {
+  const copiesIn = (folder: string) => {
     try {
-      return readdirSync(join(folder, "projects")).filter((project) =>
-        existsSync(join(folder, "projects", project, file)),
-      );
+      return readdirSync(join(folder, "projects")).flatMap((project) => {
+        const transcript = join(folder, "projects", project, file);
+        return existsSync(transcript) ? [{ folder, project, written: statSync(transcript).mtimeMs }] : [];
+      });
     } catch {
       return [];
     }
   };
-  if (projectsWith(target).length > 0) return;
-  for (const source of sources) {
-    const [project] = projectsWith(source);
-    if (project === undefined) continue;
-    try {
-      const from = join(source, "projects", project);
-      const to = join(target, "projects", project);
-      mkdirSync(to, { recursive: true, mode: 0o700 });
-      cpSync(join(from, file), join(to, file));
-      // Some sessions keep more beside the transcript, such as subagent runs.
-      if (existsSync(join(from, sessionId))) cpSync(join(from, sessionId), join(to, sessionId), { recursive: true });
-    } catch {
-      // Claude Code reports a session it cannot resume.
+  const held = copiesIn(target);
+  const latest = [...held, ...sources.flatMap(copiesIn)].reduce<(typeof held)[number] | undefined>(
+    (best, copy) => (best === undefined || copy.written > best.written ? copy : best),
+    undefined,
+  );
+  if (latest === undefined || latest.folder === target) return;
+  try {
+    // An older copy left in another project folder would compete with the new one.
+    for (const old of held) {
+      rmSync(join(target, "projects", old.project, file), { force: true });
+      rmSync(join(target, "projects", old.project, sessionId), { recursive: true, force: true });
     }
-    return;
+    const from = join(latest.folder, "projects", latest.project);
+    const to = join(target, "projects", latest.project);
+    mkdirSync(to, { recursive: true, mode: 0o700 });
+    cpSync(join(from, file), join(to, file));
+    // Some sessions keep more beside the transcript, such as subagent runs.
+    if (existsSync(join(from, sessionId))) cpSync(join(from, sessionId), join(to, sessionId), { recursive: true });
+  } catch {
+    // Claude Code reports a session it cannot resume.
   }
 };
 

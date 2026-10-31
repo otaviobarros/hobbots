@@ -86,6 +86,12 @@ export const USER_DATA_ROOTS: ReadonlyArray<string> = [
   "/private/var/folders",
 ];
 
+/** The user's own Claude Code state, which its later runs load outside any policy. */
+const userClaudeCode = (home: string) => {
+  const folder = process.env.CLAUDE_CONFIG_DIR || join(home, ".claude");
+  return [folder, join(home, ".claude.json")];
+};
+
 /**
  * The turn's filesystem rules. The home folder and the other places people keep files are closed
  * except for the folders, the hob's runtime state and the tools on PATH, so other projects, keys,
@@ -99,17 +105,30 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
     .split(delimiter)
     .filter((dir) => isAbsolute(dir) && dir.startsWith(`${home}/`));
   return {
-    denyRead: [...new Set([...(scope.roots ?? USER_DATA_ROOTS), home, scope.dataFolder, dirname(scope.runtimeFolder)])],
+    denyRead: [
+      ...new Set([
+        ...(scope.roots ?? USER_DATA_ROOTS),
+        home,
+        scope.dataFolder,
+        dirname(scope.runtimeFolder),
+        ...userClaudeCode(home),
+      ]),
+    ],
     allowRead: [...new Set([...scope.folders, scope.runtimeFolder, scope.tempFolder, ...binaryDirs, ...homeTools])],
     allowWrite: [...scope.folders, scope.runtimeFolder, scope.tempFolder],
     denyWrite: [
       scope.dataFolder,
-      // Git's hooks and config, in each folder and in any repository below it: the user's own Git
-      // would run what a hob writes there outside the sandbox. sandbox-runtime protects these only
-      // under the hub's own working folder on macOS.
+      // Loaded later by the user's own Claude Code, outside any policy.
+      ...userClaudeCode(home),
+      // Git's hooks and config, in each folder and in any repository below it, submodules' included:
+      // the user's own Git would run what a hob writes there outside the sandbox. sandbox-runtime
+      // protects these only under the hub's own working folder on macOS. A repository a hob lays out
+      // itself, such as one a `.git` file points to, is not covered (ADR 014).
       ...scope.folders.flatMap((folder) => [
         join(folder, ".git", "hooks"),
         join(folder, ".git", "config"),
+        `${folder}/**/.git/**/hooks/**`,
+        `${folder}/**/.git/**/config`,
         `${folder}/**/.git/hooks/**`,
         `${folder}/**/.git/config`,
       ]),
@@ -140,13 +159,20 @@ export const decideForLiveTurns = async (
 // started with or an SSH agent socket, stays out, so commands cannot use the hub's credentials.
 const PASSED_VARIABLES = new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "COLORTERM", "TZ"]);
 const PASSED_PREFIXES = ["LC_", "CLAUDE_CODE_", "CLAUDE_AGENT_SDK_"];
+// Claude Code's own settings pass, but never one that looks like a credential, such as a refresh
+// token; the turn's sign-in is added on its own.
+const SECRET_NAME = /TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL|AUTH/;
+const SIGN_IN = "CLAUDE_CODE_OAUTH_TOKEN";
 
 /** The part of an environment that enters the sandbox. */
 export const sandboxEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
   Object.fromEntries(
     Object.entries(env).filter(
       ([key, value]) =>
-        value !== undefined && (PASSED_VARIABLES.has(key) || PASSED_PREFIXES.some((prefix) => key.startsWith(prefix))),
+        value !== undefined &&
+        (PASSED_VARIABLES.has(key) ||
+          key === SIGN_IN ||
+          (PASSED_PREFIXES.some((prefix) => key.startsWith(prefix)) && !SECRET_NAME.test(key))),
     ),
   );
 
@@ -288,6 +314,8 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                     TMPDIR: tempFolder,
                     // Claude Code keeps its own temporary files under /tmp otherwise, outside the sandbox's reach.
                     CLAUDE_CODE_TMPDIR: tempFolder,
+                    // Claude Code keeps its sign-in to itself: commands, hooks and MCP servers start without it.
+                    CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
                     [COMMAND_VARIABLE]: [command, ...args].map(shellQuote).join(" "),
                   },
                 }),

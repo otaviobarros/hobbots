@@ -1,4 +1,5 @@
-import { join } from "node:path";
+import { realpathSync } from "node:fs";
+import { basename, dirname, join, sep } from "node:path";
 import type { Agent } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import type { ToolAccess } from "@hobbots/runtimes";
@@ -11,6 +12,10 @@ import { effectiveFolders } from "./permissions.ts";
  * it, since the data folder stays closed to every hob.
  */
 export const runtimeFolders = (dataDir: string) => `${dataDir}-runtimes`;
+
+/** Whether `folder` is `path` or holds it. */
+const holds = (folder: string, path: string) =>
+  path === folder || path.startsWith(folder.endsWith(sep) ? folder : `${folder}${sep}`);
 
 /**
  * What a hob may do with tools on its next turn (ADR 014): the installation's preset and shared
@@ -30,6 +35,15 @@ export class HobTools extends Context.Service<
         access: (agent) =>
           Effect.gen(function* () {
             const { safetyPreset, approvedFolders } = yield* setup.get;
+            const folders = yield* effectiveFolders(approvedFolders, agent.policy);
+            // A folder that holds every hob's runtime state would open one hob's sessions to another,
+            // since the sandbox cannot close that state inside a folder it opens for writing.
+            const runtimes = join(realpathSync(dirname(dataDir)), basename(runtimeFolders(dataDir)));
+            const holder = folders.find((folder) => holds(folder, runtimes));
+            if (holder !== undefined) {
+              yield* Effect.logWarning(`${holder} holds Hobbots' own state; the turn is chat-only`);
+              return null;
+            }
             return {
               policy: {
                 preset: safetyPreset,
@@ -39,7 +53,7 @@ export class HobTools extends Context.Service<
                 // Threads, Quests and delegations add no restrictions yet.
                 restrictions: [],
               },
-              folders: yield* effectiveFolders(approvedFolders, agent.policy),
+              folders,
               runtimeFolder: join(runtimeFolders(dataDir), agent.id),
             };
           }).pipe(

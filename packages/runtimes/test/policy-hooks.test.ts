@@ -1,5 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
@@ -178,7 +187,7 @@ describe("scripted tool calls in the fake runtime", () => {
 });
 
 describe("sessions across configuration folders", () => {
-  it("copies a session into the folder a turn resumes it from, once", () => {
+  it("copies a session into the folder a turn resumes it from, when that folder's copy is older", () => {
     const user = join(root, "user-claude");
     const hob = join(runtimes, "hob-adopt");
     mkdirSync(join(user, "projects", "-work", "s1"), { recursive: true });
@@ -193,6 +202,26 @@ describe("sessions across configuration folders", () => {
     expect(readFileSync(join(hob, "projects", "-work", "s1.jsonl"), "utf8")).toBe("first\nsecond\n");
     adoptSession(hob, [user], "missing");
     expect(existsSync(join(hob, "projects", "-work", "missing.jsonl"))).toBe(false);
+  });
+
+  it("keeps a thread's whole history when its turns move between folders", () => {
+    const user = join(root, "user-claude-2");
+    const hob = join(runtimes, "hob-move");
+    const transcript = (folder: string, project: string) => join(folder, "projects", project, "s2.jsonl");
+    mkdirSync(join(user, "projects", "-work"), { recursive: true });
+    mkdirSync(join(hob, "projects", "-other"), { recursive: true });
+    // The hob holds a stale copy from an earlier turn; a chat-only turn wrote on in the user's folder.
+    writeFileSync(transcript(hob, "-other"), "one\n");
+    utimesSync(transcript(hob, "-other"), new Date(1_000), new Date(1_000));
+    writeFileSync(transcript(user, "-work"), "one\ntwo\n");
+    adoptSession(hob, [user], "s2");
+    expect(readFileSync(transcript(hob, "-work"), "utf8")).toBe("one\ntwo\n");
+    expect(existsSync(transcript(hob, "-other"))).toBe(false);
+    // And back: the hob's turn wrote on, so a later chat-only turn takes its copy.
+    writeFileSync(transcript(hob, "-work"), "one\ntwo\nthree\n");
+    utimesSync(transcript(user, "-work"), new Date(2_000), new Date(2_000));
+    adoptSession(user, [hob], "s2");
+    expect(readFileSync(transcript(user, "-work"), "utf8")).toBe("one\ntwo\nthree\n");
   });
 });
 
@@ -228,6 +257,8 @@ describe("the process sandbox", () => {
       ]),
     );
     expect(rules.allowRead).not.toContain("/Users/me/.claude");
+    // Closed explicitly too, for a folder that holds the home folder.
+    expect(rules.denyWrite).toEqual(expect.arrayContaining(["/Users/me/.claude.json"]));
     expect(rules.allowWrite).toEqual([
       "/Volumes/Work/app",
       "/Users/me/Library/Hobbots-runtimes/hob-1",
@@ -247,6 +278,8 @@ describe("the process sandbox", () => {
         AWS_SECRET_ACCESS_KEY: "secret",
         SSH_AUTH_SOCK: "/tmp/agent",
         ANTHROPIC_API_KEY: "secret",
+        CLAUDE_CODE_OAUTH_REFRESH_TOKEN: "secret",
+        CLAUDE_CODE_MEMORY_API_TOKEN: "secret",
       }),
     ).toEqual({ PATH: "/usr/bin", HOME: "/Users/me", LC_ALL: "C", CLAUDE_CODE_OAUTH_TOKEN: "t" });
   });
@@ -304,11 +337,19 @@ describe("the process sandbox", () => {
           expect(run(`echo no > ${join(project, ".git", "hooks", "pre-commit")}`).status).not.toBe(0);
           expect(run(`echo no >> ${join(project, ".git", "config")}`).status).not.toBe(0);
           expect(run(`echo ok > ${join(project, ".git", "HEAD")}`).status).toBe(0);
+          // So do a submodule's.
+          mkdirSync(join(project, ".git", "modules", "lib", "hooks"), { recursive: true });
+          expect(run(`echo no > ${join(project, ".git", "modules", "lib", "config")}`).status).not.toBe(0);
+          expect(run(`echo no > ${join(project, ".git", "modules", "lib", "hooks", "post-checkout")}`).status).not.toBe(
+            0,
+          );
+          expect(run(`echo ok > ${join(project, ".git", "modules", "lib", "HEAD")}`).status).toBe(0);
           // The keychain stays closed, so no command reaches the credentials Git or gh keep there.
           const helper = run("printf 'protocol=https\\nhost=github.com\\n\\n' | git credential-osxkeychain get");
           expect(helper.stdout).not.toContain("password=");
           // Credentials in the hub's environment stay out, and the runtime keeps state in its own folder.
           expect(run('echo "[$GH_TOKEN]"').stdout.trim()).toBe("[]");
+          expect(run('echo "$CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"').stdout.trim()).toBe("1");
           expect(run('echo "$CLAUDE_CONFIG_DIR"').stdout.trim()).toBe(join(runtimes, "hob-1"));
         } finally {
           prepared.release();
