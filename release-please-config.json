@@ -76,6 +76,7 @@
     "apps/site": {
       "package-name": "site",
       "component": "site",
+      "initial-version": "0.1.0",
       "include-component-in-tag": true,
       "draft": false,
       "changelog-path": "CHANGELOG.md"

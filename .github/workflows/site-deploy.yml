@@ -108,7 +108,8 @@ jobs:
         env:
           CLOUDFLARE_ENV: ${{ github.ref_type == 'tag' && 'production' || 'staging' }}
           TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
-      # Migrations run before the code that needs them goes live.
+      # Migrations run before the code that needs them goes live. D1 commands ignore the build's
+      # redirected config, so they take --env; deploy reads the redirected config and takes none.
       - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -116,5 +117,5 @@ jobs:
           packageManager: pnpm
           workingDirectory: apps/site
           command: |
-            d1 migrations apply WAITLIST_DB --remote
+            d1 migrations apply WAITLIST_DB --remote --env ${{ github.ref_type == 'tag' && 'production' || 'staging' }}
             deploy
