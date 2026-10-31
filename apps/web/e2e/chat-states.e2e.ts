@@ -53,10 +53,10 @@ const send = async (page: Page, text: string) => {
   await composer.press("Enter");
 };
 
-const replies = async (current: Hub, page: Page) => {
+const replies = async (current: Hub, page: Page, role = "assistant") => {
   const thread = page.url().match(/threads\/([^/?#]+)/)?.[1];
   const messages = await api<ReadonlyArray<Reply>>(current, "GET", `/api/threads/${thread}/messages`);
-  return messages.filter((m) => m.role === "assistant");
+  return messages.filter((m) => m.role === role);
 };
 
 // The fake runtime writes one word every 40 ms.
@@ -147,6 +147,84 @@ test("[TC-CH-094] while the hub is out of reach a message waits, then goes out w
   await expect(page.getByText("Echo: while away")).toBeVisible();
   await expect(waiting).toBeHidden();
   await expect(page.getByText(/Reconnecting to Hobbots/)).toBeHidden();
+});
+
+// covers CH-004
+test("[TC-CH-102] messages sent while the hub is away all go out, in the order they were sent", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await expect(page.getByText("Hello, I'm Pip!")).toBeVisible();
+
+  await current.stop();
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting to Hobbots" })).toBeVisible();
+  await send(page, "one");
+  await send(page, "two");
+  await send(page, "three");
+  const waiting = page.getByRole("region", { name: "Waiting to send" });
+  await expect(waiting).toHaveCount(3);
+  await expect(waiting.nth(0)).toContainText("one");
+  await expect(waiting.nth(2)).toContainText("three");
+
+  hub = await startHub(dataDir);
+  // The first starts the thread; the rest follow it there.
+  await expect(page.getByText("Echo: three")).toBeVisible();
+  await expect(waiting).toHaveCount(0);
+  expect((await replies(hub, page, "user")).map((m) => m.content)).toEqual(["one", "two", "three"]);
+});
+
+// covers CH-004
+test("[TC-CH-103] a waiting message the hub refuses stays until it is sent again or edited", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await send(page, "first");
+  await expect(page.getByText("Echo: first")).toBeVisible();
+
+  await current.stop();
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting to Hobbots" })).toBeVisible();
+  await send(page, "keep me");
+  await send(page, "after");
+  // The hub comes back but refuses the first resend.
+  let refuse = true;
+  await page.route("**/api/threads/*/messages", (route) =>
+    refuse && route.request().method() === "POST"
+      ? route.fulfill({ status: 503, contentType: "application/json", body: "{}" })
+      : route.fallback(),
+  );
+  hub = await startHub(dataDir);
+  const waiting = page.getByRole("region", { name: "Waiting to send" });
+  await expect(waiting.nth(0)).toContainText("◷ Not sent yet. It stays here until you try again or edit it.");
+  await expect(waiting).toHaveCount(2);
+  await expect(page.getByText(/Reconnecting to Hobbots/)).toBeHidden();
+
+  refuse = false;
+  await waiting.nth(0).getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByText("Echo: after")).toBeVisible();
+  await expect(waiting).toHaveCount(0);
+  const user = (await replies(hub, page, "user")).map((m) => m.content);
+  expect(user).toEqual(["first", "keep me", "after"]);
+});
+
+// covers CH-004
+test("[TC-CH-104] a refused waiting message can be edited back into the composer", async ({ page }) => {
+  const { current, pip } = await hubWithPip();
+  await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+  await send(page, "first");
+  await expect(page.getByText("Echo: first")).toBeVisible();
+
+  await current.stop();
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting to Hobbots" })).toBeVisible();
+  await send(page, "fix me");
+  await page.route("**/api/threads/*/messages", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({ status: 503, contentType: "application/json", body: "{}" })
+      : route.fallback(),
+  );
+  hub = await startHub(dataDir);
+  const waiting = page.getByRole("region", { name: "Waiting to send" });
+  await expect(waiting).toContainText("◷ Not sent yet.");
+  await waiting.getByRole("button", { name: "Edit" }).click();
+  await expect(waiting).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: /^Message Pip/ })).toHaveValue("fix me");
 });
 
 // covers CH-001

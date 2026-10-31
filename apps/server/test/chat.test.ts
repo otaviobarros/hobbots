@@ -161,6 +161,28 @@ describe("a reply that ends early", () => {
     expect(result.again._tag).toBe("ReplyNotResumable");
   });
 
+  // covers CH-004, AG-004
+  it("[TC-CH-101] stores the configuration a continued reply runs on, after the hob was edited", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const repo = yield* HobbotsRepository;
+      const thread = yield* chat.createThread(HOB_ID);
+      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      const hob = Option.getOrThrow(yield* repo.findAgent(HOB_ID));
+      yield* repo.updateAgentConfig(
+        new Agent({ ...hob, instructions: "Be brief.", configVersion: hob.configVersion + 1 }),
+      );
+      const resumed = yield* continueSoon(thread.id, cut.id);
+      yield* settled(thread.id);
+      const stored = (yield* repo.listMessages(thread.id)).find((m) => m.id === cut.id);
+      return { cut, resumed, stored };
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    expect(result.cut.configVersion).toBe(1);
+    expect(result.resumed.configVersion).toBe(2);
+    expect(result.stored?.configVersion).toBe(2);
+  });
+
   // covers CH-004
   it("[TC-CH-099] marks a reply the provider limit ended with when the allowance refills", async () => {
     const limited = await Effect.gen(function* () {

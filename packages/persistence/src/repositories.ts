@@ -348,6 +348,7 @@ export class HobbotsRepository extends Context.Service<
             content = excluded.content,
             status = excluded.status,
             error = excluded.error,
+            config_version = excluded.config_version,
             resets_at = excluded.resets_at,
             revision = excluded.revision`;
 

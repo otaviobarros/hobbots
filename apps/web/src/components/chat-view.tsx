@@ -1,10 +1,10 @@
 import { type AgentId, isInProgress, isResumable, type ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
-import { useConnection } from "../api/live.ts";
+import { updateWaiting, useConnection, useWaiting, type WaitingPlace } from "../api/live.ts";
 import {
   agentsQuery,
   messagesQuery,
@@ -31,6 +31,9 @@ const BRAIN_PROBLEM: Record<NonNullable<ReturnType<typeof runtimeProblem>>, stri
   outdated: "is older than Hobbots supports",
   signedOut: "is signed out",
 };
+
+const dropWaiting = (queryClient: QueryClient, place: WaitingPlace, id: string) =>
+  updateWaiting(queryClient, place, (old) => old.filter((message) => message.id !== id));
 
 const IDEAS = ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"];
 
@@ -62,8 +65,13 @@ export function ChatView({
   const activity = useActivity();
   const navigate = useNavigate();
   const [draft, setDraft] = useState("");
-  // A message sent while the hub is out of reach waits here and goes out when it is back.
-  const [waiting, setWaiting] = useState<string>();
+  // Messages sent while the hub is out of reach wait, in order, and go out one at a time when it is
+  // back. Each stays until the hub takes it; one the hub refuses stays for the user to retry or edit.
+  const queryClient = useQueryClient();
+  const place: WaitingPlace = threadId ?? `new-${hobId}`;
+  const waiting = useWaiting(place);
+  const [held, setHeld] = useState(false);
+  const flushing = useRef(false);
   const connection = useConnection();
   const brain = useQuery({ ...runtimesQuery, select: (runtimes) => runtimeProblem(runtimes[0]) });
   const bottom = useRef<HTMLDivElement>(null);
@@ -106,12 +114,15 @@ export function ChatView({
       document.getElementById(messageElementId(focusMessageId))?.scrollIntoView({ block: "center" });
   }, [focusLoaded, focusMessageId]);
 
-  const sendLatest = useRef<(content: string) => void>(() => undefined);
+  // A refused send is tried again after the next reconnect, or when the user asks.
   useEffect(() => {
-    if (connection !== "live" || waiting === undefined) return;
-    setWaiting(undefined);
-    sendLatest.current(waiting);
-  }, [connection, waiting]);
+    if (connection !== "live") setHeld(false);
+  }, [connection]);
+  const flushNext = useRef<() => void>(() => undefined);
+  const next = waiting[0];
+  useEffect(() => {
+    if (connection === "live" && next !== undefined && !held && !flushing.current) flushNext.current();
+  }, [connection, next, held]);
 
   const current = hob.data;
   if (!current) return <main className="flex-1" />;
@@ -131,11 +142,36 @@ export function ChatView({
       },
     });
   };
-  sendLatest.current = (content) => deliver(content, false);
+  flushNext.current = () => {
+    const first = waiting[0];
+    if (first === undefined) return;
+    flushing.current = true;
+    const settle = {
+      onSettled: () => {
+        flushing.current = false;
+      },
+      onError: () => setHeld(true),
+    };
+    if (threadId) {
+      send.mutate(first.content, { ...settle, onSuccess: () => dropWaiting(queryClient, place, first.id) });
+      return;
+    }
+    start.mutate(first.content, {
+      ...settle,
+      onSuccess: ({ thread: created }) => {
+        // The rest follow into the thread the first one started.
+        const rest = waiting.slice(1);
+        updateWaiting(queryClient, place, () => []);
+        updateWaiting(queryClient, created.id, (old) => [...old, ...rest]);
+        void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: created.id } });
+      },
+    });
+  };
   const sendDraft = (content: string) => {
     follow();
-    if (connection === "reconnecting") {
-      setWaiting(content);
+    // Behind messages already waiting, a new one waits too, so they go out in the order sent.
+    if (connection === "reconnecting" || waiting.length > 0) {
+      updateWaiting(queryClient, place, (old) => [...old, { id: crypto.randomUUID(), content }]);
       setDraft("");
       return;
     }
@@ -242,25 +278,40 @@ export function ChatView({
             onSendNow={() => sendNow.mutate(message.id)}
           />
         ))}
-        {waiting !== undefined && (
+        {waiting.map((message, index) => (
           <section
+            key={message.id}
             aria-label="Waiting to send"
             className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end"
           >
-            <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{waiting}</div>
-            <span className="text-xs text-label">◷ Waiting to send. It goes out when we reconnect.</span>
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => {
-                setDraft(waiting);
-                setWaiting(undefined);
-              }}
-            >
-              Edit
-            </Button>
+            <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
+            <span className="text-xs text-label">
+              {held && index === 0
+                ? "◷ Not sent yet. It stays here until you try again or edit it."
+                : connection === "live"
+                  ? "◷ Sending…"
+                  : "◷ Waiting to send. It goes out when we reconnect."}
+            </span>
+            <span className="flex gap-2">
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={index === 0 && (send.isPending || start.isPending)}
+                onClick={() => {
+                  dropWaiting(queryClient, place, message.id);
+                  setDraft((old) => (old.trim() === "" ? message.content : `${old}\n${message.content}`));
+                }}
+              >
+                Edit
+              </Button>
+              {held && index === 0 && (
+                <Button variant="outline" size="xs" onClick={() => setHeld(false)}>
+                  Try again
+                </Button>
+              )}
+            </span>
           </section>
-        )}
+        ))}
         {resume.isError && (
           <p role="alert" className="text-sm text-rose">
             {current.name} could not continue that reply. {sendErrorText(resume.error, current)}
