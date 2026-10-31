@@ -173,6 +173,9 @@ const RACY_MS = 2_000;
 
 interface IndexedDir {
   readonly mtimeMs: number;
+  /** Change time, which also moves when the modification time is set back, and cannot be set itself. */
+  readonly ctimeMs: number;
+  readonly dev: number;
   /** When it was listed: a change within the file system's timestamp precision of that may not show. */
   readonly listedAt: number;
   readonly ino: number;
@@ -194,6 +197,8 @@ interface FolderIndex {
 
 export interface PathResolverOptions {
   readonly maxSearchedEntries: number;
+  /** The wall clock, in milliseconds; tests move it to tell a racy listing from a stale one. */
+  readonly now?: () => number;
 }
 
 export class PathResolver extends Context.Service<
@@ -284,6 +289,7 @@ export class PathResolver extends Context.Service<
         return found;
       };
       const indexes = new Map<string, FolderIndex>();
+      const now = options.now ?? Date.now;
       const listDir = async (dir: string, caseSensitive: boolean) => {
         const stats = await fs.lstat(dir);
         // A directory replaced by a link is gone from the index; `readdir` would follow the link.
@@ -295,7 +301,9 @@ export class PathResolver extends Context.Service<
           .map((e) => path.join(dir, e.name));
         return {
           mtimeMs: stats.mtimeMs,
-          listedAt: Date.now(),
+          ctimeMs: stats.ctimeMs,
+          dev: stats.dev,
+          listedAt: now(),
           ino: stats.ino,
           entries: entries.length,
           repository,
@@ -349,9 +357,11 @@ export class PathResolver extends Context.Service<
             const unchanged =
               stats?.isDirectory() &&
               stats.mtimeMs === entry.mtimeMs &&
+              stats.ctimeMs === entry.ctimeMs &&
               stats.ino === entry.ino &&
+              stats.dev === entry.dev &&
               // Like Git's racy index entries, a listing too close to the last change is redone.
-              entry.listedAt - entry.mtimeMs > RACY_MS;
+              entry.listedAt - Math.max(entry.mtimeMs, entry.ctimeMs) > RACY_MS;
             return unchanged ? [] : [dir];
           });
           // A replaced directory is listed afresh, along with whatever is new below it.

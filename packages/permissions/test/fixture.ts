@@ -5,6 +5,7 @@ import { EMPTY_HOB_POLICY, type SafetyPreset } from "@hobbots/domain";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterAll, beforeAll } from "vitest";
 import {
+  MAX_SEARCHED_ENTRIES,
   PathResolver,
   type PolicyContext,
   PolicyEngine,
@@ -102,6 +103,12 @@ export const lastingEngine = (engineLayer: Layer.Layer<PolicyEngine> = PolicyEng
 /** An engine whose repository search gives up after `maxSearchedEntries`, to exercise the limit. */
 export const engineWithLimit = (maxSearchedEntries: number): Layer.Layer<PolicyEngine> =>
   PolicyEngine.layer.pipe(Layer.provide(PathResolver.make({ maxSearchedEntries })));
+
+/** An engine whose clock runs `aheadMs` fast, so a fresh listing already looks settled. */
+export const engineAhead = (aheadMs: number): Layer.Layer<PolicyEngine> =>
+  PolicyEngine.layer.pipe(
+    Layer.provide(PathResolver.make({ maxSearchedEntries: MAX_SEARCHED_ENTRIES, now: () => Date.now() + aheadMs })),
+  );
 
 export const files = (
   operation: "read-files" | "edit-files" | "delete-files",

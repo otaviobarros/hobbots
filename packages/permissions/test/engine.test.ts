@@ -3,7 +3,16 @@ import * as path from "node:path";
 import { type PolicyDecision, PolicyOperation, PRESET_DECISIONS, SafetyPreset } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { evaluate, type PolicyRequest, policyVersion, type ResolvedScope } from "../src/index.ts";
-import { contextFor, decide, engineWithLimit, files, type Home, lastingEngine, useHome } from "./fixture.ts";
+import {
+  contextFor,
+  decide,
+  engineAhead,
+  engineWithLimit,
+  files,
+  type Home,
+  lastingEngine,
+  useHome,
+} from "./fixture.ts";
 
 const home: Home = useHome();
 
@@ -383,6 +392,32 @@ describe("policy engine", () => {
           "deny",
         );
       }
+    } finally {
+      await engine.dispose();
+    }
+  });
+
+  // covers PE-002
+  it("[TC-PE-010] notices a nested repository even when its folder's modification time is set back", async () => {
+    const outer = path.join(home.root, "restored-repo");
+    const nested = path.join(outer, "vendor", "lib");
+    const other = path.join(home.root, "restored-other");
+    await fs.mkdir(path.join(outer, ".git"), { recursive: true });
+    await fs.mkdir(nested, { recursive: true });
+    await fs.mkdir(path.join(other, "hooks"), { recursive: true });
+    const old = new Date(Math.floor(Date.now() / 1000) * 1000 - 24 * 60 * 60 * 1000);
+    await fs.utimes(nested, old, old);
+    // The engine's clock runs an hour fast, so every listing counts as settled and only metadata tells.
+    const engine = lastingEngine(engineAhead(60 * 60 * 1000));
+    try {
+      const context = contextFor(home, "trusting", { sharedFolders: [outer, other] });
+      const edit = () => engine.decide(context, files("edit-files", other, "hooks/pre-commit"));
+      expect((await edit()).decision).toBe("allow");
+      await fs.mkdir(path.join(nested, ".git"));
+      await fs.symlink(path.join(other, "hooks"), path.join(nested, ".git", "hooks"));
+      await fs.utimes(nested, old, old);
+      expect(Math.round((await fs.stat(nested)).mtimeMs)).toBe(old.getTime());
+      expect(await edit()).toMatchObject({ decision: "deny", reason: { code: "protected-path" } });
     } finally {
       await engine.dispose();
     }
