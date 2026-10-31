@@ -1,0 +1,365 @@
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  ApprovalService,
+  ChatService,
+  HobAdmission,
+  HobbotsRepository,
+  HobTools,
+  type ToolAccess,
+} from "@hobbots/agents";
+import {
+  Agent,
+  AgentId,
+  type ApprovalRequest,
+  EMPTY_HOB_POLICY,
+  isInProgress,
+  type Message,
+  type MessageSteps,
+  type ThreadId,
+} from "@hobbots/domain";
+import { PolicyEngine } from "@hobbots/permissions";
+import { ApprovalRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
+import { TestDatabase } from "@hobbots/persistence/testing";
+import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { Effect, Exit, Layer, PubSub, Schedule, type Scope } from "effect";
+import { afterAll, describe, expect, it } from "vitest";
+import { EventBus } from "../src/event-bus.ts";
+
+const HOB_ID = AgentId.make("aldric");
+const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-approvals-")));
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+const folder = join(root, "work");
+mkdirSync(folder);
+
+const summonHob = Effect.gen(function* () {
+  const repo = yield* HobbotsRepository;
+  yield* repo.insertAgent(
+    new Agent({
+      id: HOB_ID,
+      name: "Aldric",
+      roleTitle: "Guide",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "You are Aldric.",
+      lookSeed: 4821,
+      lookColor: "violet",
+      configVersion: 1,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }),
+  );
+});
+
+// Balanced: pushing asks. Each test may narrow the policy while a turn waits.
+let restrictions: ToolAccess["policy"]["restrictions"] = [];
+const tools = Layer.succeed(
+  HobTools,
+  HobTools.of({
+    access: () =>
+      Effect.sync(() => ({
+        policy: {
+          preset: "balanced",
+          sharedFolders: [folder],
+          hob: EMPTY_HOB_POLICY,
+          dataFolder: join(root, "data"),
+          restrictions,
+        },
+        folders: [folder],
+        runtimeFolder: join(root, "runtimes", HOB_ID),
+      })),
+  }),
+);
+
+const Persistence = Layer.mergeAll(HobbotsRepositoryLive, ApprovalRepositoryLive).pipe(
+  Layer.provideMerge(TestDatabase),
+);
+const TestLayer = ChatService.layer.pipe(
+  Layer.provide(tools),
+  Layer.provideMerge(ApprovalService.layer),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)),
+      EventBus.layer,
+      HobAdmission.layer,
+      FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
+    ),
+  ),
+);
+
+const PUSH = "Ship it\nfake:tool Bash git push origin main";
+
+/** Sends the prompt and waits until its tool call waits for a decision. */
+const askInNewThread = (prompt = PUSH) =>
+  Effect.gen(function* () {
+    const chat = yield* ChatService;
+    const thread = yield* chat.createThread(HOB_ID);
+    yield* chat.sendPrompt(thread.id, prompt);
+    const pending = yield* pendingIn(thread.id);
+    return { thread, pending };
+  });
+
+const pendingIn = (threadId: ThreadId) =>
+  Effect.gen(function* () {
+    const approvals = yield* ApprovalService;
+    return yield* approvals.listForThread(threadId).pipe(
+      Effect.flatMap((all) => {
+        const pending = all.filter((a) => a.state === "pending");
+        return pending.length > 0
+          ? Effect.succeed(pending as ReadonlyArray<ApprovalRequest>)
+          : Effect.fail("none" as const);
+      }),
+      Effect.retry(Schedule.spaced("5 millis")),
+    );
+  });
+
+const reply = (threadId: ThreadId) =>
+  Effect.gen(function* () {
+    const repo = yield* HobbotsRepository;
+    return (yield* repo.listMessages(threadId)).at(-1) as Message;
+  });
+
+const settled = (threadId: ThreadId) =>
+  reply(threadId).pipe(
+    Effect.flatMap((message) =>
+      message.role === "assistant" && !isInProgress(message.status)
+        ? Effect.succeed(message)
+        : Effect.fail("busy" as const),
+    ),
+    Effect.retry(Schedule.spaced("5 millis")),
+  );
+
+const toolSteps = (events: ReadonlyArray<{ readonly _tag: string; readonly event?: unknown }>) =>
+  events.flatMap((event) =>
+    event._tag === "Transient" && (event.event as MessageSteps)._tag === "MessageSteps"
+      ? (event.event as MessageSteps).steps.filter((step) => step.kind === "tool")
+      : [],
+  );
+
+const run = <A, E>(
+  effect: Effect.Effect<A, E, ApprovalService | ChatService | HobbotsRepository | EventBus | Scope.Scope>,
+) => effect.pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+describe("Ask decisions", () => {
+  // covers PE-003
+  it("[TC-PE-040] pauses the turn on an Ask action until the user approves it, then runs it", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const bus = yield* EventBus;
+        const subscription = yield* bus.subscribe;
+        const { thread, pending } = yield* askInNewThread();
+        // Still waiting a while later: nothing decided for the user.
+        yield* Effect.sleep("100 millis");
+        const waiting = yield* reply(thread.id);
+        const request = pending[0] as ApprovalRequest;
+        const approved = yield* approvals.decide(request.id, {
+          decision: "approve",
+          actionDigest: request.actionDigest,
+        });
+        const done = yield* settled(thread.id);
+        const events = yield* PubSub.takeAll(subscription);
+        return { request, waiting, approved, done, events };
+      }),
+    );
+
+    expect(result.request).toMatchObject({
+      agentId: HOB_ID,
+      tool: "Bash",
+      operation: "push",
+      arguments: { command: "git push origin main" },
+      label: "Running git push origin main",
+      state: "pending",
+    });
+    expect(result.request.actionDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(result.request.policyVersion).toMatch(/^r\d+-/);
+    expect(result.waiting.status).toBe("streaming");
+    expect(result.approved.state).toBe("approved");
+    expect(result.done.status).toBe("complete");
+    const journaled = result.events.flatMap((e) => (e._tag === "Journaled" ? [e.entry.type] : []));
+    expect(journaled.filter((type) => type.startsWith("Approval"))).toEqual(["ApprovalRequested", "ApprovalResolved"]);
+    expect(toolSteps(result.events).at(-1)).toEqual({
+      id: "fake-tool-1",
+      kind: "tool",
+      label: "Running git push origin main",
+      state: "done",
+    });
+  });
+
+  // covers PE-003, PE-007
+  it("[TC-PE-041] runs the action once when it is approved twice", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const bus = yield* EventBus;
+        const subscription = yield* bus.subscribe;
+        const { thread, pending } = yield* askInNewThread();
+        const request = pending[0] as ApprovalRequest;
+        const decision = { decision: "approve", actionDigest: request.actionDigest } as const;
+        const both = yield* Effect.all(
+          [approvals.decide(request.id, decision), approvals.decide(request.id, decision)],
+          {
+            concurrency: "unbounded",
+          },
+        );
+        yield* settled(thread.id);
+        const again = yield* approvals.decide(request.id, decision);
+        const events = yield* PubSub.takeAll(subscription);
+        return { both, again, events };
+      }),
+    );
+
+    expect(result.both.map((a) => a.state)).toEqual(["approved", "approved"]);
+    expect(result.again.revision).toBe(result.both[0].revision);
+    const resolved = result.events.filter((e) => e._tag === "Journaled" && e.entry.type === "ApprovalResolved");
+    expect(resolved).toHaveLength(1);
+    const started = new Set(
+      toolSteps(result.events)
+        .filter((step) => step.id === "fake-tool-1")
+        .map((step) => step.state),
+    );
+    expect(started).toEqual(new Set(["running", "done"]));
+  });
+
+  // covers PE-003
+  it("[TC-PE-042] denies with the user's reason, which goes back to the hob, and refuses a later approval", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const bus = yield* EventBus;
+        const subscription = yield* bus.subscribe;
+        const { thread, pending } = yield* askInNewThread();
+        const request = pending[0] as ApprovalRequest;
+        const denied = yield* approvals.decide(request.id, {
+          decision: "deny",
+          actionDigest: request.actionDigest,
+          reason: "  Not on Fridays  ",
+        });
+        const done = yield* settled(thread.id);
+        const late = yield* Effect.exit(
+          approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
+        );
+        const events = yield* PubSub.takeAll(subscription);
+        return { denied, done, late, events };
+      }),
+    );
+
+    expect(result.denied).toMatchObject({ state: "denied", denyReason: "Not on Fridays" });
+    expect(result.done.status).toBe("complete");
+    expect(toolSteps(result.events)).toEqual([]);
+    expect(Exit.isFailure(result.late) && JSON.stringify(result.late.cause)).toContain("ApprovalClosed");
+  });
+
+  // covers PE-007
+  it("[TC-PE-043] expires the request when the reply is stopped, so it cannot be approved late", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const approvals = yield* ApprovalService;
+        const { thread, pending } = yield* askInNewThread();
+        const request = pending[0] as ApprovalRequest;
+        yield* chat.stop(thread.id);
+        const done = yield* settled(thread.id);
+        const stored = (yield* approvals.listForThread(thread.id))[0];
+        const late = yield* Effect.exit(
+          approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
+        );
+        return { done, stored, late };
+      }),
+    );
+
+    expect(result.done.status).toBe("stopped");
+    expect(result.stored?.state).toBe("expired");
+    expect(Exit.isFailure(result.late) && JSON.stringify(result.late.cause)).toContain("expired");
+  });
+
+  // covers PE-003
+  it("[TC-PE-044] refuses a decision for another action than the one shown", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const approvals = yield* ApprovalService;
+        const { thread, pending } = yield* askInNewThread();
+        const request = pending[0] as ApprovalRequest;
+        const exit = yield* Effect.exit(approvals.decide(request.id, { decision: "approve", actionDigest: "other" }));
+        const still = (yield* approvals.listForThread(thread.id))[0];
+        yield* chat.stop(thread.id);
+        yield* settled(thread.id);
+        return { exit, still };
+      }),
+    );
+
+    expect(Exit.isFailure(result.exit) && JSON.stringify(result.exit.cause)).toContain("ApprovalActionChanged");
+    expect(result.still?.state).toBe("pending");
+  });
+
+  // covers PE-008
+  it("[TC-PE-045] asks again when the policy changes before an approved action runs", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const { thread, pending } = yield* askInNewThread();
+        const first = pending[0] as ApprovalRequest;
+        // Another rule changes, so the policy the approval was given under is not the one now.
+        restrictions = [{ "delete-files": "deny" }];
+        yield* approvals.decide(first.id, { decision: "approve", actionDigest: first.actionDigest });
+        const second = (yield* pendingIn(thread.id))[0] as ApprovalRequest;
+        yield* approvals.decide(second.id, { decision: "approve", actionDigest: second.actionDigest });
+        const done = yield* settled(thread.id);
+        return { first, second, done };
+      }),
+    );
+
+    expect(result.second.id).not.toBe(result.first.id);
+    expect(result.second.policyVersion).not.toBe(result.first.policyVersion);
+    expect(result.second.actionDigest).toBe(result.first.actionDigest);
+    expect(result.done.status).toBe("complete");
+  });
+
+  // covers PE-007
+  it("[TC-PE-046] expires requests left pending when the server restarts", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const thread = yield* chat.createThread(HOB_ID);
+      const sent = yield* chat.sendPrompt(thread.id, "hello");
+      yield* settled(thread.id);
+      const messageId = (sent.assistantMessage as Message).id;
+      // A turn asks, and the process dies before anyone decides.
+      const before = yield* Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const turn = yield* approvals.forTurn(
+          { agentId: HOB_ID, threadId: thread.id, messageId },
+          Effect.succeed(null),
+        );
+        yield* turn.approvals.request({
+          stepId: "s1",
+          tool: "Bash",
+          operation: "push",
+          targets: ["origin main"],
+          arguments: { command: "git push origin main" },
+          label: "Running git push origin main",
+          reason: "Pushing asks first.",
+          policyVersion: "r1-test",
+        });
+        return yield* approvals.listForThread(thread.id);
+      }).pipe(Effect.provide(Layer.fresh(ApprovalService.layer)));
+      // The next process starts.
+      const after = yield* Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        return yield* approvals.listForThread(thread.id);
+      }).pipe(Effect.provide(Layer.fresh(ApprovalService.layer)));
+      return { before, after };
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    expect(result.before.map((a) => a.state)).toEqual(["pending"]);
+    expect(result.after.map((a) => a.state)).toEqual(["expired"]);
+    expect(result.after[0]?.decidedAt).not.toBeNull();
+  });
+});

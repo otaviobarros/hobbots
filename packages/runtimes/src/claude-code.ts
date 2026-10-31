@@ -26,12 +26,14 @@ import {
   type RuntimeEvent,
   RuntimeLimitReached,
   type ToolAccess,
+  type TurnApprovals,
 } from "@hobbots/agents";
 import { RuntimeHealth, RuntimeModel, RuntimeModels, type SandboxState } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
+import { type CallDecision, decideCall, refusal, UNKNOWN_TOOL } from "./approval.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, ProcessSandbox } from "./sandbox.ts";
-import { narrowestVerdict, offeredTools, toolLabel, toolRequests } from "./tool-calls.ts";
+import { offeredTools, toolLabel } from "./tool-calls.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
@@ -588,70 +590,77 @@ export const toolTurn = (access: ToolAccess | null | undefined, sandbox: Sandbox
   return tools.length === 0 ? null : { context, folders, tools, runtimeFolder: access.runtimeFolder };
 };
 
-export const UNKNOWN_TOOL = (tool: string) => `Hobbots does not know the ${tool} tool, so it stays closed.`;
-
-/** Why a call did not run, in words for the model and the person. */
-export const refusal = (verdict: PolicyVerdict): string =>
-  verdict.decision === "ask"
-    ? `${verdict.reason.message} Hobbots cannot ask you for approval yet, so the call did not run.`
-    : verdict.reason.message;
-
 /**
  * The hooks that put every tool call before the policy engine (ADR 014). PreToolUse decides the
- * call and reports it; a call that is not allowed never runs, whatever the prompt says. The
- * permission callback decides again, for any call that reaches it without the hook's answer.
+ * call and reports it; a call that is not allowed never runs, whatever the prompt says. A call the
+ * policy answers Ask for goes on to the permission callback, which asks the user through
+ * `approvals` and waits for the decision (PE-003); without `approvals` it is refused. The callback
+ * also decides any call that reaches it without the hook's answer.
  */
 export const policyHooks = (
   engine: PolicyEngine["Service"],
   turn: ToolTurn,
   report: (event: RuntimeEvent) => void,
+  approvals?: TurnApprovals | null,
 ): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
-  const decide = (tool: string, input: Record<string, unknown>, cwd: string) =>
-    Effect.runPromise(
-      Effect.gen(function* () {
-        const requests = toolRequests(tool, input, cwd);
-        if (requests === null) return undefined;
-        return narrowestVerdict(yield* Effect.forEach(requests, (request) => engine.decide(turn.context, request)));
-      }),
-    );
   const started = new Set<string>();
+  const begin = (id: string, tool: string, input: Record<string, unknown>, verdict: PolicyVerdict) => {
+    started.add(id);
+    report({
+      _tag: "ToolStarted",
+      id,
+      tool,
+      operation: verdict.operation,
+      targets: verdict.targets,
+      label: toolLabel(tool, input),
+    });
+  };
+  const refuse = (id: string, tool: string, input: Record<string, unknown>, decision: CallDecision) => {
+    const reason = decision._tag === "Refuse" ? decision.reason : "";
+    report({
+      _tag: "ToolDenied",
+      id,
+      tool,
+      // An unknown tool is refused as anything outside what the hob may do.
+      operation: decision.verdict?.operation ?? "outside-folders",
+      targets: decision.verdict?.targets ?? [],
+      label: toolLabel(tool, input),
+      reason,
+      decidedBy: "policy",
+    });
+    return reason;
+  };
+  const failed = (tool: string): CallDecision => ({ _tag: "Refuse", verdict: undefined, reason: UNKNOWN_TOOL(tool) });
 
   const preToolUse: HookCallback = async (input): Promise<HookJSONOutput> => {
     if (input.hook_event_name !== "PreToolUse") return {};
     const tool = input.tool_name;
     const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
-    const label = toolLabel(tool, toolInput);
-    const verdict = await decide(tool, toolInput, input.cwd || (turn.folders[0] as string)).catch(() => undefined);
-    if (verdict?.decision === "allow") {
-      started.add(input.tool_use_id);
-      report({
-        _tag: "ToolStarted",
-        id: input.tool_use_id,
-        tool,
-        operation: verdict.operation,
-        targets: verdict.targets,
-        label,
-      });
+    const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
+    // Only the policy decides here; asking the user waits in the permission callback.
+    const decision = await Effect.runPromise(decideCall(engine, turn.context, null, call, report)).catch(() =>
+      failed(tool),
+    );
+    if (decision._tag === "Run") {
+      begin(call.id, tool, toolInput, decision.verdict);
       return {
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "allow",
-          permissionDecisionReason: verdict.reason.message,
+          permissionDecisionReason: decision.verdict.reason.message,
         },
       };
     }
-    const reason = verdict === undefined ? UNKNOWN_TOOL(tool) : refusal(verdict);
-    report({
-      _tag: "ToolDenied",
-      id: input.tool_use_id,
-      tool,
-      // An unknown tool is refused as anything outside what the hob may do.
-      operation: verdict?.operation ?? "outside-folders",
-      targets: verdict?.targets ?? [],
-      label,
-      reason,
-      decidedBy: "policy",
-    });
+    if (approvals && decision.verdict?.decision === "ask") {
+      return {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "ask",
+          permissionDecisionReason: decision.verdict.reason.message,
+        },
+      };
+    }
+    const reason = refuse(call.id, tool, toolInput, decision);
     return {
       hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason },
     };
@@ -669,10 +678,18 @@ export const policyHooks = (
       return {};
     };
 
-  const canUseTool: CanUseTool = async (tool, input) => {
-    const verdict = await decide(tool, input, turn.folders[0] as string).catch(() => undefined);
-    if (verdict?.decision === "allow") return { behavior: "allow", updatedInput: input };
-    return { behavior: "deny", message: verdict === undefined ? UNKNOWN_TOOL(tool) : refusal(verdict) };
+  const canUseTool: CanUseTool = async (tool, input, options) => {
+    const call = { id: options.toolUseID, tool, input, cwd: turn.folders[0] as string };
+    // An aborted call stops waiting, which expires its request.
+    const decision = await Effect.runPromise(decideCall(engine, turn.context, approvals, call, report), {
+      signal: options.signal,
+    }).catch(() => failed(tool));
+    if (decision._tag === "Run") {
+      // A call the hook allowed was reported then.
+      if (!started.has(call.id)) begin(call.id, tool, input, decision.verdict);
+      return { behavior: "allow", updatedInput: input };
+    }
+    return { behavior: "deny", message: refuse(call.id, tool, input, decision) };
   };
 
   return {
@@ -838,7 +855,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   ...(tools
                     ? toolOptions(
                         tools,
-                        policyHooks(engine, tools, (event) => Queue.offerUnsafe(queue, event)),
+                        policyHooks(engine, tools, (event) => Queue.offerUnsafe(queue, event), request.approvals),
                         base.env,
                       )
                     : {}),

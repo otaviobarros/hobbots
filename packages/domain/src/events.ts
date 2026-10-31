@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { Agent } from "./agent.ts";
+import { ApprovalRequest } from "./approval.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { Message } from "./message.ts";
 import { Thread } from "./thread.ts";
@@ -19,6 +20,10 @@ const MessageDequeued = Schema.TaggedStruct("MessageDequeued", {
 const TurnStopRequested = Schema.TaggedStruct("TurnStopRequested", { threadId: ThreadId, messageId: MessageId });
 /** The runtime confirmed the stopped turn ended; the reply is now stopped. */
 const TurnStopped = Schema.TaggedStruct("TurnStopped", { threadId: ThreadId, messageId: MessageId });
+/** A tool call the policy answered Ask for paused its turn until the user decides (PE-003). */
+const ApprovalRequested = Schema.TaggedStruct("ApprovalRequested", { approval: ApprovalRequest });
+/** A pending approval was approved, denied or expired; `approval.state` says which. */
+const ApprovalResolved = Schema.TaggedStruct("ApprovalResolved", { approval: ApprovalRequest });
 /**
  * A piece of a streaming reply. Transient: its text reaches durable state through the message (ADR 013).
  * `offset` is where the piece starts in the message's text, in UTF-16 code units, so a client
@@ -65,6 +70,8 @@ export const JournaledEvent = Schema.Union([
   MessageDequeued,
   TurnStopRequested,
   TurnStopped,
+  ApprovalRequested,
+  ApprovalResolved,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -83,6 +90,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   MessageDequeued: 1,
   TurnStopRequested: 1,
   TurnStopped: 1,
+  ApprovalRequested: 1,
+  ApprovalResolved: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

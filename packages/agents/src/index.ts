@@ -1,4 +1,5 @@
 export * from "./admission.ts";
+export * from "./approvals.ts";
 export * from "./chat.ts";
 export * from "./hobs.ts";
 export * from "./lifecycle.ts";

@@ -1,7 +1,15 @@
 import { NodeHttpServer } from "@effect/platform-node";
-import { ChatService, HobAdmission, HobLifecycle, HobService, HobTools, PermissionSummary } from "@hobbots/agents";
+import {
+  ApprovalService,
+  ChatService,
+  HobAdmission,
+  HobLifecycle,
+  HobService,
+  HobTools,
+  PermissionSummary,
+} from "@hobbots/agents";
 import type { SearchHit } from "@hobbots/domain";
-import { HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
+import { ApprovalRepositoryLive, HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule } from "effect";
@@ -17,14 +25,18 @@ let dispose: () => Promise<void>;
 
 // A fresh database per test: the whole API over the test database, with the fake runtime.
 beforeEach(() => {
-  const Persistence = Layer.mergeAll(HobbotsRepositoryLive, SetupRepository.layer, SearchIndex.layer).pipe(
-    Layer.provideMerge(TestDatabase),
-  );
+  const Persistence = Layer.mergeAll(
+    HobbotsRepositoryLive,
+    ApprovalRepositoryLive,
+    SetupRepository.layer,
+    SearchIndex.layer,
+  ).pipe(Layer.provideMerge(TestDatabase));
   const App = HobLifecycle.layer
     .pipe(
       Layer.provideMerge(
         Layer.mergeAll(
           ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
+          ApprovalService.layer,
           HobService.layer,
           PermissionSummary.layer,
         ),
