@@ -35,6 +35,7 @@ import {
 } from "../api/first-hob.ts";
 import { HOB_COLORS, hobLook } from "../art/look.ts";
 import { HobSprite } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
 import { RoleSigil } from "./role-sigil.tsx";
 
 /**
@@ -722,16 +723,16 @@ export function ModelsBrain<D extends BrainChoice>({
   if (models.isPending) {
     return (
       <span className={cn("text-sm text-lantern", waitingClassName)}>
-        Asking Claude Code for its models <span className="animate-hb-blink">•••</span>
+        {messages.models.loading} <span className="animate-hb-blink">•••</span>
       </span>
     );
   }
   if (models.isError) {
     return (
       <span role="alert" className="flex items-center gap-3 text-sm text-rose">
-        Hobbots could not get Claude Code's models.
+        {messages.models.failed}
         <Button type="button" variant="outline" size="xs" onClick={() => void models.refetch()}>
-          Try again
+          {messages.models.retry}
         </Button>
       </span>
     );

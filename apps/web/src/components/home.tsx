@@ -20,6 +20,7 @@ import {
 import { sceneOrder } from "../lib/hob-state.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
 import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
 import { Stars } from "./scene.tsx";
 
 /** Home, the landing page: what your hobs are doing, what needs you, and what is left of each AI plan. */
@@ -433,7 +434,7 @@ function Card({
 
 /** Every reply streaming right now; each opens its thread. */
 const openChatLabel = (hob: Agent, state: HobState) =>
-  `Open chat with ${hob.name}, ${hob.roleTitle}, ${stateLabel[state]}`;
+  messages.home.openChat({ name: hob.name, role: hob.roleTitle, state: stateLabel[state] });
 
 function HappeningNowCard({
   live,
@@ -443,9 +444,9 @@ function HappeningNowCard({
   activity: ActivityMap;
 }) {
   return (
-    <Card label="Happening now" extra={live.length > 0 && <LiveDot />}>
+    <Card label={messages.home.happeningNow} extra={live.length > 0 && <LiveDot />}>
       {live.length === 0 ? (
-        <p className="m-0 text-sm text-secondary-text">All quiet. No hob is replying right now.</p>
+        <p className="m-0 text-sm text-secondary-text">{messages.home.allQuiet}</p>
       ) : (
         <HappeningNow live={live} activity={activity} />
       )}

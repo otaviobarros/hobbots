@@ -37,6 +37,7 @@ import {
   useSettledBrain,
 } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
 import { Stars } from "./scene.tsx";
 
 const ANSWER: Readonly<Record<RuleAnswer, { text: string; className: string }>> = {
@@ -383,7 +384,7 @@ export function Summon() {
 function CheckAgain({ checking, onCheck }: { checking: boolean; onCheck: () => void }) {
   return (
     <Button type="button" variant="outline" size="xs" onClick={onCheck} disabled={checking}>
-      {checking ? "Checking…" : "Check again"}
+      {checking ? messages.summon.checking : messages.summon.checkAgain}
     </Button>
   );
 }
