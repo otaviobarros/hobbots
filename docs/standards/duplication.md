@@ -43,16 +43,16 @@ Derive TypeScript types from Effect Schemas, for example `type ThreadId = typeof
 
 ### STD-DUP-005 No unused files, exports or dependencies
 
-Delete a file, export or dependency that nothing uses. Keep one only with an ignore entry that states the reason.
+Delete a file, export or dependency that nothing uses. Keep one only with an entry in `knip.jsonc` and a comment above it that states the reason.
 
 - **Why:** dead code costs review time and hides the code that matters.
-- **Enforced by:** review. A knip check is planned.
+- **Enforced by:** knip in `pnpm check` (`pnpm lint:unused`), configured in `knip.jsonc`.
 - **Applies to:** all workspaces.
 
 ### STD-DUP-006 No copied blocks of code
 
-Copied blocks of code above the detector's threshold fail the check. Tests and generated files are excluded.
+Copied blocks of code above the detector's threshold fail the check. Tests and generated files are excluded. Extract the shared part. If a repeat is only structural and an extraction would hurt the code, wrap it in `// jscpd:ignore-start` and `// jscpd:ignore-end` with a comment that states the reason.
 
 - **Why:** a detector finds the copies that review misses.
-- **Enforced by:** review. A jscpd check is planned.
+- **Enforced by:** jscpd in `pnpm check` (`pnpm lint:dup`), configured in `.jscpd.json`.
 - **Applies to:** all source code except tests and generated files.

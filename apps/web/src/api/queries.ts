@@ -159,10 +159,8 @@ export const upsertById = <T extends { readonly id: string }>(
 };
 
 /** Adds an item unless a live event already delivered it (possibly newer); null adds nothing. */
-export const insertIfMissing = <T extends { readonly id: string }>(
-  list: ReadonlyArray<T> | undefined,
-  item: T | null,
-) => (item === null || list?.some((existing) => existing.id === item.id) ? [...(list ?? [])] : upsertById(list, item));
+const insertIfMissing = <T extends { readonly id: string }>(list: ReadonlyArray<T> | undefined, item: T | null) =>
+  item === null || list?.some((existing) => existing.id === item.id) ? [...(list ?? [])] : upsertById(list, item);
 
 /**
  * Applies a stored message. A queued message that starts moves to the end, where its turn begins,

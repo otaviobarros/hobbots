@@ -1,4 +1,4 @@
-import { AgentNotFound, HobbotsApi, type HobPermissions } from "@hobbots/api";
+import { HobbotsApi, type HobPermissions } from "@hobbots/api";
 import {
   type Agent,
   type HobPolicy,
@@ -10,17 +10,17 @@ import {
   type SafetyPreset,
 } from "@hobbots/domain";
 import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { sameFolderIn } from "./folders.ts";
-import { HobService } from "./hobs.ts";
+import { foundAgent, HobService } from "./hobs.ts";
 
 /**
  * The folders a hob works in: the shared folders it does not hide, then its own (ADR 014). A shared
  * folder is hidden when a hidden entry names the same folder now, whatever spelling either was
  * stored with, so canonicalizing a shared folder later never shows a hidden one again.
  */
-export const effectiveFolders = (sharedFolders: ReadonlyArray<string>, policy: HobPolicy) =>
+const effectiveFolders = (sharedFolders: ReadonlyArray<string>, policy: HobPolicy) =>
   Effect.gen(function* () {
     const isHidden = yield* sameFolderIn(policy.hiddenSharedFolders);
     const visible = yield* Effect.filter(sharedFolders, (folder) => Effect.map(isHidden(folder), (hidden) => !hidden));
@@ -31,7 +31,7 @@ export const effectiveFolders = (sharedFolders: ReadonlyArray<string>, policy: H
  * Per operation, the narrower of the preset and the hob's override. Taking the narrower one keeps an
  * override stored under one preset from widening a stricter preset picked later.
  */
-export const effectiveDecisions = (
+const effectiveDecisions = (
   preset: SafetyPreset,
   overrides: HobPolicy["overrides"],
 ): Record<PolicyOperation, PolicyDecision> =>
@@ -64,14 +64,7 @@ export const PermissionsHandlers = HttpApiBuilder.group(HobbotsApi, "permissions
       });
     return handlers.handleAll({
       get: ({ params }) =>
-        repo.findAgent(params.agentId).pipe(
-          Effect.flatMap(
-            Option.match({
-              onNone: () => Effect.fail(new AgentNotFound({ agentId: params.agentId })),
-              onSome: permissions,
-            }),
-          ),
-        ),
+        repo.findAgent(params.agentId).pipe(Effect.flatMap(foundAgent(params.agentId)), Effect.flatMap(permissions)),
       update: ({ params, payload }) => hobs.updatePolicy(params.agentId, payload).pipe(Effect.flatMap(permissions)),
     });
   }),

@@ -90,7 +90,7 @@ const openings = (name: string, titles: ReadonlyArray<string>): ReadonlyArray<st
 };
 
 /** The instructions without the opening Hobbots wrote, or unchanged when they start any other way. */
-export const withoutOpening = (name: string, titles: ReadonlyArray<string>, instructions: string): string => {
+const withoutOpening = (name: string, titles: ReadonlyArray<string>, instructions: string): string => {
   for (const opening of openings(name, titles)) {
     if (instructions === opening) return "";
     if (instructions.startsWith(`${opening}\n`)) return instructions.slice(opening.length).replace(/^\n+/, "");

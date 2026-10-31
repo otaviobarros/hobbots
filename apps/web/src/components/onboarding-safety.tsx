@@ -5,6 +5,7 @@ import { useState } from "react";
 import { type FirstHobDraft, hobLine, keptDraftOrStored, restoreDraft } from "../api/first-hob.ts";
 import { foldersShared, presetInfo } from "../api/safety.ts";
 import { setupQuery, useSavingSetup } from "../api/setup.ts";
+import { messages } from "./messages.ts";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
 
@@ -63,12 +64,7 @@ export function OnboardingSafety() {
             onPicked={(preset) => setGuide(presetInfo(preset).guide)}
           />
         ) : setup.isError ? (
-          <p role="alert" className="m-0 flex items-center gap-3 text-sm text-rose">
-            Hobbots could not read your setup.
-            <Button variant="outline" size="xs" onClick={() => void setup.refetch()}>
-              Try again
-            </Button>
-          </p>
+          <SetupUnread onRetry={() => void setup.refetch()} />
         ) : null}
       </div>
     </OnboardingFrame>
@@ -116,14 +112,20 @@ export function OnboardingFolders() {
         {setup.data ? (
           <FolderPicker folders={folders} />
         ) : setup.isError ? (
-          <p role="alert" className="m-0 flex items-center gap-3 text-sm text-rose">
-            Hobbots could not read your setup.
-            <Button variant="outline" size="xs" onClick={() => void setup.refetch()}>
-              Try again
-            </Button>
-          </p>
+          <SetupUnread onRetry={() => void setup.refetch()} />
         ) : null}
       </div>
     </OnboardingFrame>
+  );
+}
+
+function SetupUnread({ onRetry }: { onRetry: () => void }) {
+  return (
+    <p role="alert" className="m-0 flex items-center gap-3 text-sm text-rose">
+      {messages.setup.failed}
+      <Button variant="outline" size="xs" onClick={onRetry}>
+        {messages.setup.retry}
+      </Button>
+    </p>
   );
 }

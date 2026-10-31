@@ -1,0 +1,22 @@
+{
+  "path": ["apps", "packages", "scripts"],
+  "format": ["typescript", "tsx", "javascript"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/out/**",
+    "**/test/**",
+    "**/e2e/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.e2e.ts",
+    "**/routeTree.gen.ts",
+    "**/migrations/**"
+  ],
+  "gitignore": true,
+  "mode": "weak",
+  "minTokens": 50,
+  "minLines": 5,
+  "threshold": 0,
+  "exitCode": 1
+}

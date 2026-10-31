@@ -41,9 +41,6 @@ const ROLE_KEYS = ["role", "roleTitle", "sigil", "hat", "tool"] as const;
 export const pickRole = <D extends RoleChoice>(draft: D, role: RoleId | null): D =>
   role === null ? { ...draft, role: null } : { ...draft, ...roleFields(role) };
 
-/** The API's limit on a role title. */
-export const ROLE_TITLE_MAX = 40;
-
 /** Why the role cannot be saved as it is, or undefined when it can. */
 export const roleProblem = (draft: RoleChoice): string | undefined =>
   draft.roleTitle.trim() === "" ? "Give the role a title." : undefined;
@@ -167,7 +164,7 @@ export const aboutLine = (hob: Pick<Agent, "createdAt" | "configVersion">): stri
   `Works on the hub · ${summonedLine(hob.createdAt)} · Version ${hob.configVersion}`;
 
 /** When the hob was summoned, as "Summoned Oct 2". */
-export const summonedLine = (createdAt: string): string =>
+const summonedLine = (createdAt: string): string =>
   `Summoned ${new Date(createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}`;
 
 /** The choices Retire offers for the hob's running replies, in the order shown. */

@@ -6,7 +6,7 @@ import { dirname } from "node:path";
  * or keeps running in the menu bar.
  * A setting that was never chosen is absent, so each one keeps its own default.
  */
-export interface DesktopSettings {
+interface DesktopSettings {
   readonly openAtLogin?: boolean;
   /** Closing the last window keeps the app, the server and running work alive (ADR 012). */
   readonly keepRunningInMenuBar?: boolean;

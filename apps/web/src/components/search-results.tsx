@@ -55,7 +55,7 @@ export const resultLink = (result: SearchResult) =>
       } as const);
 
 /** A message's words around the match, with the matching words picked out. */
-export function Snippet({ parts }: { parts: ReadonlyArray<SnippetPart> }) {
+function Snippet({ parts }: { parts: ReadonlyArray<SnippetPart> }) {
   return (
     <>
       {parts.map((part, index) =>

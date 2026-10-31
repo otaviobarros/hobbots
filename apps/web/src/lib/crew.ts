@@ -4,7 +4,7 @@ import type { HobState } from "./hob-state.ts";
 export const SCENE_LIMIT = 6;
 
 /** Past this many hobs, the Resting group starts folded on Home. */
-export const FOLD_RESTING_PAST = 12;
+const FOLD_RESTING_PAST = 12;
 
 /** The groups Home sorts hobs into, in the order they are listed. */
 export type CrewGroup = "needs-you" | "working" | "waiting" | "failed" | "resting" | "paused";

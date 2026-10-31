@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  "treatConfigHintsAsErrors": true,
+  "workspaces": {
+    ".": {
+      // Maintainer scripts run by hand; see docs/contributing/issues-and-board.md.
+      "entry": ["scripts/*.mjs"]
+    },
+    "apps/desktop": {
+      // Passed to electron-builder with --config, so its plugin does not find it.
+      "entry": ["electron-builder.config.mjs"]
+    }
+  },
+  // macOS system tool the icon script calls.
+  "ignoreBinaries": ["iconutil"]
+}

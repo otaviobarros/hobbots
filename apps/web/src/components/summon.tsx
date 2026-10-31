@@ -2,7 +2,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/client.ts";
 import {
   type FirstHobDraft,
@@ -13,9 +13,8 @@ import {
   LABEL_MAX,
   pickLook,
   reopenDraft,
+  rerollName,
   rollLook,
-  rollName,
-  settleBrain,
   settleSummonDraft,
   submitDraft,
 } from "../api/first-hob.ts";
@@ -23,20 +22,22 @@ import { agentsQuery, modelsQuery, runtimesQuery, useCreateHob } from "../api/qu
 import { presetInfo, type RuleAnswer } from "../api/safety.ts";
 import { setupQuery } from "../api/setup.ts";
 import { openSummonDraft, providerNotice, summonProblem } from "../api/summon.ts";
-import { hobLook } from "../art/look.ts";
 import {
-  Brain,
   Choice,
   ChoresField,
   ColorSwatches,
   draftRolePicker,
   GearPicker,
   HobSummary,
+  ModelsBrain,
   NameDice,
   NearbyLooks,
   RolePicker,
+  useDraftLook,
+  useSettledBrain,
 } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
 import { Stars } from "./scene.tsx";
 
 const ANSWER: Readonly<Record<RuleAnswer, { text: string; className: string }>> = {
@@ -75,15 +76,10 @@ export function Summon() {
 
   // Leaving and coming back keeps what was chosen, until the hob exists.
   useEffect(() => keepSummonDraft(draft), [draft]);
-  useEffect(() => {
-    if (models.data) setDraft((d) => (d.submitted ? d : settleBrain(d, models.data)));
-  }, [models.data]);
+  useSettledBrain(models.data, setDraft);
 
   const gear = gearOf(draft);
-  const look = useMemo(
-    () => hobLook(draft.lookSeed, draft.lookColor, { hat: gear.hat, tool: gear.tool }),
-    [draft.lookSeed, draft.lookColor, gear.hat, gear.tool],
-  );
+  const look = useDraftLook(draft);
   const claude = runtimes.data?.find((r) => r.runtime === "claude-code");
   const notice = providerNotice(claude);
   const connected = notice === undefined;
@@ -290,7 +286,7 @@ export function Summon() {
                     size={18}
                     rolls={nameRolls}
                     onRoll={() => {
-                      setDraft((d) => ({ ...d, name: rollName(d.name), named: true }));
+                      setDraft(rerollName);
                       setNameRolls((n) => n + 1);
                     }}
                     className="size-9"
@@ -335,42 +331,15 @@ export function Summon() {
                   ) : !runtimes.data ? (
                     <span role="alert" className="flex items-center gap-3 text-sm text-rose">
                       Hobbots could not check Claude Code.
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        onClick={() => void runtimes.refetch()}
-                        disabled={runtimes.isFetching}
-                      >
-                        {runtimes.isFetching ? "Checking…" : "Check again"}
-                      </Button>
+                      <CheckAgain checking={runtimes.isFetching} onCheck={() => void runtimes.refetch()} />
                     </span>
                   ) : !connected ? (
                     <span role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-lantern">
                       {notice} <Link to="/settings">Open Settings</Link>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        onClick={() => void runtimes.refetch()}
-                        disabled={runtimes.isFetching}
-                      >
-                        {runtimes.isFetching ? "Checking…" : "Check again"}
-                      </Button>
-                    </span>
-                  ) : models.isPending ? (
-                    <span className="py-1 text-sm text-lantern">
-                      Asking Claude Code for its models <span className="animate-hb-blink">•••</span>
-                    </span>
-                  ) : models.isError ? (
-                    <span role="alert" className="flex items-center gap-3 text-sm text-rose">
-                      Hobbots could not get Claude Code's models.
-                      <Button type="button" variant="outline" size="xs" onClick={() => void models.refetch()}>
-                        Try again
-                      </Button>
+                      <CheckAgain checking={runtimes.isFetching} onCheck={() => void runtimes.refetch()} />
                     </span>
                   ) : (
-                    <Brain models={models.data.models} draft={draft} onChange={setDraft} />
+                    <ModelsBrain models={models} draft={draft} onChange={setDraft} />
                   )}
                 </div>
 
@@ -409,5 +378,13 @@ export function Summon() {
         </div>
       </form>
     </main>
+  );
+}
+
+function CheckAgain({ checking, onCheck }: { checking: boolean; onCheck: () => void }) {
+  return (
+    <Button type="button" variant="outline" size="xs" onClick={onCheck} disabled={checking}>
+      {checking ? messages.summon.checking : messages.summon.checkAgain}
+    </Button>
   );
 }
