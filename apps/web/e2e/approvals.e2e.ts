@@ -71,7 +71,9 @@ const pipAsksToPush = async (page: Page) => {
 };
 
 // covers PE-003
-test("[TC-PE-074] the card shows the exact action, and Allow once resumes the paused reply", async ({ page }) => {
+test("[TC-PE-074] the card shows the exact action and why, and Allow once by keyboard resumes the paused reply", async ({
+  page,
+}) => {
   const { card } = await pipAsksToPush(page);
   await expect(card).toContainText("Push your work");
   await expect(card.getByText("git push origin main", { exact: true })).toBeVisible();
@@ -79,11 +81,17 @@ test("[TC-PE-074] the card shows the exact action, and Allow once resumes the pa
   await expect(card).toContainText("Sends commits to a remote");
   await expect(page.getByRole("list", { name: "Reply steps" })).toContainText("Waiting for your approval.");
 
-  await card.getByRole("button", { name: "Allow once" }).click();
+  await expect(card).toContainText("Why now");
+  await expect(card).toContainText(/waits for you/);
+
+  // By keyboard; focus stays in the card once the buttons give way to the outcome.
+  await card.getByRole("button", { name: "Allow once" }).focus();
+  await page.keyboard.press("Enter");
 
   await expect(card.getByRole("status")).toHaveText("✓ Allowed once. Pip carries on.");
+  await expect(card.getByRole("status")).toBeFocused();
   await expect(card.getByRole("button", { name: "Allow once" })).toBeHidden();
-  await expect(page.locator('[data-state="done"]')).toBeVisible();
+  await expect(page.locator('[data-state="done"]', { hasText: "git push" })).toBeVisible();
   await expect(page.getByText(/^Echo: Ship it/)).toBeVisible();
 });
 
@@ -103,6 +111,7 @@ test("[TC-PE-075] Deny with a reason works by keyboard and the reply shows the r
   await page.keyboard.press("Enter");
 
   await expect(card.getByRole("status")).toHaveText("✕ Denied: “Not on Fridays”. Pip was told why.");
+  await expect(card.getByRole("status")).toBeFocused();
   const steps = page.getByRole("list", { name: "Reply steps" });
   await expect(steps.locator('[data-state="denied"]')).toContainText("You denied this:");
   await expect(steps.locator('[data-state="denied"]')).toContainText("Not on Fridays");

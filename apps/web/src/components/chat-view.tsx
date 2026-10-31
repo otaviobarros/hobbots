@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
+import { approvalsQuery } from "../api/approvals.ts";
 import { useConnection } from "../api/live.ts";
 import {
   carriedDraft,
@@ -72,6 +73,12 @@ export function ChatView({
   });
   const threadCount = useQuery({ ...threadsQuery(hobId), select: (threads) => threads.length });
   const messages = useQuery({ ...messagesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
+  // A new request for approval scrolls into view like new text, so a paused reply never waits unseen.
+  const asking = useQuery({
+    ...approvalsQuery(threadId ?? ("" as ThreadId)),
+    enabled: threadId !== undefined,
+    select: (approvals) => approvals.filter((approval) => approval.state === "pending").length,
+  });
   const activity = useActivity();
   const navigate = useNavigate();
   // A draft carried from a fresh page into the thread it started picks up where it was.
@@ -112,9 +119,10 @@ export function ChatView({
   const holding = focusMessageId !== undefined && released !== focusMessageId;
   const follow = () => setReleased(focusMessageId);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new pending approval scrolls like new text.
   useEffect(() => {
     if (lastContent !== undefined && !holding) bottom.current?.scrollIntoView({ block: "end" });
-  }, [lastContent, holding]);
+  }, [lastContent, asking.data, holding]);
 
   const focusLoaded = messages.data?.some((m) => m.id === focusMessageId) ?? false;
   useEffect(() => {
