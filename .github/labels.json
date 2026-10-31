@@ -23,6 +23,7 @@
   { "name": "area: desktop", "color": "fbca04", "description": "Electron app, packaging, background service" },
   { "name": "area: server", "color": "fbca04", "description": "HTTP API, events and server process" },
   { "name": "area: web", "color": "fbca04", "description": "React client and UI components" },
+  { "name": "area: site", "color": "fbca04", "description": "The hobbots.app website and its Cloudflare deploys" },
   { "name": "area: runtime", "color": "fbca04", "description": "Runtime adapters: Claude Code, Codex, ACP" },
   { "name": "area: persistence", "color": "fbca04", "description": "SQL, migrations and recovery" },
   { "name": "area: orchestration", "color": "fbca04", "description": "Quests, delegation, inbox and execution" },

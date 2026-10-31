@@ -6,7 +6,6 @@ import {
   isInProgress,
   type Message,
   MessageDelta,
-  MessageSteps,
   STREAM_FRAME,
   StreamReady,
   type Thread,
@@ -17,7 +16,7 @@ import { useEffect, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
 import { API_URL } from "./client.ts";
 import type { ConnectionState } from "./live.ts";
-import { setConnection, setSteps } from "./live.ts";
+import { setConnection } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { queryKeys, sortArchived, sortThreads, upsertById, upsertMessage } from "./queries.ts";
 import {
@@ -33,7 +32,6 @@ import {
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
 const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady));
 const decodeDelta = Schema.decodeUnknownSync(Schema.fromJsonString(MessageDelta));
-const decodeSteps = Schema.decodeUnknownSync(Schema.fromJsonString(MessageSteps));
 
 /** Replaces an entity in a list unless the list already holds a newer version of it. */
 const upsertNewer = <T extends { readonly id: string; readonly revision: number }>(
@@ -118,9 +116,6 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "MessageDelta":
       applyDelta(queryClient, event);
       return;
-    case "MessageSteps":
-      setSteps(queryClient, event.messageId, event.steps);
-      return;
     // The reply's own upsert, sent just before, already carries its stopping or stopped status.
     case "TurnStopRequested":
     case "TurnStopped":
@@ -183,14 +178,6 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
     source.addEventListener(STREAM_FRAME.delta, (frame) => {
       try {
         applyDelta(queryClient, decodeDelta(frame.data));
-      } catch (error) {
-        console.warn("Ignoring malformed event", error);
-      }
-    });
-    source.addEventListener(STREAM_FRAME.steps, (frame) => {
-      try {
-        const event = decodeSteps(frame.data);
-        setSteps(queryClient, event.messageId, event.steps);
       } catch (error) {
         console.warn("Ignoring malformed event", error);
       }
