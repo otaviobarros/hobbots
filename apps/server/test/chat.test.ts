@@ -1,7 +1,7 @@
-import { Agent, AgentId } from "@hobbots/domain";
+import { Agent, AgentId, isInProgress, type MessageId, type ThreadId } from "@hobbots/domain";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { FAKE_DIRECTIVES, FakeRuntimeLayer, fakeCutOffError } from "@hobbots/runtimes";
 import { Effect, Layer, Option, Schedule } from "effect";
 import { describe, expect, it } from "vitest";
 import { HobAdmission } from "../src/admission.ts";
@@ -115,5 +115,96 @@ describe("ChatService", () => {
 
     expect(result.during).toEqual([result.threadId]);
     expect(result.after).toEqual([]);
+  });
+});
+
+describe("a reply that ends early", () => {
+  /** Waits until the thread's latest reply has ended, however it ended, and nothing waits behind it. */
+  const settled = (threadId: ThreadId) =>
+    Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      const messages = yield* repo.listMessages(threadId);
+      const reply = messages.at(-1);
+      return reply?.role !== "assistant" || isInProgress(reply.status) || messages.some((m) => m.status === "queued")
+        ? yield* Effect.fail("busy" as const)
+        : reply;
+    }).pipe(Effect.retry(Schedule.spaced("5 millis")));
+  const replyTo = (threadId: ThreadId, prompt: string) =>
+    Effect.gen(function* () {
+      yield* (yield* ChatService).sendPrompt(threadId, prompt);
+      return yield* settled(threadId);
+    });
+  // A reply is saved as ended a moment before its turn lets go of the thread.
+  const continueSoon = (threadId: ThreadId, messageId: MessageId) =>
+    Effect.gen(function* () {
+      return yield* (yield* ChatService).continueReply(threadId, messageId);
+    }).pipe(Effect.retry({ schedule: Schedule.spaced("5 millis"), times: 100 }));
+
+  // covers CH-004, CH-007
+  it("[TC-CH-098] keeps a cut-off reply with its reason, and Continue resumes it in the same message", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const thread = yield* chat.createThread(HOB_ID);
+      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      const resumed = yield* continueSoon(thread.id, cut.id);
+      const finished = yield* settled(thread.id);
+      const again = yield* chat.continueReply(thread.id, cut.id).pipe(Effect.flip);
+      return { cut, resumed, finished, again };
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    expect(result.cut).toMatchObject({ status: "interrupted", error: fakeCutOffError });
+    expect(result.resumed).toMatchObject({ id: result.cut.id, status: "streaming", error: null });
+    expect(result.finished.status).toBe("complete");
+    expect(result.finished.content.startsWith(result.cut.content)).toBe(true);
+    expect(result.finished.content.length).toBeGreaterThan(result.cut.content.length);
+    // A finished reply cannot be continued.
+    expect(result.again._tag).toBe("ReplyNotResumable");
+  });
+
+  // covers CH-004, AG-004
+  it("[TC-CH-101] stores the configuration a continued reply runs on, after the hob was edited", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const repo = yield* HobbotsRepository;
+      const thread = yield* chat.createThread(HOB_ID);
+      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      const hob = Option.getOrThrow(yield* repo.findAgent(HOB_ID));
+      yield* repo.updateAgentConfig(
+        new Agent({ ...hob, instructions: "Be brief.", configVersion: hob.configVersion + 1 }),
+      );
+      const resumed = yield* continueSoon(thread.id, cut.id);
+      yield* settled(thread.id);
+      const stored = (yield* repo.listMessages(thread.id)).find((m) => m.id === cut.id);
+      return { cut, resumed, stored };
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    expect(result.cut.configVersion).toBe(1);
+    expect(result.resumed.configVersion).toBe(2);
+    expect(result.stored?.configVersion).toBe(2);
+  });
+
+  // covers CH-004
+  it("[TC-CH-099] marks a reply the provider limit ended with when the allowance refills", async () => {
+    const limited = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const thread = yield* chat.createThread(HOB_ID);
+      return yield* replyTo(thread.id, `${FAKE_DIRECTIVES.limit} please`);
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    expect(limited.status).toBe("limited");
+    expect(limited.resetsAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(limited.content.length).toBeGreaterThan(0);
+  });
+
+  // covers CH-004
+  it("[TC-CH-100] continues only the thread's latest reply", async () => {
+    const error = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const thread = yield* chat.createThread(HOB_ID);
+      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      yield* replyTo(thread.id, "next");
+      return yield* chat.continueReply(thread.id, cut.id).pipe(Effect.flip);
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+    expect(error._tag).toBe("ReplyNotResumable");
   });
 });

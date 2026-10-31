@@ -90,7 +90,11 @@ const waitFor = (check: () => boolean): Effect.Effect<void> =>
 const entries = (frames: ReadonlyArray<StreamFrame>) =>
   frames.flatMap((frame) => (frame._tag === "Entry" ? [frame.entry] : []));
 const deltas = (frames: ReadonlyArray<StreamFrame>) =>
-  frames.flatMap((frame) => (frame._tag === "Delta" ? [[frame.event.offset, frame.event.delta] as const] : []));
+  frames.flatMap((frame) =>
+    frame._tag === "Transient" && frame.event._tag === "MessageDelta"
+      ? [[frame.event.offset, frame.event.delta] as const]
+      : [],
+  );
 const lastCursor = (frames: ReadonlyArray<StreamFrame>) =>
   frames.flatMap((frame) => (frame._tag === "Ready" || frame._tag === "Entry" ? [frame.cursor] : [])).at(-1);
 
@@ -269,7 +273,7 @@ describe("cursors", () => {
     );
     expect(
       encodeFrame({
-        _tag: "Delta",
+        _tag: "Transient",
         event: {
           _tag: "MessageDelta",
           threadId: ThreadId.make("t"),

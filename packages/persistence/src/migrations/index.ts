@@ -15,6 +15,7 @@ import eventJournal from "./0012_event_journal.ts";
 import hobIdentity from "./0013_hob_identity.ts";
 import hobTone from "./0014_hob_tone.ts";
 import hobPolicy from "./0015_hob_policy.ts";
+import messageResetsAt from "./0016_message_resets_at.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -37,4 +38,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0013_hob_identity": hobIdentity,
   "0014_hob_tone": hobTone,
   "0015_hob_policy": hobPolicy,
+  "0016_message_resets_at": messageResetsAt,
 };

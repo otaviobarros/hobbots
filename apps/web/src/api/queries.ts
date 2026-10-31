@@ -3,7 +3,7 @@ import type { Agent, AgentId, Message, MessageId, RetireWork, RuntimeKind, Threa
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
 import { runtimeStaleTime } from "./runtime-health.ts";
-import { syncedAgents, syncedMessages, syncedThreads } from "./sync.ts";
+import { newer, syncedAgents, syncedMessages, syncedThreads } from "./sync.ts";
 
 export const queryKeys = {
   agents: ["agents"] as const,
@@ -186,17 +186,23 @@ const refreshIfUnavailable = (queryClient: QueryClient) => (error: Error) => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.agents, exact: true });
 };
 
+/** Sends a prompt and puts it and its reply in the thread, without a component to report to. */
+export const sendPrompt = async (queryClient: QueryClient, threadId: ThreadId, content: string) => {
+  try {
+    const sent = await call((c) => c.threads.sendPrompt({ params: { threadId }, payload: { content } }));
+    queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId), (old) =>
+      insertIfMissing(insertIfMissing(old, sent.userMessage), sent.assistantMessage),
+    );
+    return sent;
+  } catch (error) {
+    refreshIfUnavailable(queryClient)(error as Error);
+    throw error;
+  }
+};
+
 export const useSendPrompt = (threadId: ThreadId) => {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (content: string) => call((c) => c.threads.sendPrompt({ params: { threadId }, payload: { content } })),
-    onError: refreshIfUnavailable(queryClient),
-    onSuccess: ({ userMessage, assistantMessage }) => {
-      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId), (old) =>
-        insertIfMissing(insertIfMissing(old, userMessage), assistantMessage),
-      );
-    },
-  });
+  return useMutation({ mutationFn: (content: string) => sendPrompt(queryClient, threadId, content) });
 };
 
 /** Takes a queued message out of the thread before it starts. */
@@ -224,23 +230,48 @@ export const useInterrupt = (threadId: ThreadId) =>
   });
 
 /** Creates a thread and sends its first prompt, so a new thread only appears once it has a message. */
+export const startThread = async (queryClient: QueryClient, agentId: AgentId, content: string) => {
+  try {
+    const thread = await call((c) => c.agents.createThread({ params: { agentId } }));
+    // An empty list lets live events for the first reply land while the prompt is sent.
+    queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(thread.id), []);
+    const sent = await call((c) => c.threads.sendPrompt({ params: { threadId: thread.id }, payload: { content } }));
+    queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId), (old) =>
+      sortThreads(insertIfMissing(old, thread)),
+    );
+    queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(thread.id), (old) =>
+      insertIfMissing(insertIfMissing(old, sent.userMessage), sent.assistantMessage),
+    );
+    return { thread, ...sent };
+  } catch (error) {
+    refreshIfUnavailable(queryClient)(error as Error);
+    throw error;
+  }
+};
+
 export const useStartThread = (agentId: AgentId) => {
   const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (content: string) => startThread(queryClient, agentId, content) });
+};
+
+/** Continues a reply that was cut off or hit a limit, in the same message. */
+export const useContinueReply = (threadId: ThreadId) => {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (content: string) => {
-      const thread = await call((c) => c.agents.createThread({ params: { agentId } }));
-      // An empty list lets live events for the first reply land while the prompt is sent.
-      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(thread.id), []);
-      const sent = await call((c) => c.threads.sendPrompt({ params: { threadId: thread.id }, payload: { content } }));
-      return { thread, ...sent };
-    },
+    mutationFn: (messageId: MessageId) => call((c) => c.threads.continueReply({ params: { threadId, messageId } })),
     onError: refreshIfUnavailable(queryClient),
-    onSuccess: ({ thread, userMessage, assistantMessage }) => {
-      queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId), (old) =>
-        sortThreads(insertIfMissing(old, thread)),
-      );
-      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(thread.id), (old) =>
-        insertIfMissing(insertIfMissing(old, userMessage), assistantMessage),
+    onSuccess: (message) => {
+      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId), (old) =>
+        // A live event may already have brought a newer version of the reply.
+        old
+          ? upsertMessage(
+              old,
+              newer(
+                old.find((m) => m.id === message.id),
+                message,
+              ),
+            )
+          : old,
       );
     },
   });

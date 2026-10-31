@@ -338,16 +338,18 @@ export class HobbotsRepository extends Context.Service<
 
       // Writes the message row only; the caller journals its events in the same transaction.
       const writeMessage = (message: Message) =>
-        sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, created_at, revision, seq)
+        sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, resets_at, created_at, revision, seq)
           VALUES (
             ${message.id}, ${message.threadId}, ${message.role}, ${message.content},
-            ${message.status}, ${message.error}, ${message.configVersion}, ${message.createdAt}, ${message.revision},
+            ${message.status}, ${message.error}, ${message.configVersion}, ${message.resetsAt}, ${message.createdAt}, ${message.revision},
             (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE thread_id = ${message.threadId})
           )
           ON CONFLICT (id) DO UPDATE SET
             content = excluded.content,
             status = excluded.status,
             error = excluded.error,
+            config_version = excluded.config_version,
+            resets_at = excluded.resets_at,
             revision = excluded.revision`;
 
       // The message's revision is its MessageUpserted entry, the first of its events.

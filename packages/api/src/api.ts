@@ -21,7 +21,14 @@ import {
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware } from "effect/http-api";
-import { AgentNotFound, HobUnavailable, InvalidHob, MessageNotQueued, ThreadNotFound } from "./errors.ts";
+import {
+  AgentNotFound,
+  HobUnavailable,
+  InvalidHob,
+  MessageNotQueued,
+  ReplyNotResumable,
+  ThreadNotFound,
+} from "./errors.ts";
 import { PermissionsGroup } from "./permissions.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
@@ -198,6 +205,12 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
     HttpApiEndpoint.post("interrupt", "/threads/:threadId/interrupt", {
       params: { threadId: ThreadId },
       error: ThreadNotFound,
+    }),
+    // Resumes a reply that was cut off or ended by the provider's limit, in place.
+    HttpApiEndpoint.post("continueReply", "/threads/:threadId/messages/:messageId/continue", {
+      params: { threadId: ThreadId, messageId: MessageId },
+      success: Message,
+      error: [ThreadNotFound, HobUnavailable, ReplyNotResumable],
     }),
   )
   .prefix("/api") {}

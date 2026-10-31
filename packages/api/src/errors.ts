@@ -31,6 +31,16 @@ export class MessageNotQueued extends Schema.TaggedError<MessageNotQueued>()(
 ) {}
 
 /**
+ * A reply Continue cannot resume: it did not end early, it is not the thread's latest message, or
+ * another turn is running in its thread.
+ */
+export class ReplyNotResumable extends Schema.TaggedError<ReplyNotResumable>()(
+  "ReplyNotResumable",
+  { messageId: MessageId },
+  { httpApiStatus: 409 },
+) {}
+
+/**
  * A new hob the server will not create: a field that fails the payload schema, or a brain the
  * runtime does not offer. `field` names the payload field, or is null when the body is not a hob.
  */

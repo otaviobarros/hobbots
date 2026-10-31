@@ -35,9 +35,20 @@ function Page({
   );
 }
 
-function Panel({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+function Panel({
+  label,
+  id,
+  children,
+  className,
+}: {
+  label: string;
+  id?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <section
+      id={id}
       aria-label={label}
       className={cn("cut flex max-w-[760px] flex-col gap-3 bg-panel px-[18px] py-4", className)}
     >
@@ -116,7 +127,7 @@ export function SettingsPage() {
       <Panel label="Permissions">
         <PermissionSettings />
       </Panel>
-      <Panel label="AI providers">
+      <Panel label="AI providers" id="ai-providers">
         <RuntimeCard />
         <div className="flex flex-col">
           {LATER_PROVIDERS.map((p) => (

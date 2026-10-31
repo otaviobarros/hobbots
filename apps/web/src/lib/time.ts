@@ -34,3 +34,15 @@ export const formatDay = (iso: string, now: Date = new Date()): string => {
       : { month: "short", day: "numeric", year: "numeric" },
   );
 };
+
+/** When a provider's allowance refills: "It refills at 4:00 PM, in 52 minutes." */
+export const refillText = (resetsAt: string | null, now: Date = new Date()): string => {
+  if (resetsAt === null) return "It refills later; the provider did not say when.";
+  const minutes = Math.ceil((new Date(resetsAt).getTime() - now.getTime()) / 60_000);
+  if (minutes <= 0) return "It should have refilled by now.";
+  const wait =
+    minutes < 60
+      ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
+      : `${Math.round(minutes / 60)} ${Math.round(minutes / 60) === 1 ? "hour" : "hours"}`;
+  return `It refills at ${formatTime(resetsAt)}, in ${wait}.`;
+};

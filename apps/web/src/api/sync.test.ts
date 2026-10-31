@@ -1,7 +1,8 @@
 import { Message, MessageId, ThreadId } from "@hobbots/domain";
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { applyEvent } from "./events.ts";
+import { connectionQuery, setConnection } from "./live.ts";
 import { queryKeys, upsertMessage } from "./queries.ts";
 import { startGeneration, syncedMessages } from "./sync.ts";
 
@@ -138,5 +139,20 @@ describe("query responses during a sync generation", () => {
     await loading;
 
     expect(messages(client)?.map((m) => m.id)).toEqual(["m3"]);
+  });
+
+  // covers CH-004
+  it("[TC-CH-105] a fresh Ready leaves what only this client knows, such as the connection", async () => {
+    const client = new QueryClient();
+    // A screen showing the connection keeps its query active, so a resync would refetch it.
+    const watching = new QueryObserver(client, connectionQuery).subscribe(() => undefined);
+    await settle();
+    setConnection(client, "live");
+
+    startGeneration(client);
+    await settle();
+
+    expect(client.getQueryData(connectionQuery.queryKey)).toBe("live");
+    watching();
   });
 });

@@ -31,6 +31,31 @@ export const MessageDelta = Schema.TaggedStruct("MessageDelta", {
   delta: Schema.String,
 });
 
+/** What a reply is doing besides writing, as the runtime reports it: thinking now, tool use later. */
+export const ReplyStep = Schema.Struct({
+  /** Unique within its reply. */
+  id: Schema.String,
+  kind: Schema.Literals(["thinking", "tool"]),
+  /** Short words for the step, such as "Thinking". */
+  label: Schema.String,
+  state: Schema.Literals(["running", "done"]),
+});
+export type ReplyStep = typeof ReplyStep.Type;
+
+/**
+ * Every step of a running reply so far, in order. Transient like a delta, and idempotent: each
+ * carries the whole list, which replaces the one a client holds.
+ */
+export const MessageSteps = Schema.TaggedStruct("MessageSteps", {
+  threadId: ThreadId,
+  messageId: MessageId,
+  steps: Schema.Array(ReplyStep),
+});
+export type MessageSteps = typeof MessageSteps.Type;
+
+/** A transient event: delivered live, never journaled. */
+export type TransientEvent = MessageDelta | MessageSteps;
+
 /** State events: each is written to the event journal in the transaction that makes its change (ADR 013). */
 export const JournaledEvent = Schema.Union([
   AgentUpserted,
@@ -44,7 +69,7 @@ export const JournaledEvent = Schema.Union([
 export type JournaledEvent = typeof JournaledEvent.Type;
 
 /** Events pushed to clients over SSE after the matching state change is committed. */
-export const HobbotsEvent = Schema.Union([...JournaledEvent.members, MessageDelta]);
+export const HobbotsEvent = Schema.Union([...JournaledEvent.members, MessageDelta, MessageSteps]);
 export type HobbotsEvent = typeof HobbotsEvent.Type;
 export type MessageDelta = typeof MessageDelta.Type;
 
@@ -52,7 +77,8 @@ export type MessageDelta = typeof MessageDelta.Type;
 export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   AgentUpserted: 1,
   ThreadUpserted: 1,
-  MessageUpserted: 1,
+  // 2: a reply can be `limited`, with `resetsAt`.
+  MessageUpserted: 2,
   MessageQueued: 1,
   MessageDequeued: 1,
   TurnStopRequested: 1,
@@ -108,4 +134,4 @@ export const StreamReady = Schema.Struct({ cursor: Schema.String, resumed: Schem
 export type StreamReady = typeof StreamReady.Type;
 
 /** The SSE event names on the event stream; a journaled entry is a plain `message` frame (ADR 013). */
-export const STREAM_FRAME = { ready: "ready", delta: "delta" } as const;
+export const STREAM_FRAME = { ready: "ready", delta: "delta", steps: "steps" } as const;

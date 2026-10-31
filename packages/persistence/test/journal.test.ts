@@ -1,4 +1,4 @@
-import { Agent, AgentId, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, EVENT_SCHEMA_VERSIONS, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { DateTime, Duration, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -116,7 +116,7 @@ describe("EventJournal", () => {
       _tag: "MessageUpserted",
       message: new Message({ ...message("q", "queued", "user"), revision: 3 }),
     });
-    expect(queuedEntry?.schemaVersion).toBe(1);
+    expect(queuedEntry?.schemaVersion).toBe(EVENT_SCHEMA_VERSIONS.MessageUpserted);
     expect(queuedEntry?.causationId).toBeNull();
     expect(queuedEntry?.correlation).toEqual({ agentId, threadId, messageId: "q" });
     expect(new Set(result.entries.map((e) => e.id)).size).toBe(result.entries.length);

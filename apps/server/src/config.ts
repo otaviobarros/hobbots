@@ -16,6 +16,11 @@ export const ServerConfig = Config.all({
   // Overrides the host Claude Code the runtime finds on its own.
   claudeExecutable: Config.String("HOBBOTS_CLAUDE_EXECUTABLE").pipe(Config.option),
   runtime: Config.Literals(["claude", "fake"], "HOBBOTS_RUNTIME").pipe(Config.withDefault("claude" as const)),
+  // What the fake runtime's health check reports, to show a brain that cannot think.
+  fakeAvailability: Config.Literals(
+    ["ready", "outdated", "signedOut", "unavailable", "unverified"],
+    "HOBBOTS_FAKE_AVAILABILITY",
+  ).pipe(Config.withDefault("ready" as const)),
   // Only the Vite dev server needs CORS; the served web client calls the API on its own origin.
   allowedOrigins: Config.String("HOBBOTS_ALLOWED_ORIGINS").pipe(
     Config.withDefault("http://localhost:5173,http://127.0.0.1:5173"),
