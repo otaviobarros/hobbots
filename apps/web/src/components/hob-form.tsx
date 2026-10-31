@@ -1,3 +1,4 @@
+import { HOB_COLORS, hobLook } from "@hobbots/art/look";
 import {
   type Effort,
   type HobColor,
@@ -33,7 +34,6 @@ import {
   splitModels,
   thinksWith,
 } from "../api/first-hob.ts";
-import { HOB_COLORS, hobLook } from "../art/look.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { RoleSigil } from "./role-sigil.tsx";

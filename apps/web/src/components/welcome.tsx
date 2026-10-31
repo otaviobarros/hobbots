@@ -1,3 +1,4 @@
+import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
 import { Button } from "@hobbots/ui/components/button";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -5,7 +6,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useUpdateSetup, watchedSetupQuery } from "../api/setup.ts";
-import { MOON, MOON_PALETTE } from "../art/icons.ts";
 import { FIREFLIES, HOUSES, intro, PROVIDERS, SCENE_HOBS, type SceneHob } from "../art/village.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { Stars } from "./scene.tsx";

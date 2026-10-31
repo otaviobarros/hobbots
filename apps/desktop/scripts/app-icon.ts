@@ -1,5 +1,5 @@
 /**
- * Draws the Hobbots app icon: the chief of the hobs (`apps/web/src/art/chief.ts`) on a starry night
+ * Draws the Hobbots app icon: the chief of the hobs (`packages/art/src/chief.ts`) on a starry night
  * sky that fills the whole canvas. macOS masks the icon to its own rounded shape; any transparent
  * margin makes macOS 26 and later shrink the icon onto a gray plate, so nothing here is transparent.
  *
@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { crc32, deflateSync } from "node:zlib";
-import { CHIEF, CHIEF_PALETTE as PALETTE, SMALL_CHIEF } from "../../web/src/art/chief.ts";
+import { CHIEF, CHIEF_PALETTE as PALETTE, SMALL_CHIEF } from "../../../packages/art/src/chief.ts";
 
 export { CHIEF, PALETTE, SMALL_CHIEF };
 

@@ -93,20 +93,6 @@ export type IconName = keyof typeof ICONS;
 export const iconPalette = (active: boolean): PixelPalette =>
   active ? { "#": "#f3e9b5", o: "#f2a541" } : { "#": "#a9a2e0", o: "#7770c4" };
 
-export const MOON: PixelRows = [
-  "....####....",
-  "..###.......",
-  ".###........",
-  ".##.........",
-  "###.........",
-  "###.........",
-  ".##.........",
-  ".###........",
-  "..###.......",
-  "....####....",
-];
-export const MOON_PALETTE: PixelPalette = { "#": "#f3e9b5" };
-
 /** A 12 × 13 potion bottle; `left` (0..1) fills it from the bottom. */
 export const potion = (left: number): PixelRows => {
   const rows = [

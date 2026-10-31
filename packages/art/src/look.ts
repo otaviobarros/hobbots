@@ -1,5 +1,8 @@
 import type { HobColor, RoleHat, RoleTool } from "@hobbots/domain";
-import type { PixelPalette, PixelRows } from "@hobbots/ui/components/pixel-art";
+
+export type { HobColor };
+
+import type { PixelPalette, PixelRows } from "./pixels.ts";
 
 /**
  * The seeded hob avatar generator from the design's sprite sheet. The seed picks the hat,

@@ -1,8 +1,8 @@
+import { hobLook } from "@hobbots/art/look";
 import type { Agent } from "@hobbots/domain";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useMemo } from "react";
-import { hobLook } from "../art/look.ts";
 import type { HobState } from "../lib/hob-state.ts";
 import { SigilBadge } from "./role-sigil.tsx";
 

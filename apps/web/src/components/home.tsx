@@ -1,3 +1,4 @@
+import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
 import type { Agent, Thread } from "@hobbots/domain";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -6,7 +7,7 @@ import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { type ActivityMap, useActivity } from "../api/activity.ts";
 import { agentsQuery, runtimesQuery, threadsQuery } from "../api/queries.ts";
-import { MOON, MOON_PALETTE, potion, potionPalette } from "../art/icons.ts";
+import { potion, potionPalette } from "../art/icons.ts";
 import {
   type CrewGroup,
   foldsByDefault,

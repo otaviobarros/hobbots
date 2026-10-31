@@ -1,3 +1,4 @@
+import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
 import type { Agent, ThreadId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
@@ -6,7 +7,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { agentsQuery } from "../api/queries.ts";
-import { MOON, MOON_PALETTE } from "../art/icons.ts";
 import { readStored, writeStored } from "../lib/storage.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { Stars } from "./scene.tsx";

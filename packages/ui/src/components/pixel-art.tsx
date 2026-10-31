@@ -1,9 +1,8 @@
+import { type PixelPalette, type PixelRows, pixelPaths } from "@hobbots/art/pixels";
 import { cn } from "cn";
 import type * as React from "react";
 
-/** A grid of color names, one string per row; "." (or a missing palette entry) is transparent. */
-export type PixelRows = ReadonlyArray<string>;
-export type PixelPalette = Readonly<Record<string, string>>;
+export type { PixelPalette, PixelRows };
 
 /** Draws pixel art as crisp SVG. Decorative unless a `label` is given. */
 function PixelArt({
@@ -20,14 +19,7 @@ function PixelArt({
   label?: string;
 }) {
   const width = Math.max(...rows.map((row) => row.length));
-  // One path per color keeps the DOM small even for big scenes.
-  const paths = new Map<string, string>();
-  rows.forEach((row, y) => {
-    for (let x = 0; x < row.length; x++) {
-      const fill = palette[row[x] ?? "."];
-      if (fill && fill !== "transparent") paths.set(fill, `${paths.get(fill) ?? ""}M${x} ${y}h1v1h-1z`);
-    }
-  });
+  const paths = pixelPaths(rows, palette);
   return (
     <svg
       data-slot="pixel-art"

@@ -284,6 +284,9 @@ importers:
       '@fontsource-variable/pixelify-sans':
         specifier: 5.3.0
         version: 5.3.0
+      '@hobbots/art':
+        specifier: workspace:*
+        version: link:../../packages/art
       astro:
         specifier: 7.4.4
         version: 7.4.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)
@@ -309,6 +312,9 @@ importers:
       '@hobbots/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@hobbots/art':
+        specifier: workspace:*
+        version: link:../../packages/art
       '@hobbots/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -384,6 +390,16 @@ importers:
       '@types/node':
         specifier: 26.6.5
         version: 26.6.5
+
+  packages/art:
+    dependencies:
+      '@hobbots/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
   packages/domain:
     dependencies:
@@ -472,6 +488,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@hobbots/art':
+        specifier: workspace:*
+        version: link:../art
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
