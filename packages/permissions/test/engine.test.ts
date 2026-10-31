@@ -7,6 +7,7 @@ import {
   contextFor,
   decide,
   engineAhead,
+  engineListingWith,
   engineWithLimit,
   files,
   type Home,
@@ -418,6 +419,59 @@ describe("policy engine", () => {
       await fs.utimes(nested, old, old);
       expect(Math.round((await fs.stat(nested)).mtimeMs)).toBe(old.getTime());
       expect(await edit()).toMatchObject({ decision: "deny", reason: { code: "protected-path" } });
+    } finally {
+      await engine.dispose();
+    }
+  });
+
+  // covers PE-002
+  it("[TC-PE-011] never answers from a repository index another decision is still refreshing", async () => {
+    const outer = path.join(home.root, "racing-repo");
+    const other = path.join(home.root, "racing-other");
+    await fs.mkdir(path.join(outer, ".git"), { recursive: true });
+    await fs.mkdir(path.join(other, "hooks"), { recursive: true });
+    let hold: { readonly dir: string; readonly reached: () => void; readonly released: Promise<void> } | null = null;
+    const engine = lastingEngine(
+      engineListingWith(
+        async (dir) => {
+          if (hold !== null && dir === hold.dir) {
+            hold.reached();
+            await hold.released;
+          }
+        },
+        60 * 60 * 1000,
+      ),
+    );
+    try {
+      const context = contextFor(home, "trusting", { sharedFolders: [outer, other] });
+      const edit = () => engine.decide(context, files("edit-files", other, "hooks/pre-commit"));
+      expect((await edit()).decision).toBe("allow");
+      // A new subtree holding a repository whose hooks link into the other folder.
+      const nested = path.join(outer, "new", "lib");
+      await fs.mkdir(path.join(nested, ".git"), { recursive: true });
+      await fs.symlink(path.join(other, "hooks"), path.join(nested, ".git", "hooks"));
+      const canonicalNested = await fs.realpath(nested);
+      let release = () => {};
+      const reached = new Promise<void>((resolve) => {
+        hold = {
+          dir: canonicalNested,
+          reached: resolve,
+          released: new Promise<void>((done) => {
+            release = done;
+          }),
+        };
+      });
+      // The first refresh has indexed `new` and is paused before listing `new/lib`. The clock runs an
+      // hour fast, so the second cannot tell `new` was listed just now and re-list it.
+      const first = edit();
+      await reached;
+      hold = null;
+      const second = edit();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      release();
+      for (const verdict of await Promise.all([first, second])) {
+        expect(verdict).toMatchObject({ decision: "deny", reason: { code: "protected-path" } });
+      }
     } finally {
       await engine.dispose();
     }

@@ -104,6 +104,14 @@ export const lastingEngine = (engineLayer: Layer.Layer<PolicyEngine> = PolicyEng
 export const engineWithLimit = (maxSearchedEntries: number): Layer.Layer<PolicyEngine> =>
   PolicyEngine.layer.pipe(Layer.provide(PathResolver.make({ maxSearchedEntries })));
 
+/** An engine that waits on `beforeList` before each directory it lists for its repository index. */
+export const engineListingWith = (beforeList: (dir: string) => Promise<void>, aheadMs = 0): Layer.Layer<PolicyEngine> =>
+  PolicyEngine.layer.pipe(
+    Layer.provide(
+      PathResolver.make({ maxSearchedEntries: MAX_SEARCHED_ENTRIES, beforeList, now: () => Date.now() + aheadMs }),
+    ),
+  );
+
 /** An engine whose clock runs `aheadMs` fast, so a fresh listing already looks settled. */
 export const engineAhead = (aheadMs: number): Layer.Layer<PolicyEngine> =>
   PolicyEngine.layer.pipe(

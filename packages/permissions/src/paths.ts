@@ -199,6 +199,8 @@ export interface PathResolverOptions {
   readonly maxSearchedEntries: number;
   /** The wall clock, in milliseconds; tests move it to tell a racy listing from a stale one. */
   readonly now?: () => number;
+  /** Runs before each directory is listed for the index; tests use it to make refreshes overlap. */
+  readonly beforeList?: (dir: string) => Promise<void>;
 }
 
 export class PathResolver extends Context.Service<
@@ -290,7 +292,10 @@ export class PathResolver extends Context.Service<
       };
       const indexes = new Map<string, FolderIndex>();
       const now = options.now ?? Date.now;
+      /** The refresh running for each indexed folder: one at a time, since each builds on the last. */
+      const refreshing = new Map<string, Promise<unknown>>();
       const listDir = async (dir: string, caseSensitive: boolean) => {
+        await options.beforeList?.(dir);
         const stats = await fs.lstat(dir);
         // A directory replaced by a link is gone from the index; `readdir` would follow the link.
         if (!stats.isDirectory()) return null;
@@ -342,8 +347,24 @@ export class PathResolver extends Context.Service<
         return true;
       };
       /** The repositories at or below `folder`, or null when it holds more entries than the limit. */
-      const repositoriesIn = async (folder: CanonicalPath): Promise<ReadonlyArray<string> | null> => {
+      const repositoriesIn = (folder: CanonicalPath): Promise<ReadonlyArray<string> | null> => {
         const key = `${folder.caseSensitive}:${folder.path}`;
+        // A refresh publishes directories before their descendants, so an overlapping one would
+        // take a half-listed subtree as complete. Each waits for the one before it.
+        const run = (refreshing.get(key) ?? Promise.resolve())
+          .catch(() => undefined)
+          .then(() => refresh(key, folder))
+          .catch((error) => {
+            // A refresh that failed partway leaves a partial index; the next one starts afresh.
+            indexes.delete(key);
+            throw error;
+          });
+        refreshing.set(key, run);
+        return run.finally(() => {
+          if (refreshing.get(key) === run) refreshing.delete(key);
+        });
+      };
+      const refresh = async (key: string, folder: CanonicalPath): Promise<ReadonlyArray<string> | null> => {
         let index = indexes.get(key);
         let changed: Array<string>;
         if (index === undefined) {
