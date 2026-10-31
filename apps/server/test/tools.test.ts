@@ -46,7 +46,11 @@ describe("a hob's tools", () => {
 
   it("[TC-PE-017] gives no tools when a folder holds every hob's runtime state", async () => {
     // covers PE-005
-    expect(await accessWith([join(temp, "hub")])).toBeNull();
-    expect(await accessWith([temp, project])).toBeNull();
+    // Chat-only, with the runtime folder kept so the thread's session still moves back.
+    for (const folders of [[join(temp, "hub")], [temp, project]]) {
+      const access = await accessWith(folders);
+      expect(access?.folders).toEqual([]);
+      expect(access?.runtimeFolder).toBe(join(runtimeFolders(dataDir), "hob-1"));
+    }
   });
 });

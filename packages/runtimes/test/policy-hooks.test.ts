@@ -6,6 +6,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -222,6 +223,23 @@ describe("sessions across configuration folders", () => {
     utimesSync(transcript(user, "-work"), new Date(2_000), new Date(2_000));
     adoptSession(user, [hob], "s2");
     expect(readFileSync(transcript(user, "-work"), "utf8")).toBe("one\ntwo\nthree\n");
+  });
+
+  it("never copies a link a hob's command left in its folder", () => {
+    const user = join(root, "user-claude-3");
+    const hob = join(runtimes, "hob-link");
+    const target = join(outside, "user-file.json");
+    writeFileSync(target, "{}\n");
+    mkdirSync(join(hob, "projects", "-work", "s3"), { recursive: true });
+    symlinkSync(target, join(hob, "projects", "-work", "s3.jsonl"));
+    adoptSession(user, [hob], "s3");
+    expect(existsSync(join(user, "projects", "-work", "s3.jsonl"))).toBe(false);
+    rmSync(join(hob, "projects", "-work", "s3.jsonl"));
+    writeFileSync(join(hob, "projects", "-work", "s3.jsonl"), "one\n");
+    symlinkSync(target, join(hob, "projects", "-work", "s3", "agent.jsonl"));
+    adoptSession(user, [hob], "s3");
+    expect(readFileSync(join(user, "projects", "-work", "s3.jsonl"), "utf8")).toBe("one\n");
+    expect(existsSync(join(user, "projects", "-work", "s3", "agent.jsonl"))).toBe(false);
   });
 });
 

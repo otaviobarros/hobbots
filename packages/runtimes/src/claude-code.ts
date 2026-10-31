@@ -3,7 +3,7 @@ import {
   accessSync,
   constants,
   cpSync,
-  existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   realpathSync,
@@ -157,8 +157,10 @@ export const adoptSession = (target: string, sources: ReadonlyArray<string>, ses
   const copiesIn = (folder: string) => {
     try {
       return readdirSync(join(folder, "projects")).flatMap((project) => {
-        const transcript = join(folder, "projects", project, file);
-        return existsSync(transcript) ? [{ folder, project, written: statSync(transcript).mtimeMs }] : [];
+        // Only a regular file: a hob's commands can write its folder, and a link there would make an
+        // unsandboxed turn write wherever it points.
+        const transcript = lstatSync(join(folder, "projects", project, file), { throwIfNoEntry: false });
+        return transcript?.isFile() ? [{ folder, project, written: transcript.mtimeMs }] : [];
       });
     } catch {
       return [];
@@ -181,7 +183,11 @@ export const adoptSession = (target: string, sources: ReadonlyArray<string>, ses
     mkdirSync(to, { recursive: true, mode: 0o700 });
     cpSync(join(from, file), join(to, file));
     // Some sessions keep more beside the transcript, such as subagent runs.
-    if (existsSync(join(from, sessionId))) cpSync(join(from, sessionId), join(to, sessionId), { recursive: true });
+    if (lstatSync(join(from, sessionId), { throwIfNoEntry: false })?.isDirectory())
+      cpSync(join(from, sessionId), join(to, sessionId), {
+        recursive: true,
+        filter: (path) => !lstatSync(path).isSymbolicLink(),
+      });
   } catch {
     // Claude Code reports a session it cannot resume.
   }

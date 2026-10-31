@@ -37,13 +37,12 @@ export class HobTools extends Context.Service<
             const { safetyPreset, approvedFolders } = yield* setup.get;
             const folders = yield* effectiveFolders(approvedFolders, agent.policy);
             // A folder that holds every hob's runtime state would open one hob's sessions to another,
-            // since the sandbox cannot close that state inside a folder it opens for writing.
+            // since the sandbox cannot close that state inside a folder it opens for writing. The turn
+            // then gets no folders, so it is chat-only but still resumes the hob's latest session.
             const runtimes = join(realpathSync(dirname(dataDir)), basename(runtimeFolders(dataDir)));
             const holder = folders.find((folder) => holds(folder, runtimes));
-            if (holder !== undefined) {
+            if (holder !== undefined)
               yield* Effect.logWarning(`${holder} holds Hobbots' own state; the turn is chat-only`);
-              return null;
-            }
             return {
               policy: {
                 preset: safetyPreset,
@@ -53,7 +52,7 @@ export class HobTools extends Context.Service<
                 // Threads, Quests and delegations add no restrictions yet.
                 restrictions: [],
               },
-              folders,
+              folders: holder === undefined ? folders : [],
               runtimeFolder: join(runtimeFolders(dataDir), agent.id),
             };
           }).pipe(
