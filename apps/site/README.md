@@ -25,7 +25,7 @@ Only the interactive parts run script, all from `src/scripts/page.ts`: clicking 
 
 ## Checks
 
-`pnpm check` lints, typechecks and unit-tests the site with the rest of the workspace. The [Site workflow](../../.github/workflows/site.yml) builds it and runs the end-to-end tests in `e2e/`, only when `apps/site`, `packages/art` or the workflow changes. Build before running `test:e2e` locally. Astro moves `astro preview` to the background when it detects a coding agent (`CLAUDECODE` or `AI_AGENT` set), which Playwright reads as a failed start; unset those variables for the run.
+`pnpm check` lints, typechecks and unit-tests the site with the rest of the workspace. The [Site workflow](../../.github/workflows/site.yml) builds it and runs the end-to-end tests in `e2e/`, only when `apps/site`, `packages/art`, `pnpm-lock.yaml` or the workflow changes. Build before running `test:e2e` locally. Astro moves `astro preview` to the background when it detects a coding agent (`CLAUDECODE` or `AI_AGENT` set), which Playwright reads as a failed start; unset those variables for the run.
 
 ## Teaser video
 
