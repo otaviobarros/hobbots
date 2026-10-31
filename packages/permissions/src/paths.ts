@@ -151,11 +151,23 @@ const probeCaseSensitivity = async (dir: string, cache: Map<number, boolean>): P
   return result;
 };
 
-/** The most entries searched below a directory for Git repositories before giving up closed. */
+/** The most entries searched below a folder for Git repositories before giving up closed. */
 export const MAX_SEARCHED_ENTRIES = 50_000;
 
 /** The Git resources inside a repository folder that hobs can only read (ADR 014). */
 const GIT_PROTECTED = [path.join(".git", "hooks"), path.join(".git", "config")];
+
+/** The Git resources found across the hob's folders. */
+export interface ScopeGitResources {
+  /** Canonical hooks folders, hook files they link to, and config files. */
+  readonly paths: ReadonlyArray<string>;
+  /** Folders too large to search, where an unseen repository could link its hooks. */
+  readonly unsearched: ReadonlyArray<string>;
+}
+
+export interface PathResolverOptions {
+  readonly maxSearchedEntries: number;
+}
 
 export class PathResolver extends Context.Service<
   PathResolver,
@@ -163,114 +175,132 @@ export class PathResolver extends Context.Service<
     /** Canonicalizes `input`, resolving a relative path against `base`. */
     readonly canonicalize: (input: string, base: string) => Effect.Effect<CanonicalPath, PathResolutionError>;
     /**
-     * The canonical Git hooks folders and config files a change to `target` could touch: those of
-     * every folder above it, wherever their links point, and, when it is a directory, those of every
-     * repository at or below it. A directory too large to search returns the target
-     * itself, so it is treated as protected.
+     * The canonical Git resources a change to `target` could touch: those of every folder above it,
+     * wherever their links point, and, when it is a directory, those of every repository at or below
+     * it. A directory too large to search returns the target itself, so it is treated as protected.
      */
     readonly protectedGitPaths: (target: CanonicalPath) => Effect.Effect<ReadonlyArray<string>, PathResolutionError>;
     /**
-     * The canonical Git hooks folders and config files of every repository at, above or below the
-     * given folders, wherever their links point, so a hooks folder linked into another folder is
-     * protected when reached directly. A folder too large to search returns the folder itself.
+     * The canonical Git resources of every repository at, above or below the given folders,
+     * wherever their links point, so a hooks folder linked into another folder is protected when
+     * reached directly. A repository's own working tree is not searched for further repositories.
      */
     readonly protectedGitPathsIn: (
       folders: ReadonlyArray<CanonicalPath>,
-    ) => Effect.Effect<ReadonlyArray<string>, PathResolutionError>;
+    ) => Effect.Effect<ScopeGitResources, PathResolutionError>;
   }
 >()("@hobbots/permissions/PathResolver") {
   /** Resolves against the hub's own file system. */
-  static readonly node = Layer.sync(PathResolver, () => {
-    const cache = new Map<number, boolean>();
-    const canonical = async (input: string): Promise<string> => resolvePath(input, { count: 0 });
-    const exists = (p: string) =>
-      fs.lstat(p).then(
-        () => true,
-        (error) => {
-          if (isMissing(error)) return false;
-          throw error;
-        },
-      );
-    const repositoryResources = (repository: string): Promise<ReadonlyArray<string>> =>
-      Promise.all(GIT_PROTECTED.map((r) => canonical(path.join(repository, r))));
-    const resourcesOf = async (repository: string): Promise<ReadonlyArray<string>> =>
-      (await exists(path.join(repository, ".git")))
-        ? repositoryResources(repository)
-        : // Not a repository yet: creating these would make one, so their plain spelling stays protected.
-          GIT_PROTECTED.map((r) => path.join(repository, r));
-    const ancestorsOf = (p: string): Array<string> => {
-      const found: Array<string> = [];
-      for (let dir = p; path.dirname(dir) !== dir; ) {
-        dir = path.dirname(dir);
-        found.push(dir);
-      }
-      return found;
-    };
-    /** Repositories below `dir`, without following links; null when there are too many entries. */
-    const repositoriesBelow = async (dir: string, caseSensitive: boolean): Promise<Array<string> | null> => {
-      const found: Array<string> = [];
-      const pending = [dir];
-      let searched = 0;
-      for (let current = pending.pop(); current !== undefined; current = pending.pop()) {
-        let entries: Array<Dirent>;
-        try {
-          entries = await fs.readdir(current, { withFileTypes: true });
-        } catch (error) {
-          if (isMissing(error)) continue;
-          throw error;
-        }
-        searched += entries.length;
-        if (searched > MAX_SEARCHED_ENTRIES) return null;
-        for (const entry of entries) {
-          if (comparable(entry.name, caseSensitive) === ".git") found.push(current);
-          else if (entry.isDirectory()) pending.push(path.join(current, entry.name));
-        }
-      }
-      return found;
-    };
-    return {
-      canonicalize: (input, base) =>
-        Effect.tryPromise({
-          try: async () => {
-            const resolved = await canonical(absolute(absolute(process.cwd(), base), input));
-            const caseSensitive = await probeCaseSensitivity(await nearestExisting(resolved), cache);
-            return { path: resolved, caseSensitive };
+  static readonly make = (options: PathResolverOptions) =>
+    Layer.sync(PathResolver, () => {
+      const cache = new Map<number, boolean>();
+      const canonical = async (input: string): Promise<string> => resolvePath(input, { count: 0 });
+      const exists = (p: string) =>
+        fs.lstat(p).then(
+          () => true,
+          (error) => {
+            if (isMissing(error)) return false;
+            throw error;
           },
-          catch: (error) => new PathResolutionError({ path: input, message: String(error) }),
-        }),
-      protectedGitPaths: (target) =>
-        Effect.tryPromise({
-          try: async () => {
-            const repositories = ancestorsOf(target.path);
-            const stats = await fs.lstat(target.path).catch(() => null);
-            if (stats?.isDirectory()) {
-              const below = await repositoriesBelow(target.path, target.caseSensitive);
-              if (below === null) return [target.path];
-              // Only actual repositories: removing a folder cannot touch a `.git` it does not hold.
-              repositories.push(...below);
-            }
-            return (await Promise.all(repositories.map(resourcesOf))).flat();
-          },
-          catch: (error) => new PathResolutionError({ path: target.path, message: String(error) }),
-        }),
-      protectedGitPathsIn: (folders) =>
-        Effect.tryPromise({
-          try: async () => {
-            const repositories = new Set<string>();
-            const tooLarge: Array<string> = [];
-            for (const folder of folders) {
-              const below = await repositoriesBelow(folder.path, folder.caseSensitive);
-              if (below === null) tooLarge.push(folder.path);
-              for (const repository of [...ancestorsOf(folder.path), ...(below ?? [])]) {
-                if (await exists(path.join(repository, ".git"))) repositories.add(repository);
+        );
+      const isRepository = (dir: string) => exists(path.join(dir, ".git"));
+      /** The hooks folder and config, and the files the hooks folder's entries link to. */
+      const repositoryResources = async (repository: string): Promise<ReadonlyArray<string>> => {
+        const [hooks, config] = await Promise.all(GIT_PROTECTED.map((r) => canonical(path.join(repository, r))));
+        const entries = await fs.readdir(hooks as string, { withFileTypes: true }).catch((error) => {
+          if (isMissing(error)) return [];
+          throw error;
+        });
+        const linked = await Promise.all(
+          entries.filter((e) => e.isSymbolicLink()).map((e) => canonical(path.join(hooks as string, e.name))),
+        );
+        return [hooks as string, config as string, ...linked];
+      };
+      const resourcesOf = async (repository: string): Promise<ReadonlyArray<string>> =>
+        (await isRepository(repository))
+          ? repositoryResources(repository)
+          : // Not a repository yet: creating these would make one, so their plain spelling stays protected.
+            GIT_PROTECTED.map((r) => path.join(repository, r));
+      const ancestorsOf = (p: string): Array<string> => {
+        const found: Array<string> = [];
+        for (let dir = p; path.dirname(dir) !== dir; ) {
+          dir = path.dirname(dir);
+          found.push(dir);
+        }
+        return found;
+      };
+      /**
+       * Repositories at or below `dir`, without following links or entering a repository's working
+       * tree; null when the search passes the entry limit.
+       */
+      const repositoriesBelow = async (dir: string, caseSensitive: boolean): Promise<Array<string> | null> => {
+        const found: Array<string> = [];
+        const pending = [dir];
+        let searched = 0;
+        for (let current = pending.pop(); current !== undefined; current = pending.pop()) {
+          let entries: Array<Dirent>;
+          try {
+            entries = await fs.readdir(current, { withFileTypes: true });
+          } catch (error) {
+            if (isMissing(error)) continue;
+            throw error;
+          }
+          if (entries.some((e) => comparable(e.name, caseSensitive) === ".git")) {
+            found.push(current);
+            continue;
+          }
+          searched += entries.length;
+          if (searched > options.maxSearchedEntries) return null;
+          for (const entry of entries) if (entry.isDirectory()) pending.push(path.join(current, entry.name));
+        }
+        return found;
+      };
+      return {
+        canonicalize: (input, base) =>
+          Effect.tryPromise({
+            try: async () => {
+              const resolved = await canonical(absolute(absolute(process.cwd(), base), input));
+              const caseSensitive = await probeCaseSensitivity(await nearestExisting(resolved), cache);
+              return { path: resolved, caseSensitive };
+            },
+            catch: (error) => new PathResolutionError({ path: input, message: String(error) }),
+          }),
+        protectedGitPaths: (target) =>
+          Effect.tryPromise({
+            try: async () => {
+              const repositories = ancestorsOf(target.path);
+              const stats = await fs.lstat(target.path).catch(() => null);
+              if (stats?.isDirectory()) {
+                const below = await repositoriesBelow(target.path, target.caseSensitive);
+                if (below === null) return [target.path];
+                // Only actual repositories: removing a folder cannot touch a `.git` it does not hold.
+                repositories.push(...below);
               }
-            }
-            const resources = await Promise.all([...repositories].map(repositoryResources));
-            return [...tooLarge, ...resources.flat()];
-          },
-          catch: (error) =>
-            new PathResolutionError({ path: folders.map((f) => f.path).join(", "), message: String(error) }),
-        }),
-    };
-  });
+              return (await Promise.all(repositories.map(resourcesOf))).flat();
+            },
+            catch: (error) => new PathResolutionError({ path: target.path, message: String(error) }),
+          }),
+        protectedGitPathsIn: (folders) =>
+          Effect.tryPromise({
+            try: async () => {
+              const repositories = new Set<string>();
+              const unsearched: Array<string> = [];
+              for (const folder of folders) {
+                const above: Array<string> = [];
+                for (const dir of ancestorsOf(folder.path)) if (await isRepository(dir)) above.push(dir);
+                // Inside a working tree the walk up from each target finds the repository.
+                const below = above.length > 0 ? [] : await repositoriesBelow(folder.path, folder.caseSensitive);
+                if (below === null) unsearched.push(folder.path);
+                for (const repository of [...above, ...(below ?? [])]) repositories.add(repository);
+              }
+              const resources = await Promise.all([...repositories].map(repositoryResources));
+              return { paths: resources.flat(), unsearched };
+            },
+            catch: (error) =>
+              new PathResolutionError({ path: folders.map((f) => f.path).join(", "), message: String(error) }),
+          }),
+      };
+    });
+
+  static readonly node = PathResolver.make({ maxSearchedEntries: MAX_SEARCHED_ENTRIES });
 }

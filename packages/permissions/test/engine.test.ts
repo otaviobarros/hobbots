@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { type PolicyDecision, PolicyOperation, PRESET_DECISIONS, SafetyPreset } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { evaluate, type PolicyRequest, policyVersion, type ResolvedScope } from "../src/index.ts";
-import { contextFor, decide, files, type Home, useHome } from "./fixture.ts";
+import { contextFor, decide, engineWithLimit, files, type Home, useHome } from "./fixture.ts";
 
 const home: Home = useHome();
 
@@ -351,6 +351,64 @@ describe("policy engine", () => {
       expect((await decide(context, files("edit-files", other, "docs/readme.md"))).decision).not.toBe("deny");
       expect((await decide(context, files("read-files", other, "hooks/pre-commit"))).decision).toBe("allow");
     }
+  });
+
+  // covers PE-002
+  it("[TC-PE-008] keeps single-file changes open in folders too large to search, and asks instead of guessing", async () => {
+    const big = path.join(home.root, "big");
+    const bigRepo = path.join(home.root, "big-repo");
+    await fs.mkdir(path.join(big, "docs"), { recursive: true });
+    await fs.mkdir(path.join(bigRepo, ".git", "hooks"), { recursive: true });
+    for (let i = 0; i < 10; i++) {
+      await fs.writeFile(path.join(big, `file-${i}.txt`), "");
+      await fs.writeFile(path.join(bigRepo, `file-${i}.txt`), "");
+    }
+    const limited = engineWithLimit(5);
+    const context = (preset: SafetyPreset) =>
+      contextFor(home, preset, { sharedFolders: [big, bigRepo, path.join(home.project, "src")] });
+    // A repository is not searched below its root, however large, and a folder inside one not at all.
+    for (const [cwd, target] of [
+      [bigRepo, "file-1.txt"],
+      [path.join(home.project, "src"), "index.ts"],
+    ] as const) {
+      expect((await decide(context("trusting"), files("edit-files", cwd, target), limited)).decision).toBe("allow");
+    }
+    expect(
+      (await decide(context("trusting"), files("edit-files", bigRepo, ".git/hooks/pre-commit"), limited)).reason.code,
+    ).toBe("protected-path");
+    // Past the limit a change asks rather than locking the folder; a folder too large to search is refused.
+    for (const preset of ["balanced", "trusting"] as const) {
+      expect(await decide(context(preset), files("edit-files", big, "file-1.txt"), limited)).toMatchObject({
+        decision: "ask",
+        reason: { code: "unsearched-folder" },
+      });
+      expect((await decide(context(preset), files("delete-files", big, "docs"), limited)).decision).toBe("ask");
+      expect(await decide(context(preset), files("delete-files", big, "."), limited)).toMatchObject({
+        decision: "deny",
+        reason: { code: "protected-path" },
+      });
+    }
+    expect((await decide(context("careful"), files("edit-files", big, "file-1.txt"), limited)).reason.code).toBe(
+      "preset",
+    );
+    expect((await decide(context("trusting"), files("read-files", big, "file-1.txt"), limited)).decision).toBe("allow");
+    expect((await decide(context("trusting"), files("edit-files", big, "file-1.txt"))).decision).toBe("allow");
+  });
+
+  // covers PE-002
+  it("[TC-PE-009] keeps the files a hook links to read-only", async () => {
+    const repo = path.join(home.root, "hooked-repo");
+    await fs.mkdir(path.join(repo, ".git", "hooks"), { recursive: true });
+    await fs.mkdir(path.join(repo, "scripts"));
+    await fs.writeFile(path.join(repo, "scripts", "pre-push.sh"), "");
+    await fs.writeFile(path.join(repo, "scripts", "build.sh"), "");
+    await fs.symlink(path.join(repo, "scripts", "pre-push.sh"), path.join(repo, ".git", "hooks", "pre-push"));
+    const context = contextFor(home, "trusting", { sharedFolders: [repo] });
+    for (const operation of ["edit-files", "delete-files"] as const) {
+      expect((await decide(context, files(operation, repo, "scripts/pre-push.sh"))).reason.code).toBe("protected-path");
+      expect((await decide(context, files(operation, repo, "scripts"))).reason.code).toBe("protected-path");
+    }
+    expect((await decide(context, files("edit-files", repo, "scripts/build.sh"))).decision).toBe("allow");
   });
 
   // covers PE-002

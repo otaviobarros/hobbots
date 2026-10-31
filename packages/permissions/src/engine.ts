@@ -10,7 +10,7 @@ import {
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { isBlockedHost, normalizeHost } from "./hosts.ts";
-import { type CanonicalPath, isInside, PathResolver } from "./paths.ts";
+import { type CanonicalPath, isInside, PathResolver, type ScopeGitResources } from "./paths.ts";
 
 /**
  * The policy engine of ADR 014: Allow, Ask or Deny for a normalized operation on a concrete
@@ -73,6 +73,8 @@ export const ReasonCode = Schema.Literals([
   "model-host",
   /** A force push or a push to the default branch always asks, once only. */
   "protected-push",
+  /** A change in a folder too large to search for Git repositories asks, since it could be a hook. */
+  "unsearched-folder",
 ]);
 export type ReasonCode = typeof ReasonCode.Type;
 
@@ -107,6 +109,8 @@ export interface ResolvedTarget {
    * `PathResolver.protectedGitPaths`). A directory target covers everything beneath it.
    */
   readonly protectedPaths?: ReadonlyArray<string>;
+  /** For a change, whether it lies in a folder too large to search for repositories. */
+  readonly unsearched?: boolean;
 }
 
 /** A request whose paths are already canonical, for the pure evaluation. */
@@ -254,6 +258,18 @@ const fileTarget = (
         `${canonical.path} is or holds a Git hook or config, which hobs can only read.`,
       );
     }
+    if (target.unsearched === true) {
+      const answer = fromLayers(context, operation);
+      if (answer.decision === "allow") {
+        return {
+          decision: "ask",
+          operation,
+          code: "unsearched-folder",
+          message: `${canonical.path} is in a folder too large to check for Git hooks, so changing it needs approval.`,
+        };
+      }
+      return answer;
+    }
   }
   return fromLayers(context, operation);
 };
@@ -386,12 +402,19 @@ export class PolicyEngine extends Context.Service<
         );
       const folder = (input: string) => resolve(input, "/");
       /** `inScope` holds the Git resources found across the hob's folders (`protectedGitPathsIn`). */
-      const resolveChange = (input: string, base: string, inScope: ReadonlyArray<string>) =>
+      const resolveChange = (input: string, base: string, inScope: ScopeGitResources) =>
         resolver.canonicalize(input, base).pipe(
           Effect.flatMap((canonical) =>
-            resolver
-              .protectedGitPaths(canonical)
-              .pipe(Effect.map((own): ResolvedTarget => ({ input, canonical, protectedPaths: [...own, ...inScope] }))),
+            resolver.protectedGitPaths(canonical).pipe(
+              Effect.map(
+                (own): ResolvedTarget => ({
+                  input,
+                  canonical,
+                  protectedPaths: [...own, ...inScope.paths],
+                  unsearched: inScope.unsearched.some((folder) => isInside(canonical, folder)),
+                }),
+              ),
+            ),
           ),
           Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
         );

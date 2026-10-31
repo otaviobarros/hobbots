@@ -2,9 +2,15 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { EMPTY_HOB_POLICY, type SafetyPreset } from "@hobbots/domain";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { afterAll, beforeAll } from "vitest";
-import { type PolicyContext, PolicyEngine, type PolicyRequest, type PolicyVerdict } from "../src/index.ts";
+import {
+  PathResolver,
+  type PolicyContext,
+  PolicyEngine,
+  type PolicyRequest,
+  type PolicyVerdict,
+} from "../src/index.ts";
 
 /**
  * A pretend home folder on disk: a shared `project` folder holding Hobbots' data folder and a Git
@@ -68,11 +74,19 @@ export const contextFor = (home: Home, preset: SafetyPreset, extra: Partial<Poli
   ...extra,
 });
 
-export const decide = (context: PolicyContext, request: PolicyRequest): Promise<PolicyVerdict> =>
+export const decide = (
+  context: PolicyContext,
+  request: PolicyRequest,
+  engineLayer: Layer.Layer<PolicyEngine> = PolicyEngine.node,
+): Promise<PolicyVerdict> =>
   Effect.gen(function* () {
     const engine = yield* PolicyEngine;
     return yield* engine.decide(context, request);
-  }).pipe(Effect.provide(PolicyEngine.node), Effect.runPromise);
+  }).pipe(Effect.provide(engineLayer), Effect.runPromise);
+
+/** An engine whose repository search gives up after `maxSearchedEntries`, to exercise the limit. */
+export const engineWithLimit = (maxSearchedEntries: number): Layer.Layer<PolicyEngine> =>
+  PolicyEngine.layer.pipe(Layer.provide(PathResolver.make({ maxSearchedEntries })));
 
 export const files = (
   operation: "read-files" | "edit-files" | "delete-files",
