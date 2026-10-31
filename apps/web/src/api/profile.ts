@@ -1,6 +1,7 @@
 import type { UpdateAgentPayload } from "@hobbots/api";
 import {
   type Agent,
+  type ReplyLength,
   type RetireWork,
   type RoleHat,
   type RoleId,
@@ -8,6 +9,7 @@ import {
   type RuntimeModels,
   roleFields,
   starterRole,
+  type Voice,
 } from "@hobbots/domain";
 import { type BrainChoice, settleBrain } from "./first-hob.ts";
 
@@ -21,10 +23,12 @@ export interface RoleChoice {
 }
 
 /**
- * The hob profile's editable configuration: its role, its instructions and the model and effort it
- * thinks with. Kept apart from the screen so the edit it sends can be tested without a browser.
+ * The hob profile's editable configuration: its role, its tone, its instructions and the model and
+ * effort it thinks with. Kept apart from the screen so the edit it sends can be tested without a browser.
  */
 export interface ProfileDraft extends BrainChoice, RoleChoice {
+  readonly voice: Voice;
+  readonly length: ReplyLength;
   readonly instructions: string;
 }
 
@@ -62,6 +66,8 @@ export const profileDraft = (hob: Agent, models?: RuntimeModels): ProfileDraft =
     sigil: hob.sigil,
     hat: hob.hat,
     tool: hob.tool,
+    voice: hob.voice,
+    length: hob.length,
     instructions: hob.instructions,
     model: hob.model ?? DEFAULT_MODEL,
     effort: hob.effort,
@@ -79,6 +85,8 @@ export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload
     ...(role.sigil !== hob.sigil && { sigil: role.sigil }),
     ...(role.hat !== hob.hat && { hat: role.hat }),
     ...(role.tool !== hob.tool && { tool: role.tool }),
+    ...(draft.voice !== hob.voice && { voice: draft.voice }),
+    ...(draft.length !== hob.length && { length: draft.length }),
     ...(draft.instructions !== hob.instructions && { instructions: draft.instructions }),
     ...(model !== hob.model && { model }),
     ...(draft.effort !== hob.effort && { effort: draft.effort }),
@@ -89,7 +97,7 @@ export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload
  * Moves a draft onto a newer baseline, such as a version saved from another window or the answer
  * to a save. Each part the user left as it was in the old baseline takes the new value; each part
  * they changed keeps their edit. The model and effort move together, as the form picks them, and so
- * do the role's title, sigil, hat and tool.
+ * do the role's title, sigil, hat and tool. The voice and the length move on their own.
  *
  * While a save is on its way, the parts it sends stay as the user has them now, even when that is
  * back to the old baseline: the update for the save itself can arrive before the save's answer.
@@ -107,12 +115,16 @@ export const rebaseDraft = (
   const roleChanged = (d: ProfileDraft) => ROLE_KEYS.some((key) => d[key] !== from[key]);
   const keepRole = roleChanged(draft) || (sending !== undefined && roleChanged(sending));
   const role = keepRole ? draft : to;
+  const keep = <K extends "voice" | "length">(key: K) =>
+    draft[key] !== from[key] || (sending !== undefined && sending[key] !== from[key]) ? draft[key] : to[key];
   return {
     role: role.role,
     roleTitle: role.roleTitle,
     sigil: role.sigil,
     hat: role.hat,
     tool: role.tool,
+    voice: keep("voice"),
+    length: keep("length"),
     instructions: keepInstructions ? draft.instructions : to.instructions,
     model: keepBrain ? draft.model : to.model,
     effort: keepBrain ? draft.effort : to.effort,
@@ -122,6 +134,8 @@ export const rebaseDraft = (
 /** Whether the draft differs from where the form started. */
 export const isDirty = (base: ProfileDraft, draft: ProfileDraft): boolean =>
   ROLE_KEYS.some((key) => base[key] !== draft[key]) ||
+  base.voice !== draft.voice ||
+  base.length !== draft.length ||
   base.instructions !== draft.instructions ||
   base.model !== draft.model ||
   base.effort !== draft.effort;

@@ -46,6 +46,8 @@ describe("hob profile", () => {
       sigil: "assistant",
       hat: null,
       tool: null,
+      voice: "default",
+      length: "balanced",
       instructions: "Write short answers.",
       model: "default",
       effort: "medium",
@@ -153,6 +155,20 @@ describe("hob profile", () => {
     const rebased = rebaseDraft(base, profileDraft(after, offered), draft);
     expect(rebased).toMatchObject({ role: "qa", roleTitle: "QA engineer", instructions: "Be brief." });
     expect(isDirty(base, draft)).toBe(true);
+  });
+
+  it("sends a new voice and length as one edit, and keeps them when another window saves", () => {
+    const pip = hob();
+    const base = profileDraft(pip, offered);
+    const draft = { ...base, voice: "wizard", length: "brief" } as const;
+    expect(isDirty(base, draft)).toBe(true);
+    expect(profileEdit(pip, draft)).toEqual({ voice: "wizard", length: "brief" });
+    const after = hob({ length: "detailed", instructions: "Be brief.", configVersion: 2 });
+    expect(rebaseDraft(base, profileDraft(after, offered), { ...base, voice: "pirate" })).toMatchObject({
+      voice: "pirate",
+      length: "detailed",
+      instructions: "Be brief.",
+    });
   });
 
   it("says what the hob is good at from its chores, else from its starter role", () => {

@@ -72,7 +72,7 @@ const run = <A, E>(test: (gate: Gate, events: Array<HobbotsEvent>) => Effect.Eff
       publish: (entries) => Effect.sync(() => void events.push(...entries.map((entry) => entry.payload))),
       publishTransient: (event) => Effect.sync(() => void events.push(event)),
       stream: Stream.empty,
-      subscribe: Effect.succeed(Stream.empty),
+      subscribe: Effect.die("unused"),
       close: Effect.void,
     });
     const admission = Layer.effect(

@@ -10,6 +10,7 @@ import { HobAdmission } from "./admission.ts";
 import { ChatService } from "./chat.ts";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
+import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { HobService } from "./hobs.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
@@ -49,7 +50,8 @@ const ServerLive = Layer.unwrap(
             executable: Option.getOrUndefined(config.claudeExecutable),
           });
     const App = HobLifecycle.layer
-      .pipe(Layer.provideMerge(Layer.mergeAll(ChatService.layer, HobService.layer, JournalCompaction)))
+      .pipe(Layer.provideMerge(Layer.mergeAll(EventStream.layer, HobService.layer, JournalCompaction)))
+      .pipe(Layer.provideMerge(ChatService.layer))
       .pipe(Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, HobAdmission.layer, Runtime, identity)));
 
     if (!existsSync(join(config.webDir, "index.html"))) {
@@ -68,6 +70,7 @@ const ServerLive = Layer.unwrap(
         HttpRouter.serve(
           Layer.mergeAll(
             ApiRoutes,
+            EventStreamRoute,
             WebClientRoutes(config.webDir),
             LoopbackHostOnly,
             HttpRouter.cors({ allowedOrigins: config.allowedOrigins }),

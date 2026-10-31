@@ -1,20 +1,14 @@
 import { AgentNotFound, HobbotsApi, ThreadNotFound } from "@hobbots/api";
-import { HobbotsEvent } from "@hobbots/domain";
 import { HobbotsRepository } from "@hobbots/persistence";
 import { RuntimeAdapter } from "@hobbots/runtimes";
-import { Effect, Layer, Option, Schema, Stream } from "effect";
-import { Sse } from "effect/encoding";
-import { HttpServerResponse } from "effect/http";
+import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ChatService } from "./chat.ts";
-import { EventBus } from "./event-bus.ts";
 import { HobInputErrorsLayer, HobService } from "./hobs.ts";
 import { Installation } from "./installation.ts";
 import { HobLifecycle } from "./lifecycle.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
-
-const encodeEvent = Schema.encodeEffect(Schema.fromJsonString(HobbotsEvent));
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
 const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
@@ -68,7 +62,6 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
 
 const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
   Effect.gen(function* () {
-    const bus = yield* EventBus;
     const runtime = yield* RuntimeAdapter;
     const installation = yield* Installation;
     const repo = yield* HobbotsRepository;
@@ -98,28 +91,6 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
       health: () => Effect.succeed(installation),
       activity: () => activity,
       runtimes: () => runtime.health.pipe(Effect.map((health) => [health])),
-      // The payloads only, until clients resume from the journal's cursor (#113).
-      events: () =>
-        Effect.succeed(
-          HttpServerResponse.stream(
-            Stream.unwrap(
-              Effect.map(bus.subscribe, (events) =>
-                // A comment first, sent once subscribed, so the client opens without waiting for an event
-                // and can refetch knowing nothing published since is lost.
-                Stream.concat(
-                  Stream.succeed(": subscribed\n\n"),
-                  events.pipe(
-                    Stream.mapEffect((event) =>
-                      Effect.orDie(encodeEvent(event._tag === "Journaled" ? event.entry.payload : event.event)),
-                    ),
-                    Stream.map((data) => Sse.encoder.write({ _tag: "Event", event: "message", id: undefined, data })),
-                  ),
-                ),
-              ),
-            ).pipe(Stream.encodeText),
-            { contentType: "text/event-stream", headers: { "cache-control": "no-cache" } },
-          ),
-        ),
     });
   }),
 );

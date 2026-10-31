@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { type ReplyLength, toneLines, type Voice } from "./tone.ts";
 
 /**
  * The starter roles a hob can take. A role is a title with a sigil, and the hat and tool
@@ -1204,14 +1205,24 @@ export const hobIdentity = (name: string, role: RoleId | null, roleTitle: string
 
 /**
  * What the runtime is told before the user's messages, in labeled sections so the model can tell
- * what Hobbots states about the hob from what the user wrote: who the hob is, then its instructions.
+ * what Hobbots states about the hob from what the user wrote: who the hob is, how it talks when its
+ * tone differs from the defaults, then its instructions, last, so the user's own words win.
  */
 export const systemInstructions = (
   name: string,
-  config: { readonly role: RoleId | null; readonly roleTitle: string; readonly instructions: string },
+  config: {
+    readonly role: RoleId | null;
+    readonly roleTitle: string;
+    readonly voice: Voice;
+    readonly length: ReplyLength;
+    readonly instructions: string;
+  },
 ): string => {
-  const identity = hobIdentity(name, config.role, config.roleTitle);
+  const tone = toneLines(config.voice, config.length);
   const instructions = config.instructions.trim();
-  const about = `## About you\n${identity}`;
-  return instructions === "" ? about : `${about}\n\n## Your instructions, from the user\n${instructions}`;
+  return [
+    `## About you\n${hobIdentity(name, config.role, config.roleTitle)}`,
+    ...(tone.length === 0 ? [] : [`## How you talk\n${tone.join("\n")}`]),
+    ...(instructions === "" ? [] : [`## Your instructions, from the user\n${instructions}`]),
+  ].join("\n\n");
 };

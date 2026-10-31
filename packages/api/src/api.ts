@@ -3,11 +3,11 @@ import {
   AgentId,
   AgentStatus,
   Effort,
-  HobbotsEvent,
   HobColor,
   LookSeed,
   Message,
   MessageId,
+  ReplyLength,
   RetireWork,
   RoleHat,
   RoleId,
@@ -17,9 +17,10 @@ import {
   RuntimeModels,
   Thread,
   ThreadId,
+  Voice,
 } from "@hobbots/domain";
 import { Schema } from "effect";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/http-api";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware } from "effect/http-api";
 import { AgentNotFound, HobUnavailable, InvalidHob, MessageNotQueued, ThreadNotFound } from "./errors.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
@@ -44,6 +45,9 @@ export const CreateAgentPayload = Schema.Struct({
   /** The hat and tool the sprite wears, or null to leave them to the look seed. */
   hat: Schema.NullOr(RoleHat),
   tool: Schema.NullOr(RoleTool),
+  /** How the hob talks; Default and Balanced when left out. */
+  voice: Schema.optionalKey(Voice),
+  length: Schema.optionalKey(ReplyLength),
   lookSeed: LookSeed,
   lookColor: HobColor,
   runtime: RuntimeKind,
@@ -66,6 +70,8 @@ export const UpdateAgentPayload = Schema.Struct({
   sigil: Schema.optionalKey(RoleId),
   hat: Schema.optionalKey(Schema.NullOr(RoleHat)),
   tool: Schema.optionalKey(Schema.NullOr(RoleTool)),
+  voice: Schema.optionalKey(Voice),
+  length: Schema.optionalKey(ReplyLength),
   lookSeed: Schema.optionalKey(LookSeed),
   lookColor: Schema.optionalKey(HobColor),
   model: Schema.optionalKey(Schema.NullOr(Schema.NonEmptyString)),
@@ -201,9 +207,6 @@ export class SystemGroup extends HttpApiGroup.make("system")
     HttpApiEndpoint.get("activity", "/activity", { success: Activity }),
     HttpApiEndpoint.get("runtimes", "/runtimes", {
       success: Schema.Array(RuntimeHealth),
-    }),
-    HttpApiEndpoint.get("events", "/events", {
-      success: HttpApiSchema.StreamSse({ data: HobbotsEvent }),
     }),
   )
   .prefix("/api") {}

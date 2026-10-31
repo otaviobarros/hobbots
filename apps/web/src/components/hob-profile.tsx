@@ -28,6 +28,7 @@ import { Brain, Choice } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { RoleSheet } from "./role-sheet.tsx";
 import { RoleSigil } from "./role-sigil.tsx";
+import { TonePicker } from "./tone-picker.tsx";
 
 type Tab = "profile" | "tools" | "permissions";
 const TABS: ReadonlyArray<readonly [Tab, string]> = [
@@ -37,7 +38,7 @@ const TABS: ReadonlyArray<readonly [Tab, string]> = [
 ];
 
 /**
- * A hob's profile (screen 11): who it is and how it thinks. Role, instructions and brain are edited
+ * A hob's profile (screen 11): who it is, how it talks and how it thinks. Role, tone, instructions and brain are edited
  * together and saved as the hob's next configuration version; Pause / Wake and Retire act at once.
  */
 export function HobProfile({ hobId }: { hobId: AgentId }) {
@@ -320,12 +321,32 @@ function ProfileTab({ hob }: { hob: Agent }) {
             <RoleCard name={hob.name} draft={draft} disabled={update.isPending} onChange={() => setSheetOpen(true)} />
           </section>
 
+          <section aria-labelledby="hob-tone" className="flex flex-col gap-3.5">
+            <div className="flex flex-col gap-1">
+              <h2 id="hob-tone" className="lbl m-0 text-moonlight">
+                Tone
+              </h2>
+              <span className="text-sm text-secondary-text">
+                How {hob.name} talks. If your instructions describe a voice too, they win.
+              </span>
+            </div>
+            <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-3.5 border-0 p-0">
+              <TonePicker
+                name={hob.name}
+                voice={draft.voice}
+                length={draft.length}
+                onVoice={(voice) => setDraft((d) => ({ ...d, voice }))}
+                onLength={(length) => setDraft((d) => ({ ...d, length }))}
+              />
+            </fieldset>
+          </section>
+
           <section className="flex flex-col gap-2">
             <label htmlFor="hob-instructions" className="lbl text-moonlight">
               Instructions
             </label>
             <span id="hob-instructions-note" className="text-sm text-secondary-text">
-              {hob.name} reads this before every reply, after its name and role. Add anything else it should know.
+              {hob.name} reads this before every reply, after its name, role and tone. Add anything else it should know.
             </span>
             <textarea
               id="hob-instructions"
