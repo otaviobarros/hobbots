@@ -148,7 +148,8 @@ The file holds personal data. Keep it out of the repository and delete it once i
 `d1 execute` cannot bind parameters, so the address goes into the SQL text. Read it with `read -r`, so the shell takes it as typed, and double each `'`, so an address such as `o'brien@example.com` stays one SQL string:
 
 ```sh
-read -r -p "Email to remove: " EMAIL
+printf "Email to remove: "
+read -r EMAIL
 SQL_EMAIL=$(printf '%s' "$EMAIL" | sed "s/'/''/g")
 wrangler d1 execute hobbots-waitlist-production --env production --remote \
   --command "SELECT email FROM waitlist WHERE email = lower(trim('$SQL_EMAIL'))"
