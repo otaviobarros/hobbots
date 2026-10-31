@@ -3,9 +3,9 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:f
 import { homedir, platform, tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
+import { RuntimeError } from "@hobbots/agents";
 import type { SandboxState } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
-import { RuntimeError } from "./adapter.ts";
 
 /**
  * The OS sandbox a runtime with tools starts in (ADR 014). Commands, and the runtime itself, run

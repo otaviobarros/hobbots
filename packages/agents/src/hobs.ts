@@ -1,7 +1,6 @@
 import {
   AgentNotFound,
   type CreateAgentPayload,
-  HobInputErrors,
   InvalidFolder,
   InvalidHob,
   OverrideWidens,
@@ -23,13 +22,12 @@ import {
   type SafetyPreset,
   starterRole,
 } from "@hobbots/domain";
-import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
-import { RuntimeAdapter } from "@hobbots/runtimes";
-import { Context, DateTime, Effect, Layer, Option, SchemaIssue } from "effect";
-import { HttpApiMiddleware } from "effect/http-api";
+import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission } from "./admission.ts";
-import { EventBus } from "./event-bus.ts";
-import { checkFolder, folderIdentity, sameFolderIn } from "./folders.ts";
+import { sameFolderIn } from "./folders.ts";
+import { EventPublisher, FolderChecks, InstallationSettings } from "./ports.ts";
+import { HobbotsRepository } from "./repository.ts";
+import { RuntimeAdapter } from "./runtime.ts";
 
 /**
  * Checks a new hob's model and effort against what the runtime offers. A null model is the
@@ -91,20 +89,6 @@ const samePolicy = (a: HobPolicy, b: HobPolicy) =>
   a.hiddenSharedFolders.join("\0") === b.hiddenSharedFolders.join("\0") &&
   POLICY_OPERATIONS.every((operation) => a.overrides[operation] === b.overrides[operation]);
 
-const formatIssue = SchemaIssue.makeFormatterStandardSchemaV1();
-
-/** The first failing field of a create or edit request, as `InvalidHob`. */
-export const HobInputErrorsLayer = HttpApiMiddleware.layerSchemaErrorTransform(HobInputErrors, (error) => {
-  const [first] = formatIssue(error.cause.issue).issues;
-  const field = first?.path?.[0];
-  return Effect.fail(
-    new InvalidHob({
-      field: typeof field === "string" ? field : null,
-      message: first?.message ?? error.cause.message,
-    }),
-  );
-});
-
 const roleFields = ["role", "roleTitle", "sigil", "hat", "tool"] as const;
 const toneFields = ["voice", "length"] as const;
 
@@ -153,15 +137,16 @@ export class HobService extends Context.Service<
       payload: UpdateHobPermissionsPayload,
     ) => Effect.Effect<Agent, AgentNotFound | InvalidFolder | OverrideWidens>;
   }
->()("@hobbots/server/HobService") {
+>()("@hobbots/agents/HobService") {
   static readonly layer = Layer.effect(
     HobService,
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
-      const bus = yield* EventBus;
+      const bus = yield* EventPublisher;
       const runtime = yield* RuntimeAdapter;
       const admission = yield* HobAdmission;
-      const setup = yield* SetupRepository;
+      const setup = yield* InstallationSettings;
+      const folders = yield* FolderChecks;
 
       // Under the hob's lock, so the event carries the status the hob has when the change is stored:
       // a retirement publishes after it and a stale change cannot re-list a retired hob. Another
@@ -249,12 +234,12 @@ export class HobService extends Context.Service<
       ) {
         // Own folders are checked on the hub and stored canonical, once each, where first added.
         const ownFolders = payload.ownFolders && [
-          ...new Set(yield* Effect.forEach(payload.ownFolders, (folder) => checkFolder(folder))),
+          ...new Set(yield* Effect.forEach(payload.ownFolders, (folder) => folders.check(folder))),
         ];
         // A hidden folder is stored canonical too, so any spelling of a shared folder hides it. One
         // missing from the hub keeps its spelling; it is compared by identity whenever it is read.
         const hiddenSharedFolders = payload.hiddenSharedFolders && [
-          ...new Set(yield* Effect.forEach(payload.hiddenSharedFolders, folderIdentity)),
+          ...new Set(yield* Effect.forEach(payload.hiddenSharedFolders, folders.identity)),
         ];
         return yield* nextVersion(id, (agent) =>
           Effect.gen(function* () {
@@ -278,7 +263,7 @@ export class HobService extends Context.Service<
               }
             }
             if (hiddenSharedFolders !== undefined) {
-              const isShared = yield* sameFolderIn(approvedFolders);
+              const isShared = yield* sameFolderIn(folders, approvedFolders);
               const unknown = yield* Effect.findFirst(policy.hiddenSharedFolders, (folder) =>
                 Effect.map(isShared(folder), (shared) => !shared),
               ).pipe(Effect.map(Option.getOrUndefined));

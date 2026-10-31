@@ -1,7 +1,13 @@
+import {
+  type PromptRequest,
+  RuntimeAdapter,
+  RuntimeError,
+  type RuntimeEvent,
+  RuntimeLimitReached,
+} from "@hobbots/agents";
 import { type RuntimeAvailability, RuntimeHealth, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Clock, Effect, Exit, Layer, Option, Stream } from "effect";
-import { type PromptRequest, RuntimeAdapter, RuntimeError, type RuntimeEvent, RuntimeLimitReached } from "./adapter.ts";
 import { refusal, toolTurn, UNKNOWN_TOOL } from "./claude-code.ts";
 import { narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
 

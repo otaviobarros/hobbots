@@ -1,3 +1,4 @@
+import { EventPublisher } from "@hobbots/agents";
 import type { EventEnvelope, TransientEvent } from "@hobbots/domain";
 import { Context, Effect, Layer, PubSub, type Scope, Stream } from "effect";
 
@@ -24,21 +25,29 @@ export class EventBus extends Context.Service<
     readonly close: Effect.Effect<void>;
   }
 >()("@hobbots/server/EventBus") {
+  /** The bus, which also publishes for the use cases. */
   static readonly layer = Layer.effect(
-    EventBus,
-    Effect.gen(function* () {
-      const pubsub = yield* PubSub.unbounded<BusEvent>();
-      return EventBus.of({
-        publish: (entries) =>
-          PubSub.publishAll(
-            pubsub,
-            entries.map((entry) => ({ _tag: "Journaled", entry }) as const),
-          ).pipe(Effect.asVoid),
-        publishTransient: (event) => PubSub.publish(pubsub, { _tag: "Transient", event }).pipe(Effect.asVoid),
-        stream: Stream.fromPubSub(pubsub),
-        subscribe: PubSub.subscribe(pubsub),
-        close: PubSub.shutdown(pubsub),
-      });
-    }),
+    EventPublisher,
+    Effect.map(EventBus, (bus) => EventPublisher.of(bus)),
+  ).pipe(
+    Layer.provideMerge(
+      Layer.effect(
+        EventBus,
+        Effect.gen(function* () {
+          const pubsub = yield* PubSub.unbounded<BusEvent>();
+          return EventBus.of({
+            publish: (entries) =>
+              PubSub.publishAll(
+                pubsub,
+                entries.map((entry) => ({ _tag: "Journaled", entry }) as const),
+              ).pipe(Effect.asVoid),
+            publishTransient: (event) => PubSub.publish(pubsub, { _tag: "Transient", event }).pipe(Effect.asVoid),
+            stream: Stream.fromPubSub(pubsub),
+            subscribe: PubSub.subscribe(pubsub),
+            close: PubSub.shutdown(pubsub),
+          });
+        }),
+      ),
+    ),
   );
 }

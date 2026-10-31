@@ -1,13 +1,15 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HobTools } from "@hobbots/agents";
 import { type Agent, EMPTY_HOB_POLICY } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Effect, Layer } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
+import { NodeFolderChecks } from "../src/folders.ts";
 import { Installation } from "../src/installation.ts";
-import { HobTools, runtimeFolders } from "../src/tools.ts";
+import { HobToolsLive, runtimeFolders } from "../src/tools.ts";
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-tools-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -26,8 +28,9 @@ const accessWith = (approvedFolders: ReadonlyArray<string>) =>
     return yield* tools.access(hob);
   }).pipe(
     Effect.provide(
-      HobTools.layer.pipe(
+      HobToolsLive.pipe(
         Layer.provideMerge(SetupRepository.layer),
+        Layer.provide(NodeFolderChecks),
         Layer.provide(TestDatabase),
         Layer.provide(
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),

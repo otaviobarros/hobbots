@@ -1,15 +1,19 @@
+import {
+  ChatService,
+  EventPublisher,
+  HobAdmission,
+  HobbotsRepository,
+  HobLifecycle,
+  HobService,
+  HobTools,
+} from "@hobbots/agents";
 import { Agent, AgentId, type HobbotsEvent } from "@hobbots/domain";
-import { HobbotsRepository, SetupRepository } from "@hobbots/persistence";
+import { HobbotsRepositoryLive, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Deferred, Effect, Exit, Fiber, Layer, Option, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
-import { HobAdmission } from "../src/admission.ts";
-import { ChatService } from "../src/chat.ts";
-import { EventBus } from "../src/event-bus.ts";
-import { HobService } from "../src/hobs.ts";
-import { HobLifecycle } from "../src/lifecycle.ts";
-import { HobTools } from "../src/tools.ts";
+import { NodeFolderChecks } from "../src/folders.ts";
 
 // Each case holds one request at a chosen repository call and releases it only after a second
 // request has asked for the same hob, so the overlap happens on every run. The short pause after
@@ -68,13 +72,10 @@ const run = <A, E>(test: (gate: Gate, events: Array<HobbotsEvent>) => Effect.Eff
             gate.pass("updateAgentConfig").pipe(Effect.andThen(base.updateAgentConfig(agent))),
         });
       }),
-    ).pipe(Layer.provide(HobbotsRepository.layer), Layer.provide(TestDatabase));
-    const bus = Layer.succeed(EventBus, {
+    ).pipe(Layer.provide(HobbotsRepositoryLive), Layer.provide(TestDatabase));
+    const bus = Layer.succeed(EventPublisher, {
       publish: (entries) => Effect.sync(() => void events.push(...entries.map((entry) => entry.payload))),
       publishTransient: (event) => Effect.sync(() => void events.push(event)),
-      stream: Stream.empty,
-      subscribe: Effect.die("unused"),
-      close: Effect.void,
     });
     const admission = Layer.effect(
       HobAdmission,
@@ -94,6 +95,7 @@ const run = <A, E>(test: (gate: Gate, events: Array<HobbotsEvent>) => Effect.Eff
           SetupRepository.layer.pipe(Layer.provide(TestDatabase)),
           bus,
           admission,
+          NodeFolderChecks,
           FakeRuntimeLayer({ delay: "40 millis" }),
         ),
       ),

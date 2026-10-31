@@ -1,6 +1,6 @@
 # packages/runtimes
 
-Validation slice implemented ([ADR 009](../../docs/decisions/009-toolchain-and-validation-slice.md)): Runtime adapter interface, the Claude Code adapter (Agent SDK) and a deterministic fake adapter.
+Validation slice implemented ([ADR 009](../../docs/decisions/009-toolchain-and-validation-slice.md)): the Claude Code adapter (Agent SDK) and a deterministic fake adapter. Both implement the `RuntimeAdapter` port that `@hobbots/agents` defines.
 
 Codex, Claude Code and ACP adapters, versioned capability discovery and normalization.
 

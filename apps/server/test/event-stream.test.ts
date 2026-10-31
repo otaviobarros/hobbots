@@ -1,11 +1,16 @@
+import {
+  ChatService,
+  HobAdmission,
+  HobbotsRepository,
+  HobTools,
+  RuntimeAdapter,
+  type RuntimeEvent,
+} from "@hobbots/agents";
 import { Agent, AgentId, MessageId, Thread, ThreadId } from "@hobbots/domain";
-import { EventJournal, HobbotsRepository } from "@hobbots/persistence";
+import { EventJournal, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { RuntimeAdapter, type RuntimeEvent } from "@hobbots/runtimes";
 import { Deferred, Effect, Exit, Fiber, Layer, Queue, Schedule, type Scope, Stream } from "effect";
 import { describe, expect, it } from "vitest";
-import { HobAdmission } from "../src/admission.ts";
-import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
 import {
   CONNECTION_BUFFER,
@@ -16,7 +21,6 @@ import {
   resumePoint,
   type StreamFrame,
 } from "../src/event-stream.ts";
-import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("odo");
 
@@ -55,7 +59,7 @@ const makeHub = Effect.gen(function* () {
     Layer.provideMerge(Layer.mergeAll(EventBus.layer, HobAdmission.layer, runtime)),
     Layer.provideMerge(
       Layer.effectDiscard(summonHob).pipe(
-        Layer.provideMerge(Layer.mergeAll(HobbotsRepository.layer, EventJournal.layer)),
+        Layer.provideMerge(Layer.mergeAll(HobbotsRepositoryLive, EventJournal.layer)),
         Layer.provideMerge(TestDatabase),
       ),
     ),

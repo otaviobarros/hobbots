@@ -10,7 +10,7 @@ import { Context, type Effect, Layer, Semaphore } from "effect";
 export class HobAdmission extends Context.Service<
   HobAdmission,
   { readonly withHob: <A, E, R>(agentId: AgentId, effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R> }
->()("@hobbots/server/HobAdmission") {
+>()("@hobbots/agents/HobAdmission") {
   static readonly layer = Layer.sync(HobAdmission, () => {
     const locks = new Map<AgentId, Semaphore.Semaphore>();
     const lock = (agentId: AgentId) => {

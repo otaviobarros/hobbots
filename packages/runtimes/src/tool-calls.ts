@@ -1,4 +1,5 @@
 import { basename } from "node:path";
+import { operationDecision } from "@hobbots/agents";
 import { narrowest, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS } from "@hobbots/domain";
 import type { PolicyContext, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 
@@ -19,16 +20,6 @@ export const CLAUDE_CODE_TOOLS = [
   "NotebookEdit",
   "Bash",
 ] as const;
-
-/** The preset's answer for an operation, narrowed by the hob's overrides and every restriction. */
-export const operationDecision = (
-  context: Pick<PolicyContext, "preset" | "hob" | "restrictions">,
-  operation: PolicyOperation,
-): PolicyDecision =>
-  narrowest(
-    PRESET_DECISIONS[context.preset][operation],
-    ...[context.hob.overrides, ...context.restrictions].flatMap((layer) => layer[operation] ?? []),
-  );
 
 /**
  * The tools offered to the runtime this turn. A tool whose operations are all denied is left out,

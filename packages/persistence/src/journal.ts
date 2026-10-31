@@ -9,12 +9,6 @@ import {
 import { Context, DateTime, Duration, Effect, Layer, Schema } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 
-/** A committed write: what it stored, and the journal entries it appended, in sequence order. */
-export interface Committed<A> {
-  readonly value: A;
-  readonly entries: ReadonlyArray<EventEnvelope>;
-}
-
 /** Where the journal stands: its epoch (new for every fresh database) and the last committed sequence. */
 export interface JournalHead {
   readonly epoch: string;

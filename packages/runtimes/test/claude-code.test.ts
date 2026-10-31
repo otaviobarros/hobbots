@@ -12,11 +12,11 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { RuntimeLimitReached } from "@hobbots/agents";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
-import { RuntimeLimitReached } from "../src/adapter.ts";
 import {
   brainOptions,
   type ClaudeCodeConfig,

@@ -3,6 +3,7 @@ import {
   type Agent,
   type AgentConfiguration,
   type AgentId,
+  type Committed,
   DEFAULT_THREAD_TITLE,
   isInProgress,
   isResumable,
@@ -17,11 +18,11 @@ import {
   ThreadId,
   titleFromPrompt,
 } from "@hobbots/domain";
-import { type Committed, HobbotsRepository } from "@hobbots/persistence";
-import { RuntimeAdapter, type RuntimeEvent, type ToolAccess } from "@hobbots/runtimes";
 import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
-import { EventBus } from "./event-bus.ts";
+import { EventPublisher } from "./ports.ts";
+import { HobbotsRepository } from "./repository.ts";
+import { RuntimeAdapter, type RuntimeEvent, type ToolAccess } from "./runtime.ts";
 import { HobTools, narrows } from "./tools.ts";
 
 interface Reply {
@@ -97,12 +98,12 @@ export class ChatService extends Context.Service<
     /** The steps of each reply still streaming or stopping. */
     readonly streamingSteps: Effect.Effect<ReadonlyArray<MessageSteps>>;
   }
->()("@hobbots/server/ChatService") {
+>()("@hobbots/agents/ChatService") {
   static readonly layer = Layer.effect(
     ChatService,
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
-      const bus = yield* EventBus;
+      const bus = yield* EventPublisher;
       const runtime = yield* RuntimeAdapter;
       const admission = yield* HobAdmission;
       const hobTools = yield* HobTools;

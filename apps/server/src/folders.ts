@@ -1,6 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { FolderChecks } from "@hobbots/agents";
 import { InvalidFolder } from "@hobbots/api";
 import { SetupRepository } from "@hobbots/persistence";
 import { Effect, Layer } from "effect";
@@ -40,16 +41,14 @@ export const checkFolder = (typed: string, home: string = homedir()): Effect.Eff
  * A folder that was missing when it was stored, such as one on an unmounted drive, keeps its
  * spelling; comparing by this identity matches it again once it returns.
  */
-export const folderIdentity = (folder: string): Effect.Effect<string> =>
+const folderIdentity = (folder: string): Effect.Effect<string> =>
   checkFolder(folder).pipe(Effect.orElseSucceed(() => folder));
 
-/** Whether `folder` is one of `among`, by spelling or by the folder each names now. */
-export const sameFolderIn = (among: ReadonlyArray<string>) =>
-  Effect.gen(function* () {
-    const identities = new Set([...among, ...(yield* Effect.forEach(among, folderIdentity))]);
-    return (folder: string) =>
-      Effect.map(folderIdentity(folder), (identity) => identities.has(folder) || identities.has(identity));
-  });
+/** The hub's folder checks, on the filesystem of the machine the server runs on. */
+export const NodeFolderChecks = Layer.succeed(FolderChecks, {
+  check: (typed) => checkFolder(typed),
+  identity: folderIdentity,
+});
 
 /**
  * Stores the shared folders canonical when the hub starts, since folders saved before they were

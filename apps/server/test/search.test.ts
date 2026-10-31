@@ -1,31 +1,34 @@
 import { NodeHttpServer } from "@effect/platform-node";
+import { ChatService, HobAdmission, HobLifecycle, HobService, HobTools, PermissionSummary } from "@hobbots/agents";
 import type { SearchHit } from "@hobbots/domain";
-import { HobbotsRepository, SearchIndex, SetupRepository } from "@hobbots/persistence";
+import { HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { HobAdmission } from "../src/admission.ts";
-import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
-import { HobService } from "../src/hobs.ts";
+import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
-import { HobLifecycle } from "../src/lifecycle.ts";
-import { HobTools } from "../src/tools.ts";
 
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
 // A fresh database per test: the whole API over the test database, with the fake runtime.
 beforeEach(() => {
-  const Persistence = Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer, SearchIndex.layer).pipe(
+  const Persistence = Layer.mergeAll(HobbotsRepositoryLive, SetupRepository.layer, SearchIndex.layer).pipe(
     Layer.provideMerge(TestDatabase),
   );
   const App = HobLifecycle.layer
     .pipe(
-      Layer.provideMerge(Layer.mergeAll(ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)), HobService.layer)),
+      Layer.provideMerge(
+        Layer.mergeAll(
+          ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
+          HobService.layer,
+          PermissionSummary.layer,
+        ),
+      ),
     )
     .pipe(
       Layer.provideMerge(
@@ -33,6 +36,7 @@ beforeEach(() => {
           Persistence,
           EventBus.layer,
           HobAdmission.layer,
+          NodeFolderChecks,
           FakeRuntimeLayer(),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/data" }),
         ),

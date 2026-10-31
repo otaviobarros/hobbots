@@ -1,11 +1,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { HobbotsRepository } from "@hobbots/agents";
 import { Agent, AgentId, type AgentStatus, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepository, migrations, SearchIndex, SqliteLive } from "../src/index.ts";
+import { migrations, SearchIndex, SqliteLive } from "../src/index.ts";
 import searchIndex from "../src/migrations/0011_search_index.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
@@ -63,7 +65,7 @@ const seed = Effect.gen(function* () {
   yield* repo.upsertMessage(message("x1", "gone", "Tomatoes from a retired hob."));
 });
 
-const Layers = Layer.mergeAll(HobbotsRepository.layer, SearchIndex.layer).pipe(Layer.provideMerge(TestDatabase));
+const Layers = Layer.mergeAll(HobbotsRepositoryLive, SearchIndex.layer).pipe(Layer.provideMerge(TestDatabase));
 
 const ids = (hits: ReadonlyArray<{ thread: Thread; matches: ReadonlyArray<{ messageId: string }> }>) =>
   hits.map((hit) => [hit.thread.id, hit.matches.map((m) => m.messageId)]);
@@ -216,7 +218,7 @@ describe("SearchIndex", () => {
       return { message: yield* index.search("receipts"), title: yield* index.search("plan garden") };
     }).pipe(
       Effect.provide(
-        Layer.mergeAll(HobbotsRepository.layer, SearchIndex.layer).pipe(Layer.provideMerge(TestDatabaseAt(before))),
+        Layer.mergeAll(HobbotsRepositoryLive, SearchIndex.layer).pipe(Layer.provideMerge(TestDatabaseAt(before))),
       ),
       Effect.runPromise,
     );
@@ -240,7 +242,7 @@ describe("SearchIndex", () => {
       }).pipe(
         Effect.provide(
           SearchIndex.sqliteWorker(filename).pipe(
-            Layer.merge(HobbotsRepository.layer),
+            Layer.merge(HobbotsRepositoryLive),
             Layer.provideMerge(SqliteLive(filename)),
           ),
         ),

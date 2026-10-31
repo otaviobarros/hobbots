@@ -2,25 +2,22 @@ import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
+import { ChatService, HobAdmission, HobLifecycle, HobService, PermissionSummary } from "@hobbots/agents";
 import { PolicyEngine } from "@hobbots/permissions";
-import { EventJournal, HobbotsRepository, SearchIndex, SetupRepository, SqliteLive } from "@hobbots/persistence";
+import { EventJournal, HobbotsRepositoryLive, SearchIndex, SetupRepository, SqliteLive } from "@hobbots/persistence";
 import { ClaudeCodeLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
-import { HobAdmission } from "./admission.ts";
-import { ChatService } from "./chat.ts";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
-import { CanonicalSharedFolders } from "./folders.ts";
-import { HobService } from "./hobs.ts";
+import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
-import { HobLifecycle } from "./lifecycle.ts";
 import { IPv6Loopback } from "./loopback.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
-import { HobTools } from "./tools.ts";
+import { HobToolsLive } from "./tools.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
 
 const ServerLive = Layer.unwrap(
@@ -40,7 +37,7 @@ const ServerLive = Layer.unwrap(
     const database = join(config.dataDir, "hobbots.sqlite");
     // Search reads the same file from a worker thread, so a long search never blocks the server.
     const Persistence = Layer.mergeAll(
-      HobbotsRepository.layer,
+      HobbotsRepositoryLive,
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
@@ -55,12 +52,20 @@ const ServerLive = Layer.unwrap(
           }).pipe(Layer.provide(ProcessSandbox.layer))
     ).pipe(Layer.provide(PolicyEngine.node));
     const App = HobLifecycle.layer
-      .pipe(Layer.provideMerge(Layer.mergeAll(EventStream.layer, HobService.layer, JournalCompaction)))
+      .pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(EventStream.layer, HobService.layer, PermissionSummary.layer, JournalCompaction),
+        ),
+      )
       .pipe(Layer.provideMerge(ChatService.layer))
-      .pipe(Layer.provideMerge(HobTools.layer))
+      .pipe(Layer.provideMerge(HobToolsLive))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
       .pipe(Layer.provideMerge(CanonicalSharedFolders))
-      .pipe(Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, HobAdmission.layer, Runtime, identity)));
+      .pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(Persistence, EventBus.layer, HobAdmission.layer, NodeFolderChecks, Runtime, identity),
+        ),
+      );
 
     if (!existsSync(join(config.webDir, "index.html"))) {
       yield* Effect.logWarning(

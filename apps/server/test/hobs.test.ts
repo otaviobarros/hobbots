@@ -1,5 +1,16 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import {
+  ChatService,
+  checkBrain,
+  HobAdmission,
+  HobLifecycle,
+  HobService,
+  HobTools,
+  PermissionSummary,
+  type PromptRequest,
+  RuntimeAdapter,
+} from "@hobbots/agents";
+import {
   type Agent,
   type Message,
   RuntimeModel,
@@ -8,20 +19,16 @@ import {
   starterRole,
   toneLines,
 } from "@hobbots/domain";
-import { HobbotsRepository, SearchIndex, SetupRepository } from "@hobbots/persistence";
+import { HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { fakeInstructionsPrompt, makeFakeRuntime, type PromptRequest, RuntimeAdapter } from "@hobbots/runtimes";
+import { fakeInstructionsPrompt, makeFakeRuntime } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { HobAdmission } from "../src/admission.ts";
-import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
-import { checkBrain, HobService } from "../src/hobs.ts";
+import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
-import { HobLifecycle } from "../src/lifecycle.ts";
-import { HobTools } from "../src/tools.ts";
 
 const hob = {
   name: "Wren",
@@ -76,16 +83,23 @@ beforeEach(() => {
   });
   const App = HobLifecycle.layer
     .pipe(
-      Layer.provideMerge(Layer.mergeAll(ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)), HobService.layer)),
+      Layer.provideMerge(
+        Layer.mergeAll(
+          ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
+          HobService.layer,
+          PermissionSummary.layer,
+        ),
+      ),
     )
     .pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          Layer.mergeAll(HobbotsRepository.layer, SetupRepository.layer, SearchIndex.layer).pipe(
+          Layer.mergeAll(HobbotsRepositoryLive, SetupRepository.layer, SearchIndex.layer).pipe(
             Layer.provideMerge(TestDatabase),
           ),
           EventBus.layer,
           HobAdmission.layer,
+          NodeFolderChecks,
           runtime,
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
         ),

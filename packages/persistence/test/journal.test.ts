@@ -1,11 +1,13 @@
+import { HobbotsRepository } from "@hobbots/agents";
 import { Agent, AgentId, EVENT_SCHEMA_VERSIONS, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { DateTime, Duration, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepository, JOURNAL_RETENTION } from "../src/index.ts";
+import { EventJournal, JOURNAL_RETENTION } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
-const Repositories = Layer.mergeAll(HobbotsRepository.layer, EventJournal.layer);
+const Repositories = Layer.mergeAll(HobbotsRepositoryLive, EventJournal.layer);
 const TestLayer = Repositories.pipe(Layer.provideMerge(TestDatabase));
 const now = "2026-10-30T00:00:00.000Z";
 const agentId = AgentId.make("aldric");

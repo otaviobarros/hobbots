@@ -1,15 +1,12 @@
+import { ChatService, HobAdmission, HobbotsRepository, HobLifecycle, HobTools } from "@hobbots/agents";
 import { MessageNotQueued } from "@hobbots/api";
 import { Agent, AgentId, type HobbotsEvent, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
-import { HobbotsRepository } from "@hobbots/persistence";
+import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Fiber, Layer, Option, Schedule, Stream } from "effect";
 import { describe, expect, it } from "vitest";
-import { HobAdmission } from "../src/admission.ts";
-import { ChatService } from "../src/chat.ts";
 import { EventBus } from "../src/event-bus.ts";
-import { HobLifecycle } from "../src/lifecycle.ts";
-import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("aldric");
 const THREAD_ID = ThreadId.make("t-queued");
@@ -89,7 +86,7 @@ const testLayer = (seed: Effect.Effect<void, never, HobbotsRepository> = Effect.
     Layer.provideMerge(
       Layer.mergeAll(
         Layer.effectDiscard(Effect.andThen(summonHob, seed)).pipe(
-          Layer.provideMerge(HobbotsRepository.layer.pipe(Layer.provideMerge(TestDatabase))),
+          Layer.provideMerge(HobbotsRepositoryLive.pipe(Layer.provideMerge(TestDatabase))),
         ),
         EventBus.layer,
         HobAdmission.layer,

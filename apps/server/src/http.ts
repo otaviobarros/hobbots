@@ -1,12 +1,9 @@
+import { ChatService, foundAgent, HobbotsRepository, HobLifecycle, HobService, RuntimeAdapter } from "@hobbots/agents";
 import { HobbotsApi, ThreadNotFound } from "@hobbots/api";
-import { HobbotsRepository } from "@hobbots/persistence";
-import { RuntimeAdapter } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { ChatService } from "./chat.ts";
-import { foundAgent, HobInputErrorsLayer, HobService } from "./hobs.ts";
+import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { Installation } from "./installation.ts";
-import { HobLifecycle } from "./lifecycle.ts";
 import { PermissionsHandlers } from "./permissions.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";

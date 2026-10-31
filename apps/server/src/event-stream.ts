@@ -1,8 +1,8 @@
+import { ChatService } from "@hobbots/agents";
 import { EventEnvelope, STREAM_FRAME, type StreamReady, type TransientEvent } from "@hobbots/domain";
 import { EventJournal, type JournalHead } from "@hobbots/persistence";
 import { type Cause, Context, Effect, Exit, Fiber, Layer, PubSub, Queue, Schema, Scope, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { ChatService } from "./chat.ts";
 import { type BusEvent, EventBus } from "./event-bus.ts";
 
 /** What a connection sends, in order: `Ready`, journal entries by sequence, transient reply events, keep-alives (ADR 013). */

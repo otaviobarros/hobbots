@@ -1,13 +1,17 @@
+import {
+  ChatService,
+  HobAdmission,
+  HobbotsRepository,
+  HobTools,
+  RuntimeAdapter,
+  type RuntimeEvent,
+} from "@hobbots/agents";
 import { Agent, AgentId } from "@hobbots/domain";
-import { EventJournal, HobbotsRepository } from "@hobbots/persistence";
+import { EventJournal, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { RuntimeAdapter, type RuntimeEvent } from "@hobbots/runtimes";
 import { Context, Effect, Layer, Schedule, Stream } from "effect";
 import { describe, expect, it } from "vitest";
-import { HobAdmission } from "../src/admission.ts";
-import { ChatService } from "../src/chat.ts";
 import { type BusEvent, EventBus } from "../src/event-bus.ts";
-import { HobTools } from "../src/tools.ts";
 
 const HOB_ID = AgentId.make("odo");
 
@@ -84,7 +88,7 @@ describe("event journal", () => {
     }).pipe(
       Effect.provide(
         Layer.effectDiscard(summonHob).pipe(
-          Layer.provideMerge(Layer.mergeAll(HobbotsRepository.layer, EventJournal.layer)),
+          Layer.provideMerge(Layer.mergeAll(HobbotsRepositoryLive, EventJournal.layer)),
           Layer.provideMerge(TestDatabase),
         ),
       ),
