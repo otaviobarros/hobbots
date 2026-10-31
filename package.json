@@ -15,7 +15,7 @@
     "pg:down": "docker compose -f infrastructure/local/compose.yaml down",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "check": "biome check . && turbo run typecheck test"
+    "check": "node scripts/check-standards.mjs && biome check . && turbo run typecheck test"
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {

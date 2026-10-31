@@ -6,7 +6,8 @@ Scope: this repository. Purpose: tell people and coding agents where each projec
 
 | Concern | Read when | Authoritative source |
 |---|---|---|
-| Instructions and architectural constraints | Every task | [AGENTS.md](../AGENTS.md) |
+| Instructions | Every task | [AGENTS.md](../AGENTS.md) |
+| Engineering rules (`STD-` IDs) | Planning, implementing or reviewing a change | [Engineering standards](standards/README.md) |
 | Product scope and requirement IDs (`AG-`, `CH-`, `OR-`, `IN-`, `EX-`, …) | Planning; writing acceptance criteria | [MVP requirements](product/mvp-requirements.md), [open questions](product/open-questions.md), [vision](product/vision.md) |
 | Architecture and per-area contracts | Before changing an area; AGENTS.md maps area → contract | [Architecture overview](architecture/overview.md), [`docs/architecture/`](architecture/) |
 | Decisions | Interfaces, ownership, significant tradeoffs; record deliberate changes as a new or updated ADR | [ADR index](decisions/README.md) |
@@ -16,7 +17,7 @@ Scope: this repository. Purpose: tell people and coding agents where each projec
 | Package boundaries | Adding code to a package; README-only packages are planned boundaries with no code yet | Each `apps/*/README.md` and `packages/*/README.md` |
 | Issues, labels, board, commits, branches, PRs | Picking up or publishing work | [Issues and the project board](contributing/issues-and-board.md), [CONTRIBUTING.md](../CONTRIBUTING.md), [PR template](../.github/pull_request_template.md) |
 | Versions, tags, changelog, betas | Changing release configuration or cutting a release | [Releases](contributing/releases.md) |
-| Dependencies | Adding a package | [AGENTS.md](../AGENTS.md) (latest stable via `pnpm add`; exact Effect v4 pins) |
+| Dependencies | Adding a package | [STD-DOCS-006](standards/docs.md) and [STD-EFFECT-005](standards/effect.md) |
 
 ## Checks
 
@@ -32,7 +33,7 @@ Commands live in executable configuration; read them there rather than from this
 
 ### Test case identity
 
-Integration, end-to-end and regression tests carry a stable case ID at the start of the test title, for example `it("[TC-CH-001] streams a turn and resumes the session", …)`. The middle part is the requirement area (`CH`, `OR`, `IN`, …, or `GEN` when none fits). A comment names the requirement IDs the case covers (`// covers CH-001, CH-004`). Case IDs are separate from requirement IDs, are never reused, and a removed case is retired rather than renumbered. Pure unit tests do not need IDs. Existing tests get an ID when they are next changed.
+[STD-TEST-001](standards/testing.md) defines the `[TC-<AREA>-NNN]` case IDs for integration, end-to-end and regression tests.
 
 ## Environment and worktrees
 
@@ -67,18 +68,18 @@ Workflow selection: **Default for matching tasks** (selected by the maintainer d
 
 | Practice | Disposition | Source or decision | Scope and rationale |
 |---|---|---|---|
-| Architectural constraints, contracts, ADR change control | Established | [AGENTS.md](../AGENTS.md), [ADR index](decisions/README.md) | Whole repository |
+| Architectural constraints, contracts, ADR change control | Established | [Engineering standards](standards/README.md), [ADR index](decisions/README.md) | Whole repository |
 | `pnpm check` before handing work back or opening a PR | Established | [AGENTS.md](../AGENTS.md), [CONTRIBUTING.md](../CONTRIBUTING.md) | Root; the PR template checks it |
 | Conventional Commits, `Closes #N`, issue forms and labels | Established | [Issues and the project board](contributing/issues-and-board.md) | All contributions |
 | GitHub Issues as requirements owner for tasks; MVP requirement IDs | Established | [Issues and the project board](contributing/issues-and-board.md), [MVP requirements](product/mvp-requirements.md) | Resolve live issue state at task time |
-| Deterministic fakes before real-runtime checks | Established | [AGENTS.md](../AGENTS.md) › Working rules | Runtime and orchestration work |
+| Deterministic fakes before real-runtime checks | Established | [STD-TEST-002](standards/testing.md) | Runtime and orchestration work |
 | Stable IDs for integration, E2E and regression tests | Established | agent-engineering workflow contract | Required by the adopted workflow |
 | `[TC-<AREA>-NNN]` title prefix as the test ID scheme | Accepted | Setup interview | Fits Vitest titles with no tooling; IDs added as tests are touched |
 | Catalog or duplicate-ID check for test cases | Proposed | No adoption decision | Add once enough tests carry IDs to need it; blocks nothing |
 | Branch names `<type>/<issue>-<slug>` | Accepted | Setup interview; recorded in [Issues and the project board](contributing/issues-and-board.md#working-on-an-issue) | Matches Conventional Commit types |
 | Worktree isolation (own install, data folder, port) | Accepted | Setup interview; [Environment and worktrees](#environment-and-worktrees) | Keeps agent work off real user data |
 | Glossary | Accepted | [Glossary](product/glossary.md) | Built only from existing docs |
-| Stable rule IDs for AGENTS.md constraints | Proposed | Deferred in setup interview | Revisit when reviews need to cite rules; blocks nothing |
+| Stable rule IDs (`STD-<AREA>-NNN`) with an index check in `pnpm check` | Accepted | Standards interview, issue #170; [Engineering standards](standards/README.md) | Whole repository |
 | CI running `pnpm check` on SQLite and the persistence and server suites on PostgreSQL | Established | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [ADR 011](decisions/011-sqlite-storage.md) | Every pull request and push to `main` |
 | Agent-engineering default routing | Accepted | Setup interview; [AGENTS.md](../AGENTS.md#workflow) | Guidance, not enforcement |
 
