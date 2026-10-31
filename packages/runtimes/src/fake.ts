@@ -133,7 +133,7 @@ export const scriptedToolEvents = (
               targets: decision.verdict?.targets ?? [],
               label,
               reason: decision.reason,
-              decidedBy: "policy",
+              decidedBy: decision.decidedBy ?? "policy",
             });
           }
           yield* Queue.end(queue);

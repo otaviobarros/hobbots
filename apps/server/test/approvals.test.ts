@@ -6,6 +6,7 @@ import {
   ChatService,
   HobAdmission,
   HobbotsRepository,
+  HobLifecycle,
   HobTools,
   type ToolAccess,
 } from "@hobbots/agents";
@@ -75,8 +76,8 @@ const tools = Layer.succeed(
 const Persistence = Layer.mergeAll(HobbotsRepositoryLive, ApprovalRepositoryLive).pipe(
   Layer.provideMerge(TestDatabase),
 );
-const TestLayer = ChatService.layer.pipe(
-  Layer.provide(tools),
+const TestLayer = HobLifecycle.layer.pipe(
+  Layer.provideMerge(ChatService.layer.pipe(Layer.provide(tools))),
   Layer.provideMerge(ApprovalService.layer),
   Layer.provideMerge(
     Layer.mergeAll(
@@ -138,7 +139,11 @@ const toolSteps = (events: ReadonlyArray<{ readonly _tag: string; readonly event
   );
 
 const run = <A, E>(
-  effect: Effect.Effect<A, E, ApprovalService | ChatService | HobbotsRepository | EventBus | Scope.Scope>,
+  effect: Effect.Effect<
+    A,
+    E,
+    ApprovalService | ChatService | HobLifecycle | HobbotsRepository | EventBus | Scope.Scope
+  >,
 ) => effect.pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
 describe("Ask decisions", () => {
@@ -276,6 +281,30 @@ describe("Ask decisions", () => {
     expect(result.done.status).toBe("stopped");
     expect(result.stored?.state).toBe("expired");
     expect(Exit.isFailure(result.late) && JSON.stringify(result.late.cause)).toContain("expired");
+  });
+
+  // covers PE-007, AG-006
+  it("[TC-PE-052] expires the request when its hob retires, even with its reply left to finish", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const lifecycle = yield* HobLifecycle;
+        const { thread, pending } = yield* askInNewThread();
+        const request = pending[0] as ApprovalRequest;
+        yield* lifecycle.retire(HOB_ID, "finish");
+        const done = yield* settled(thread.id);
+        const stored = (yield* approvals.listForThread(thread.id))[0];
+        const late = yield* Effect.exit(
+          approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
+        );
+        return { done, stored, late };
+      }),
+    );
+
+    expect(result.done.status).toBe("complete");
+    expect(result.stored?.state).toBe("expired");
+    expect(Exit.isFailure(result.late) && JSON.stringify(result.late.cause)).toContain("ApprovalClosed");
   });
 
   // covers PE-003

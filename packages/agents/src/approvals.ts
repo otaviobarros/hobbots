@@ -13,6 +13,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
 import { EventPublisher } from "./ports.ts";
+import { HobbotsRepository } from "./repository.ts";
 import type { ApprovalAction, ApprovalOutcome, PendingApproval, ToolAccess, TurnApprovals } from "./runtime.ts";
 
 /** Where approval requests are stored. Each write journals its event. */
@@ -76,6 +77,7 @@ export interface TurnApprovalsHandle {
 
 interface Waiter {
   readonly owner: TurnApprovalsHandle;
+  readonly agentId: AgentId;
   readonly decision: Deferred.Deferred<ApprovalOutcome>;
 }
 
@@ -84,8 +86,8 @@ const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 /**
  * Ask decisions (PE-003, PE-007, PE-008): a tool call the policy answers Ask for becomes a durable
  * request and its turn waits until the user approves it once or denies it. Duplicate decisions are
- * idempotent, a request whose turn ended or whose server restarted expires and cannot be approved
- * late, and a decision applies only to the exact action it names.
+ * idempotent, a request whose turn ended, whose hob retired or whose server restarted expires and
+ * cannot be approved late, and a decision applies only to the exact action it names.
  */
 export class ApprovalService extends Context.Service<
   ApprovalService,
@@ -103,6 +105,8 @@ export class ApprovalService extends Context.Service<
       id: ApprovalId,
       input: ApprovalDecisionInput,
     ) => Effect.Effect<ApprovalRequest, ApprovalNotFound | ApprovalClosed | ApprovalActionChanged>;
+    /** Expires the hob's pending requests, as when it retires: a retired hob is never approved anything. */
+    readonly expireForAgent: (agentId: AgentId) => Effect.Effect<void>;
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
   }
 >()("@hobbots/agents/ApprovalService") {
@@ -110,6 +114,10 @@ export class ApprovalService extends Context.Service<
     ApprovalService,
     Effect.gen(function* () {
       const repo = yield* ApprovalRepository;
+      const hobs = yield* HobbotsRepository;
+      // Paused hobs finish their running turns, so only a retired one stops being asked.
+      const hobActive = (agentId: AgentId) =>
+        Effect.map(hobs.findAgent(agentId), (agent) => Option.isSome(agent) && agent.value.status !== "retired");
       const bus = yield* EventPublisher;
       // Decisions, expiries and new requests take turns, so each sees the others' outcome.
       const lock = yield* Semaphore.make(1);
@@ -158,6 +166,8 @@ export class ApprovalService extends Context.Service<
                   lock,
                   Effect.gen(function* () {
                     const now = yield* nowIso;
+                    // A retired hob's turn that is still finishing cannot be approved anything new.
+                    const asking = open && (yield* hobActive(owner.agentId));
                     const approval = new ApprovalRequest({
                       id: ApprovalId.make(crypto.randomUUID()),
                       ...owner,
@@ -170,17 +180,17 @@ export class ApprovalService extends Context.Service<
                       reason: action.reason,
                       actionDigest: yield* actionDigest(action),
                       policyVersion: action.policyVersion,
-                      state: open ? "pending" : "expired",
+                      state: asking ? "pending" : "expired",
                       denyReason: null,
                       createdAt: now,
-                      decidedAt: open ? null : now,
+                      decidedAt: asking ? null : now,
                     });
                     const saved = yield* repo.insert(approval).pipe(Effect.flatMap(announce));
-                    if (!open) {
+                    if (!asking) {
                       return { approvalId: saved.id, decision: Effect.succeed({ _tag: "Expired" }) } as PendingApproval;
                     }
                     const decision = yield* Deferred.make<ApprovalOutcome>();
-                    waiters.set(saved.id, { owner: handle, decision });
+                    waiters.set(saved.id, { owner: handle, agentId: owner.agentId, decision });
                     return {
                       approvalId: saved.id,
                       // A wait given up (the call was aborted) expires the request.
@@ -217,8 +227,10 @@ export class ApprovalService extends Context.Service<
             if (input.actionDigest !== approval.actionDigest)
               return yield* new ApprovalActionChanged({ approvalId: id });
             const waiter = waiters.get(id);
-            // Nothing waits for it here, so no call would run: it can only expire.
-            if (waiter === undefined) {
+            // Nothing waits for it here, so no call would run, or its hob retired: it can only expire.
+            if (waiter === undefined || !(yield* hobActive(approval.agentId))) {
+              waiters.delete(id);
+              if (waiter) yield* Deferred.succeed(waiter.decision, { _tag: "Expired" });
               yield* settle(yield* expired(approval));
               return yield* new ApprovalClosed({ approvalId: id, state: "expired" });
             }
@@ -238,7 +250,19 @@ export class ApprovalService extends Context.Service<
         );
       });
 
-      return ApprovalService.of({ forTurn, decide, listForThread: repo.listForThread });
+      const expireForAgent = (agentId: AgentId) =>
+        Semaphore.withPermit(
+          lock,
+          Effect.suspend(() =>
+            Effect.forEach(
+              Array.from(waiters).flatMap(([id, waiter]) => (waiter.agentId === agentId ? [id] : [])),
+              expire,
+              { discard: true },
+            ),
+          ),
+        );
+
+      return ApprovalService.of({ forTurn, decide, expireForAgent, listForThread: repo.listForThread });
     }),
   );
 }

@@ -33,7 +33,13 @@ export interface ToolCall {
 /** Whether a call runs, and the verdict it runs under or why it does not. */
 export type CallDecision =
   | { readonly _tag: "Run"; readonly verdict: PolicyVerdict }
-  | { readonly _tag: "Refuse"; readonly verdict: PolicyVerdict | undefined; readonly reason: string };
+  | {
+      readonly _tag: "Refuse";
+      readonly verdict: PolicyVerdict | undefined;
+      readonly reason: string;
+      /** The user, when they denied it; otherwise the policy. */
+      readonly decidedBy?: "user";
+    };
 
 const decideIn = (engine: PolicyEngine["Service"], context: PolicyContext, call: ToolCall) =>
   Effect.gen(function* () {
@@ -82,7 +88,8 @@ export const decideCall = (
         label,
       });
       const outcome = yield* pending.decision;
-      if (outcome._tag === "Denied") return { _tag: "Refuse", verdict: asked, reason: denied(outcome.reason) } as const;
+      if (outcome._tag === "Denied")
+        return { _tag: "Refuse", verdict: asked, reason: denied(outcome.reason), decidedBy: "user" } as const;
       if (outcome._tag === "Expired") return { _tag: "Refuse", verdict: asked, reason: EXPIRED } as const;
       const access = yield* approvals.currentAccess;
       if (access === null) return { _tag: "Refuse", verdict: asked, reason: NO_TOOLS } as const;

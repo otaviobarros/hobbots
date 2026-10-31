@@ -208,6 +208,7 @@ describe("Claude Code tool calls under the policy hook", () => {
     const { result, events } = await askedCall(approvals);
     expect(result).toMatchObject({ behavior: "deny", message: expect.stringContaining("Not today") });
     expect(events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval", "ToolDenied"]);
+    expect(events[1]).toMatchObject({ decidedBy: "user" });
   });
 
   // covers PE-008
@@ -227,6 +228,40 @@ describe("Claude Code tool calls under the policy hook", () => {
     const again = await askedCall(changed.approvals);
     expect(changed.asked).toHaveLength(2);
     expect(again.result).toMatchObject({ behavior: "allow" });
+  });
+
+  // covers PE-003, PE-008
+  it("[TC-PE-051] asks about the call in the folder the hook saw, and refuses one whose arguments changed", async () => {
+    const turn = toolTurn(access(), "on");
+    if (turn === null) throw new Error("expected a tool turn");
+    const { asked, approvals } = approvalsAnswering(approve);
+    const events: Array<RuntimeEvent> = [];
+    const { hooks, canUseTool } = policyHooks(engine, turn, (event) => events.push(event), approvals);
+    const signal = new AbortController().signal;
+    const [pre] = hooks.PreToolUse?.[0]?.hooks ?? [];
+    const sub = join(project, "sub");
+    mkdirSync(sub, { recursive: true });
+    const hook = (id: string, command: string) =>
+      pre?.(
+        {
+          session_id: "s",
+          transcript_path: "",
+          cwd: sub,
+          tool_name: "Bash",
+          tool_input: { command },
+          tool_use_id: id,
+          hook_event_name: "PreToolUse",
+        } as HookInput,
+        id,
+        { signal },
+      );
+    const options = (id: string) => ({ signal, toolUseID: id }) as Parameters<typeof canUseTool>[2];
+    await hook("t1", "rm -rf build");
+    expect(await canUseTool("Bash", { command: "rm -rf build" }, options("t1"))).toMatchObject({ behavior: "allow" });
+    expect(asked[0]?.targets).toEqual([join(sub, "build")]);
+    await hook("t2", "rm -rf build");
+    expect(await canUseTool("Bash", { command: "rm -rf /" }, options("t2"))).toMatchObject({ behavior: "deny" });
+    expect(asked).toHaveLength(1);
   });
 
   it("refuses a tool Hobbots does not know", async () => {

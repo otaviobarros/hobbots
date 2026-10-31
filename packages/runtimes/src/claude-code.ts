@@ -28,10 +28,10 @@ import {
   type ToolAccess,
   type TurnApprovals,
 } from "@hobbots/agents";
-import { RuntimeHealth, RuntimeModel, RuntimeModels, type SandboxState } from "@hobbots/domain";
+import { RuntimeHealth, RuntimeModel, RuntimeModels, type SandboxState, stableJson } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
-import { type CallDecision, decideCall, refusal, UNKNOWN_TOOL } from "./approval.ts";
+import { type CallDecision, decideCall, refusal, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, ProcessSandbox } from "./sandbox.ts";
 import { offeredTools, toolLabel } from "./tool-calls.ts";
 
@@ -604,6 +604,8 @@ export const policyHooks = (
   approvals?: TurnApprovals | null,
 ): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
   const started = new Set<string>();
+  // Each call as the hook saw it, so the permission callback decides the same call in the same folder.
+  const seen = new Map<string, ToolCall>();
   const begin = (id: string, tool: string, input: Record<string, unknown>, verdict: PolicyVerdict) => {
     started.add(id);
     report({
@@ -626,7 +628,7 @@ export const policyHooks = (
       targets: decision.verdict?.targets ?? [],
       label: toolLabel(tool, input),
       reason,
-      decidedBy: "policy",
+      decidedBy: decision._tag === "Refuse" && decision.decidedBy === "user" ? "user" : "policy",
     });
     return reason;
   };
@@ -652,6 +654,7 @@ export const policyHooks = (
       };
     }
     if (approvals && decision.verdict?.decision === "ask") {
+      seen.set(call.id, call);
       return {
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
@@ -679,7 +682,17 @@ export const policyHooks = (
     };
 
   const canUseTool: CanUseTool = async (tool, input, options) => {
-    const call = { id: options.toolUseID, tool, input, cwd: turn.folders[0] as string };
+    const hooked = seen.get(options.toolUseID);
+    seen.delete(options.toolUseID);
+    // A call the hook decided on other arguments is not the one it saw, so it does not run.
+    if (hooked !== undefined && (hooked.tool !== tool || stableJson(hooked.input) !== stableJson(input))) {
+      const reason = "The call changed after Hobbots decided it, so it did not run.";
+      return {
+        behavior: "deny",
+        message: refuse(options.toolUseID, tool, input, { _tag: "Refuse", verdict: undefined, reason }),
+      };
+    }
+    const call = { id: options.toolUseID, tool, input, cwd: hooked?.cwd ?? (turn.folders[0] as string) };
     // An aborted call stops waiting, which expires its request.
     const decision = await Effect.runPromise(decideCall(engine, turn.context, approvals, call, report), {
       signal: options.signal,

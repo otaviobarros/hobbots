@@ -10,8 +10,9 @@ export type ApprovalId = typeof ApprovalId.Type;
  * - `pending`: the turn is paused on it until the user decides.
  * - `approved`: the user approved this one action, once.
  * - `denied`: the user said no; `denyReason` goes back to the hob when they gave one.
- * - `expired`: it can no longer be decided: its reply stopped, its hob retired, the server
- *   restarted, or the policy changed before the approved action ran.
+ * - `expired`: it can no longer be decided: its reply stopped, its hob retired, the call was
+ *   aborted or the server restarted. An approved action that the policy no longer allows when it
+ *   is about to run stays `approved` and is refused; the tool step says so.
  */
 export const ApprovalState = Schema.Literals(["pending", "approved", "denied", "expired"]);
 export type ApprovalState = typeof ApprovalState.Type;
