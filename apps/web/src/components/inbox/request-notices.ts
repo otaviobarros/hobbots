@@ -1,4 +1,4 @@
-import type { ApprovalRequest } from "@hobbots/domain";
+import type { ApprovalRequest, HobbotsEvent } from "@hobbots/domain";
 import { requestTitle } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
 
@@ -8,18 +8,21 @@ const copy = messages.notice;
 const EXACT_LIMIT = 120;
 
 /**
- * The pending requests that arrived since `seen`, and the requests seen from now on. The first
- * read of the Inbox only learns what already waits, so opening the app announces nothing.
+ * What an event means for the request notifications: `show` a request that now waits for the
+ * user, or `close` the one for a request that no longer does. `current` is the request as the
+ * Inbox holds it after the event, when it is loaded, so a request replayed after it was decided is
+ * never announced.
  */
-export const freshRequests = (
-  seen: ReadonlySet<string> | undefined,
-  approvals: ReadonlyArray<ApprovalRequest>,
-): { readonly fresh: ReadonlyArray<ApprovalRequest>; readonly seen: ReadonlySet<string> } => {
-  const pending = approvals.filter((approval) => approval.state === "pending");
-  return {
-    fresh: seen === undefined ? [] : pending.filter((approval) => !seen.has(approval.id)),
-    seen: new Set([...(seen ?? []), ...pending.map((approval) => approval.id)]),
-  };
+export const noticeChange = (
+  event: HobbotsEvent,
+  current: ApprovalRequest | undefined,
+): { readonly show: ApprovalRequest } | { readonly close: string } | undefined => {
+  if (event._tag === "ApprovalRequested") {
+    const approval = current ?? event.approval;
+    return approval.state === "pending" ? { show: approval } : { close: approval.id };
+  }
+  if (event._tag === "ApprovalResolved") return { close: event.approval.id };
+  return undefined;
 };
 
 /** The system notification for a request: who asks, and the action in the Inbox's words. */

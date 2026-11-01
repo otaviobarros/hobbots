@@ -1,6 +1,6 @@
-import { AgentId, ApprovalId, ApprovalRequest, MessageId, ThreadId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, type HobbotsEvent, MessageId, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { freshRequests, requestNotice } from "./request-notices.ts";
+import { noticeChange, requestNotice } from "./request-notices.ts";
 
 const request = (id: string, state: ApprovalRequest["state"], command = "git push origin feature") =>
   new ApprovalRequest({
@@ -23,23 +23,30 @@ const request = (id: string, state: ApprovalRequest["state"], command = "git pus
     decidedAt: state === "pending" ? null : "2026-11-01T10:01:00.000Z",
   });
 
-describe("freshRequests", () => {
-  it("announces nothing on the first read, which only learns what already waits", () => {
-    const first = freshRequests(undefined, [request("a", "pending")]);
-    expect(first.fresh).toEqual([]);
-    expect([...first.seen]).toEqual(["a"]);
+const requested = (approval: ApprovalRequest): HobbotsEvent => ({ _tag: "ApprovalRequested", approval });
+
+describe("noticeChange", () => {
+  it("shows a request that arrives waiting for you", () => {
+    const asked = request("a", "pending");
+    expect(noticeChange(requested(asked), asked)).toEqual({ show: asked });
+    expect(noticeChange(requested(asked), undefined)).toEqual({ show: asked });
   });
 
-  it("announces each new pending request once", () => {
-    const { seen } = freshRequests(undefined, [request("a", "pending")]);
-    const next = freshRequests(seen, [request("a", "pending"), request("b", "pending"), request("c", "denied")]);
-    expect(next.fresh.map((approval) => approval.id)).toEqual(["b"]);
-    expect(freshRequests(next.seen, [request("b", "pending")]).fresh).toEqual([]);
+  it("does not show a request replayed after it was decided", () => {
+    const asked = request("a", "pending");
+    expect(noticeChange(requested(asked), request("a", "approved"))).toEqual({ close: "a" });
   });
 
-  it("does not announce a request again after it is decided", () => {
-    const { seen } = freshRequests(new Set(), [request("a", "pending")]);
-    expect(freshRequests(seen, [request("a", "approved")]).fresh).toEqual([]);
+  it("closes the notification once the request is decided", () => {
+    expect(noticeChange({ _tag: "ApprovalResolved", approval: request("a", "denied") }, undefined)).toEqual({
+      close: "a",
+    });
+  });
+
+  it("ignores other events", () => {
+    expect(
+      noticeChange({ _tag: "TurnStopped", threadId: ThreadId.make("t1"), messageId: MessageId.make("m1") }, undefined),
+    ).toBeUndefined();
   });
 });
 

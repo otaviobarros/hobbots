@@ -12,7 +12,7 @@ import {
 } from "@hobbots/domain";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
 import { storeApproval } from "./approvals.ts";
 import { API_URL } from "./client.ts";
@@ -139,12 +139,18 @@ const understands = (entry: EventEnvelope) =>
  * reconnect replays what was missed instead of refetching everything. A fresh `Ready` (a first
  * connection, or a cursor the hub can no longer replay) starts a new sync generation.
  *
- * The browser retries a dropped stream on its own; `retry` opens a new one now.
+ * The browser retries a dropped stream on its own; `retry` opens a new one now. `onEvent` hears
+ * each event once the cache holds it, for what the app does when one arrives, such as a notification.
  */
-export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void } => {
+export const useHobbotsEvents = (
+  onEvent?: (event: HobbotsEvent) => void,
+): { state: ConnectionState; retry: () => void } => {
   const queryClient = useQueryClient();
   const [state, setState] = useState<ConnectionState>("connecting");
   const [attempt, setAttempt] = useState(0);
+  // The latest handler, read when an event arrives, so a new one never reopens the stream.
+  const handler = useRef(onEvent);
+  handler.current = onEvent;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new attempt opens a new stream.
   useEffect(() => {
@@ -177,8 +183,10 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         startGeneration(queryClient);
         return;
       }
-      if (understands(entry)) applyEvent(queryClient, entry.payload);
-      else startGeneration(queryClient);
+      if (understands(entry)) {
+        applyEvent(queryClient, entry.payload);
+        handler.current?.(entry.payload);
+      } else startGeneration(queryClient);
     };
     source.addEventListener(STREAM_FRAME.delta, (frame) => {
       try {

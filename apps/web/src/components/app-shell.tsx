@@ -20,8 +20,7 @@ export function AppWindow() {
 
 /** The app once setup is done: live events, the rail and the current page. */
 export function AppShell() {
-  const connection = useHobbotsEvents();
-  useRequestNotices();
+  const connection = useHobbotsEvents(useRequestNotices());
 
   return (
     <>
