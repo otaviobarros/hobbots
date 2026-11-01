@@ -256,7 +256,7 @@ test("[TC-PE-102] Always narrowed to the action's files saves only those files, 
 });
 
 // covers PE-007
-test("[TC-PE-121] an Always rule shows in Inbox History and Settings, and removing it there makes the next call ask again", async ({
+test("[TC-PE-125] an Always rule shows in Inbox History and Settings, and removing it there makes the next call ask again", async ({
   page,
 }) => {
   const { current, card } = await pipAsks(page, remove("old.txt"));
