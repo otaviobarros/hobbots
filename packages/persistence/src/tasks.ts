@@ -365,7 +365,7 @@ export const TaskRepositoryLive = Layer.effect(
           return {
             value: { task, attempt },
             events: [
-              { _tag: "TaskStateChanged", task, attempt, quest } as const,
+              { _tag: "TaskStateChanged", task, attempt, quest, wait: null } as const,
               ...(yield* automatic(task, input.startedAt, revision + 1)),
             ],
           };
@@ -395,7 +395,7 @@ export const TaskRepositoryLive = Layer.effect(
           yield* saveTask(task);
           return {
             value: { task, attempt },
-            events: [{ _tag: "TaskStateChanged", task, attempt, quest: null } as const],
+            events: [{ _tag: "TaskStateChanged", task, attempt, quest: null, wait: null } as const],
           };
         }),
       );
@@ -411,7 +411,7 @@ export const TaskRepositoryLive = Layer.effect(
           return {
             value: task,
             events: [
-              { _tag: "TaskStateChanged", task, attempt: null, quest } as const,
+              { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null } as const,
               ...(yield* automatic(task, at, revision + 1)),
             ],
           };
@@ -647,7 +647,7 @@ export const TaskRepositoryLive = Layer.effect(
           const automatically = before.state === "waiting" ? [] : yield* automatic(task, input.at, revision + 1);
           return {
             value: { task, wait },
-            events: [{ _tag: "TaskStateChanged", task, attempt: null, quest: null } as const, ...automatically],
+            events: [{ _tag: "TaskStateChanged", task, attempt: null, quest: null, wait } as const, ...automatically],
           };
         }),
       );

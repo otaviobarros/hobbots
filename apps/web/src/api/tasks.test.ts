@@ -47,6 +47,7 @@ describe("Task reads kept live", () => {
       task: task(BUILD, { state: "active", revision: 4 }),
       attempt: null,
       quest: null,
+      wait: null,
     });
     const thread = queryClient.getQueryData<ThreadTasksRead>(taskKeys.thread(THREAD));
     expect(thread?.trees[0]?.tasks.find((each) => each.id === BUILD)?.state).toBe("active");
@@ -61,6 +62,7 @@ describe("Task reads kept live", () => {
       task: task(COPY, { ownerId: QUILL, state: "failed", revision: 4 }),
       attempt: null,
       quest: null,
+      wait: null,
     });
     const pinned = queryClient.getQueryData<TaskTreeRead>(taskKeys.tree(CAMPAIGN));
     expect(pinned?.tree.tasks.find((each) => each.id === COPY)?.state).toBe("failed");

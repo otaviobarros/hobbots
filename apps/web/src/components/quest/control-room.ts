@@ -36,7 +36,9 @@ const waitingOnOf = (tree: TaskTree, task: Task): ReadonlyArray<Waited> => {
     const each = tree.tasks.find((candidate) => candidate.id === id);
     return each !== undefined && !isTerminalTask(each.state) ? [each.ownerId] : [];
   };
-  const waited = tree.waits.find((wait) => wait.taskId === task.id)?.on.flatMap(open) ?? [];
+  // A wait counts only while the Task waits; the hub keeps the last one after it moves on.
+  const waited =
+    task.state === "waiting" ? (tree.waits.find((wait) => wait.taskId === task.id)?.on.flatMap(open) ?? []) : [];
   const hobs = [...new Set([...waitsOnOf(tree, task), ...waited])].filter((id) => id !== task.ownerId);
   const asked = tree.questions.filter((question) => question.taskId === task.id && question.state === "open");
   const holders = [...new Set(asked.map((question) => question.recipientId))];

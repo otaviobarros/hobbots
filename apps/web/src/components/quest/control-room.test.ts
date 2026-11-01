@@ -1,5 +1,6 @@
 import { AgentId, Attempt, AttemptId, Quest, QuestId, type Task, TaskId, TaskWait } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
+import { ApiError } from "../../api/client.ts";
 import {
   ADA,
   ALDRIC,
@@ -15,7 +16,7 @@ import {
   tree,
 } from "../../test/quests.ts";
 import { attemptCount, roomRows, taskControls, topCancel } from "./control-room.ts";
-import { parsePins } from "./use-work.ts";
+import { parsePins, sortPinnedReads } from "./use-work.ts";
 
 const ROOK = AgentId.make("rook");
 
@@ -53,12 +54,12 @@ describe("roomRows", () => {
 
   it("says who each Task waits on: the hobs it depends on and whoever holds its question", () => {
     const base = blackFriday();
+    const wait = new TaskWait({ taskId: CAMPAIGN, on: [COPY, BUILD], mode: "all", createdAt: "2026-11-01T10:00:09Z" });
     const asking = tree({
       ...base,
+      tasks: [task(CAMPAIGN, { state: "waiting" }), ...base.tasks.slice(1)],
       questions: [question(BUILD, ADA, "Dec 12 for international?", { recipientId: null })],
-      waits: [
-        new TaskWait({ taskId: CAMPAIGN, on: [COPY, BUILD], mode: "all", createdAt: nth(base.tasks, 0).createdAt }),
-      ],
+      waits: [wait],
     });
     const rows = roomRows(asking);
     expect(rows.find((row) => row.task.id === BUILD)?.waitingOn).toEqual([{ kind: "hob", id: QUILL }, { kind: "you" }]);
@@ -67,6 +68,10 @@ describe("roomRows", () => {
       { kind: "hob", id: ADA },
     ]);
     expect(rows.find((row) => row.task.id === COPY)?.waitingOn).toEqual([]);
+
+    // The hub keeps a Task's last wait after it moves on; it no longer counts then.
+    const movedOn = tree({ ...base, waits: [wait] });
+    expect(roomRows(movedOn).find((row) => row.task.id === CAMPAIGN)?.waitingOn).toEqual([]);
   });
 
   it("shows a cancel as it is, apart from done", () => {
@@ -134,5 +139,19 @@ describe("parsePins", () => {
     expect(parsePins(["campaign", "campaign", 3, "", "copy"])).toEqual([CAMPAIGN, COPY]);
     expect(parsePins({ not: "a list" })).toEqual([]);
     expect(parsePins(null)).toEqual([]);
+  });
+});
+
+describe("sortPinnedReads", () => {
+  it("offers Unpin only when the hub says the Task is gone, and keeps the pin when a read just failed", () => {
+    const shown = { data: { tree: blackFriday() }, error: null, isError: false, refetch: () => undefined };
+    const gone = { error: new ApiError("TaskNotFound", "TaskNotFound"), isError: true, refetch: () => undefined };
+    const down = { error: new ApiError("Failed to fetch", undefined), isError: true, refetch: () => undefined };
+    const stale = { ...shown, error: down.error, isError: true };
+    const ids = [CAMPAIGN, COPY, BUILD, RESEARCH];
+    const sorted = sortPinnedReads(ids, [shown, gone, down, stale]);
+    expect(sorted.elsewhere).toHaveLength(2);
+    expect(sorted.missing).toEqual([COPY]);
+    expect(sorted.failed.map((each) => each.taskId)).toEqual([BUILD]);
   });
 });

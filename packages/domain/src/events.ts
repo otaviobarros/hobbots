@@ -1,10 +1,10 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { Grant } from "./grant.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { Message } from "./message.ts";
-import { ArtifactRef, Checkpoint, Delegation, HandOff, Milestone, Quest, Question } from "./quest.ts";
+import { ArtifactRef, Checkpoint, Delegation, HandOff, Milestone, Quest, Question, TaskWait } from "./quest.ts";
 import { Attempt, Task } from "./task.ts";
 import { Thread } from "./thread.ts";
 
@@ -39,12 +39,14 @@ const TaskCreated = Schema.TaggedStruct("TaskCreated", {
 });
 /**
  * A Task's state or current Attempt changed: a start, a retry, a wait, a cancel, or its Attempt
- * moving on. `attempt` is the current one when it changed; `quest` the Task's Quest when it ended with it.
+ * moving on. `attempt` is the current one when it changed; `quest` the Task's Quest when it ended with it;
+ * `wait` the wait its owner started or replaced, so who it waits on shows live.
  */
 const TaskStateChanged = Schema.TaggedStruct("TaskStateChanged", {
   task: Task,
   attempt: Schema.NullOr(Attempt),
   quest: Schema.NullOr(Quest),
+  wait: Schema.NullOr(TaskWait).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 });
 /** A Task gained its Quest record: its owner brought in another hob. */
 const QuestStarted = Schema.TaggedStruct("QuestStarted", { quest: Quest });
@@ -126,6 +128,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   GrantCreated: 1,
   GrantRevoked: 1,
   TaskCreated: 1,
+  // A change's `wait` was added with a default, compatibly.
   TaskStateChanged: 1,
   QuestStarted: 1,
   CheckpointRecorded: 1,

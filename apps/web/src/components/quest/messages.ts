@@ -118,6 +118,8 @@ export const messages = {
     pinned: "Pinned",
     missing: "A pinned Quest is no longer on this hub.",
     unpin: "Unpin",
+    unreadable: "A pinned Quest could not be loaded right now.",
+    tryAgain: "Try again",
     pinHint: "Pin: keep this Quest in view in every thread",
     unpinHint: "Unpin: show it only in its own thread",
     tree: ({ title }: { title: string }) => `Tasks of ${title}`,

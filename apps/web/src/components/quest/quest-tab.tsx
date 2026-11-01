@@ -22,7 +22,7 @@ export function QuestTab({
   taskId: TaskId | undefined;
   pins: Pins;
 }) {
-  const { thread, elsewhere, missing } = useFollowedTrees(threadId, pins.pinned);
+  const { thread, elsewhere, missing, failed } = useFollowedTrees(threadId, pins.pinned);
   const hobs = useHobLookup();
   const open = useOpenTask(hobId, threadId ?? ("" as ThreadId));
   const trees = [
@@ -30,14 +30,14 @@ export function QuestTab({
     ...thread.map((tree) => ({ tree, own: true })).reverse(),
   ];
 
-  const gone = missing.map((id) => (
-    <p key={id} className="m-0 flex items-center gap-2 border-b-2 border-line px-3.5 py-2.5 text-detail text-label">
-      <span className="flex-1">{copy.missing}</span>
-      <Button variant="chip" size="xs" onClick={() => pins.toggle(id)}>
-        {copy.unpin}
-      </Button>
-    </p>
-  ));
+  const gone = [
+    ...missing.map((id) => (
+      <PinNote key={id} text={copy.missing} action={copy.unpin} onAction={() => pins.toggle(id)} />
+    )),
+    ...failed.map(({ taskId: id, retry }) => (
+      <PinNote key={id} text={copy.unreadable} action={copy.tryAgain} onAction={retry} />
+    )),
+  ];
 
   if (trees.length === 0) {
     return (
@@ -66,5 +66,17 @@ export function QuestTab({
         />
       ))}
     </div>
+  );
+}
+
+/** A line about a pinned Quest the tab cannot show, with what you can do about it. */
+function PinNote({ text, action, onAction }: { text: string; action: string; onAction: () => void }) {
+  return (
+    <p className="m-0 flex items-center gap-2 border-b-2 border-line px-3.5 py-2.5 text-detail text-label">
+      <span className="flex-1">{text}</span>
+      <Button variant="chip" size="xs" onClick={onAction}>
+        {action}
+      </Button>
+    </p>
   );
 }
