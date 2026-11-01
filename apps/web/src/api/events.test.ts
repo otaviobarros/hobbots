@@ -38,6 +38,28 @@ describe("applyEvent", () => {
     expect(client.getQueryData(queryKeys.threads(AgentId.make("aldric")))).toBeUndefined();
   });
 
+  it("moves a thread archived or restored elsewhere between its hob's two lists", () => {
+    const client = new QueryClient();
+    const hobId = AgentId.make("aldric");
+    const live = new Thread({ id: threadId, agentId: hobId, title: "Hi", createdAt: now, updatedAt: now, revision: 1 });
+    const archived = new Thread({ ...live, archivedAt: "2026-10-29T09:00:00.000Z", revision: 2 });
+    const restored = new Thread({ ...live, revision: 3 });
+    client.setQueryData(queryKeys.threads(hobId), [live]);
+    client.setQueryData(queryKeys.archivedThreads(hobId), []);
+
+    applyEvent(client, { _tag: "ThreadUpserted", thread: archived });
+    expect(client.getQueryData(queryKeys.threads(hobId))).toEqual([]);
+    expect(client.getQueryData(queryKeys.archivedThreads(hobId))).toEqual([archived]);
+
+    // An older version arriving late does not move it back.
+    applyEvent(client, { _tag: "ThreadUpserted", thread: live });
+    expect(client.getQueryData(queryKeys.archivedThreads(hobId))).toEqual([archived]);
+
+    applyEvent(client, { _tag: "ThreadUpserted", thread: restored });
+    expect(client.getQueryData(queryKeys.threads(hobId))).toEqual([restored]);
+    expect(client.getQueryData(queryKeys.archivedThreads(hobId))).toEqual([]);
+  });
+
   it("adds a hob created elsewhere to a loaded hob list", () => {
     const client = new QueryClient();
     const hob = new Agent({
