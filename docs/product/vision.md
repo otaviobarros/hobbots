@@ -6,9 +6,9 @@ The primary user is an individual operating multiple specialized agents on user-
 
 ## Defining experience
 
-A user asks Aldric to investigate a problem. Aldric works directly while Rook and Sage investigate in parallel. Rook can ask Pip for tests. Sage can ask another agent a question. The execution panel shows owners, progress, unanswered messages, and exactly who is waiting for whom. Tool activity opens in the Workbench while the central conversation stays accessible. Results activate the responsible agent, which reconciles its commitments, continues authorized work, verifies the outcome, and reports back.
+A user asks Aldric to investigate a problem. Aldric works directly while Rook and Sage investigate in parallel. Rook can ask Pip for tests. Sage can ask Aldric a question, and Aldric answers or asks the user. The execution panel shows owners, progress, unanswered messages, and exactly who is waiting for whom. Tool activity opens in the Workbench while the central conversation stays accessible. Results activate the responsible agent, which reconciles its commitments, continues authorized work, verifies the outcome, and reports back.
 
-The durable objective is a Quest. A thread organizes discussion; a Quest organizes responsibility and execution. A completed runtime turn does not by itself complete a Quest or consume a delegated result.
+The durable unit of work is a Task, and a Task that brings in other hobs is a Quest ([ADR 018](../decisions/018-tasks-and-quests.md)). A thread organizes discussion; Tasks and Quests organize responsibility and execution. A completed runtime turn does not by itself complete a Task or consume a delegated result.
 
 ## Product principles
 

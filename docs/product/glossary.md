@@ -10,9 +10,14 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Thread | A durable user conversation that belongs to one agent. | [Conversations](../architecture/conversations.md) |
 | Session | The binding to an underlying runtime conversation or connection. It may change during recovery and never replaces domain identity. | [Conversations](../architecture/conversations.md) |
 | Runtime / adapter | An existing agent engine (Claude Code, Codex, ACP-compatible) and the capability-aware adapter that hosts it. | [Runtime adapters](../architecture/runtime-adapters.md), [ADR 002](../decisions/002-existing-runtimes.md) |
-| Quest | A durable objective with acceptance criteria, ownership and an aggregate outcome; spans threads and agents. | [Agent model](../architecture/agent-model.md) |
-| Task | A unit of responsibility inside a Quest, with owner, dependencies and completion conditions. | [Agent model](../architecture/agent-model.md) |
-| Delegation | An explicit request/result relationship between a sender and a recipient agent. | [Orchestration](../architecture/orchestration.md) |
+| Task | One hob's piece of work, end to end: one owner, one result, even when it takes hours. | [ADR 018](../decisions/018-tasks-and-quests.md), [Agent model](../architecture/agent-model.md) |
+| Step | A part of a Task that its own hob runs in a fresh session from a short brief. Steps never make a Task a Quest. | [ADR 018](../decisions/018-tasks-and-quests.md) |
+| Quest | A Task that brings in other hobs. It keeps the Task's id, card and history, and adds a goal, acceptance criteria and limits. | [ADR 018](../decisions/018-tasks-and-quests.md), [Orchestration](../architecture/orchestration.md) |
+| Lead | The hob that owns a Quest: the hob you asked. You talk only to the lead. A member that brings in a hob of its own leads that subtree. | [ADR 018](../decisions/018-tasks-and-quests.md) |
+| Party | The other hobs working on a Quest, shown as "Aldric's party: Quill, Ada". Members never talk to each other. | [ADR 018](../decisions/018-tasks-and-quests.md) |
+| Checkpoint | A short record of where a Task stands: a planned milestone, a finding, blocker or question, or an automatic state. | [ADR 018](../decisions/018-tasks-and-quests.md) |
+| Hand-off | A lead giving one Task's result to another Task as context. The only way results move between party members. | [ADR 018](../decisions/018-tasks-and-quests.md) |
+| Delegation | An explicit request/result relationship from a lead to a party member, with a brief and narrowed authority. | [Orchestration](../architecture/orchestration.md) |
 | Execution / attempt | One attempt to perform task work; retries create new attempts, not new tasks. | [Execution lifecycle](../architecture/execution-lifecycle.md) |
 | Inbox / inbox item | A durable per-agent queue of tasks, messages, questions, results and outcomes, with separate delivery and processing states. | [Inbox](../architecture/inbox.md), [ADR 004](../decisions/004-durable-inbox.md) |
 | Responsibility | An outstanding promise, reply, deliverable or dependency that must be reconciled before success. | [Agent model](../architecture/agent-model.md), [Execution lifecycle](../architecture/execution-lifecycle.md) |

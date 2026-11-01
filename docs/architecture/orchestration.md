@@ -2,13 +2,46 @@
 
 **Decided.** Every agent is a proactive worker. An orchestrator is an ordinary agent used for coordination, with no special runtime type. It can do its own work and delegate concurrently; any delegated agent can do the same within policy.
 
+## Tasks, steps and Quests
+
+**Decided** ([ADR 018](../decisions/018-tasks-and-quests.md)). Work is named by who does it. A **Task** is one hob's piece of work, end to end. A **step** is a part of a Task that its own hob runs in a fresh session from a short brief. A **Quest** is a Task that brings in other hobs: the hob you asked is its **lead**, and the hobs helping are its **party**.
+
+- Steps, members' work and nested Quests are all Tasks in one tree. A Task whose children all have its owner is a Task with steps; splitting work into steps never makes a Task a Quest.
+- A Task becomes a Quest when its owner first delegates to another hob or starts a Quest explicitly. The Quest record is added to the same Task, which keeps its id, card and history.
+- You talk only to the lead. Cancel, Retry and Reassign act on a Task directly. A member's approvals come straight to you; a lead never approves for you (PE-006).
+- A member's question goes to its nearest lead, who answers or escalates it. Only a question no lead can answer reaches you, and your answer goes back down the same chain.
+- Members never talk to each other. Results move between them only as hand-offs through the lead.
+- A member can lead its own subtree under the same rules. Depth counts Quests, not steps, and is 2 by default.
+
+### Checkpoints
+
+Checkpoints come from three sources: milestones the lead plans in a brief; findings, blockers and questions the owner reports when they matter; and the automatic states started, waiting, done, failed and cancelled, which the hub records. Milestones, findings, blockers, questions, done and failed reach the lead's context and can wake it. Routine progress only updates the screens (IN-005).
+
 ## Delegation contract
 
-A request records delegation ID, Quest ID, parent task, sender, destination, objective/instructions, expected output, priority, context artifact references, permitted scope and timeout/budget policy. The server validates identity, authorization, capacity, depth/cycles and input schemas before dispatch. A child cannot gain authority by receiving more ambitious prose.
+A request records delegation ID, Quest ID (once the Task is a Quest), parent task, lead, member, objective/instructions, expected output, priority, context artifact references, permitted scope and timeout/budget policy. The server validates identity, authorization, capacity, depth/cycles and input schemas before dispatch. A child cannot gain authority by receiving more ambitious prose.
 
-Expose controlled Hobbots tools such as `delegate_task`, `list_tasks`, `get_task`, `send_agent_message`, `wait_for_tasks`, `cancel_task` and `get_quest_status` through MCP or a supported equivalent adapter integration. These are Hobbots-level operations, not vendor method names. MCP is a transport/control boundary; it does not replace inbox durability or the scheduler.
+Expose controlled Hobbots tools through MCP or a supported equivalent adapter integration. These are Hobbots-level operations, not vendor method names. MCP is a transport/control boundary; it does not replace inbox durability or the scheduler.
 
-Structured tasks/results coexist with conversational exchanges. Questions preserve sender, recipient and relevant task/delegation ID. A request to clarify a date range does not need a new Quest. Natural-language messages cannot bypass structural lifecycle and policy validation.
+| Tool | Who may call it | What it does |
+|---|---|---|
+| `plan_steps` | A Task's owner | Splits its own Task into steps, each with a brief |
+| `start_quest` | A Task's owner | Turns its Task into a Quest with a goal, milestones and limits |
+| `delegate_task` | A Task's owner, which becomes or already is its lead | Gives another hob a Task with a brief, milestones and dependencies; the first call makes the Task a Quest |
+| `report_checkpoint` | A Task's owner | Reports a milestone, finding, blocker or progress |
+| `ask` | A Task's owner | Asks a question, routed to the nearest lead |
+| `answer` | A lead | Answers a question from its subtree |
+| `escalate` | A lead | Passes a question to the next lead, and from the top lead to you |
+| `hand_off` | A lead | Gives one Task's result to another Task as an artifact reference |
+| `wait_for` | A Task's owner | Waits for any or all of its child Tasks without blocking its chat |
+| `complete_task` | A Task's owner | Returns the result, subject to the completion gate |
+| `cancel_task` | A Task's owner | Cancels one of its child Tasks and that Task's subtree |
+
+`list_tasks`, `get_task` and `get_quest_status` stay as read tools, scoped to the caller's subtree. `send_agent_message` reaches only between a lead and its own members; members never message each other. Tool names can change during implementation; what each one does is decided in [ADR 018](../decisions/018-tasks-and-quests.md).
+
+On every call the server checks who may call it (the Task's owner or a lead above it in the tree), depth, concurrency and time limits, that the delegation makes no cycle, that the child's authority only narrows, and the call's idempotency key, so a retried call never creates a second Task, Question or hand-off.
+
+Structured tasks/results coexist with conversational exchanges. Questions preserve sender, recipient and relevant task/delegation ID, and the chain of leads they passed through. A request to clarify a date range does not need a new Quest. Natural-language messages cannot bypass structural lifecycle and policy validation.
 
 ## Coordination loop
 
@@ -20,7 +53,7 @@ The parent may continue while children execute and may await any/all/a selected 
 
 Bound active executions per executor, agent and Quest and enforce supported runtime session concurrency. Prevent delegation cycles and unlimited depth. Apply bounded retries, task deadlines and cost/usage limits where the runtime provides reliable usage data. Missing cost telemetry must be visible rather than presented as a precise budget guarantee.
 
-Concurrency, depth, per-agent active tasks and task timeout defaults are open (for example three parallel tasks, depth two, two active tasks per agent, a fifteen-minute timeout). Exact fairness, batching, depth and timeout policies require resolution; make them configurable rather than hard-coded.
+The depth limit is 2 by default ([ADR 018](../decisions/018-tasks-and-quests.md)). Concurrency, per-agent active tasks and task timeout defaults are open (for example three parallel tasks, two active tasks per agent, a fifteen-minute timeout). Exact fairness, batching and timeout policies require resolution; make them configurable rather than hard-coded.
 
 Cancellation/reassignment propagates as explicit commands and retains history. Late child results are reconciled against current ownership and task version. A canceled parent does not permit a delayed child event to restart unauthorized work. Partial useful results may be retained without misrepresenting success.
 

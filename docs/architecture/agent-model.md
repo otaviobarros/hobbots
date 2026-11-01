@@ -5,17 +5,22 @@
 | Entity | Owns | Important relationships |
 |---|---|---|
 | Agent | Stable identity, versioned configuration, runtime/model preference, instructions/personality, optional skills/specialization, tools and policy references | Many threads and assigned tasks. |
-| Thread | Durable user conversation and linked work | Belongs to one agent; may initiate several Quests. |
+| Thread | Durable user conversation and linked work | Belongs to one agent; may start several Tasks, and so several Quests. |
 | Session | Binding to an underlying runtime conversation/connection | May change during recovery; never replaces domain identity. |
-| Quest | Durable objective, acceptance criteria, ownership and aggregate outcome | Spans threads/agents; contains tasks and artifacts. |
-| Task | Unit of responsibility with owner, dependencies and completion conditions | Belongs to a Quest; may have children and multiple attempts. |
-| Delegation | Explicit request/result relationship | Sender, recipient, parent task, child task, scoped context and expected output. |
-| Execution | One attempt to perform task work | Runtime, executor, session, configuration/policy version and outcome. |
+| Task | One hob's piece of work: owner, parent, root, brief, state, dependencies, result and version | May have child Tasks: steps when they share its owner, members' work in a Quest. Has one or more attempts. |
+| Quest | Goal, acceptance criteria, limits, lead, party and aggregate outcome | Added to a Task when it first brings in another hob; the Task keeps its id. Its owner is the lead. A nested Quest sits inside its parent Quest. |
+| Delegation | Explicit request/result relationship from a lead to a member | Lead, member, parent Task, child Task, the brief, narrowed authority and timeout. |
+| Execution / Attempt | One attempt to perform task work | Runtime, executor, session, configuration/policy version and outcome. A retry is a new attempt. |
+| Milestone | A point the lead plans in a brief | Task; title, order and when it was reached. |
+| Checkpoint | A short record of where a Task stands | Task and attempt; source (planned, unplanned or automatic), kind and summary. |
+| Question | A question from a Task's owner | Asking Task, current recipient, the escalation chain and the answer. |
 | Inbox item | Durable delivery/processing responsibility | Recipient, sender, kind, correlations, processing/consumption state. |
 | Responsibility | Outstanding promise, reply, deliverable or dependency | Owning agent/task, origin, condition for closure and evidence. |
 | Approval | Human decision for a specific bounded action | Requesting identity, executor, action digest, scope and lifetime. |
 | Executor | Authorized execution environment | Platform, runtime versions, resource boundaries, capacity and health. |
-| Artifact / Tool invocation / Event | Evidence and activity | Correlate to relevant work and attempt; avoid credentials. |
+| Artifact / Tool invocation / Event | Evidence and activity | Correlate to relevant work and attempt; avoid credentials. A hand-off passes an artifact reference to another Task's brief. |
+
+Tasks, steps and Quests are decided in [ADR 018](../decisions/018-tasks-and-quests.md), which lists each record's lineage and the events its changes journal.
 
 ## Identity and versioning
 
@@ -27,7 +32,7 @@ Availability, runtime health, execution status and inbox backlog are different p
 
 ## Invariants
 
-Tasks cannot belong to a nonexistent Quest or assign a nonexistent agent. Delegations retain the original requester and expected response. Children have bounded scope. A result references the producing attempt and artifacts. Retries create new attempts, not new user-visible task identities. Completion requires the closure contract in [execution lifecycle](execution-lifecycle.md).
+Every Task has an owner hob that exists, and every child Task a parent that exists. A Quest sits on exactly one Task. A step has its parent's owner. Delegations retain the original requester and expected response. Children have bounded scope. A result references the producing attempt and artifacts. Retries create new attempts, not new user-visible task identities. Completion requires the closure contract in [execution lifecycle](execution-lifecycle.md).
 
 
 ## Configuration
