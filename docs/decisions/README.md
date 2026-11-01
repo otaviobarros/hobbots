@@ -19,3 +19,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [015 — Approval lifetimes and standing grants](015-approval-lifetimes-and-grants.md)
 - [016 — Client stores for unsent messages](016-client-stores-outside-react.md)
 - [017 — Switching a thread's brain](017-switching-brains.md)
+- [018 — Tasks and Quests](018-tasks-and-quests.md)

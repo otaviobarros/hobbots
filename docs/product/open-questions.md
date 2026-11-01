@@ -9,7 +9,7 @@ These choices are not decided yet. They do not reopen decided product direction.
 | Toolchain | Package manager, workspace/build/test tooling, supported Node/Electron versions. Decided for the validation slice in ADR 009. |
 | Configuration | Canonical app database versus portable JSON/YAML definitions versus both; import/export/versioning details. |
 | Delegation default | Explicit collaborator allowlist versus all configured hobs by default; automatic dynamic agent creation is not assumed. |
-| Limits | Final concurrency, depth, timeout, fairness, batching, retry and cost-limit defaults. |
+| Limits | Final concurrency, timeout, fairness, batching, retry and cost-limit defaults. The depth limit defaults to 2 ([ADR 018](../decisions/018-tasks-and-quests.md)). |
 | Remote-to-local routing | Explicit handoff versus configured scoped routes, pairing, execution-grant transport and revocation. No silent privilege expansion. |
 | Policies | The preset mapping, folders and the sandbox are decided in ADR 014; what sandbox-runtime's credential masking hides and whether its live configuration updates work need evidence (#131). Grant matching, precedence, expiry and revocation are decided in ADR 015. |
 | Lifecycle | Exhaustive task/attempt/approval transition tables, late-result and reassignment rules, partial completion semantics. |
