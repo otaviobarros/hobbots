@@ -3,7 +3,8 @@ import { ApprovalRequest, type ApprovalState, type Grant } from "@hobbots/domain
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { grantRow } from "./grants.ts";
-import { makeJournaled, oldestFirst } from "./journal.ts";
+import { makeJournaled } from "./journal.ts";
+import { oldestFirst } from "./order.ts";
 
 interface ApprovalRow {
   readonly targets?: unknown;

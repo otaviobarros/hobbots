@@ -10,8 +10,13 @@ export const layers = {
   "@hobbots/agents": { layer: "application", may: ["@hobbots/domain", "@hobbots/api"] },
   // Tasks, Quests and delegation, as use cases over the ports in agents (ADR 018).
   "@hobbots/orchestration": { layer: "application", may: ["@hobbots/domain", "@hobbots/agents"] },
+  // A hob's backpack: the rule that turns changes into backpack items, and the port that moves them on (ADR 019).
+  "@hobbots/inbox": { layer: "application", may: ["@hobbots/domain"] },
   "@hobbots/permissions": { layer: "adapter", may: ["@hobbots/domain"] },
-  "@hobbots/persistence": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/api", "@hobbots/agents"] },
+  "@hobbots/persistence": {
+    layer: "adapter",
+    may: ["@hobbots/domain", "@hobbots/api", "@hobbots/agents", "@hobbots/inbox"],
+  },
   "@hobbots/runtimes": {
     layer: "adapter",
     // The runtime adapters ask the policy engine before each tool call (ADR 014).
@@ -26,6 +31,7 @@ export const layers = {
       "@hobbots/domain",
       "@hobbots/api",
       "@hobbots/agents",
+      "@hobbots/inbox",
       "@hobbots/orchestration",
       "@hobbots/permissions",
       "@hobbots/persistence",

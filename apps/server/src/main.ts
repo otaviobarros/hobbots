@@ -17,6 +17,7 @@ import { TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
+  BackpackLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -66,6 +67,7 @@ const ServerLive = Layer.unwrap(
       GrantRepositoryLive,
       TaskRepositoryLive,
       TaskToolCallsLive,
+      BackpackLive,
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),

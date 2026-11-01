@@ -18,6 +18,7 @@ import {
 import { type Agent, isInProgress, type Message, type RuntimeKind, roleFields, type Thread } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
+  BackpackLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -123,6 +124,7 @@ const start = (options: { readonly codex?: boolean } = {}) => {
             GrantRepositoryLive,
             TaskRepositoryLive,
             EventJournal.layer,
+            BackpackLive,
             SetupRepository.layer,
             SearchIndex.layer,
           ).pipe(Layer.provideMerge(TestDatabase)),

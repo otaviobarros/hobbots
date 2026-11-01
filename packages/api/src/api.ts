@@ -23,6 +23,7 @@ import {
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/http-api";
 import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
+import { BackpackGroup } from "./backpack.ts";
 import {
   AgentNotFound,
   HobUnavailable,
@@ -290,4 +291,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(ApprovalsGroup)
   .add(GrantsGroup)
   .add(TasksGroup)
-  .add(QuestionsGroup) {}
+  .add(QuestionsGroup)
+  .add(BackpackGroup) {}

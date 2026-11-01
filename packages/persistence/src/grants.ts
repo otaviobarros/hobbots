@@ -2,7 +2,8 @@ import { GrantRepository } from "@hobbots/agents";
 import { Grant, GrantId } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { makeJournaled, oldestFirst } from "./journal.ts";
+import { makeJournaled } from "./journal.ts";
+import { oldestFirst } from "./order.ts";
 
 interface GrantRowShape {
   readonly rule?: unknown;

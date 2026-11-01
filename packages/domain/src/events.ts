@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
+import { BackpackItem } from "./backpack.ts";
 import { Grant } from "./grant.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { Message } from "./message.ts";
@@ -63,6 +64,10 @@ const HandedOff = Schema.TaggedStruct("HandedOff", { handOff: HandOff, artifact:
 const TaskCompleted = Schema.TaggedStruct("TaskCompleted", { task: Task, artifacts: Schema.Array(ArtifactRef) });
 /** The Task that holds a Quest passed the completion gate. */
 const QuestCompleted = Schema.TaggedStruct("QuestCompleted", { quest: Quest });
+/** A backpack item was committed with the change that caused it (ADR 019). */
+const BackpackItemRecorded = Schema.TaggedStruct("BackpackItemRecorded", { item: BackpackItem });
+/** A backpack item was claimed, delivered, acknowledged, processed, put back, resolved or failed. */
+const BackpackItemChanged = Schema.TaggedStruct("BackpackItemChanged", { item: BackpackItem });
 /**
  * A piece of a streaming reply. Transient: its text reaches durable state through the message (ADR 013).
  * `offset` is where the piece starts in the message's text, in UTF-16 code units, so a client
@@ -101,6 +106,8 @@ export const JournaledEvent = Schema.Union([
   HandedOff,
   TaskCompleted,
   QuestCompleted,
+  BackpackItemRecorded,
+  BackpackItemChanged,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -135,6 +142,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   HandedOff: 1,
   TaskCompleted: 1,
   QuestCompleted: 1,
+  BackpackItemRecorded: 1,
+  BackpackItemChanged: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

@@ -16,6 +16,7 @@
     "@effect/sql-sqlite-node": "catalog:",
     "@hobbots/agents": "workspace:*",
     "@hobbots/domain": "workspace:*",
+    "@hobbots/inbox": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

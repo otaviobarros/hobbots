@@ -30,6 +30,7 @@ import {
   startGeneration,
   syncState,
 } from "./sync.ts";
+import type { TaskEvent } from "./task-trees.ts";
 import { applyTaskEvent } from "./tasks.ts";
 
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
@@ -127,6 +128,31 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "TurnStopRequested":
     case "TurnStopped":
       return;
+    default:
+      applyWorkEvent(queryClient, event);
+      return;
+  }
+};
+
+/** Approvals, grants, backpack items, and the events that change Tasks and Quests. */
+const applyWorkEvent = (
+  queryClient: QueryClient,
+  event:
+    | TaskEvent
+    | Extract<
+        HobbotsEvent,
+        {
+          readonly _tag:
+            | "ApprovalRequested"
+            | "ApprovalResolved"
+            | "GrantCreated"
+            | "GrantRevoked"
+            | "BackpackItemRecorded"
+            | "BackpackItemChanged";
+        }
+      >,
+) => {
+  switch (event._tag) {
     case "ApprovalRequested":
     case "ApprovalResolved":
       storeApproval(queryClient, event.approval);
@@ -134,6 +160,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "GrantCreated":
     case "GrantRevoked":
       void grantsChanged(queryClient);
+      return;
+    // Nothing shows a hob's backpack yet (ADR 019).
+    case "BackpackItemRecorded":
+    case "BackpackItemChanged":
       return;
     // The rest change Tasks and Quests (ADR 018).
     default:

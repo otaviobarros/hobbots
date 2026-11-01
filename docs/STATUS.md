@@ -33,7 +33,9 @@ Built, but not proven end to end, or proven only in part.
 
 - **2026-11-01 · Hob tools for Tasks and Quests.** Hobs can plan steps, start a Quest, delegate, report, ask, answer, escalate, hand off, wait, complete and cancel through tools the hub checks. Proven at hub level with the fake runtime on SQLite and PostgreSQL. No turn offers them yet, and serving them to a real Claude Code is not verified. ([#271](https://github.com/otaviobarros/hobbots/issues/271), [#272](https://github.com/otaviobarros/hobbots/issues/272), [#273](https://github.com/otaviobarros/hobbots/issues/273))
 
-Running steps and delegated work, inboxes, other runtimes, the Workbench and remote access are not built yet. The [slices](https://github.com/otaviobarros/hobbots/issues?q=label%3A%22type%3A+slice%22) list them in order.
+- **2026-11-01 · A hob's backpack is recorded.** A delegated Task, a result, a failure, a report, a question, an answer and a hand-off each land in the backpack of the hob that has to deal with them, in the same transaction as the change. A retried tool call records nothing new, and a write under a stale claim is refused. Proven at the repository and hub level on SQLite and PostgreSQL. Nothing delivers the items or wakes a hob yet. ([#290](https://github.com/otaviobarros/hobbots/issues/290), [#291](https://github.com/otaviobarros/hobbots/issues/291), [#292](https://github.com/otaviobarros/hobbots/issues/292))
+
+Running steps and delegated work, delivering backpack items, other runtimes, the Workbench and remote access are not built yet. The [slices](https://github.com/otaviobarros/hobbots/issues?q=label%3A%22type%3A+slice%22) list them in order.
 
 ## Keep this page current
 
