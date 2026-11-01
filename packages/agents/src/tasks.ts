@@ -205,7 +205,10 @@ export interface TaskToolCall {
   readonly agentId: AgentId;
   readonly key: string;
   readonly tool: TaskToolName;
-  /** The input without its key, as stable JSON, so a key reused for another call is told apart. */
+  /**
+   * The input without its key, with the Task the turn works on, as stable JSON: a key sent again
+   * for another call, or from another Task, is told apart.
+   */
   readonly input: string;
   readonly at: string;
 }

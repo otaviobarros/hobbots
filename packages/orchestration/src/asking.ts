@@ -8,18 +8,19 @@ import {
   type TaskToolRefused,
 } from "@hobbots/domain";
 import { Effect } from "effect";
-import { type CallScope, fromRecords, journalOf, newId, ownTask, refuse } from "./call-scope.ts";
+import { type CallScope, fromRecords, journalOf, newId, ownTask, refuse, taskIn } from "./call-scope.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
 }
 
 /** A question asked in the call's tree. */
+/** A question asked on a Task the turn reaches. */
 const questionIn = (scope: CallScope, id: string): Effect.Effect<Question, TaskToolRefused> => {
   const question = scope.tree.questions.find((each) => each.id === id);
   return question === undefined
     ? refuse("question-missing", `No question ${id} in the work you are on.`)
-    : Effect.succeed(question);
+    : Effect.as(taskIn(scope, question.taskId), question);
 };
 
 const recipient = (question: Question) => (question.recipientId === null ? "the user" : `hob ${question.recipientId}`);

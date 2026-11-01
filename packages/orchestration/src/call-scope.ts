@@ -91,10 +91,18 @@ export const journalOf = () => {
 export const newId = () => crypto.randomUUID();
 
 /** A Task of the call's tree, or a refusal naming it. */
-const taskIn = (scope: CallScope, id: string): Effect.Effect<Task, TaskToolRefused> => {
+/**
+ * The Tasks a turn reaches: the Task it works on and everything under it. A step's session never
+ * reaches its sibling, and a member working on one branch never reaches another.
+ */
+const withinTurn = (scope: CallScope, task: Task): boolean =>
+  task.id === scope.turnTask.id || ancestorsOf(task, scope.tree.tasks).some((above) => above.id === scope.turnTask.id);
+
+/** A Task the turn reaches, or a refusal naming it. */
+export const taskIn = (scope: CallScope, id: string): Effect.Effect<Task, TaskToolRefused> => {
   const task = scope.tree.tasks.find((each) => each.id === id);
-  return task === undefined
-    ? refuse("outside-subtree", `Task ${id} is not part of the work you are on.`)
+  return task === undefined || !withinTurn(scope, task)
+    ? refuse("outside-subtree", `Task ${id} is not part of the Task you are working on.`)
     : Effect.succeed(task);
 };
 
@@ -106,13 +114,32 @@ export const ownTask = (scope: CallScope, id: string | undefined): Effect.Effect
       : refuse("not-owner", `Task ${task.id} is not yours; only its owner can do this.`),
   );
 
-/** A Task the caller leads: it owns one of the Tasks above it. */
+/** A Task the caller leads from this turn: it owns a Task above it, the turn's own or one under it. */
 export const ledTask = (scope: CallScope, id: string): Effect.Effect<Task, TaskToolRefused> =>
   Effect.flatMap(taskIn(scope, id), (task) =>
-    ancestorsOf(task, scope.tree.tasks).some((above) => above.ownerId === scope.caller.agentId)
+    ancestorsOf(task, scope.tree.tasks).some(
+      (above) => above.ownerId === scope.caller.agentId && withinTurn(scope, above),
+    )
       ? Effect.succeed(task)
       : refuse("not-lead", `Task ${task.id} is not under any Task of yours.`),
   );
+
+/** A Quest's deadline: the one asked for, never later than the one above it, and not passed. */
+const deadlineWithin = (scope: CallScope, above: string | null, asked: string | undefined) =>
+  Effect.gen(function* () {
+    const deadline = asked ?? above;
+    if (deadline === null) return null;
+    if (Number.isNaN(Date.parse(deadline))) {
+      return yield* refuse("invalid-input", `The deadline ${deadline} is not an ISO 8601 time.`);
+    }
+    if (above !== null && Date.parse(deadline) > Date.parse(above)) {
+      return yield* refuse("authority-wider", `The deadline cannot be later than ${above}.`);
+    }
+    if (Date.parse(deadline) <= Date.parse(scope.at)) {
+      return yield* refuse("deadline-passed", `The deadline ${deadline} has passed.`);
+    }
+    return deadline;
+  });
 
 /** The Quest limits a new Quest on `task` gets: within the hub's and every Quest's above it. */
 export const questLimitsFor = (
@@ -132,17 +159,7 @@ export const questLimitsFor = (
     }
     const maxDepth = requested.max_depth ?? allowed;
     if (maxDepth > allowed) return yield* refuse("authority-wider", `The depth limit here is at most ${allowed}.`);
-    const above = outer?.limits.deadline ?? null;
-    const deadline = requested.deadline ?? above;
-    if (deadline !== null && Number.isNaN(Date.parse(deadline))) {
-      return yield* refuse("invalid-input", `The deadline ${deadline} is not an ISO 8601 time.`);
-    }
-    if (deadline !== null && above !== null && Date.parse(deadline) > Date.parse(above)) {
-      return yield* refuse("authority-wider", `The deadline cannot be later than ${above}.`);
-    }
-    if (deadline !== null && Date.parse(deadline) <= Date.parse(scope.at)) {
-      return yield* refuse("deadline-passed", `The deadline ${deadline} has passed.`);
-    }
+    const deadline = yield* deadlineWithin(scope, outer?.limits.deadline ?? null, requested.deadline);
     return { maxDepth, deadline };
   });
 
@@ -176,9 +193,10 @@ export const makeCapacity = (limits: TaskToolLimits) =>
 export const makeAuthorityOf = Effect.gen(function* () {
   const hobs = yield* HobbotsRepository;
   const hobTools = yield* HobTools;
-  return (scope: CallScope, task: Task) =>
+  /** What a hob's own policy lets it do now. */
+  const ownAuthority = (agentId: AgentId) =>
     Effect.gen(function* () {
-      const agent = yield* hobs.findAgent(scope.caller.agentId);
+      const agent = yield* hobs.findAgent(agentId);
       const access = Option.isNone(agent) ? null : yield* hobTools.access(agent.value);
       const own: Authority =
         access === null
@@ -189,9 +207,15 @@ export const makeAuthorityOf = Effect.gen(function* () {
               ) as Authority["decisions"],
               folders: access.folders,
             };
+      return own;
+    });
+  const of = (scope: CallScope, task: Task) =>
+    Effect.gen(function* () {
+      const own = yield* ownAuthority(scope.caller.agentId);
       const path = new Set([task.id, ...ancestorsOf(task, scope.tree.tasks).map((each) => each.id)]);
       return scope.tree.delegations
         .filter((delegation) => path.has(delegation.childTaskId))
         .reduce((authority, delegation) => narrowBy(authority, delegation.authority), own);
     });
+  return { of, own: ownAuthority };
 });

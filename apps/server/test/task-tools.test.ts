@@ -6,6 +6,7 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  EMPTY_HOB_POLICY,
   type EventEnvelope,
   type TaskId,
   TaskId as TaskIdSchema,
@@ -100,6 +101,8 @@ const seed = Effect.gen(function* () {
         lookColor: "moss",
         configVersion: 1,
         createdAt: now,
+        // Ada never uses the web, whatever she is given.
+        ...(id === ADA ? { policy: { ...EMPTY_HOB_POLICY, overrides: { "use-web": "deny" as const } } } : {}),
       }),
     );
   }
@@ -170,6 +173,14 @@ describe("hob tools for Tasks and Quests", () => {
     const draft = tasks.find((task) => task.brief === "Draft copy");
     expect(draft?.dependsOn).toEqual([research?.id]);
 
+    // The same key and input from another Task's turn is another call, not a retry.
+    const [step] = (first.details.steps as Array<{ readonly task_id: string }>).map((each) =>
+      TaskIdSchema.make(each.task_id),
+    );
+    if (step === undefined) throw new Error("expected a step");
+    const fromStep = await refused(ALDRIC, step, "plan_steps", input);
+    expect(fromStep.reason).toBe("key-reused");
+
     const reused = await refused(ALDRIC, TOP, "plan_steps", { ...input, steps: [{ brief: "Something else" }] });
     expect(reused).toBeInstanceOf(TaskToolRefused);
     expect(reused.reason).toBe("key-reused");
@@ -236,6 +247,10 @@ describe("hob tools for Tasks and Quests", () => {
     });
     expect(pass.reason).toBe("authority-wider");
     const pip = await delegate(QUILL, quill, "Pip", "pip");
+    // A member's own policy narrows what it is given: the intersection of the lead's and its own.
+    const ada = await delegate(ALDRIC, TOP, "Ada", "ada");
+    const adas = (await tree()).delegations.find((each) => each.childTaskId === ada);
+    expect(adas?.authority.overrides).toMatchObject({ "use-web": "deny", "edit-files": "allow" });
     const given = (await tree()).delegations.find((each) => each.childTaskId === pip);
     expect(given?.authority.overrides).toMatchObject({ push: "deny", "run-commands": "ask" });
     expect(given?.authority.folders).toEqual([join(work, "copy")]);
@@ -253,9 +268,11 @@ describe("hob tools for Tasks and Quests", () => {
       kind: "finding",
       summary: "Aldric's work is mine now",
     });
-    expect(notOwner.reason).toBe("not-owner");
+    expect(notOwner.reason).toBe("outside-subtree");
     const sibling = await refused(QUILL, quill, "cancel_task", { key: "k2", task_id: ada });
-    expect(sibling.reason).toBe("not-lead");
+    expect(sibling.reason).toBe("outside-subtree");
+    const members = await refused(ALDRIC, TOP, "complete_task", { key: "k9", task_id: quill, summary: "Mine" });
+    expect(members.reason).toBe("not-owner");
     const turn = await refused(QUILL, TOP, "plan_steps", { key: "k3", steps: [{ brief: "Take over" }] });
     expect(turn.reason).toBe("not-owner");
 
@@ -283,6 +300,18 @@ describe("hob tools for Tasks and Quests", () => {
       summary: "Half way",
     });
     expect(otherTree.reason).toBe("outside-subtree");
+
+    // A step's session reaches only its own step, never its sibling or the Task above.
+    const planned = await done(ALDRIC, TOP, "plan_steps", { key: "s", steps: [{ brief: "One" }, { brief: "Two" }] });
+    const [one, two] = (planned.details.steps as Array<{ readonly task_id: string }>).map((step) =>
+      TaskIdSchema.make(step.task_id),
+    );
+    if (one === undefined || two === undefined) throw new Error("expected two steps");
+    expect((await refused(ALDRIC, one, "cancel_task", { key: "k6", task_id: two })).reason).toBe("outside-subtree");
+    expect((await refused(ALDRIC, one, "ask", { key: "k7", task_id: TOP, question: "?" })).reason).toBe(
+      "outside-subtree",
+    );
+    expect((await refused(ALDRIC, one, "cancel_task", { key: "k8", task_id: one })).reason).toBe("not-lead");
 
     const before = await head();
     expect((await refused(ADA, ada, "hand_off", { key: "k5", artifact_id: "nope", to_task_id: quill })).reason).toBe(
@@ -340,9 +369,15 @@ describe("hob tools for Tasks and Quests", () => {
       question_id: asked.details.question_id,
       answer: "x",
     });
-    expect(notMine.reason).toBe("not-recipient");
+    expect(notMine.reason).toBe("outside-subtree");
     const up = await done(ALDRIC, TOP, "escalate", { key: "e", question_id: asked.details.question_id });
     expect(up.details.recipient).toBeNull();
+    const passedOn = await refused(ALDRIC, TOP, "answer", {
+      key: "a2",
+      question_id: asked.details.question_id,
+      answer: "x",
+    });
+    expect(passedOn.reason).toBe("not-recipient");
 
     const waiting = await done(ALDRIC, TOP, "wait_for", { key: "w", tasks: [quill, ada], mode: "all" });
     expect(waiting.details.states).toEqual({ [quill]: "queued", [ada]: "queued" });

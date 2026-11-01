@@ -15,7 +15,7 @@ import {
   type TaskToolRefused,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import { type Authority, delegatedAuthority } from "./authority.ts";
+import { type Authority, delegatedAuthority, narrowBy } from "./authority.ts";
 import {
   type CallScope,
   fromRecords,
@@ -33,7 +33,12 @@ interface Deps {
   readonly hobs: HobbotsRepository["Service"];
   readonly folderChecks: FolderChecksShape;
   readonly capacity: (scope: CallScope, ownerId: AgentId, adding: number) => Effect.Effect<void, TaskToolRefused>;
-  readonly authorityOf: (scope: CallScope, task: Task) => Effect.Effect<Authority>;
+  readonly authority: {
+    /** The caller's authority on a Task: its own, narrowed by every Delegation on the way down. */
+    readonly of: (scope: CallScope, task: Task) => Effect.Effect<Authority>;
+    /** What a hob's own policy lets it do now. */
+    readonly own: (agentId: AgentId) => Effect.Effect<Authority>;
+  };
   readonly limits: TaskToolLimits;
 }
 
@@ -94,9 +99,12 @@ const timeoutFor = (scope: CallScope, task: Task, minutes: number | undefined) =
 };
 
 /** Tools a lead brings in other hobs and moves results between them with. */
-export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authorityOf, limits }: Deps) => {
-  /** The member's authority: the caller's on this Task, narrowed by what the brief asks for. */
-  const memberAuthority = (scope: CallScope, task: Task, requested: DelegateInput["authority"]) =>
+export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority, limits }: Deps) => {
+  /**
+   * The member's authority: the caller's on this Task, narrowed by what the brief asks for and by
+   * the member's own policy, so it holds the intersection of the lead's and its own (STD-SEC-003).
+   */
+  const memberAuthority = (scope: CallScope, task: Task, member: Agent, requested: DelegateInput["authority"]) =>
     Effect.gen(function* () {
       const folders =
         requested?.folders === undefined
@@ -106,11 +114,14 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authorityO
                 .check(folder)
                 .pipe(Effect.catch(() => refuse("invalid-input", `${folder} is not a folder on this hub.`))),
             );
-      const narrowed = delegatedAuthority(yield* authorityOf(scope, task), {
+      const narrowed = delegatedAuthority(yield* authority.of(scope, task), {
         ...(requested?.decisions === undefined ? {} : { decisions: requested.decisions }),
         ...(folders === undefined ? {} : { folders }),
       });
-      return narrowed._tag === "Wider" ? yield* refuse("authority-wider", narrowed.message) : narrowed.authority;
+      if (narrowed._tag === "Wider") return yield* refuse("authority-wider", narrowed.message);
+      const own = yield* authority.own(member.id);
+      const both = narrowBy(own, narrowed.authority);
+      return { overrides: both.decisions, folders: [...both.folders] };
     });
 
   return {
@@ -120,7 +131,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authorityO
         const member = yield* findHob(hobs, input.hob);
         yield* checkMember(scope, task, member);
         yield* capacity(scope, member.id, 1);
-        const authority = yield* memberAuthority(scope, task, input.authority);
+        const given = yield* memberAuthority(scope, task, member, input.authority);
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         const journal = journalOf();
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
@@ -156,7 +167,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authorityO
                 id: delegationId,
                 brief: input.brief,
                 expectedOutput: input.expected_output ?? null,
-                authority,
+                authority: given,
                 timeoutMs,
               },
               milestones,

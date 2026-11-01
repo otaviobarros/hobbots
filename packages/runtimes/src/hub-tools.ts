@@ -91,9 +91,13 @@ const mergeHooks = (
   return merged;
 };
 
+/** Tools Claude Code adds once any MCP server is present; the hub's server offers no resources. */
+const MCP_RESOURCE_TOOLS = ["ListMcpResourcesTool", "ReadMcpResourceTool", "ReadMcpResourceDirTool"];
+
 /**
- * A turn's options with its hub tools added. A chat-only turn closes every tool with `*`; with hub
- * tools it closes none by name, since it offers no built-in tool and allows only the hub's.
+ * A turn's options with its hub tools added. A chat-only turn closes every tool with `*`, which
+ * would close the hub's too, so it closes the MCP resource tools by name instead: it offers no
+ * built-in tool and allows only the hub's.
  */
 export const withHubTools = (
   options: Options,
@@ -106,7 +110,7 @@ export const withHubTools = (
     ...options,
     ...added,
     allowedTools: [...(options.allowedTools ?? []), ...(added.allowedTools ?? [])],
-    disallowedTools: (options.disallowedTools ?? []).filter((rule) => rule !== "*"),
+    disallowedTools: [...(options.disallowedTools ?? []).filter((rule) => rule !== "*"), ...MCP_RESOURCE_TOOLS],
     hooks: mergeHooks(options.hooks, added.hooks),
   };
 };

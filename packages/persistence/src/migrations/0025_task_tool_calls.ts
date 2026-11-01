@@ -3,8 +3,8 @@ import { SqlClient } from "effect/sql";
 
 // Hob tools for Tasks and Quests (ADR 018). `task_tool_calls` keeps the result of each call a hob
 // made, keyed by the hob and the key it sent, so a retried call returns the first result and never
-// writes twice. `input` is the call's input as stable JSON without its key, so a key sent again
-// with another call is told apart. `result` is the stored result as JSON text.
+// writes twice. `input` is the call's input as stable JSON without its key and with the Task the
+// turn worked on, so a key sent again with another call, or from another Task, is told apart. `result` is the stored result as JSON text.
 //
 // `task_waits` holds what a Task's owner waits for: the Tasks under it (`waits_on`, JSON text)
 // and whether any or all of them must end. A Task has at most one wait; a new one replaces it.

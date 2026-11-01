@@ -64,12 +64,12 @@ export class TaskTools extends Context.Service<
         const ledger = yield* TaskToolCalls;
         const publisher = yield* EventPublisher;
         const capacity = yield* makeCapacity(limits);
-        const authorityOf = yield* makeAuthorityOf;
+        const authority = yield* makeAuthorityOf;
         const folderChecks = yield* FolderChecks;
         const hobs = yield* HobbotsRepository;
         const handlers: Record<TaskToolName, ToolHandler> = {
           ...makePlanning({ tasks, capacity, limits }),
-          ...makeDelegating({ tasks, capacity, limits, authorityOf, folderChecks, hobs }),
+          ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs }),
           ...makeAsking({ tasks }),
         };
 
@@ -97,13 +97,26 @@ export class TaskTools extends Context.Service<
             const { key, ...rest } = input;
             const at = DateTime.formatIso(yield* DateTime.now);
             const outcome = yield* ledger.once(
-              { agentId: caller.agentId, key, tool: name, input: stableJson(rest), at },
+              {
+                agentId: caller.agentId,
+                key,
+                tool: name,
+                input: stableJson({ ...rest, turn_task: caller.taskId }),
+                at,
+              },
               Effect.flatMap(scopeOf(caller, at), (scope) => handlers[name](scope, rest as never)),
             );
-            if (outcome.entries.length > 0) yield* publisher.publish(outcome.entries);
+            // Committed already: a client that misses the announcement replays it from the journal.
+            if (outcome.entries.length > 0) {
+              yield* publisher
+                .publish(outcome.entries)
+                .pipe(Effect.catchCause((cause) => Effect.logWarning("Could not announce a Task tool call", cause)));
+            }
             return outcome.done;
           });
 
+        // A runtime runs each call on its own, so it carries the hub's services, its logger included.
+        const context = yield* Effect.context<never>();
         const forTurn = (caller: TaskToolCaller): HubTools => ({
           tools: TASK_TOOLS.map((tool) => ({ ...tool, inputSchema: taskToolJsonSchema(tool.name) })),
           call: (name, input) =>
@@ -117,6 +130,7 @@ export class TaskTools extends Context.Service<
                   Effect.as({ text: COULD_NOT_RECORD, refused: true }),
                 ),
               ),
+              Effect.provideContext(context),
             ),
         });
 

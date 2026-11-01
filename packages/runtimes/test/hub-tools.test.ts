@@ -49,7 +49,7 @@ describe("hub tools on Claude Code's control channel", () => {
     const events: Array<RuntimeEvent> = [];
     const options = withHubTools(chatOnly, hub, (event) => events.push(event));
     expect(options.tools).toEqual([]);
-    expect(options.disallowedTools).toEqual([]);
+    expect(options.disallowedTools).toEqual(["ListMcpResourcesTool", "ReadMcpResourceTool", "ReadMcpResourceDirTool"]);
     expect(options.permissionMode).toBe("dontAsk");
     expect(options.strictMcpConfig).toBe(true);
     expect(options.allowedTools).toEqual(TASK_TOOLS.map((tool) => `mcp__${HUB_SERVER}__${tool.name}`));
