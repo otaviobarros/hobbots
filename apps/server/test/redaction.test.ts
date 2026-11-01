@@ -160,4 +160,38 @@ describe("secrets in tool calls", () => {
     expect(leaks(fromHobbots(result.published))).toEqual([]);
     expect(result.journaled.some((entry) => entry.type === "ApprovalRequested")).toBe(true);
   });
+  // covers PE-003
+  it("[TC-PE-080] runs the call when the user approves the redacted request they were shown", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const approvals = yield* ApprovalService;
+        const repo = yield* HobbotsRepository;
+        const thread = yield* chat.createThread(HOB_ID);
+        yield* chat.sendPrompt(
+          thread.id,
+          PROMPT.split("\n")
+            .filter((line) => line.includes("git push"))
+            .join("\n"),
+        );
+        const request = yield* approvals.listForThread(thread.id).pipe(
+          Effect.flatMap((all) =>
+            all[0] === undefined ? Effect.fail("none" as const) : Effect.succeed(all[0] as ApprovalRequest),
+          ),
+          Effect.retry(Schedule.spaced("5 millis")),
+        );
+        yield* approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest });
+        return yield* repo.listMessages(thread.id).pipe(
+          Effect.map((messages) => messages.at(-1) as Message),
+          Effect.flatMap((m) =>
+            m.role === "assistant" && !isInProgress(m.status) ? Effect.succeed(m) : Effect.fail("busy" as const),
+          ),
+          Effect.retry(Schedule.spaced("5 millis")),
+        );
+      }),
+    );
+    // The digest names the call as it runs, so the approval matches it and the push goes ahead.
+    expect(result.steps.filter((step) => step.kind === "tool").map((step) => step.state)).toEqual(["done"]);
+    expect(leaks(result.steps)).toEqual([]);
+  });
 });

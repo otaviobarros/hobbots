@@ -345,7 +345,8 @@ export class ChatService extends Context.Service<
             .pipe(
               Stream.runForEach(handle),
               Effect.catchTags({
-                RuntimeError: (error) => update((m) => MessageTransitions.cutOff(m, error.message)),
+                // The runtime's error can quote what a tool printed.
+                RuntimeError: (error) => update((m) => MessageTransitions.cutOff(m, redactor.text(error.message))),
                 RuntimeLimitReached: (error) => update((m) => MessageTransitions.limit(m, error.resetsAt)),
               }),
             );

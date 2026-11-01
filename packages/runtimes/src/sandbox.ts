@@ -4,7 +4,7 @@ import { homedir, platform, tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
 import { RuntimeError } from "@hobbots/agents";
-import { type SandboxState, SECRET_NAME } from "@hobbots/domain";
+import type { SandboxState } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
 import { gitConfigAccess } from "./git-config.ts";
 
@@ -182,6 +182,7 @@ const PASSED_VARIABLES = new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "L
 const PASSED_PREFIXES = ["LC_", "CLAUDE_CODE_", "CLAUDE_AGENT_SDK_"];
 // Claude Code's own settings pass, but never one that looks like a credential, such as a refresh
 // token; the turn's sign-in is added on its own.
+const SECRET_NAME = /TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL|AUTH/;
 const SIGN_IN = "CLAUDE_CODE_OAUTH_TOKEN";
 
 /** The part of an environment that enters the sandbox. */

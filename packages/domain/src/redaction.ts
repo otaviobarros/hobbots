@@ -15,25 +15,33 @@ export interface KnownSecret {
 /** What replaces a secret: it says what kind of value was there, never the value. */
 export const redactionMarker = (kind: string) => `[redacted: ${kind}]`;
 
-/** Environment variable names that hold credentials, such as `GH_TOKEN` or `ANTHROPIC_API_KEY`. */
-export const SECRET_NAME = /TOKEN|SECRET|KEY|PASSWORD|PASSWD|CREDENTIAL|AUTH/;
+/**
+ * Environment variable names that hold credentials, such as `GH_TOKEN`, `PGPASSWORD` or
+ * `ANTHROPIC_API_KEY`. `KEY` and `AUTH` count only as whole parts of the name, so `GIT_AUTHOR_NAME`
+ * and `KEYBOARD_LAYOUT` do not.
+ */
+const SECRET_ENV_NAME = /TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|APIKEY|(?:^|_)(?:KEYS?|AUTH)(?:_|$)/;
 
 /**
  * Values too short or too plain to treat as secrets: replacing every `true` or `1` in tool output
  * would hide more than it protects. A path names a file and is not itself a secret.
  */
 const MIN_KNOWN_LENGTH = 8;
-const usableSecret = (value: string) => value.trim().length >= MIN_KNOWN_LENGTH && !value.startsWith("/");
+const usableSecret = (value: string) =>
+  value.trim().length >= MIN_KNOWN_LENGTH && !value.startsWith("/") && !/^\d+$/.test(value.trim());
 
 /** The credentials an environment holds: each variable whose name says it holds one. */
 export const secretsFromEnv = (env: Readonly<Record<string, string | undefined>>): ReadonlyArray<KnownSecret> =>
   Object.entries(env).flatMap(([name, value]) =>
-    value !== undefined && SECRET_NAME.test(name) && usableSecret(value) ? [{ value, kind: name }] : [],
+    value !== undefined && SECRET_ENV_NAME.test(name) && usableSecret(value) ? [{ value, kind: name }] : [],
   );
 
 interface SecretShape {
   readonly kind: string;
-  /** Global. Group `secret`, when present, is the part replaced; otherwise the whole match is. */
+  /**
+   * Global. With a `secret` group, only that group is replaced and `prefix` before it is kept;
+   * otherwise the whole match is replaced.
+   */
   readonly pattern: RegExp;
 }
 
@@ -58,14 +66,18 @@ const SHAPES: ReadonlyArray<SecretShape> = [
   { kind: "Stripe key", pattern: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}/g },
   { kind: "npm token", pattern: /\bnpm_[A-Za-z0-9]{36}\b/g },
   { kind: "JSON web token", pattern: /\beyJ[\w-]{8,}\.eyJ[\w-]{8,}\.[\w-]{8,}/g },
-  { kind: "bearer token", pattern: /\bBearer\s+(?<secret>[A-Za-z0-9\-._~+/]{8,}=*)/gi },
+  { kind: "bearer token", pattern: /(?<prefix>\bBearer[ \t]+)(?<secret>[A-Za-z0-9\-._~+/]{8,}=*)/g },
   // A password in a URL, such as `https://user:token@github.com/`.
-  { kind: "password", pattern: /\b[a-z][a-z0-9+.-]{0,30}:\/\/[^\s:/@]{1,256}:(?<secret>[^\s@/]{1,256})@/gi },
-  // An environment-style assignment, as `env` or a `.env` file prints it: `GH_TOKEN=…`.
+  {
+    kind: "password",
+    pattern: /(?<prefix>\b[a-z][a-z0-9+.-]{0,30}:\/\/[^\s:/@]{1,256}:)(?<secret>[^\s@/]{1,256})(?=@)/gi,
+  },
+  // An environment-style assignment, as `env` or a `.env` file prints it: `GH_TOKEN=…`. A value
+  // that is a variable, a marker or a plain number, such as `MAX_TOKENS=100000`, is not a secret.
   {
     kind: "credential",
     pattern:
-      /\b[A-Z0-9_]{0,64}(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_KEY|PRIVATE_KEY)[A-Z0-9_]{0,64}=(?<secret>["']?[^\s"'$][^\s"']{7,}["']?)/g,
+      /(?<prefix>\b[A-Z0-9_]{0,64}(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_KEY|PRIVATE_KEY)[A-Z0-9_]{0,64}=)(?<secret>["']?(?!\d+["']?(?:\s|$))[^\s"'$[][^\s"']{7,}["']?)/g,
   },
 ];
 
@@ -79,7 +91,8 @@ const replaceShape = (text: string, shape: SecretShape) =>
     // An earlier shape or a known value already replaced it.
     if (MARKER.test(secret ?? match)) return match;
     const marker = redactionMarker(shape.kind);
-    return secret === undefined ? marker : match.replace(secret, marker);
+    // By position: the secret's text may also appear earlier in the match, as in `postgres:postgres@`.
+    return secret === undefined ? marker : `${groups?.prefix ?? ""}${marker}`;
   });
 
 /** The kind of the first secret shape `text` holds, or null when it holds none. */

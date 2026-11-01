@@ -63,6 +63,35 @@ describe("redactSecrets", () => {
     );
   });
 
+  it("redacts a URL password or an assigned value by position, even when the same text comes earlier", () => {
+    expect(redactSecrets("psql postgres://postgres:postgres@localhost/db")).toBe(
+      "psql postgres://postgres:[redacted: password]@localhost/db",
+    );
+    expect(redactSecrets("https://admin:admin@host/x")).toBe("https://admin:[redacted: password]@host/x");
+    expect(redactSecrets("API_TOKEN_ABCDEFGH=ABCDEFGH")).toBe("API_TOKEN_ABCDEFGH=[redacted: credential]");
+  });
+
+  it("names a known value inside an assignment once, and redacting again changes nothing", () => {
+    const known = [{ value: "abcdefgh123456", kind: "GH_TOKEN" }];
+    const inputs = [
+      "GH_TOKEN=abcdefgh123456 gh pr list",
+      `export GH_TOKEN=ghp_${"a".repeat(36)}`,
+      `curl -H "Authorization: Bearer abcdefgh123456" https://u:abcdefgh123456@x.dev ${PEM}`,
+    ];
+    expect(redactSecrets(inputs[0] as string, known)).toBe("GH_TOKEN=[redacted: GH_TOKEN] gh pr list");
+    expect(redactSecrets(inputs[1] as string, known)).toBe("export GH_TOKEN=[redacted: GitHub token]");
+    for (const input of inputs) {
+      const once = redactSecrets(input, known);
+      expect(redactSecrets(once, known)).toBe(once);
+    }
+  });
+
+  it("leaves numbers and ordinary words that look close to a secret alone", () => {
+    for (const text of ["MAX_TOKENS=100000000", "The bearer instruments were sold", "Bearer\nsomething-long-here"]) {
+      expect(redactSecrets(text)).toBe(text);
+    }
+  });
+
   it("leaves ordinary text and earlier markers alone", () => {
     const text = "Running pnpm test in /work, token expired, sk-short, Bearer of news";
     expect(redactSecrets(text)).toBe(text);
@@ -101,11 +130,16 @@ describe("secretsFromEnv", () => {
         HOME: "/Users/me",
         SSH_AUTH_SOCK: "/tmp/agent.sock",
         FEATURE_TOKEN: "on",
+        MAX_TOKENS: "100000000",
+        GIT_AUTHOR_NAME: "Ada Lovelace",
+        KEYBOARD_LAYOUT: "us-international",
+        PGPASSWORD: "pg-password-1",
         UNSET_SECRET: undefined,
       }),
     ).toEqual([
       { value: "sk-ant-value-123", kind: "ANTHROPIC_API_KEY" },
       { value: "gh-value-1234", kind: "GH_TOKEN" },
+      { value: "pg-password-1", kind: "PGPASSWORD" },
     ]);
   });
 });
