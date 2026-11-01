@@ -38,6 +38,8 @@ import { runtimeProblem } from "../api/runtime-health.ts";
 import { brainSwitches, lastReplyBrain } from "../lib/brains.ts";
 import { sendErrorText } from "../lib/send-error.ts";
 import { ReplyApprovals } from "./approvals/reply-approvals.tsx";
+import { ArchiveToastViewport } from "./archive/archive-toast.tsx";
+import { ThreadHeaderMenu } from "./archive/thread-menu.tsx";
 import { BrainPicker, BrainSwitchNote, useOtherReadyRuntimes } from "./brain-picker.tsx";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
@@ -229,6 +231,7 @@ export function ChatView({
           <span className="text-xs text-label">{stateLabel[state]}</span>
         </div>
         <BrainPicker hob={current} thread={thread.data} />
+        {thread.data && <ThreadHeaderMenu hob={current} thread={thread.data} />}
         <Button asChild variant="outline">
           <Link to="/hobs/$hobId/profile" params={{ hobId }}>
             Edit hob
@@ -381,6 +384,7 @@ export function ChatView({
           </Button>
         </section>
       )}
+      <ArchiveToastViewport />
       <Composer
         placeholder={copy.placeholder({ name: current.name, title })}
         place={place}

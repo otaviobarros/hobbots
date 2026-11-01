@@ -54,6 +54,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly tag: string | undefined,
+    /** The tagged error's own fields, such as a refusal's `reason`. */
+    readonly fields: Readonly<Record<string, unknown>> = {},
   ) {
     super(message);
   }
@@ -67,7 +69,8 @@ export const call = async <A, E>(f: (client: Client) => Effect.Effect<A, E>): Pr
   const tag = typeof error === "object" && error !== null && "_tag" in error ? String(error._tag) : undefined;
   // Tagged API errors carry their fields but no message, so the tag stands in for an empty one.
   const message = error instanceof Error && error.message !== "" ? error.message : (tag ?? "Request failed");
-  throw new ApiError(message, tag);
+  const fields = typeof error === "object" && error !== null ? { ...error } : {};
+  throw new ApiError(message, tag, fields);
 };
 
 /** Where the hub serves the whole output of a tool step that shows only its start and end. */

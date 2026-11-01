@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { agentsQuery, threadsQuery } from "../api/queries.ts";
 import { formatWhen } from "../lib/time.ts";
+import { ThreadRowMenu } from "./archive/thread-menu.tsx";
 import { ArchivedEntry } from "./archived-threads/archived-threads.tsx";
 import { HobSprite, hobState, stateLabel } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
@@ -113,7 +114,7 @@ function HobEntry({ hob, open, threadId }: { hob: Agent; open: boolean; threadId
           {threads.data?.map((thread) => (
             <ThreadLink
               key={thread.id}
-              hobId={hob.id}
+              hob={hob}
               thread={thread}
               current={thread.id === threadId}
               live={!!activity[thread.id]}
@@ -133,30 +134,24 @@ function HobEntry({ hob, open, threadId }: { hob: Agent; open: boolean; threadId
   );
 }
 
-function ThreadLink({
-  hobId,
-  thread,
-  current,
-  live,
-}: {
-  hobId: AgentId;
-  thread: Thread;
-  current: boolean;
-  live: boolean;
-}) {
+function ThreadLink({ hob, thread, current, live }: { hob: Agent; thread: Thread; current: boolean; live: boolean }) {
   return (
-    <Link
-      to="/hobs/$hobId/threads/$threadId"
-      params={{ hobId, threadId: thread.id }}
-      aria-current={current ? "page" : undefined}
-      className={cn(
-        "flex w-full items-center gap-2 py-[7px] pr-2.5 pl-[34px] text-sm text-text no-underline hover:bg-hover hover:text-text",
-        current && "bg-line text-moonlight hover:text-moonlight",
-      )}
-    >
-      <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-      {live && <span role="img" aria-label={copy.working} className="size-[7px] flex-none animate-hb-blink bg-mint" />}
-      <span className="text-[11px] whitespace-nowrap text-label">{formatWhen(thread.updatedAt)}</span>
-    </Link>
+    <ThreadRowMenu hob={hob} thread={thread} current={current}>
+      <Link
+        to="/hobs/$hobId/threads/$threadId"
+        params={{ hobId: hob.id, threadId: thread.id }}
+        aria-current={current ? "page" : undefined}
+        className={cn(
+          "flex w-full animate-hb-in items-center gap-2 py-[7px] pe-2.5 ps-[34px] text-sm text-text no-underline hover:bg-hover hover:text-text",
+          current && "bg-line text-moonlight hover:text-moonlight",
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+        {live && (
+          <span role="img" aria-label={copy.working} className="size-[7px] flex-none animate-hb-blink bg-mint" />
+        )}
+        <span className="text-[11px] whitespace-nowrap text-label">{formatWhen(thread.updatedAt)}</span>
+      </Link>
+    </ThreadRowMenu>
   );
 }
