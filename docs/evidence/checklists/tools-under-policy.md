@@ -5,7 +5,7 @@ Slice 7's done-when checks, by hand, on macOS with real Claude Code. The automat
 ## Setup
 
 1. On a Mac with Apple silicon, signed in to Claude Code (`claude auth status` says so). Note the versions of macOS, Claude Code and Hobbots.
-2. Start a hub that cannot touch your own data: `pnpm package:mac`, then open `release/mac-arm64/Hobbots.app` with its own `--user-data-dir` and `HOBBOTS_PORT`, or run `pnpm dev` with `HOBBOTS_DATA_DIR` set to an empty folder.
+2. Start a hub that cannot touch your own data: `pnpm package:mac`, then open `apps/desktop/release/mac-arm64/Hobbots.app` with its own `--user-data-dir` and `HOBBOTS_PORT`, or run `pnpm dev` with `HOBBOTS_DATA_DIR` set to an empty folder.
 3. Make a project folder holding a small Node project with one failing test, for example `sum.ts` that subtracts and `sum.test.ts` that expects `sum(1, 2)` to be `3`, and a `test` script in `package.json`. Run `git init` and commit it.
 4. Make a file outside the project folder, such as `~/hobbots-personal/diary.txt`, and inside the project a link to its folder: `ln -s ~/hobbots-personal personal-link`.
 5. In setup, pick **Balanced** and share only the project folder. Summon one hob on a small model with low effort.

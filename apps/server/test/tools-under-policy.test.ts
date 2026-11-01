@@ -190,7 +190,8 @@ describe("tools under policy, end to end", () => {
     const escapes = [
       join(outside, "diary.txt"),
       // `..` and a link inside the folder both lead outside it.
-      join(project, "..", "personal", "diary.txt"),
+      // Spelled out, since `join` would resolve the `..` before the hub sees it.
+      `${project}/../personal/diary.txt`,
       join(project, "personal-link", "diary.txt"),
       // Hobbots' own data is never reachable.
       join(dataDir, "hobbots.sqlite"),
