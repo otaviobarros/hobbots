@@ -66,6 +66,8 @@ pnpm package:mac   # unsigned .dmg installers for Apple silicon and Intel in app
 
 Set `HOBBOTS_RUNTIME=fake` to run the server with a deterministic fake runtime instead of Claude Code.
 
+The server logs writes and failures. Set `HOBBOTS_LOG_LEVEL=Debug` to log every request, reads included, or pick another of Effect's levels (`All`, `Trace`, `Debug`, `Info`, `Warn`, `Error`, `Fatal`, `None`). The default is `Info`.
+
 The tests use in-memory SQLite. To run the persistence and server suites on PostgreSQL as well, start Docker and run:
 
 ```sh

@@ -28,7 +28,7 @@ import {
   TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { ClaudeCodeLayer, FakeAdditionalRuntimesLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
@@ -170,4 +170,11 @@ const ServerLive = Layer.unwrap(
   }),
 );
 
-Layer.launch(ServerLive).pipe(NodeRuntime.runMain);
+Layer.launch(ServerLive).pipe(
+  // HOBBOTS_LOG_LEVEL sets the least severe line the hub writes; Debug adds routine reads.
+  Effect.provideServiceEffect(
+    References.MinimumLogLevel,
+    Effect.map(ServerConfig, (config) => config.logLevel),
+  ),
+  NodeRuntime.runMain,
+);
