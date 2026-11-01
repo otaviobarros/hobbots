@@ -175,5 +175,8 @@ export const syncedInbox = (fetch: () => Promise<ReadonlyArray<ApprovalRequest>>
     fetch,
     "approval",
     () => true,
-    (items) => items.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+    (items) => items.sort((a, b) => bytewise(a.createdAt, b.createdAt) || bytewise(a.id, b.id)),
   );
+
+/** Compares text by code unit, as the hub's queries order it (`COLLATE "C"` on PostgreSQL). */
+export const bytewise = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);

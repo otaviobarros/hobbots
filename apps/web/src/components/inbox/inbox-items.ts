@@ -1,4 +1,5 @@
 import type { ApprovalRequest, ThreadId } from "@hobbots/domain";
+import { bytewise } from "../../api/sync.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
 import { exactAction } from "../approvals/approval-text.ts";
 import { messages } from "./messages.ts";
@@ -33,7 +34,7 @@ export const tabRequests = (
 
 // The most recently decided or expired first.
 const byClosing = (a: ApprovalRequest, b: ApprovalRequest) =>
-  (b.decidedAt ?? b.createdAt).localeCompare(a.decidedAt ?? a.createdAt) || b.id.localeCompare(a.id);
+  bytewise(b.decidedAt ?? b.createdAt, a.decidedAt ?? a.createdAt) || bytewise(b.id, a.id);
 
 export interface InboxGroup {
   readonly threadId: ThreadId;
