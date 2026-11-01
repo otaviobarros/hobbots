@@ -150,10 +150,10 @@ export class Dispatcher extends Context.Service<
           backpack.renew(itemId, held, lease).pipe(Effect.delay(Duration.divideUnsafe(lease, 3)), Effect.forever);
 
         /**
-         * One delivery: claimed, checked, put into a turn, and settled by how the turn ended. `last`
-         * keeps why the previous delivery of this dispatch ended early.
+         * Claims the item for the turn it is to go into, unless it is gone, settled, claimed, or a
+         * deadline not yet due. The claim's owner is this hub process and that turn (ADR 019).
          */
-        const once = (itemId: BackpackItemId, turn: (item: BackpackItem) => Turn, last: { reason: string | null }) =>
+        const claimFor = (itemId: BackpackItemId, turn: (item: BackpackItem) => Turn) =>
           Effect.gen(function* () {
             const found = yield* backpack.find(itemId).pipe(Effect.option);
             if (found._tag === "None") return { _tag: "Skipped", reason: "missing" } as const;
@@ -161,21 +161,58 @@ export class Dispatcher extends Context.Service<
             if (found.value.notBefore !== null && found.value.notBefore > now) {
               return { _tag: "Skipped", reason: "not-yet" } as const;
             }
-            // The claim's owner is this hub process and the turn the item is to go into (ADR 019).
-            const { target, turnId, run } = turn(found.value);
-            const owner = `${hub}:${turnId}`;
-            const claimed = yield* backpack.claim(itemId, owner, lease).pipe(
+            const planned = turn(found.value);
+            const owner = `${hub}:${planned.turnId}`;
+            return yield* backpack.claim(itemId, owner, lease).pipe(
               Effect.flatMap(announce),
-              Effect.map((item) => ({ _tag: "Claimed", item }) as const),
+              Effect.map(
+                (item) =>
+                  ({ _tag: "Claimed", item, turn: planned, held: { owner, token: item.fencingToken } }) as const,
+              ),
               Effect.catchTags({
                 BackpackItemMissing: () => Effect.succeed({ _tag: "Skipped", reason: "missing" } as const),
                 BackpackItemUnclaimable: ({ reason }) =>
                   Effect.succeed({ _tag: "Skipped", reason: reason === "claimed" ? "claimed" : "settled" } as const),
               }),
             );
+          });
+
+        /**
+         * After a turn that ran to its end: the item is consumed, unless the runtime never accepted
+         * the turn (`endedEarly`). A turn that settled the item itself under this claim, as
+         * `complete_task` does when it consumes it, is taken as is; otherwise `resolve` decides, and a
+         * claim lost meanwhile is refused as stale, so the outcome is dropped.
+         */
+        const afterTurn = <E>(
+          itemId: BackpackItemId,
+          held: HeldClaim,
+          turnId: string,
+          endedEarly: (reason: string) => Effect.Effect<Dispatched, E>,
+        ) =>
+          Effect.gen(function* () {
+            const current = yield* backpack.find(itemId).pipe(Effect.orDie);
+            const settledHere =
+              current.state === "resolved" &&
+              current.fencingToken === held.token &&
+              current.disposition?._tag === "consumed";
+            if (settledHere) return { _tag: "Consumed", item: current } as const;
+            if (current.state === "delivered" && current.claim?.token === held.token) {
+              return yield* endedEarly("The runtime never accepted the turn.");
+            }
+            const resolved = yield* step(backpack.resolve(itemId, held, { _tag: "consumed", by: turnId }));
+            return { _tag: "Consumed", item: resolved } as const;
+          });
+
+        /**
+         * One delivery: claimed, checked, put into a turn, and settled by how the turn ended. `last`
+         * keeps why the previous delivery of this dispatch ended early.
+         */
+        const once = (itemId: BackpackItemId, turn: (item: BackpackItem) => Turn, last: { reason: string | null }) =>
+          Effect.gen(function* () {
+            const claimed = yield* claimFor(itemId, turn);
             if (claimed._tag === "Skipped") return claimed;
-            const item = claimed.item;
-            const held: HeldClaim = { owner, token: item.fencingToken };
+            const { item, held } = claimed;
+            const { target, turnId, run } = claimed.turn;
 
             const late = item.taskId === null ? null : lateness(item, yield* host.treeOf(item.taskId));
             if (late !== null) {
@@ -230,20 +267,7 @@ export class Dispatcher extends Context.Service<
               if (ended.failure._tag !== "BackpackTurnFailed") return yield* ended.failure;
               return yield* endedEarly(ended.failure.reason);
             }
-            const current = yield* backpack.find(itemId).pipe(Effect.orDie);
-            // The turn settled the item itself under this claim, as `complete_task` does when it consumes it.
-            const settledHere =
-              current.state === "resolved" &&
-              current.fencingToken === held.token &&
-              current.disposition?._tag === "consumed";
-            if (settledHere) return { _tag: "Consumed", item: current } as const;
-            // A turn that handled nothing the runtime accepted counts as ended early.
-            if (current.state === "delivered" && current.claim?.token === held.token) {
-              return yield* endedEarly("The runtime never accepted the turn.");
-            }
-            // Otherwise `resolve` decides: a claim lost meanwhile is refused as stale, and the outcome dropped.
-            const resolved = yield* step(backpack.resolve(itemId, held, { _tag: "consumed", by: turnId }));
-            return { _tag: "Consumed", item: resolved } as const;
+            return yield* afterTurn(itemId, held, turnId, endedEarly);
           });
 
         const backoff = Schedule.max([
