@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { basename, isAbsolute, sep } from "node:path";
+import { basename, isAbsolute, resolve, sep } from "node:path";
 import { operationDecision } from "@hobbots/agents";
 import { narrowest, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
 import type { PolicyContext, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
@@ -88,34 +88,65 @@ const separatorAt = (command: string, i: number, word: string): { separator: Sep
   return next === "&" ? { separator: "&&", length: 2 } : { separator: "&", length: 1 };
 };
 
-/** One shell command line as simple commands and the separators between them. Quotes are honored; anything subtler is not. */
+/** A redirection operator at the start of a word: `>`, `2>>`, `&>`, `2>&1`, `<in`, `<<<`. */
+const REDIRECTION = /^(\d*|&)(>>|>\||>&|>|<<<|<<|<&|<>|<)/;
+
+/**
+ * The words of one simple command as they are read, with redirections left out. Only an unquoted,
+ * unescaped operator is a redirection, so `rm '>' file` still names both files. A bare operator
+ * (`> out`) also takes the next word, its target.
+ */
+const commandWords = () => {
+  const words: Array<string> = [];
+  let target = false;
+  return {
+    words,
+    add: (word: string, quoted: boolean) => {
+      const operator = quoted ? undefined : REDIRECTION.exec(word)?.[0];
+      if (target) target = false;
+      else if (operator === undefined) words.push(word);
+      else target = operator === word;
+    },
+  };
+};
+
+/**
+ * One shell command line as simple commands and the separators between them. Quotes are honored and
+ * redirections dropped; anything subtler is not.
+ */
 const commandLine = (command: string): ReadonlyArray<CommandToken> => {
   const tokens: Array<CommandToken> = [];
-  let words: Array<string> = [];
+  let current = commandWords();
   let word = "";
   let started = false;
+  let quoted = false;
   const endWord = () => {
-    if (started) words.push(word);
+    if (started) current.add(word, quoted);
     word = "";
     started = false;
+    quoted = false;
   };
   const endCommand = () => {
     endWord();
-    if (words.length > 0) tokens.push({ words });
-    words = [];
+    if (current.words.length > 0) tokens.push({ words: current.words });
+    current = commandWords();
+  };
+  const take = (text: string) => {
+    word += text;
+    started = true;
   };
   let i = 0;
   while (i < command.length) {
     const c = command[i] as string;
     const separator = separatorAt(command, i, word);
     if (c === "'" || c === '"') {
-      const quoted = readQuoted(command, i + 1, c);
-      word += quoted.text;
-      started = true;
-      i = quoted.next;
+      const read = readQuoted(command, i + 1, c);
+      take(read.text);
+      quoted = true;
+      i = read.next;
     } else if (c === "\\" && i + 1 < command.length) {
-      word += command[i + 1];
-      started = true;
+      take(command[i + 1] as string);
+      quoted = true;
       i += 2;
     } else if (separator !== null) {
       endCommand();
@@ -123,10 +154,7 @@ const commandLine = (command: string): ReadonlyArray<CommandToken> => {
       i += separator.length;
     } else {
       if (c === " " || c === "\t") endWord();
-      else {
-        word += c;
-        started = true;
-      }
+      else take(c);
       i++;
     }
   }
@@ -158,14 +186,16 @@ const readOption = (
 const isSettled = (word: string) => !/[$`*?[{]/.test(word) && !/^~[^/]/.test(word);
 
 /**
- * The folder `target` names from `base`, joined without normalizing so the engine follows links the
- * way the kernel does. A folder Hobbots cannot work out is written as the words that named it, which
- * are never an absolute path, so the engine cannot resolve it and stays closed.
+ * The folder `target` names from `base`. A program that changes folder (`git -C`) joins without
+ * normalizing, so the engine follows links the way the kernel does; the shell's own `cd` is
+ * `logical` and takes `..` off the spelling. A folder Hobbots cannot work out is written as the words
+ * that named it, which are never an absolute path, so the engine cannot resolve it and stays closed.
  */
-const moveTo = (base: string, target: string | undefined, home: string, spelling: string): string => {
+const moveTo = (base: string, target: string | undefined, home: string, spelling: string, logical = false): string => {
   if (!isAbsolute(base)) return base;
   if (target === undefined || !isSettled(target)) return spelling;
-  const expanded = target === "~" ? home : target.startsWith("~/") ? `${home}${target.slice(1)}` : target;
+  const expanded = expandHome(target, home);
+  if (logical) return resolve(base, expanded);
   return isAbsolute(expanded) ? expanded : `${base}${sep}${expanded}`;
 };
 
@@ -251,17 +281,6 @@ const unwrap = (words: ReadonlyArray<string>, folder: string, home: string): Unw
   }
 };
 
-/** Drops redirections (`> out`, `2>&1`, `<in`), which name no argument of the command. */
-const withoutRedirections = (args: ReadonlyArray<string>): ReadonlyArray<string> => {
-  const kept: Array<string> = [];
-  for (let i = 0; i < args.length; i++) {
-    const operator = /^(\d*|&)(>>|>\||>&|>|<<<|<<|<&|<>|<)/.exec(args[i] as string)?.[0];
-    if (operator === undefined) kept.push(args[i] as string);
-    else if (operator === args[i]) i++;
-  }
-  return kept;
-};
-
 // Git options that take a separate value before the subcommand.
 const GIT_VALUE_OPTIONS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"]);
 
@@ -316,10 +335,9 @@ const DELETE_PROGRAMS = new Set(["rm", "rmdir", "unlink"]);
 
 /** The requests one simple command makes in `folder`: running it, plus any Git, push or delete it is recognized as. */
 const programRequests = (words: ReadonlyArray<string>, folder: string, home: string): ReadonlyArray<PolicyRequest> => {
-  const [name, ...rest] = words;
+  const [name, ...args] = words;
   if (name === undefined) return [];
   const program = basename(name);
-  const args = withoutRedirections(rest);
   if (program === "git") {
     const git = gitFolder(args, folder, home);
     return args[git.sub] === "push"
@@ -336,27 +354,100 @@ const programRequests = (words: ReadonlyArray<string>, folder: string, home: str
   return [{ _tag: "Files", operation: "delete-files", paths: paths.length > 0 ? paths : ["."], cwd: folder }, run];
 };
 
+const DIRECTORY_COMMANDS = new Set(["cd", "pushd", "popd"]);
+
 /**
- * Where the shell is after a simple command: a `cd`, `pushd` or `popd` moves it, unless it ran in a
- * pipeline or in the background, which run in a subshell. After `cd x ||` the shell may be in either
- * folder, and a folder the words cannot settle (`cd "$DIR"`, `cd -`, `popd`) is not worked out.
+ * The folder a `cd`, `pushd` or `popd` moves the shell to from `folder`. Like the shell's default,
+ * `..` is taken off the folder's spelling, so `cd link && cd ..` comes back. A folder the words
+ * cannot settle (`cd "$DIR"`, `cd -`, `popd`, `cd -P`, which follows links Hobbots does not read) is
+ * not worked out.
  */
-const folderAfter = (
-  words: ReadonlyArray<string>,
-  folder: string,
-  around: { before: Separator | undefined; after: Separator | undefined },
-  home: string,
-): string => {
+const changedFolder = (words: ReadonlyArray<string>, folder: string, home: string): string => {
   const [name, ...args] = words;
-  if (name !== "cd" && name !== "pushd" && name !== "popd") return folder;
-  if (around.before === "|" || around.after === "|" || around.after === "&") return folder;
-  const spelling = words.join(" ");
-  const operands = args.filter((a) => a === "-" || !a.startsWith("-"));
-  const [target] = operands;
+  const [target] = args.filter((a) => a === "-" || !a.startsWith("-"));
   const unsettled =
-    name === "popd" || target === "-" || (name === "pushd" && (target === undefined || /^[+-]\d+$/.test(target)));
-  if (around.after === "||" || unsettled) return moveTo(folder, undefined, home, spelling);
-  return moveTo(folder, target ?? "~", home, spelling);
+    name === "popd" ||
+    target === "-" ||
+    args.some((a) => /^-[A-Za-z@]*P/.test(a)) ||
+    (name === "pushd" && (target === undefined || /^[+-]\d+$/.test(target)));
+  return moveTo(folder, unsettled ? undefined : (target ?? "~"), home, words.join(" "), true);
+};
+
+/** The folders the shell may be in after the last command, if it succeeded and if it failed. */
+interface Flow {
+  readonly ok: ReadonlySet<string>;
+  readonly fail: ReadonlySet<string>;
+}
+
+const NONE: ReadonlySet<string> = new Set();
+const union = (a: ReadonlySet<string>, b: ReadonlySet<string>): ReadonlySet<string> => new Set([...a, ...b]);
+
+/** Where the next command runs, given the separator before it. */
+const entering = (flow: Flow, separator: Separator | undefined) =>
+  separator === "&&" ? flow.ok : separator === "||" ? flow.fail : union(flow.ok, flow.fail);
+
+/** The flow after a command joined to what came before by `separator`; a skipped command passes the status on. */
+const joined = (separator: Separator | undefined, before: Flow, after: Flow): Flow => {
+  if (separator === "&&") return { ok: after.ok, fail: union(after.fail, before.fail) };
+  if (separator === "||") return { ok: union(before.ok, after.ok), fail: after.fail };
+  return after;
+};
+
+/** Written in place of a folder when a command could run in more than one, so the engine stays closed. */
+const SEVERAL_FOLDERS = "(one of several folders, depending on which earlier cd ran)";
+
+/** The one folder a command runs in, or a marker the engine cannot resolve. */
+const single = (folders: ReadonlySet<string>): string =>
+  folders.size === 1 ? ([...folders][0] as string) : SEVERAL_FOLDERS;
+
+/**
+ * Follows the folders a command line moves through. Each command runs in every folder the shell may
+ * be in by then: `false && cd sub; rm x` may remove `x` in either folder, so that is not worked out.
+ * A `cd` is taken to succeed unless `||` follows it, and moves nothing from a subshell, a pipeline
+ * or the background.
+ */
+const folderFlow = (cwd: string, home: string) => {
+  let flow: Flow = { ok: new Set([cwd]), fail: NONE };
+  let separator: Separator | undefined;
+  // The pipeline being run: what came before it and how it is joined. Its status is its last command's.
+  let pipeline = { separator, before: flow, folders: flow.ok };
+  const subshells: Array<typeof pipeline> = [];
+  const start = () => {
+    if (separator !== "|") pipeline = { separator, before: flow, folders: entering(flow, separator) };
+    return pipeline.folders;
+  };
+  const finish = (outcome: Flow) => {
+    flow = joined(pipeline.separator, pipeline.before, outcome);
+    separator = undefined;
+  };
+  return {
+    separator: (next: Separator) => {
+      if (next === "(") {
+        const folders = start();
+        subshells.push(pipeline);
+        flow = { ok: folders, fail: NONE };
+        separator = undefined;
+      } else if (next === ")") {
+        pipeline = subshells.pop() ?? pipeline;
+        finish({ ok: pipeline.folders, fail: pipeline.folders });
+      } else separator = next;
+    },
+    /** The folder `words` runs in, moving the flow past it. `after` is the separator that follows it. */
+    command: (words: ReadonlyArray<string>, after: Separator | undefined): string => {
+      const inPipeline = separator === "|" || after === "|";
+      const folders = start();
+      const moves = DIRECTORY_COMMANDS.has(words[0] ?? "") && !inPipeline && after !== "&";
+      finish(
+        moves
+          ? {
+              ok: new Set([...folders].map((f) => changedFolder(words, f, home))),
+              fail: after === "||" ? folders : NONE,
+            }
+          : { ok: folders, fail: folders },
+      );
+      return single(folders);
+    },
+  };
 };
 
 const separatorOf = (token: CommandToken | undefined): Separator | undefined =>
@@ -378,18 +469,17 @@ export const commandRequests = (
     if (!requests.some((r) => JSON.stringify(r) === key)) requests.push(request);
   };
   const tokens = commandLine(command);
-  const subshells: Array<string> = [];
-  let folder = cwd;
+  const folders = folderFlow(cwd, home);
   tokens.forEach((token, index) => {
     if ("separator" in token) {
-      if (token.separator === "(") subshells.push(folder);
-      if (token.separator === ")") folder = subshells.pop() ?? folder;
+      folders.separator(token.separator);
       return;
     }
+    // A wrapper such as `command cd` still moves the shell, so the flow sees the unwrapped words.
+    const preview = unwrap(token.words, cwd, home).words;
+    const folder = folders.command(preview, separatorOf(tokens[index + 1]));
     const unwrapped = unwrap(token.words, folder, home);
     for (const request of programRequests(unwrapped.words, unwrapped.folder, home)) add(request);
-    const around = { before: separatorOf(tokens[index - 1]), after: separatorOf(tokens[index + 1]) };
-    folder = folderAfter(unwrapped.words, folder, around, home);
   });
   if (requests.length === 0) add({ _tag: "Command", operation: "run-commands", cwd });
   return requests;

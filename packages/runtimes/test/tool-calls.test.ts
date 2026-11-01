@@ -114,7 +114,7 @@ describe("Claude Code tool calls as policy requests", () => {
     expect(deletes("pwd; cd ~/project && touch x; rm -rf .git/zz-probe")).toEqual([
       { _tag: "Files", operation: "delete-files", paths: [".git/zz-probe"], cwd: "/home/me/project" },
     ]);
-    expect(deletes("cd sub && cd ../other; rm x")[0]).toMatchObject({ cwd: "/work/sub/../other" });
+    expect(deletes("cd sub && cd ../other; rm x")[0]).toMatchObject({ cwd: "/work/other" });
     expect(deletes("pushd /tmp && rm x")[0]).toMatchObject({ cwd: "/tmp" });
     expect(deletes("cd && rm x")[0]).toMatchObject({ cwd: "/home/me" });
     expect(deletes("rm ~/x")[0]).toMatchObject({ paths: ["/home/me/x"] });
@@ -122,6 +122,42 @@ describe("Claude Code tool calls as policy requests", () => {
     expect(deletes("(cd sub && rm a); rm b").map((r) => r.cwd)).toEqual(["/work/sub", "/work"]);
     expect(deletes("cd sub | cat; rm b")[0]).toMatchObject({ cwd: "/work" });
     expect(deletes("cd sub & rm b")[0]).toMatchObject({ cwd: "/work" });
+  });
+
+  it("[#209] takes `..` off the spelling after cd, as the shell does, but not after git -C", () => {
+    // With /work/link pointing at /work/real/deep, `cd link && cd ..` is back in /work.
+    expect(commandRequests("cd link && cd .. && rm file", "/work").find((r) => r._tag === "Files")).toMatchObject({
+      cwd: "/work",
+    });
+    expect(commandRequests("git -C link/.. status", "/work")[0]).toMatchObject({ cwd: "/work/link/.." });
+    // `cd -P` follows links Hobbots does not read, so the folder after it is not worked out.
+    const physical = commandRequests("cd -P link && rm file", "/work")[1];
+    expect(physical?._tag === "Files" && isAbsolute(physical.cwd)).toBe(false);
+  });
+
+  it("[#209] does not guess the folder when a cd may have been skipped", () => {
+    const cwdOf = (command: string) => {
+      const remove = commandRequests(command, "/work").find((r) => r._tag === "Files");
+      return remove?._tag === "Files" ? remove.cwd : undefined;
+    };
+    for (const command of ["false && cd sub; rm file", "true || cd sub; rm file", "cd a || cd b; rm file"])
+      expect(isAbsolute(cwdOf(command) ?? "/"), command).toBe(false);
+    expect(commandRequests("false && cd /tmp; git status", "/work").at(-1)).toMatchObject({ operation: "local-git" });
+    expect(isAbsolute((commandRequests("false && cd /tmp; git status", "/work").at(-1) as { cwd: string }).cwd)).toBe(
+      false,
+    );
+    // A command that runs only after the cd ran, or only when it failed, is in a known folder.
+    expect(cwdOf("make && cd sub && rm file")).toBe("/work/sub");
+    expect(cwdOf("cd sub || rm file")).toBe("/work");
+    expect(cwdOf("(false && cd sub); rm file")).toBe("/work");
+  });
+
+  it("[#209] keeps quoted operators as arguments, dropping only real redirections", () => {
+    expect(commandRequests("rm -f '>' .git/config safe", "/work")[0]).toMatchObject({
+      paths: [">", ".git/config", "safe"],
+    });
+    expect(commandRequests(String.raw`rm \> a 2>/dev/null`, "/work")[0]).toMatchObject({ paths: [">", "a"] });
+    expect(commandRequests("rm a > 'out file' b", "/work")[0]).toMatchObject({ paths: ["a", "b"] });
   });
 
   it("[#209] moves git -C, make -C and env -C only for their own command", () => {
