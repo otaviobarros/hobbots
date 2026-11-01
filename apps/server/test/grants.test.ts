@@ -175,8 +175,10 @@ describe("Standing grants", () => {
         const otherHob = yield* runCommand("rm build", BRAM);
         if (otherHob.pending) yield* dismiss(otherHob.pending, otherHob.thread.id);
 
-        const removed = yield* grants.revoke(saved[0]?.id as never);
-        const removedAgain = yield* grants.revoke(saved[0]?.id as never);
+        let thens = 0;
+        const counted = () => Effect.sync(() => void thens++);
+        const removed = yield* grants.revoke(saved[0]?.id as never, counted);
+        const removedAgain = yield* grants.revoke(saved[0]?.id as never, counted);
         const afterRemoval = yield* runCommand("rm build");
         if (afterRemoval.pending) yield* dismiss(afterRemoval.pending, afterRemoval.thread.id);
         const all = yield* grants.list({ agentId: SCOUT, all: true });
@@ -192,6 +194,7 @@ describe("Standing grants", () => {
           otherHob,
           removed,
           removedAgain,
+          thens,
           afterRemoval,
           all,
           events,
@@ -223,6 +226,8 @@ describe("Standing grants", () => {
     // Removing it is kept in History, and the next `rm build` asks again.
     expect(result.removed).toMatchObject({ revokedBy: "user", revokeReason: "removed" });
     expect(result.removedAgain.revision).toBe(result.removed.revision);
+    // What follows a removal, such as stopping turns for a host grant, runs once.
+    expect(result.thens).toBe(1);
     expect(result.afterRemoval.pending).toBeDefined();
     expect(result.all).toHaveLength(1);
     expect(result.all[0]?.lastUsedAt).not.toBeNull();

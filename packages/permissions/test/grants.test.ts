@@ -109,6 +109,15 @@ describe("the command reader", () => {
       "builtin cd sub && rm build",
       "CDPATH=/tmp cd sub && rm build",
       "nice cd sub; rm build",
+      "if true; then cd sub; fi; rm build",
+      "true && { cd sub; }; rm build",
+      "for d in sub; do cd sub; done; rm build",
+      "while false; do :; done; rm build",
+      "case x in x) ;; esac; rm build",
+      "! cd sub; rm build",
+      "trap 'cd sub' EXIT; rm build",
+      "[[ -d sub ]] && rm build",
+      "echo cd; rm build",
     ]) {
       expect({ line, read: readCommandLine(line) }).toEqual({ line, read: null });
     }

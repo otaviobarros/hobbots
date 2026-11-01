@@ -162,8 +162,11 @@ export class GrantService extends Context.Service<
       readonly agentId?: AgentId | undefined;
       readonly all?: boolean | undefined;
     }) => Effect.Effect<ReadonlyArray<Grant>>;
-    /** The user removes a grant. Removing it again returns it unchanged. */
-    readonly revoke: (id: GrantId) => Effect.Effect<Grant, GrantNotFound>;
+    /**
+     * The user removes a grant. Removing it again returns it unchanged. `then` runs only when this
+     * call revoked it, such as stopping the hob's running turns for a host grant.
+     */
+    readonly revoke: (id: GrantId, then?: (grant: Grant) => Effect.Effect<void>) => Effect.Effect<Grant, GrantNotFound>;
     /** Revokes the grants, of one hob or all, that the change took authority from. */
     readonly revokeLost: (agentId: AgentId | null, loss: AuthorityLoss) => Effect.Effect<void>;
     /** Revokes every grant of a hob that retired. */
@@ -212,12 +215,13 @@ export class GrantService extends Context.Service<
         live: (agentId) => Effect.flatMap(repo.list(agentId), liveOf),
         list: ({ agentId, all }) =>
           Effect.flatMap(repo.list(agentId), (grants) => (all === true ? Effect.succeed(grants) : liveOf(grants))),
-        revoke: (id) =>
+        revoke: (id, then) =>
           Effect.gen(function* () {
             const found = yield* repo.find(id);
             if (Option.isNone(found)) return yield* new GrantNotFound({ grantId: id });
             if (found.value.revokedAt !== null) return found.value;
             const revoked = yield* end(found.value, "user", "removed");
+            if (Option.isSome(revoked) && then) yield* then(revoked.value);
             // Revoked meanwhile by a change: return it as it is now.
             return Option.isSome(revoked) ? revoked.value : Option.getOrElse(yield* repo.find(id), () => found.value);
           }),
