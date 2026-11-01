@@ -30,7 +30,6 @@ describe("applyEvent", () => {
         id: threadId,
         agentId: AgentId.make("aldric"),
         title: "Hi",
-        runtimeSessionId: null,
         createdAt: now,
         updatedAt: now,
       }),

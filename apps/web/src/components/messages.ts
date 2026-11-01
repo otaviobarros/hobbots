@@ -46,8 +46,8 @@ export const messages = {
     continueFailed: ({ name, why }: { name: string; why: string }) => `${name} could not continue that reply. ${why}`,
     queueGone: "That message already started or was removed.",
     wakeFailed: ({ name }: { name: string }) => `Hobbots could not wake ${name}. Try again.`,
-    brainProblem: ({ name, problem }: { name: string; problem: string }) =>
-      `${name} can't think right now: Claude Code ${problem}.`,
+    brainProblem: ({ name, runtime, problem }: { name: string; runtime: string; problem: string }) =>
+      `${name} can't think right now: ${runtime} ${problem}.`,
     brain: {
       notFound: "is not installed on this Mac",
       notStarted: "did not start",
@@ -79,12 +79,31 @@ export const messages = {
     interrupted: ({ name }: { name: string }) =>
       `This reply was cut off, not by you: Hobbots restarted or ${name} was paused. What it wrote so far is kept.`,
     cutOff: ({ error }: { error: string }) => `Answer cut off: ${error}. Nothing was lost before this point.`,
-    limited: ({ name, refill }: { name: string; refill: string }) =>
-      `⚗ ${name} used up the Claude allowance for now. ${refill} What it wrote so far is kept.`,
+    limited: ({ name, provider, refill }: { name: string; provider: string; refill: string }) =>
+      `⚗ ${name} used up the ${provider} allowance for now. ${refill} What it wrote so far is kept.`,
     resuming: ({ name }: { name: string }) => `Picking up where ${name} left off…`,
     continue: "Continue from here",
     failed: ({ error }: { error: string | null }) =>
       `✗ This reply failed: ${error ?? "unknown error"}. Send your message again to retry.`,
+  },
+  brain: {
+    trigger: ({ brain, state }: { brain: string; state: string }) => `Thinking with ${brain}, ${state}. Change brain`,
+    continueFailed: ({ name }: { name: string }) => `Hobbots could not switch ${name}'s brain. Try again.`,
+    title: "Think with",
+    scope: "Changes this thread from its next reply.",
+    freshPage: "Send a first message, then you can change this thread's brain.",
+    defaultModel: "Default model",
+    effort: "Effort",
+    noEffort: ({ model }: { model: string }) => `${model} takes no effort setting.`,
+    makeDefault: ({ name }: { name: string }) => `Also make it ${name}'s default`,
+    backToDefault: ({ name, brain }: { name: string; brain: string }) => `Back to ${name}'s default: ${brain}`,
+    notOnThisHub: ({ runtime }: { runtime: string }) => `Hobbots can't run ${runtime} on this hub yet.`,
+    notReady: ({ runtime, state }: { runtime: string; state: string }) =>
+      `${runtime} is ${state}. Fix it in Settings to think with it.`,
+    failed: "Hobbots could not switch brains. Try again.",
+    now: ({ brain }: { brain: string }) => `Now thinking with ${brain}`,
+    next: ({ brain }: { brain: string }) => `The next reply thinks with ${brain}`,
+    continueWith: ({ runtime }: { runtime: string }) => `Continue with ${runtime}`,
   },
   queued: {
     label: "Queued message",

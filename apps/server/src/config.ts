@@ -21,6 +21,11 @@ export const ServerConfig = Config.all({
     ["ready", "outdated", "signedOut", "unavailable", "unverified"],
     "HOBBOTS_FAKE_AVAILABILITY",
   ).pipe(Config.withDefault("ready" as const)),
+  // What the fake Codex's health check reports, to switch to or away from a brain that cannot think.
+  fakeCodexAvailability: Config.Literals(
+    ["ready", "outdated", "signedOut", "unavailable", "unverified"],
+    "HOBBOTS_FAKE_CODEX_AVAILABILITY",
+  ).pipe(Config.withDefault("ready" as const)),
   // Whether the fake runtime pretends its sandbox started, or cannot start on this hub.
   fakeSandbox: Config.Literals(["on", "unavailable"], "HOBBOTS_FAKE_SANDBOX").pipe(Config.withDefault("on" as const)),
   // Only the Vite dev server needs CORS; the served web client calls the API on its own origin.

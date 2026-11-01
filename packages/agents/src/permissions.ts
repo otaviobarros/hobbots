@@ -12,7 +12,7 @@ import {
 import { Context, Effect, Layer } from "effect";
 import { sameFolderIn } from "./folders.ts";
 import { FolderChecks, type FolderChecksShape, InstallationSettings } from "./ports.ts";
-import { RuntimeAdapter } from "./runtime.ts";
+import { missingRuntimeHealth, runtimeAdapters } from "./runtime.ts";
 
 /**
  * The folders a hob works in: the shared folders it does not hide, then its own (ADR 014). A shared
@@ -55,7 +55,7 @@ export class PermissionSummary extends Context.Service<
     Effect.gen(function* () {
       const setup = yield* InstallationSettings;
       const folders = yield* FolderChecks;
-      const runtime = yield* RuntimeAdapter;
+      const adapters = yield* runtimeAdapters;
       return PermissionSummary.of({
         of: (agent) =>
           Effect.gen(function* () {
@@ -68,7 +68,9 @@ export class PermissionSummary extends Context.Service<
               policy: agent.policy,
               folders: yield* effectiveFolders(folders, approvedFolders, agent.policy),
               decisions: effectiveDecisions(safetyPreset, agent.policy.overrides),
-              enforcement: yield* runtime.enforcement,
+              // What the hob's own runtime enforces; a thread on another brain runs under that one's.
+              enforcement: yield* adapters(agent.runtime)?.enforcement ??
+                Effect.succeed(missingRuntimeHealth(agent.runtime).enforcement),
             } satisfies HobPermissions;
           }),
       });

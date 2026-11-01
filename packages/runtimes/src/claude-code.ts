@@ -547,22 +547,26 @@ export const turnEvents = () => {
 /**
  * The prompt Claude Code receives. On resume Claude Code keeps the system prompt the session started
  * with, so instructions it may not follow come first in the turn itself. The block may repeat on
- * later turns, so it states the current instructions rather than announcing a change.
+ * later turns, so it states the current instructions rather than announcing a change. A briefing on
+ * what the session missed (ADR 017) comes next, then the user's prompt.
  */
 export const turnPrompt = (
-  request: Pick<PromptRequest, "prompt" | "sessionId" | "instructions" | "instructionsChanged">,
-) =>
-  request.sessionId && request.instructionsChanged
-    ? [
-        "<current-instructions>",
-        "These are your current instructions. Follow them in place of the ones in your system prompt and any earlier ones:",
-        "",
-        request.instructions,
-        "</current-instructions>",
-        "",
-        request.prompt,
-      ].join("\n")
-    : request.prompt;
+  request: Pick<PromptRequest, "prompt" | "briefing" | "sessionId" | "instructions" | "instructionsChanged">,
+) => {
+  const instructions =
+    request.sessionId && request.instructionsChanged
+      ? [
+          "<current-instructions>",
+          "These are your current instructions. Follow them in place of the ones in your system prompt and any earlier ones:",
+          "",
+          request.instructions,
+          "</current-instructions>",
+          "",
+        ]
+      : [];
+  const briefing = request.briefing ? [request.briefing, ""] : [];
+  return [...instructions, ...briefing, request.prompt].join("\n");
+};
 
 /** A turn with tools: the context every call is decided under, its folders and the tools offered. */
 export interface ToolTurn {

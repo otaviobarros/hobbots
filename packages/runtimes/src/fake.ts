@@ -1,4 +1,5 @@
 import {
+  AdditionalRuntimes,
   type PromptRequest,
   RuntimeAdapter,
   RuntimeError,
@@ -6,9 +7,11 @@ import {
   RuntimeLimitReached,
 } from "@hobbots/agents";
 import {
+  RUNTIME_NAMES,
   type RuntimeAvailability,
   type RuntimeEnforcement,
   RuntimeHealth,
+  type RuntimeKind,
   RuntimeModel,
   RuntimeModels,
 } from "@hobbots/domain";
@@ -43,7 +46,24 @@ export const fakeModels = new RuntimeModels({
   ],
 });
 
+/** The fake Codex's one model, so a switch can change runtime and model at once. */
+export const fakeCodexModels = new RuntimeModels({
+  runtime: "codex",
+  source: "runtime",
+  models: [
+    new RuntimeModel({
+      id: "fake-coder",
+      displayName: "Fake Coder",
+      description: "Echoes prompts as the fake Codex",
+      efforts: ["low", "medium", "high"],
+      main: true,
+    }),
+  ],
+});
+
 export interface FakeRuntimeOptions {
+  /** The runtime the fake answers for: Claude Code by default. */
+  readonly runtime?: RuntimeKind;
   /** Pause before each event, so a reply streams visibly. */
   readonly delay?: string;
   /** How long a cancelled turn takes to end, like a real runtime shutting a turn down. */
@@ -172,11 +192,34 @@ export const scriptedToolEvents = (
   );
 };
 
+/** How a directive in the prompt makes the fake end its reply. */
+const fakeEnding = (prompt: string) =>
+  prompt.startsWith(FAKE_DIRECTIVES.cutOff)
+    ? "cutOff"
+    : prompt.startsWith(FAKE_DIRECTIVES.limit)
+      ? "limit"
+      : "complete";
+
+/** The failure that ends a reply cut off or limited, as a provider would end it. */
+const fakeFailure = (
+  ending: ReturnType<typeof fakeEnding>,
+): Stream.Stream<never, RuntimeError | RuntimeLimitReached> =>
+  ending === "cutOff"
+    ? Stream.fail(new RuntimeError({ message: fakeCutOffError }))
+    : ending === "limit"
+      ? Stream.unwrap(
+          Effect.map(Clock.currentTimeMillis, (now) =>
+            Stream.fail(new RuntimeLimitReached({ resetsAt: new Date(now + 60 * 60 * 1000).toISOString() })),
+          ),
+        )
+      : Stream.empty;
+
 /**
  * Deterministic adapter for tests and UI work without model usage. Like Claude Code, a resumed session
  * keeps the instructions it started with unless the turn carries changed ones.
  */
 export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
+  const runtime = options.runtime ?? "claude-code";
   const availability = options.availability ?? "ready";
   const sandbox = options.sandbox ?? "on";
   const enforcement = fakeEnforcement(sandbox);
@@ -186,17 +229,16 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     if (availability !== "ready") {
       return Stream.fail(new RuntimeError({ message: `Fake runtime is ${availability}` }));
     }
-    const sessionId = request.sessionId ?? `fake-${crypto.randomUUID()}`;
+    const sessionId =
+      request.sessionId ?? `fake-${runtime === "claude-code" ? "" : `${runtime}-`}${crypto.randomUUID()}`;
     const known = sessions.get(sessionId);
     const followed = known === undefined || request.instructionsChanged ? request.instructions : known;
     sessions.set(sessionId, followed);
-    const reply = request.prompt === fakeInstructionsPrompt ? followed : `Echo: ${request.prompt}`;
+    // A briefing is echoed ahead of the prompt, so a test can see what the session was told.
+    const told = request.briefing ? `${request.briefing}\n\n${request.prompt}` : request.prompt;
+    const reply = request.prompt === fakeInstructionsPrompt ? followed : `Echo: ${told}`;
     const words = reply.split(/(?<= )/);
-    const ending = request.prompt.startsWith(FAKE_DIRECTIVES.cutOff)
-      ? "cutOff"
-      : request.prompt.startsWith(FAKE_DIRECTIVES.limit)
-        ? "limit"
-        : "complete";
+    const ending = fakeEnding(request.prompt);
     const events: Array<RuntimeEvent> = [
       { _tag: "SessionStarted", sessionId, billing: "fake" },
       // Every reply thinks first, so the step display can be seen and tested.
@@ -205,16 +247,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
       ...(ending === "complete" ? words : words.slice(0, 2)).map((text): RuntimeEvent => ({ _tag: "TextDelta", text })),
       ...(ending === "complete" ? [{ _tag: "Completed", sessionId, text: reply } as const] : []),
     ];
-    const failure: Stream.Stream<never, RuntimeError | RuntimeLimitReached> =
-      ending === "cutOff"
-        ? Stream.fail(new RuntimeError({ message: fakeCutOffError }))
-        : ending === "limit"
-          ? Stream.unwrap(
-              Effect.map(Clock.currentTimeMillis, (now) =>
-                Stream.fail(new RuntimeLimitReached({ resetsAt: new Date(now + 60 * 60 * 1000).toISOString() })),
-              ),
-            )
-          : Stream.empty;
+    const failure = fakeFailure(ending);
     // Tool calls come after the thinking step, before the reply is written.
     const stream = Stream.fromIterable(events.slice(0, 3)).pipe(
       Stream.concat(scriptedToolEvents(request, options.engine, sandbox)),
@@ -234,16 +267,16 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   return RuntimeAdapter.of({
     health: Effect.succeed(
       new RuntimeHealth({
-        runtime: "claude-code",
+        runtime,
         availability,
         billing: "fake",
         version: "fake",
-        detail: "Fake runtime (no model calls)",
+        detail: `Fake ${RUNTIME_NAMES[runtime]} (no model calls)`,
         checkedAt: null,
         enforcement,
       }),
     ),
-    models: Effect.succeed(fakeModels),
+    models: Effect.succeed(runtime === "claude-code" ? fakeModels : fakeCodexModels),
     enforcement: Effect.succeed(enforcement),
     sendPrompt,
   });
@@ -255,5 +288,28 @@ export const FakeRuntimeLayer = (options?: FakeRuntimeOptions) =>
     RuntimeAdapter,
     Effect.map(Effect.serviceOption(PolicyEngine), (engine) =>
       makeFakeRuntime({ ...options, ...(Option.isSome(engine) ? { engine: engine.value } : {}) }),
+    ),
+  );
+
+/**
+ * A fake Codex beside the fake Claude Code, so a thread can switch runtimes without either (ADR 017).
+ * Its own options set what its health reports; it decides scripted tool calls like the other.
+ */
+export const FakeAdditionalRuntimesLayer = (options?: FakeRuntimeOptions) =>
+  Layer.effect(
+    AdditionalRuntimes,
+    Effect.map(
+      Effect.serviceOption(PolicyEngine),
+      (engine) =>
+        new Map([
+          [
+            "codex" as const,
+            makeFakeRuntime({
+              ...options,
+              runtime: "codex",
+              ...(Option.isSome(engine) ? { engine: engine.value } : {}),
+            }),
+          ],
+        ]),
     ),
   );

@@ -21,7 +21,7 @@ import {
   SetupRepository,
   SqliteLive,
 } from "@hobbots/persistence";
-import { ClaudeCodeLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
+import { ClaudeCodeLayer, FakeAdditionalRuntimesLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { ServerConfig } from "./config.ts";
@@ -60,14 +60,14 @@ const ServerLive = Layer.unwrap(
       SearchIndex.sqliteWorker(database),
     ).pipe(Layer.provideMerge(SqliteLive(database)));
     // One policy engine for the hub, so its index of the folders' Git repositories is built once.
+    // The fake answers for Claude Code and Codex, so a thread can switch brains (ADR 017).
+    const fake = { delay: "40 millis", stopDelay: "600 millis", sandbox: config.fakeSandbox } as const;
     const Runtime = (
       config.runtime === "fake"
-        ? FakeRuntimeLayer({
-            delay: "40 millis",
-            stopDelay: "600 millis",
-            availability: config.fakeAvailability,
-            sandbox: config.fakeSandbox,
-          })
+        ? Layer.mergeAll(
+            FakeRuntimeLayer({ ...fake, availability: config.fakeAvailability }),
+            FakeAdditionalRuntimesLayer({ ...fake, availability: config.fakeCodexAvailability }),
+          )
         : ClaudeCodeLayer({
             workspaceDir: join(config.dataDir, "workspaces", "default"),
             executable: Option.getOrUndefined(config.claudeExecutable),

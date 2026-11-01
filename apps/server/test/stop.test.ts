@@ -211,7 +211,6 @@ describe("Stopping a reply", () => {
           id: threadId,
           agentId: HOB_ID,
           title: "t",
-          runtimeSessionId: null,
           createdAt: NOW,
           updatedAt: NOW,
         }),

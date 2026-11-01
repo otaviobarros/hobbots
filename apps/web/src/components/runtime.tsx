@@ -31,21 +31,6 @@ const availabilityLabel: Record<RuntimeHealth["availability"], string> = {
   unverified: "Unverified",
 };
 
-/** The brain chip in the chat header: which provider runs this hob, and whether it is ready. */
-export function RuntimeChip() {
-  const { pending, claude } = useClaudeRuntime();
-  const ready = claude?.availability === "ready";
-  return (
-    <span className="flex flex-none items-center gap-2 border-2 border-line-2 px-2 py-1 text-xs whitespace-nowrap">
-      <ProviderTile />
-      <span className="font-bold">Claude Code</span>
-      <span className={ready ? "text-mint" : "text-lantern"}>
-        {pending ? "checking" : claude ? availabilityLabel[claude.availability].toLowerCase() : "unknown"}
-      </span>
-    </span>
-  );
-}
-
 /** Provider health for the Workshop tab. Detail is never shown: it can carry account names. */
 // complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export function RuntimeCard() {
