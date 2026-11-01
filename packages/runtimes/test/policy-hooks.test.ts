@@ -193,6 +193,8 @@ describe("Claude Code tool calls under the policy hook", () => {
           return { approvalId: ApprovalId.make(`approval-${asked.length}`), decision: answer(action) };
         }),
       currentAccess: Effect.succeed(current),
+      grants: Effect.succeed([]),
+      used: () => Effect.void,
     };
     return { asked, approvals };
   };

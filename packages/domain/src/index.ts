@@ -2,6 +2,8 @@ export * from "./agent.ts";
 export * from "./approval.ts";
 export * from "./brain.ts";
 export * from "./events.ts";
+export * from "./grant.ts";
+export * from "./grant-rule.ts";
 export * from "./ids.ts";
 export * from "./look.ts";
 export * from "./message.ts";

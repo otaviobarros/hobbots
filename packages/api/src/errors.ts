@@ -2,7 +2,9 @@ import {
   AgentId,
   AgentStatus,
   ApprovalId,
+  ApprovalLifetime,
   ApprovalState,
+  GrantId,
   MessageId,
   PolicyOperation,
   SafetyPreset,
@@ -112,4 +114,28 @@ export class ApprovalActionChanged extends Schema.TaggedError<ApprovalActionChan
   "ApprovalActionChanged",
   { approvalId: ApprovalId },
   { httpApiStatus: 409 },
+) {}
+
+/**
+ * A lifetime the request does not offer (ADR 015): This Quest or Always on a high-risk action, a
+ * command Hobbots cannot read fully, an Ask from an override, a restriction or a safety check, or
+ * This Quest before Quests exist. The user can still allow it once.
+ */
+export class ApprovalNotGrantable extends Schema.TaggedError<ApprovalNotGrantable>()(
+  "ApprovalNotGrantable",
+  { approvalId: ApprovalId, lifetime: ApprovalLifetime },
+  { httpApiStatus: 422 },
+) {}
+
+/** A rule to save that the card did not offer: another action's, or broader than the request's own. */
+export class GrantRuleRefused extends Schema.TaggedError<GrantRuleRefused>()(
+  "GrantRuleRefused",
+  { approvalId: ApprovalId, message: Schema.String },
+  { httpApiStatus: 422 },
+) {}
+
+export class GrantNotFound extends Schema.TaggedError<GrantNotFound>()(
+  "GrantNotFound",
+  { grantId: GrantId },
+  { httpApiStatus: 404 },
 ) {}

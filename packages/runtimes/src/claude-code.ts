@@ -917,11 +917,20 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   runtimeFolder: tools.runtimeFolder,
                   ...(signingAgent ? { signingAgent } : {}),
                   allowedHosts: CLAUDE_CODE_MODEL_HOSTS,
+                  // The hob's own grants as they are now can answer the preset's Ask for a host (ADR 015).
                   decideHost: (host) =>
                     Effect.runPromise(
-                      engine
-                        .decide(tools.context, { _tag: "Web", host, addresses: [] })
-                        .pipe(Effect.map((verdict) => (verdict.decision === "allow" ? true : refusal(verdict)))),
+                      (request.approvals?.grants ?? Effect.succeed([])).pipe(
+                        Effect.flatMap((grants) =>
+                          engine.decide({ ...tools.context, grants }, { _tag: "Web", host, addresses: [] }),
+                        ),
+                        Effect.tap((verdict) =>
+                          verdict.decision === "allow" && verdict.grantIds.length > 0
+                            ? (request.approvals?.used(verdict.grantIds) ?? Effect.void)
+                            : Effect.void,
+                        ),
+                        Effect.map((verdict) => (verdict.decision === "allow" ? true : refusal(verdict))),
+                      ),
                     ),
                 }),
                 (prepared) => Effect.sync(prepared.release),

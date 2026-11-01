@@ -1,6 +1,9 @@
 import {
   type ApprovalId,
   type Effort,
+  type Grant,
+  type GrantId,
+  type GrantRule,
   type HobPolicy,
   type PolicyOperation,
   type PolicyOverrides,
@@ -136,6 +139,10 @@ export interface ApprovalAction {
   readonly policyVersion: string;
   /** A high-risk action, approved once only and with the user's confirmation. */
   readonly onceOnly: boolean;
+  /** Whether a saved rule could answer it, so This Quest and Always are offered (ADR 015). */
+  readonly grantable: boolean;
+  /** The rules Always would save, for a grantable action. */
+  readonly rules: ReadonlyArray<GrantRule>;
 }
 
 /**
@@ -159,6 +166,10 @@ export interface TurnApprovals {
   readonly request: (action: ApprovalAction) => Effect.Effect<PendingApproval>;
   /** The hob's tool access now, to decide an approved call again just before it runs (PE-008). */
   readonly currentAccess: Effect.Effect<ToolAccess | null>;
+  /** The hob's live grants now, read again for every call so a revocation applies to the next (PE-008). */
+  readonly grants: Effect.Effect<ReadonlyArray<Grant>>;
+  /** Records that these grants answered a call. */
+  readonly used: (grantIds: ReadonlyArray<GrantId>) => Effect.Effect<void>;
 }
 
 export interface PromptRequest {

@@ -2,7 +2,13 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, resolve, sep } from "node:path";
 import { operationDecision } from "@hobbots/agents";
 import { narrowest, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
-import type { PolicyContext, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
+import {
+  type PolicyContext,
+  type PolicyRequest,
+  type PolicyVerdict,
+  readCommandLine,
+  uniqueRules,
+} from "@hobbots/permissions";
 
 /**
  * Claude Code's tool calls in the policy engine's terms (ADR 014). Only what the call itself says is
@@ -197,7 +203,13 @@ const isSettled = (word: string) => !/[$`*?[{]/.test(word) && !/^~[^/]/.test(wor
  * `logical` and takes `..` off the spelling. A folder Hobbots cannot work out is written as the words
  * that named it, which are never an absolute path, so the engine cannot resolve it and stays closed.
  */
-const moveTo = (base: string, target: string | undefined, home: string, spelling: string, logical = false): string => {
+const moveTo = (
+  base: string,
+  target: string | undefined,
+  home: string | null,
+  spelling: string,
+  logical = false,
+): string => {
   if (!isAbsolute(base)) return base;
   if (target === undefined || !isSettled(target)) return spelling;
   const expanded = expandHome(target, home);
@@ -205,9 +217,12 @@ const moveTo = (base: string, target: string | undefined, home: string, spelling
   return isAbsolute(expanded) ? expanded : `${base}${sep}${expanded}`;
 };
 
-/** A path a command names, with `~` spelled out. */
-const expandHome = (word: string, home: string) =>
-  word === "~" ? home : word.startsWith("~/") ? `${home}${word.slice(1)}` : word;
+/**
+ * A path a command names, with `~` spelled out. With no home the word is kept as written: a `~`
+ * the command reader read was quoted, so the shell passes it on as a literal `~` (ADR 015).
+ */
+const expandHome = (word: string, home: string | null) =>
+  home === null ? word : word === "~" ? home : word.startsWith("~/") ? `${home}${word.slice(1)}` : word;
 
 /**
  * Programs that run the words after their options as the command: the options that take a value,
@@ -292,29 +307,72 @@ const GIT_VALUE_OPTIONS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--na
 
 const DEFAULT_BRANCHES = new Set(["main", "master", "trunk", "develop"]);
 
-/** A `git push` as a Push request. Unknown remotes and branches are assumed the riskiest. */
-const pushRequest = (args: ReadonlyArray<string>): PolicyRequest => {
+/** Push options that change nothing about which refs go where. */
+const PLAIN_PUSH_OPTIONS = new Set(["-u", "--set-upstream", "-q", "--quiet", "-v", "--verbose", "--progress"]);
+
+/** Push options after which the refs pushed cannot be read from the words. */
+const UNNAMED_REFS = new Set([
+  "--all",
+  "--branches",
+  "--mirror",
+  "--tags",
+  "--follow-tags",
+  "--delete",
+  "-d",
+  "--prune",
+]);
+
+const isForce = (a: string) => a === "-f" || a === "--force" || a.startsWith("--force-with-lease") || a === "--mirror";
+
+/** One refspec's branch, and whether it forces or deletes. */
+const refspecBranch = (refspec: string) => {
+  const forced = refspec.startsWith("+");
+  const [source, destination] = refspec.replace(/^\+/, "").split(":");
+  const branch = (destination ?? source ?? "").replace(/^refs\/heads\//, "");
+  // `:branch` deletes the branch on the remote.
+  return { branch, forced: forced || (source === "" && branch !== "") };
+};
+
+/**
+ * A `git push` as one Push request per refspec, so every branch it updates is decided. Unknown
+ * remotes and branches are assumed the riskiest. `exact` is false when the words do not say
+ * everything the push does, so no grant answers it (ADR 015).
+ */
+const pushRequests = (args: ReadonlyArray<string>, cwd: string, literal: boolean): ReadonlyArray<PolicyRequest> => {
+  const options = args.filter((a) => a.startsWith("-"));
   const positional = args.filter((a) => !a.startsWith("-"));
-  const force = args.some(
-    (a) => a === "-f" || a === "--force" || a.startsWith("--force-with-lease") || a === "--mirror",
-  );
-  const refspec = positional[1];
-  const branch = refspec
-    ?.split(":")
-    .at(-1)
-    ?.replace(/^\+/, "")
-    .replace(/^refs\/heads\//, "");
-  return {
+  const force = options.some(isForce);
+  const remote = positional[0] ?? "origin";
+  const exact = literal && options.every((a) => PLAIN_PUSH_OPTIONS.has(a));
+  const push = (branch: string, forced: boolean, toDefaultBranch: boolean, exactPush: boolean): PolicyRequest => ({
     _tag: "Push",
-    remote: positional[0] ?? "origin",
-    branch: branch ?? "(current branch)",
-    force: force || refspec?.startsWith("+") === true,
-    toDefaultBranch: branch === undefined || DEFAULT_BRANCHES.has(branch),
-  };
+    remote,
+    branch,
+    force: force || forced,
+    toDefaultBranch,
+    cwd,
+    exact: exactPush,
+  });
+  if (options.some((a) => UNNAMED_REFS.has(a))) return [push("(several branches)", false, true, false)];
+  const refspecs = positional.slice(1);
+  if (refspecs.length === 0) return [push("(current branch)", false, true, false)];
+  return refspecs.map((refspec) => {
+    const { branch, forced } = refspecBranch(refspec);
+    // A pattern (`refs/heads/*`), `:` or `+:` (every matching branch) and `HEAD` or `@` (the current
+    // branch) do not name the branches they update, so they may reach the default branch.
+    if (branch === "" || branch.includes("*") || branch === "HEAD" || branch === "@") {
+      return push(`(${refspec})`, forced, true, false);
+    }
+    return push(branch, forced, DEFAULT_BRANCHES.has(branch), exact);
+  });
 };
 
 /** The folder `git` works in after its `-C` options, and the index of its subcommand. */
-const gitFolder = (args: ReadonlyArray<string>, folder: string, home: string): { folder: string; sub: number } => {
+const gitFolder = (
+  args: ReadonlyArray<string>,
+  folder: string,
+  home: string | null,
+): { folder: string; sub: number } => {
   let i = 0;
   let where = folder;
   while (i < args.length && (args[i] as string).startsWith("-")) {
@@ -327,7 +385,7 @@ const gitFolder = (args: ReadonlyArray<string>, folder: string, home: string): {
 const MAKE_CHDIR = new Set(["-C", "--directory"]);
 
 /** The folder `make` runs in after its `-C` options. */
-const makeFolder = (args: ReadonlyArray<string>, folder: string, home: string): string => {
+const makeFolder = (args: ReadonlyArray<string>, folder: string, home: string | null): string => {
   let where = folder;
   for (let i = 0; i < args.length; ) {
     const option = (args[i] as string).startsWith("-") ? readOption(args, i, MAKE_CHDIR) : { name: "", used: 1 };
@@ -339,25 +397,48 @@ const makeFolder = (args: ReadonlyArray<string>, folder: string, home: string): 
 
 const DELETE_PROGRAMS = new Set(["rm", "rmdir", "unlink"]);
 
-/** The requests one simple command makes in `folder`: running it, plus any Git, push or delete it is recognized as. */
-const programRequests = (words: ReadonlyArray<string>, folder: string, home: string): ReadonlyArray<PolicyRequest> => {
+/**
+ * The requests one simple command makes in `folder`: running it, plus any Git, push or delete it is
+ * recognized as. `literal` is the simple command's literal words as the hub's command reader read
+ * them, before any wrapper is taken off, or null: only then can a grant match it exactly (ADR 015).
+ */
+const programRequests = (
+  words: ReadonlyArray<string>,
+  folder: string,
+  home: string,
+  literal: ReadonlyArray<string> | null,
+): ReadonlyArray<PolicyRequest> => {
   const [name, ...args] = words;
   if (name === undefined) return [];
   const program = basename(name);
+  // The reader reads no unquoted `~`, so in literal words every `~` is the shell's literal `~`.
+  const tilde = literal === null ? home : null;
   if (program === "git") {
-    const git = gitFolder(args, folder, home);
+    const git = gitFolder(args, folder, tilde);
+    // Options before the subcommand, such as `-C` or `-c`, change where or how a push runs.
     return args[git.sub] === "push"
-      ? [pushRequest(args.slice(git.sub + 1))]
-      : [{ _tag: "Command", operation: "local-git", cwd: git.folder }];
+      ? pushRequests(args.slice(git.sub + 1), git.folder, literal !== null && git.sub === 0)
+      : [{ _tag: "Command", operation: "local-git", cwd: git.folder, words: literal }];
   }
   const run: PolicyRequest = {
     _tag: "Command",
     operation: "run-commands",
-    cwd: program === "make" ? makeFolder(args, folder, home) : folder,
+    cwd: program === "make" ? makeFolder(args, folder, tilde) : folder,
+    words: literal,
   };
   if (!DELETE_PROGRAMS.has(program)) return [run];
-  const paths = args.filter((a) => !a.startsWith("-")).map((a) => expandHome(a, home));
-  return [{ _tag: "Files", operation: "delete-files", paths: paths.length > 0 ? paths : ["."], cwd: folder }, run];
+  const paths = args.filter((a) => !a.startsWith("-")).map((a) => expandHome(a, tilde));
+  // Paths from a line the reader could not read may expand into other files, so no rule covers them.
+  return [
+    {
+      _tag: "Files",
+      operation: "delete-files",
+      paths: paths.length > 0 ? paths : ["."],
+      cwd: folder,
+      exact: literal !== null,
+    },
+    run,
+  ];
 };
 
 const DIRECTORY_COMMANDS = new Set(["cd", "pushd", "popd"]);
@@ -483,16 +564,22 @@ export const commandRequests = (
   };
   const tokens = commandLine(command);
   const folders = folderFlow(cwd, home);
+  // The reader splits a line it can read where this does, so its commands line up one to one.
+  const read = readCommandLine(command);
+  const simple = tokens.filter((token) => "words" in token).length;
+  const literal = read !== null && read.length === simple ? read : null;
+  let position = 0;
   tokens.forEach((token, index) => {
     if ("separator" in token) {
       folders.separator(token.separator);
       return;
     }
+    const literalWords = literal?.[position++] ?? null;
     // A wrapper such as `command cd` still moves the shell, so the flow sees the unwrapped words.
     const preview = unwrap(token.words, cwd, home).words;
     const folder = folders.command(preview, separatorOf(tokens[index + 1]));
     const unwrapped = unwrap(token.words, folder, home);
-    for (const request of programRequests(unwrapped.words, unwrapped.folder, home)) add(request);
+    for (const request of programRequests(unwrapped.words, unwrapped.folder, home, literalWords)) add(request);
   });
   if (requests.length === 0) add({ _tag: "Command", operation: "run-commands", cwd });
   return requests;
@@ -569,9 +656,13 @@ export const toolLabel = (
   }
 };
 
-/** The narrowest of several verdicts, keeping the first on a tie. */
-export const narrowestVerdict = (verdicts: ReadonlyArray<PolicyVerdict>): PolicyVerdict | undefined =>
-  verdicts.reduce<PolicyVerdict | undefined>(
+/**
+ * The narrowest of several verdicts, keeping the first on a tie, for one call's requests. An Ask is
+ * high risk when any part that asks is, and grantable only when every part that asks is, with the
+ * rules of each (ADR 015). An Allow names every grant that answered a part.
+ */
+export const narrowestVerdict = (verdicts: ReadonlyArray<PolicyVerdict>): PolicyVerdict | undefined => {
+  const verdict = verdicts.reduce<PolicyVerdict | undefined>(
     (current, next) =>
       current === undefined ||
       (next.decision !== current.decision && narrowest(current.decision, next.decision) === next.decision)
@@ -579,3 +670,16 @@ export const narrowestVerdict = (verdicts: ReadonlyArray<PolicyVerdict>): Policy
         : current,
     undefined,
   );
+  if (verdict === undefined || verdict.decision === "deny") return verdict;
+  if (verdict.decision === "allow") return { ...verdict, grantIds: [...new Set(verdicts.flatMap((v) => v.grantIds))] };
+  const asking = verdicts.filter((v) => v.decision === "ask");
+  const onceOnly = asking.some((v) => v.onceOnly);
+  const grantable = !onceOnly && asking.every((v) => v.grantable);
+  return {
+    ...verdict,
+    onceOnly,
+    grantable,
+    rules: grantable ? uniqueRules(asking.flatMap((v) => v.rules)) : [],
+    grantIds: [],
+  };
+};

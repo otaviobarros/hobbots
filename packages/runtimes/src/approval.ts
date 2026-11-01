@@ -65,8 +65,15 @@ export type CallDecision =
       readonly decidedBy?: "user";
     };
 
-const decideIn = (engine: PolicyEngine["Service"], context: PolicyContext, call: ToolCall) =>
+/** Decides a call under the context with the hob's live grants as they are now (PE-008). */
+const decideIn = (
+  engine: PolicyEngine["Service"],
+  base: PolicyContext,
+  approvals: TurnApprovals | null | undefined,
+  call: ToolCall,
+) =>
   Effect.gen(function* () {
+    const context: PolicyContext = approvals ? { ...base, grants: yield* approvals.grants } : base;
     // Without the sandbox Bash is never offered. A command that reaches the hook anyway is decided
     // as a command, so it is refused with the reason (PE-005); a `git push` alone is never let through.
     const requests: ReadonlyArray<PolicyRequest> | null =
@@ -92,7 +99,7 @@ export const decideCall = (
   redaction?: Redactor | null,
 ): Effect.Effect<CallDecision> =>
   Effect.gen(function* () {
-    let verdict = yield* decideIn(engine, context, call);
+    let verdict = yield* decideIn(engine, context, approvals, call);
     if (verdict === undefined) return { _tag: "Refuse", verdict, reason: UNKNOWN_TOOL(call.tool) } as const;
     const label = toolLabel(call.tool, call.input, redaction?.text);
     while (verdict.decision === "ask") {
@@ -108,6 +115,8 @@ export const decideCall = (
         reason: asked.reason.message,
         policyVersion: asked.policyVersion,
         onceOnly: asked.onceOnly,
+        grantable: asked.grantable,
+        rules: asked.rules,
       });
       report({
         _tag: "ToolAwaitingApproval",
@@ -124,7 +133,8 @@ export const decideCall = (
       if (outcome._tag === "Expired") return { _tag: "Refuse", verdict: asked, reason: EXPIRED } as const;
       const access = yield* approvals.currentAccess;
       if (access === null) return { _tag: "Refuse", verdict: asked, reason: NO_TOOLS } as const;
-      const now = yield* decideIn(engine, { ...context, ...access.policy }, call);
+      // Approving with a lifetime saved its grants first, so they answer here.
+      const now = yield* decideIn(engine, { ...context, ...access.policy }, approvals, call);
       if (now === undefined) return { _tag: "Refuse", verdict: asked, reason: UNKNOWN_TOOL(call.tool) } as const;
       if (now.decision === "ask") {
         const digest = yield* actionDigest({
@@ -139,7 +149,7 @@ export const decideCall = (
       }
       verdict = now;
     }
-    return verdict.decision === "allow"
-      ? ({ _tag: "Run", verdict } as const)
-      : ({ _tag: "Refuse", verdict, reason: refusal(verdict) } as const);
+    if (verdict.decision !== "allow") return { _tag: "Refuse", verdict, reason: refusal(verdict) } as const;
+    if (approvals && verdict.grantIds.length > 0) yield* approvals.used(verdict.grantIds);
+    return { _tag: "Run", verdict } as const;
   });

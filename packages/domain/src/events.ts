@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
+import { Grant } from "./grant.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { Message } from "./message.ts";
 import { Thread } from "./thread.ts";
@@ -24,6 +25,10 @@ const TurnStopped = Schema.TaggedStruct("TurnStopped", { threadId: ThreadId, mes
 const ApprovalRequested = Schema.TaggedStruct("ApprovalRequested", { approval: ApprovalRequest });
 /** A pending approval was approved, denied or expired; `approval.state` says which. */
 const ApprovalResolved = Schema.TaggedStruct("ApprovalResolved", { approval: ApprovalRequest });
+/** A decision with a lifetime saved a standing grant for its hob (ADR 015). */
+const GrantCreated = Schema.TaggedStruct("GrantCreated", { grant: Grant });
+/** A grant stopped applying: the user removed it, or a change took away the authority it relied on. */
+const GrantRevoked = Schema.TaggedStruct("GrantRevoked", { grant: Grant });
 /**
  * A piece of a streaming reply. Transient: its text reaches durable state through the message (ADR 013).
  * `offset` is where the piece starts in the message's text, in UTF-16 code units, so a client
@@ -50,6 +55,8 @@ export const JournaledEvent = Schema.Union([
   TurnStopped,
   ApprovalRequested,
   ApprovalResolved,
+  GrantCreated,
+  GrantRevoked,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -69,8 +76,11 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   MessageDequeued: 1,
   TurnStopRequested: 1,
   TurnStopped: 1,
+  // A request's `grantable`, `rules`, `lifetime` and `expiresAt` were added with defaults, compatibly.
   ApprovalRequested: 1,
   ApprovalResolved: 1,
+  GrantCreated: 1,
+  GrantRevoked: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

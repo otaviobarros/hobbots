@@ -1,4 +1,5 @@
 export * from "./approvals.ts";
+export * from "./grants.ts";
 export * from "./journal.ts";
 export * from "./migrations/index.ts";
 export * from "./postgres.ts";

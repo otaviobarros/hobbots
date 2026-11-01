@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { ApprovalLifetime, GrantRule } from "./grant-rule.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { PolicyOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
@@ -8,10 +9,10 @@ export type ApprovalId = typeof ApprovalId.Type;
 
 /**
  * - `pending`: the turn is paused on it until the user decides.
- * - `approved`: the user approved this one action, once.
+ * - `approved`: the user approved this action, once or with a lifetime that saved a grant.
  * - `denied`: the user said no; `denyReason` goes back to the hob when they gave one.
  * - `expired`: it can no longer be decided: its reply stopped, its hob retired, the call was
- *   aborted or the server restarted. An approved action that the policy no longer allows when it
+ *   aborted, the server restarted or nobody decided within a day. An approved action that the policy no longer allows when it
  *   is about to run stays `approved` and is refused; the tool step says so.
  */
 export const ApprovalState = Schema.Literals(["pending", "approved", "denied", "expired"]);
@@ -53,16 +54,40 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
     Schema.withDecodingDefaultKey(Effect.succeed(false)),
     Schema.withConstructorDefault(Effect.succeed(false)),
   ),
+  /**
+   * Whether This Quest and Always are offered (ADR 015): only when a saved rule could answer the Ask.
+   * False for a high-risk action, a command Hobbots cannot read fully, and an Ask from an override,
+   * a restriction or a safety check.
+   */
+  grantable: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(false)),
+    Schema.withConstructorDefault(Effect.succeed(false)),
+  ),
+  /** The rules Always would save, as the card shows them: one per folder, subcommand or host that asked. */
+  rules: Schema.Array(GrantRule).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
   state: ApprovalState,
+  /** The lifetime it was approved with; null until approved, and for requests from before lifetimes. */
+  lifetime: Schema.NullOr(ApprovalLifetime).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /** Why the user denied it, if they said. */
   denyReason: Schema.NullOr(Schema.String),
   createdAt: Schema.String,
+  /** When a pending request expires if nobody decides it: at most a day after it was asked (ADR 015). */
+  expiresAt: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /** When it left `pending`. */
   decidedAt: Schema.NullOr(Schema.String),
   revision: Revision,
 }) {}
 
-/** What the user decides on a pending request: Approve once, or Deny with an optional reason. */
+/** What the user decides on a pending request: Approve with a lifetime, or Deny with an optional reason. */
 export const ApprovalDecision = Schema.Literals(["approve", "deny"]);
 export type ApprovalDecision = typeof ApprovalDecision.Type;
 

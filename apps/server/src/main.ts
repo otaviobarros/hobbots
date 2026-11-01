@@ -5,6 +5,7 @@ import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import {
   ApprovalService,
   ChatService,
+  GrantService,
   HobAdmission,
   HobLifecycle,
   HobService,
@@ -16,6 +17,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
   EventJournal,
+  GrantRepositoryLive,
   HobbotsRepositoryLive,
   SearchIndex,
   SetupRepository,
@@ -56,6 +58,7 @@ const ServerLive = Layer.unwrap(
     const Persistence = Layer.mergeAll(
       HobbotsRepositoryLive,
       ApprovalRepositoryLive,
+      GrantRepositoryLive,
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
@@ -83,6 +86,8 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(ChatService.layer))
       // Before the chat service, so turns can ask, and after a restart the requests left pending expire.
       .pipe(Layer.provideMerge(ApprovalService.layer))
+      // Before approvals, so a decision can save grants and every call reads the hob's live ones.
+      .pipe(Layer.provideMerge(GrantService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
       .pipe(Layer.provideMerge(CanonicalSharedFolders))
