@@ -1,5 +1,6 @@
 export * from "./admission.ts";
 export * from "./approvals.ts";
+export { clip } from "./briefing.ts";
 export * from "./chat.ts";
 export * from "./grants.ts";
 export * from "./hobs.ts";

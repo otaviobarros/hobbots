@@ -211,7 +211,7 @@ export class TaskTools extends Context.Service<
             // The Attempt this turn started on its Task, known once the call that started it commits.
             let attemptId: AttemptId | null = null;
             const source: CallSource = {
-              turn: { turn_thread: turn.threadId },
+              turn: { turn_reply: turn.messageId },
               resolve: (name, at) => chat.resolve(name, at, attemptId),
             };
             const end = (outcome: Parameters<ChatTaskTurn["end"]>[0], sessionId: string | null) =>

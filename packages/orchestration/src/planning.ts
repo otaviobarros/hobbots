@@ -13,7 +13,7 @@ import {
   type TaskToolInput,
   type TaskToolRefused,
 } from "@hobbots/domain";
-import { DateTime, Effect } from "effect";
+import { Effect } from "effect";
 import {
   type CallScope,
   fromRecords,
@@ -54,7 +54,11 @@ export const makePlanning = ({ tasks, capacity, limits }: Deps) => ({
   plan_steps: (scope: CallScope, input: Omit<TaskToolInput<"plan_steps">, "key">) =>
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
-      const ids = input.steps.map(() => TaskId.make(newId()));
+      // Created at the same moment, the steps list by id: sorted ids keep them in the order planned.
+      const ids = input.steps
+        .map(() => newId())
+        .sort()
+        .map((id) => TaskId.make(id));
       const early = input.steps.findIndex((step, index) => (step.after ?? []).some((n) => n > index));
       if (early !== -1) {
         return yield* refuse("invalid-input", `Step ${early + 1} can only come after steps before it.`);
@@ -74,8 +78,7 @@ export const makePlanning = ({ tasks, capacity, limits }: Deps) => ({
                 threadId: null,
                 brief: step.brief,
                 dependsOn: (step.after ?? []).map((n) => ids[n - 1] as TaskId),
-                // A millisecond apart, so the tree lists the steps in the order they were planned.
-                createdAt: DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(scope.at), { milliseconds: index })),
+                createdAt: scope.at,
               },
               delegation: null,
               milestones,

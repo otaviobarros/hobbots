@@ -1,4 +1,4 @@
-import type { AgentId, RuntimeKind, ThreadId } from "@hobbots/domain";
+import type { AgentId, MessageId, RuntimeKind, ThreadId } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 import type { HubTools } from "./runtime.ts";
 
@@ -6,6 +6,8 @@ import type { HubTools } from "./runtime.ts";
 export interface ChatTurn {
   readonly agentId: AgentId;
   readonly threadId: ThreadId;
+  /** The reply the turn writes. A key is idempotent within it, Continue included. */
+  readonly messageId: MessageId;
   /** The turn's prompt, which becomes the brief of a Task the turn starts. */
   readonly prompt: string;
   readonly runtime: RuntimeKind;

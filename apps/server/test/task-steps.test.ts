@@ -64,6 +64,30 @@ const gated = (gates: Map<string, Deferred.Deferred<void>>, requests: Array<Prom
     }),
   ).pipe(Layer.provide(FakeRuntimeLayer()));
 
+/** The folders every hob may work in; a test narrows them to stop the steps that had them. */
+let folders: ReadonlyArray<string> = [];
+const WorkFolders = Layer.succeed(
+  HobTools,
+  HobTools.of({
+    access: (agent) =>
+      Effect.sync(() =>
+        folders.length === 0
+          ? null
+          : {
+              policy: {
+                preset: "balanced",
+                sharedFolders: [],
+                hob: agent.policy,
+                dataFolder: "/hobbots/data",
+                restrictions: [],
+              },
+              folders,
+              runtimeFolder: `/hobbots/runtimes/${agent.id}`,
+            },
+      ),
+  }),
+);
+
 /** What the hub's records hold before it starts, as after a restart. */
 type Before = Layer.Layer<never, never, HobbotsRepository | TaskRepository>;
 
@@ -86,7 +110,7 @@ const makeApp = (
         EventJournal.layer,
         EventBus.layer,
         NodeFolderChecks,
-        HobTools.chatOnly,
+        WorkFolders,
         HobAdmission.layer,
         gated(gates, requests),
       ),
@@ -98,6 +122,7 @@ type App = ReturnType<typeof makeApp>;
 let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<App>, Layer.Error<App>> | undefined;
 
 afterEach(async () => {
+  folders = [];
   await runtime?.dispose();
   runtime = undefined;
 });
@@ -270,6 +295,13 @@ describe("a Task's steps in fresh sessions", () => {
     const ended = await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
     expect(stepsOf(ended).map((step) => step.result?.summary)).toEqual(["Twelve keywords chosen", "Copy drafted"]);
     expect(ended.checkpoints.some((each) => each.kind === "finding")).toBe(true);
+    // A step that returned its own result still ends its session as completed.
+    const settled = await run(
+      treeWhen(thread.id, (tree) =>
+        tree.attempts.filter((each) => each.taskId !== tree.tasks[0]?.id).every((each) => each.state === "completed"),
+      ),
+    );
+    expect(settled.attempts.filter((each) => each.taskId !== settled.tasks[0]?.id)).toHaveLength(2);
 
     const next = await run(send(thread.id, "How did it go?"));
     const told = control.requests.at(-1)?.briefing ?? "";
@@ -398,5 +430,65 @@ describe("a Task's steps in fresh sessions", () => {
     const tree = Option.getOrThrow(await run(TaskRepository.use((tasks) => tasks.readTree(TOP))));
     expect(tree.attempts.map((each) => each.state)).toEqual(["interrupted", "interrupted"]);
     expect(tree.tasks.map((task) => task.state)).toEqual(["active", "failed"]);
+  });
+
+  // covers OR-003
+  it("[TC-OR-035] a Task whose cancel was asked for is confirmed once its last step stops", async () => {
+    const { run } = setUp();
+    const thread = await run(seed);
+    await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Slow work" }] })));
+    const running = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const [top, step] = running.tasks as [Task, Task];
+    // As Cancel on the Quest tab will: the Task and its step move to cancelling together.
+    // Each move reads the Task again, since the turn that planned the steps may still be ending.
+    const cancel = (id: TaskId) =>
+      retry(
+        Effect.gen(function* () {
+          const tasks = yield* TaskRepository;
+          const [task] = Option.getOrThrow(yield* tasks.readTree(id)).tasks;
+          yield* tasks.moveTask(id, (task as Task).revision, "cancelling", now);
+        }),
+      );
+    await run(
+      Effect.gen(function* () {
+        yield* cancel(step.id);
+        yield* cancel(top.id);
+        yield* TaskSignal.use((signal) => signal.notify);
+      }),
+    );
+    const ended = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "cancelled"));
+    expect(ended.tasks.map((task) => task.state)).toEqual(["cancelled", "cancelled"]);
+  });
+
+  // covers OR-001, EX-005
+  it("[TC-OR-036] a key from an earlier request is refused in a later one, never replayed", async () => {
+    const { run, control } = setUp();
+    const thread = await run(seed);
+    const plan = hub("plan_steps", { key: "plan", steps: [{ brief: "Draft" }] });
+    await run(send(thread.id, `First request\n${plan}`));
+    await run(control.open("Draft"));
+    await run(treeWhen(thread.id, (tree) => states(tree)[0] === "completed"));
+    await run(send(thread.id, hub("complete_task", { key: "done", summary: "First done" })));
+    const again = await run(send(thread.id, `Second request\n${plan}`));
+    expect(again.content).toContain("Refused (key-reused)");
+    const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(thread.id)));
+    expect(trees.map((tree) => tree.tasks[0]?.state)).toEqual(["completed"]);
+  });
+
+  // covers PE-008
+  it("[TC-OR-037] narrowing its hob's folders stops a running step and fails it with the reason", async () => {
+    folders = ["/work/site", "/work/brand"];
+    const { run } = setUp();
+    const thread = await run(seed);
+    await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Edit the site" }] })));
+    const running = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const step = stepsOf(running)[0] as Task;
+
+    folders = ["/work/site"];
+    await run(ChatService.use((chat) => chat.reviewAuthority(ALDRIC)));
+    const failed = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "failed"));
+    const attempt = failed.attempts.find((each) => each.taskId === step.id);
+    expect(attempt?.state).toBe("interrupted");
+    expect(attempt?.outcome).toBe("Stopped because its hob's permissions were narrowed.");
   });
 });

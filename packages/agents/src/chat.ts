@@ -505,6 +505,7 @@ export class ChatService extends Context.Service<
                 taskTurns.value.forChat({
                   agentId: agent.id,
                   threadId: thread.id,
+                  messageId: (yield* Ref.get(reply.current)).id,
                   prompt,
                   runtime: brain.runtime,
                   configVersion: config.version,

@@ -22,6 +22,8 @@ import {
   AttemptId as AttemptIdSchema,
   CheckpointId,
   type Committed,
+  descendantsOf,
+  isLiveAttempt,
   isTerminalTask,
   RUNTIME_NAMES,
   systemInstructions,
@@ -53,9 +55,10 @@ const STEP_TOOLS: ReadonlyArray<TaskToolName> = ["report_checkpoint", "complete_
 /** Why a running step was stopped, which decides what its Task becomes. */
 type StopReason = "cancel" | "authority" | "hob";
 
-const STOPPED: Record<Exclude<StopReason, "cancel">, string> = {
+const STOPPED: Record<StopReason, string> = {
+  cancel: "Cancelled.",
   authority: "Stopped because its hob's permissions were narrowed.",
-  hob: "Stopped because its hob was stopped.",
+  hob: "Stopped by Hobbots before it finished, with its hob's other work.",
 };
 
 interface Running {
@@ -99,6 +102,9 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
       const scope = yield* Effect.scope;
       const running = new Map<TaskId, Running>();
       const rounds = yield* Semaphore.make(1);
+      // Reading a step's tools and registering it take turns with reviewing them, so a narrower
+      // policy saved meanwhile never misses a step that is starting (PE-008).
+      const authority = yield* Semaphore.make(1);
 
       const announce = <A>(committed: Committed<A>) =>
         publisher.publish(committed.entries).pipe(
@@ -256,7 +262,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           yield* attempt(
             tasks.updateAttempt(attemptId, {
               state: cancelling ? "cancelled" : "interrupted",
-              outcome: cancelling ? "Cancelled." : STOPPED[reason === "cancel" ? "hob" : reason],
+              outcome: cancelling ? STOPPED.cancel : STOPPED[reason],
               at,
             }),
             "end a stopped step's Attempt",
@@ -265,6 +271,30 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           if (Option.isNone(latest) || isTerminalTask(latest.value.state)) return;
           const to = latest.value.state === "cancelling" ? "cancelled" : "failed";
           yield* attempt(tasks.moveTask(stepId, latest.value.revision, to, at), "end a stopped step");
+        });
+
+      /**
+       * Confirms the cancel of each Task above `step` that is cancelling and has nothing left
+       * running: no live Attempt and nothing open under it.
+       */
+      const confirmCancelsAbove = (step: Task): Effect.Effect<void> =>
+        Effect.gen(function* () {
+          for (let parentId = step.parentId; parentId !== null; ) {
+            const found = yield* tasks.readTree(step.rootId);
+            if (Option.isNone(found)) return;
+            const { tasks: tree, attempts } = found.value;
+            const above = tree.find((each) => each.id === parentId);
+            if (above === undefined || above.state !== "cancelling") return;
+            const live = attempts.some((each) => each.id === above.currentAttemptId && isLiveAttempt(each.state));
+            if (live || descendantsOf(above, tree).some((each) => !isTerminalTask(each.state))) return;
+            const at = yield* nowIso;
+            const confirmed = yield* attempt(
+              tasks.moveTask(above.id, above.revision, "cancelled", at),
+              "confirm a cancel above a step",
+            );
+            if (Option.isNone(confirmed)) return;
+            parentId = above.parentId;
+          }
         });
 
       /** Starts one step under its hob's lock, so a retirement sees every step admitted before it. */
@@ -277,30 +307,43 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
             if (Option.isNone(agent) || agent.value.status !== "active") return;
             const config = yield* repo.findAgentConfig(agent.value.id, agent.value.configVersion);
             if (Option.isNone(config)) return;
-            const access = yield* hobTools.access(agent.value);
             const attemptId = AttemptIdSchema.make(newId());
-            const started = yield* attempt(
-              tasks.startAttempt(queued.id, queued.revision, {
-                id: attemptId,
-                runtime: config.value.runtime,
-                sessionId: null,
-                configVersion: config.value.version,
-                policyVersion: null,
-                startedAt: yield* nowIso,
+            const registered = yield* Semaphore.withPermit(
+              authority,
+              Effect.gen(function* () {
+                const access = yield* hobTools.access(agent.value);
+                const started = yield* attempt(
+                  tasks.startAttempt(queued.id, queued.revision, {
+                    id: attemptId,
+                    runtime: config.value.runtime,
+                    sessionId: null,
+                    configVersion: config.value.version,
+                    policyVersion: null,
+                    startedAt: yield* nowIso,
+                  }),
+                  "start a step",
+                );
+                if (Option.isNone(started)) return Option.none();
+                const step = started.value.task;
+                const run: Running = { agentId: step.ownerId, rootId: step.rootId, access, stop: null };
+                running.set(step.id, run);
+                return Option.some({ step, run, access });
               }),
-              "start a step",
             );
-            if (Option.isNone(started)) return;
-            const step = started.value.task;
-            const run: Running = { agentId: step.ownerId, rootId: step.rootId, access, stop: null };
-            running.set(step.id, run);
+            if (Option.isNone(registered)) return;
+            const { step, run, access } = registered.value;
             yield* FiberMap.run(
               fibers,
               step.id,
               runSession(agent.value, config.value, step, tree, access, attemptId).pipe(
                 Effect.flatMap((ending) => settle(step.id, attemptId, ending)),
                 Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
-                Effect.ensuring(Effect.sync(() => running.delete(step.id)).pipe(Effect.andThen(signal.notify))),
+                Effect.ensuring(
+                  Effect.sync(() => running.delete(step.id)).pipe(
+                    Effect.andThen(confirmCancelsAbove(step)),
+                    Effect.andThen(signal.notify),
+                  ),
+                ),
               ),
             );
           }),
@@ -309,11 +352,14 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
       const count = (pick: (run: Running) => string, value: string) =>
         Array.from(running.values()).filter((run) => pick(run) === value).length;
 
-      /** Stops running steps whose Task is cancelling or ended, then starts the steps that are ready. */
+      /**
+       * Stops running steps whose cancel was asked for, then starts the steps that are ready. A step
+       * that returned its result keeps running until its session ends.
+       */
       const round = Effect.gen(function* () {
         for (const [id, run] of running) {
           const task = yield* currentTask(id);
-          if (Option.isSome(task) && (task.value.state === "cancelling" || isTerminalTask(task.value.state))) {
+          if (Option.isSome(task) && task.value.state === "cancelling" && run.stop === null) {
             run.stop = "cancel";
             yield* Effect.forkIn(FiberMap.remove(fibers, id), scope);
           }
@@ -354,7 +400,10 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
 
       const stopWhere = (reason: StopReason, matches: (run: Running) => Effect.Effect<boolean>) =>
         Effect.gen(function* () {
-          const chosen = yield* Effect.filter(Array.from(running), ([, run]) => matches(run));
+          const chosen = yield* Semaphore.withPermit(
+            authority,
+            Effect.suspend(() => Effect.filter(Array.from(running), ([, run]) => matches(run))),
+          );
           for (const [, run] of chosen) run.stop = reason;
           yield* Effect.forEach(chosen, ([id]) => FiberMap.remove(fibers, id), { discard: true });
         });

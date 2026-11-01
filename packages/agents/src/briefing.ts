@@ -60,7 +60,8 @@ const ENDINGS: Partial<Record<Message["status"], string>> = {
 };
 
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
-const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+/** `text` cut to `max` characters, marked with an ellipsis when it was cut. */
+export const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
 
 /** Keeps a long message's start and end, which usually carry the question and the conclusion. */
 const clipMiddle = (text: string) => {
