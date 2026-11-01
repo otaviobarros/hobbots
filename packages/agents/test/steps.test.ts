@@ -21,8 +21,10 @@ describe("nextSteps", () => {
     ]);
     const running = nextSteps(awaiting ?? [], 0, started);
     expect(states(running)).toEqual(["t1:running"]);
-    const failed = nextSteps(running ?? [], 0, { _tag: "ToolFinished", id: "t1", failed: true });
+    const output = { head: "boom\n", tail: "", omittedBytes: 0, totalBytes: 5, logged: false };
+    const failed = nextSteps(running ?? [], 0, { _tag: "ToolFinished", id: "t1", failed: true }, output);
     expect(states(failed)).toEqual(["t1:failed"]);
+    expect(failed?.[0]?.output).toEqual(output);
     // A late or repeated end changes nothing, and text is not a step.
     expect(nextSteps(failed ?? [], 0, { _tag: "ToolFinished", id: "t1", failed: false })).toBeNull();
     expect(nextSteps(failed ?? [], 0, { _tag: "TextDelta", text: "hi" })).toBeNull();

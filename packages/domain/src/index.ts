@@ -14,3 +14,4 @@ export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./thread.ts";
 export * from "./tone.ts";
+export * from "./tool-output.ts";

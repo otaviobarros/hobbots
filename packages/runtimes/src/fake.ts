@@ -126,6 +126,17 @@ const scriptedInput = (tool: string, argument: string): Record<string, unknown> 
 };
 
 /**
+ * What a scripted command prints, though nothing runs: `echo` its words and `seq N` the numbers 1
+ * to N, so a step can show short, long and secret-bearing output. Any other call prints nothing.
+ */
+const scriptedOutput = (tool: string, input: Record<string, unknown>): string | undefined => {
+  const command = tool === "Bash" && typeof input.command === "string" ? input.command : "";
+  const count = /^seq (\d{1,7})$/.exec(command)?.[1];
+  if (count !== undefined) return `${Array.from({ length: Number(count) }, (_, i) => i + 1).join("\n")}\n`;
+  return command.startsWith("echo ") ? `${command.slice("echo ".length)}\n` : undefined;
+};
+
+/**
  * The tool calls a prompt scripts, decided as Claude Code's would be: by the policy engine, and for
  * Ask by the user through the turn's approvals. Each is reported as started and finished, or denied.
  * Nothing is read, written or run.
@@ -172,7 +183,13 @@ export const scriptedToolEvents = (
           if (decision._tag === "Run") {
             const { operation, targets } = decision.verdict;
             yield* Queue.offer(queue, { _tag: "ToolStarted", id: call.id, tool: call.tool, operation, targets, label });
-            yield* Queue.offer(queue, { _tag: "ToolFinished", id: call.id, failed: false });
+            const output = scriptedOutput(call.tool, call.input);
+            yield* Queue.offer(queue, {
+              _tag: "ToolFinished",
+              id: call.id,
+              failed: false,
+              ...(output === undefined ? {} : { output }),
+            });
           } else {
             yield* Queue.offer(queue, {
               _tag: "ToolDenied",

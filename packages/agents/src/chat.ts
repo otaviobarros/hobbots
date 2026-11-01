@@ -33,11 +33,12 @@ import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing } from "./briefing.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
-import { EventPublisher } from "./ports.ts";
+import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { type RuntimeEvent, runtimeAdapters, type ToolAccess } from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
-import { nextSteps } from "./steps.ts";
+import { nextSteps, replyStepId } from "./steps.ts";
+import { keepToolOutput } from "./tool-output.ts";
 import { HobTools, narrows } from "./tools.ts";
 
 interface Reply {
@@ -151,6 +152,8 @@ export class ChatService extends Context.Service<
       const approvals = yield* Effect.serviceOption(ApprovalService);
       // Without the hub's redactor, secret shapes are still redacted.
       const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
+      // Without a log store, a long tool output keeps only its start and end.
+      const toolLogs = yield* Effect.serviceOption(ToolLogs);
       const turns = yield* FiberMap.make<ThreadId>();
       const scope = yield* Effect.scope;
       // The reply each running turn is writing, so a stop request can reach it.
@@ -404,6 +407,25 @@ export class ChatService extends Context.Service<
                 );
               case "Completed":
                 return update((m) => MessageTransitions.complete(m, reply.prefix + event.text));
+              // What the call printed is cut to its start and end before the step is saved; a long
+              // output is kept whole in the step's log.
+              case "ToolFinished":
+                return Effect.gen(function* () {
+                  const current = yield* Ref.get(reply.current);
+                  const stepId = replyStepId(current.steps, reply.stepsFrom, event.id);
+                  const output =
+                    event.output === undefined
+                      ? undefined
+                      : yield* keepToolOutput(
+                          event.output,
+                          { threadId: thread.id, messageId: current.id, stepId },
+                          toolLogs,
+                        );
+                  yield* update((m) => {
+                    const steps = nextSteps(m.steps, reply.stepsFrom, event, output);
+                    return steps === null ? undefined : MessageTransitions.setSteps(m, steps);
+                  });
+                });
               // Steps, a tool call's included, are saved with the reply, so they replay on reconnect.
               default:
                 return update((m) => {

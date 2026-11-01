@@ -32,6 +32,13 @@ export class ThreadNotFound extends Schema.TaggedError<ThreadNotFound>()(
   { httpApiStatus: 404 },
 ) {}
 
+/** A tool step with no full log: the step, its reply or its thread is not there, or its output was shown whole. */
+export class ToolLogNotFound extends Schema.TaggedError<ToolLogNotFound>()(
+  "ToolLogNotFound",
+  { messageId: MessageId, stepId: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
 /** A message that is not waiting in the thread's queue: it already started, was removed, or is elsewhere. */
 export class MessageNotQueued extends Schema.TaggedError<MessageNotQueued>()(
   "MessageNotQueued",

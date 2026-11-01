@@ -6,7 +6,9 @@ import {
   HobService,
   missingRuntimeHealth,
   missingRuntimeModels,
+  readToolLog,
   runtimeAdapters,
+  ToolLogs,
 } from "@hobbots/agents";
 import { HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
 import { RuntimeKind, type ThreadId } from "@hobbots/domain";
@@ -48,6 +50,8 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
     const hobs = yield* HobService;
+    // Hubs without a log store, as in tests, have no full logs to open.
+    const logs = yield* Effect.serviceOption(ToolLogs);
     // Making a brain the hob's default edits the hob (a new configuration version), then the thread
     // follows the hob again. Otherwise only the thread changes (ADR 017).
     const setBrain = (threadId: ThreadId, { brain, makeDefault }: SetBrainPayload) =>
@@ -78,6 +82,7 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
       sendNow: ({ params }) => chat.sendNow(params.threadId, params.messageId),
       interrupt: ({ params }) => chat.stop(params.threadId),
       continueReply: ({ params }) => chat.continueReply(params.threadId, params.messageId),
+      toolLog: ({ params }) => readToolLog(params, repo, logs),
       setBrain: ({ params, payload }) => setBrain(params.threadId, payload),
     });
   }),

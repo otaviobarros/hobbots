@@ -23,6 +23,9 @@ describe("secret redaction", () => {
       targets: ["https://me:[redacted: HUB_TOKEN]@example.com/app.git"],
       reason: "https://me:[redacted: HUB_TOKEN]@example.com/app.git is not allowed.",
     });
+    expect(
+      redactEvent({ _tag: "ToolFinished", id: "t1", failed: false, output: "GH known-hub-value-1234" }, redactor),
+    ).toEqual({ _tag: "ToolFinished", id: "t1", failed: false, output: "GH [redacted: HUB_TOKEN]" });
     const text = { _tag: "TextDelta", text: "known-hub-value-1234" } as const;
     expect(redactEvent(text, redactor)).toBe(text);
   });

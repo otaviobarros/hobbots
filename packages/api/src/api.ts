@@ -21,7 +21,7 @@ import {
   Voice,
 } from "@hobbots/domain";
 import { Schema } from "effect";
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware } from "effect/http-api";
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/http-api";
 import { ApprovalsGroup } from "./approvals.ts";
 import {
   AgentNotFound,
@@ -30,6 +30,7 @@ import {
   MessageNotQueued,
   ReplyNotResumable,
   ThreadNotFound,
+  ToolLogNotFound,
 } from "./errors.ts";
 import { PermissionsGroup } from "./permissions.ts";
 import { SearchGroup } from "./search.ts";
@@ -225,6 +226,12 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId, messageId: MessageId },
       success: Message,
       error: [ThreadNotFound, HobUnavailable, ReplyNotResumable],
+    }),
+    // The whole redacted output of a tool step that shows only its start and end, as plain text.
+    HttpApiEndpoint.get("toolLog", "/threads/:threadId/messages/:messageId/steps/:stepId/log", {
+      params: { threadId: ThreadId, messageId: MessageId, stepId: Schema.String },
+      success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/plain; charset=utf-8" })),
+      error: ToolLogNotFound,
     }),
     // Switches the thread's brain from its next turn; a reply already running keeps its own.
     HttpApiEndpoint.put("setBrain", "/threads/:threadId/brain", {

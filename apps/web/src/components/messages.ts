@@ -135,6 +135,10 @@ export const messages = {
     operation: "Action",
     targets: "On",
     noTargets: "Nothing in particular",
+    output: "Output",
+    omitted: ({ size }: { size: string }) => `${size} left out here`,
+    openLog: ({ size }: { size: string }) => `Open the full log (${size})`,
+    noLog: "The full log could not be kept.",
   },
   approval: {
     asks: ({ name }: { name: string }) => `${name} asks permission`,

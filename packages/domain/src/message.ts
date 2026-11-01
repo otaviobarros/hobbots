@@ -3,6 +3,7 @@ import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
 import { PolicyOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
+import { ToolOutput } from "./tool-output.ts";
 
 export const MessageRole = Schema.Literals(["user", "assistant"]);
 export type MessageRole = typeof MessageRole.Type;
@@ -72,6 +73,8 @@ export const ReplyStep = Schema.Struct({
   reason: Schema.optionalKey(Schema.String),
   /** For a `denied` step: the policy hook refused it, the user denied its Ask, or the OS sandbox did. */
   decidedBy: Schema.optionalKey(Schema.Literals(["policy", "user", "sandbox"])),
+  /** For a tool step that ended: what its call printed, redacted, and cut to its start and end when long. */
+  output: Schema.optionalKey(ToolOutput),
 });
 export type ReplyStep = typeof ReplyStep.Type;
 
