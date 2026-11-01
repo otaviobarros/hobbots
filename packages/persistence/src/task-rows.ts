@@ -5,6 +5,7 @@ import {
   Delegation,
   descendantsOf,
   HandOff,
+  MemberWork,
   Milestone,
   Quest,
   Question,
@@ -185,5 +186,31 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
       return trees;
     });
 
-  return { task, treeOf, questsOn, quest, attempt, question, artifact, readTree, threadTrees };
+  /** A member's Tasks on active Quests, each with its Delegation and Quest, oldest first. */
+  const memberWork = (agentId: string) =>
+    Effect.gen(function* () {
+      const delegations = yield* sql<Row>`SELECT * FROM delegations WHERE member_id = ${agentId}`.pipe(
+        Effect.flatMap(decodeRows("delegation")),
+      );
+      if (delegations.length === 0) return [];
+      const quests = yield* sql<Row>`SELECT * FROM quests WHERE state = 'active'
+        AND ${sql.in("id", [...new Set(delegations.map((each) => each.questId))])}`.pipe(
+        Effect.flatMap(decodeRows("quest")),
+      );
+      const active = new Map(quests.map((each) => [each.id, each]));
+      const open = delegations.filter((each) => active.has(each.questId));
+      if (open.length === 0) return [];
+      const tasks = yield* sql<Row>`SELECT * FROM tasks WHERE ${sql.in(
+        "id",
+        open.map((each) => each.childTaskId),
+      )} ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("task")));
+      const byTask = new Map(open.map((each) => [each.childTaskId, each]));
+      return tasks.flatMap((task) => {
+        const delegation = byTask.get(task.id);
+        const quest = delegation && active.get(delegation.questId);
+        return delegation && quest ? [new MemberWork({ task, delegation, quest })] : [];
+      });
+    });
+
+  return { task, treeOf, questsOn, quest, attempt, question, artifact, readTree, threadTrees, memberWork };
 };

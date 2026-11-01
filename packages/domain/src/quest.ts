@@ -248,3 +248,13 @@ export class TaskTree extends Schema.Class<TaskTree>("TaskTree")({
 export const partyOf = (quest: Quest, delegations: ReadonlyArray<Delegation>): ReadonlyArray<AgentId> => [
   ...new Set(delegations.filter((delegation) => delegation.questId === quest.id).map((d) => d.memberId)),
 ];
+
+/**
+ * A party member's Task on another hob's Quest, with the Delegation that brought it in and the
+ * Quest it serves. Home and the member's panel show it as "On Aldric's quest", never as a thread.
+ */
+export class MemberWork extends Schema.Class<MemberWork>("MemberWork")({
+  task: Task,
+  delegation: Delegation,
+  quest: Quest,
+}) {}

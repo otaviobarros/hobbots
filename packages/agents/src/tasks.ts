@@ -14,6 +14,7 @@ import type {
   DelegationId,
   HandOff,
   IllegalTaskTransition,
+  MemberWork,
   MilestoneId,
   Quest,
   QuestId,
@@ -175,5 +176,10 @@ export class TaskRepository extends Context.Service<
     /** The tree of each Task a request in the thread started, oldest first. */
     readonly readThreadTrees: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<TaskTree>>;
     readonly findQuest: (questId: QuestId) => Effect.Effect<Option.Option<Quest>>;
+    /**
+     * A hob's Tasks as a party member on Quests still active, oldest first. A member's Task stays
+     * listed once it ends, until its Quest does, so its outcome shows where its work did.
+     */
+    readonly listMemberWork: (agentId: AgentId) => Effect.Effect<ReadonlyArray<MemberWork>>;
   }
 >()("@hobbots/agents/TaskRepository") {}

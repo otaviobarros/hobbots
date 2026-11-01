@@ -655,6 +655,7 @@ export const TaskRepositoryLive = Layer.effect(
           Effect.map(([quest]) => Option.fromNullishOr(quest)),
           Effect.orDie,
         ),
+      listMemberWork: (agentId) => read.memberWork(agentId).pipe(Effect.orDie),
     });
   }),
 );

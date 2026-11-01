@@ -1,5 +1,5 @@
 import { HobbotsRepository, TaskRepository } from "@hobbots/agents";
-import { HobbotsApi, QuestNotFound, TaskNotFound, ThreadNotFound } from "@hobbots/api";
+import { AgentNotFound, HobbotsApi, QuestNotFound, TaskNotFound, ThreadNotFound } from "@hobbots/api";
 import { partyOf } from "@hobbots/domain";
 import { EventJournal } from "@hobbots/persistence";
 import { Effect, Option } from "effect";
@@ -41,6 +41,13 @@ export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers
           const thread = yield* repo.findThread(params.threadId);
           if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId: params.threadId });
           return { cursor: at, trees: yield* tasks.readThreadTrees(params.threadId) };
+        }),
+      questWork: ({ params }) =>
+        Effect.gen(function* () {
+          const at = yield* cursor;
+          const hob = yield* repo.findAgent(params.agentId);
+          if (Option.isNone(hob)) return yield* new AgentNotFound({ agentId: params.agentId });
+          return { cursor: at, work: yield* tasks.listMemberWork(params.agentId) };
         }),
     });
   }),

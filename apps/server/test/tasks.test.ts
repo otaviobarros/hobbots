@@ -11,7 +11,7 @@ import {
   PermissionSummary,
   TaskRepository,
 } from "@hobbots/agents";
-import { QuestRead, TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
+import { MemberWorkRead, QuestRead, TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -237,5 +237,27 @@ describe("Task and Quest reads", () => {
   it("[TC-OR-007] answers 404 for a Task or Quest that is not there", async () => {
     expect(await get("/api/tasks/nope")).toEqual({ status: 404, body: { _tag: "TaskNotFound", taskId: "nope" } });
     expect(await get("/api/quests/nope")).toEqual({ status: 404, body: { _tag: "QuestNotFound", questId: "nope" } });
+  });
+  // covers OR-001, UX-001, CH-005
+  it("[TC-OR-022] reads a hob's work on other hobs' Quests, and answers 404 for a hob that is not there", async () => {
+    await runtime.runPromise(quest);
+
+    const response = await get("/api/agents/quill/quest-work");
+    expect(response.status).toBe(200);
+    const read = Schema.decodeUnknownSync(MemberWorkRead)(response.body);
+    expect(read.work).toMatchObject([
+      {
+        task: { id: "copy", ownerId: QUILL, state: "queued" },
+        delegation: { leadId: ALDRIC, brief: "Draft the copy" },
+        quest: { id: "q1", leadId: ALDRIC, threadId, state: "active" },
+      },
+    ]);
+    expect(Schema.decodeUnknownSync(MemberWorkRead)((await get("/api/agents/aldric/quest-work")).body).work).toEqual(
+      [],
+    );
+    expect(await get("/api/agents/nope/quest-work")).toEqual({
+      status: 404,
+      body: { _tag: "AgentNotFound", agentId: "nope" },
+    });
   });
 });
