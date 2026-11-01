@@ -1,4 +1,4 @@
-import type { Agent, AgentId, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
+import type { Agent, AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -46,8 +46,14 @@ export interface Pins {
   readonly toggle: (taskId: TaskId) => void;
 }
 
+/** The stored pins, kept only when they are a list of ids, each once. */
+export const parsePins = (stored: unknown): ReadonlyArray<TaskId> =>
+  Array.isArray(stored)
+    ? [...new Set(stored.filter((id): id is string => typeof id === "string" && id !== ""))].map((id) => id as TaskId)
+    : [];
+
 export const usePins = (): Pins => {
-  const [pinned, setPinned] = useState<ReadonlyArray<TaskId>>(() => readStored<Array<TaskId>>(PINS_KEY, []));
+  const [pinned, setPinned] = useState<ReadonlyArray<TaskId>>(() => parsePins(readStored<unknown>(PINS_KEY, [])));
   const toggle = (taskId: TaskId) => {
     const next = pinned.includes(taskId) ? pinned.filter((id) => id !== taskId) : [...pinned, taskId];
     writeStored(PINS_KEY, next);
@@ -58,14 +64,25 @@ export const usePins = (): Pins => {
 
 /**
  * The trees a thread follows: the Tasks its own requests started, and the pinned ones that started
- * elsewhere, in the order they were pinned. A pinned Task the hub no longer has is left out.
+ * elsewhere, in the order they were pinned. Pins are read once the thread's own trees are known, so
+ * its own pinned tree never shows as from elsewhere. A pinned Task the hub no longer has is listed
+ * in `missing`, so it can be unpinned.
  */
 export const useFollowedTrees = (threadId: ThreadId | undefined, pinned: ReadonlyArray<TaskId>) => {
-  const thread = useThreadTrees(threadId);
-  const others = pinned.filter((id) => !thread.some((tree) => tree.tasks[0]?.id === id));
-  const elsewhere = useQueries({
-    queries: others.map((taskId) => ({ ...taskTreeQuery(taskId), select: (read: { tree: TaskTree }) => read.tree })),
-    combine: (results) => results.flatMap((result) => (result.data === undefined ? [] : [result.data])),
+  const read = useQuery({
+    ...threadTasksQuery(threadId ?? ("" as ThreadId)),
+    enabled: threadId !== undefined,
+    select: (each) => each.trees,
   });
-  return { thread, elsewhere };
+  const thread = read.data ?? [];
+  const known = threadId === undefined || read.isSuccess;
+  const others = known ? pinned.filter((id) => !thread.some((tree) => tree.tasks[0]?.id === id)) : [];
+  const { elsewhere, missing } = useQueries({
+    queries: others.map((taskId) => ({ ...taskTreeQuery(taskId), retry: false })),
+    combine: (results) => ({
+      elsewhere: results.flatMap((result) => (result.data === undefined ? [] : [result.data.tree])),
+      missing: others.filter((_, index) => results[index]?.isError === true),
+    }),
+  });
+  return { thread, elsewhere, missing };
 };

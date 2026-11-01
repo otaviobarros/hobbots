@@ -1,4 +1,5 @@
 import type { AgentId, TaskId, ThreadId } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { messages } from "./messages.ts";
 import { QuestRoom } from "./quest-room.tsx";
 import { type Pins, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
@@ -21,7 +22,7 @@ export function QuestTab({
   taskId: TaskId | undefined;
   pins: Pins;
 }) {
-  const { thread, elsewhere } = useFollowedTrees(threadId, pins.pinned);
+  const { thread, elsewhere, missing } = useFollowedTrees(threadId, pins.pinned);
   const hobs = useHobLookup();
   const open = useOpenTask(hobId, threadId ?? ("" as ThreadId));
   const trees = [
@@ -29,16 +30,29 @@ export function QuestTab({
     ...thread.map((tree) => ({ tree, own: true })).reverse(),
   ];
 
+  const gone = missing.map((id) => (
+    <p key={id} className="m-0 flex items-center gap-2 border-b-2 border-line px-3.5 py-2.5 text-detail text-label">
+      <span className="flex-1">{copy.missing}</span>
+      <Button variant="chip" size="xs" onClick={() => pins.toggle(id)}>
+        {copy.unpin}
+      </Button>
+    </p>
+  ));
+
   if (trees.length === 0) {
     return (
-      <div className="flex animate-hb-in flex-col gap-2 px-[18px] py-[22px] leading-normal text-secondary-text">
-        <span className="font-pixel text-lg text-moonlight">{copy.emptyTitle}</span>
-        <span>{copy.empty}</span>
-      </div>
+      <>
+        {gone}
+        <div className="flex animate-hb-in flex-col gap-2 px-[18px] py-[22px] leading-normal text-secondary-text">
+          <span className="font-pixel text-lg text-moonlight">{copy.emptyTitle}</span>
+          <span>{copy.empty}</span>
+        </div>
+      </>
     );
   }
   return (
     <div className="flex flex-col">
+      {gone}
       {trees.map(({ tree, own }) => (
         <QuestRoom
           key={tree.tasks[0]?.id}

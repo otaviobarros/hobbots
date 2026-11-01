@@ -57,6 +57,7 @@ export function QuestRoom({
   const rows = roomRows(tree);
   const chosen = rows.find((row) => row.task.id === selected) ?? null;
   const { done, total } = card.progress;
+  const whose = card.quest === null ? messages.strip.task({ name: lead }) : messages.strip.quest({ name: lead });
   const ownThread = top.threadId === null ? null : { hobId: top.ownerId, threadId: top.threadId };
   const open =
     onOpen ??
@@ -73,6 +74,7 @@ export function QuestRoom({
             variant="chip"
             size="xs"
             aria-pressed={pinned}
+            aria-label={copy.pin}
             title={pinned ? copy.unpinHint : copy.pinHint}
             onClick={() => onPin(top.id)}
             className={cn("text-xs", pinned && "border-moonlight text-moonlight")}
@@ -81,8 +83,7 @@ export function QuestRoom({
           </Button>
         </div>
         <span className="text-detail text-secondary-text">
-          {card.quest === null ? copy.task({ name: lead }) : copy.quest({ name: lead })}
-          {total > 0 && ` · ${messages.card.progress({ done, total })}`}
+          {total > 0 ? copy.summary({ whose, done, total }) : whose}
         </span>
         {!own && (
           <span className="flex items-center gap-2 text-detail text-label">
@@ -148,7 +149,6 @@ function Row({
     <button
       type="button"
       aria-current={selected || undefined}
-      aria-label={messages.card.open({ title })}
       onClick={() => onOpen(row.task.id)}
       className={cn(
         "flex w-full cursor-pointer items-center gap-2 border-0 py-1.5 pe-2 text-start text-text hover:bg-hover",
@@ -160,13 +160,11 @@ function Row({
       <StatusDot status={toneOf(row.status)} />
       <HobSprite hob={owner} size={20} state={row.status === "running" ? "working" : "idle"} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm">
-          <b>{owner.name}</b> · {title}
-        </span>
+        <span className="truncate text-sm">{copy.row({ name: owner.name, title })}</span>
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-label">
           {row.quest !== null && <span className="shrink-0 bg-line px-1.5 font-bold text-moonlight">{copy.leads}</span>}
           {waits.length > 0 && (
-            <span className="truncate text-lantern">{copy.waitingOn({ names: messages.names(waits) })}</span>
+            <span className="truncate text-lantern">{messages.card.waitingOn({ names: messages.names(waits) })}</span>
           )}
           <Age task={row.task} now={now} />
         </span>

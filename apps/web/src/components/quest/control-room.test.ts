@@ -15,6 +15,7 @@ import {
   tree,
 } from "../../test/quests.ts";
 import { attemptCount, roomRows, taskControls, topCancel } from "./control-room.ts";
+import { parsePins } from "./use-work.ts";
 
 const ROOK = AgentId.make("rook");
 
@@ -125,5 +126,13 @@ describe("topCancel and attemptCount", () => {
     });
     expect(attemptCount(retried, nth(retried.tasks, 0))).toBe(2);
     expect(attemptCount(blackFriday(), nth(blackFriday().tasks, 1))).toBe(0);
+  });
+});
+
+describe("parsePins", () => {
+  it("keeps only ids, each once, and drops anything else stored under the key", () => {
+    expect(parsePins(["campaign", "campaign", 3, "", "copy"])).toEqual([CAMPAIGN, COPY]);
+    expect(parsePins({ not: "a list" })).toEqual([]);
+    expect(parsePins(null)).toEqual([]);
   });
 });

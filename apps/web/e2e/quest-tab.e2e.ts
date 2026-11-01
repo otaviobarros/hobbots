@@ -19,8 +19,8 @@ test("[TC-CH-190] the Quest tab shows the whole tree live, holds its controls an
   const room = page.getByRole("region", { name: "Control room for Plan the Black Friday campaign" });
   await expect(room).toContainText("Aldric's quest");
   const tasks = room.getByRole("list", { name: "Tasks of Plan the Black Friday campaign" });
-  await expect(tasks.getByRole("button", { name: "Look inside Draft the landing copy" })).toContainText("Quill");
-  const build = tasks.getByRole("button", { name: "Look inside Build the campaign" });
+  await expect(tasks.getByRole("button", { name: /Quill · Draft the landing copy/ })).toBeVisible();
+  const build = tasks.getByRole("button", { name: /Ada · Build the campaign/ });
   await expect(build).toContainText("waiting on Quill");
   await expect(build).toContainText("you", { timeout: 15_000 });
 
@@ -38,14 +38,16 @@ test("[TC-CH-190] the Quest tab shows the whole tree live, holds its controls an
 
   // Pinned, the Quest stays in the tab of another thread, and its Tasks still open there.
   const pin = room.getByRole("button", { name: "Pin" });
+  await expect(pin).toHaveAttribute("aria-pressed", "false");
   await pin.click();
-  await expect(room.getByRole("button", { name: "Pinned" })).toHaveAttribute("aria-pressed", "true");
+  await expect(pin).toHaveAttribute("aria-pressed", "true");
+  await expect(pin).toHaveText("Pinned");
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   await page.getByRole("textbox", { name: /^Message Aldric/ }).fill("Something else");
   await page.getByRole("textbox", { name: /^Message Aldric/ }).press("Enter");
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
   await expect(room).toContainText("Pinned from another thread");
-  await room.getByRole("button", { name: "Look inside Draft the landing copy" }).click();
+  await room.getByRole("button", { name: /Quill · Draft the landing copy/ }).click();
   await expect(page.getByRole("complementary", { name: "Draft the landing copy, Task details" })).toBeVisible();
 
   // The answer goes back from the card in the Quest's own thread, and the tab follows live.
@@ -53,13 +55,20 @@ test("[TC-CH-190] the Quest tab shows the whole tree live, holds its controls an
   const asks = page.getByRole("region", { name: "Ada asks you" });
   await asks.getByRole("textbox", { name: "Your answer to Ada" }).fill("Yes, Dec 12 for international orders.");
   await asks.getByRole("button", { name: "Send answer" }).click();
-  await expect(tasks.getByRole("button", { name: "Look inside Build the campaign" })).toContainText("Done", {
+  await expect(tasks.getByRole("button", { name: /Ada · Build the campaign/ })).toContainText("Done", {
     timeout: 15_000,
   });
   await expect(room.getByRole("button", { name: "Cancel Quest" })).toHaveCount(0, { timeout: 15_000 });
 
   // Unpinned, it leaves the other thread's tab.
-  await room.getByRole("button", { name: "Pinned" }).click();
+  await room.getByRole("button", { name: "Pin" }).click();
   await page.goBack();
   await expect(page.getByText("No Quest in this thread")).toBeVisible();
+
+  // A pin the hub no longer has says so and can be unpinned.
+  await page.evaluate(() => localStorage.setItem("quest.pinned", JSON.stringify(["gone"])));
+  await page.reload();
+  await expect(page.getByText("A pinned Quest is no longer on this hub.")).toBeVisible();
+  await page.getByRole("button", { name: "Unpin" }).click();
+  await expect(page.getByText("A pinned Quest is no longer on this hub.")).toBeHidden();
 });
