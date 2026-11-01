@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { expect, type Page, type Route, test } from "@playwright/test";
 import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
 
 let hub: Hub | undefined;
@@ -28,8 +29,8 @@ const api = async <A>(current: Hub, method: string, path: string, body?: unknown
 const LONG_PROMPT = Array.from({ length: 80 }, (_, i) => `word${i}`).join(" ");
 
 /** A finished setup with Pip, and one finished thread per title, created in order. */
-const pipWithThreads = async (current: Hub, titles: ReadonlyArray<string>) => {
-  await api(current, "PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
+const pipWithThreads = async (current: Hub, titles: ReadonlyArray<string>, setup: Record<string, unknown> = {}) => {
+  await api(current, "PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"], ...setup });
   const pip = await api<{ id: string }>(current, "POST", "/agents", {
     name: "Pip",
     role: "writer",
@@ -153,4 +154,150 @@ test("[TC-CH-152] a thread cannot be archived while its reply runs, by menu or b
   await page.keyboard.press("Control+Alt+a");
   await expect(page).toHaveURL(new RegExp(`hobs/${pip}/new$`));
   await expect(threadLink(page, "Tagline ideas")).toHaveCount(0);
+});
+
+/** Holds the hub's answer to a request until `release` answers it: as `fail` says, or as the hub does. */
+const holdRequests = async (page: Page, pattern: RegExp) => {
+  const held: Array<Route> = [];
+  await page.route(pattern, (route) => {
+    held.push(route);
+  });
+  return {
+    waiting: () => held.length,
+    release: async (fail?: { status: number; body?: unknown }) => {
+      for (const route of held.splice(0)) {
+        if (fail === undefined) await route.continue();
+        else if (fail.body === undefined) await route.abort("connectionrefused");
+        else await route.fulfill({ status: fail.status, contentType: "application/json", json: fail.body });
+      }
+      await page.unroute(pattern);
+    },
+  };
+};
+
+// covers CH-009
+test("[TC-CH-153] an archive that fails after the user moved on leaves them where they are, and Try again archives it", async ({
+  page,
+}) => {
+  hub = await startHub(dataDir);
+  const current = hub;
+  // Newest first: Weekly digest, Support triage, Tagline ideas.
+  const { pip, threads } = await pipWithThreads(current, ["Tagline ideas", "Support triage", "Weekly digest"]);
+  const [tagline, triage] = threads;
+
+  await page.goto(`${current.url}/#/hobs/${pip}/threads/${triage}`);
+  const archiveCall = await holdRequests(page, /\/api\/threads\/[^/]+\/archive$/);
+  await page.getByRole("button", { name: "More for this thread" }).click();
+  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  // The next thread opens at once; the user then opens another before the hub answers.
+  await expect(page).toHaveURL(new RegExp(`threads/${tagline}$`));
+  await expect.poll(archiveCall.waiting).toBe(1);
+  await threadLink(page, "Weekly digest").click();
+  await expect(page).toHaveURL(new RegExp(`threads/${threads[2]}$`));
+
+  await archiveCall.release({ status: 0 });
+  const failed = page.getByRole("status").filter({ hasText: "Couldn't archive “Support triage”." });
+  await expect(failed).toBeVisible();
+  // The row steps back in, and the user stays on the thread they chose.
+  await expect(threadLink(page, "Support triage")).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`threads/${threads[2]}$`));
+
+  await page.getByRole("button", { name: "Try again for Support triage" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Archived “Support triage”." })).toBeVisible();
+  await expect(threadLink(page, "Support triage")).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`threads/${threads[2]}$`));
+  expect(
+    (await api<Array<{ id: string }>>(current, "GET", `/agents/${pip}/threads?archived=true`)).map((t) => t.id),
+  ).toEqual([triage]);
+});
+
+// covers CH-009
+test("[TC-CH-154] a refusal that arrives late puts the thread back and reopens it, with the hub's reason", async ({
+  page,
+}) => {
+  hub = await startHub(dataDir);
+  const { pip, threads } = await pipWithThreads(hub, ["Tagline ideas", "Support triage"]);
+  const [tagline, triage] = threads;
+
+  await page.goto(`${hub.url}/#/hobs/${pip}/threads/${triage}`);
+  // As if a reply started on another device after the menu opened.
+  const archiveCall = await holdRequests(page, /\/api\/threads\/[^/]+\/archive$/);
+  await page.getByRole("button", { name: "More for this thread" }).click();
+  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  await expect(page).toHaveURL(new RegExp(`threads/${tagline}$`));
+  await expect.poll(archiveCall.waiting).toBe(1);
+  await archiveCall.release({
+    status: 409,
+    body: { _tag: "ThreadArchiveRefused", threadId: triage, reason: "reply-running" },
+  });
+
+  await expect(
+    page.getByRole("status").filter({ hasText: "Pip started replying in “Support triage”, so it stays in the list." }),
+  ).toBeVisible();
+  await expect(threadLink(page, "Support triage")).toBeVisible();
+  // The user had not moved on, so the thread they were archiving opens again.
+  await expect(page).toHaveURL(new RegExp(`threads/${triage}$`));
+});
+
+// covers CH-009
+test("[TC-CH-155] an Undo that fails offers Try again, which brings the thread back", async ({ page }) => {
+  hub = await startHub(dataDir);
+  const current = hub;
+  const { pip, threads } = await pipWithThreads(current, ["Tagline ideas", "Support triage"]);
+
+  await page.goto(`${current.url}/#/hobs/${pip}/threads/${threads[1]}`);
+  await threadLink(page, "Tagline ideas").focus();
+  await page.keyboard.press("Shift+F10");
+  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  await expect(threadLink(page, "Tagline ideas")).toHaveCount(0);
+
+  const restoreCall = await holdRequests(page, /\/api\/threads\/[^/]+\/restore$/);
+  await page.getByRole("button", { name: "Undo archive of Tagline ideas" }).click();
+  await expect.poll(restoreCall.waiting).toBe(1);
+  await restoreCall.release({ status: 0 });
+  await expect(page.getByRole("status").filter({ hasText: "Couldn't bring back “Tagline ideas”." })).toBeVisible();
+  await expect(threadLink(page, "Tagline ideas")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Try again for Tagline ideas" }).click();
+  await expect(threadLink(page, "Tagline ideas")).toBeVisible();
+  expect(await api<Array<unknown>>(current, "GET", `/agents/${pip}/threads?archived=true`)).toEqual([]);
+});
+
+// covers CH-009, PE-003
+test("[TC-CH-156] a thread waiting for approval cannot be archived, and Show request focuses the card", async ({
+  page,
+}) => {
+  hub = await startHub(dataDir);
+  const shared = realpathSync(mkdtempSync(`${dataDir}-shared-`));
+  try {
+    const { pip, threads } = await pipWithThreads(hub, ["Tagline ideas"], {
+      safetyPreset: "balanced",
+      approvedFolders: [shared],
+    });
+    await page.goto(`${hub.url}/#/hobs/${pip}/threads/${threads[0]}`);
+    // Balanced asks before pushing; the fake runtime makes the scripted call.
+    const composer = page.getByRole("textbox", { name: /^Message Pip/ });
+    await composer.fill("Ship it\nfake:tool Bash git push origin feature");
+    await composer.press("Enter");
+    const card = page.getByRole("region", { name: "Pip asks permission" });
+    await expect(card).toBeVisible();
+
+    await threadLink(page, "Tagline ideas").focus();
+    await page.keyboard.press("Shift+F10");
+    const item = page.getByRole("menuitem", { name: /Archive thread/ });
+    await expect(item).toHaveAttribute("aria-disabled", "true");
+    await expect(item).toContainText("Pip is waiting for your approval here. Answer it first.");
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("main", { name: "Chat" }).getByText("Ship it").first().click();
+    await page.keyboard.press("Control+Alt+a");
+    await expect(
+      page.getByRole("status").filter({ hasText: "Can't archive yet: Pip is waiting for your approval." }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Show request" }).click();
+    await expect(card.getByRole("button").first()).toBeFocused();
+    await expect(threadLink(page, "Tagline ideas")).toBeVisible();
+  } finally {
+    rmSync(shared, { recursive: true, force: true });
+  }
 });
