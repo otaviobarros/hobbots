@@ -1,8 +1,8 @@
-import { HobbotsRepository, TaskRepository } from "@hobbots/agents";
+import { EventPublisher, HobbotsRepository, TaskRepository } from "@hobbots/agents";
 import { AgentNotFound, HobbotsApi, QuestNotFound } from "@hobbots/api";
-import { Backpack, type BackpackScope } from "@hobbots/inbox";
+import { Backpack, type BackpackScope, DispatcherHost } from "@hobbots/inbox";
 import { EventJournal } from "@hobbots/persistence";
-import { Effect, Option } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { formatCursor } from "./event-stream.ts";
 
@@ -35,6 +35,32 @@ export const BackpackHandlers = HttpApiBuilder.group(HobbotsApi, "backpack", (ha
           }
           return yield* read({ _tag: "Quest", questId: params.questId });
         }),
+    });
+  }),
+);
+
+/** What the dispatcher reads and announces through: the Task trees, and the hub's event bus. */
+export const DispatcherHostLive = Layer.effect(
+  DispatcherHost,
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const publisher = yield* EventPublisher;
+    return DispatcherHost.of({
+      treeOf: (taskId) =>
+        tasks.readTree(taskId).pipe(
+          Effect.flatMap(
+            Option.match({
+              onNone: () => Effect.succeed([]),
+              onSome: ({ tasks: [task] }) =>
+                task === undefined
+                  ? Effect.succeed([])
+                  : tasks
+                      .readTree(task.rootId)
+                      .pipe(Effect.map(Option.match({ onNone: () => [], onSome: (tree) => tree.tasks }))),
+            }),
+          ),
+        ),
+      announce: publisher.publish,
     });
   }),
 );

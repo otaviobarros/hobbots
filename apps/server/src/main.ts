@@ -13,6 +13,7 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import { secretsFromEnv } from "@hobbots/domain";
+import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -30,6 +31,7 @@ import {
 import { ClaudeCodeLayer, FakeAdditionalRuntimesLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
+import { DispatcherHostLive } from "./backpack.ts";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
@@ -95,6 +97,8 @@ const ServerLive = Layer.unwrap(
             HobService.layer,
             PermissionSummary.layer,
             JournalCompaction,
+            // At start, it expires the claims an earlier process held on backpack items (ADR 019).
+            Dispatcher.layer().pipe(Layer.provide(DispatcherHostLive)),
             config.runtime === "fake" && config.fakeQuest === "black-friday"
               ? FakeQuestLive(FAKE_QUEST_STEP)
               : Layer.empty,
