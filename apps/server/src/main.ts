@@ -36,6 +36,7 @@ import { JournalCompaction } from "./journal-compaction.ts";
 import { IPv6Loopback } from "./loopback.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { HobToolsLive } from "./tools.ts";
+import { ClientOrigins } from "./user-session.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
 
 const ServerLive = Layer.unwrap(
@@ -122,7 +123,8 @@ const ServerLive = Layer.unwrap(
       Layer.provideMerge(
         HttpRouter.serve(
           Layer.mergeAll(
-            ApiRoutes,
+            // The CORS allow list is also where a user session may come from besides the hub's own origin.
+            ApiRoutes.pipe(Layer.provide(Layer.succeed(ClientOrigins, config.allowedOrigins))),
             EventStreamRoute,
             WebClientRoutes(config.webDir),
             LoopbackHostOnly,

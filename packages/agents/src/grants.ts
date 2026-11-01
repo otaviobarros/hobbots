@@ -1,4 +1,4 @@
-import { GrantNotFound } from "@hobbots/api";
+import { GrantNotFound, UserSession } from "@hobbots/api";
 import {
   type AgentId,
   type ApprovalRequest,
@@ -165,9 +165,13 @@ export class GrantService extends Context.Service<
     /**
      * The user removes a grant. Removing it again returns it unchanged. `then` runs only when this
      * call revoked it, such as stopping the hob's running turns for a host grant, and, like saving
-     * the revocation, is not interrupted once begun.
+     * the revocation, is not interrupted once begun. Only the user removes a grant (PE-006): it needs
+     * a `UserSession`, which no hob, Charm or runtime tool has.
      */
-    readonly revoke: (id: GrantId, then?: (grant: Grant) => Effect.Effect<void>) => Effect.Effect<Grant, GrantNotFound>;
+    readonly revoke: (
+      id: GrantId,
+      then?: (grant: Grant) => Effect.Effect<void>,
+    ) => Effect.Effect<Grant, GrantNotFound, UserSession>;
     /** Revokes the grants, of one hob or all, that the change took authority from. */
     readonly revokeLost: (agentId: AgentId | null, loss: AuthorityLoss) => Effect.Effect<void>;
     /** Revokes every grant of a hob that retired. */
@@ -218,6 +222,7 @@ export class GrantService extends Context.Service<
           Effect.flatMap(repo.list(agentId), (grants) => (all === true ? Effect.succeed(grants) : liveOf(grants))),
         revoke: (id, then) =>
           Effect.gen(function* () {
+            yield* UserSession;
             const found = yield* repo.find(id);
             if (Option.isNone(found)) return yield* new GrantNotFound({ grantId: id });
             if (found.value.revokedAt !== null) return found.value;

@@ -11,6 +11,7 @@ import {
   HobTools,
   type ToolAccess,
 } from "@hobbots/agents";
+import { UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -84,6 +85,8 @@ const TestLayer = HobLifecycle.layer.pipe(
     Layer.mergeAll(
       Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)),
       EventBus.layer,
+      // The decisions these cases make are the user's, as the hub's user-session middleware provides.
+      Layer.succeed(UserSession, { origin: "http://localhost:4317" }),
       HobAdmission.layer,
       FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
     ),
@@ -148,7 +151,7 @@ const run = <A, E>(
   effect: Effect.Effect<
     A,
     E,
-    ApprovalService | ChatService | HobLifecycle | HobbotsRepository | EventBus | Scope.Scope
+    ApprovalService | ChatService | HobLifecycle | HobbotsRepository | EventBus | UserSession | Scope.Scope
   >,
 ) => effect.pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 

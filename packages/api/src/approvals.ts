@@ -21,6 +21,7 @@ import {
   GrantRuleRefused,
   ThreadNotFound,
 } from "./errors.ts";
+import { UserSessionOnly } from "./user-session.ts";
 
 /**
  * The user's decision on a pending approval request (PE-003, PE-007): approve it with a lifetime, or
@@ -41,6 +42,7 @@ export const DecideApprovalPayload = Schema.Struct({
 });
 export type DecideApprovalPayload = typeof DecideApprovalPayload.Type;
 
+/** Approval requests and the user's decisions. Only a user session reaches it (PE-006). */
 export class ApprovalsGroup extends HttpApiGroup.make("approvals")
   .add(
     // The thread's approval requests, oldest first, whatever their state.
@@ -64,9 +66,10 @@ export class ApprovalsGroup extends HttpApiGroup.make("approvals")
       ],
     }),
   )
+  .middleware(UserSessionOnly)
   .prefix("/api") {}
 
-/** Standing grants (ADR 015): what each hob may do without asking again, and removing it. */
+/** Standing grants (ADR 015): what each hob may do without asking again, and removing it. Only a user session reaches it (PE-006). */
 export class GrantsGroup extends HttpApiGroup.make("grants")
   .add(
     // Grants oldest first, optionally for one hob: the live ones, or with `include=all` revoked and expired ones too.
@@ -81,4 +84,5 @@ export class GrantsGroup extends HttpApiGroup.make("grants")
       error: GrantNotFound,
     }),
   )
+  .middleware(UserSessionOnly)
   .prefix("/api") {}
