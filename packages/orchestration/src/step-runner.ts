@@ -308,7 +308,9 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
             const config = yield* repo.findAgentConfig(agent.value.id, agent.value.configVersion);
             if (Option.isNone(config)) return;
             const attemptId = AttemptIdSchema.make(newId());
-            const registered = yield* Semaphore.withPermit(
+            // The step is registered and its fiber forked under one permit, so a narrower policy
+            // either sees neither or can stop the fiber it finds (PE-008).
+            yield* Semaphore.withPermit(
               authority,
               Effect.gen(function* () {
                 const access = yield* hobTools.access(agent.value);
@@ -323,28 +325,25 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
                   }),
                   "start a step",
                 );
-                if (Option.isNone(started)) return Option.none();
+                if (Option.isNone(started)) return;
                 const step = started.value.task;
                 const run: Running = { agentId: step.ownerId, rootId: step.rootId, access, stop: null };
                 running.set(step.id, run);
-                return Option.some({ step, run, access });
-              }),
-            );
-            if (Option.isNone(registered)) return;
-            const { step, run, access } = registered.value;
-            yield* FiberMap.run(
-              fibers,
-              step.id,
-              runSession(agent.value, config.value, step, tree, access, attemptId).pipe(
-                Effect.flatMap((ending) => settle(step.id, attemptId, ending)),
-                Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
-                Effect.ensuring(
-                  Effect.sync(() => running.delete(step.id)).pipe(
-                    Effect.andThen(confirmCancelsAbove(step)),
-                    Effect.andThen(signal.notify),
+                yield* FiberMap.run(
+                  fibers,
+                  step.id,
+                  runSession(agent.value, config.value, step, tree, access, attemptId).pipe(
+                    Effect.flatMap((ending) => settle(step.id, attemptId, ending)),
+                    Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
+                    Effect.ensuring(
+                      Effect.sync(() => running.delete(step.id)).pipe(
+                        Effect.andThen(confirmCancelsAbove(step)),
+                        Effect.andThen(signal.notify),
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              }),
             );
           }),
         );
@@ -402,9 +401,14 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
         Effect.gen(function* () {
           const chosen = yield* Semaphore.withPermit(
             authority,
-            Effect.suspend(() => Effect.filter(Array.from(running), ([, run]) => matches(run))),
+            Effect.suspend(() => Effect.filter(Array.from(running), ([, run]) => matches(run))).pipe(
+              Effect.tap((found) =>
+                Effect.sync(() => {
+                  for (const [, run] of found) run.stop = reason;
+                }),
+              ),
+            ),
           );
-          for (const [, run] of chosen) run.stop = reason;
           yield* Effect.forEach(chosen, ([id]) => FiberMap.remove(fibers, id), { discard: true });
         });
 

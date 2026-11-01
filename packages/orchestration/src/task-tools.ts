@@ -30,6 +30,7 @@ import {
   DEFAULT_TASK_TOOL_LIMITS,
   makeAuthorityOf,
   makeCapacity,
+  makeHobRoom,
   refuse,
   type TaskToolCaller,
   type TaskToolLimits,
@@ -93,6 +94,7 @@ export class TaskTools extends Context.Service<
         const ledger = yield* TaskToolCalls;
         const publisher = yield* EventPublisher;
         const capacity = yield* makeCapacity(limits);
+        const hobRoom = yield* makeHobRoom(limits);
         const authority = yield* makeAuthorityOf(separator);
         const folderChecks = yield* FolderChecks;
         const hobs = yield* HobbotsRepository;
@@ -207,7 +209,7 @@ export class TaskTools extends Context.Service<
 
         const forChat = (turn: ChatTurn) =>
           Effect.gen(function* () {
-            const chat = makeChatResolver(tasks, turn);
+            const chat = makeChatResolver(tasks, hobRoom, turn);
             // The Attempt this turn started on its Task, known once the call that started it commits.
             let attemptId: AttemptId | null = null;
             const source: CallSource = {

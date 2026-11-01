@@ -1,5 +1,6 @@
 import type { ChatTurn, TaskRepository } from "@hobbots/agents";
 import {
+  type AgentId,
   AttemptId,
   type EventEnvelope,
   isTerminalTask,
@@ -40,7 +41,12 @@ const openTaskOf = (trees: ReadonlyArray<TaskTree>, turn: ChatTurn) =>
  * from the turn's prompt, inside each call's own transaction, so a refused call leaves no Task
  * behind and two calls never start two.
  */
-export const makeChatResolver = (tasks: TaskRepository["Service"], turn: ChatTurn) => ({
+export const makeChatResolver = (
+  tasks: TaskRepository["Service"],
+  /** Refuses a new Task for a hob that already owns as many open Tasks as the hub allows. */
+  hobRoom: (ownerId: AgentId, adding: number) => Effect.Effect<void, TaskToolRefused>,
+  turn: ChatTurn,
+) => ({
   /** What the turn's session is told of the open Task, read as the turn starts. */
   briefing: Effect.map(tasks.readThreadTrees(turn.threadId), (trees) => {
     const open = openTaskOf(trees, turn);
@@ -63,6 +69,8 @@ export const makeChatResolver = (tasks: TaskRepository["Service"], turn: ChatTur
             "You are not working on a Task in this conversation. plan_steps, start_quest or delegate_task starts one for this request.",
           );
         }
+        // The request's Task counts against its hob's open Tasks, whichever call starts it.
+        yield* hobRoom(turn.agentId, 1);
         task = journal.keep(
           yield* fromRecords(
             tasks.createTask({

@@ -17,11 +17,18 @@ import {
   type TaskTree,
   type ThreadId,
 } from "@hobbots/domain";
-import { type StepLimits, StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
+import {
+  DEFAULT_TASK_TOOL_LIMITS,
+  type StepLimits,
+  StepRunnerLive,
+  TaskSignal,
+  type TaskToolLimits,
+  TaskTools,
+} from "@hobbots/orchestration";
 import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Deferred, Effect, Layer, ManagedRuntime, Option, Schedule, Stream } from "effect";
+import { Deferred, Effect, Layer, ManagedRuntime, Option, Schedule, Scheduler, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
@@ -66,42 +73,63 @@ const gated = (gates: Map<string, Deferred.Deferred<void>>, requests: Array<Prom
 
 /** The folders every hob may work in; a test narrows them to stop the steps that had them. */
 let folders: ReadonlyArray<string> = [];
+/**
+ * When set, the next read of a hob's access returns the folders of that moment, then waits until
+ * the test lets it go, so the test can narrow the folders while a step is starting.
+ */
+let held: { readonly reached: Deferred.Deferred<void>; readonly release: Deferred.Deferred<void> } | undefined;
+const accessTo = (agent: Agent, now: ReadonlyArray<string>) =>
+  now.length === 0
+    ? null
+    : {
+        policy: {
+          preset: "balanced" as const,
+          sharedFolders: [],
+          hob: agent.policy,
+          dataFolder: "/hobbots/data",
+          restrictions: [],
+        },
+        folders: now,
+        runtimeFolder: `/hobbots/runtimes/${agent.id}`,
+      };
 const WorkFolders = Layer.succeed(
   HobTools,
   HobTools.of({
     access: (agent) =>
-      Effect.sync(() =>
-        folders.length === 0
-          ? null
-          : {
-              policy: {
-                preset: "balanced",
-                sharedFolders: [],
-                hob: agent.policy,
-                dataFolder: "/hobbots/data",
-                restrictions: [],
-              },
-              folders,
-              runtimeFolder: `/hobbots/runtimes/${agent.id}`,
-            },
-      ),
+      Effect.gen(function* () {
+        const access = accessTo(agent, folders);
+        const hold = held;
+        held = undefined;
+        if (hold !== undefined) {
+          yield* Deferred.succeed(hold.reached, undefined);
+          yield* Deferred.await(hold.release);
+        }
+        return access;
+      }),
   }),
 );
 
 /** What the hub's records hold before it starts, as after a restart. */
 type Before = Layer.Layer<never, never, HobbotsRepository | TaskRepository>;
 
-const makeApp = (
-  limits: StepLimits,
-  gates: Map<string, Deferred.Deferred<void>>,
-  requests: Array<PromptRequest>,
-  before: Before,
-) =>
+/** How a test's hub is set up, beyond the defaults. */
+interface Options {
+  readonly limits?: StepLimits;
+  readonly taskLimits?: TaskToolLimits;
+  readonly before?: Before;
+  /** How many operations a fiber runs before it lets others run. */
+  readonly opsBeforeYield?: number;
+}
+
+const makeApp = (options: Options, gates: Map<string, Deferred.Deferred<void>>, requests: Array<PromptRequest>) =>
   ChatService.layer.pipe(
     Layer.provideMerge(
-      StepRunnerLive(limits).pipe(Layer.provideMerge(TaskTools.layer("/")), Layer.provideMerge(TaskSignal.layer)),
+      StepRunnerLive(options.limits ?? { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3 }).pipe(
+        Layer.provideMerge(TaskTools.layer("/", options.taskLimits ?? DEFAULT_TASK_TOOL_LIMITS)),
+        Layer.provideMerge(TaskSignal.layer),
+      ),
     ),
-    Layer.provideMerge(before),
+    Layer.provideMerge(options.before ?? Layer.empty),
     Layer.provideMerge(
       Layer.mergeAll(
         HobbotsRepositoryLive,
@@ -123,17 +151,20 @@ let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<App>, Layer.Error<App>>
 
 afterEach(async () => {
   folders = [];
+  held = undefined;
   await runtime?.dispose();
   runtime = undefined;
 });
 
-const setUp = (
-  limits: StepLimits = { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3 },
-  before: Before = Layer.empty,
-) => {
+const setUp = (options: Options = {}) => {
   const gates = new Map<string, Deferred.Deferred<void>>();
   const requests: Array<PromptRequest> = [];
-  const app = ManagedRuntime.make(makeApp(limits, gates, requests, before));
+  const layer = makeApp(options, gates, requests);
+  const app = ManagedRuntime.make(
+    options.opsBeforeYield === undefined
+      ? layer
+      : layer.pipe(Layer.provide(Layer.succeed(Scheduler.MaxOpsBeforeYield, options.opsBeforeYield))),
+  );
   runtime = app;
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<App>>) => app.runPromise(effect);
   const gate = (name: string) =>
@@ -315,7 +346,7 @@ describe("a Task's steps in fresh sessions", () => {
 
   // covers OR-004, OR-005
   it("[TC-OR-027] steps without an order run in parallel, up to the hob's limit", async () => {
-    const { run, control } = setUp({ maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3 });
+    const { run, control } = setUp({ limits: { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3 } });
     const thread = await run(seed);
     const briefs = ["Banner A", "Banner B", "Banner C"];
     await run(send(thread.id, hub("plan_steps", { key: "plan", steps: briefs.map((brief) => ({ brief })) })));
@@ -334,7 +365,7 @@ describe("a Task's steps in fresh sessions", () => {
 
   // covers OR-004
   it("[TC-OR-028] the tree's limit holds steps back across its hob's limit", async () => {
-    const { run } = setUp({ maxRunningStepsPerHob: 4, maxRunningStepsPerTree: 1 });
+    const { run } = setUp({ limits: { maxRunningStepsPerHob: 4, maxRunningStepsPerTree: 1 } });
     const thread = await run(seed);
     await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "One" }, { brief: "Two" }] })));
     const one = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
@@ -426,7 +457,7 @@ describe("a Task's steps in fresh sessions", () => {
         yield* tasks.startAttempt(STEP, step.value.revision, attempt("step-1"));
       }).pipe(Effect.orDie),
     );
-    const { run } = setUp(undefined, leftRunning);
+    const { run } = setUp({ before: leftRunning });
     const tree = Option.getOrThrow(await run(TaskRepository.use((tasks) => tasks.readTree(TOP))));
     expect(tree.attempts.map((each) => each.state)).toEqual(["interrupted", "interrupted"]);
     expect(tree.tasks.map((task) => task.state)).toEqual(["active", "failed"]);
@@ -490,5 +521,47 @@ describe("a Task's steps in fresh sessions", () => {
     const attempt = failed.attempts.find((each) => each.taskId === step.id);
     expect(attempt?.state).toBe("interrupted");
     expect(attempt?.outcome).toBe("Stopped because its hob's permissions were narrowed.");
+  });
+
+  // covers PE-008
+  it("[TC-OR-038] narrowing its hob's folders while a step starts stops that step before it works", async () => {
+    folders = ["/work/site", "/work/brand"];
+    // Fibers yield every few operations, so the waiting review runs as soon as the start lets go of
+    // the authority lock. Before the fix it then found the step with no session to stop.
+    const { run, control } = setUp({ opsBeforeYield: 4 });
+    const thread = await run(seed);
+    await run(send(thread.id, hub("plan_steps", { key: "plan", steps: chain(["Outline", "Edit the site"]) })));
+    await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+
+    // The second step reads its hob's wide access as it starts, and waits there.
+    const hold = { reached: await run(Deferred.make<void>()), release: await run(Deferred.make<void>()) };
+    held = hold;
+    await run(control.open("Outline"));
+    await run(Deferred.await(hold.reached));
+
+    // The folders narrow before the step has a session; the review waits for it to be started.
+    folders = ["/work/site"];
+    const review = run(ChatService.use((chat) => chat.reviewAuthority(ALDRIC)));
+    await run(Deferred.succeed(hold.release, undefined));
+    await review;
+
+    const failed = await run(treeWhen(thread.id, (tree) => states(tree)[1] === "failed"));
+    const step = stepsOf(failed)[1] as Task;
+    const attempt = failed.attempts.find((each) => each.taskId === step.id);
+    expect(attempt?.state).toBe("interrupted");
+    expect(attempt?.outcome).toBe("Stopped because its hob's permissions were narrowed.");
+  }, 15_000);
+  it("[TC-OR-039] a hob at its open-Task limit cannot start another request's Task from a chat turn", async () => {
+    const { run } = setUp({ taskLimits: { ...DEFAULT_TASK_TOOL_LIMITS, maxOpenTasksPerHob: 1 } });
+    const first = await run(seed);
+    const started = await run(
+      send(first.id, `Plan the launch\n${hub("start_quest", { key: "launch", goal: "Launch" })}`),
+    );
+    expect(started.content).not.toContain("Refused");
+    const second = await run(ChatService.use((chat) => chat.createThread(ALDRIC)));
+    const refused = await run(send(second.id, `Plan the sale\n${hub("start_quest", { key: "sale", goal: "Sale" })}`));
+    expect(refused.content).toContain("Refused (concurrency-limit)");
+    // The refused call leaves no Task behind in the second conversation.
+    expect(await run(TaskRepository.use((tasks) => tasks.readThreadTrees(second.id)))).toEqual([]);
   });
 });

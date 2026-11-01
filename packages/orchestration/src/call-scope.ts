@@ -180,11 +180,11 @@ export const questLimitsFor = (
     return { maxDepth, deadline };
   });
 
-/** Refuses new work for `ownerId` once it, or the tree, would hold more open Tasks than the limits allow. */
-export const makeCapacity = (limits: TaskToolLimits) =>
+/** Refuses new work for `ownerId` once it would own more open Tasks than the hub allows a hob. */
+export const makeHobRoom = (limits: TaskToolLimits) =>
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
-    return (scope: CallScope, ownerId: AgentId, adding: number) =>
+    return (ownerId: AgentId, adding: number) =>
       Effect.gen(function* () {
         const own = yield* tasks.openTaskCount(ownerId);
         if (own + adding > limits.maxOpenTasksPerHob) {
@@ -193,6 +193,16 @@ export const makeCapacity = (limits: TaskToolLimits) =>
             `Hob ${ownerId} has ${own} open Tasks; the limit is ${limits.maxOpenTasksPerHob}. Wait for some to end.`,
           );
         }
+      });
+  });
+
+/** Refuses new work for `ownerId` once it, or the tree, would hold more open Tasks than the limits allow. */
+export const makeCapacity = (limits: TaskToolLimits) =>
+  Effect.gen(function* () {
+    const hobRoom = yield* makeHobRoom(limits);
+    return (scope: CallScope, ownerId: AgentId, adding: number) =>
+      Effect.gen(function* () {
+        yield* hobRoom(ownerId, adding);
         const inTree = scope.tree.tasks.filter((task) => !isTerminalTask(task.state)).length;
         if (inTree + adding > limits.maxOpenTasksPerTree) {
           return yield* refuse(
