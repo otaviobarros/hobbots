@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { coalesce } from "../src/main/coalesce.ts";
 import { followHub, type HubEventsOptions } from "../src/main/hub-events.ts";
 import { frameChange } from "../src/main/hub-events-model.ts";
-import { entryFrame, fakeEventStream, readyFrame, resumedFrame } from "./fake-event-stream.ts";
+import { entryFrame, fakeEventStream, readyFrame, resumedFrame, turnFrame } from "./fake-event-stream.ts";
 
 const stops: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -17,8 +17,7 @@ const follow = (options: Partial<HubEventsOptions> = {}, opening?: string) => {
     url: "http://127.0.0.1:4317/api/events",
     canConnect: () => true,
     onConnected: (resumed) => void heard.push(resumed ? "resumed" : "connected"),
-    onChange: (change) =>
-      void heard.push(change._tag === "Approvals" ? "approvals" : `activity ${change.threadId} ${change.working}`),
+    onChange: (change) => void heard.push(change._tag === "Approvals" ? "approvals" : "activity"),
     onLost: () => void heard.push("lost"),
     fetch: hub.fetch,
     firstRetryMs: 5,
@@ -42,17 +41,17 @@ describe("following the hub's event stream", () => {
     hub.last().write(readyFrame);
     hub.last().write(": keep-alive\n\n");
     hub.last().write(entryFrame("ApprovalRequested", { _tag: "ApprovalRequested" }, 1));
-    hub.last().write(entryFrame("MessageUpserted", reply("user"), 2));
-    hub.last().write(entryFrame("MessageUpserted", reply("assistant"), 3));
-    hub.last().write(entryFrame("MessageUpserted", reply("assistant", "complete"), 6));
+    // A reply's own events leave who is working to the turn frames.
+    hub.last().write(entryFrame("MessageUpserted", reply("assistant"), 2));
+    hub.last().write(turnFrame("TurnStarted"));
+    hub.last().write(entryFrame("MessageUpserted", reply("assistant", "complete"), 3));
+    hub.last().write(turnFrame("TurnEnded"));
     hub.last().write(entryFrame("GrantCreated", { _tag: "GrantCreated" }, 4));
     // A frame split across chunks is read once it is complete.
     const resolved = entryFrame("ApprovalResolved", { _tag: "ApprovalResolved" }, 5);
     hub.last().write(resolved.slice(0, 9));
     hub.last().write(resolved.slice(9));
-    await expect
-      .poll(() => heard)
-      .toEqual(["connected", "approvals", "activity t1 true", "activity t1 false", "approvals"]);
+    await expect.poll(() => heard).toEqual(["connected", "approvals", "activity", "activity", "approvals"]);
 
     hub.last().close();
     await expect.poll(() => hub.connections.length).toBe(2);
@@ -111,13 +110,15 @@ it("[TC-DP-049] resumes after the last entry it received, so the hub replays wha
   await expect.poll(() => hub.connections.length).toBe(1);
   expect(hub.connections[0]?.lastEventId).toBeNull();
   hub.last().write(readyFrame);
-  hub.last().write(entryFrame("MessageUpserted", reply("assistant", "complete"), 7));
-  await expect.poll(() => heard).toEqual(["connected", "activity t1 false"]);
+  hub.last().write(entryFrame("ApprovalResolved", { _tag: "ApprovalResolved" }, 7));
+  // A turn frame has no id, so the cursor stays at the last entry.
+  hub.last().write(turnFrame("TurnEnded"));
+  await expect.poll(() => heard).toEqual(["connected", "approvals", "activity"]);
   hub.last().close();
   await expect.poll(() => hub.connections.length).toBe(2);
   expect(hub.connections[1]?.lastEventId).toBe("e.7");
   hub.last().write(resumedFrame("e.7"));
-  await expect.poll(() => heard).toEqual(["connected", "activity t1 false", "lost", "resumed"]);
+  await expect.poll(() => heard).toEqual(["connected", "approvals", "activity", "lost", "resumed"]);
 });
 
 describe("the event stream model", () => {
@@ -130,17 +131,8 @@ describe("the event stream model", () => {
     });
     expect(frameChange({ event: "delta", data: "{}" })).toBeNull();
     expect(message(JSON.stringify({ type: "ApprovalResolved" }))).toEqual({ _tag: "Approvals" });
-    expect(message(JSON.stringify({ type: "MessageUpserted", payload: reply("assistant") }))).toEqual({
-      _tag: "Activity",
-      threadId: "t1",
-      working: true,
-    });
-    expect(message(JSON.stringify({ type: "MessageUpserted", payload: reply("assistant", "stopped") }))).toEqual({
-      _tag: "Activity",
-      threadId: "t1",
-      working: false,
-    });
-    expect(message(JSON.stringify({ type: "MessageUpserted", payload: reply("user") }))).toBeNull();
+    expect(frameChange({ event: "turn", data: "{}" })).toEqual({ _tag: "Activity" });
+    expect(message(JSON.stringify({ type: "MessageUpserted", payload: reply("assistant") }))).toBeNull();
     expect(message("not json")).toBeNull();
   });
 });

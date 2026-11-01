@@ -128,6 +128,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "TurnStopRequested":
     case "TurnStopped":
       return;
+    // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
+    case "TurnStarted":
+    case "TurnEnded":
+      return;
     default:
       applyWorkEvent(queryClient, event);
       return;

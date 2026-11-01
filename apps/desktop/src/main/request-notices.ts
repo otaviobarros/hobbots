@@ -42,7 +42,7 @@ export const requestNotices = ({ read, isFocused, notify, open, retry }: Request
   const reconcile = async () => {
     // A read that did not answer is made again until one does, since no later event may come. Until
     // then what is shown stays.
-    const pending = await readUntil(async () => pendingRequests(await read("/api/approvals")), undefined, retry);
+    const pending = await readUntil(async () => pendingRequests(await read("/api/approvals")), retry);
     const changes = noticeChanges(state, pending, isFocused());
     for (const id of changes.close) {
       shown.get(id)?.close();

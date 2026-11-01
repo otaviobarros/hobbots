@@ -52,3 +52,7 @@ export const resumedFrame = (cursor: string) =>
 /** A journal entry frame, with only what the main process reads. */
 export const entryFrame = (type: string, payload: unknown, sequence = 1) =>
   `id: e.${sequence}\ndata: ${JSON.stringify({ sequence, type, payload })}\n\n`;
+
+/** A transient turn frame, as the hub writes it: no `id`, so it moves no cursor. */
+export const turnFrame = (tag: "TurnStarted" | "TurnEnded", threadId = "t1") =>
+  `event: turn\ndata: ${JSON.stringify({ _tag: tag, threadId, agentId: "a1" })}\n\n`;
