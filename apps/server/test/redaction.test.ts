@@ -155,7 +155,7 @@ describe("secrets in tool calls", () => {
     expect(result.reply.steps.filter((step) => step.kind === "tool").map((step) => step.label)).toEqual([
       "Running echo [redacted: DEPLOY_TOKEN] [redacted: DEPLOY_SECRET]",
       "Running echo [redacted: private key]",
-      "Running git push https://wren:[redacted: GitHub token]@github.com/a…",
+      "Running git push https://wren:[redacted: GitHub token]@github.com/acme/app.git feature",
     ]);
     expect(result.stored[0]?.arguments).toEqual({
       command: "git push https://wren:[redacted: GitHub token]@github.com/acme/app.git feature",

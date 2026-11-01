@@ -119,6 +119,24 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(tests.events.at(-1)).toEqual({ _tag: "ToolFinished", id: "t1", failed: true, output: "x" });
   });
 
+  // covers PE-002
+  it("[TC-PE-120] names the folder a Git command works in, and keeps in the label any folder the step does not show", async () => {
+    const sub = join(project, "tree");
+    mkdirSync(sub, { recursive: true });
+    const log = await call("Bash", { command: `GIT_CONFIG_GLOBAL=/dev/null git -C ${project} log --oneline -3` });
+    expect(log.events[0]).toMatchObject({
+      _tag: "ToolStarted",
+      operation: "local-git",
+      targets: [project],
+      label: "Running git log --oneline -3",
+    });
+    // Decided on the folder it runs in and on the working tree, the step shows one of them.
+    const tree = await call("Bash", { command: `git --work-tree=${sub} status` });
+    expect(tree.decision).toBe("allow");
+    expect(tree.events[0]).toMatchObject({ _tag: "ToolStarted", operation: "local-git", targets: [project] });
+    expect((tree.events[0] as { label: string }).label).toMatch(/^Running git --work-tree=\S*tree status$/);
+  });
+
   // covers EX-004
   it("[TC-EX-011] lets an allowed call run only once Hobbots has recorded it, and refuses one it could not record", async () => {
     const recorded: Array<RuntimeEvent> = [];
