@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
 import { storeApproval } from "./approvals.ts";
 import { API_URL } from "./client.ts";
+import { grantsChanged } from "./grants.ts";
 import type { ConnectionState } from "./live.ts";
 import { setConnection } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
@@ -66,6 +67,24 @@ const applyDelta = (queryClient: QueryClient, event: MessageDelta) => {
   setActivity(queryClient, event.threadId, "working");
 };
 
+const applyAgent = (queryClient: QueryClient, hob: Agent) => {
+  recordAgent(queryClient, hob);
+  // The hob list leaves retired hobs out, as the server's list does.
+  queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.agents, (old) =>
+    old === undefined
+      ? old
+      : hob.status === "retired"
+        ? old.filter((agent) => agent.id !== hob.id)
+        : upsertNewer(old, hob),
+  );
+  // A hob retired elsewhere joins Archived hobs.
+  if (hob.status === "retired") {
+    queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.archivedAgents, (old) =>
+      old === undefined ? old : sortArchived(upsertNewer(old, hob)),
+    );
+  }
+};
+
 /**
  * Applies an event to the Query cache and records what it changed in the sync generation's overlay.
  * Lists are only patched once loaded; creating a partial list here would hide the rest of it.
@@ -73,21 +92,7 @@ const applyDelta = (queryClient: QueryClient, event: MessageDelta) => {
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   switch (event._tag) {
     case "AgentUpserted":
-      recordAgent(queryClient, event.agent);
-      // The hob list leaves retired hobs out, as the server's list does.
-      queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.agents, (old) =>
-        old === undefined
-          ? old
-          : event.agent.status === "retired"
-            ? old.filter((agent) => agent.id !== event.agent.id)
-            : upsertNewer(old, event.agent),
-      );
-      // A hob retired elsewhere joins Archived hobs.
-      if (event.agent.status === "retired") {
-        queryClient.setQueryData<ReadonlyArray<Agent>>(queryKeys.archivedAgents, (old) =>
-          old === undefined ? old : sortArchived(upsertNewer(old, event.agent)),
-        );
-      }
+      applyAgent(queryClient, event.agent);
       return;
     case "ThreadUpserted":
       recordThread(queryClient, event.thread);
@@ -122,6 +127,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "ApprovalRequested":
     case "ApprovalResolved":
       storeApproval(queryClient, event.approval);
+      return;
+    case "GrantCreated":
+    case "GrantRevoked":
+      void grantsChanged(queryClient);
       return;
   }
 };
