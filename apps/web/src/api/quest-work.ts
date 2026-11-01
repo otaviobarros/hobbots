@@ -1,6 +1,7 @@
 import type { AgentId, HobbotsEvent, MemberWork } from "@hobbots/domain";
 import { type QueryClient, type QueryFunctionContext, queryOptions, useQueries, useQuery } from "@tanstack/react-query";
 import { call } from "./client.ts";
+import { followsEvents } from "./queries.ts";
 import { syncState } from "./sync.ts";
 
 /** One list per hob, keyed under a shared prefix so a Quest ending can refetch them all. */
@@ -13,6 +14,7 @@ export const questWorkKeys = {
 export const questWorkQuery = (agentId: AgentId) =>
   queryOptions({
     queryKey: questWorkKeys.of(agentId),
+    ...followsEvents,
     queryFn: async ({ client }: QueryFunctionContext): Promise<ReadonlyArray<MemberWork>> => {
       // A change that arrives while the read is on its way may be missing from it, and a refetch
       // asked for then joins this read instead of starting one, so the read is made again.

@@ -30,6 +30,9 @@ export const canContinueSetup = (
   runtimes?.some((health) => health.availability === "ready" && (connected?.includes(health.runtime) ?? false)) ??
   false;
 
-/** A ready provider is checked once a minute; one that needs fixing again on every focus or mount. */
-export const runtimeStaleTime = (runtimes: ReadonlyArray<RuntimeHealth> | undefined): number =>
-  runtimes?.every((health) => health.availability === "ready") ? 60_000 : 0;
+/**
+ * Providers are checked at most once a minute. While one needs fixing, coming back to the window
+ * checks again at once, as after installing or updating Claude Code in a terminal.
+ */
+export const runtimeRefetchOnFocus = (runtimes: ReadonlyArray<RuntimeHealth> | undefined): boolean | "always" =>
+  runtimes?.every((health) => health.availability === "ready") ? true : "always";

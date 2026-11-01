@@ -18,7 +18,7 @@ import type {
 } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
-import { runtimeStaleTime } from "./runtime-health.ts";
+import { runtimeRefetchOnFocus } from "./runtime-health.ts";
 import { newer, syncedAgents, syncedMessages, syncedThreads } from "./sync.ts";
 
 export const queryKeys = {
@@ -32,15 +32,23 @@ export const queryKeys = {
   permissions: (agentId: AgentId) => ["agents", agentId, "permissions"] as const,
 };
 
+/**
+ * For a query the event stream keeps current: it never goes stale on its own, so opening a page
+ * that shows it reads nothing. A fresh `Ready` still refetches it (ADR 013).
+ */
+export const followsEvents = { staleTime: Number.POSITIVE_INFINITY } as const;
+
 /** The hobs that are not retired. */
 export const agentsQuery = queryOptions({
   queryKey: queryKeys.agents,
+  ...followsEvents,
   queryFn: syncedAgents(() => call((c) => c.agents.list({ query: {} })), false),
 });
 
 /** Archived hobs: the retired ones, most recently retired first. */
 export const archivedAgentsQuery = queryOptions({
   queryKey: queryKeys.archivedAgents,
+  ...followsEvents,
   queryFn: syncedAgents(
     () => call((c) => c.agents.list({ query: { status: "retired" } })),
     true,
@@ -55,6 +63,7 @@ export const sortArchived = (hobs: ReadonlyArray<Agent>): Array<Agent> =>
 export const threadsQuery = (agentId: AgentId) =>
   queryOptions({
     queryKey: queryKeys.threads(agentId),
+    ...followsEvents,
     queryFn: syncedThreads(
       agentId,
       () => call((c) => c.agents.threads({ params: { agentId }, query: {} })),
@@ -67,6 +76,7 @@ export const threadsQuery = (agentId: AgentId) =>
 export const archivedThreadsQuery = (agentId: AgentId) =>
   queryOptions({
     queryKey: queryKeys.archivedThreads(agentId),
+    ...followsEvents,
     queryFn: syncedThreads(
       agentId,
       () => call((c) => c.agents.threads({ params: { agentId }, query: { archived: "true" } })),
@@ -78,15 +88,16 @@ export const archivedThreadsQuery = (agentId: AgentId) =>
 export const messagesQuery = (threadId: ThreadId) =>
   queryOptions({
     queryKey: queryKeys.messages(threadId),
+    ...followsEvents,
     queryFn: syncedMessages(threadId, () => call((c) => c.threads.messages({ params: { threadId } })), upsertMessage),
   });
 
 export const runtimesQuery = queryOptions({
   queryKey: queryKeys.runtimes,
   queryFn: () => call((c) => c.system.runtimes()),
-  // Coming back from installing or updating Claude Code in a terminal checks again.
-  staleTime: (query) => runtimeStaleTime(query.state.data),
-  refetchOnWindowFocus: true,
+  // Each check runs the providers' CLIs, so opening a page or a thread doesn't check again.
+  staleTime: 60_000,
+  refetchOnWindowFocus: (query) => runtimeRefetchOnFocus(query.state.data),
 });
 
 /** The models a runtime offers a hob's brain. */
