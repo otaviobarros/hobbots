@@ -160,10 +160,15 @@ export const scriptedToolEvents = (
     Stream.flatMap((call) =>
       Stream.callback<RuntimeEvent>((queue) =>
         Effect.gen(function* () {
-          const decision = yield* decideCall(engine, turn.context, request.approvals, call, (event) =>
-            Queue.offerUnsafe(queue, event),
+          const decision = yield* decideCall(
+            engine,
+            turn.context,
+            request.approvals,
+            call,
+            (event) => Queue.offerUnsafe(queue, event),
+            request.redaction,
           );
-          const label = toolLabel(call.tool, call.input);
+          const label = toolLabel(call.tool, call.input, request.redaction?.text);
           if (decision._tag === "Run") {
             const { operation, targets } = decision.verdict;
             yield* Queue.offer(queue, { _tag: "ToolStarted", id: call.id, tool: call.tool, operation, targets, label });

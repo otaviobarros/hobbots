@@ -17,4 +17,5 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [013 — The event journal and resuming the event stream](013-event-journal.md)
 - [014 — Tool policy and enforcement](014-tool-policy-and-enforcement.md)
 - [015 — Approval lifetimes and standing grants](015-approval-lifetimes-and-grants.md)
+- [016 — Client stores for unsent messages](016-client-stores-outside-react.md)
 - [017 — Switching a thread's brain](017-switching-brains.md)

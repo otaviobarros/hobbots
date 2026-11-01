@@ -7,4 +7,5 @@ export * from "./permissions.ts";
 export * from "./ports.ts";
 export * from "./repository.ts";
 export * from "./runtime.ts";
+export * from "./secrets.ts";
 export * from "./tools.ts";

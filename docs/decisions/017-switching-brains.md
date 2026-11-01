@@ -13,7 +13,7 @@ The issue leaves four questions to this ADR: how much history to send verbatim a
 ### Hobbots' transcript is the source of truth
 
 - A thread keeps **one session per runtime**: its runtime, the runtime's session id, and the last message that session has seen. A switch never moves a session. The first turn on a runtime the thread has not used starts a fresh session; switching back to a runtime the thread used before resumes that runtime's own session.
-- A switch reads nothing from the runtime it leaves. The handoff is built from what Hobbots stored: messages, and each reply's tool steps as stored (label and outcome). A step's label can hold the first line of a command, so a briefing can carry a secret typed into one to another provider; the redaction of stored step text that [#168](https://github.com/otaviobarros/hobbots/issues/168) adds will apply to briefings too, since they read the stored steps. A switch away from a brain that is limited, signed out or down works the same as any other.
+- A switch reads nothing from the runtime it leaves. The handoff is built from what Hobbots stored: messages, and each reply's tool steps as stored (label and outcome). Tool calls are redacted before they are stored ([#168](https://github.com/otaviobarros/hobbots/issues/168)), so a secret in a command never reaches another provider through a briefing either. A switch away from a brain that is limited, signed out or down works the same as any other.
 - Files a hob changed are already in its folders, so the handoff does not repeat them.
 
 ### The briefing

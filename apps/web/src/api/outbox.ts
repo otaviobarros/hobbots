@@ -115,14 +115,3 @@ export const tryAgain = (place: WaitingPlace) => {
 
 /** A fresh page has moved to the thread its first message started. */
 export const followed = (place: WaitingPlace) => change(place, (old) => ({ ...old, startedThread: undefined }));
-
-/** Drafts carried from a fresh page into the thread it started, so an edit in progress survives. */
-const carried = new Map<WaitingPlace, string>();
-
-export const carryDraft = (place: WaitingPlace, draft: string) => {
-  if (draft !== "") carried.set(place, draft);
-};
-
-export const carriedDraft = (place: WaitingPlace): string => carried.get(place) ?? "";
-
-export const dropCarriedDraft = (place: WaitingPlace) => carried.delete(place);

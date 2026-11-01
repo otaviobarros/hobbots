@@ -6,6 +6,7 @@ export * from "./ids.ts";
 export * from "./look.ts";
 export * from "./message.ts";
 export * from "./policy.ts";
+export * from "./redaction.ts";
 export * from "./revision.ts";
 export * from "./roles.ts";
 export * from "./runtime.ts";

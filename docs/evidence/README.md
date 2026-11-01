@@ -38,6 +38,12 @@ What this run did not prove, each with the issue that tracks it.
 - **Checks** cites test case IDs (STD-TEST-001) for automated checks. A manual step has no ID.
 - **Gaps** lists what is left, so the status page can show it under "Not proven yet".
 
+## Manual checklists
+
+A check that needs a real runtime, a packaged app or a real Mac, and that will be run again, keeps its steps in [`checklists/`](checklists/). Each run of a checklist leaves a new record that cites its step numbers in `Manual` rows.
+
+- [Tools under policy on real Claude Code](checklists/tools-under-policy.md)
+
 ## Records
 
 - [2026-10-29 The background service](2026-10-29-background-service.md)
@@ -45,3 +51,4 @@ What this run did not prove, each with the issue that tracks it.
 - [2026-10-30 Three hobs chat, edit and retire independently](2026-10-30-multi-hob.md)
 - [2026-10-31 Hob edits reach existing threads](2026-10-31-hob-edits-existing-threads.md)
 - [2026-10-31 Reliable chat survives a crash, time offline, an expired cursor and a restored backup](2026-10-31-reliable-chat.md)
+- [2026-11-01 Hobs use tools within their folders, under the policy](2026-11-01-tools-under-policy.md)

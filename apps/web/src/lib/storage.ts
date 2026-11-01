@@ -15,3 +15,11 @@ export const writeStored = (key: string, value: unknown) => {
     // Storage can be unavailable (private mode); the UI still works without it.
   }
 };
+
+export const removeStored = (key: string) => {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Storage can be unavailable (private mode); there is nothing to remove then.
+  }
+};
