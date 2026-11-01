@@ -37,7 +37,7 @@ import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { type RuntimeEvent, runtimeAdapters, type ToolAccess, type ToolStartedEvent } from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
-import { nextSteps, stepsSinceCompleted, uncertainCalls } from "./steps.ts";
+import { nextSteps, uncertainCalls } from "./steps.ts";
 import { HobTools, narrows } from "./tools.ts";
 
 interface Reply {
@@ -542,9 +542,10 @@ export class ChatService extends Context.Service<
           // brain left, so the new one does not redo or contradict that work.
           const switched = continued !== null && continued.runtime !== brain.runtime;
           const briefed = yield* brief(thread, brain.runtime, switched ? [...before, continued] : before, switched);
-          // Every turn hears of the calls cut off since the thread's last completed reply, whichever
-          // brain runs it, so none is repeated before it is checked (EX-004). Continue names its own.
-          const uncertain = uncertainCalls(stepsSinceCompleted(before));
+          // Every turn hears of every call the thread left uncertain, whichever brain runs it, since a
+          // reply that completes is no proof one was checked: none is repeated unchecked (EX-004).
+          // Continue names the continued reply's own.
+          const uncertain = uncertainCalls(before.flatMap((m) => (m.role === "assistant" ? m.steps : [])));
           const briefing = [briefed, uncertain].filter((part) => part !== null).join("\n\n") || null;
           const changed = yield* instructionsChanged(
             thread,

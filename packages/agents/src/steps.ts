@@ -1,4 +1,4 @@
-import type { Message, ReplyStep } from "@hobbots/domain";
+import type { ReplyStep } from "@hobbots/domain";
 import type { RuntimeEvent } from "./runtime.ts";
 
 /** Replaces the step with `step.id`, merged into it, or appends `step` when there is none. */
@@ -72,17 +72,8 @@ export const uncertainCalls = (steps: ReadonlyArray<ReplyStep>): string | null =
   });
   if (calls.length === 0) return null;
   return [
-    "These tool calls were running when a reply was cut off, so Hobbots does not know whether they took effect:",
+    "Earlier in this thread, these tool calls were running when a reply was cut off, so Hobbots does not know whether they took effect:",
     ...calls,
     "Do not run any of them again until you have checked whether it took effect, and tell the user what you found.",
   ].join("\n");
-};
-
-/**
- * The steps of the replies since the thread's last reply that completed, oldest first: a completed
- * turn was told about the uncertain calls before it, so those are left to its answer.
- */
-export const stepsSinceCompleted = (transcript: ReadonlyArray<Message>): ReadonlyArray<ReplyStep> => {
-  const last = transcript.findLastIndex((m) => m.role === "assistant" && m.status === "complete");
-  return transcript.slice(last + 1).flatMap((m) => (m.role === "assistant" ? m.steps : []));
 };

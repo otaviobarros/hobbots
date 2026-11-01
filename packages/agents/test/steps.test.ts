@@ -1,6 +1,6 @@
-import type { Message, ReplyStep } from "@hobbots/domain";
+import type { ReplyStep } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { nextSteps, stepsSinceCompleted, uncertainCalls } from "../src/steps.ts";
+import { nextSteps, uncertainCalls } from "../src/steps.ts";
 
 const call = { tool: "Bash", operation: "run-commands", targets: ["/work"] } as const;
 const started = { _tag: "ToolStarted", id: "t1", ...call, label: "Running pnpm test" } as const;
@@ -85,21 +85,5 @@ describe("uncertainCalls", () => {
     ]);
     expect(told).toContain("Do not run any of them again");
     expect(uncertainCalls(steps.slice(0, 2))).toBeNull();
-  });
-});
-
-describe("stepsSinceCompleted", () => {
-  it("keeps the steps of the replies after the thread's last completed reply", () => {
-    const reply = (status: Message["status"], id: string): Message =>
-      ({
-        role: "assistant",
-        status,
-        steps: [{ id, kind: "tool", label: id, state: "uncertain", call }],
-      }) as unknown as Message;
-    const prompt = { role: "user", status: "complete", steps: [] } as unknown as Message;
-    const steps = (transcript: ReadonlyArray<Message>) => stepsSinceCompleted(transcript).map((step) => step.id);
-    expect(steps([reply("interrupted", "a"), prompt, reply("stopped", "b"), prompt])).toEqual(["a", "b"]);
-    expect(steps([reply("interrupted", "a"), prompt, reply("complete", "c"), prompt])).toEqual([]);
-    expect(steps([])).toEqual([]);
   });
 });

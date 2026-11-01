@@ -152,7 +152,7 @@ describe("a tool call cut off by a crash", () => {
   });
 
   // covers EX-004, CH-008
-  it("[TC-EX-015] tells every turn after the crash, a queued one included, about the uncertain call until a reply completes", async () => {
+  it("[TC-EX-015] tells every turn after the crash about the uncertain call, a queued one and one after a completed reply included", async () => {
     const briefings = await Effect.gen(function* () {
       const told: Array<string | null> = [];
       const release = yield* Deferred.make<void>();
@@ -181,17 +181,16 @@ describe("a tool call cut off by a crash", () => {
       yield* chat.stop(thread.id);
       yield* settled(2);
       yield* lastReply(thread.id, (reply) => reply.status === "complete");
-      // A reply completed after hearing of it, so the next turn is not told again.
+      // A reply that completes may not have checked it, so the next turn is told again.
       yield* chat.sendPrompt(thread.id, "Thanks");
       yield* settled(3);
       return told;
     }).pipe(Effect.provide(firstHub), Effect.scoped, Effect.runPromise);
 
     expect(briefings).toHaveLength(3);
-    for (const briefing of briefings.slice(0, 2)) {
+    for (const briefing of briefings) {
       expect(briefing).toContain("- Running git push (Bash, push on origin)");
       expect(briefing).toContain("Do not run any of them again until you have checked whether it took effect");
     }
-    expect(briefings[2]).toBeNull();
   });
 });
