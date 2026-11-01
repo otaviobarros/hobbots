@@ -160,9 +160,7 @@ test("[TC-CH-163] an archived thread opened by its address shows no composer whi
 });
 
 // covers CH-009
-test("[TC-CH-164] an archived thread whose lookup fails stays without a composer until Try again", async ({
-  page,
-}) => {
+test("[TC-CH-164] an archived thread whose lookup fails stays without a composer until Try again", async ({ page }) => {
   const { current, hob, archived } = await hubWithArchive();
   await page.route(archivedList, (route) => route.fulfill({ status: 500, body: "" }));
   await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${archived.id}`);
