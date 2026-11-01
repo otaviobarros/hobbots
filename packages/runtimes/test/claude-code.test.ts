@@ -31,9 +31,11 @@ import {
   modelListMaxAge,
   parseVersion,
   runtimePath,
+  SANDBOX_NOTE,
   stderrTail,
   toRuntimeModels,
   turnEvents,
+  turnInstructions,
   turnPrompt,
 } from "../src/claude-code.ts";
 import { ProcessSandbox } from "../src/sandbox.ts";
@@ -458,5 +460,15 @@ describe("reading a Claude Code turn", () => {
     expect(() => read(limit({ status: "rejected", resetsAt: 1_800_000_000 }))).toThrow(
       new RuntimeLimitReached({ resetsAt: new Date(1_800_000_000_000).toISOString() }),
     );
+  });
+});
+
+describe("the sandbox note", () => {
+  // covers PE-005
+  it("[TC-PE-087] tells a sandboxed turn that Git's config and hooks are read-only, and no other turn", () => {
+    expect(turnInstructions("Be brief.", true)).toBe(`Be brief.\n\n${SANDBOX_NOTE}`);
+    expect(turnInstructions("", true)).toBe(SANDBOX_NOTE);
+    expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
+    expect(SANDBOX_NOTE).toContain("could not write config file .git/config: Operation not permitted");
   });
 });

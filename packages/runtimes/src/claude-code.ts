@@ -84,6 +84,21 @@ const runtimeEnv = (binary: string): NodeJS.ProcessEnv => ({
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * What a sandboxed turn is told about the sandbox, after the hob's own instructions: Git's config
+ * and hooks in each repository are read-only (ADR 014), so Git's warning when it cannot write them
+ * is expected, and the changes that need them are the user's to make.
+ */
+export const SANDBOX_NOTE = [
+  "Your commands run in a sandbox. In every Git repository, .git/config and .git/hooks are read-only.",
+  "Git prints `could not write config file .git/config: Operation not permitted` when it tries to change them, for example when deleting a branch; if the command otherwise succeeded, that warning is expected and not worth mentioning.",
+  "A change that needs .git/config or a hook, such as adding a remote, setting an upstream or installing a hook, fails here: ask the user to make it.",
+].join(" ");
+
+/** The text appended to Claude Code's system prompt: the hob's instructions, and the sandbox note when sandboxed. */
+export const turnInstructions = (instructions: string, sandboxed: boolean) =>
+  sandboxed ? [instructions, SANDBOX_NOTE].filter((part) => part !== "").join("\n\n") : instructions;
+
 /** The user's own Claude Code configuration folder, which the sandbox keeps closed. */
 const userConfigFolder = () => process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 
@@ -932,7 +947,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   systemPrompt: {
                     type: "preset",
                     preset: "claude_code",
-                    append: request.instructions,
+                    append: turnInstructions(request.instructions, sandboxed),
                   },
                   ...(request.sessionId ? { resume: request.sessionId } : {}),
                   // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
