@@ -30,7 +30,6 @@ const thread = new Thread({
   id: threadId,
   agentId,
   title: "New thread",
-  runtimeSessionId: null,
   createdAt: now,
   updatedAt: now,
 });

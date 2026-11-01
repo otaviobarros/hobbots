@@ -34,7 +34,6 @@ const thread = (id: string, agentId: string, title: string, updatedAt = now) =>
     id: ThreadId.make(id),
     agentId: AgentId.make(agentId),
     title,
-    runtimeSessionId: null,
     createdAt: now,
     updatedAt,
   });

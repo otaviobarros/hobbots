@@ -226,7 +226,11 @@ test("[TC-AG-088] picking a voice and a length in the profile saves them as the 
 interface Permissions {
   readonly configVersion: number;
   readonly folders: ReadonlyArray<string>;
-  readonly policy: { readonly ownFolders: ReadonlyArray<string>; readonly overrides: Record<string, string> };
+  readonly policy: {
+    readonly ownFolders: ReadonlyArray<string>;
+    readonly overrides: Record<string, string>;
+    readonly signCommits?: boolean;
+  };
   readonly decisions: Record<string, string>;
 }
 
@@ -278,6 +282,36 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
   await expect
     .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
     .toMatchObject({ configVersion: 5, folders: [], policy: { ownFolders: [], overrides: {} } });
+});
+
+// covers AG-004, PE-005
+test("[TC-PE-086] the Permissions tab turns commit signing with 1Password on, with its SSH warning, and off", async ({
+  page,
+}) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
+  await page.getByRole("tab", { name: "Permissions" }).click();
+
+  const signing = page.getByRole("switch", { name: "Sign commits with my 1Password key" });
+  await expect(signing).not.toBeChecked();
+  await expect(page.getByText("Pip's commits are unsigned.")).toBeVisible();
+  await signing.click();
+  await expect(signing).toBeChecked();
+  await expect(page.getByText(/signed when your Git config asks for it/)).toBeVisible();
+  await expect(page.getByText(/can also use your SSH keys to log in to servers/)).toBeVisible();
+  await expect
+    .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
+    .toMatchObject({ configVersion: 2, policy: { signCommits: true } });
+
+  await page.reload();
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  await expect(signing).toBeChecked();
+  await signing.click();
+  await expect(signing).not.toBeChecked();
+  await expect
+    .poll(async () => (await api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`)).policy)
+    .not.toHaveProperty("signCommits");
 });
 
 // covers PE-001

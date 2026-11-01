@@ -7,6 +7,7 @@ import type {
   Message,
   MessageId,
   Thread,
+  ThreadCheckpoint,
   ThreadId,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
@@ -61,5 +62,9 @@ export class HobbotsRepository extends Context.Service<
     ) => Effect.Effect<Option.Option<Committed<{ readonly message: Message; readonly reply: Message }>>>;
     /** Deletes a message that is still queued in the thread; none, and nothing deleted, when it is not. */
     readonly removeQueuedMessage: (threadId: ThreadId, id: MessageId) => Effect.Effect<Option.Option<Committed<void>>>;
+    /** The thread's stored summary of older messages, if a handoff made one (ADR 017). */
+    readonly findCheckpoint: (threadId: ThreadId) => Effect.Effect<Option.Option<ThreadCheckpoint>>;
+    /** Replaces the thread's stored summary. */
+    readonly saveCheckpoint: (checkpoint: ThreadCheckpoint) => Effect.Effect<void>;
   }
 >()("@hobbots/agents/HobbotsRepository") {}

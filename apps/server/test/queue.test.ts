@@ -39,7 +39,6 @@ const leftQueued = Effect.gen(function* () {
       id: THREAD_ID,
       agentId: HOB_ID,
       title: "Plans",
-      runtimeSessionId: null,
       createdAt: at,
       updatedAt: at,
     }),

@@ -47,7 +47,6 @@ describe("HobbotsRepository", () => {
           id: threadId,
           agentId,
           title: "New thread",
-          runtimeSessionId: null,
           createdAt: now,
           updatedAt: now,
         }),
@@ -57,7 +56,8 @@ describe("HobbotsRepository", () => {
           id: threadId,
           agentId,
           title: "Renamed",
-          runtimeSessionId: "s1",
+          sessions: [{ runtime: "claude-code", sessionId: "s1", seenThrough: null }],
+          brain: { runtime: "codex", model: "gpt", effort: null },
           createdAt: now,
           updatedAt: now,
         }),
@@ -78,7 +78,8 @@ describe("HobbotsRepository", () => {
     expect(result.agents.map((a) => [a.name, a.lookSeed, a.lookColor])).toEqual([["Aldric", 1234, "moss"]]);
     expect(Option.getOrThrow(result.thread)).toMatchObject({
       title: "Renamed",
-      runtimeSessionId: "s1",
+      sessions: [{ runtime: "claude-code", sessionId: "s1", seenThrough: null }],
+      brain: { runtime: "codex", model: "gpt", effort: null },
     });
     expect(result.messages.map((m) => [m.id, m.content, m.status])).toEqual([
       ["b", "b2", "complete"],
@@ -105,7 +106,7 @@ describe("HobbotsRepository", () => {
         createdAt: now,
       });
     const thread = (id: string) =>
-      new Thread({ id: ThreadId.make(id), agentId, title: id, runtimeSessionId: null, createdAt: now, updatedAt: now });
+      new Thread({ id: ThreadId.make(id), agentId, title: id, createdAt: now, updatedAt: now });
 
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
@@ -277,9 +278,7 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertThread(
-        new Thread({ id: threadId, agentId, title: "Queue", runtimeSessionId: null, createdAt: now, updatedAt: now }),
-      );
+      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Queue", createdAt: now, updatedAt: now }));
       const user = (id: string, status: Message["status"]) =>
         new Message({ ...message(id, status), role: "user", configVersion: null });
       yield* repo.upsertMessage(user("q1", "queued"));

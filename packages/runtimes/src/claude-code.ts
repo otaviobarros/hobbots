@@ -40,7 +40,7 @@ import {
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
 import { type CallDecision, decideCall, refusal, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
-import { CLAUDE_CODE_MODEL_HOSTS, ProcessSandbox } from "./sandbox.ts";
+import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox } from "./sandbox.ts";
 import { offeredTools, toolLabel } from "./tool-calls.ts";
 
 export interface ClaudeCodeConfig {
@@ -562,22 +562,26 @@ export const turnEvents = () => {
 /**
  * The prompt Claude Code receives. On resume Claude Code keeps the system prompt the session started
  * with, so instructions it may not follow come first in the turn itself. The block may repeat on
- * later turns, so it states the current instructions rather than announcing a change.
+ * later turns, so it states the current instructions rather than announcing a change. A briefing on
+ * what the session missed (ADR 017) comes next, then the user's prompt.
  */
 export const turnPrompt = (
-  request: Pick<PromptRequest, "prompt" | "sessionId" | "instructions" | "instructionsChanged">,
-) =>
-  request.sessionId && request.instructionsChanged
-    ? [
-        "<current-instructions>",
-        "These are your current instructions. Follow them in place of the ones in your system prompt and any earlier ones:",
-        "",
-        request.instructions,
-        "</current-instructions>",
-        "",
-        request.prompt,
-      ].join("\n")
-    : request.prompt;
+  request: Pick<PromptRequest, "prompt" | "briefing" | "sessionId" | "instructions" | "instructionsChanged">,
+) => {
+  const instructions =
+    request.sessionId && request.instructionsChanged
+      ? [
+          "<current-instructions>",
+          "These are your current instructions. Follow them in place of the ones in your system prompt and any earlier ones:",
+          "",
+          request.instructions,
+          "</current-instructions>",
+          "",
+        ]
+      : [];
+  const briefing = request.briefing ? [request.briefing, ""] : [];
+  return [...instructions, ...briefing, request.prompt].join("\n");
+};
 
 /** A turn with tools: the context every call is decided under, its folders and the tools offered. */
 export interface ToolTurn {
@@ -869,6 +873,9 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               : [userConfigFolder(), request.tools.runtimeFolder];
             yield* Effect.promise(() => adoptSession(target, [source], sessionId));
           }
+          // The hob signs commits with the user's 1Password key only when the user turned that on.
+          const signingAgent =
+            sandboxed && tools.context.hob.signCommits === true ? onePasswordAgentSocket() : undefined;
           const prepared = sandboxed
             ? yield* Effect.acquireRelease(
                 sandbox.prepare({
@@ -881,6 +888,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   dataFolder: tools.context.dataFolder,
                   binary: absoluteBinary,
                   runtimeFolder: tools.runtimeFolder,
+                  ...(signingAgent ? { signingAgent } : {}),
                   allowedHosts: CLAUDE_CODE_MODEL_HOSTS,
                   decideHost: (host) =>
                     Effect.runPromise(
@@ -942,6 +950,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                     append: turnInstructions(request.instructions, sandboxed),
                   },
                   ...(request.sessionId ? { resume: request.sessionId } : {}),
+                  // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
+                  ...(signingAgent ? { sandbox: { network: { allowUnixSockets: [signingAgent] } } } : {}),
                   ...brainOptions(request),
                 },
               }),

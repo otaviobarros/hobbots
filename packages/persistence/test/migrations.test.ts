@@ -10,6 +10,8 @@ import hobRoles from "../src/migrations/0010_hob_roles.ts";
 import hobIdentity from "../src/migrations/0013_hob_identity.ts";
 import hobTone from "../src/migrations/0014_hob_tone.ts";
 import hobPolicy from "../src/migrations/0015_hob_policy.ts";
+import threadBrains from "../src/migrations/0020_thread_brains.ts";
+import hobSignCommits from "../src/migrations/0021_hob_sign_commits.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -537,5 +539,154 @@ describe("0015_hob_policy", () => {
         agent: { id: "pip", policy: { ownFolders: [], hiddenSharedFolders: [], overrides: {} } },
       },
     ]);
+  });
+});
+
+describe("0020_thread_brains", () => {
+  // covers DP-003, RT-001
+  it("[TC-DP-035] moves each thread's Claude Code session into its sessions and records each reply's brain", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+        agentId: "pip",
+        version: 1,
+        roleTitle: "Writer",
+        model: "sonnet",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      for (const [id, session] of [
+        ["bound", "s1"],
+        ["fresh", null],
+      ] as const) {
+        yield* sql`INSERT INTO threads ${sql.insert({
+          id,
+          agentId: "pip",
+          title: id,
+          runtimeSessionId: session,
+          createdAt: "2026-10-28T00:00:00.000Z",
+          updatedAt: "2026-10-28T00:00:00.000Z",
+        })}`;
+      }
+      const messages = [
+        { id: "u1", role: "user", status: "complete", configVersion: null, seq: 1 },
+        { id: "a1", role: "assistant", status: "complete", configVersion: 1, seq: 2 },
+        { id: "q1", role: "user", status: "queued", configVersion: null, seq: 3 },
+      ];
+      for (const m of messages) {
+        yield* sql`INSERT INTO messages ${sql.insert({
+          ...m,
+          threadId: "bound",
+          content: m.id,
+          createdAt: "2026-10-28T00:00:00.000Z",
+        })}`;
+      }
+      yield* threadBrains;
+      return {
+        threads: yield* sql`SELECT id, sessions, brain FROM threads ORDER BY id`,
+        messages: yield* sql`SELECT id, runtime, model FROM messages ORDER BY seq`,
+        versions: yield* sql`SELECT runtime FROM agent_config_versions`,
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0020"))), Effect.runPromise);
+
+    expect(result.threads).toEqual([
+      {
+        id: "bound",
+        sessions: JSON.stringify([{ runtime: "claude-code", sessionId: "s1", seenThrough: "a1" }]),
+        brain: null,
+      },
+      { id: "fresh", sessions: "[]", brain: null },
+    ]);
+    expect(result.messages).toEqual([
+      { id: "u1", runtime: null, model: null },
+      { id: "a1", runtime: "claude-code", model: "sonnet" },
+      { id: "q1", runtime: null, model: null },
+    ]);
+    expect(result.versions).toEqual([{ runtime: "claude-code" }]);
+  });
+
+  // covers DP-003
+  it("[TC-DP-036] still reads a thread event journaled before brains existed, with no sessions and no brain", async () => {
+    const before = {
+      _tag: "ThreadUpserted",
+      thread: {
+        id: "t1",
+        agentId: "pip",
+        title: "Hello",
+        runtimeSessionId: "s1",
+        createdAt: "2026-10-28T00:00:00.000Z",
+        updatedAt: "2026-10-28T00:00:00.000Z",
+        revision: 1,
+      },
+    };
+    const database = TestDatabaseAt(migrationsBefore("0020"));
+    const entries = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;
+      yield* sql`INSERT INTO event_journal ${sql.insert({
+        sequence: 1,
+        id: "0b6f2c1e-7a3d-4e8f-9b0a-1c2d3e4f5a6b",
+        type: "ThreadUpserted",
+        schemaVersion: 1,
+        occurredAt: "2026-10-28T00:00:00.000Z",
+        threadId: "t1",
+        payload: JSON.stringify(before),
+      })}`;
+      yield* threadBrains;
+      return yield* (yield* EventJournal).readAfter(0);
+    }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
+
+    expect(entries.map((e) => e.payload)).toMatchObject([
+      { _tag: "ThreadUpserted", thread: { id: "t1", sessions: [], brain: null } },
+    ]);
+  });
+});
+
+describe("0021_hob_sign_commits", () => {
+  // covers AG-004, DP-003
+  it("[TC-DP-037] leaves every existing hob and version unsigned", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+        agentId: "pip",
+        version: 1,
+        roleTitle: "Writer",
+        model: "sonnet",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* hobSignCommits;
+      return {
+        agents: yield* sql`SELECT sign_commits FROM agents`,
+        versions: yield* sql`SELECT sign_commits FROM agent_config_versions`,
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0021"))), Effect.runPromise);
+
+    expect(result.agents.map((row) => Number(row.signCommits))).toEqual([0]);
+    expect(result.versions.map((row) => Number(row.signCommits))).toEqual([0]);
   });
 });

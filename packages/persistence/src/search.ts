@@ -10,6 +10,7 @@ import {
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema, String as Str } from "effect";
 import { SqlClient } from "effect/sql";
+import { threadRows } from "./repositories.ts";
 
 // Search over thread titles and settled messages (CH-006), on SQLite FTS5 or PostgreSQL full-text
 // search (migration 0011). Hobs that retired are left out. On a SQLite file the query runs in a
@@ -127,7 +128,7 @@ const groupHits = (rows: ReadonlyArray<Row>, terms: ReadonlyArray<string>): Arra
   const hits = new Map<string, { thread: Thread; titleMatch: boolean; matchCount: number; matches: MessageMatch[] }>();
   for (const row of rows) {
     // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every revision fits a number.
-    const thread = decodeThread({ ...row, revision: Number(row.revision) });
+    const thread = decodeThread(threadRows([row])[0]);
     let hit = hits.get(thread.id);
     if (!hit) {
       // SQLite answers 0 or 1 where PostgreSQL answers a boolean.

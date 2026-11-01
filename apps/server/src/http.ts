@@ -1,5 +1,15 @@
-import { ChatService, foundAgent, HobbotsRepository, HobLifecycle, HobService, RuntimeAdapter } from "@hobbots/agents";
-import { HobbotsApi, ThreadNotFound } from "@hobbots/api";
+import {
+  ChatService,
+  foundAgent,
+  HobbotsRepository,
+  HobLifecycle,
+  HobService,
+  missingRuntimeHealth,
+  missingRuntimeModels,
+  runtimeAdapters,
+} from "@hobbots/agents";
+import { HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
+import { RuntimeKind, type ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ApprovalsHandlers } from "./approvals.ts";
@@ -37,6 +47,22 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
+    const hobs = yield* HobService;
+    // Making a brain the hob's default edits the hob (a new configuration version), then the thread
+    // follows the hob again. Otherwise only the thread changes (ADR 017).
+    const setBrain = (threadId: ThreadId, { brain, makeDefault }: SetBrainPayload) =>
+      Effect.gen(function* () {
+        if (brain === null || makeDefault !== true) return yield* chat.setBrain(threadId, brain);
+        const thread = yield* repo
+          .findThread(threadId)
+          .pipe(
+            Effect.flatMap(
+              Option.match({ onNone: () => Effect.fail(new ThreadNotFound({ threadId })), onSome: Effect.succeed }),
+            ),
+          );
+        yield* hobs.update(thread.agentId, brain);
+        return yield* chat.setBrain(threadId, null);
+      });
     return handlers.handleAll({
       messages: ({ params }) =>
         repo.findThread(params.threadId).pipe(
@@ -52,13 +78,14 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
       sendNow: ({ params }) => chat.sendNow(params.threadId, params.messageId),
       interrupt: ({ params }) => chat.stop(params.threadId),
       continueReply: ({ params }) => chat.continueReply(params.threadId, params.messageId),
+      setBrain: ({ params, payload }) => setBrain(params.threadId, payload),
     });
   }),
 );
 
 const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
   Effect.gen(function* () {
-    const runtime = yield* RuntimeAdapter;
+    const adapters = yield* runtimeAdapters;
     const installation = yield* Installation;
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
@@ -86,16 +113,26 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     return handlers.handleAll({
       health: () => Effect.succeed(installation),
       activity: () => activity,
-      runtimes: () => runtime.health.pipe(Effect.map((health) => [health])),
+      // Every runtime, Claude Code first; one the hub has no adapter for is listed as unavailable.
+      runtimes: () =>
+        Effect.forEach(
+          RuntimeKind.literals,
+          (kind) => adapters(kind)?.health ?? Effect.succeed(missingRuntimeHealth(kind)),
+          {
+            concurrency: "unbounded",
+          },
+        ),
     });
   }),
 );
 
-// Only Claude Code is wired, so every runtime kind is answered by the one adapter.
+// A runtime the hub has no adapter for offers no models.
 const RuntimesHandlers = HttpApiBuilder.group(HobbotsApi, "runtimes", (handlers) =>
   Effect.gen(function* () {
-    const runtime = yield* RuntimeAdapter;
-    return handlers.handleAll({ models: () => runtime.models });
+    const adapters = yield* runtimeAdapters;
+    return handlers.handleAll({
+      models: ({ params }) => adapters(params.runtime)?.models ?? Effect.succeed(missingRuntimeModels(params.runtime)),
+    });
   }),
 );
 
