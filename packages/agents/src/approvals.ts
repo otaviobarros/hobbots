@@ -24,7 +24,7 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Duration, Effect, Layer, Option, Semaphore } from "effect";
-import { GrantService, ruleOffered } from "./grants.ts";
+import { GrantService, ruleHolds, ruleOffered } from "./grants.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { ApprovalAction, ApprovalOutcome, PendingApproval, ToolAccess, TurnApprovals } from "./runtime.ts";
@@ -103,6 +103,8 @@ export interface TurnApprovalsHandle {
 interface Waiter {
   readonly owner: TurnApprovalsHandle;
   readonly agentId: AgentId;
+  /** The hob's tool access as it is now, read when a decision saves grants. */
+  readonly currentAccess: Effect.Effect<ToolAccess | null>;
   readonly decision: Deferred.Deferred<ApprovalOutcome>;
 }
 
@@ -314,7 +316,7 @@ export class ApprovalService extends Context.Service<
                       return { approvalId: saved.id, decision: Effect.succeed({ _tag: "Expired" }) } as PendingApproval;
                     }
                     const decision = yield* Deferred.make<ApprovalOutcome>();
-                    waiters.set(saved.id, { owner: handle, agentId: owner.agentId, decision });
+                    waiters.set(saved.id, { owner: handle, agentId: owner.agentId, currentAccess, decision });
                     return {
                       approvalId: saved.id,
                       // A wait given up (the call was aborted) or past the request's expiry expires it.
@@ -351,6 +353,20 @@ export class ApprovalService extends Context.Service<
           ? hobActive(approval.agentId)
           : Effect.succeed(false);
 
+      // Saves the decision with its grants only while the hob's access now still holds each rule, so
+      // a narrowing since the request was asked, or one racing this decision, leaves no grant behind.
+      const saveGrants = (approval: ApprovalRequest, next: ApprovalRequest, saving: ReadonlyArray<Grant>) =>
+        Effect.gen(function* () {
+          const access = yield* waiters.get(approval.id)?.currentAccess ?? Effect.succeed(null);
+          if (!saving.every((grant) => ruleHolds(access, grant.rule))) return "narrowed" as const;
+          return yield* settle(next, saving);
+        });
+
+      const store = (approval: ApprovalRequest, next: ApprovalRequest, saving: ReadonlyArray<Grant>) =>
+        saving.length === 0 || Option.isNone(grants)
+          ? settle(next)
+          : grants.value.exclusive(saveGrants(approval, next, saving));
+
       const decide = Effect.fn("ApprovalService.decide")(function* (id: ApprovalId, input: ApprovalDecisionInput) {
         return yield* Semaphore.withPermit(
           lock,
@@ -374,7 +390,10 @@ export class ApprovalService extends Context.Service<
             }
             const denyReason = input.decision === "deny" ? input.reason?.trim() || null : null;
             const next = new ApprovalRequest({ ...approval, state, lifetime, denyReason, decidedAt: now });
-            const saved = yield* settle(next, grantsFor(approval, input, now));
+            const saved = yield* store(approval, next, grantsFor(approval, input, now));
+            if (saved === "narrowed") {
+              return yield* new ApprovalNotGrantable({ approvalId: id, lifetime: lifetime ?? "once" });
+            }
             if (Option.isNone(saved)) return yield* new ApprovalClosed({ approvalId: id, state: "expired" });
             yield* wake(saved.value);
             return saved.value;

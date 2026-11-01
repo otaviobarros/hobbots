@@ -88,11 +88,59 @@ describe("Claude Code tool calls as policy requests", () => {
       force: false,
       toDefaultBranch: false,
       cwd: "/work",
+      exact: true,
     });
     expect(push("git push")).toMatchObject({ remote: "origin", toDefaultBranch: true });
     expect(push("git push origin HEAD:refs/heads/main")).toMatchObject({ branch: "main", toDefaultBranch: true });
     expect(push("git push --force-with-lease origin feature")).toMatchObject({ force: true });
     expect(push("git push origin +feature")).toMatchObject({ branch: "feature", force: true });
+    expect(push("git push origin :feature")).toMatchObject({ branch: "feature", force: true });
+  });
+
+  it("decides every branch a push updates, and marks a push its words do not fully describe as inexact", () => {
+    const pushes = (command: string) => commandRequests(command, "/work").filter((r) => r._tag === "Push");
+    expect(pushes("git push origin feature main")).toEqual([
+      {
+        _tag: "Push",
+        remote: "origin",
+        branch: "feature",
+        force: false,
+        toDefaultBranch: false,
+        cwd: "/work",
+        exact: true,
+      },
+      {
+        _tag: "Push",
+        remote: "origin",
+        branch: "main",
+        force: false,
+        toDefaultBranch: true,
+        cwd: "/work",
+        exact: true,
+      },
+    ]);
+    expect(pushes("git push -u origin feature")).toMatchObject([{ branch: "feature", exact: true }]);
+    for (const command of [
+      "git push --force-with-lease origin feature",
+      "git push -o ci.skip origin feature",
+      "git -C ../sibling push origin feature",
+      "git -c push.default=matching push origin feature",
+      "cd sub && git push origin feature",
+    ]) {
+      expect({ command, exact: pushes(command).map((p) => p._tag === "Push" && p.exact) }).toEqual({
+        command,
+        exact: pushes(command).map(() => false),
+      });
+    }
+    expect(pushes("git push --all origin")).toMatchObject([{ toDefaultBranch: true, exact: false }]);
+    expect(pushes("git push --tags origin feature")).toMatchObject([{ toDefaultBranch: true, exact: false }]);
+  });
+
+  it("names no exact paths or words in a line that changes folder", () => {
+    expect(commandRequests("cd sub && rm build", "/work")).toEqual([
+      { _tag: "Command", operation: "run-commands", cwd: "/work", words: null },
+      { _tag: "Files", operation: "delete-files", paths: ["build"], cwd: "/work", exact: false },
+    ]);
   });
 
   it("labels each step from the call's own arguments", () => {
