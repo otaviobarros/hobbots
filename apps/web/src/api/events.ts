@@ -29,6 +29,7 @@ import {
   startGeneration,
   syncState,
 } from "./sync.ts";
+import { applyTaskEvent } from "./tasks.ts";
 
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
 const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady));
@@ -131,6 +132,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "GrantCreated":
     case "GrantRevoked":
       void grantsChanged(queryClient);
+      return;
+    // The rest change Tasks and Quests (ADR 018).
+    default:
+      applyTaskEvent(queryClient, event);
       return;
   }
 };

@@ -172,6 +172,8 @@ export class TaskRepository extends Context.Service<
     readonly handOff: (artifactId: ArtifactId, toTaskId: TaskId, at: string) => Changed<HandOff>;
     /** The Task and everything under it. */
     readonly readTree: (taskId: TaskId) => Effect.Effect<Option.Option<TaskTree>>;
+    /** The tree of each Task a request in the thread started, oldest first. */
+    readonly readThreadTrees: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<TaskTree>>;
     readonly findQuest: (questId: QuestId) => Effect.Effect<Option.Option<Quest>>;
   }
 >()("@hobbots/agents/TaskRepository") {}

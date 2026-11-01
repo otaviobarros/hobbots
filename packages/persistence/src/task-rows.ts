@@ -11,6 +11,7 @@ import {
   Task,
   type TaskId,
   TaskTree,
+  type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import type { SqlClient } from "effect/sql";
@@ -171,5 +172,18 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
       });
     });
 
-  return { task, treeOf, questsOn, quest, attempt, question, artifact, readTree };
+  /** The trees of the Tasks a thread's requests started, oldest first. */
+  const threadTrees = (threadId: ThreadId) =>
+    Effect.gen(function* () {
+      const tops = yield* sql<Row>`SELECT * FROM tasks WHERE thread_id = ${threadId} AND parent_id IS NULL
+        ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("task")));
+      const trees: Array<TaskTree> = [];
+      for (const top of tops) {
+        const tree = yield* readTree(top.id);
+        if (tree !== null) trees.push(tree);
+      }
+      return trees;
+    });
+
+  return { task, treeOf, questsOn, quest, attempt, question, artifact, readTree, threadTrees };
 };

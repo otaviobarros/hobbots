@@ -11,7 +11,7 @@ import {
   PermissionSummary,
   TaskRepository,
 } from "@hobbots/agents";
-import { QuestRead, TaskTreeRead } from "@hobbots/api";
+import { QuestRead, TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -196,6 +196,41 @@ describe("Task and Quest reads", () => {
     );
     expect(replayed.map((entry) => entry.sequence)).toEqual(moved.entries.map((entry) => entry.sequence));
     expect(replayed.map((entry) => entry.type)).toEqual(["TaskStateChanged", "CheckpointRecorded"]);
+  });
+
+  // covers OR-001, OR-007
+  it("[TC-OR-010] reads the Tasks a thread's requests started, each with its tree, oldest first", async () => {
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        yield* quest;
+        const tasks = yield* TaskRepository;
+        yield* tasks.createTask({
+          task: {
+            id: TaskId.make("follow-up"),
+            ownerId: ALDRIC,
+            parentId: null,
+            threadId,
+            brief: "Plan the follow-up",
+            dependsOn: [],
+            createdAt: "2026-11-01T00:00:02.000Z",
+          },
+          delegation: null,
+          milestones: [],
+        });
+      }),
+    );
+
+    const response = await get("/api/threads/t1/tasks");
+    expect(response.status).toBe(200);
+    const read = Schema.decodeUnknownSync(ThreadTasksRead)(response.body);
+    expect(read.trees.map((tree) => tree.tasks.map((task) => task.id))).toEqual([["campaign", "copy"], ["follow-up"]]);
+    expect(read.trees[0]?.quests).toMatchObject([{ id: "q1", leadId: ALDRIC }]);
+    expect(read.cursor).toBe(Schema.decodeUnknownSync(TaskTreeRead)((await get("/api/tasks/campaign")).body).cursor);
+
+    expect(await get("/api/threads/nope/tasks")).toEqual({
+      status: 404,
+      body: { _tag: "ThreadNotFound", threadId: "nope" },
+    });
   });
 
   // covers OR-007

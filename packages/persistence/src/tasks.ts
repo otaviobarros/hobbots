@@ -649,6 +649,7 @@ export const TaskRepositoryLive = Layer.effect(
       escalateQuestion,
       handOff,
       readTree: (taskId) => read.readTree(taskId).pipe(Effect.map(Option.fromNullishOr), Effect.orDie),
+      readThreadTrees: (threadId) => read.threadTrees(threadId).pipe(Effect.orDie),
       findQuest: (questId) =>
         read.quest(questId).pipe(
           Effect.map(([quest]) => Option.fromNullishOr(quest)),
