@@ -25,6 +25,8 @@ Every change follows the [engineering standards](docs/standards/README.md). Befo
 | Tests                       | [testing](docs/standards/testing.md)                                                         | [Project workflow guide](docs/agent-engineering.md#checks)                                                                                                |
 | Docs, commits and decisions | [docs](docs/standards/docs.md)                                                               | [ADRs](docs/decisions/README.md), [status](docs/STATUS.md)                                                                                                |
 
+Before you write a mechanism such as a parser, client, retry loop or cache, check whether an installed library already provides it, Effect first (STD-DUP-007).
+
 Read the [MVP requirements](docs/product/mvp-requirements.md) and [open questions](docs/product/open-questions.md) before you plan.
 
 ## Workflow
