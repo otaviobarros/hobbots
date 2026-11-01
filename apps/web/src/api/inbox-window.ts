@@ -8,7 +8,7 @@ export const byClosing = (a: ApprovalRequest, b: ApprovalRequest): number =>
   bytewise(b.decidedAt ?? b.createdAt, a.decidedAt ?? a.createdAt) || bytewise(b.id, a.id);
 
 /** Oldest first, as the hub lists them. */
-const byCreation = (a: ApprovalRequest, b: ApprovalRequest): number =>
+export const byCreation = (a: ApprovalRequest, b: ApprovalRequest): number =>
   bytewise(a.createdAt, b.createdAt) || bytewise(a.id, b.id);
 
 /**

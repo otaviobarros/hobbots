@@ -11,10 +11,13 @@ import { Empty, InboxHistory } from "./inbox-history.tsx";
 import { type InboxTab, pendingCount, selectedRequest, tabRequests } from "./inbox-items.ts";
 import { InboxList, InboxTabs } from "./inbox-list.tsx";
 import { messages } from "./messages.ts";
+import { useWithShown } from "./shown-request.ts";
 import { type InboxDirectory, useInboxDirectory } from "./use-inbox-directory.ts";
 import { useNow } from "./use-now.ts";
 
 const copy = messages;
+
+const NONE: ReadonlyArray<ApprovalRequest> = [];
 
 const EMPTY: Record<Exclude<InboxTab, "history">, { readonly title: string; readonly hint: string }> = {
   needs: { title: copy.allClear, hint: copy.allClearHint },
@@ -29,7 +32,7 @@ const EMPTY: Record<Exclude<InboxTab, "history">, { readonly title: string; read
  */
 export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string | undefined }) {
   const inbox = useQuery(inboxQuery);
-  const approvals = inbox.data ?? [];
+  const approvals = useWithShown(inbox.data ?? NONE, requestId);
   const directory = useInboxDirectory(approvals);
   const requests = tabRequests(approvals, tab, requestId);
   const selected = tab === "history" ? undefined : selectedRequest(requests, requestId);
