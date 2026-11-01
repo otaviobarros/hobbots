@@ -1,5 +1,6 @@
 import {
   type Agent,
+  type AgentId,
   isNarrowerOrEqual,
   narrowest,
   POLICY_OPERATIONS,
@@ -7,7 +8,8 @@ import {
   type PolicyOperation,
   PRESET_DECISIONS,
 } from "@hobbots/domain";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
+import type { HobbotsRepository } from "./repository.ts";
 import type { ToolAccess, ToolPolicy } from "./runtime.ts";
 
 /** The preset's answer for an operation, narrowed by the hob's overrides and every restriction. */
@@ -50,3 +52,11 @@ export class HobTools extends Context.Service<
   /** Every turn chat-only, for hubs and tests that give hobs no tools. */
   static readonly chatOnly = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succeed(null) }));
 }
+
+/** What the hob may do with tools now, read again from its stored policy; null once it is gone. */
+export const accessNow = (repo: HobbotsRepository["Service"], hobTools: HobTools["Service"], agentId: AgentId) =>
+  repo
+    .findAgent(agentId)
+    .pipe(
+      Effect.flatMap(Option.match({ onNone: () => Effect.succeed(null), onSome: (agent) => hobTools.access(agent) })),
+    );

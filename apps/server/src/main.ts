@@ -13,7 +13,7 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import { secretsFromEnv } from "@hobbots/domain";
-import { TaskTools } from "@hobbots/orchestration";
+import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
@@ -92,8 +92,6 @@ const ServerLive = Layer.unwrap(
             HobService.layer,
             PermissionSummary.layer,
             JournalCompaction,
-            // Served to turns that work on a Task (ADR 018); the hub checks every call.
-            TaskTools.layer(sep === "\\" ? "\\" : "/", config.taskLimits),
             config.runtime === "fake" && config.fakeQuest === "black-friday"
               ? FakeQuestLive(FAKE_QUEST_STEP)
               : Layer.empty,
@@ -101,6 +99,16 @@ const ServerLive = Layer.unwrap(
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))
+      // Before the chat service: its turns offer the Task tools (the hub checks every call), and a
+      // Task's steps run in their own sessions while the hob keeps chatting (ADR 018).
+      .pipe(
+        Layer.provideMerge(
+          StepRunnerLive(config.stepLimits).pipe(
+            Layer.provideMerge(TaskTools.layer(sep === "\\" ? "\\" : "/", config.taskLimits)),
+            Layer.provideMerge(TaskSignal.layer),
+          ),
+        ),
+      )
       // Before the chat service, so turns can ask, and after a restart the requests left pending expire.
       .pipe(Layer.provideMerge(ApprovalService.layer))
       // Before approvals, so a decision can save grants and every call reads the hob's live ones.

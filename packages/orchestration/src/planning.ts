@@ -13,7 +13,7 @@ import {
   type TaskToolInput,
   type TaskToolRefused,
 } from "@hobbots/domain";
-import { Effect } from "effect";
+import { DateTime, Effect } from "effect";
 import {
   type CallScope,
   fromRecords,
@@ -74,7 +74,8 @@ export const makePlanning = ({ tasks, capacity, limits }: Deps) => ({
                 threadId: null,
                 brief: step.brief,
                 dependsOn: (step.after ?? []).map((n) => ids[n - 1] as TaskId),
-                createdAt: scope.at,
+                // A millisecond apart, so the tree lists the steps in the order they were planned.
+                createdAt: DateTime.formatIso(DateTime.add(DateTime.makeUnsafe(scope.at), { milliseconds: index })),
               },
               delegation: null,
               milestones,
