@@ -40,7 +40,15 @@ import {
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
-import { type CallDecision, decideCall, refusal, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
+import {
+  approvalNote,
+  type CallDecision,
+  decideCall,
+  refusal,
+  startCall,
+  type ToolCall,
+  UNKNOWN_TOOL,
+} from "./approval.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox } from "./sandbox.ts";
 import { offeredTools, toolLabel } from "./tool-calls.ts";
 import { fullToolOutput } from "./tool-output.ts";
@@ -97,9 +105,22 @@ export const SANDBOX_NOTE = [
   "A change that needs .git/config or a hook, such as adding a remote, setting an upstream or installing a hook, fails here: ask the user to make it.",
 ].join(" ");
 
-/** The text appended to Claude Code's system prompt: the hob's instructions, and the sandbox note when sandboxed. */
-export const turnInstructions = (instructions: string, sandboxed: boolean) =>
-  sandboxed ? [instructions, SANDBOX_NOTE].filter((part) => part !== "").join("\n\n") : instructions;
+/**
+ * What a turn that can ask the user is told about approvals: the hob never sees the request, so the
+ * note on a tool result is its only record that it asked (#282).
+ */
+export const APPROVAL_NOTE = [
+  "Some of your tool calls wait for the user to approve them. The user sees the approval request; you do not.",
+  "When the user approved a call, its result ends with a note that says so and for how long. When they deny one, the result says it did not run and gives their reason if they wrote one.",
+  "A result without such a note needed no approval. Go by these notes when you tell the user what you asked; never guess whether a request appeared.",
+].join(" ");
+
+/**
+ * The text appended to Claude Code's system prompt: the hob's instructions, the approval note when
+ * the turn can ask the user, and the sandbox note when sandboxed.
+ */
+export const turnInstructions = (instructions: string, sandboxed: boolean, asks = false) =>
+  [instructions, asks ? APPROVAL_NOTE : "", sandboxed ? SANDBOX_NOTE : ""].filter((part) => part !== "").join("\n\n");
 
 /** The user's own Claude Code configuration folder, which the sandbox keeps closed. */
 const userConfigFolder = () => process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
@@ -565,24 +586,26 @@ export const turnEvents = () => {
  * The prompt Claude Code receives. On resume Claude Code keeps the system prompt the session started
  * with, so instructions it may not follow come first in the turn itself. The block may repeat on
  * later turns, so it states the current instructions rather than announcing a change. A briefing on
- * what the session missed (ADR 017) comes next, then the user's prompt.
+ * what the session missed (ADR 017) comes next, then the user's prompt. `instructions` is the
+ * whole text the system prompt would append, notes included, so a resumed session gets them too.
  */
 export const turnPrompt = (
   request: Pick<PromptRequest, "prompt" | "briefing" | "sessionId" | "instructions" | "instructionsChanged">,
+  instructions: string = request.instructions,
 ) => {
-  const instructions =
+  const current =
     request.sessionId && request.instructionsChanged
       ? [
           "<current-instructions>",
           "These are your current instructions. Follow them in place of the ones in your system prompt and any earlier ones:",
           "",
-          request.instructions,
+          instructions,
           "</current-instructions>",
           "",
         ]
       : [];
   const briefing = request.briefing ? [request.briefing, ""] : [];
-  return [...instructions, ...briefing, request.prompt].join("\n");
+  return [...current, ...briefing, request.prompt].join("\n");
 };
 
 /** A turn with tools: the context every call is decided under, its folders and the tools offered. */
@@ -636,6 +659,8 @@ export const policyHooks = (
 ): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
   const label = (tool: string, input: Record<string, unknown>) => toolLabel(tool, input, redaction?.text);
   const started = new Set<string>();
+  // What the hob is told with the result of each call the user approved.
+  const notes = new Map<string, string>();
   // Each call as the hook saw it, so the permission callback decides the same call in the same folder.
   const seen = new Map<string, ToolCall>();
   // Answers whether the call may run: it is recorded first when the turn records calls (EX-004).
@@ -721,10 +746,8 @@ export const policyHooks = (
   const finished =
     (failed: boolean): HookCallback =>
     async (input) => {
-      if (
-        (input.hook_event_name === "PostToolUse" || input.hook_event_name === "PostToolUseFailure") &&
-        started.delete(input.tool_use_id)
-      ) {
+      if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") return {};
+      if (started.delete(input.tool_use_id)) {
         // Claude Code keeps an output too large to return inline in its configuration folder.
         const output =
           input.hook_event_name === "PostToolUse"
@@ -732,7 +755,12 @@ export const policyHooks = (
             : input.error;
         report({ _tag: "ToolFinished", id: input.tool_use_id, failed, ...(output === undefined ? {} : { output }) });
       }
-      return {};
+      // The note goes with the result, so the hob knows it asked as it would know of a refusal.
+      const note = notes.get(input.tool_use_id);
+      notes.delete(input.tool_use_id);
+      return note === undefined
+        ? {}
+        : { hookSpecificOutput: { hookEventName: input.hook_event_name, additionalContext: note } };
     };
 
   const canUseTool: CanUseTool = async (tool, input, options) => {
@@ -754,6 +782,7 @@ export const policyHooks = (
     if (decision._tag === "Run") {
       // A call the hook allowed was recorded then.
       if (started.has(call.id) || (await begin(call.id, tool, input, decision.verdict))) {
+        if (decision.approval) notes.set(call.id, approvalNote(decision.approval));
         return { behavior: "allow", updatedInput: input };
       }
       return { behavior: "deny", message: refuse(call.id, tool, input, unrecorded(decision)) };
@@ -886,6 +915,11 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           // sandbox that starts still wraps the runtime.
           const tools = toolTurn(request.tools, policySandbox(declared));
           const sandboxed = tools !== null && sandbox.state === "on";
+          const instructions = turnInstructions(
+            request.instructions,
+            sandboxed,
+            tools !== null && Boolean(request.approvals),
+          );
           // The sandbox opens the binary's folder, so it must be a real path, never the hub's own folder.
           const absoluteBinary = sandboxed ? yield* resolveBinary(binary) : binary;
           const login = sandboxed ? yield* sandboxLogin(binary) : {};
@@ -961,7 +995,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const turn = yield* Effect.acquireRelease(
             Effect.sync(() =>
               query({
-                prompt: turnPrompt(request),
+                prompt: turnPrompt(request, instructions),
                 options: {
                   ...base,
                   ...(tools
@@ -984,7 +1018,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   systemPrompt: {
                     type: "preset",
                     preset: "claude_code",
-                    append: turnInstructions(request.instructions, sandboxed),
+                    append: instructions,
                   },
                   ...(request.sessionId ? { resume: request.sessionId } : {}),
                   // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.

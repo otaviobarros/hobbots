@@ -483,7 +483,7 @@ describe("Ask decisions", () => {
       }).pipe(Effect.provide(Layer.fresh(ApprovalService.layer).pipe(Layer.provide(Gated))));
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
-    expect(result.outcome._tag).toBe("Approved");
+    expect(result.outcome).toMatchObject({ _tag: "Approved", lifetime: "once" });
     expect(result.retried.state).toBe("approved");
   });
 
