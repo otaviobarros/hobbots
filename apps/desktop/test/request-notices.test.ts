@@ -15,7 +15,7 @@ const setup = () => {
   const hub = { inbox: [] as Array<unknown> | null, focused: false };
   const notices: Array<{ title: string; body: string; closed: boolean; click: () => void }> = [];
   const opened: Array<string> = [];
-  const { check } = requestNotices({
+  const { check, start } = requestNotices({
     read: async (path) => (path === "/api/agents" ? [{ id: "pip", name: "Pip" }] : hub.inbox),
     isFocused: () => hub.focused,
     notify: ({ title, body }, onClick) => {
@@ -29,7 +29,7 @@ const setup = () => {
     },
     open: (id) => void opened.push(id),
   });
-  return { hub, notices, opened, check };
+  return { hub, notices, opened, check, start };
 };
 
 describe("request notifications", () => {
@@ -71,6 +71,23 @@ describe("request notifications", () => {
     hub.inbox = null;
     await check();
     expect(notices[0]?.closed).toBe(false);
+  });
+
+  // covers UX-001
+  it("[TC-IN-016] learns what waits as soon as it starts, so a request before the first tick is announced", async () => {
+    const { hub, notices, start } = setup();
+    hub.inbox = [approval("a", "pending")];
+    const ticks: Array<() => void> = [];
+    const { first, stop } = start(3000, (tick) => {
+      ticks.push(tick);
+      return () => ticks.splice(0);
+    });
+    await first;
+    hub.inbox = [approval("a", "pending"), approval("b", "pending", "git push origin main")];
+    ticks[0]?.();
+    await expect.poll(() => notices.map((notice) => notice.body)).toEqual(["git push origin main"]);
+    stop();
+    expect(ticks).toEqual([]);
   });
 
   it("announces nothing on the first read, nor while a Hobbots window is focused", async () => {

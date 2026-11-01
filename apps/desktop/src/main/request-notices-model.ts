@@ -3,6 +3,10 @@
  * main process reads the hub's Inbox on a timer, so this works with no window open, and every
  * read is compared with what is shown: a request decided anywhere, missed events included, closes.
  */
+import { exactAction } from "@hobbots/domain";
+import { messages } from "./messages.ts";
+
+const copy = messages.requestNotice;
 
 /** A request waiting for the user, as the notification needs it. */
 export interface PendingRequest {
@@ -11,20 +15,6 @@ export interface PendingRequest {
   /** The exact action: the command, address or path the call was made with, or the step's words. */
   readonly action: string;
 }
-
-/** The arguments that say exactly what a call does, in the order the Inbox looks for them. */
-const EXACT_KEYS = ["command", "url", "file_path", "notebook_path", "path", "pattern", "query"] as const;
-
-const exactAction = (approval: Record<string, unknown>): string => {
-  const args = approval.arguments;
-  if (typeof args === "object" && args !== null) {
-    for (const key of EXACT_KEYS) {
-      const value = (args as Record<string, unknown>)[key];
-      if (typeof value === "string" && value.trim() !== "") return value;
-    }
-  }
-  return typeof approval.label === "string" ? approval.label : "";
-};
 
 /** The pending requests in the hub's Inbox answer, or null when it is not one. */
 export const pendingRequests = (body: unknown): ReadonlyArray<PendingRequest> | null => {
@@ -35,7 +25,15 @@ export const pendingRequests = (body: unknown): ReadonlyArray<PendingRequest> | 
     if (approval.state !== "pending" || typeof approval.id !== "string" || typeof approval.agentId !== "string") {
       return [];
     }
-    return [{ id: approval.id, agentId: approval.agentId, action: exactAction(approval) }];
+    const args = typeof approval.arguments === "object" && approval.arguments !== null ? approval.arguments : {};
+    const label = typeof approval.label === "string" ? approval.label : "";
+    return [
+      {
+        id: approval.id,
+        agentId: approval.agentId,
+        action: exactAction({ arguments: args as Record<string, unknown>, label }),
+      },
+    ];
   });
 };
 
@@ -76,12 +74,12 @@ const NOTICE_BYTES = 240;
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
-/** The notification for a request: who asks, and the exact action, cut to fit. */
+/** The notification for a request: who asks, or "A hob" while that is unknown, and the exact action, cut to fit. */
 export const noticeText = (
   request: PendingRequest,
-  name: string,
+  name: string | undefined,
 ): { readonly title: string; readonly body: string } => {
-  const title = `${name} asks permission`;
+  const title = copy.title({ name: name ?? copy.unknownHob });
   const room = NOTICE_BYTES - bytes(title);
   if (bytes(request.action) <= room) return { title, body: request.action };
   let body = "";

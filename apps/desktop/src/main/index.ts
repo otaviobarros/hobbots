@@ -146,8 +146,8 @@ const startRequestNotices = (open: (requestId: string) => void) => {
     },
     open,
   });
-  const poll = setInterval(() => void notices.check(), NOTICE_POLL_MS);
-  app.on("will-quit", () => clearInterval(poll));
+  const { stop } = notices.start(NOTICE_POLL_MS);
+  app.on("will-quit", stop);
 };
 
 app.whenReady().then(async () => {

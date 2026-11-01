@@ -1,7 +1,7 @@
 import { AgentId, ApprovalId, ApprovalRequest, MessageId, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
-import { decisionErrorText, exactAction, expiryText, resultText } from "./approval-text.ts";
+import { decisionErrorText, expiryText, resultText } from "./approval-text.ts";
 
 const request = (fields: Partial<ApprovalRequest> = {}) =>
   new ApprovalRequest({
@@ -25,19 +25,6 @@ const request = (fields: Partial<ApprovalRequest> = {}) =>
     revision: 1,
     ...fields,
   });
-
-describe("exactAction", () => {
-  it("shows the command, path or address the call was made with", () => {
-    expect(exactAction(request())).toBe("git push origin main");
-    expect(exactAction(request({ tool: "Write", arguments: { file_path: "/w/a.md", content: "long" } }))).toBe(
-      "/w/a.md",
-    );
-  });
-
-  it("falls back to the step's words when no argument says it", () => {
-    expect(exactAction(request({ tool: "Odd", arguments: { level: 3 } }))).toBe("Running git push origin main");
-  });
-});
 
 describe("resultText", () => {
   it("says how the request ended, with the deny reason when there is one", () => {

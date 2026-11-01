@@ -16,9 +16,14 @@ export interface RequestNoticesOptions {
   readonly open: (requestId: string) => void;
 }
 
+const every = (tick: () => void, ms: number) => {
+  const timer = setInterval(tick, ms);
+  return () => clearInterval(timer);
+};
+
 /**
  * Notifies the user of new requests from the main process, so it works with no window open: in the
- * menu bar after the last window closed, or after opening at login. Call `check` on a timer.
+ * menu bar after the last window closed, or after opening at login. `start` it once the hub runs.
  */
 export const requestNotices = ({ read, isFocused, notify, open }: RequestNoticesOptions) => {
   let state: NoticeState = { known: undefined, shown: new Set() };
@@ -58,7 +63,7 @@ export const requestNotices = ({ read, isFocused, notify, open }: RequestNotices
     if (changes.show.length > 0) {
       const names = await hobNames();
       for (const request of changes.show) {
-        const notice = notify(noticeText(request, names.get(request.agentId) ?? "A hob"), () => {
+        const notice = notify(noticeText(request, names.get(request.agentId)), () => {
           shown.delete(request.id);
           open(request.id);
         });
@@ -68,5 +73,16 @@ export const requestNotices = ({ read, isFocused, notify, open }: RequestNotices
     state = { known: changes.known, shown: new Set(shown.keys()) };
   };
 
-  return { check };
+  /**
+   * Reads at once, to learn what already waits, then every `everyMs`, so a request that arrives
+   * before the first tick is announced rather than taken for one that was already there. Answers a
+   * function that stops it.
+   */
+  const start = (everyMs: number, schedule: (tick: () => void, ms: number) => () => void = every) => {
+    const first = check();
+    const stop = schedule(() => void check(), everyMs);
+    return { first, stop };
+  };
+
+  return { check, start };
 };

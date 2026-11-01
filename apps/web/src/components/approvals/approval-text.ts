@@ -5,21 +5,6 @@ import { messages } from "../messages.ts";
 
 const copy = messages.approval;
 
-/** The arguments that say exactly what a call does, in the order they are looked for. */
-const EXACT_KEYS = ["command", "url", "file_path", "notebook_path", "path", "pattern", "query"] as const;
-
-/**
- * The exact action to show: the command, address, file or pattern the call was made with, or the
- * step's words when the call has none of these.
- */
-export const exactAction = (approval: ApprovalRequest): string => {
-  for (const key of EXACT_KEYS) {
-    const value = approval.arguments[key];
-    if (typeof value === "string" && value.trim() !== "") return value;
-  }
-  return approval.label;
-};
-
 /** The line a decided or expired request leaves in the card. */
 export const resultText = (approval: ApprovalRequest, name: string): string => {
   switch (approval.state) {
