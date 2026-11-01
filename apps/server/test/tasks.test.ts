@@ -11,7 +11,7 @@ import {
   PermissionSummary,
   TaskRepository,
 } from "@hobbots/agents";
-import { QuestRead, TaskTreeRead } from "@hobbots/api";
+import { MemberWorkRead, QuestRead, TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -198,9 +198,67 @@ describe("Task and Quest reads", () => {
     expect(replayed.map((entry) => entry.type)).toEqual(["TaskStateChanged", "CheckpointRecorded"]);
   });
 
+  // covers OR-001, OR-007
+  it("[TC-OR-010] reads the Tasks a thread's requests started, each with its tree, oldest first", async () => {
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        yield* quest;
+        const tasks = yield* TaskRepository;
+        yield* tasks.createTask({
+          task: {
+            id: TaskId.make("follow-up"),
+            ownerId: ALDRIC,
+            parentId: null,
+            threadId,
+            brief: "Plan the follow-up",
+            dependsOn: [],
+            createdAt: "2026-11-01T00:00:02.000Z",
+          },
+          delegation: null,
+          milestones: [],
+        });
+      }),
+    );
+
+    const response = await get("/api/threads/t1/tasks");
+    expect(response.status).toBe(200);
+    const read = Schema.decodeUnknownSync(ThreadTasksRead)(response.body);
+    expect(read.trees.map((tree) => tree.tasks.map((task) => task.id))).toEqual([["campaign", "copy"], ["follow-up"]]);
+    expect(read.trees[0]?.quests).toMatchObject([{ id: "q1", leadId: ALDRIC }]);
+    expect(read.cursor).toBe(Schema.decodeUnknownSync(TaskTreeRead)((await get("/api/tasks/campaign")).body).cursor);
+
+    expect(await get("/api/threads/nope/tasks")).toEqual({
+      status: 404,
+      body: { _tag: "ThreadNotFound", threadId: "nope" },
+    });
+  });
+
   // covers OR-007
   it("[TC-OR-007] answers 404 for a Task or Quest that is not there", async () => {
     expect(await get("/api/tasks/nope")).toEqual({ status: 404, body: { _tag: "TaskNotFound", taskId: "nope" } });
     expect(await get("/api/quests/nope")).toEqual({ status: 404, body: { _tag: "QuestNotFound", questId: "nope" } });
+  });
+  // covers OR-001, UX-001, CH-005
+  it("[TC-OR-022] reads a hob's work on other hobs' Quests, and answers 404 for a hob that is not there", async () => {
+    await runtime.runPromise(quest);
+
+    const response = await get("/api/agents/quill/quest-work");
+    expect(response.status).toBe(200);
+    const read = Schema.decodeUnknownSync(MemberWorkRead)(response.body);
+    expect(read.work).toMatchObject([
+      {
+        task: { id: "copy", ownerId: QUILL, state: "queued" },
+        delegation: { leadId: ALDRIC, brief: "Draft the copy" },
+        quest: { id: "q1", leadId: ALDRIC, threadId, state: "active" },
+        threadAgentId: ALDRIC,
+      },
+    ]);
+    expect(Schema.decodeUnknownSync(MemberWorkRead)((await get("/api/agents/aldric/quest-work")).body).work).toEqual(
+      [],
+    );
+    expect(await get("/api/agents/nope/quest-work")).toEqual({
+      status: 404,
+      body: { _tag: "AgentNotFound", agentId: "nope" },
+    });
   });
 });

@@ -683,6 +683,73 @@ describe("Task records", () => {
       quest: { id: "q-top", state: "active", endedAt: null },
     });
   });
+  // covers OR-001, UX-001, CH-005
+  it("[TC-OR-021] lists a hob's Tasks on other hobs' Quests with their Quest until the Quest ends", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const ids = (agentId: AgentId) =>
+          tasks
+            .listMemberWork(agentId)
+            .pipe(Effect.map((work) => work.map((each) => [each.task.id, each.quest.id, each.delegation.leadId])));
+        const quill = yield* ids(QUILL);
+        const ada = yield* ids(ADA);
+        const lead = yield* ids(ALDRIC);
+        const copy = Option.getOrThrow(yield* tasks.readTree(TaskId.make("copy"))).tasks[0];
+        if (copy === undefined) throw new Error("no Task");
+        yield* tasks.moveTask(copy.id, copy.revision, "failed", later);
+        const ended = yield* tasks.listMemberWork(QUILL);
+        const tree = Option.getOrThrow(yield* tasks.readTree(TaskId.make("campaign")));
+        const build = tree.tasks.find((task) => task.id === "build");
+        const top = tree.tasks[0];
+        if (build === undefined || top === undefined) throw new Error("no Task");
+        yield* tasks.moveTask(build.id, build.revision, "cancelled", later);
+        yield* tasks.moveTask(top.id, top.revision, "failed", later);
+        const afterQuest = yield* ids(QUILL);
+        return { quill, ada, lead, ended, afterQuest };
+      }),
+    );
+
+    expect(result.quill).toEqual([["copy", "q1", ALDRIC]]);
+    expect(result.ada).toEqual([["build", "q1", ALDRIC]]);
+    // The lead's own Task is not member work.
+    expect(result.lead).toEqual([]);
+    // A member's ended Task stays listed, with its outcome, while its Quest is active.
+    expect(result.ended.map((each) => [each.task.id, each.task.state, each.quest.state])).toEqual([
+      ["copy", "failed", "active"],
+    ]);
+    expect(result.afterQuest).toEqual([]);
+  });
+  // covers OR-001, UX-001
+  it("[TC-OR-023] gives a member's work on a nested Quest the hob whose thread the request came from", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        yield* tasks.startQuest({
+          id: QuestId.make("q2"),
+          taskId: TaskId.make("build"),
+          goal: "Keywords",
+          acceptance: [],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        yield* tasks.createTask({
+          task: newTask("keywords", PIP, "build"),
+          delegation: brief("d-keywords"),
+          milestones: [],
+        });
+        return { pip: yield* tasks.listMemberWork(PIP), quill: yield* tasks.listMemberWork(QUILL) };
+      }),
+    );
+
+    // Ada leads Pip's Quest, but it is followed in Aldric's thread.
+    expect(result.pip.map((each) => [each.task.id, each.quest.id, each.quest.leadId, each.threadAgentId])).toEqual([
+      ["keywords", "q2", ADA, ALDRIC],
+    ]);
+    expect(result.quill.map((each) => [each.quest.leadId, each.threadAgentId])).toEqual([[ALDRIC, ALDRIC]]);
+  });
 });
 
 describe("waits and Task tool calls", () => {

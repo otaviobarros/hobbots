@@ -15,6 +15,7 @@ import type {
   EventEnvelope,
   HandOff,
   IllegalTaskTransition,
+  MemberWork,
   MilestoneId,
   Quest,
   QuestId,
@@ -194,9 +195,16 @@ export class TaskRepository extends Context.Service<
     ) => Changed<{ readonly task: Task; readonly wait: TaskWait }, TaskChange>;
     /** The Task and everything under it. */
     readonly readTree: (taskId: TaskId) => Effect.Effect<Option.Option<TaskTree>>;
+    /** The tree of each Task a request in the thread started, oldest first. */
+    readonly readThreadTrees: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<TaskTree>>;
     readonly findQuest: (questId: QuestId) => Effect.Effect<Option.Option<Quest>>;
     /** How many Tasks the hob owns that have not ended, across every tree. */
     readonly openTaskCount: (ownerId: AgentId) => Effect.Effect<number>;
+    /**
+     * A hob's Tasks as a party member on Quests still active, oldest first. A member's Task stays
+     * listed once it ends, until its Quest does, so its outcome shows where its work did.
+     */
+    readonly listMemberWork: (agentId: AgentId) => Effect.Effect<ReadonlyArray<MemberWork>>;
   }
 >()("@hobbots/agents/TaskRepository") {}
 

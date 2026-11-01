@@ -666,6 +666,7 @@ export const TaskRepositoryLive = Layer.effect(
       handOff,
       waitFor,
       readTree: (taskId) => read.readTree(taskId).pipe(Effect.map(Option.fromNullishOr), Effect.orDie),
+      readThreadTrees: (threadId) => read.threadTrees(threadId).pipe(Effect.orDie),
       findQuest: (questId) =>
         read.quest(questId).pipe(
           Effect.map(([quest]) => Option.fromNullishOr(quest)),
@@ -677,6 +678,7 @@ export const TaskRepositoryLive = Layer.effect(
           Effect.map(([row]) => Number(row?.count ?? 0)),
           Effect.orDie,
         ),
+      listMemberWork: (agentId) => read.memberWork(agentId).pipe(Effect.orDie),
     });
   }),
 );

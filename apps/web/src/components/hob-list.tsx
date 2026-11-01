@@ -12,6 +12,7 @@ import { ThreadRowMenu } from "./archive/thread-menu.tsx";
 import { ArchivedEntry } from "./archived-threads/archived-threads.tsx";
 import { HobSprite, hobState, stateLabel } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
+import { HobQuestWork } from "./quest-work/quest-work.tsx";
 import { SearchResults } from "./search-results.tsx";
 
 const copy = messages.hobPanel;
@@ -109,6 +110,7 @@ function HobEntry({ hob, open, threadId }: { hob: Agent; open: boolean; threadId
           </span>
         </span>
       </Link>
+      <HobQuestWork hob={hob} />
       {open && (
         <div className="flex animate-hb-in flex-col pt-0.5 pb-1.5">
           {threads.data?.map((thread) => (
