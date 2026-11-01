@@ -2,8 +2,8 @@
 
 - **Date:** 2026-11-01
 - **Issue:** [#137](https://github.com/otaviobarros/hobbots/issues/137)
-- **Pull request:** PULL_REQUEST
-- **Commit:** not yet on `main` (ran on the pull request branch at `COMMIT`)
+- **Pull request:** [#241](https://github.com/otaviobarros/hobbots/pull/241)
+- **Commit:** not yet on `main` (ran on the pull request branch at `90309b3`)
 - **Setup:** Automated only, with the fake runtime, which decides each scripted tool call with the hub's policy engine and runs nothing. Linux x86_64, Node 22.23.4. The hub-level cases go through the HTTP API with the hub's own composition (the setup's preset and folders read at every turn, one policy engine) and ran on SQLite in memory and on PostgreSQL 16; CI runs them on SQLite and PostgreSQL 18. The browser case ran with Playwright 1.64.1 and Chromium 153 against a hub from source on a SQLite file.
 - **Result:** Passed with gaps. Under Balanced a hob edits and runs tests in its folder without asking, a read outside its folders is refused whatever the prompt says, and an Ask action holds its turn until the user decides in chat. Real Claude Code was not part of this run; the [manual checklist](checklists/tools-under-policy.md) covers it.
 
