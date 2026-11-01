@@ -329,7 +329,7 @@ describe("Task and Quest reads", () => {
 
 describe("Backpack reads", () => {
   // covers IN-001
-  it("[TC-IN-007] reads a hob's, a Quest's and the workspace's open backpack items with a cursor, and answers 404 for what is not there", async () => {
+  it("[TC-IN-026] reads a hob's, a Quest's and the workspace's open backpack items with a cursor, and answers 404 for what is not there", async () => {
     const copy = await runtime.runPromise(quest);
     const read = async (path: string) => {
       const response = await get(path);

@@ -135,7 +135,7 @@ const count = Effect.gen(function* () {
 
 describe("A hob's backpack", () => {
   // covers IN-001
-  it("[TC-IN-001] records a backpack item in the transaction of the change that causes it, and none when the change is refused", async () => {
+  it("[TC-IN-020] records a backpack item in the transaction of the change that causes it, and none when the change is refused", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -193,7 +193,7 @@ describe("A hob's backpack", () => {
   });
 
   // covers IN-001, IN-003
-  it("[TC-IN-002] keys an item from a hob tool call by the call's key, so the call retried records no second item", async () => {
+  it("[TC-IN-021] keys an item from a hob tool call by the call's key, so the call retried records no second item", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -240,7 +240,7 @@ describe("A hob's backpack", () => {
   });
 
   // covers IN-001, IN-002, IN-005
-  it("[TC-IN-003] records each kind for the hob it needs, and keeps routine progress from being actionable", async () => {
+  it("[TC-IN-022] records each kind for the hob it needs, and keeps routine progress from being actionable", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -291,7 +291,7 @@ describe("A hob's backpack", () => {
   });
 
   // covers IN-002
-  it("[TC-IN-004] moves an item only through legal steps under its claim, recording each delivery and acknowledgement", async () => {
+  it("[TC-IN-023] moves an item only through legal steps under its claim, recording each delivery and acknowledgement", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -346,7 +346,7 @@ describe("A hob's backpack", () => {
   });
 
   // covers IN-002, IN-003
-  it("[TC-IN-005] refuses a write under another owner, an older token or a lapsed lease, and expiring a claim raises its token", async () => {
+  it("[TC-IN-024] refuses a write under another owner, an older token or a lapsed lease, and expiring a claim raises its token", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy, build } = yield* campaign;
@@ -395,7 +395,7 @@ describe("A hob's backpack", () => {
   });
 
   // covers IN-001
-  it("[TC-IN-006] reads a hob's, a Quest's and the workspace's open items, highest priority first", async () => {
+  it("[TC-IN-025] reads a hob's, a Quest's and the workspace's open items, highest priority first", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
