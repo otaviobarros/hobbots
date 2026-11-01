@@ -7,7 +7,8 @@ import type { WaitingPlace } from "./outbox.ts";
  * keeps it, and in browser storage, so a reload keeps it too. Typing changes memory at once and
  * storage a moment later, so a long draft stays quick to type in; a cleared draft leaves storage at
  * once, so a reload never brings back a message just sent, and leaving the page saves what waits.
- * Like the outbox, it is a store outside React because it must outlive each thread's chat view.
+ * Like the outbox, it is a store outside React because it must outlive each thread's chat view
+ * (ADR 016).
  */
 const drafts = new Map<WaitingPlace, string>();
 const saving = new Map<WaitingPlace, ReturnType<typeof setTimeout>>();
@@ -87,8 +88,5 @@ export const moveDraft = (from: WaitingPlace, to: WaitingPlace) => {
   writeDraft(to, readDraft(to) === "" ? text : `${readDraft(to)}\n${text}`);
 };
 
-/**
- * What a draft sends: exactly what was typed, minus blank lines before it and whitespace after it.
- * Indentation on the first line stays.
- */
-export const sendable = (draft: string): string => draft.replace(/^(?:[ \t]*\r?\n)+/, "").trimEnd();
+/** What a draft sends: exactly what was typed, or nothing when it holds only whitespace. */
+export const sendable = (draft: string): string => (draft.trim() === "" ? "" : draft);

@@ -22,7 +22,7 @@ Put state that defines the view, such as the selected hob, tab or filter, in rou
 
 ### STD-REACT-003 Local UI state stays local
 
-Keep UI state in the component that owns it, with `useState` or `useReducer`. Lift it only as far as the nearest common parent. A global client store (Zustand, Redux, Jotai or similar) needs an ADR first.
+Keep UI state in the component that owns it, with `useState` or `useReducer`. Lift it only as far as the nearest common parent. A global client store (Zustand, Redux, Jotai or similar) needs an ADR first. [ADR 016](../decisions/016-client-stores-outside-react.md) records the outbox and the draft store.
 
 - **Why:** most UI state has one owner, and a global store hides who changes it.
 - **Enforced by:** review.

@@ -8,8 +8,7 @@ const fresh = `new-${"hob" as AgentId}` as const;
 describe("sendable", () => {
   it("keeps line breaks, tabs and indentation as typed", () =>
     expect(sendable("  def run():\n\treturn 1\n\nDone")).toBe("  def run():\n\treturn 1\n\nDone"));
-  it("drops blank lines before the text and whitespace after it", () =>
-    expect(sendable(" \n\n  indented\nnext  \n\n ")).toBe("  indented\nnext"));
+  it("keeps blank lines and spaces around the text", () => expect(sendable("\n hello\n")).toBe("\n hello\n"));
   it("sends nothing for whitespace alone", () => expect(sendable(" \n\t\n ")).toBe(""));
 });
 
