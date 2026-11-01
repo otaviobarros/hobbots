@@ -80,6 +80,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-DUP-004 | Effect Schemas are the single source of a contract | Active |
 | STD-DUP-005 | No unused files, exports or dependencies | Active |
 | STD-DUP-006 | No copied blocks of code | Active |
+| STD-DUP-007 | Use what installed libraries provide before writing your own | Active |
 | STD-EFFECT-001 | Backend code and the HTTP API use Effect v4 | Active |
 | STD-EFFECT-002 | Expected failures are typed errors | Active |
 | STD-EFFECT-003 | Dependencies are services provided by Layers | Active |
