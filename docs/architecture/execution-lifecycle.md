@@ -30,7 +30,7 @@ Validate each command and persisted state through Effect Schema. Pure transition
 
 ## Recovery sequence
 
-On server startup, identify incomplete attempts, stale leases, pending outbox and backpack work and open responsibilities. Query authorized executors/adapters for live sessions and actual outcomes. Resume supported sessions, reconstruct context only when allowed and labeled, or surface a blocker when safe resumption cannot be established. Expire every backpack claim the earlier process held; their fencing tokens keep a delayed worker from applying stale changes. The dispatcher then reschedules pending items and queued chat messages through the same path it uses at any other time.
+On server startup, identify incomplete attempts, stale leases, pending outbox and backpack work and open responsibilities. Query authorized executors/adapters for live sessions and actual outcomes. Resume supported sessions, reconstruct context only when allowed and labeled, or surface a blocker when safe resumption cannot be established. Expire every backpack claim the earlier process held, clearing its owner and raising its fencing token in one update, so a delayed worker cannot apply stale changes. The dispatcher then reschedules pending items and queued chat messages through the same path it uses at any other time.
 
 An external operation may finish just before a connection fails. Treat this as an unknown outcome requiring reconciliation, not proof that it is safe to repeat. Exactly-once side effects cannot be guaranteed merely by an event journal.
 

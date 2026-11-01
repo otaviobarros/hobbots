@@ -32,7 +32,7 @@ Adapters and Hobbots services record real evidence. Inactivity is not acknowledg
 5. Persist the outcome and linked Task changes in one transaction, guarded by the fencing token.
 6. Queue the next continuation or outgoing item durably; publish UI updates after commit.
 
-Each item has a dedupe key, unique per recipient. Keys reuse the hob tools' idempotency keys, the source record's id and version, or your command's key. A worker whose lease expired holds a lower fencing token, so its write changes nothing. Retry transport failures with bounded backoff. For effects outside the database, use provider idempotency where available and reconcile unknown outcomes before retry. [ADR 019](../decisions/019-hob-backpack-and-continuations.md) sets the key scope, retention, lease and retry defaults.
+Each item has a dedupe key, unique per recipient. Keys reuse the hob tools' idempotency keys, the source record's id and version, or your command's key. An outcome write checks the token, the claim's owner and the lease's expiry in one conditional update. Expiring a claim clears its owner and raises its token in one update, so a worker whose lease expired is refused at once, before any other worker claims the item. Retry transport failures with bounded backoff. For effects outside the database, use provider idempotency where available and reconcile unknown outcomes before retry. [ADR 019](../decisions/019-hob-backpack-and-continuations.md) sets the key scope, retention, lease and retry defaults.
 
 Items for a cancelled or reassigned Task are recorded, checked against the Task's current owner and version, and resolved as late. They never restart work.
 
@@ -50,7 +50,7 @@ An ended parent turn does not discard the continuation obligation. A continuatio
 
 ## Responsibility ledger
 
-The responsibility ledger is a read over the Task tree and the backpack, not a separate store. It covers promised outputs, outstanding child work, questions awaiting answers, dependencies, pending approvals, unresolved backpack items and closure evidence. A supervisor can detect unfinished work without asking the model for status. The completion gate and Quest closure use the same query. It must respect configured budgets and genuine blockers rather than generate unbounded new work.
+The responsibility ledger is a read over the Task tree and the backpack, not a separate store. It covers promised outputs, outstanding child work, questions awaiting answers, dependencies, pending approvals, unresolved backpack items and closure evidence. A supervisor can detect unfinished work without asking the model for status. The completion gate and Quest closure use the same query. The gate leaves out the items the calling turn holds a valid claim on, and a successful completion resolves them in the same transaction. It must respect configured budgets and genuine blockers rather than generate unbounded new work.
 
 ## User visibility
 

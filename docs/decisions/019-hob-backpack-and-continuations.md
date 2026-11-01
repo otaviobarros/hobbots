@@ -54,7 +54,7 @@ Actionable items can wake a hob. Routine items never wake a hob on their own (IN
 | Delivered | Put into a turn: the prompt of a continuation, or a live turn's waiting tool call | A delivery attempt: number, target, the turn's message or Attempt id, runtime session, time |
 | Acknowledged | The runtime accepted the turn that carries it | The adapter's start evidence for that turn: the runtime session id and the time it reported it |
 | Processing | That turn is running and holds the item's claim | Claim owner, fencing token, lease expiry |
-| Resolved | Handled | A disposition: `consumed` with the turn that ended, `answered` with the tool call, `late` with the Task version it was checked against, or `dismissed` with who dismissed it |
+| Resolved | Handled | A disposition: `consumed` with the turn that ended or the `complete_task` call that settled it, `answered` with the tool call, `late` with the Task version it was checked against, or `dismissed` with who dismissed it |
 | Failed | Delivery or processing exhausted its retries, or the recipient can no longer take it | The error, every attempt, and the blocker with its next action (IN-007) |
 
 Inactivity is never acknowledgement. Only the adapter's own evidence moves an item to Acknowledged. An item whose turn ends early, by interruption, a crash or a runtime failure, goes back to Pending with a new attempt. It never counts as resolved.
@@ -75,10 +75,11 @@ The processing side deduplicates by item id. Any effect an item causes, such as 
 
 A worker claims an item before it delivers it, and holds the claim until the item resolves or goes back to Pending.
 
-- A claim records its owner (the hub process and the turn), a **lease** with an expiry, and a **fencing token**. The token is an integer that grows by one on every claim of that item.
-- The worker renews the lease while the turn runs, on the turn's text checkpoint cadence ([ADR 013](013-event-journal.md)). The default lease is 60 seconds and is configurable.
-- Every write that applies an item's outcome includes `fence = <token>` as an expected value, in the same transaction as the change. A worker whose lease expired holds a lower token, so its write changes nothing. It discards the outcome and logs it.
-- At boot every claim held by an earlier process is expired at once, because its turns are gone.
+- A claim records its owner (the hub process and the turn), a **lease** with an expiry, and a **fencing token**. The token is an integer that grows by one on every claim of that item, and again whenever a claim ends without its owner.
+- The worker renews the lease while the turn runs, on the turn's text checkpoint cadence ([ADR 013](013-event-journal.md)). The default lease is 60 seconds and is configurable. A renewal is guarded the same way as an outcome, so an expired claim cannot be renewed.
+- Every write that applies an item's outcome checks three things in one conditional update, in the same transaction as the change: the token still matches, the claim's owner is still this worker, and the lease has not expired by the database's clock. If any check fails, the write changes nothing, and the worker discards the outcome and logs it.
+- **Expiring a claim is a write of its own.** When the dispatcher finds a lease past its expiry, it clears the owner and raises the token in one update, and the item goes back to Pending. A worker whose lease expired is therefore refused at once, even before any other worker claims the item.
+- At boot every claim held by an earlier process is expired the same way, because its turns are gone.
 
 The same rule works on SQLite and PostgreSQL, because it needs only a conditional update.
 
@@ -103,6 +104,8 @@ An item for a Task that was cancelled or reassigned is still recorded. When it i
 ### The responsibility ledger is a read
 
 The responsibility ledger is a query, not a table. It reads the Task tree and the backpack together: open child Tasks, wait records, unanswered Questions, milestones not reached, promised artifacts, pending approvals, and backpack items not yet resolved. `complete_task`'s completion gate from #271 and a Quest's closure call the same query.
+
+**A turn can pass its own gate.** The items a turn carries are still Processing while it runs, including the Task item that started the work. The gate leaves out the items that the calling turn holds a valid claim on, under the same three checks as any outcome. When `complete_task` succeeds, it resolves those items as `consumed` in the same transaction as the Task's completion. An item that arrived during the turn and was not delivered to it still blocks the gate, so the hob sees it before it finishes. A refused gate returns which items and children are open, so the hob can act on them in the same turn.
 
 ### The delivery seam in the hob tools
 
@@ -145,11 +148,13 @@ Routine progress stays out of the wake because a turn per update would spend the
 The scenarios that would show this decision holds. Each names the issue that will prove it.
 
 - An item is committed in the same transaction as the change that caused it, and the same tool call or hub change retried makes no second item: not proven yet, [#290](https://github.com/otaviobarros/hobbots/issues/290).
-- Delivering the same item twice creates no second Task, message or effect, and a worker whose lease expired cannot apply its outcome: not proven yet, [#291](https://github.com/otaviobarros/hobbots/issues/291).
+- Delivering the same item twice creates no second Task, message or effect: not proven yet, [#291](https://github.com/otaviobarros/hobbots/issues/291).
+- A worker whose lease expired cannot apply or renew its outcome, both before another worker claims the item and after; a claim expired at boot is refused the same way: not proven yet, [#291](https://github.com/otaviobarros/hobbots/issues/291).
 - A late result from a cancelled or reassigned Task resolves as late and starts nothing: not proven yet, [#291](https://github.com/otaviobarros/hobbots/issues/291).
 - A result arriving after the lead's turn ended starts one continuation without you prompting, queued chat messages still start first, and an approval outcome reaches its live turn without a new one: not proven yet, [#292](https://github.com/otaviobarros/hobbots/issues/292).
 - Thirty progress updates start no turn and reach the lead as one digest: not proven yet, [#293](https://github.com/otaviobarros/hobbots/issues/293).
 - The completion gate refuses a Task with an unresolved backpack item or an open child, from the same ledger query: not proven yet, [#294](https://github.com/otaviobarros/hobbots/issues/294).
+- A hob completes a delegated Task from the turn its Task item started: the gate passes, and that item resolves as consumed in the same transaction. An item that arrived during the turn without being delivered to it still blocks: not proven yet, [#294](https://github.com/otaviobarros/hobbots/issues/294).
 - Restarting between a child finishing and its lead being notified loses nothing, and the earlier process's claims are expired at boot: not proven yet, [#295](https://github.com/otaviobarros/hobbots/issues/295).
 - Exhausted retries and a retired recipient end in a failed item with a blocker and a next action: not proven yet, [#296](https://github.com/otaviobarros/hobbots/issues/296).
 - The whole slice runs end to end with an evidence record: not proven yet, [#298](https://github.com/otaviobarros/hobbots/issues/298).
