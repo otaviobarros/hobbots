@@ -9,7 +9,7 @@ The rules live in `docs/standards/`. The index is `docs/standards/README.md`.
 
 ## Apply the rules to a change
 
-1. Find the areas the change touches in the prefix table of `docs/standards/README.md`. A component change touches at least `STD-REACT`, `STD-UI` and `STD-I18N`. A backend change touches at least `STD-ARCH`, `STD-EFFECT` and `STD-DUP`. Every change that adds code touches `STD-DUP`: before writing a mechanism of your own, check what the installed libraries provide (STD-DUP-007).
+1. Find the areas the change touches in the prefix table of `docs/standards/README.md`. A component change touches at least `STD-REACT`, `STD-UI` and `STD-I18N`. A backend change touches at least `STD-ARCH`, `STD-EFFECT` and `STD-DUP`.
 2. Read each of those area files in full.
 3. Apply every rule in them. The step is done when you can say, for each rule, that the change follows it or that it does not apply.
 4. Cite the IDs you applied in the plan or the review, for example "follows STD-REACT-001". A review finding names the rule it breaks.
