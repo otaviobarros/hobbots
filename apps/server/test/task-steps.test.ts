@@ -564,4 +564,76 @@ describe("a Task's steps in fresh sessions", () => {
     // The refused call leaves no Task behind in the second conversation.
     expect(await run(TaskRepository.use((tasks) => tasks.readThreadTrees(second.id)))).toEqual([]);
   });
+  // covers IN-006, CH-005
+  it("[TC-OR-051] a request whose hob asked you a question completes once the next turn is briefed with your answer", async () => {
+    const { run, control } = setUp();
+    const thread = await run(seed);
+    const steps = [{ brief: `Outline\n${hub("complete_task", { key: "o", summary: "Outlined" })}` }];
+    await run(
+      send(
+        thread.id,
+        `Plan the launch\n${hub("plan_steps", { key: "plan", steps })}\n${hub("ask", { key: "q", question: "Which date?" })}`,
+      ),
+    );
+    await run(control.open("Outline"));
+    const asked = await run(
+      treeWhen(
+        thread.id,
+        (tree) => tree.questions.length === 1 && states(tree).every((state) => state === "completed"),
+      ),
+    );
+    const question = asked.questions[0];
+    if (question === undefined) throw new Error("no question");
+    await run(TaskRepository.use((tasks) => tasks.answerQuestion(question.id, { _tag: "User" }, "Friday", now)));
+
+    await run(send(thread.id, hub("complete_task", { key: "done", summary: "Launch on Friday" })));
+    expect(control.requests.at(-1)?.briefing).toContain("Which date? Answer: Friday");
+    const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
+    expect(finished.tasks[0]?.result?.summary).toBe("Launch on Friday");
+    const ledger = await run(TaskRepository.use((tasks) => tasks.readLedger(finished.tasks[0]?.id ?? TaskId.make(""))));
+    expect(Option.getOrThrow(ledger).open).toEqual([]);
+  });
+
+  // covers IN-006, OR-005
+  it("[TC-OR-052] a step that was handed an artifact completes from the prompt that showed it, and so does its Task", async () => {
+    const { run, control } = setUp();
+    const thread = await run(seed);
+    const steps = [
+      {
+        brief: `Draft\n${hub("complete_task", { key: "d", summary: "Drafted", artifacts: [{ kind: "text", label: "Doc", value: "The draft" }] })}`,
+      },
+      { brief: `Review\n${hub("complete_task", { key: "r", summary: "Reviewed" })}`, after: [1] },
+      { brief: `Publish\n${hub("complete_task", { key: "p", summary: "Published" })}`, after: [2] },
+    ];
+    await run(send(thread.id, `Write the post\n${hub("plan_steps", { key: "plan", steps })}`));
+    await run(control.open("Draft"));
+    const drafted = await run(treeWhen(thread.id, (tree) => states(tree).join() === "completed,active,queued"));
+    const publish = stepsOf(drafted)[2];
+    const artifact = drafted.artifacts[0];
+    if (publish === undefined || artifact === undefined) throw new Error("no step or artifact");
+    // The owner hands the draft to the last step before it starts.
+    await run(send(thread.id, hub("hand_off", { key: "h", artifact_id: artifact.id, to_task_id: publish.id })));
+    await run(control.open("Review"));
+    await run(control.open("Publish"));
+    await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+    const prompt = control.requests.find((request) => request.prompt.startsWith("Publish"))?.prompt ?? "";
+    expect(prompt).toContain("Handed to this step:");
+
+    await run(send(thread.id, hub("complete_task", { key: "done", summary: "The post is out" })));
+    const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
+    expect(finished.tasks[0]?.result?.summary).toBe("The post is out");
+  });
+
+  // covers IN-006, EX-006
+  it("[TC-OR-053] a step that ends without reaching a milestone it promised fails with a blocker that says so", async () => {
+    const { run, control } = setUp();
+    const thread = await run(seed);
+    const steps = [{ brief: "Research the market", milestones: ["Sources listed"] }];
+    await run(send(thread.id, `Research\n${hub("plan_steps", { key: "plan", steps })}`));
+    await run(control.open("Research the market"));
+    const ended = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "failed"));
+    const step = stepsOf(ended)[0];
+    const blocker = ended.checkpoints.find((each) => each.taskId === step?.id && each.kind === "blocker");
+    expect(blocker?.summary).toContain('milestone "Sources listed" is not reached');
+  });
 });

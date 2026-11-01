@@ -37,13 +37,16 @@ export class ResponsibilityLedger extends Schema.Class<ResponsibilityLedger>("Re
 
 /**
  * A backpack item the completing turn carries: it was put into that turn, so finishing the Task
- * deals with it. `claim` is the turn's hold on it when a worker delivered it under a claim, or null
- * for an unclaimed item the turn was briefed with. The gate leaves out only a carried item whose
- * claim still holds, or that is still pending and unclaimed, and resolves it as consumed (ADR 019).
+ * deals with it (ADR 019). `owner` is the turn's claim on it when a worker delivered it under a
+ * claim, or null for an unclaimed item the turn was briefed with; `token` is the item's fencing
+ * token as the turn saw it. The gate leaves out a carried item only while that claim still holds,
+ * or while the item is still pending, unclaimed and at that token, so an item claimed or expired
+ * since is never consumed by a stale turn. It resolves the rest as consumed.
  */
 export interface CarriedItem {
   readonly itemId: BackpackItemId;
-  readonly claim: { readonly owner: string; readonly token: number } | null;
+  readonly owner: string | null;
+  readonly token: number;
 }
 
 /** What the ledger is read from: the records as one transaction sees them. */
@@ -66,13 +69,17 @@ const waitHolds = (wait: TaskWait, tasks: ReadonlyArray<Task>) => {
   return wait.mode === "any" ? ended.length === 0 : ended.length < wait.on.length;
 };
 
+/** What a lead has to read about a Task under it once that Task has ended. */
+const OUTCOME_KINDS: ReadonlyArray<BackpackItem["kind"]> = ["result", "failure"];
+
 /**
- * An item the records already settle: a question is open exactly while its Question record is,
- * which the ledger lists, and a Task item asks to take up a Task, which has ended once the Task
- * has. What the ended Task left for its lead comes as its own result or failure item.
+ * An item the records already settle. A question is open exactly while its Question record is,
+ * which the ledger lists. Once a Task under this one has ended, its result or failure is what its
+ * lead must still read; anything else about it, such as its Task item, a hand-off or an answer for
+ * its work, or a report it made on the way, has nothing left to act on.
  */
 const settledElsewhere = (item: BackpackItem, ended: ReadonlySet<string>) =>
-  item.kind === "question" || (item.kind === "task" && item.taskId !== null && ended.has(item.taskId));
+  item.kind === "question" || (item.taskId !== null && ended.has(item.taskId) && !OUTCOME_KINDS.includes(item.kind));
 
 /** The ledger of `task`: everything still open on it, from the records in `sources`. Pure. */
 export const responsibilityLedger = (task: Task, sources: LedgerSources): ResponsibilityLedger => {
@@ -181,12 +188,15 @@ export const ledgerRefusal = (
 
 /**
  * The open backpack items in `ledger` that a turn carries because its prompt shows them, picked by
- * `shows`, as unclaimed items. A worker that delivers under a claim passes its claim instead.
+ * `shows`, as unclaimed items at the token they have now. A worker that delivers under a claim
+ * passes its claim instead.
  */
 export const carriedFrom = (
   ledger: ResponsibilityLedger,
   shows: (item: BackpackItem) => boolean,
 ): ReadonlyArray<CarriedItem> =>
   ledger.open.flatMap((entry) =>
-    entry._tag === "Item" && shows(entry.item) ? [{ itemId: entry.item.id, claim: null }] : [],
+    entry._tag === "Item" && shows(entry.item)
+      ? [{ itemId: entry.item.id, owner: null, token: entry.item.fencingToken }]
+      : [],
   );

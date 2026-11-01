@@ -19,11 +19,11 @@ type Row = Record<string, unknown>;
 
 const decodeApprovals = Schema.decodeUnknownEffect(Schema.Array(ApprovalRequest));
 
-/** Whether the completing turn carries `item`, by a claim that still holds or as an item still pending and unclaimed. */
+/** Whether the completing turn carries `item`: under a claim that still holds, or still pending and unclaimed at the token it saw. */
 const carries = (item: BackpackItem, claimLive: boolean, carried: CarriedItem | undefined) => {
-  if (carried === undefined) return false;
-  if (carried.claim === null) return item.state === "pending" && item.claim === null;
-  return item.claim?.owner === carried.claim.owner && item.claim.token === carried.claim.token && claimLive;
+  if (carried === undefined || item.fencingToken !== carried.token) return false;
+  if (carried.owner === null) return item.state === "pending" && item.claim === null;
+  return item.claim?.owner === carried.owner && claimLive;
 };
 
 /** A Task's ledger as one transaction reads it, and the carried items its completion consumes. */
@@ -56,18 +56,16 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
     });
 
   /**
-   * Approval requests still pending on the Task's work. A request belongs to a chat turn, and a
-   * chat turn works on the request's top Task in its thread; a step's session never asks.
+   * Approval requests still pending on the Task's work and not past their expiry. A request belongs
+   * to a chat turn, and a chat turn works on the request's top Task in its thread; a step's session
+   * never asks.
    */
-  const pendingApprovals = (task: Task) =>
+  const pendingApprovals = (task: Task, now: string) =>
     task.threadId === null || task.parentId !== null
       ? Effect.succeed([])
       : sql<Row>`SELECT * FROM approval_requests WHERE state = 'pending' AND thread_id = ${task.threadId}
-          AND agent_id = ${task.ownerId} ORDER BY created_at, id`.pipe(
-          Effect.map(approvalRows),
-          Effect.flatMap(decodeApprovals),
-          Effect.orDie,
-        );
+          AND agent_id = ${task.ownerId} AND (expires_at IS NULL OR expires_at > ${now})
+          ORDER BY created_at, id`.pipe(Effect.map(approvalRows), Effect.flatMap(decodeApprovals), Effect.orDie);
 
   /** The ledger of `task`, less the items in `carried` that the completing turn really carries. */
   const readFor = (task: Task, carried: ReadonlyArray<CarriedItem> = []) =>
@@ -86,7 +84,7 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
         if (holds !== undefined && carries(item, live, holds)) consumes.push({ item, carried: holds });
         else blocking.push(item);
       }
-      const approvals = yield* pendingApprovals(task);
+      const approvals = yield* pendingApprovals(task, DateTime.formatIso(yield* DateTime.now));
       const ledger = responsibilityLedger(task, { subtree, tree, approvals, items: blocking });
       return { ledger, consumes } satisfies LedgerRead;
     });
@@ -103,13 +101,12 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
       const events: Array<JournaledEvent> = [];
       for (const [index, { item, carried }] of consumes.entries()) {
         const guard =
-          carried.claim === null
+          carried.owner === null
             ? sql`state = 'pending' AND claim_owner IS NULL`
-            : sql`claim_owner = ${carried.claim.owner} AND claim_token = ${carried.claim.token} AND ${clock.leaseLive}
-                AND state NOT IN ('resolved', 'failed')`;
+            : sql`claim_owner = ${carried.owner} AND ${clock.leaseLive} AND state NOT IN ('resolved', 'failed')`;
         const updated = yield* sql`UPDATE backpack_items SET state = 'resolved', disposition = ${disposition},
             claim_owner = NULL, lease_expires_at = NULL, updated_at = ${at}, revision = ${first + index}
-          WHERE id = ${item.id} AND ${guard} RETURNING id`;
+          WHERE id = ${item.id} AND claim_token = ${carried.token} AND ${guard} RETURNING id`;
         if (updated.length === 0) {
           return yield* new TaskRefused({
             reason: "items-open",

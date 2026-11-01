@@ -14,7 +14,7 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import { BRIEF_LIMIT, cut, ownerBriefing } from "./briefs.ts";
+import { answeredFor, BRIEF_LIMIT, cut, ownerBriefing } from "./briefs.ts";
 import { fromRecords, journalOf, newId, refuse, type TaskToolCaller } from "./call-scope.ts";
 
 /** Calls that start work, so a chat turn with no open Task starts one for its request. */
@@ -55,16 +55,20 @@ export const makeChatResolver = (
   return {
     /**
      * What the turn's session is told of the open Task, read as the turn starts. The briefing shows
-     * each Task under it with its state and result, so the turn carries the results and failures
-     * in its hob's backpack about those Tasks: they settle when the turn completes the Task.
+     * each Task under it with its state and result, and the answers to the questions its hob asked
+     * about it, so the turn carries those results, failures and answers in its hob's backpack:
+     * they settle when the turn completes the Task.
      */
     briefing: Effect.gen(function* () {
       const open = openTaskOf(yield* tasks.readThreadTrees(turn.threadId), turn);
       if (open === undefined) return null;
       const children = new Set(open.tree.tasks.filter((each) => each.parentId === open.top.id).map((each) => each.id));
+      const answers = new Set(answeredFor(open.top, open.tree).map((question) => question.id));
       const ledger = yield* tasks.readLedger(open.top.id);
-      const shown = (item: BackpackItem) =>
-        (item.payload._tag === "result" || item.payload._tag === "failure") && children.has(item.payload.task.id);
+      const shown = ({ payload }: BackpackItem) =>
+        payload._tag === "answer"
+          ? answers.has(payload.question.id)
+          : (payload._tag === "result" || payload._tag === "failure") && children.has(payload.task.id);
       briefed = {
         taskId: open.top.id,
         carried: Option.match(ledger, { onNone: () => [], onSome: (read) => carriedFrom(read, shown) }),

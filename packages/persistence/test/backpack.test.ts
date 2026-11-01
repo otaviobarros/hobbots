@@ -694,11 +694,14 @@ describe("The responsibility ledger", () => {
           "Playful",
           now,
         );
-        const carried = [{ itemId: id, claim: held }];
+        const carried = [{ itemId: id, ...held }];
         const blocked = yield* finish("copy", "a-copy", carried).pipe(Effect.flip);
         const stillProcessing = yield* backpack.find(id);
         // The next turn carries the answer as well, and the Task completes.
-        const done = yield* finish("copy", "a-copy", [...carried, { itemId: recorded(answer).id, claim: null }]);
+        const done = yield* finish("copy", "a-copy", [
+          ...carried,
+          { itemId: recorded(answer).id, owner: null, token: 0 },
+        ]);
         return {
           blocked,
           stillProcessing,
@@ -729,33 +732,40 @@ describe("The responsibility ledger", () => {
   });
 
   // covers IN-006, IN-003
-  it("[TC-IN-042] a carried item counts only while the turn's claim holds or it is still pending and unclaimed", async () => {
+  it("[TC-IN-042] a carried item counts only while the turn's claim holds, or while it is still pending and unclaimed at the token the turn saw", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
         const backpack = yield* Backpack;
         const id = recorded(copy).id;
         yield* startOn("copy", "a-copy");
+        // A turn is briefed with the item while nobody has claimed it yet.
+        const briefed = { itemId: id, owner: null, token: recorded(copy).fencingToken };
         // A lease that has already run out by the database's clock.
         const lapsed = yield* backpack.claim(id, "hub-1:turn-1", "0 millis");
-        const lapsedHeld = { owner: "hub-1:turn-1", token: lapsed.value.fencingToken };
-        const lapsedRefused = yield* finish("copy", "a-copy", [{ itemId: id, claim: lapsedHeld }]).pipe(Effect.flip);
-        yield* backpack.expireClaims();
-        // A worker claimed the item after the turn was briefed with it unclaimed.
+        const lapsedHeld = { itemId: id, owner: "hub-1:turn-1", token: lapsed.value.fencingToken };
+        const lapsedRefused = yield* finish("copy", "a-copy", [lapsedHeld]).pipe(Effect.flip);
+        // Expired, the item is pending and unclaimed again, but at a newer token than the briefing saw.
+        const [expired] = (yield* backpack.expireClaims()).value;
+        const staleBriefing = yield* finish("copy", "a-copy", [briefed]).pipe(Effect.flip);
+        // A worker claimed the item after another turn was briefed with it unclaimed.
         const live = yield* backpack.claim(id, "hub-2:turn-1", "1 minute");
-        const takenRefused = yield* finish("copy", "a-copy", [{ itemId: id, claim: null }]).pipe(Effect.flip);
+        const takenRefused = yield* finish("copy", "a-copy", [
+          { itemId: id, owner: null, token: expired?.fencingToken ?? -1 },
+        ]).pipe(Effect.flip);
         const olderToken = yield* finish("copy", "a-copy", [
-          { itemId: id, claim: { owner: "hub-2:turn-1", token: lapsed.value.fencingToken } },
+          { itemId: id, owner: "hub-2:turn-1", token: lapsed.value.fencingToken },
         ]).pipe(Effect.flip);
         const item = yield* backpack.find(id);
         const done = yield* finish("copy", "a-copy", [
-          { itemId: id, claim: { owner: "hub-2:turn-1", token: live.value.fencingToken } },
+          { itemId: id, owner: "hub-2:turn-1", token: live.value.fencingToken },
         ]);
-        return { lapsedRefused, takenRefused, olderToken, item, done };
+        return { lapsedRefused, staleBriefing, takenRefused, olderToken, item, done };
       }),
     );
 
     expect(result.lapsedRefused).toMatchObject({ reason: "items-open" });
+    expect(result.staleBriefing).toMatchObject({ reason: "items-open" });
     expect(result.takenRefused).toMatchObject({ reason: "items-open" });
     expect(result.olderToken).toMatchObject({ reason: "items-open" });
     // A refused completion changes nothing: the live claim still holds the item.

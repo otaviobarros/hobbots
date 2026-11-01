@@ -335,7 +335,7 @@ describe("Task records", () => {
   });
 
   // covers EX-001, OR-006
-  it("[TC-OR-004] completes a Task only with its own Attempt, a finished subtree and no open questions, and its Quest with it", async () => {
+  it("[TC-OR-004] completes a Task only with its own Attempt and a settled ledger, and its Quest with it", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -438,7 +438,6 @@ describe("Task records", () => {
         ),
     ).toEqual([
       ["answer", "campaign", "resolved"],
-      ["checkpoint", "copy", "resolved"],
       ["result", "copy", "resolved"],
       ["result", "build", "resolved"],
     ]);

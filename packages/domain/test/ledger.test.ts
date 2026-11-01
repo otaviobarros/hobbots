@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   AgentId,
+  ArtifactId,
+  ArtifactRef,
+  AttemptId,
   BackpackItem,
   BackpackItemId,
   carriedFrom,
+  HandOff,
   ledgerRefusal,
   Question,
   QuestionId,
@@ -121,8 +125,21 @@ describe("responsibilityLedger", () => {
       approvals: [],
       items: [
         item("i-question", { _tag: "question", question: question("q1") }),
-        // The Task item of a Task that has ended asks for nothing more; its result says what it left.
+        // Once a Task under it ended, only its result or failure is left to read.
         item("i-taken", { _tag: "task", task: child, delegation: null }),
+        item("i-handed", {
+          _tag: "hand-off",
+          handOff: new HandOff({ artifactId: ArtifactId.make("art"), toTaskId: child.id, createdAt: at }),
+          artifact: new ArtifactRef({
+            id: ArtifactId.make("art"),
+            taskId: child.id,
+            attemptId: AttemptId.make("a1"),
+            kind: "text",
+            label: "Doc",
+            value: "text",
+            createdAt: at,
+          }),
+        }),
         item("i-result", done),
         item("i-elsewhere", done, "elsewhere"),
       ],
@@ -161,6 +178,8 @@ describe("ledgerRefusal", () => {
         "Task top cannot complete yet: the result of Task child (Brief for child) is in your backpack, not yet read; " +
         "Task other (Brief for other) failed, and you have not read it yet.",
     });
-    expect(carriedFrom(ledger, (each) => each.kind === "result")).toEqual([{ itemId: "i-result", claim: null }]);
+    expect(carriedFrom(ledger, (each) => each.kind === "result")).toEqual([
+      { itemId: "i-result", owner: null, token: 0 },
+    ]);
   });
 });

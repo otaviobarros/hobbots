@@ -1,5 +1,5 @@
 import { clip } from "@hobbots/agents";
-import { ancestorsOf, isTerminalTask, type Task, type TaskTree } from "@hobbots/domain";
+import { ancestorsOf, isTerminalTask, type Question, type Task, type TaskTree } from "@hobbots/domain";
 
 /**
  * What a step's fresh session and its owner's chat are told (ADR 018). A step sees only its brief
@@ -101,6 +101,12 @@ const childLine = (child: Task, tree: TaskTree, number: number) => {
   ];
 };
 
+/** The questions the owner asked about `task` that have been answered, oldest first: its briefing shows them. */
+export const answeredFor = (task: Task, tree: TaskTree): ReadonlyArray<Question> =>
+  tree.questions.filter(
+    (question) => question.taskId === task.id && question.askerId === task.ownerId && question.state === "answered",
+  );
+
 /**
  * What the owner's chat turn is told of the open Task it works on: the Task, and for each Task
  * under it its state, result or latest checkpoint. Transcripts never reach it.
@@ -108,8 +114,12 @@ const childLine = (child: Task, tree: TaskTree, number: number) => {
 export const ownerBriefing = (task: Task, tree: TaskTree): string => {
   const children = childrenOf(task, tree);
   const above = ancestorsOf(task, tree.tasks).length;
+  const answers = answeredFor(task, tree).map(
+    (question) => `- ${cut(question.text, SUMMARY_LIMIT)} Answer: ${cut(question.answer ?? "", SUMMARY_LIMIT)}`,
+  );
   return [
     `You are working on Task ${task.id} (${task.state}) for this conversation${above === 0 ? "" : ", under another Task"}: ${firstLine(task.brief)}`,
+    ...(answers.length === 0 ? [] : ["Answers to the questions you asked about it:", ...answers]),
     ...(children.length === 0
       ? []
       : [

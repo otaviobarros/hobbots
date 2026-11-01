@@ -146,13 +146,20 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           return Option.isSome(recorded);
         });
 
-      /** A step's session starts from its brief, so it carries the step's own Task item (ADR 019). */
+      /**
+       * A step's session starts from its prompt, which shows its brief and what was handed to it,
+       * so it carries the step's own Task item and its hand-offs (ADR 019).
+       */
       const carriedBy = (step: Task) =>
         Effect.map(
           tasks.readLedger(step.id),
           Option.match({
             onNone: () => [],
-            onSome: (ledger) => carriedFrom(ledger, (item) => item.kind === "task" && item.taskId === step.id),
+            onSome: (ledger) =>
+              carriedFrom(
+                ledger,
+                (item) => (item.kind === "task" || item.kind === "hand-off") && item.taskId === step.id,
+              ),
           }),
         );
 
@@ -223,6 +230,21 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           return ending;
         });
 
+      /** Records why a step could not complete as a blocker on it, so its failure says what was left open. */
+      const explain = (stepId: TaskId, reason: string, at: string) =>
+        attempt(
+          tasks.recordCheckpoint({
+            id: CheckpointId.make(newId()),
+            taskId: stepId,
+            source: "unplanned",
+            kind: "blocker",
+            milestoneId: null,
+            summary: cut(reason, RESULT_LIMIT),
+            createdAt: at,
+          }),
+          "record why a step could not complete",
+        );
+
       /**
        * Records how the step's session ended: the Attempt first, then the step completes with the
        * session's final reply unless it returned a result itself, or fails with the reason.
@@ -248,13 +270,19 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           }
           if (!failed) {
             const done = yield* attempt(
-              tasks.completeTask(step.id, step.revision, {
-                summary: cut(redactor.text(ending.text), RESULT_LIMIT) || "The step finished without a reply.",
-                attemptId,
-                artifacts: [],
-                at,
-                carried,
-              }),
+              tasks
+                .completeTask(step.id, step.revision, {
+                  summary: cut(redactor.text(ending.text), RESULT_LIMIT) || "The step finished without a reply.",
+                  attemptId,
+                  artifacts: [],
+                  at,
+                  carried,
+                })
+                .pipe(
+                  Effect.tapError((error) =>
+                    error._tag === "TaskRefused" ? explain(step.id, error.message, at) : Effect.void,
+                  ),
+                ),
               "complete a step",
             );
             if (Option.isSome(done)) return;
