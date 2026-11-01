@@ -239,7 +239,12 @@ export class ApprovalService extends Context.Service<
       const outcomeOf = (approval: ApprovalRequest): ApprovalOutcome | undefined => {
         switch (approval.state) {
           case "approved":
-            return { _tag: "Approved", actionDigest: approval.actionDigest, policyVersion: approval.policyVersion };
+            return {
+              _tag: "Approved",
+              actionDigest: approval.actionDigest,
+              policyVersion: approval.policyVersion,
+              lifetime: approval.lifetime ?? "once",
+            };
           case "denied":
             return { _tag: "Denied", reason: approval.denyReason };
           case "expired":

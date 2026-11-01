@@ -37,6 +37,7 @@ import {
 import { PermissionsGroup } from "./permissions.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
+import { TasksGroup } from "./tasks.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
 const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(40));
@@ -287,4 +288,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(SearchGroup)
   .add(PermissionsGroup)
   .add(ApprovalsGroup)
-  .add(GrantsGroup) {}
+  .add(GrantsGroup)
+  .add(TasksGroup) {}

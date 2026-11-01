@@ -1,5 +1,6 @@
 import {
   type ApprovalId,
+  type ApprovalLifetime,
   type Effort,
   type Grant,
   type GrantId,
@@ -147,10 +148,16 @@ export interface ApprovalAction {
 
 /**
  * The user's answer. Approved names the action and policy it applies to, so the adapter can check
- * both again just before the call runs (PE-008). Expired: the request can no longer be decided.
+ * both again just before the call runs (PE-008), and the lifetime the user picked, so the hob is
+ * told how it was approved. Expired: the request can no longer be decided.
  */
 export type ApprovalOutcome =
-  | { readonly _tag: "Approved"; readonly actionDigest: string; readonly policyVersion: string }
+  | {
+      readonly _tag: "Approved";
+      readonly actionDigest: string;
+      readonly policyVersion: string;
+      readonly lifetime: ApprovalLifetime;
+    }
   | { readonly _tag: "Denied"; readonly reason: string | null }
   | { readonly _tag: "Expired" };
 

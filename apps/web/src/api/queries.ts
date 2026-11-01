@@ -25,6 +25,7 @@ export const queryKeys = {
   agents: ["agents"] as const,
   archivedAgents: ["archivedAgents"] as const,
   threads: (agentId: AgentId) => ["agents", agentId, "threads"] as const,
+  archivedThreads: (agentId: AgentId) => ["agents", agentId, "archivedThreads"] as const,
   messages: (threadId: ThreadId) => ["threads", threadId, "messages"] as const,
   runtimes: ["runtimes"] as const,
   models: (runtime: RuntimeKind) => ["runtimes", runtime, "models"] as const,
@@ -58,6 +59,19 @@ export const threadsQuery = (agentId: AgentId) =>
       agentId,
       () => call((c) => c.agents.threads({ params: { agentId }, query: {} })),
       sortThreads,
+      false,
+    ),
+  });
+
+/** A hob's archived threads, most recently archived first. */
+export const archivedThreadsQuery = (agentId: AgentId) =>
+  queryOptions({
+    queryKey: queryKeys.archivedThreads(agentId),
+    queryFn: syncedThreads(
+      agentId,
+      () => call((c) => c.agents.threads({ params: { agentId }, query: { archived: "true" } })),
+      sortArchivedThreads,
+      true,
     ),
   });
 
@@ -193,7 +207,28 @@ export const upsertMessage = (list: ReadonlyArray<Message>, message: Message): A
     : upsertById(list, message);
 };
 
-export const sortThreads = (threads: Array<Thread>) => threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+const sortThreads = (threads: Array<Thread>) => threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+const sortArchivedThreads = (threads: Array<Thread>) =>
+  threads.sort((a, b) => (b.archivedAt ?? "").localeCompare(a.archivedAt ?? ""));
+
+/**
+ * Puts a thread the hub returned or announced in its hob's list by its `archivedAt`: a live thread in
+ * the thread list, an archived one in the archived list, and out of the other. An older version than
+ * the one already shown changes nothing. Lists not loaded yet stay unloaded.
+ */
+export const placeThread = (queryClient: QueryClient, thread: Thread) => {
+  const archived = thread.archivedAt !== null;
+  const known = [queryKeys.threads(thread.agentId), queryKeys.archivedThreads(thread.agentId)]
+    .flatMap((key) => queryClient.getQueryData<ReadonlyArray<Thread>>(key) ?? [])
+    .find((existing) => existing.id === thread.id);
+  if (newer(known, thread) !== thread) return;
+  const into = archived ? queryKeys.archivedThreads(thread.agentId) : queryKeys.threads(thread.agentId);
+  const outOf = archived ? queryKeys.threads(thread.agentId) : queryKeys.archivedThreads(thread.agentId);
+  const order = archived ? sortArchivedThreads : sortThreads;
+  queryClient.setQueryData<ReadonlyArray<Thread>>(into, (old) => (old ? order(upsertById(old, thread)) : old));
+  queryClient.setQueryData<ReadonlyArray<Thread>>(outOf, (old) => old?.filter((t) => t.id !== thread.id));
+};
 
 /**
  * A hob that refused a message was paused or retired where this client has not heard yet, so the

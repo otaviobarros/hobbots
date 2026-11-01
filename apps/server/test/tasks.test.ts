@@ -1,0 +1,206 @@
+import { NodeHttpServer } from "@effect/platform-node";
+import {
+  ApprovalService,
+  ChatService,
+  GrantService,
+  HobAdmission,
+  HobbotsRepository,
+  HobLifecycle,
+  HobService,
+  HobTools,
+  PermissionSummary,
+  TaskRepository,
+} from "@hobbots/agents";
+import { QuestRead, TaskTreeRead } from "@hobbots/api";
+import {
+  Agent,
+  AgentId,
+  DEFAULT_QUEST_LIMITS,
+  DelegationId,
+  type EventEnvelope,
+  QuestId,
+  TaskId,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
+import {
+  ApprovalRepositoryLive,
+  EventJournal,
+  GrantRepositoryLive,
+  HobbotsRepositoryLive,
+  SearchIndex,
+  SetupRepository,
+  TaskRepositoryLive,
+} from "@hobbots/persistence";
+import { TestDatabase } from "@hobbots/persistence/testing";
+import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { Effect, Layer, ManagedRuntime, Schema } from "effect";
+import { HttpRouter } from "effect/http";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { EventBus } from "../src/event-bus.ts";
+import { parseCursor } from "../src/event-stream.ts";
+import { NodeFolderChecks } from "../src/folders.ts";
+import { ApiRoutes } from "../src/http.ts";
+import { Installation } from "../src/installation.ts";
+
+const App = HobLifecycle.layer.pipe(
+  Layer.provideMerge(
+    Layer.mergeAll(
+      ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
+      ApprovalService.layer,
+      GrantService.layer,
+      HobService.layer,
+      PermissionSummary.layer,
+    ),
+  ),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      Layer.mergeAll(
+        HobbotsRepositoryLive,
+        ApprovalRepositoryLive,
+        GrantRepositoryLive,
+        TaskRepositoryLive,
+        EventJournal.layer,
+        SetupRepository.layer,
+        SearchIndex.layer,
+      ).pipe(Layer.provideMerge(TestDatabase)),
+      EventBus.layer,
+      HobAdmission.layer,
+      NodeFolderChecks,
+      FakeRuntimeLayer(),
+      Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/tmp" }),
+    ),
+  ),
+);
+
+let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<typeof App>, Layer.Error<typeof App>>;
+let handler: (request: Request) => Promise<Response>;
+let dispose: () => Promise<void>;
+
+beforeEach(async () => {
+  runtime = ManagedRuntime.make(App);
+  const web = HttpRouter.toWebHandler(
+    ApiRoutes.pipe(
+      Layer.provide(Layer.succeedContext(await runtime.context())),
+      Layer.provide(NodeHttpServer.layerHttpServices),
+    ),
+    { disableLogger: true },
+  );
+  handler = (request) => web.handler(request);
+  dispose = async () => {
+    await web.dispose();
+    await runtime.dispose();
+  };
+});
+
+afterEach(() => dispose());
+
+const get = async (path: string): Promise<{ readonly status: number; readonly body: unknown }> => {
+  const response = await handler(new Request(`http://localhost:4390${path}`));
+  return { status: response.status, body: await response.json() };
+};
+
+const now = "2026-11-01T00:00:00.000Z";
+const ALDRIC = AgentId.make("aldric");
+const QUILL = AgentId.make("quill");
+const threadId = ThreadId.make("t1");
+
+/** Aldric leads a Quest on the Task you asked for, with Quill drafting the copy. */
+const quest = Effect.gen(function* () {
+  const repo = yield* HobbotsRepository;
+  for (const [id, name] of [
+    [ALDRIC, "Aldric"],
+    [QUILL, "Quill"],
+  ] as const) {
+    yield* repo.insertAgent(
+      new Agent({
+        id,
+        name,
+        roleTitle: "Guide",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        configVersion: 1,
+        createdAt: now,
+      }),
+    );
+  }
+  yield* repo.upsertThread(
+    new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+  );
+  const tasks = yield* TaskRepository;
+  const task = (id: string, ownerId: AgentId, parentId: string | null, createdAt: string) => ({
+    id: TaskId.make(id),
+    ownerId,
+    parentId: parentId === null ? null : TaskId.make(parentId),
+    threadId,
+    brief: id,
+    dependsOn: [],
+    createdAt,
+  });
+  yield* tasks.createTask({ task: task("campaign", ALDRIC, null, now), delegation: null, milestones: [] });
+  yield* tasks.startQuest({
+    id: QuestId.make("q1"),
+    taskId: TaskId.make("campaign"),
+    goal: "A Black Friday campaign",
+    acceptance: [],
+    limits: DEFAULT_QUEST_LIMITS,
+    createdAt: now,
+  });
+  return yield* tasks.createTask({
+    task: task("copy", QUILL, "campaign", "2026-11-01T00:00:01.000Z"),
+    delegation: {
+      id: DelegationId.make("d1"),
+      brief: "Draft the copy",
+      expectedOutput: "Three headlines",
+      authority: { overrides: {}, folders: null },
+      timeoutMs: null,
+    },
+    milestones: [],
+  });
+});
+
+describe("Task and Quest reads", () => {
+  // covers OR-002, OR-007
+  it("[TC-OR-006] reads a Task tree and a Quest with a cursor the event stream resumes from without missing a change", async () => {
+    const copy = await runtime.runPromise(quest);
+
+    const treeResponse = await get("/api/tasks/campaign");
+    expect(treeResponse.status).toBe(200);
+    const tree = Schema.decodeUnknownSync(TaskTreeRead)(treeResponse.body);
+    expect(tree.tree.tasks.map((task) => task.id)).toEqual(["campaign", "copy"]);
+    expect(tree.tree.delegations).toMatchObject([{ id: "d1", leadId: ALDRIC, memberId: QUILL }]);
+
+    const questResponse = await get("/api/quests/q1");
+    expect(questResponse.status).toBe(200);
+    const read = Schema.decodeUnknownSync(QuestRead)(questResponse.body);
+    expect(read).toMatchObject({ quest: { id: "q1", taskId: "campaign", leadId: ALDRIC }, party: [QUILL] });
+    expect(read.tree).toEqual(tree.tree);
+    expect(read.cursor).toBe(tree.cursor);
+
+    // A change after the read is exactly what the stream replays after the read's cursor.
+    const moved = await runtime.runPromise(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        return yield* tasks.moveTask(copy.value.id, copy.value.revision, "cancelled", now);
+      }),
+    );
+    const replayed: ReadonlyArray<EventEnvelope> = await runtime.runPromise(
+      Effect.gen(function* () {
+        const journal = yield* EventJournal;
+        return yield* journal.readAfter(parseCursor(tree.cursor)?.sequence ?? -1);
+      }),
+    );
+    expect(replayed.map((entry) => entry.sequence)).toEqual(moved.entries.map((entry) => entry.sequence));
+    expect(replayed.map((entry) => entry.type)).toEqual(["TaskStateChanged", "CheckpointRecorded"]);
+  });
+
+  // covers OR-007
+  it("[TC-OR-007] answers 404 for a Task or Quest that is not there", async () => {
+    expect(await get("/api/tasks/nope")).toEqual({ status: 404, body: { _tag: "TaskNotFound", taskId: "nope" } });
+    expect(await get("/api/quests/nope")).toEqual({ status: 404, body: { _tag: "QuestNotFound", questId: "nope" } });
+  });
+});

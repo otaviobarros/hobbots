@@ -16,10 +16,12 @@ import {
 import { type Agent, type Message, PRESET_DECISIONS, roleFields } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
+  EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   SearchIndex,
   SetupRepository,
+  TaskRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { fakeEnforcement, makeFakeRuntime } from "@hobbots/runtimes";
@@ -105,6 +107,8 @@ const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailab
                 HobbotsRepositoryLive,
                 ApprovalRepositoryLive,
                 GrantRepositoryLive,
+                TaskRepositoryLive,
+                EventJournal.layer,
                 SetupRepository.layer,
                 SearchIndex.layer,
               ).pipe(Layer.provideMerge(TestDatabase)),

@@ -23,10 +23,12 @@ import {
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
+  EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   SearchIndex,
   SetupRepository,
+  TaskRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { fakeInstructionsPrompt, makeFakeRuntime } from "@hobbots/runtimes";
@@ -108,6 +110,8 @@ beforeEach(() => {
             HobbotsRepositoryLive,
             ApprovalRepositoryLive,
             GrantRepositoryLive,
+            TaskRepositoryLive,
+            EventJournal.layer,
             SetupRepository.layer,
             SearchIndex.layer,
           ).pipe(Layer.provideMerge(TestDatabase)),

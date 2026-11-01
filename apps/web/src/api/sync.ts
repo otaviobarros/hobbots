@@ -155,11 +155,14 @@ export const syncedAgents = (
   order?: (items: Array<Agent>) => Array<Agent>,
 ) => synced(fetch, "agent", (agent) => (agent.status === "retired") === retired, order);
 
+/** A hob's live threads, or with `archived` its archived ones; a thread moves between them by its `archivedAt`. */
 export const syncedThreads = (
   agentId: AgentId,
   fetch: () => Promise<ReadonlyArray<Thread>>,
   order: (items: Array<Thread>) => Array<Thread>,
-) => synced(fetch, "thread", (thread) => thread.agentId === agentId, order);
+  archived: boolean,
+) =>
+  synced(fetch, "thread", (thread) => thread.agentId === agentId && (thread.archivedAt !== null) === archived, order);
 
 export const syncedMessages = (
   threadId: ThreadId,

@@ -6,9 +6,10 @@ import {
   EventEnvelope,
   JournaledEvent,
   type JournaledEvent as JournaledEventType,
+  ThreadId,
 } from "@hobbots/domain";
 import { Context, Data, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
-import { SqlClient, type SqlError } from "effect/sql";
+import { SqlClient, SqlError } from "effect/sql";
 
 /** Where the journal stands: its epoch (new for every fresh database) and the last committed sequence. */
 export interface JournalHead {
@@ -22,27 +23,73 @@ export const JOURNAL_RETENTION = { age: Duration.days(7), entries: 10_000 } as c
 const encodePayload = Schema.encodeSync(JournaledEvent);
 const decodeEnvelope = Schema.decodeUnknownEffect(EventEnvelope);
 
-const correlationOf = (event: JournaledEventType): EventCorrelation => {
+// What the journal row is correlated with. A Task's records name only their Task, so the row takes
+// the Task's owner and thread from the tasks table, as a message event takes its hob from its thread.
+interface RowCorrelation extends EventCorrelation {
+  readonly taskId: string | null;
+}
+
+const byTask = (task: { readonly ownerId: AgentId; readonly threadId: ThreadId | null; readonly id: string }) => ({
+  agentId: task.ownerId,
+  threadId: task.threadId,
+  messageId: null,
+  taskId: task.id,
+});
+
+const NONE: RowCorrelation = { agentId: null, threadId: null, messageId: null, taskId: null };
+
+type TaskEvent = Extract<
+  JournaledEventType,
+  {
+    readonly _tag:
+      | "TaskCreated"
+      | "TaskStateChanged"
+      | "TaskCompleted"
+      | "QuestStarted"
+      | "QuestCompleted"
+      | "CheckpointRecorded"
+      | "QuestionAsked"
+      | "QuestionAnswered"
+      | "QuestionEscalated"
+      | "HandedOff";
+  }
+>;
+
+const isTaskEvent = (event: JournaledEventType): event is TaskEvent =>
+  "task" in event || "quest" in event || "checkpoint" in event || "question" in event || "handOff" in event;
+
+const taskCorrelationOf = (event: TaskEvent): RowCorrelation => {
+  if ("task" in event) return byTask(event.task);
+  if ("quest" in event)
+    return { ...NONE, agentId: event.quest.leadId, threadId: event.quest.threadId, taskId: event.quest.taskId };
+  if ("question" in event) return { ...NONE, agentId: event.question.askerId, taskId: event.question.taskId };
+  return { ...NONE, taskId: "checkpoint" in event ? event.checkpoint.taskId : event.handOff.toTaskId };
+};
+
+const correlationOf = (event: JournaledEventType): RowCorrelation => {
   switch (event._tag) {
     case "AgentUpserted":
-      return { agentId: event.agent.id, threadId: null, messageId: null };
+      return { ...NONE, agentId: event.agent.id };
     case "ThreadUpserted":
-      return { agentId: event.thread.agentId, threadId: event.thread.id, messageId: null };
+      return { ...NONE, agentId: event.thread.agentId, threadId: event.thread.id };
     case "ApprovalRequested":
     case "ApprovalResolved":
       return {
+        ...NONE,
         agentId: event.approval.agentId,
         threadId: event.approval.threadId,
         messageId: event.approval.messageId,
       };
     case "GrantCreated":
     case "GrantRevoked":
-      return { agentId: event.grant.agentId, threadId: null, messageId: null };
+      return { ...NONE, agentId: event.grant.agentId };
     case "MessageUpserted":
     case "MessageQueued":
-      return { agentId: null, threadId: event.message.threadId, messageId: event.message.id };
+      return { ...NONE, threadId: event.message.threadId, messageId: event.message.id };
     default:
-      return { agentId: null, threadId: event.threadId, messageId: event.messageId };
+      return isTaskEvent(event)
+        ? taskCorrelationOf(event)
+        : { ...NONE, threadId: event.threadId, messageId: event.messageId };
   }
 };
 
@@ -70,22 +117,35 @@ const makeJournalWriter = (sql: SqlClient.SqlClient) => {
           const sequence = first + index;
           const type = payload._tag;
           const schemaVersion = EVENT_SCHEMA_VERSIONS[type];
-          const { agentId, threadId, messageId } = correlationOf(payload);
-          const [row] = yield* sql<{ readonly agentId: string | null }>`INSERT INTO event_journal
+          const { agentId, threadId, messageId, taskId } = correlationOf(payload);
+          const agent =
+            taskId === null
+              ? sql`COALESCE(${agentId}, (SELECT agent_id FROM threads WHERE id = ${threadId}))`
+              : sql`COALESCE(${agentId}, (SELECT owner_id FROM tasks WHERE id = ${taskId}))`;
+          const thread =
+            taskId === null
+              ? sql`${threadId}`
+              : sql`COALESCE(${threadId}, (SELECT thread_id FROM tasks WHERE id = ${taskId}))`;
+          const [row] = yield* sql<{
+            readonly agentId: string | null;
+            readonly threadId: string | null;
+          }>`INSERT INTO event_journal
               (sequence, id, type, schema_version, occurred_at, agent_id, thread_id, message_id, causation_id, payload)
             VALUES (
-              ${sequence}, ${id}, ${type}, ${schemaVersion}, ${occurredAt},
-              COALESCE(${agentId}, (SELECT agent_id FROM threads WHERE id = ${threadId})),
-              ${threadId}, ${messageId}, NULL, ${JSON.stringify(encodePayload(payload))}
+              ${sequence}, ${id}, ${type}, ${schemaVersion}, ${occurredAt}, ${agent}, ${thread}, ${messageId}, NULL, ${JSON.stringify(encodePayload(payload))}
             )
-            RETURNING agent_id`;
+            RETURNING agent_id, thread_id`;
           return new EventEnvelope({
             id,
             sequence,
             schemaVersion,
             type,
             occurredAt,
-            correlation: { agentId: row?.agentId == null ? null : AgentId.make(row.agentId), threadId, messageId },
+            correlation: {
+              agentId: row?.agentId == null ? null : AgentId.make(row.agentId),
+              threadId: row?.threadId == null ? null : ThreadId.make(row.threadId),
+              messageId,
+            },
             causationId: null,
             payload,
           });
@@ -93,7 +153,17 @@ const makeJournalWriter = (sql: SqlClient.SqlClient) => {
       );
     });
 
-  return { reserve, append };
+  /**
+   * Locks the head row for the rest of the transaction without taking sequences yet, and returns
+   * the first sequence the transaction's events will take. `advance` then takes them.
+   */
+  const lock: Effect.Effect<number, SqlError.SqlError> = sql<{ readonly sequence: unknown }>`UPDATE event_journal_head
+    SET sequence = sequence WHERE id = 1 RETURNING sequence`.pipe(Effect.map(([row]) => Number(row?.sequence) + 1));
+
+  const advance = (first: number, count: number) =>
+    sql`UPDATE event_journal_head SET sequence = ${first + count - 1} WHERE id = 1`.pipe(Effect.asVoid);
+
+  return { reserve, append, lock, advance };
 };
 
 // A conditional write found nothing to change; its transaction rolls back, releasing its sequences.
@@ -130,6 +200,37 @@ export const makeJournaled =
       Effect.catchTag("NothingChanged", () => Effect.succeed(Option.none())),
       Effect.orDie,
     );
+  };
+
+/**
+ * Runs a change in one transaction, as `makeJournaled` does, for a change that learns how many
+ * events it journals only as it reads, and that can be refused. The head row is locked first, so
+ * concurrent writers still take turns on PostgreSQL; the events take the sequences from `first`.
+ * A refusal (`E`) rolls the whole change back and is returned as the failure.
+ */
+export const makeJournaledChange =
+  (sql: SqlClient.SqlClient) =>
+  <A, E extends { readonly _tag: string }>(
+    write: (
+      first: number,
+    ) => Effect.Effect<
+      { readonly value: A; readonly events: ReadonlyArray<JournaledEventType> },
+      SqlError.SqlError | E
+    >,
+  ): Effect.Effect<Committed<A>, Exclude<E, SqlError.SqlError>> => {
+    const journal = makeJournalWriter(sql);
+    return Effect.gen(function* () {
+      const first = yield* journal.lock;
+      const change = yield* write(first);
+      yield* journal.advance(first, change.events.length);
+      return { value: change.value, entries: yield* journal.append(first, change.events) };
+    }).pipe(
+      sql.withTransaction,
+      Effect.catchIf(
+        (error): error is SqlError.SqlError => SqlError.isSqlError(error),
+        (error) => Effect.die(error),
+      ),
+    ) as Effect.Effect<Committed<A>, Exclude<E, SqlError.SqlError>>;
   };
 
 interface JournalRow {

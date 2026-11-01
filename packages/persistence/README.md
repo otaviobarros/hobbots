@@ -2,7 +2,7 @@
 
 Validation slice implemented ([ADR 009](../../docs/decisions/009-toolchain-and-validation-slice.md)): SQLite client, migrations and `HobbotsRepositoryLive`, which implements the `HobbotsRepository` port of `@hobbots/agents` for hobs, threads and messages.
 
-SQLite/PostgreSQL repositories, transactions, journal, outbox and migrations.
+SQLite/PostgreSQL repositories, transactions, journal, outbox and migrations. `TaskRepositoryLive` stores the Tasks, Quests and records of [ADR 018](../../docs/decisions/018-tasks-and-quests.md) and checks their lineage on every write.
 
 `SqliteLive(filename)` is the database every installation uses. `PgLive(url)` runs the same migrations and repositories on PostgreSQL, so the SQL stays portable ([ADR 011](../../docs/decisions/011-sqlite-storage.md)).
 

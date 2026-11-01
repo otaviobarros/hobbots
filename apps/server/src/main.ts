@@ -22,6 +22,7 @@ import {
   SearchIndex,
   SetupRepository,
   SqliteLive,
+  TaskRepositoryLive,
 } from "@hobbots/persistence";
 import { ClaudeCodeLayer, FakeAdditionalRuntimesLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
@@ -60,6 +61,7 @@ const ServerLive = Layer.unwrap(
       HobbotsRepositoryLive,
       ApprovalRepositoryLive,
       GrantRepositoryLive,
+      TaskRepositoryLive,
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
