@@ -66,11 +66,14 @@ const inside = async (path: string, roots: ReadonlyArray<string>) => {
 /**
  * The whole output Claude Code saved to a file because it was too large to return inline, or
  * undefined when the file is not one to trust: outside the runtime's configuration folders, a
- * link, not a regular file the hub's user owns, or larger than Hobbots reads back.
+ * link, not a regular file the hub's user owns (a FIFO or a device), or larger than Hobbots reads
+ * back.
  */
 const persistedOutput = async (path: string, roots: ReadonlyArray<string>): Promise<string | undefined> => {
   if (!(await inside(path, roots))) return undefined;
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  // O_NONBLOCK: a FIFO swapped in for the file opens at once instead of waiting for a writer, and is
+  // then refused as not a regular file. Reading a regular file never blocks either way.
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stats = await handle.stat();
     const own = process.getuid === undefined || stats.uid === process.getuid();

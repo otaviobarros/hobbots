@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,6 +62,14 @@ describe("fullToolOutput", () => {
     expect(await fullToolOutput("Bash", persisted(join(results, "planted.txt")), [config])).toBe("line\nline\n…");
     expect(await fullToolOutput("Bash", persisted(join(results, "gone.txt")), [config])).toBe("line\nline\n…");
   });
+
+  it("keeps the excerpt at once for a FIFO swapped in for the file, never waiting for a writer", async () => {
+    const fifo = join(results, "fifo.txt");
+    execFileSync("mkfifo", [fifo]);
+    const started = Date.now();
+    expect(await fullToolOutput("Bash", persisted(fifo), [config])).toBe("line\nline\n…");
+    expect(Date.now() - started).toBeLessThan(1000);
+  }, 5000);
 
   it("reads other tools' responses as they come", async () => {
     expect(await fullToolOutput("Grep", { content: "a.ts:1:x", filenames: [] }, [config])).toBe("a.ts:1:x");
