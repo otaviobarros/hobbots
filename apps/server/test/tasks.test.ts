@@ -250,6 +250,7 @@ describe("Task and Quest reads", () => {
         task: { id: "copy", ownerId: QUILL, state: "queued" },
         delegation: { leadId: ALDRIC, brief: "Draft the copy" },
         quest: { id: "q1", leadId: ALDRIC, threadId, state: "active" },
+        threadAgentId: ALDRIC,
       },
     ]);
     expect(Schema.decodeUnknownSync(MemberWorkRead)((await get("/api/agents/aldric/quest-work")).body).work).toEqual(

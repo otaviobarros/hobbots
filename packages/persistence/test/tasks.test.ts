@@ -721,4 +721,33 @@ describe("Task records", () => {
     ]);
     expect(result.afterQuest).toEqual([]);
   });
+  // covers OR-001, UX-001
+  it("[TC-OR-023] gives a member's work on a nested Quest the hob whose thread the request came from", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        yield* tasks.startQuest({
+          id: QuestId.make("q2"),
+          taskId: TaskId.make("build"),
+          goal: "Keywords",
+          acceptance: [],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        yield* tasks.createTask({
+          task: newTask("keywords", PIP, "build"),
+          delegation: brief("d-keywords"),
+          milestones: [],
+        });
+        return { pip: yield* tasks.listMemberWork(PIP), quill: yield* tasks.listMemberWork(QUILL) };
+      }),
+    );
+
+    // Ada leads Pip's Quest, but it is followed in Aldric's thread.
+    expect(result.pip.map((each) => [each.task.id, each.quest.id, each.quest.leadId, each.threadAgentId])).toEqual([
+      ["keywords", "q2", ADA, ALDRIC],
+    ]);
+    expect(result.quill.map((each) => [each.quest.leadId, each.threadAgentId])).toEqual([[ALDRIC, ALDRIC]]);
+  });
 });

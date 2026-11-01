@@ -1,4 +1,5 @@
 import {
+  AgentId,
   ArtifactRef,
   Attempt,
   Checkpoint,
@@ -205,10 +206,20 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
         open.map((each) => each.childTaskId),
       )} ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("task")));
       const byTask = new Map(open.map((each) => [each.childTaskId, each]));
+      // A nested Quest's lead is a member, but its thread belongs to the hob the request was made to.
+      const threadIds = [...new Set(quests.flatMap((each) => (each.threadId === null ? [] : [each.threadId])))];
+      const owners =
+        threadIds.length === 0
+          ? []
+          : yield* sql<{ readonly id: string; readonly agentId: string }>`SELECT id, agent_id FROM threads
+              WHERE ${sql.in("id", threadIds)}`;
+      const ownerOf = new Map(owners.map((each) => [each.id, AgentId.make(each.agentId)]));
       return tasks.flatMap((task) => {
         const delegation = byTask.get(task.id);
         const quest = delegation && active.get(delegation.questId);
-        return delegation && quest ? [new MemberWork({ task, delegation, quest })] : [];
+        if (!delegation || !quest) return [];
+        const threadAgentId = quest.threadId === null ? null : (ownerOf.get(quest.threadId) ?? null);
+        return [new MemberWork({ task, delegation, quest, threadAgentId })];
       });
     });
 

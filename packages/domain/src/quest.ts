@@ -257,4 +257,9 @@ export class MemberWork extends Schema.Class<MemberWork>("MemberWork")({
   task: Task,
   delegation: Delegation,
   quest: Quest,
+  /**
+   * The hob whose thread the request came from, where the Quest is followed. A nested Quest's lead
+   * is a member, but its thread is still that hob's; null when the Quest has no thread.
+   */
+  threadAgentId: Schema.NullOr(AgentId),
 }) {}

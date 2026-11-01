@@ -42,10 +42,11 @@ const summon = (name: string, seed: number) =>
 
 /**
  * Aldric leads the Black Friday campaign from his thread: Quill drafts the copy and Ada waits to
- * build the page. The hob tools that write these records arrive with #271, so the test writes them
+ * build the page. Ada leads her own Quest inside it, with Pip finding keywords; it is still
+ * followed in Aldric's thread. The hob tools that write these records arrive with #271, so the test writes them
  * as the repository would.
  */
-const campaign = (ids: { aldric: string; quill: string; ada: string }, threadId: string) => {
+const campaign = (ids: { aldric: string; quill: string; ada: string; pip: string }, threadId: string) => {
   const database = new DatabaseSync(join(dataDir, "hobbots.sqlite"));
   const at = (second: number) => new Date(Date.UTC(2026, 10, 1, 9, 0, second)).toISOString();
   const task = (id: string, owner: string, parent: string | null, state: string, second: number) =>
@@ -55,16 +56,23 @@ const campaign = (ids: { aldric: string; quill: string; ada: string }, threadId:
          VALUES (?, ?, ?, 'campaign', ?, ?, ?, ?, ?, 1)`,
       )
       .run(id, owner, parent, threadId, `Brief for ${id}`, state, at(second), at(second));
-  const delegation = (child: string, member: string, second: number) =>
+  const delegation = (
+    child: string,
+    member: string,
+    second: number,
+    on = { quest: "q1", lead: ids.aldric, parent: "campaign" },
+  ) =>
     database
       .prepare(
         `INSERT INTO delegations (id, quest_id, lead_id, member_id, parent_task_id, child_task_id, brief, authority, created_at)
-         VALUES (?, 'q1', ?, ?, 'campaign', ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         `d-${child}`,
-        ids.aldric,
+        on.quest,
+        on.lead,
         member,
+        on.parent,
         child,
         `Brief for ${child}`,
         JSON.stringify({ overrides: {}, folders: null }),
@@ -83,6 +91,14 @@ const campaign = (ids: { aldric: string; quill: string; ada: string }, threadId:
     delegation("copy", ids.quill, 1);
     task("build", ids.ada, "campaign", "queued", 2);
     delegation("build", ids.ada, 2);
+    database
+      .prepare(
+        `INSERT INTO quests (id, task_id, lead_id, parent_quest_id, thread_id, goal, limits, depth, state, created_at, revision)
+         VALUES ('q2', 'build', ?, 'q1', ?, 'Landing page keywords', ?, 2, 'active', ?, 1)`,
+      )
+      .run(ids.ada, threadId, JSON.stringify({ maxDepth: 2, deadline: null }), at(3));
+    task("keywords", ids.pip, "build", "active", 4);
+    delegation("keywords", ids.pip, 4, { quest: "q2", lead: ids.ada, parent: "build" });
   } finally {
     database.close();
   }
@@ -99,6 +115,7 @@ test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and ope
     aldric: await summon("Aldric", 1001),
     quill: await summon("Quill", 1338),
     ada: await summon("Ada", 1675),
+    pip: await summon("Pip", 2012),
   };
   const thread = await call<{ readonly id: string }>("POST", `/agents/${ids.aldric}/threads`);
   campaign(ids, thread.id);
@@ -125,5 +142,16 @@ test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and ope
   // Quill's work is not one of her threads.
   expect(await call<ReadonlyArray<unknown>>("GET", `/agents/${ids.quill}/threads`)).toEqual([]);
   await work.click();
+  await expect(page).toHaveURL(questThread);
+
+  // Ada leads Pip's nested Quest, but it is followed in Aldric's thread, so the link opens his chat.
+  const nested = panel.getByRole("link", { name: "Pip is on Ada's quest, Working. Open the Quest" });
+  await nested.click();
+  await expect(page).toHaveURL(questThread);
+  await expect(page.getByRole("main", { name: "Chat" }).locator("header")).toContainText("Aldric");
+  await page.goto(hub.url);
+  const keywords = quests.getByRole("link", { name: /Landing page keywords/ });
+  await expect(keywords).toContainText(/Pip\s*On Ada's quest\s*Working/);
+  await keywords.click();
   await expect(page).toHaveURL(questThread);
 });

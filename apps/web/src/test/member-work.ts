@@ -64,4 +64,5 @@ export const memberWork = (taskId: string, member: string, on: Quest, state: Tas
       createdAt: at(second),
     }),
     quest: on,
+    threadAgentId: on.leadId,
   });
