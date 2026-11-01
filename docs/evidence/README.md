@@ -53,3 +53,4 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-10-31 Reliable chat survives a crash, time offline, an expired cursor and a restored backup](2026-10-31-reliable-chat.md)
 - [2026-11-01 Hobs use tools within their folders, under the policy](2026-11-01-tools-under-policy.md)
 - [2026-11-01 Approvals hold end to end: rules, doubled clicks, expiry and the Inbox](2026-11-01-approvals-end-to-end.md)
+- [2026-11-01 Threads are archived, found, read and restored without losing history](2026-11-01-archive-threads.md)
