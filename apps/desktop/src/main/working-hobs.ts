@@ -43,13 +43,15 @@ export const workingHobs = ({ read, onRead, retry }: WorkingHobsOptions) => {
   };
 
   /**
-   * Forgets what events said, for a fresh connection or a hub that went away: the next read that
-   * answers stands, as a new snapshot.
+   * Starts over at a connection boundary: a fresh connection, or one that ended or failed. What
+   * earlier events said is forgotten at once, before `check` runs, so an event that arrives while
+   * the server is checked is kept and waited for; then a new snapshot is read.
    */
-  const reset = () => {
+  const startOver = async (check: () => Promise<void>) => {
     expected.clear();
-    return refresh();
+    await check();
+    await refresh();
   };
 
-  return { changed, refresh, reset };
+  return { changed, refresh, startOver };
 };

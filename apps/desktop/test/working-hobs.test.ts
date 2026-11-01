@@ -61,11 +61,26 @@ describe("which hobs are working", () => {
     expect(seen.filter((names) => names.length > 0)).toEqual([["Pip"]]);
   });
 
-  it("starts from a new snapshot on reset", async () => {
+  it("starts from a new snapshot at a connection boundary", async () => {
     const { hobs, seen, reads } = setup([[]]);
     void hobs.changed("t1", true);
     await expect.poll(() => reads()).toBeGreaterThan(1);
-    await hobs.reset();
+    await hobs.startOver(async () => {});
     expect(seen.at(-1)).toEqual([]);
+  });
+
+  // covers UX-001
+  it("[TC-DP-048] keeps an event that arrives while the server is checked at a new connection", async () => {
+    const { hobs, seen, reads } = setup([[pip], [pip], []]);
+    let checked: () => void = () => {};
+    // The stream says Ready, and the server's health check is still on its way.
+    const starting = hobs.startOver(() => new Promise((resolve) => (checked = resolve)));
+    // Meanwhile Pip's reply completes, while the hub is still cleaning up its turn.
+    void hobs.changed("t1", false);
+    checked();
+    await starting;
+    expect(seen.at(-1)).toEqual([]);
+    expect(seen.filter((names) => names.length > 0)).toEqual([]);
+    expect(reads()).toBeGreaterThanOrEqual(3);
   });
 });

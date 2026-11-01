@@ -108,11 +108,7 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
    * cannot connect.
    * The open stream is what shows the server is alive, so nothing is checked on a timer.
    */
-  const checkServer = async () => {
-    await supervisor.check();
-    // A fresh connection, or a hub that went away, starts from a new snapshot.
-    await workingReads.reset();
-  };
+  const checkServer = () => workingReads.startOver(() => supervisor.check());
 
   const guard = (window: BrowserWindow) => {
     windows.add(window);
