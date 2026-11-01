@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
@@ -10,6 +10,7 @@ import {
   HobLifecycle,
   HobService,
   PermissionSummary,
+  SecretRedaction,
 } from "@hobbots/agents";
 import {
   type Agent,
@@ -37,6 +38,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { ToolLogsLive } from "../src/tool-logs.ts";
 import { HobToolsLive } from "../src/tools.ts";
 
 // Slice 7's done-when checks, at hub level and over the HTTP API, with the hub's own composition:
@@ -55,6 +57,9 @@ writeFileSync(join(project, "src", "sum.ts"), "export const sum = (a: number, b:
 writeFileSync(join(outside, "diary.txt"), "Not for hobs.\n");
 // A link inside the folder that points outside it is outside.
 symlinkSync(outside, join(project, "personal-link"));
+
+// A credential the hub knows by value, as one in its environment.
+const HUB_TOKEN = "hub-credential-0123456789";
 
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
@@ -82,6 +87,8 @@ beforeEach(() => {
           NodeFolderChecks,
           FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir }),
+          SecretRedaction.layer([{ value: HUB_TOKEN, kind: "GH_TOKEN" }]),
+          ToolLogsLive(join(dataDir, "tool-logs")),
         ),
       ),
     );
@@ -253,5 +260,67 @@ describe("tools under policy, end to end", () => {
     expect(toolSteps(reply)).toMatchObject([{ state: "done", call: { operation: "push" } }]);
     expect(reply.content).toMatch(/^Echo: Ship it/);
     expect(await approvals(thread)).toHaveLength(1);
+  });
+});
+
+describe("long tool output", () => {
+  const logOf = async (thread: Thread, reply: Message, step: ReplyStep) => {
+    const response = await handler(
+      new Request(
+        `http://localhost:4364/api/threads/${thread.id}/messages/${reply.id}/steps/${encodeURIComponent(step.id)}/log`,
+      ),
+    );
+    return { status: response.status, text: await response.text() };
+  };
+
+  it("[#153] shows short output whole and keeps no log for it", async () => {
+    const thread = await hobInProject("balanced");
+    const reply = await exchange(thread, ["Say hi", "fake:tool Bash echo hello"]);
+    const [step] = toolSteps(reply);
+    expect(step?.output).toEqual({ head: "hello\n", tail: "", omittedBytes: 0, totalBytes: 6, logged: false });
+    expect((await logOf(thread, reply, step as ReplyStep)).status).toBe(404);
+  });
+
+  it("[#153] shows the start and end of long output and serves the full log", async () => {
+    const thread = await hobInProject("balanced");
+    const reply = await exchange(thread, ["Count", "fake:tool Bash seq 20000"]);
+    const [step] = toolSteps(reply);
+    const full = `${Array.from({ length: 20000 }, (_, i) => i + 1).join("\n")}\n`;
+    expect(step?.output).toMatchObject({ totalBytes: full.length, logged: true });
+    expect(step?.output?.head.startsWith("1\n2\n3\n")).toBe(true);
+    expect(step?.output?.tail.endsWith("19999\n20000\n")).toBe(true);
+    const { head = "", tail = "", omittedBytes = 0 } = step?.output ?? {};
+    expect(head.length + omittedBytes + tail.length).toBe(full.length);
+    expect(head.length).toBeLessThanOrEqual(8 * 1024);
+    expect(await logOf(thread, reply, step as ReplyStep)).toEqual({ status: 200, text: full });
+  });
+
+  it("[#168] redacts output in the step and in the full log", async () => {
+    const thread = await hobInProject("balanced");
+    const reply = await exchange(thread, [
+      "Print",
+      `fake:tool Bash echo token ${HUB_TOKEN}`,
+      "fake:tool Bash echo -----BEGIN PRIVATE KEY----- MIIEvQIBADANBgkqhkiG9w0BAQEFAASC -----END PRIVATE KEY-----",
+    ]);
+    const [known, shaped] = toolSteps(reply);
+    expect(known?.output?.head).toBe("token [redacted: GH_TOKEN]\n");
+    expect(shaped?.output?.head).toBe("[redacted: private key]\n");
+    // The reply's own text echoes the prompt; what the steps keep never holds the value.
+    expect(JSON.stringify(reply.steps)).not.toContain(HUB_TOKEN);
+  });
+
+  it("[#153] never serves a log for a step that has none, or a file that is not the hub's", async () => {
+    const thread = await hobInProject("balanced");
+    const reply = await exchange(thread, ["Count", "fake:tool Bash seq 20000"]);
+    const missing = { id: "not-a-step" } as ReplyStep;
+    expect((await logOf(thread, reply, missing)).status).toBe(404);
+    // A link planted in place of the log is not followed.
+    const folder = join(dataDir, "tool-logs");
+    const [step] = toolSteps(reply);
+    for (const name of readdirSync(folder)) {
+      rmSync(join(folder, name));
+      symlinkSync(join(outside, "diary.txt"), join(folder, name));
+    }
+    expect((await logOf(thread, reply, step as ReplyStep)).status).toBe(404);
   });
 });

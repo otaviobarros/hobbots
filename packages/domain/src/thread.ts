@@ -20,6 +20,14 @@ export class Thread extends Schema.Class<Thread>("Thread")({
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
+  /**
+   * When the thread was archived, or null while it is live. An archived thread is left out of thread
+   * lists, takes no new messages until it is restored, and is still found by search.
+   */
+  archivedAt: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   createdAt: Schema.String,
   updatedAt: Schema.String,
   revision: Revision,

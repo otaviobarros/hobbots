@@ -64,3 +64,7 @@ export const call = async <A, E>(f: (client: Client) => Effect.Effect<A, E>): Pr
   const message = error instanceof Error && error.message !== "" ? error.message : (tag ?? "Request failed");
   throw new ApiError(message, tag);
 };
+
+/** Where the hub serves the whole output of a tool step that shows only its start and end. */
+export const toolLogUrl = (threadId: string, messageId: string, stepId: string): string =>
+  `${API_URL}/api/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/steps/${encodeURIComponent(stepId)}/log`;

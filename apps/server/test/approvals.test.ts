@@ -327,6 +327,27 @@ describe("Ask decisions", () => {
     expect(Exit.isFailure(result.late) && JSON.stringify(result.late.cause)).toContain("expired");
   });
 
+  // covers PE-003, CH-009
+  it("[TC-CH-146] refuses to archive a thread while its approval waits, and archives it once decided", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const approvals = yield* ApprovalService;
+        const { thread, pending } = yield* askInNewThread();
+        const request = pending[0] as ApprovalRequest;
+        const waiting = yield* Effect.exit(chat.archive(thread.id));
+        yield* approvals.decide(request.id, { decision: "deny", actionDigest: request.actionDigest });
+        yield* settled(thread.id);
+        const archived = yield* chat.archive(thread.id);
+        return { waiting, archived };
+      }),
+    );
+
+    expect(Exit.isFailure(result.waiting) && JSON.stringify(result.waiting.cause)).toContain("approval-pending");
+    expect(result.archived.archivedAt).not.toBeNull();
+  });
+
   // covers PE-007, AG-006
   it("[TC-PE-072] expires the request when its hob retires, even with its reply left to finish", async () => {
     restrictions = [];

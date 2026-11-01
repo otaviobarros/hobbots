@@ -2,6 +2,7 @@ import { type Agent, isInProgress, type Message } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import type { ReactNode } from "react";
+import { toolLogUrl } from "../api/client.ts";
 import { formatTime, refillText } from "../lib/time.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { ReplyMarkdown } from "./markdown/reply-markdown.tsx";
@@ -89,7 +90,11 @@ function ReplyRow({
         <span className="text-xs text-label">
           <b className="font-pixel text-sm text-moonlight">{hob.name}</b> {formatTime(message.createdAt)}
         </span>
-        <ReplySteps steps={message.steps} inProgress={streaming} />
+        <ReplySteps
+          steps={message.steps}
+          inProgress={streaming}
+          logUrl={(stepId) => toolLogUrl(message.threadId, message.id, stepId)}
+        />
         {children}
         {writing && message.content.length === 0 ? (
           message.steps.length === 0 && <Thinking name={hob.name} />
