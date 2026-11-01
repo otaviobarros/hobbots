@@ -3,6 +3,7 @@
  * does, the Dock icon only while a window is open, and Quit stopping the server before the app exits.
  */
 import { app, type BrowserWindow, dialog, Menu, nativeImage, Tray } from "electron";
+import { coalesce } from "./coalesce.ts";
 import { keepsRunning } from "./keep-running.ts";
 import { closeAction, quitWhileWorkingDialog, renderTrayIcon, TRAY_SIZE, trayModel } from "./menu-bar-model.ts";
 import type { ServerState, ServerSupervisor } from "./server.ts";
@@ -16,8 +17,6 @@ export interface MenuBarOptions {
   readonly port: number;
   readonly createWindow: () => Promise<BrowserWindow>;
 }
-
-const POLL_MS = 5_000;
 
 const trayImage = (state: ServerState) => {
   const image = nativeImage.createEmpty();
@@ -90,11 +89,20 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
   supervisor.onChange(refresh);
   refresh();
 
-  const poll = setInterval(async () => {
-    await supervisor.check();
+  /** Reads which hobs are working again, when a reply started or ended. */
+  const readWorking = coalesce(async () => {
     working = (await fetchWorking()) ?? working;
     refresh();
-  }, POLL_MS);
+  });
+
+  /**
+   * Checks the server and reads which hobs are working, when the event stream connects or is lost.
+   * The open stream is what shows the server is alive, so nothing is checked on a timer.
+   */
+  const checkServer = async () => {
+    await supervisor.check();
+    await readWorking();
+  };
 
   const guard = (window: BrowserWindow) => {
     windows.add(window);
@@ -174,10 +182,7 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
   let stopped = false;
   app.on("before-quit", (event) => {
     quitting = true;
-    if (stopped) {
-      clearInterval(poll);
-      return;
-    }
+    if (stopped) return;
     event.preventDefault();
     shutdown ??= supervisor.shutdown().finally(() => {
       stopped = true;
@@ -185,5 +190,5 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
     });
   });
 
-  return { startServer, showWindow };
+  return { startServer, showWindow, checkServer, readWorking };
 };

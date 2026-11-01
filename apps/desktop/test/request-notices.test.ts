@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { followHub } from "../src/main/hub-events.ts";
 import { requestNotices } from "../src/main/request-notices.ts";
 import { noticeChanges, noticeText, pendingRequests } from "../src/main/request-notices-model.ts";
+import { entryFrame, fakeEventStream, readyFrame } from "./fake-event-stream.ts";
 
 const approval = (id: string, state: string, command = "git push origin feature") => ({
   id,
@@ -12,11 +14,15 @@ const approval = (id: string, state: string, command = "git push origin feature"
 
 /** A hub whose Inbox answers what `inbox` holds, and a system that records its notifications. */
 const setup = () => {
-  const hub = { inbox: [] as Array<unknown> | null, focused: false };
+  const hub = { inbox: [] as Array<unknown> | null, focused: false, reads: 0 };
   const notices: Array<{ title: string; body: string; closed: boolean; click: () => void }> = [];
   const opened: Array<string> = [];
-  const { check, start } = requestNotices({
-    read: async (path) => (path === "/api/agents" ? [{ id: "pip", name: "Pip" }] : hub.inbox),
+  const { check } = requestNotices({
+    read: async (path) => {
+      if (path === "/api/agents") return [{ id: "pip", name: "Pip" }];
+      hub.reads += 1;
+      return hub.inbox;
+    },
     isFocused: () => hub.focused,
     notify: ({ title, body }, onClick) => {
       const notice = { title, body, closed: false, click: onClick };
@@ -29,7 +35,7 @@ const setup = () => {
     },
     open: (id) => void opened.push(id),
   });
-  return { hub, notices, opened, check, start };
+  return { hub, notices, opened, check };
 };
 
 describe("request notifications", () => {
@@ -74,20 +80,38 @@ describe("request notifications", () => {
   });
 
   // covers UX-001
-  it("[TC-IN-016] learns what waits as soon as it starts, so a request before the first tick is announced", async () => {
-    const { hub, notices, start } = setup();
+  it("[TC-IN-016] learns what waits once the event stream connects, then announces what a request event brings", async () => {
+    const { hub, notices, check } = setup();
+    const stream = fakeEventStream();
     hub.inbox = [approval("a", "pending")];
-    const ticks: Array<() => void> = [];
-    const { first, stop } = start(3000, (tick) => {
-      ticks.push(tick);
-      return () => ticks.splice(0);
+    const following = followHub({
+      url: "http://127.0.0.1:4317/api/events",
+      canConnect: () => true,
+      onConnected: () => void check(),
+      onChange: (change) => void (change === "approvals" && check()),
+      onLost: () => {},
+      fetch: stream.fetch,
     });
-    await first;
-    hub.inbox = [approval("a", "pending"), approval("b", "pending", "git push origin main")];
-    ticks[0]?.();
-    await expect.poll(() => notices.map((notice) => notice.body)).toEqual(["git push origin main"]);
-    stop();
-    expect(ticks).toEqual([]);
+    try {
+      await expect.poll(() => stream.connections.length).toBe(1);
+      stream.last().write(readyFrame);
+      await expect.poll(() => hub.reads).toBe(1);
+      hub.inbox = [approval("a", "pending"), approval("b", "pending", "git push origin main")];
+      stream.last().write(entryFrame("ApprovalRequested", { _tag: "ApprovalRequested" }));
+      await expect.poll(() => notices.map((notice) => notice.body)).toEqual(["git push origin main"]);
+    } finally {
+      await following.stop();
+    }
+  });
+
+  it("checks again after a check asked for while one was under way", async () => {
+    const { hub, notices, check } = setup();
+    hub.inbox = [];
+    await check();
+    const first = check();
+    hub.inbox = [approval("a", "pending")];
+    await Promise.all([first, check()]);
+    expect(notices).toHaveLength(1);
   });
 
   it("announces nothing on the first read, nor while a Hobbots window is focused", async () => {

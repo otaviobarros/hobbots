@@ -1,3 +1,4 @@
+import { coalesce } from "./coalesce.ts";
 import { type NoticeState, noticeChanges, noticeText, pendingRequests } from "./request-notices-model.ts";
 
 /** A notification the system shows; `close` takes it away. */
@@ -16,14 +17,10 @@ export interface RequestNoticesOptions {
   readonly open: (requestId: string) => void;
 }
 
-const every = (tick: () => void, ms: number) => {
-  const timer = setInterval(tick, ms);
-  return () => clearInterval(timer);
-};
-
 /**
  * Notifies the user of new requests from the main process, so it works with no window open: in the
- * menu bar after the last window closed, or after opening at login. `start` it once the hub runs.
+ * menu bar after the last window closed, or after opening at login. `check` it whenever the hub's
+ * event stream connects and whenever a request arrives or is decided.
  */
 export const requestNotices = ({ read, isFocused, notify, open }: RequestNoticesOptions) => {
   let state: NoticeState = { known: undefined, shown: new Set() };
@@ -37,18 +34,6 @@ export const requestNotices = ({ read, isFocused, notify, open }: RequestNotices
         typeof hob?.id === "string" && typeof hob.name === "string" ? [[hob.id, hob.name] as const] : [],
       ),
     );
-  };
-
-  let checking = false;
-  const check = async () => {
-    // A read still under way finishes first, so a slow hub never announces a request twice.
-    if (checking) return;
-    checking = true;
-    try {
-      await reconcile();
-    } finally {
-      checking = false;
-    }
   };
 
   const reconcile = async () => {
@@ -74,15 +59,11 @@ export const requestNotices = ({ read, isFocused, notify, open }: RequestNotices
   };
 
   /**
-   * Reads at once, to learn what already waits, then every `everyMs`, so a request that arrives
-   * before the first tick is announced rather than taken for one that was already there. Answers a
-   * function that stops it.
+   * Compares the Inbox with what is shown. The first check learns what already waits. A check asked
+   * for while one is under way runs once more after it, so a slow hub never announces a request
+   * twice and a change that arrived meanwhile is never missed.
    */
-  const start = (everyMs: number, schedule: (tick: () => void, ms: number) => () => void = every) => {
-    const first = check();
-    const stop = schedule(() => void check(), everyMs);
-    return { first, stop };
-  };
+  const check = coalesce(reconcile);
 
-  return { check, start };
+  return { check };
 };
