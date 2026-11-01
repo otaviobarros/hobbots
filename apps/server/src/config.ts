@@ -1,6 +1,6 @@
 import { homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
-import { DEFAULT_TASK_TOOL_LIMITS } from "@hobbots/orchestration";
+import { DEFAULT_STEP_LIMITS, DEFAULT_TASK_TOOL_LIMITS } from "@hobbots/orchestration";
 import { Config, Option } from "effect";
 
 const defaultDataDir = () =>
@@ -38,6 +38,15 @@ export const ServerConfig = Config.all({
     ),
     maxOpenTasksPerTree: Config.Int("HOBBOTS_MAX_OPEN_TASKS_PER_TREE").pipe(
       Config.withDefault(DEFAULT_TASK_TOOL_LIMITS.maxOpenTasksPerTree),
+    ),
+  }),
+  // How many steps run at once (ADR 018): per hob, and per request's tree; the rest wait their turn.
+  stepLimits: Config.all({
+    maxRunningStepsPerHob: Config.Int("HOBBOTS_MAX_RUNNING_STEPS_PER_HOB").pipe(
+      Config.withDefault(DEFAULT_STEP_LIMITS.maxRunningStepsPerHob),
+    ),
+    maxRunningStepsPerTree: Config.Int("HOBBOTS_MAX_RUNNING_STEPS_PER_TREE").pipe(
+      Config.withDefault(DEFAULT_STEP_LIMITS.maxRunningStepsPerTree),
     ),
   }),
   // A scripted Quest the fake runtime plays on the hub's records: asking for a Black Friday campaign starts it.

@@ -229,5 +229,26 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
       });
     });
 
-  return { task, treeOf, questsOn, quest, attempt, question, artifact, readTree, threadTrees, memberWork };
+  /** Steps waiting to start: queued Tasks whose parent has the same owner and has not ended, oldest first. */
+  const queuedSteps = sql<Row>`SELECT t.* FROM tasks t JOIN tasks p ON p.id = t.parent_id
+    WHERE t.state = 'queued' AND p.owner_id = t.owner_id
+      AND p.state NOT IN ('completed', 'failed', 'cancelled', 'cancelling')
+    ORDER BY ${orderBy(sql, ["t.created_at", "t.id"])}`.pipe(Effect.flatMap(decodeRows("task")));
+  const liveAttempts = sql<Row>`SELECT * FROM attempts WHERE state IN ('starting', 'running')
+    ORDER BY ${orderBy(sql, ["started_at", "id"])}`.pipe(Effect.flatMap(decodeRows("attempt")));
+
+  return {
+    task,
+    treeOf,
+    questsOn,
+    quest,
+    attempt,
+    question,
+    artifact,
+    readTree,
+    threadTrees,
+    memberWork,
+    queuedSteps,
+    liveAttempts,
+  };
 };

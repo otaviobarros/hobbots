@@ -253,6 +253,7 @@ export const TaskToolRefusal = Schema.Literals([
   "deadline-passed",
   "key-reused",
   "no-attempt",
+  "no-task",
   "task-state",
 ]);
 export type TaskToolRefusal = typeof TaskToolRefusal.Type;

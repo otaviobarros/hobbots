@@ -205,6 +205,13 @@ export class TaskRepository extends Context.Service<
      * listed once it ends, until its Quest does, so its outcome shows where its work did.
      */
     readonly listMemberWork: (agentId: AgentId) => Effect.Effect<ReadonlyArray<MemberWork>>;
+    /**
+     * Steps waiting to start, oldest first: queued Tasks whose parent has the same owner and has not
+     * ended. Whether their dependencies have completed is for the caller to check.
+     */
+    readonly listQueuedSteps: Effect.Effect<ReadonlyArray<Task>>;
+    /** Every Attempt still starting or running, oldest first: after a restart, none of them runs. */
+    readonly listLiveAttempts: Effect.Effect<ReadonlyArray<Attempt>>;
   }
 >()("@hobbots/agents/TaskRepository") {}
 

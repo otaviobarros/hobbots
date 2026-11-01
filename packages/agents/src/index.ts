@@ -1,5 +1,6 @@
 export * from "./admission.ts";
 export * from "./approvals.ts";
+export { clip } from "./briefing.ts";
 export * from "./chat.ts";
 export * from "./grants.ts";
 export * from "./hobs.ts";
@@ -10,6 +11,7 @@ export * from "./questions.ts";
 export * from "./repository.ts";
 export * from "./runtime.ts";
 export * from "./secrets.ts";
+export * from "./task-turns.ts";
 export * from "./tasks.ts";
 export * from "./tool-output.ts";
 export * from "./tools.ts";

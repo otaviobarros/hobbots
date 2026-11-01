@@ -20,6 +20,7 @@ import {
   isResumable,
   Message,
   MessageId,
+  type MessageStatus,
   MessageTransitions,
   QueuedMessageTransitions,
   RUNTIME_NAMES,
@@ -41,8 +42,9 @@ import { HobbotsRepository } from "./repository.ts";
 import { type RuntimeEvent, runtimeAdapters, type ToolAccess, type ToolStartedEvent } from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
 import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
+import { type ChatTurnOutcome, TaskTurns } from "./task-turns.ts";
 import { keepToolOutput } from "./tool-output.ts";
-import { HobTools, narrows } from "./tools.ts";
+import { accessNow, HobTools, narrows } from "./tools.ts";
 
 interface Reply {
   readonly current: Ref.Ref<Message>;
@@ -73,6 +75,10 @@ const continuePrompt = (reply: Message) => {
 };
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
+
+/** How a turn ended, for the Attempt it may have started on a Task: a reply still running was interrupted. */
+const turnOutcome = (status: MessageStatus): ChatTurnOutcome =>
+  status === "complete" ? "completed" : status === "failed" || status === "limited" ? "failed" : "interrupted";
 
 /** The brain a thread's turn thinks with: the thread's own, else the hob's configuration's. */
 const brainFor = (thread: Thread, config: AgentConfiguration): Brain =>
@@ -192,6 +198,8 @@ export class ChatService extends Context.Service<
       const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
       // Without a log store, a long tool output keeps only its start and end.
       const toolLogs = yield* Effect.serviceOption(ToolLogs);
+      // Without Task work, turns offer no Task tools and hobs run no steps.
+      const taskTurns = yield* Effect.serviceOption(TaskTurns);
       const turns = yield* FiberMap.make<ThreadId>();
       const scope = yield* Effect.scope;
       // The reply each running turn is writing, so a stop request can reach it.
@@ -356,14 +364,7 @@ export class ChatService extends Context.Service<
       // and reviewing them take turns, so no change to the policy lands between the two unseen.
       const authority = yield* Semaphore.make(1);
       const granted = new Map<ThreadId, { readonly agentId: AgentId; readonly access: ToolAccess | null }>();
-      const currentAccess = (agentId: AgentId) =>
-        repo
-          .findAgent(agentId)
-          .pipe(
-            Effect.flatMap(
-              Option.match({ onNone: () => Effect.succeed(null), onSome: (agent) => hobTools.access(agent) }),
-            ),
-          );
+      const currentAccess = (agentId: AgentId) => accessNow(repo, hobTools, agentId);
       const grant = (threadId: ThreadId, agent: Agent) =>
         Semaphore.withPermit(
           authority,
@@ -409,6 +410,8 @@ export class ChatService extends Context.Service<
           );
           yield* checkpoint.pipe(Effect.delay("1 second"), Effect.forever, Effect.forkScoped);
           const update = (f: (message: Message) => Message | unknown) => transition(reply, f, saveMessage);
+          // The session the turn ran in, for the Attempt it may start on a Task.
+          let turnSession: string | null = null;
 
           // Saves a step's change with the reply. A tool call that starts is stamped with when.
           const saveStep = (event: RuntimeEvent) =>
@@ -432,6 +435,7 @@ export class ChatService extends Context.Service<
               // The session has now seen the thread through this reply.
               case "SessionStarted":
                 return Effect.gen(function* () {
+                  turnSession = event.sessionId;
                   const seenThrough = (yield* Ref.get(reply.current)).id;
                   const updatedAt = yield* nowIso;
                   const session = { runtime: brain.runtime, sessionId: event.sessionId, seenThrough };
@@ -500,10 +504,26 @@ export class ChatService extends Context.Service<
                 (handle) => handle.close,
               )
             : null;
+          // The Task the hob works on in this thread, if any: its tools, and what its steps returned.
+          // The turn's Attempt on it ends with the turn.
+          const taskTurn = Option.isSome(taskTurns)
+            ? yield* Effect.acquireRelease(
+                taskTurns.value.forChat({
+                  agentId: agent.id,
+                  threadId: thread.id,
+                  messageId: (yield* Ref.get(reply.current)).id,
+                  prompt,
+                  runtime: brain.runtime,
+                  configVersion: config.version,
+                }),
+                (turn) =>
+                  Ref.get(reply.current).pipe(Effect.flatMap((m) => turn.end(turnOutcome(m.status), turnSession))),
+              )
+            : null;
           yield* adapter
             .sendPrompt({
               prompt,
-              briefing,
+              briefing: [briefing, taskTurn?.briefing ?? null].filter((part) => part !== null).join("\n\n") || null,
               sessionId: thread.sessions.find((s) => s.runtime === brain.runtime)?.sessionId ?? null,
               instructions: systemInstructions(name, config),
               instructionsChanged: changed,
@@ -513,6 +533,7 @@ export class ChatService extends Context.Service<
               approvals: turnApprovals?.approvals ?? null,
               redaction: redactor,
               recordToolStart,
+              hubTools: taskTurn?.hubTools ?? null,
             })
             .pipe(
               Stream.runForEach(handle),
@@ -817,6 +838,7 @@ export class ChatService extends Context.Service<
           const thread = yield* repo.findThread(threadId);
           if (Option.isSome(thread) && thread.value.agentId === agentId) yield* FiberMap.remove(turns, threadId);
         }
+        if (Option.isSome(taskTurns)) yield* taskTurns.value.interruptAgent(agentId);
       });
 
       const reviewAuthority = Effect.fn("ChatService.reviewAuthority")(function* (agentId?: AgentId) {
@@ -832,6 +854,7 @@ export class ChatService extends Context.Service<
         );
         // Outside the permit: a turn that is stopping may still be reading its grant.
         yield* Effect.forEach(narrowed, ([threadId]) => FiberMap.remove(turns, threadId), { discard: true });
+        if (Option.isSome(taskTurns)) yield* taskTurns.value.reviewAuthority(agentId);
       });
 
       const checkBrainSwitch = Effect.fn("ChatService.checkBrainSwitch")(function* (threadId: ThreadId) {
@@ -921,6 +944,7 @@ export class ChatService extends Context.Service<
           repo.findThread(threadId).pipe(Effect.map((t) => Option.isSome(t) && t.value.agentId === agentId)),
         );
         yield* drainThreads(own);
+        if (Option.isSome(taskTurns)) yield* taskTurns.value.drainAgent(agentId);
       });
 
       // Messages queued before a restart start again, through the same path as any other.

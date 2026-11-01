@@ -126,12 +126,12 @@ describe("backpackItemsFor", () => {
     ).toMatchObject([{ to: ALDRIC, kind: "result", key: "task:copy:v4:result" }]);
     for (const state of ["failed", "blocked", "cancelled"] as const) {
       const moved = task("copy", QUILL, "campaign", state, 5);
-      expect(items({ _tag: "TaskStateChanged", task: moved, attempt: null, quest: null })).toMatchObject([
+      expect(items({ _tag: "TaskStateChanged", task: moved, attempt: null, quest: null, wait: null })).toMatchObject([
         { to: ALDRIC, kind: "failure" },
       ]);
     }
     const waiting = task("copy", QUILL, "campaign", "waiting", 5);
-    expect(items({ _tag: "TaskStateChanged", task: waiting, attempt: null, quest: null })).toEqual([]);
+    expect(items({ _tag: "TaskStateChanged", task: waiting, attempt: null, quest: null, wait: null })).toEqual([]);
     // An Attempt that moves on under a blocked Task is not a second failure.
     const blocked = task("copy", QUILL, "campaign", "blocked", 6);
     const attempt = { _tag: "TaskStateChanged", task: blocked, attempt: {}, quest: null } as unknown as JournaledEvent;
