@@ -11,7 +11,7 @@ import { Empty, InboxHistory } from "./inbox-history.tsx";
 import { type InboxTab, pendingCount, selectedRequest, tabRequests } from "./inbox-items.ts";
 import { InboxList, InboxTabs } from "./inbox-list.tsx";
 import { messages } from "./messages.ts";
-import { useWithShown } from "./shown-request.ts";
+import { type ShownHold, useWithShown } from "./shown-request.ts";
 import { type InboxDirectory, useInboxDirectory } from "./use-inbox-directory.ts";
 import { useNow } from "./use-now.ts";
 
@@ -32,10 +32,11 @@ const EMPTY: Record<Exclude<InboxTab, "history">, { readonly title: string; read
  */
 export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string | undefined }) {
   const inbox = useQuery(inboxQuery);
-  const { approvals, resolving } = useWithShown(inbox.data ?? NONE, requestId, inbox.isSuccess);
+  const shown = useWithShown(inbox.data ?? NONE, requestId, inbox.isSuccess);
+  const approvals = shown.approvals;
   const directory = useInboxDirectory(approvals);
   const requests = tabRequests(approvals, tab, requestId);
-  const selected = tab === "history" || resolving ? undefined : selectedRequest(requests, requestId);
+  const selected = tab === "history" || shown.hold !== undefined ? undefined : selectedRequest(requests, requestId);
   const waiting = pendingCount(approvals);
   const now = useNow();
   const navigate = useNavigate();
@@ -55,7 +56,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
         <InboxTabs tab={tab} waiting={waiting} />
         <div className="min-h-0 flex-1 overflow-y-auto">
           {inbox.isPending && <p className="px-3 py-4 text-sm text-label">{copy.loading}</p>}
-          {inbox.isError && <LoadFailed onRetry={() => void inbox.refetch()} />}
+          {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
           {inbox.isSuccess && tab !== "history" && requests.length === 0 && <Empty {...EMPTY[tab]} />}
           {tab !== "history" && (
             <InboxList tab={tab} requests={requests} selectedId={selected?.id} directory={directory} now={now} />
@@ -66,7 +67,14 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
         {tab === "history" ? (
           inbox.isSuccess && <InboxHistory requests={requests} directory={directory} />
         ) : (
-          <Selected request={selected} directory={directory} ready={inbox.isSuccess} now={now} />
+          <Selected
+            request={selected}
+            hold={shown.hold}
+            onRetry={shown.retry}
+            directory={directory}
+            ready={inbox.isSuccess}
+            now={now}
+          />
         )}
       </main>
     </div>
@@ -75,15 +83,27 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
 
 function Selected({
   request,
+  hold,
+  onRetry,
   directory,
   ready,
   now,
 }: {
   request: ApprovalRequest | undefined;
+  hold: ShownHold | undefined;
+  onRetry: () => void;
   directory: InboxDirectory;
   ready: boolean;
   now: Date;
 }) {
+  if (hold === "loading") return <p className="m-0 px-7 py-6 text-label">{copy.loadingRequest}</p>;
+  if (hold === "failed") {
+    return (
+      <div className="px-7 py-6">
+        <LoadFailed message={copy.requestFailed} onRetry={onRetry} />
+      </div>
+    );
+  }
   if (request === undefined) {
     return ready ? <p className="m-0 px-7 py-6 text-secondary-text">{copy.pickOne}</p> : null;
   }
@@ -116,10 +136,10 @@ function InboxHeader({ waiting }: { waiting: number }) {
   );
 }
 
-function LoadFailed({ onRetry }: { onRetry: () => void }) {
+function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div role="alert" className="flex flex-col items-start gap-2 px-3 py-4 text-sm text-rose">
-      {copy.failed}
+      {message}
       <Button variant="outline" onClick={onRetry}>
         {copy.retry}
       </Button>

@@ -41,6 +41,7 @@ export const messages = {
   loadingRequest: "Reading the request…",
   loading: "Reading the Inbox…",
   failed: "Hobbots could not read the Inbox.",
+  requestFailed: "Hobbots could not read this request. It stays open here until you try again or pick another.",
   retry: "Try again",
   detail: {
     label: ({ name, action }: { name: string; action: string }) => `Request from ${name}: ${action}`,

@@ -183,3 +183,32 @@ test("[TC-IN-004] an expired request shows as expired and cannot be approved", a
     "Expired",
   );
 });
+
+// covers PE-003, UX-005
+test("[TC-IN-011] the open request keeps its place when it cannot be read on its own, and Try again shows it", async ({
+  page,
+}) => {
+  const { current } = await pipAsksToPush(page);
+  const [asked] = await api<ReadonlyArray<Approval>>(current, "GET", "/api/approvals");
+  if (asked === undefined) throw new Error("No approval request");
+  // As if newer decisions had pushed it out of the list: the list holds another request instead,
+  // and reading it on its own fails.
+  await page.route(`${current.url}/api/approvals`, (route) =>
+    route.fulfill({ json: [{ ...asked, id: "other-request" }] }),
+  );
+  const detail = `${current.url}/api/approvals/${asked.id}`;
+  await page.route(detail, (route) => route.fulfill({ status: 503, body: "" }));
+
+  // Loaded afresh, so the app reads the list through the routes above.
+  await page.goto(`${current.url}/#/inbox?tab=all&request=${asked.id}`);
+  await page.reload();
+  const failed = page.getByRole("main").getByRole("alert");
+  await expect(failed).toContainText("could not read this request", { timeout: 20_000 });
+  await expect(page.getByRole("list", { name: "Requests" }).locator('[aria-current="page"]')).toHaveCount(0);
+  expect(page.url()).toContain(`request=${asked.id}`);
+
+  await page.unroute(detail);
+  await failed.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("article", { name: "Request from Pip: Push your work" })).toBeVisible();
+  expect(page.url()).toContain(`request=${asked.id}`);
+});

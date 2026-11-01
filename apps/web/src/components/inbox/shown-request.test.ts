@@ -2,7 +2,7 @@ import { AgentId, ApprovalId, ApprovalRequest, INBOX_HISTORY, MessageId, ThreadI
 import { describe, expect, it } from "vitest";
 import { inboxWindow } from "../../api/inbox-window.ts";
 import { selectedRequest, tabRequests } from "./inbox-items.ts";
-import { withShown } from "./shown-request.ts";
+import { shownHold, withShown } from "./shown-request.ts";
 
 const at = (n: number) => new Date(Date.UTC(2026, 10, 1) + n * 60_000).toISOString();
 
@@ -69,5 +69,17 @@ describe("withShown", () => {
     expect(withShown(listed, gone, "r0002")).toBe(listed);
     expect(withShown(listed, listed[0], "r0001")).toBe(listed);
     expect(withShown(listed, undefined, "r0000")).toBe(listed);
+  });
+});
+
+describe("shownHold", () => {
+  it("[TC-IN-010] holds the open request's place while its own read is under way or failed", () => {
+    expect(shownHold(true, "pending")).toBe("loading");
+    // A failed read keeps the place too, so no other request is shown or put in the address.
+    expect(shownHold(true, "error")).toBe("failed");
+    expect(shownHold(true, "success")).toBeUndefined();
+    // The list holds it, or nothing is named: nothing to hold.
+    expect(shownHold(false, "error")).toBeUndefined();
+    expect(shownHold(false, "pending")).toBeUndefined();
   });
 });
