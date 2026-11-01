@@ -5,6 +5,7 @@ import {
   ApprovalNotFound,
   ApprovalNotGrantable,
   GrantRuleRefused,
+  UserSession,
 } from "@hobbots/api";
 import {
   type AgentId,
@@ -183,11 +184,12 @@ export class ApprovalService extends Context.Service<
     /**
      * Approves or denies a pending request, and lets its turn go on. Deciding it again the same way
      * returns it unchanged, so a retried or doubled decision applies once and saves its grants once.
+     * Only the user decides (PE-006): it needs a `UserSession`, which no hob, Charm or runtime tool has.
      */
     readonly decide: (
       id: ApprovalId,
       input: ApprovalDecisionInput,
-    ) => Effect.Effect<ApprovalRequest, ApprovalNotFound | ApprovalClosed | RefusedDecision>;
+    ) => Effect.Effect<ApprovalRequest, ApprovalNotFound | ApprovalClosed | RefusedDecision, UserSession>;
     /** Expires the hob's pending requests, as when it retires: a retired hob is never approved anything. */
     readonly expireForAgent: (agentId: AgentId) => Effect.Effect<void>;
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
@@ -368,6 +370,7 @@ export class ApprovalService extends Context.Service<
           : grants.value.exclusive(saveGrants(approval, next, saving));
 
       const decide = Effect.fn("ApprovalService.decide")(function* (id: ApprovalId, input: ApprovalDecisionInput) {
+        yield* UserSession;
         return yield* Semaphore.withPermit(
           lock,
           Effect.gen(function* () {

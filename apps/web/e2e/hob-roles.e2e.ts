@@ -19,7 +19,7 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   hub = current;
   const setup = await fetch(`${current.url}/api/setup`, {
     method: "PATCH",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: current.url },
     body: JSON.stringify({ completed: true, connectedProviders: ["claude-code"] }),
   });
   expect(setup.ok).toBe(true);

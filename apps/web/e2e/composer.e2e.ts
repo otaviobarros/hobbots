@@ -18,7 +18,8 @@ const call = async <A>(path: string, method = "GET", body?: unknown): Promise<A>
   if (hub === undefined) throw new Error("No hub is running.");
   const response = await fetch(`${hub.url}${path}`, {
     method,
-    ...(body !== undefined && { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    headers: { origin: hub.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}`);
   return (await response.json()) as A;

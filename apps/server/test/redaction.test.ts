@@ -9,6 +9,7 @@ import {
   HobTools,
   SecretRedaction,
 } from "@hobbots/agents";
+import { UserSession } from "@hobbots/api";
 import { Agent, AgentId, type ApprovalRequest, EMPTY_HOB_POLICY, isInProgress, type Message } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { ApprovalRepositoryLive, EventJournal, HobbotsRepositoryLive } from "@hobbots/persistence";
@@ -79,6 +80,8 @@ const TestLayer = ChatService.layer.pipe(
     Layer.mergeAll(
       Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)),
       EventBus.layer,
+      // The decisions these cases make are the user's, as the hub's user-session middleware provides.
+      Layer.succeed(UserSession, { origin: "http://localhost:4317" }),
       HobAdmission.layer,
       FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
       SecretRedaction.layer([
@@ -102,7 +105,7 @@ const run = <A, E>(
   effect: Effect.Effect<
     A,
     E,
-    ApprovalService | ChatService | HobbotsRepository | EventBus | EventJournal | Scope.Scope
+    ApprovalService | ChatService | HobbotsRepository | EventBus | EventJournal | UserSession | Scope.Scope
   >,
 ) => effect.pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 

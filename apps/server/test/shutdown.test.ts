@@ -104,7 +104,7 @@ describe("hub shutdown", () => {
     const sending = new Promise<void>((done) => (started = done));
     const call = request(`${url}/api/setup`, {
       method: "PATCH",
-      headers: { "content-type": "application/json", "content-length": String(body.length), ...headers },
+      headers: { "content-type": "application/json", "content-length": String(body.length), origin: url, ...headers },
     });
     const answered = new Promise<number | undefined>((done, fail) => {
       call.once("response", (response) => {

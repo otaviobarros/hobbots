@@ -88,9 +88,12 @@ const request = (method: string, path: string, body?: unknown) =>
   handler(
     new Request(
       `http://localhost:4317${path}`,
-      body === undefined
-        ? { method }
-        : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+      // As the web client sends it: only a user session changes the setup (PE-006).
+      {
+        method,
+        headers: { "content-type": "application/json", host: "localhost:4317", origin: "http://localhost:4317" },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      },
     ),
   );
 

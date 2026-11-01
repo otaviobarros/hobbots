@@ -21,7 +21,9 @@ test.afterEach(async () => {
 const api = async <A>(current: Hub, method: string, path: string, body?: unknown): Promise<A> => {
   const response = await fetch(`${current.url}${path}`, {
     method,
-    ...(body !== undefined && { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    // As another window of the app, on the hub's own origin: approvals answer only the user (PE-006).
+    headers: { origin: current.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);
   return (await response.json()) as A;

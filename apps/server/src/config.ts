@@ -1,6 +1,6 @@
 import { homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
-import { Config } from "effect";
+import { Config, Option } from "effect";
 
 const defaultDataDir = () =>
   platform() === "darwin" ? join(homedir(), "Library", "Application Support", "Hobbots") : join(homedir(), ".hobbots");
@@ -28,6 +28,8 @@ export const ServerConfig = Config.all({
   ).pipe(Config.withDefault("ready" as const)),
   // Whether the fake runtime pretends its sandbox started, or cannot start on this hub.
   fakeSandbox: Config.Literals(["on", "unavailable"], "HOBBOTS_FAKE_SANDBOX").pipe(Config.withDefault("on" as const)),
+  // Set when the allow list was given, such as by the desktop app's development build.
+  allowedOriginsSet: Config.String("HOBBOTS_ALLOWED_ORIGINS").pipe(Config.option, Config.map(Option.isSome)),
   // Only the Vite dev server needs CORS; the served web client calls the API on its own origin.
   allowedOrigins: Config.String("HOBBOTS_ALLOWED_ORIGINS").pipe(
     Config.withDefault("http://localhost:5173,http://127.0.0.1:5173"),
