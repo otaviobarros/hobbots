@@ -292,7 +292,7 @@ describe("a hob's instructions on a resumed Claude Code session", () => {
   });
 
   // covers RT-001
-  it("[TC-CH-133] delivers a briefing on what the session missed after the instructions and before the prompt", () => {
+  it("[TC-CH-185] delivers a briefing on what the session missed after the instructions and before the prompt", () => {
     expect(turnPrompt({ ...request, sessionId: null, briefing: "## This thread so far" })).toBe(
       "## This thread so far\n\nhi",
     );

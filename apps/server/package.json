@@ -13,6 +13,7 @@
     "@hobbots/agents": "workspace:*",
     "@hobbots/api": "workspace:*",
     "@hobbots/domain": "workspace:*",
+    "@hobbots/orchestration": "workspace:*",
     "@hobbots/permissions": "workspace:*",
     "@hobbots/persistence": "workspace:*",
     "@hobbots/runtimes": "workspace:*",

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import {
   ApprovalService,
@@ -13,6 +13,7 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import { secretsFromEnv } from "@hobbots/domain";
+import { TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
@@ -23,6 +24,7 @@ import {
   SetupRepository,
   SqliteLive,
   TaskRepositoryLive,
+  TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { ClaudeCodeLayer, FakeAdditionalRuntimesLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
@@ -30,6 +32,7 @@ import { HttpRouter } from "effect/http";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
+import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
@@ -63,6 +66,7 @@ const ServerLive = Layer.unwrap(
       ApprovalRepositoryLive,
       GrantRepositoryLive,
       TaskRepositoryLive,
+      TaskToolCallsLive,
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
@@ -84,7 +88,17 @@ const ServerLive = Layer.unwrap(
     const App = HobLifecycle.layer
       .pipe(
         Layer.provideMerge(
-          Layer.mergeAll(EventStream.layer, HobService.layer, PermissionSummary.layer, JournalCompaction),
+          Layer.mergeAll(
+            EventStream.layer,
+            HobService.layer,
+            PermissionSummary.layer,
+            JournalCompaction,
+            // Served to turns that work on a Task (ADR 018); the hub checks every call.
+            TaskTools.layer(sep === "\\" ? "\\" : "/", config.taskLimits),
+            config.runtime === "fake" && config.fakeQuest === "black-friday"
+              ? FakeQuestLive(FAKE_QUEST_STEP)
+              : Layer.empty,
+          ),
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))

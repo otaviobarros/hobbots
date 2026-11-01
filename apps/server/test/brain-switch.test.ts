@@ -304,7 +304,7 @@ describe("switching a thread's brain", () => {
   });
 
   // covers RT-001
-  it("[TC-CH-130] refuses a brain the hub cannot run, or a model or effort its runtime does not offer", async () => {
+  it("[TC-CH-180] refuses a brain the hub cannot run, or a model or effort its runtime does not offer", async () => {
     start({ codex: false });
     const agent = await summon();
     const { id } = await newThread(agent);

@@ -26,6 +26,8 @@ The use cases reach storage, runtimes and the filesystem only through these port
 | `FolderChecks`         | `NodeFolderChecks` in `apps/server`                             |
 | `HobTools`             | `HobToolsLive` in `apps/server`, or `HobTools.chatOnly`         |
 | `ApprovalRepository`   | `ApprovalRepositoryLive` in `@hobbots/persistence`              |
+| `TaskRepository`       | `TaskRepositoryLive` in `@hobbots/persistence`                  |
+| `TaskToolCalls`        | `TaskToolCallsLive` in `@hobbots/persistence`                   |
 
 The server suites test these use cases with the test database and the fake runtime.
 

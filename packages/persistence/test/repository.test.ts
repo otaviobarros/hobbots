@@ -300,7 +300,7 @@ describe("HobbotsRepository", () => {
   });
 
   // covers DP-003, CH-008
-  it("[TC-DP-010] keeps queued messages in order, starts one with its reply after the thread's messages and removes only queued ones", async () => {
+  it("[TC-DP-050] keeps queued messages in order, starts one with its reply after the thread's messages and removes only queued ones", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(

@@ -1,7 +1,15 @@
-import { AgentId, Quest, QuestId, TaskId, TaskTree } from "@hobbots/domain";
+import { AgentId, MemberWork, Quest, QuestId, Question, QuestionId, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { QuestNotFound, TaskNotFound } from "./errors.ts";
+import {
+  AgentNotFound,
+  QuestionClosed,
+  QuestionNotFound,
+  QuestNotFound,
+  TaskNotFound,
+  ThreadNotFound,
+} from "./errors.ts";
+import { UserSessionOnly } from "./user-session.ts";
 
 /**
  * A read of a Task tree, with the event stream cursor taken just before it (ADR 013). Opening the
@@ -20,6 +28,14 @@ export const QuestRead = Schema.Struct({
 });
 export type QuestRead = typeof QuestRead.Type;
 
+/** The Tasks a thread's requests started, each with its tree, oldest first, with the cursor as above. */
+export const ThreadTasksRead = Schema.Struct({ cursor: Schema.String, trees: Schema.Array(TaskTree) });
+export type ThreadTasksRead = typeof ThreadTasksRead.Type;
+
+/** A hob's Tasks on other hobs' Quests, with the cursor as above. */
+export const MemberWorkRead = Schema.Struct({ cursor: Schema.String, work: Schema.Array(MemberWork) });
+export type MemberWorkRead = typeof MemberWorkRead.Type;
+
 /** Tasks and Quests (ADR 018): reads only. Hobs change them through their tools; the user through the Quest tab. */
 export class TasksGroup extends HttpApiGroup.make("tasks")
   .add(
@@ -34,5 +50,38 @@ export class TasksGroup extends HttpApiGroup.make("tasks")
       success: QuestRead,
       error: QuestNotFound,
     }),
+    // The work under a thread's requests, for the card, the strip and the drawer in its chat.
+    HttpApiEndpoint.get("threadTasks", "/threads/:threadId/tasks", {
+      params: { threadId: ThreadId },
+      success: ThreadTasksRead,
+      error: ThreadNotFound,
+    }),
+    // What a hob does on Quests it joined as a party member: its Task, the brief and the Quest.
+    HttpApiEndpoint.get("questWork", "/agents/:agentId/quest-work", {
+      params: { agentId: AgentId },
+      success: MemberWorkRead,
+      error: AgentNotFound,
+    }),
   )
+  .prefix("/api") {}
+
+export const AnswerQuestionPayload = Schema.Struct({
+  answer: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(4000)),
+});
+export type AnswerQuestionPayload = typeof AnswerQuestionPayload.Type;
+
+/**
+ * Your answer to a question that climbed every lead and reached you (ADR 018). It goes back down
+ * the same chain to the hob that asked. User sessions only: a hob never answers for you (PE-006).
+ */
+export class QuestionsGroup extends HttpApiGroup.make("questions")
+  .add(
+    HttpApiEndpoint.post("answer", "/questions/:questionId/answer", {
+      params: { questionId: QuestionId },
+      payload: AnswerQuestionPayload,
+      success: Question,
+      error: [QuestionNotFound, QuestionClosed],
+    }),
+  )
+  .middleware(UserSessionOnly)
   .prefix("/api") {}

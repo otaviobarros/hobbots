@@ -29,7 +29,7 @@ const tool = (label: string, state: ReplyStep["state"], reason?: string): ReplyS
 
 describe("buildBriefing", () => {
   // covers RT-001, CH-001
-  it("[TC-CH-131] keeps the latest messages verbatim, summarizes older ones with their tool steps, and reuses the checkpoint", () => {
+  it("[TC-CH-183] keeps the latest messages verbatim, summarizes older ones with their tool steps, and reuses the checkpoint", () => {
     // Nothing to tell, nothing told.
     expect(buildBriefing({ kind: "new", messages: [], checkpoint: null })).toBeNull();
 

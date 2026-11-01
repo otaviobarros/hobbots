@@ -30,7 +30,7 @@ Domain code does no I/O and imports nothing except `effect` and other domain mod
 A use case reaches storage, runtimes, the clock or the network only through a **port**. A port is an Effect service whose interface the application layer defines, for example `ThreadRepository` or `RuntimeAdapter`. A use case never imports a concrete adapter.
 
 - **Why:** a test swaps the port for a fake, and an adapter can change without touching the use case.
-- **Enforced by:** Biome `noNodejsModules` and `noRestrictedImports` on `packages/agents/src` block Node, platform and runtime SDK imports, and `scripts/check-layers.mjs` blocks adapter packages. Review covers ports in `apps/server`.
+- **Enforced by:** Biome `noNodejsModules` and `noRestrictedImports` on `packages/agents/src` and `packages/orchestration/src` block Node, platform and runtime SDK imports, and `scripts/check-layers.mjs` blocks adapter packages. Review covers ports in `apps/server`.
 - **Applies to:** application code in feature packages and in `apps/server`.
 
 ### STD-ARCH-004 Adapters own all I/O

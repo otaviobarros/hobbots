@@ -4,6 +4,7 @@ import {
   type Answerer,
   ArtifactRef,
   Attempt,
+  ancestorsOf,
   CHECKPOINT_KINDS,
   Checkpoint,
   CheckpointId,
@@ -19,6 +20,7 @@ import {
   Quest,
   Question,
   type QuestState,
+  questPlacement,
   StaleTask,
   Task,
   type TaskId,
@@ -27,6 +29,7 @@ import {
   type TaskState,
   type TaskTarget,
   TaskTransitions,
+  TaskWait,
   type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
@@ -60,15 +63,9 @@ const QUEST_END: Partial<Record<TaskState, QuestState>> = {
  * The leads above a Task, nearest first: the owners of its ancestors other than its own owner.
  * A question climbs this list, and reaches the user past its end.
  */
-const leadsAbove = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<AgentId> => {
-  const byId = new Map(tree.map((each) => [each.id, each]));
-  const leads: Array<AgentId> = [];
-  for (let at = task.parentId === null ? undefined : byId.get(task.parentId); at; ) {
-    if (at.ownerId !== task.ownerId && !leads.includes(at.ownerId)) leads.push(at.ownerId);
-    at = at.parentId === null ? undefined : byId.get(at.parentId);
-  }
-  return leads;
-};
+const leadsAbove = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<AgentId> => [
+  ...new Set(ancestorsOf(task, tree).flatMap((each) => (each.ownerId === task.ownerId ? [] : [each.ownerId]))),
+];
 
 /** The SQL store of Tasks, Quests and their records, for SQLite and PostgreSQL (ADR 011, ADR 018). */
 export const TaskRepositoryLive = Layer.effect(
@@ -269,19 +266,13 @@ export const TaskRepositoryLive = Layer.effect(
           if (quests.some((quest) => quest.taskId === task.id)) {
             return yield* refuse("quest-exists", `Task ${task.id} is already a Quest`);
           }
-          const byTask = new Map(quests.map((quest) => [quest.taskId, quest]));
-          const byId = new Map(tree.map((each) => [each.id, each]));
-          let outer: Quest | undefined;
-          for (let at = task.parentId; at !== null && outer === undefined; at = byId.get(at)?.parentId ?? null) {
-            outer = byTask.get(at);
-          }
+          const { outer, depth } = questPlacement(task, tree, quests);
           const quest = new Quest({
             ...input,
             leadId: task.ownerId,
             parentQuestId: outer?.id ?? null,
             threadId: task.threadId,
-            // Steps never add depth: a Quest on its lead's own step sits at that Quest's depth.
-            depth: outer === undefined ? 1 : outer.leadId === task.ownerId ? outer.depth : outer.depth + 1,
+            depth,
             state: "active",
             endedAt: null,
             revision,
@@ -327,12 +318,8 @@ export const TaskRepositoryLive = Layer.effect(
     const reopen = (task: Task, revision: number) =>
       Effect.gen(function* () {
         if (task.state !== "failed") return null;
-        const tree = yield* read.treeOf(task.rootId);
-        const byId = new Map(tree.map((each) => [each.id, each]));
-        for (let at = task.parentId === null ? undefined : byId.get(task.parentId); at; ) {
-          if (isTerminalTask(at.state)) return yield* refuse("parent-ended", `Task ${at.id} is ${at.state}`);
-          at = at.parentId === null ? undefined : byId.get(at.parentId);
-        }
+        const ended = ancestorsOf(task, yield* read.treeOf(task.rootId)).find((at) => isTerminalTask(at.state));
+        if (ended !== undefined) return yield* refuse("parent-ended", `Task ${ended.id} is ${ended.state}`);
         const [quest] = yield* read.questsOn([task.id]);
         if (quest === undefined) return null;
         yield* sql`UPDATE quests SET state = 'active', ended_at = NULL, revision = ${revision} WHERE id = ${quest.id}`;
@@ -636,6 +623,35 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
+    const waitFor: TaskRepository["Service"]["waitFor"] = (taskId, expected, input) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const before = yield* current(taskId, expected);
+          const under = new Set(descendantsOf(before, yield* read.treeOf(before.rootId)).map((each) => each.id));
+          if (input.on.length === 0 || input.on.some((id) => !under.has(id))) {
+            return yield* refuse("wait-outside-subtree", "A Task waits only for Tasks under it");
+          }
+          // A new wait replaces the one the Task is already waiting on.
+          const moved =
+            before.state === "waiting" ? before : yield* orFail(TaskTransitions.moveTo(before, "waiting", input.at));
+          const task = new Task({ ...moved, updatedAt: input.at, revision });
+          const wait = new TaskWait({ taskId, on: [...new Set(input.on)], mode: input.mode, createdAt: input.at });
+          yield* sql`DELETE FROM task_waits WHERE task_id = ${taskId}`;
+          yield* sql`INSERT INTO task_waits ${sql.insert({
+            task_id: wait.taskId,
+            waits_on: JSON.stringify(wait.on),
+            mode: wait.mode,
+            created_at: wait.createdAt,
+          })}`;
+          yield* saveTask(task);
+          const automatically = before.state === "waiting" ? [] : yield* automatic(task, input.at, revision + 1);
+          return {
+            value: { task, wait },
+            events: [{ _tag: "TaskStateChanged", task, attempt: null, quest: null } as const, ...automatically],
+          };
+        }),
+      );
+
     return TaskRepository.of({
       createTask,
       startQuest,
@@ -648,12 +664,21 @@ export const TaskRepositoryLive = Layer.effect(
       answerQuestion,
       escalateQuestion,
       handOff,
+      waitFor,
       readTree: (taskId) => read.readTree(taskId).pipe(Effect.map(Option.fromNullishOr), Effect.orDie),
+      readThreadTrees: (threadId) => read.threadTrees(threadId).pipe(Effect.orDie),
       findQuest: (questId) =>
         read.quest(questId).pipe(
           Effect.map(([quest]) => Option.fromNullishOr(quest)),
           Effect.orDie,
         ),
+      openTaskCount: (ownerId) =>
+        sql<{ readonly count: unknown }>`SELECT COUNT(*) AS count FROM tasks WHERE owner_id = ${ownerId}
+          AND state NOT IN ('completed', 'failed', 'cancelled')`.pipe(
+          Effect.map(([row]) => Number(row?.count ?? 0)),
+          Effect.orDie,
+        ),
+      listMemberWork: (agentId) => read.memberWork(agentId).pipe(Effect.orDie),
     });
   }),
 );

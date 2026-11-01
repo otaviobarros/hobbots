@@ -156,19 +156,21 @@ Checking every rule in the server, not in the prompt, is what makes a recursive 
 - ADR 015's grant table binds This Quest grants to the top Task instead of a Quest, and the approval card offers the lifetime from Slice 9 on.
 - The depth limit default is 2. Concurrency, per-hob active Task and timeout defaults stay open and configurable.
 - The chat gets a card, a strip and a drawer; the Quest tab becomes the control room; Home and the hob panel show a member's Quest work.
-- Continuation after a turn ends (Slice 10) and different runtimes in one Quest (Slice 11) are out of scope.
+- Continuation after a turn ends is decided in [ADR 019](019-hob-backpack-and-continuations.md) for Slice 10: results, questions and hand-offs reach the lead through its backpack, and one dispatcher wakes it. Different runtimes in one Quest (Slice 11) are out of scope.
 
 ## Validation
 
 The scenarios that would show this decision holds. Each names the issue that will prove it.
 
 - Records keep lineage and their invariants, and each change is journaled with its event: `[TC-OR-001]`, `[TC-OR-002]`, `[TC-OR-003]`, `[TC-OR-004]`, `[TC-OR-005]`, `[TC-OR-008]`, `[TC-OR-009]`, `[TC-EX-016]`, on SQLite and PostgreSQL. A Task tree and a Quest read with a cursor the event stream resumes from: `[TC-OR-006]`.
-- Each hob tool is refused for a caller outside its subtree, past the depth limit, in a cycle or with wider authority, and a retried call is idempotent: not proven yet, [#271](https://github.com/otaviobarros/hobbots/issues/271).
+- Each hob tool is refused for a caller outside its subtree, past the depth limit, in a cycle or with wider authority, and a retried call is idempotent: `[TC-OR-010]` to `[TC-OR-020]` and `[TC-OR-024]`, at hub level with the fake runtime on SQLite and PostgreSQL ([#271](https://github.com/otaviobarros/hobbots/issues/271)). Serving the tools to a real Claude Code is not verified yet.
 - Aldric splits a long Task into steps; the card shows "step 2 of 4" and he keeps only checkpoints, not each step's session: not proven yet, [#272](https://github.com/otaviobarros/hobbots/issues/272).
 - Aldric leads a Quest with Quill and Ada in parallel; Ada waits on Quill's copy, which reaches her through Aldric: not proven yet, [#273](https://github.com/otaviobarros/hobbots/issues/273).
 - Quill's question is answered by Aldric without reaching you; Ada's escalated question reaches you and your answer gets back to her; routine progress never wakes Aldric: not proven yet, [#274](https://github.com/otaviobarros/hobbots/issues/274).
 - A party member that brings in another hob shows nested in the tree, and a recursive delegation loop is stopped by the limits: not proven yet, [#275](https://github.com/otaviobarros/hobbots/issues/275).
 - A This Task grant covers every step of the Task, still applies after the Task becomes a Quest, is never used by another hob, and ends with the top Task: not proven yet, [#273](https://github.com/otaviobarros/hobbots/issues/273).
 - Cancelling the Quest ends with every Task confirmed or explicitly unresolved; Retry adds an Attempt and Reassign keeps history: not proven yet, [#276](https://github.com/otaviobarros/hobbots/issues/276).
-- The card, strip, drawer, Quest tab and "On Aldric's quest" show the work as decided: not proven yet, [#277](https://github.com/otaviobarros/hobbots/issues/277), [#278](https://github.com/otaviobarros/hobbots/issues/278), [#279](https://github.com/otaviobarros/hobbots/issues/279).
+- The card, strip and drawer show the work as decided, and the Black Friday Quest can be followed end to end from the lead's chat, live from the journal: `[TC-OR-010]`, `[TC-OR-011]`, `[TC-OR-012]`, `[TC-OR-013]`.
+- The Quest tab shows the work as decided: not proven yet, [#278](https://github.com/otaviobarros/hobbots/issues/278).
+- A party member's work shows "On Aldric's quest" with its Task's state on Home and in its panel, opens the Quest, and is never one of its threads: `[TC-UX-020]`. A hob's work on other hobs' Quests reads with a cursor and stays listed until its Quest ends, with the hob whose thread follows a nested Quest: `[TC-OR-021]`, `[TC-OR-022]`, `[TC-OR-023]`.
 - The whole slice runs end to end with an evidence record: not proven yet, [#280](https://github.com/otaviobarros/hobbots/issues/280).

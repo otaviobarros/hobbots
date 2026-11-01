@@ -1,5 +1,6 @@
 import { homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
+import { DEFAULT_TASK_TOOL_LIMITS } from "@hobbots/orchestration";
 import { Config, Option } from "effect";
 
 const defaultDataDir = () =>
@@ -28,6 +29,19 @@ export const ServerConfig = Config.all({
   ).pipe(Config.withDefault("ready" as const)),
   // Whether the fake runtime pretends its sandbox started, or cannot start on this hub.
   fakeSandbox: Config.Literals(["on", "unavailable"], "HOBBOTS_FAKE_SANDBOX").pipe(Config.withDefault("on" as const)),
+  // Limits every hob tool call is held to (ADR 018): how many Quests deep work may nest, and how
+  // many open Tasks one hob, and one request's tree, may hold.
+  taskLimits: Config.all({
+    maxDepth: Config.Int("HOBBOTS_QUEST_MAX_DEPTH").pipe(Config.withDefault(DEFAULT_TASK_TOOL_LIMITS.maxDepth)),
+    maxOpenTasksPerHob: Config.Int("HOBBOTS_MAX_OPEN_TASKS_PER_HOB").pipe(
+      Config.withDefault(DEFAULT_TASK_TOOL_LIMITS.maxOpenTasksPerHob),
+    ),
+    maxOpenTasksPerTree: Config.Int("HOBBOTS_MAX_OPEN_TASKS_PER_TREE").pipe(
+      Config.withDefault(DEFAULT_TASK_TOOL_LIMITS.maxOpenTasksPerTree),
+    ),
+  }),
+  // A scripted Quest the fake runtime plays on the hub's records: asking for a Black Friday campaign starts it.
+  fakeQuest: Config.Literals(["off", "black-friday"], "HOBBOTS_FAKE_QUEST").pipe(Config.withDefault("off" as const)),
   // Set when the allow list was given, such as by the desktop app's development build.
   allowedOriginsSet: Config.String("HOBBOTS_ALLOWED_ORIGINS").pipe(Config.option, Config.map(Option.isSome)),
   // Only the Vite dev server needs CORS; the served web client calls the API on its own origin.

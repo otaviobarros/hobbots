@@ -49,6 +49,7 @@ import {
   type ToolCall,
   UNKNOWN_TOOL,
 } from "./approval.ts";
+import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox } from "./sandbox.ts";
 import { offeredTools, toolLabel } from "./tool-calls.ts";
 import { fullToolOutput } from "./tool-output.ts";
@@ -702,6 +703,8 @@ export const policyHooks = (
   const preToolUse: HookCallback = async (input): Promise<HookJSONOutput> => {
     if (input.hook_event_name !== "PreToolUse") return {};
     const tool = input.tool_name;
+    // The hub decides its own tools' calls (ADR 018); the turn allows them by name.
+    if (hubToolOf(tool) !== null) return {};
     const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
@@ -896,6 +899,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               status: "unverified",
               evidence: `Claude Code starts inside ${sandbox.evidence}, not yet verified on this platform.`,
             },
+      // Coordination tools are served when a turn carries them, which no turn does yet (#272, #273).
       hubTools: { status: "unsupported", evidence: "Charms and coordination tools are not served yet." },
       toolEvents: {
         status: "verified",
@@ -996,35 +1000,39 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
             Effect.sync(() =>
               query({
                 prompt: turnPrompt(request, instructions),
-                options: {
-                  ...base,
-                  ...(tools
-                    ? toolOptions(
-                        tools,
-                        policyHooks(
-                          engine,
+                options: withHubTools(
+                  {
+                    ...base,
+                    ...(tools
+                      ? toolOptions(
                           tools,
-                          (event) => Queue.offerUnsafe(queue, event),
-                          request.approvals,
-                          request.redaction,
-                          request.recordToolStart,
-                        ),
-                        base.env,
-                      )
-                    : {}),
-                  abortController,
-                  spawnClaudeCodeProcess,
-                  includePartialMessages: true,
-                  systemPrompt: {
-                    type: "preset",
-                    preset: "claude_code",
-                    append: instructions,
+                          policyHooks(
+                            engine,
+                            tools,
+                            (event) => Queue.offerUnsafe(queue, event),
+                            request.approvals,
+                            request.redaction,
+                            request.recordToolStart,
+                          ),
+                          base.env,
+                        )
+                      : {}),
+                    abortController,
+                    spawnClaudeCodeProcess,
+                    includePartialMessages: true,
+                    systemPrompt: {
+                      type: "preset",
+                      preset: "claude_code",
+                      append: instructions,
+                    },
+                    ...(request.sessionId ? { resume: request.sessionId } : {}),
+                    // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
+                    ...(signingAgent ? { sandbox: { network: { allowUnixSockets: [signingAgent] } } } : {}),
+                    ...brainOptions(request),
                   },
-                  ...(request.sessionId ? { resume: request.sessionId } : {}),
-                  // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
-                  ...(signingAgent ? { sandbox: { network: { allowUnixSockets: [signingAgent] } } } : {}),
-                  ...brainOptions(request),
-                },
+                  request.hubTools,
+                  (event) => Queue.offerUnsafe(queue, event),
+                ),
               }),
             ),
             // A cancelled turn has ended only once Claude Code has exited: close() starts the shutdown

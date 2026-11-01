@@ -11,7 +11,7 @@ import {
   PermissionSummary,
   TaskRepository,
 } from "@hobbots/agents";
-import { QuestRead, TaskTreeRead } from "@hobbots/api";
+import { MemberWorkRead, QuestRead, TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -19,6 +19,7 @@ import {
   DelegationId,
   type EventEnvelope,
   QuestId,
+  QuestionId,
   TaskId,
   Thread,
   ThreadId,
@@ -97,6 +98,21 @@ afterEach(() => dispose());
 
 const get = async (path: string): Promise<{ readonly status: number; readonly body: unknown }> => {
   const response = await handler(new Request(`http://localhost:4390${path}`));
+  return { status: response.status, body: await response.json() };
+};
+
+const post = async (path: string, body: unknown, origin?: string) => {
+  const response = await handler(
+    new Request(`http://localhost:4390${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        host: "localhost:4390",
+        ...(origin === undefined ? {} : { origin }),
+      },
+      body: JSON.stringify(body),
+    }),
+  );
   return { status: response.status, body: await response.json() };
 };
 
@@ -198,9 +214,108 @@ describe("Task and Quest reads", () => {
     expect(replayed.map((entry) => entry.type)).toEqual(["TaskStateChanged", "CheckpointRecorded"]);
   });
 
+  // covers OR-001, OR-007
+  it("[TC-OR-010] reads the Tasks a thread's requests started, each with its tree, oldest first", async () => {
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        yield* quest;
+        const tasks = yield* TaskRepository;
+        yield* tasks.createTask({
+          task: {
+            id: TaskId.make("follow-up"),
+            ownerId: ALDRIC,
+            parentId: null,
+            threadId,
+            brief: "Plan the follow-up",
+            dependsOn: [],
+            createdAt: "2026-11-01T00:00:02.000Z",
+          },
+          delegation: null,
+          milestones: [],
+        });
+      }),
+    );
+
+    const response = await get("/api/threads/t1/tasks");
+    expect(response.status).toBe(200);
+    const read = Schema.decodeUnknownSync(ThreadTasksRead)(response.body);
+    expect(read.trees.map((tree) => tree.tasks.map((task) => task.id))).toEqual([["campaign", "copy"], ["follow-up"]]);
+    expect(read.trees[0]?.quests).toMatchObject([{ id: "q1", leadId: ALDRIC }]);
+    expect(read.cursor).toBe(Schema.decodeUnknownSync(TaskTreeRead)((await get("/api/tasks/campaign")).body).cursor);
+
+    expect(await get("/api/threads/nope/tasks")).toEqual({
+      status: 404,
+      body: { _tag: "ThreadNotFound", threadId: "nope" },
+    });
+  });
+
+  // covers OR-004, PE-006
+  it("[TC-OR-012] records your answer to a question that reached you, once, from the app only", async () => {
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        yield* quest;
+        const tasks = yield* TaskRepository;
+        // Aldric leads the top Quest, so no lead is above him and his question comes to you.
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-ship"),
+          taskId: TaskId.make("campaign"),
+          askerId: ALDRIC,
+          text: "Ship on Friday?",
+          createdAt: now,
+        });
+      }),
+    );
+    const app = "http://localhost:4390";
+
+    expect((await post("/api/questions/q-ship/answer", { answer: "Yes" })).status).toBe(403);
+    const answered = await post("/api/questions/q-ship/answer", { answer: "Yes" }, app);
+    expect(answered).toMatchObject({
+      status: 200,
+      body: { id: "q-ship", state: "answered", answer: "Yes", answeredBy: { _tag: "User" } },
+    });
+    expect(await post("/api/questions/q-ship/answer", { answer: "No" }, app)).toEqual({
+      status: 409,
+      body: { _tag: "QuestionClosed", questionId: "q-ship" },
+    });
+    expect(await post("/api/questions/nope/answer", { answer: "No" }, app)).toEqual({
+      status: 404,
+      body: { _tag: "QuestionNotFound", questionId: "nope" },
+    });
+    const events = await runtime.runPromise(
+      Effect.gen(function* () {
+        const journal = yield* EventJournal;
+        return yield* journal.readAfter(-1);
+      }),
+    );
+    expect(events.filter((entry) => entry.type === "QuestionAnswered")).toHaveLength(1);
+  });
+
   // covers OR-007
   it("[TC-OR-007] answers 404 for a Task or Quest that is not there", async () => {
     expect(await get("/api/tasks/nope")).toEqual({ status: 404, body: { _tag: "TaskNotFound", taskId: "nope" } });
     expect(await get("/api/quests/nope")).toEqual({ status: 404, body: { _tag: "QuestNotFound", questId: "nope" } });
+  });
+  // covers OR-001, UX-001, CH-005
+  it("[TC-OR-022] reads a hob's work on other hobs' Quests, and answers 404 for a hob that is not there", async () => {
+    await runtime.runPromise(quest);
+
+    const response = await get("/api/agents/quill/quest-work");
+    expect(response.status).toBe(200);
+    const read = Schema.decodeUnknownSync(MemberWorkRead)(response.body);
+    expect(read.work).toMatchObject([
+      {
+        task: { id: "copy", ownerId: QUILL, state: "queued" },
+        delegation: { leadId: ALDRIC, brief: "Draft the copy" },
+        quest: { id: "q1", leadId: ALDRIC, threadId, state: "active" },
+        threadAgentId: ALDRIC,
+      },
+    ]);
+    expect(Schema.decodeUnknownSync(MemberWorkRead)((await get("/api/agents/aldric/quest-work")).body).work).toEqual(
+      [],
+    );
+    expect(await get("/api/agents/nope/quest-work")).toEqual({
+      status: 404,
+      body: { _tag: "AgentNotFound", agentId: "nope" },
+    });
   });
 });

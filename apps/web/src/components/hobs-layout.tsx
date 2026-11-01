@@ -1,4 +1,4 @@
-import type { AgentId, ThreadId } from "@hobbots/domain";
+import type { AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
@@ -7,6 +7,7 @@ import { readStored, writeStored } from "../lib/storage.ts";
 import { ArchiveProvider } from "./archive/archive-context.tsx";
 import { ThreadMain, type WorkspaceMainProps } from "./archived-threads/archived-threads.tsx";
 import { HobList } from "./hob-list.tsx";
+import { TaskDrawer } from "./quest/task-drawer.tsx";
 import { SidePanel } from "./side-panel.tsx";
 
 const usePersistentToggle = (key: string) => {
@@ -23,6 +24,8 @@ interface WorkspaceProps {
   threadId?: ThreadId | undefined;
   /** A message to scroll to and mark, such as a search match. */
   focusMessageId?: string | undefined;
+  /** A Task to show in the drawer beside the chat. */
+  taskId?: TaskId | undefined;
   main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
 }
 
@@ -39,7 +42,13 @@ export function HobsLayout(props: WorkspaceProps) {
   );
 }
 
-function Workspace({ hobId, threadId, focusMessageId, main = (props) => <ThreadMain {...props} /> }: WorkspaceProps) {
+function Workspace({
+  hobId,
+  threadId,
+  focusMessageId,
+  taskId,
+  main = (props) => <ThreadMain {...props} />,
+}: WorkspaceProps) {
   const [navOpen, setNavOpen] = usePersistentToggle("layout.navOpen");
   const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
   useThreadKeys(hobId, threadId);
@@ -47,15 +56,21 @@ function Workspace({ hobId, threadId, focusMessageId, main = (props) => <ThreadM
   return (
     <div className="flex min-w-0 flex-1">
       {navOpen && <HobList hobId={hobId} threadId={threadId} onHide={() => setNavOpen(false)} />}
-      {main({
-        hobId,
-        threadId,
-        focusMessageId,
-        navOpen,
-        panelOpen,
-        onShowNav: () => setNavOpen(true),
-        onTogglePanel: () => setPanelOpen(!panelOpen),
-      })}
+      {/* The drawer opens over the end of the chat, so the conversation keeps its width. */}
+      <div className="relative flex min-w-0 flex-1">
+        {main({
+          hobId,
+          threadId,
+          focusMessageId,
+          navOpen,
+          panelOpen,
+          onShowNav: () => setNavOpen(true),
+          onTogglePanel: () => setPanelOpen(!panelOpen),
+        })}
+        {threadId !== undefined && taskId !== undefined && (
+          <TaskDrawer key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} />
+        )}
+      </div>
       {panelOpen && <SidePanel hobId={hobId} threadId={threadId} />}
     </div>
   );

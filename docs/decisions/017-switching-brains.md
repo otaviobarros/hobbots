@@ -64,9 +64,9 @@ The scenarios that would show this decision holds. Each names the test case or e
 - Switching back resumes the first runtime's own session and sends only what happened since it left: `[TC-CH-127]`.
 - The picker changes only that thread; making it the hob's default adds a configuration version and the hob's other threads follow it: `[TC-CH-128]`.
 - A switch away from a runtime that is limited or unavailable still works, the old runtime is never asked, and a reply continued on another brain is told the tool steps it already ran: `[TC-CH-129]`.
-- A brain with no adapter or a model the runtime does not offer is refused: `[TC-CH-130]`.
-- The briefing keeps the latest messages within the verbatim budget, cuts long messages, summarizes tool steps and reuses the stored checkpoint: `[TC-CH-131]`.
+- A brain with no adapter or a model the runtime does not offer is refused: `[TC-CH-180]`.
+- The briefing keeps the latest messages within the verbatim budget, cuts long messages, summarizes tool steps and reuses the stored checkpoint: `[TC-CH-183]`.
 - The summary drops its oldest lines to fit, a reply with many tool calls cannot crowd it out, and text that looks like the briefing's headings or speakers stays quoted: `[TC-CH-134]`.
-- Claude Code receives the briefing between the hob's instructions and the user's prompt: `[TC-CH-133]`.
+- Claude Code receives the briefing between the hob's instructions and the user's prompt: `[TC-CH-185]`.
 - Migration 0020 keeps an existing thread's Claude Code session and records Claude Code and the configured model on existing replies: `[TC-DP-035]`, `[TC-DP-036]`.
-- The chat shows the switch, sets the effort as well as the runtime and model, and offers Continue on another brain for a limited reply: `[TC-CH-132]`, in the browser.
+- The chat shows the switch, sets the effort as well as the runtime and model, and offers Continue on another brain for a limited reply: `[TC-CH-184]`, in the browser.
