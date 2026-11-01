@@ -378,6 +378,62 @@ describe("Standing grants", () => {
     expect(result.after[0]).toMatchObject({ revokedBy: "hub", revokeReason: "retired" });
   });
 
+  // covers PE-008
+  it("[TC-PE-100] finishes stopping the hob's turns after a saved removal, even when the request is cancelled", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const grants = yield* GrantService;
+        const chat = yield* ChatService;
+        const first = yield* runCommand("rm build");
+        const asked = first.pending as ApprovalRequest;
+        yield* approvals.decide(asked.id, {
+          decision: "approve",
+          actionDigest: asked.actionDigest,
+          lifetime: "always",
+        });
+        yield* settled(first.thread.id);
+        const [grant] = yield* grants.live(SCOUT);
+
+        // A turn still running, waiting on another request.
+        const running = yield* runCommand("rm dist");
+        let stops = 0;
+        const started = yield* Deferred.make<void>();
+        const gate = yield* Deferred.make<void>();
+        const removal = yield* Effect.forkChild(
+          grants.revoke(grant?.id as never, () =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Deferred.await(gate)),
+              Effect.andThen(chat.interruptAgent(SCOUT)),
+              Effect.andThen(Effect.sync(() => void stops++)),
+            ),
+          ),
+        );
+        // The client disconnects once the removal is saved and the turns begin to stop.
+        yield* Deferred.await(started);
+        const cancelled = yield* Effect.forkChild(Fiber.interrupt(removal));
+        // Let the cancellation reach the removal before the turns are stopped.
+        yield* Effect.sleep("20 millis");
+        yield* Deferred.succeed(gate, undefined);
+        yield* Fiber.join(cancelled);
+        return {
+          pending: running.pending,
+          stops,
+          stopped: yield* settled(running.thread.id),
+          live: yield* grants.live(SCOUT),
+          all: yield* grants.list({ agentId: SCOUT, all: true }),
+        };
+      }),
+    );
+
+    expect(result.pending).toBeDefined();
+    expect(result.stops).toBe(1);
+    expect(result.live).toEqual([]);
+    expect(result.all[0]).toMatchObject({ revokedBy: "user", revokeReason: "removed" });
+    expect(isInProgress(result.stopped.status)).toBe(false);
+  });
+
   // covers PE-007
   it("[TC-PE-097] asks again for a push that also updates another branch, and offers no rule after a folder change", async () => {
     restrictions = [];

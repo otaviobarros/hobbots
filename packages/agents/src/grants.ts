@@ -164,7 +164,8 @@ export class GrantService extends Context.Service<
     }) => Effect.Effect<ReadonlyArray<Grant>>;
     /**
      * The user removes a grant. Removing it again returns it unchanged. `then` runs only when this
-     * call revoked it, such as stopping the hob's running turns for a host grant.
+     * call revoked it, such as stopping the hob's running turns for a host grant, and, like saving
+     * the revocation, is not interrupted once begun.
      */
     readonly revoke: (id: GrantId, then?: (grant: Grant) => Effect.Effect<void>) => Effect.Effect<Grant, GrantNotFound>;
     /** Revokes the grants, of one hob or all, that the change took authority from. */
@@ -220,8 +221,13 @@ export class GrantService extends Context.Service<
             const found = yield* repo.find(id);
             if (Option.isNone(found)) return yield* new GrantNotFound({ grantId: id });
             if (found.value.revokedAt !== null) return found.value;
-            const revoked = yield* end(found.value, "user", "removed");
-            if (Option.isSome(revoked) && then) yield* then(revoked.value);
+            // Once saved, a revocation is never retried, so what follows it runs to the end even when
+            // the request is cancelled, such as by the client disconnecting.
+            const revoked = yield* Effect.uninterruptible(
+              Effect.tap(end(found.value, "user", "removed"), (saved) =>
+                Option.isSome(saved) && then ? then(saved.value) : Effect.void,
+              ),
+            );
             // Revoked meanwhile by a change: return it as it is now.
             return Option.isSome(revoked) ? revoked.value : Option.getOrElse(yield* repo.find(id), () => found.value);
           }),
