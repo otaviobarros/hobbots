@@ -5,18 +5,9 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { approvalsQuery } from "../api/approvals.ts";
+import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../api/drafts.ts";
 import { useConnection } from "../api/live.ts";
-import {
-  carriedDraft,
-  carryDraft,
-  dropCarriedDraft,
-  enqueue,
-  followed,
-  takeBack,
-  tryAgain,
-  useOutbox,
-  type WaitingPlace,
-} from "../api/outbox.ts";
+import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../api/outbox.ts";
 import {
   agentsQuery,
   messagesQuery,
@@ -36,16 +27,25 @@ import { ReplyApprovals } from "./approvals/reply-approvals.tsx";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
 import { MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
+import { messages } from "./messages.ts";
 import { RuntimeChip } from "./runtime.tsx";
 
-const BRAIN_PROBLEM: Record<NonNullable<ReturnType<typeof runtimeProblem>>, string> = {
-  notFound: "is not installed on this Mac",
-  notStarted: "did not start",
-  outdated: "is older than Hobbots supports",
-  signedOut: "is signed out",
+/**
+ * Keeps the transcript's end in view while the composer grows or shrinks, so a long draft never
+ * hides the latest message. A transcript scrolled back stays where it is.
+ */
+const stayAtEnd = (view: HTMLDivElement | null) => {
+  if (view === null) return;
+  let height = view.clientHeight;
+  const observer = new ResizeObserver(() => {
+    if (view.scrollHeight - view.scrollTop - height < 24) view.scrollTop = view.scrollHeight;
+    height = view.clientHeight;
+  });
+  observer.observe(view);
+  return () => observer.disconnect();
 };
 
-const IDEAS = ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"];
+const copy = messages.chat;
 
 /** The middle of the chat workspace. Without a thread id it is the empty "fresh page". */
 // complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
@@ -81,8 +81,6 @@ export function ChatView({
   });
   const activity = useActivity();
   const navigate = useNavigate();
-  // A draft carried from a fresh page into the thread it started picks up where it was.
-  const [draft, setDraft] = useState(() => carriedDraft(threadId ?? `new-${hobId}`));
   // Messages sent while the hub is out of reach wait in the outbox, which sends them when it is back.
   const place: WaitingPlace = threadId ?? `new-${hobId}`;
   const outbox = useOutbox(place);
@@ -106,6 +104,8 @@ export function ChatView({
   const transcript = messages.data?.filter((m) => m.status !== "queued");
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
+  // Up brings back the last message that went out; a queued one is still there to remove or edit.
+  const lastSent = transcript?.findLast((m) => m.role === "user")?.content;
   // Only the thread's latest reply can be continued, and only while nothing else runs.
   const latest = transcript?.at(-1);
   const resumable =
@@ -131,46 +131,49 @@ export function ChatView({
   }, [focusLoaded, focusMessageId]);
 
   // When a waiting message starts this page's thread, the page follows it there with its draft.
-  const draftNow = useRef(draft);
-  draftNow.current = draft;
   useEffect(() => {
     const started = outbox.startedThread;
     if (started === undefined) return;
     followed(place);
-    carryDraft(started, draftNow.current);
+    moveDraft(place, started);
     void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: started } });
   }, [outbox.startedThread, place, hobId, navigate]);
+  // A send answered after the user left this page must not pull them back to it.
+  const shown = useRef(true);
   useEffect(() => {
-    dropCarriedDraft(place);
-  }, [place]);
+    shown.current = true;
+    return () => {
+      shown.current = false;
+    };
+  }, []);
 
   const current = hob.data;
   if (!current) return <main className="flex-1" />;
 
   const state = threadState(current, threadId ? activity[threadId] : undefined, streaming);
   const paused = current.status === "paused";
-  const title = thread.data?.title ?? "New thread";
-  const deliver = (content: string, clearDraft: boolean) => {
-    if (threadId) {
-      send.mutate(content, { onSuccess: () => clearDraft && setDraft("") });
-      return;
-    }
-    start.mutate(content, {
-      onSuccess: ({ thread: created }) => {
-        if (clearDraft) setDraft("");
-        void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: created.id } });
-      },
-    });
+  const title = thread.data?.title ?? copy.newThread;
+  // The draft clears as it is sent, so the next message can be typed at once. A refused send puts
+  // its text back, even when the user has moved to another thread meanwhile.
+  const deliver = (content: string) => {
+    const sent = threadId
+      ? send.mutateAsync(content)
+      : start.mutateAsync(content).then(({ thread: created }) => {
+          if (!shown.current) return;
+          moveDraft(place, created.id);
+          void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: created.id } });
+        });
+    sent.catch(() => restoreDraft(place, content));
   };
   const sendDraft = (content: string) => {
     follow();
+    writeDraft(place, "");
     // Behind messages already waiting, a new one waits too, so they go out in the order sent.
     if (connection === "reconnecting" || waiting.length > 0) {
       enqueue(place, content);
-      setDraft("");
       return;
     }
-    deliver(content, true);
+    deliver(content);
   };
   const error = send.error ?? start.error;
   const queueError = remove.error ?? sendNow.error;
@@ -191,7 +194,7 @@ export function ChatView({
     <main aria-label="Chat" className="flex min-w-[360px] flex-1 flex-col">
       <header className="flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
         {!navOpen && (
-          <Button variant="icon" size="icon" onClick={onShowNav} aria-label="Show hob list" title="Show hob list">
+          <Button variant="icon" size="icon" onClick={onShowNav} aria-label={copy.showNav} title={copy.showNav}>
             »
           </Button>
         )}
@@ -214,8 +217,8 @@ export function ChatView({
           variant="icon"
           size="icon"
           onClick={onTogglePanel}
-          aria-label={panelOpen ? "Hide Quest panel" : "Show Quest panel"}
-          title={panelOpen ? "Hide Quest panel" : "Show Quest panel"}
+          aria-label={panelOpen ? copy.hidePanel : copy.showPanel}
+          title={panelOpen ? copy.hidePanel : copy.showPanel}
         >
           {panelOpen ? "»" : "«"}
         </Button>
@@ -226,6 +229,7 @@ export function ChatView({
           const view = event.currentTarget;
           if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
         }}
+        ref={stayAtEnd}
         className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-[18px]"
       >
         {threadId && messages.isPending && <p className="text-label">Loading messages…</p>}
@@ -233,16 +237,12 @@ export function ChatView({
           <div className="m-auto flex max-w-[420px] animate-hb-in flex-col items-center gap-3 text-center">
             <HobSprite hob={current} size={72} state="working" />
             <span className="font-pixel text-[22px] font-bold text-moonlight">
-              {newHob ? `Hello, I'm ${current.name}!` : "A fresh page"}
+              {newHob ? copy.hello(current) : copy.freshPage}
             </span>
-            <span className="text-secondary-text">
-              {newHob
-                ? "Tell me my first chore. I keep working even if you switch to another thread."
-                : `Tell ${current.name} what you need. It keeps working even if you switch to another thread.`}
-            </span>
+            <span className="text-secondary-text">{newHob ? copy.helloBody : copy.freshBody(current)}</span>
             <div className="flex flex-wrap justify-center gap-1.5">
-              {IDEAS.map((idea) => (
-                <Button key={idea} variant="chip" onClick={() => setDraft(idea)}>
+              {copy.ideas.map((idea) => (
+                <Button key={idea} variant="chip" onClick={() => writeDraft(place, idea)}>
                   {idea}
                 </Button>
               ))}
@@ -278,16 +278,16 @@ export function ChatView({
         {waiting.map((message, index) => (
           <section
             key={message.id}
-            aria-label="Waiting to send"
+            aria-label={copy.waiting}
             className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end"
           >
             <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
             <span className="text-xs text-label">
               {outbox.refused && index === 0
-                ? "◷ Not sent yet. It stays here until you try again or edit it."
+                ? copy.waitingRefused
                 : connection === "live"
-                  ? "◷ Sending…"
-                  : "◷ Waiting to send. It goes out when we reconnect."}
+                  ? copy.waitingSending
+                  : copy.waitingOffline}
             </span>
             <span className="flex gap-2">
               <Button
@@ -297,14 +297,14 @@ export function ChatView({
                 onClick={() => {
                   const content = takeBack(place, message.id);
                   if (content === undefined) return;
-                  setDraft((old) => (old.trim() === "" ? content : `${old}\n${content}`));
+                  appendDraft(place, content);
                 }}
               >
-                Edit
+                {copy.edit}
               </Button>
               {outbox.refused && index === 0 && (
                 <Button variant="outline" size="xs" onClick={() => tryAgain(place)}>
-                  Try again
+                  {copy.tryAgain}
                 </Button>
               )}
             </span>
@@ -312,12 +312,12 @@ export function ChatView({
         ))}
         {resume.isError && (
           <p role="alert" className="text-sm text-rose">
-            {current.name} could not continue that reply. {sendErrorText(resume.error, current)}
+            {copy.continueFailed({ name: current.name, why: sendErrorText(resume.error, current) })}
           </p>
         )}
         {queueError && (
           <p role="alert" className="text-sm text-rose">
-            That message already started or was removed.
+            {copy.queueGone}
           </p>
         )}
         {error && (
@@ -327,7 +327,7 @@ export function ChatView({
         )}
         {pause.isError && (
           <p role="alert" className="text-sm text-rose">
-            Hobbots could not wake {current.name}. Try again.
+            {copy.wakeFailed(current)}
           </p>
         )}
         <div ref={bottom} />
@@ -335,23 +335,23 @@ export function ChatView({
 
       {brainProblem !== null && (
         <section
-          aria-label="Brain unavailable"
+          aria-label={copy.brainUnavailable}
           className="mx-4 mb-2 flex flex-wrap items-center gap-2.5 bg-card px-3.5 py-2.5 text-sm"
         >
           <span className="flex-1 text-lantern">
-            {current.name} can't think right now: Claude Code {BRAIN_PROBLEM[brainProblem]}.
+            {copy.brainProblem({ name: current.name, problem: copy.brain[brainProblem] })}
           </span>
           <Button asChild variant="outline" size="xs">
             <Link to="/settings" hash="ai-providers">
-              Fix it in Settings
+              {copy.fixInSettings}
             </Link>
           </Button>
         </section>
       )}
       <Composer
-        placeholder={`Message ${current.name} in “${title}”…`}
-        draft={draft}
-        onDraft={setDraft}
+        placeholder={copy.placeholder({ name: current.name, title })}
+        place={place}
+        lastSent={lastSent}
         busy={streaming}
         stopping={stopping}
         sending={start.isPending || send.isPending}
