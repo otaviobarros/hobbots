@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
@@ -12,8 +12,10 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import {
   type ApprovalAction,
@@ -507,6 +509,7 @@ describe("the process sandbox", () => {
       home: "/Users/me",
       path: "/usr/bin:/Users/me/.volta/bin:relative",
       gitConfigFiles: ["/Users/me/.gitconfig"],
+      signingAgent: "/Users/me/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock",
     });
     expect(rules.denyRead).toEqual(
       expect.arrayContaining([
@@ -526,6 +529,7 @@ describe("the process sandbox", () => {
         "/Users/me/.local/bin",
         "/Users/me/.volta/bin",
         "/Users/me/.gitconfig",
+        "/Users/me/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock",
       ]),
     );
     expect(rules.allowRead).not.toContain("/Users/me/.claude");
@@ -659,7 +663,7 @@ describe("the process sandbox", () => {
 
   // covers PE-005
   it.runIf(process.platform === "darwin")(
-    "[TC-PE-074] lets Git read the user's config and the files it includes, unless one holds a secret",
+    "[TC-PE-084] lets Git read the user's config and the files it includes, unless one holds a secret",
     async () => {
       await Effect.gen(function* () {
         const sandbox = yield* ProcessSandbox;
@@ -723,6 +727,56 @@ describe("the process sandbox", () => {
         expect(closed.stderr).toContain("unable to access");
         expect((yield* runAt(secret, `cat ${join(secret, ".gitconfig")}`)).status).not.toBe(0);
       }).pipe(Effect.provide(ProcessSandbox.layer), Effect.scoped, Effect.runPromise);
+    },
+    30_000,
+  );
+
+  // covers PE-005
+  it.runIf(process.platform === "darwin")(
+    "[TC-PE-085] opens the user's signing agent and keeps signing on only for a hob that signs commits",
+    async () => {
+      // A stand-in for 1Password's SSH agent: a Unix socket that answers each connection.
+      const socket = join(root, "agent.sock");
+      const agent = createServer((connection) => connection.end("agent\n"));
+      await new Promise<void>((listening) => agent.listen(socket, listening));
+      try {
+        await Effect.gen(function* () {
+          const sandbox = yield* ProcessSandbox;
+          // Run without blocking, so the agent can answer while the command waits.
+          const runWith = (signingAgent: string | undefined, script: string) =>
+            Effect.acquireUseRelease(
+              sandbox.prepare({
+                folders: [project],
+                folderAccess: { read: true, write: true },
+                dataFolder: data,
+                binary: "/bin/sh",
+                runtimeFolder: join(runtimes, "hob-1"),
+                allowedHosts: [],
+                ...(signingAgent ? { signingAgent } : {}),
+              }),
+              (prepared) =>
+                Effect.promise(async () => {
+                  const { command, args, env } = prepared.spawnArgs("/bin/sh", ["-c", script], {
+                    PATH: "/usr/bin:/bin",
+                  });
+                  return promisify(execFile)(command, [...args], { cwd: project, env, encoding: "utf8" }).then(
+                    ({ stdout }) => ({ ok: true, stdout }),
+                    (error: { stdout?: string; stderr?: string }) => ({ ok: false, stdout: error.stdout ?? "" }),
+                  );
+                }),
+              (prepared) => Effect.sync(prepared.release),
+            );
+          const reach = `nc -U -w 2 '${socket}' < /dev/null`;
+          const signing = yield* runWith(socket, reach);
+          expect(signing).toEqual({ ok: true, stdout: "agent\n" });
+          expect((yield* runWith(socket, "git config --get commit.gpgsign || echo unset")).stdout.trim()).toBe("unset");
+          // A turn wrapped after it, without the agent, cannot reach it, and signs nothing.
+          expect((yield* runWith(undefined, reach)).ok).toBe(false);
+          expect((yield* runWith(undefined, "git config --get commit.gpgsign")).stdout.trim()).toBe("false");
+        }).pipe(Effect.provide(ProcessSandbox.layer), Effect.scoped, Effect.runPromise);
+      } finally {
+        agent.close();
+      }
     },
     30_000,
   );

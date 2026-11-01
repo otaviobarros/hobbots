@@ -7,6 +7,7 @@ import {
   policySandbox,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { Switch } from "@hobbots/ui/components/switch";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -121,6 +122,12 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
 
       <h2 className="lbl m-0 pt-4 text-xs text-label">Sandbox</h2>
       <SandboxSwitch name={hob.name} sandbox={data.enforcement.processSandbox} />
+      <SigningSwitch
+        name={hob.name}
+        checked={sending?.signCommits ?? data.policy.signCommits === true}
+        pending={locked}
+        onChange={(signCommits) => save({ signCommits })}
+      />
 
       <h2 className="lbl m-0 pt-4 text-xs text-label">Rules</h2>
       <span className="text-[13px] text-secondary-text">
@@ -169,6 +176,44 @@ function SandboxSwitch({ name, sandbox }: { name: string; sandbox: HobPermission
       checked={gap === null}
       later="Turning it off arrives in a later update."
     />
+  );
+}
+
+/**
+ * Whether the hob's commands may reach the user's 1Password SSH agent (ADR 014), so Git signs commits
+ * as the user's config asks. Off, commits are unsigned. The agent also logs in over SSH.
+ */
+function SigningSwitch({
+  name,
+  checked,
+  pending,
+  onChange,
+}: {
+  name: string;
+  checked: boolean;
+  pending: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const labelId = useId();
+  const noteId = useId();
+  return (
+    <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+      <div className="flex flex-1 flex-col gap-0.5">
+        <span id={labelId} className="font-bold">
+          {messages.signing.label}
+        </span>
+        <span id={noteId} className="text-[13px] text-secondary-text">
+          {checked ? messages.signing.on({ name }) : messages.signing.off({ name })}
+        </span>
+      </div>
+      <Switch
+        aria-labelledby={labelId}
+        aria-describedby={noteId}
+        checked={checked}
+        disabled={pending}
+        onCheckedChange={onChange}
+      />
+    </div>
   );
 }
 

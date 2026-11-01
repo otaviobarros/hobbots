@@ -317,6 +317,7 @@ describe("tool calls in a reply", () => {
     // The policy as saved right now; each case changes it while the turn runs.
     let restrictions: ToolAccess["policy"]["restrictions"] = [{ "edit-files": "ask" }];
     let folders = [folder];
+    let hob: ToolAccess["policy"]["hob"] = EMPTY_HOB_POLICY;
     const changing = Layer.succeed(
       HobTools,
       HobTools.of({
@@ -325,7 +326,7 @@ describe("tool calls in a reply", () => {
             policy: {
               preset: "balanced" as const,
               sharedFolders: folders,
-              hob: EMPTY_HOB_POLICY,
+              hob,
               dataFolder: join(root, "data"),
               restrictions,
             },
@@ -363,6 +364,13 @@ describe("tool calls in a reply", () => {
     folders = [folder];
     restrictions = [{ "edit-files": "ask" }];
     expect(await statusAfter(() => (restrictions = []))).toBe("streaming");
+    // Signing with the user's key taken away stops the turn, since it holds the agent's socket.
+    restrictions = [];
+    hob = { ...EMPTY_HOB_POLICY, signCommits: true };
+    expect(await statusAfter(() => (hob = EMPTY_HOB_POLICY))).toBe("interrupted");
+    // Given, it waits for the next turn.
+    hob = EMPTY_HOB_POLICY;
+    expect(await statusAfter(() => (hob = { ...EMPTY_HOB_POLICY, signCommits: true }))).toBe("streaming");
   });
 
   // covers PE-008

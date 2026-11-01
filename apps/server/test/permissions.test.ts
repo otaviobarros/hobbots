@@ -189,6 +189,26 @@ describe("a hob's folders", () => {
     expect(renamed.body).toMatchObject({ configVersion: 3, policy: changed.body.policy });
   });
 
+  // covers AG-004, PE-005
+  it("[TC-AG-101] turns commit signing with the user's 1Password key on and off as new versions", async () => {
+    const agent = await newHob();
+    const on = await request("PATCH", permissions(agent), { signCommits: true });
+    expect(on).toMatchObject({
+      status: 200,
+      body: { configVersion: 2, policy: { ownFolders: [], hiddenSharedFolders: [], overrides: {}, signCommits: true } },
+    });
+    const listed: Array<Agent> = (await request("GET", "/api/agents")).body;
+    expect(listed).toMatchObject([{ id: agent.id, policy: { signCommits: true } }]);
+    // Other policy changes keep it.
+    const hidden = await request("PATCH", permissions(agent), { hiddenSharedFolders: [notes] });
+    expect(hidden.body).toMatchObject({ configVersion: 3, policy: { signCommits: true } });
+    // The same answer again adds no version; turning it off does, and leaves it out.
+    expect((await request("PATCH", permissions(agent), { signCommits: true })).body.configVersion).toBe(3);
+    const off = await request("PATCH", permissions(agent), { signCommits: false });
+    expect(off.body.configVersion).toBe(4);
+    expect(off.body.policy).toEqual({ ownFolders: [], hiddenSharedFolders: [notes], overrides: {} });
+  });
+
   // covers AG-004
   it("[TC-AG-091] refuses a missing folder, an own folder that is already shared and hiding a folder that is not shared", async () => {
     const agent = await newHob();

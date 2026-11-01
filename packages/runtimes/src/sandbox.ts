@@ -61,11 +61,26 @@ export interface SandboxScope {
   readonly decideHost?: HostDecider;
   /** The user's own Git config files, opened read-only so Git runs (see `gitConfigAccess`). */
   readonly gitConfigFiles?: ReadonlyArray<string>;
+  /**
+   * The Unix socket of the user's signing agent, such as 1Password's, that the turn's processes may
+   * connect to, so Git signs commits as the user's config asks. Without one, signing is turned off.
+   * The agent also answers SSH logins, so this opens those too.
+   */
+  readonly signingAgent?: string;
   readonly home?: string;
   readonly path?: string;
   /** The closed places outside the home folder; USER_DATA_ROOTS that exist by default. */
   readonly roots?: ReadonlyArray<string>;
 }
+
+/**
+ * Where 1Password's SSH agent listens for the user on macOS, or undefined elsewhere: on Linux
+ * sandbox-runtime does not let a command reach a Unix socket by its path, so signing stays off.
+ */
+export const onePasswordAgentSocket = (home: string = homedir()): string | undefined =>
+  platform() === "darwin"
+    ? join(home, "Library", "Group Containers", "2BUA8C4S2C.com.1password", "t", "agent.sock")
+    : undefined;
 
 const realOrSelf = (path: string) => {
   try {
@@ -130,6 +145,7 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
         ...binaryDirs,
         ...homeTools,
         ...(scope.gitConfigFiles ?? []),
+        ...(scope.signingAgent ? [scope.signingAgent] : []),
       ]),
     ],
     allowWrite: [...(scope.folderAccess.write ? scope.folders : []), scope.runtimeFolder, scope.tempFolder],
@@ -307,6 +323,25 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
         });
       }
 
+      // sandbox-runtime reads the Unix sockets a command may reach from its own configuration, not
+      // from each wrap, so a turn that opens its signing agent widens the configuration while it
+      // wraps, and puts it back. Every wrap waits for the one before, so no other turn's wrap sees it.
+      let wraps: Promise<unknown> = Promise.resolve();
+      const wrapAlone = <A>(signingAgent: string | undefined, wrap: () => Promise<A>): Promise<A> => {
+        const run = wraps.then(async () => {
+          const base = SandboxManager.getConfig();
+          if (signingAgent === undefined || base === undefined) return wrap();
+          SandboxManager.updateConfig({ ...base, network: { ...base.network, allowUnixSockets: [signingAgent] } });
+          try {
+            return await wrap();
+          } finally {
+            SandboxManager.updateConfig(base);
+          }
+        });
+        wraps = run.catch(() => undefined);
+        return run;
+      };
+
       const prepare: ProcessSandboxShape["prepare"] = (scope) =>
         Effect.tryPromise({
           try: async (): Promise<PreparedSandbox> => {
@@ -322,21 +357,23 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
             try {
               SandboxManager.registerCommandNetworkLists(commandId, { allowedDomains: [...scope.allowedHosts] });
               liveTurns.set(commandId, scope.decideHost ?? (async (host) => `${host} is not allowed for this hob.`));
-              const wrapped = await SandboxManager.wrapWithSandboxArgv(
-                LAUNCHER,
-                undefined,
-                {
-                  filesystem: sandboxFilesystem({
-                    ...scope,
-                    tempFolder,
-                    gitConfigFiles: gitConfigFilesFor(gitConfigAccess(scope.home ?? homedir())),
-                    roots: USER_DATA_ROOTS.filter((root) => existsSync(root)),
-                  }),
-                },
-                undefined,
-                // The protected Git paths are found from here and the allowed folders.
-                scope.folders[0],
-                { commandId, commandText: "runtime" },
+              const wrapped = await wrapAlone(scope.signingAgent, () =>
+                SandboxManager.wrapWithSandboxArgv(
+                  LAUNCHER,
+                  undefined,
+                  {
+                    filesystem: sandboxFilesystem({
+                      ...scope,
+                      tempFolder,
+                      gitConfigFiles: gitConfigFilesFor(gitConfigAccess(scope.home ?? homedir())),
+                      roots: USER_DATA_ROOTS.filter((root) => existsSync(root)),
+                    }),
+                  },
+                  undefined,
+                  // The protected Git paths are found from here and the allowed folders.
+                  scope.folders[0],
+                  { commandId, commandText: "runtime" },
+                ),
               );
               const [shell, ...shellArgs] = wrapped.argv;
               // Only what the wrap adds is taken from its environment: on macOS it returns the hub's
@@ -360,7 +397,8 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                     CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
                     // Signing cannot reach the user's keys or agent inside the sandbox, so a config that
                     // asks for it (`commit.gpgsign`) would stop every commit. The scrub keeps these.
-                    ...UNSIGNED_GIT,
+                    // A turn given the user's signing agent signs as the config asks.
+                    ...(scope.signingAgent ? {} : UNSIGNED_GIT),
                     [COMMAND_VARIABLE]: [command, ...args].map(shellQuote).join(" "),
                   },
                 }),

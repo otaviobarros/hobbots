@@ -102,8 +102,9 @@ const checkOverrides = (preset: SafetyPreset, overrides: HobPolicy["overrides"])
       });
 };
 
-/** Two policies hold the same folders, in the same order, and the same overrides. */
+/** Two policies hold the same folders, in the same order, the same overrides and the same signing. */
 const samePolicy = (a: HobPolicy, b: HobPolicy) =>
+  (a.signCommits === true) === (b.signCommits === true) &&
   a.ownFolders.join("\0") === b.ownFolders.join("\0") &&
   a.hiddenSharedFolders.join("\0") === b.hiddenSharedFolders.join("\0") &&
   POLICY_OPERATIONS.every((operation) => a.overrides[operation] === b.overrides[operation]);
@@ -270,6 +271,7 @@ export class HobService extends Context.Service<
               ownFolders: ownFolders ?? agent.policy.ownFolders,
               hiddenSharedFolders: hiddenSharedFolders ?? agent.policy.hiddenSharedFolders,
               overrides: payload.overrides ?? agent.policy.overrides,
+              ...((payload.signCommits ?? agent.policy.signCommits) === true ? { signCommits: true } : {}),
             };
             if (samePolicy(policy, agent.policy)) return agent;
             // Only what changes is checked, so a shared folder removed in setup since does not block

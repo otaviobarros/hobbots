@@ -11,6 +11,7 @@ import hobIdentity from "../src/migrations/0013_hob_identity.ts";
 import hobTone from "../src/migrations/0014_hob_tone.ts";
 import hobPolicy from "../src/migrations/0015_hob_policy.ts";
 import threadBrains from "../src/migrations/0020_thread_brains.ts";
+import hobSignCommits from "../src/migrations/0021_hob_sign_commits.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -650,5 +651,42 @@ describe("0020_thread_brains", () => {
     expect(entries.map((e) => e.payload)).toMatchObject([
       { _tag: "ThreadUpserted", thread: { id: "t1", sessions: [], brain: null } },
     ]);
+  });
+});
+
+describe("0021_hob_sign_commits", () => {
+  // covers AG-004, DP-003
+  it("[TC-DP-037] leaves every existing hob and version unsigned", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+        agentId: "pip",
+        version: 1,
+        roleTitle: "Writer",
+        model: "sonnet",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* hobSignCommits;
+      return {
+        agents: yield* sql`SELECT sign_commits FROM agents`,
+        versions: yield* sql`SELECT sign_commits FROM agent_config_versions`,
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0021"))), Effect.runPromise);
+
+    expect(result.agents.map((row) => Number(row.signCommits))).toEqual([0]);
+    expect(result.versions.map((row) => Number(row.signCommits))).toEqual([0]);
   });
 });
