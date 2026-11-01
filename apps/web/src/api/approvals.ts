@@ -1,8 +1,15 @@
-import type { ApprovalDecision, ApprovalLifetime, ApprovalRequest, GrantRule, ThreadId } from "@hobbots/domain";
+import {
+  type ApprovalDecision,
+  ApprovalId,
+  type ApprovalLifetime,
+  type ApprovalRequest,
+  type GrantRule,
+  type ThreadId,
+} from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { inboxWindow } from "./inbox-window.ts";
-import { newer, recordApproval, syncedApprovals, syncedInbox } from "./sync.ts";
+import { newer, recordApproval, syncedApproval, syncedApprovals, syncedInbox } from "./sync.ts";
 
 export const approvalsKey = (threadId: ThreadId) => ["threads", threadId, "approvals"] as const;
 
@@ -18,6 +25,9 @@ export const storeApproval = (queryClient: QueryClient, approval: ApprovalReques
   recordApproval(queryClient, approval);
   queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(approval.threadId), (old) =>
     withApproval(old, approval),
+  );
+  queryClient.setQueryData<ApprovalRequest>(approvalKey(approval.id), (old) =>
+    old === undefined ? old : newer(old, approval),
   );
   queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(inboxKey, (old) => {
     const updated = withApproval(old, approval);
@@ -83,3 +93,17 @@ const withApproval = (old: ReadonlyArray<ApprovalRequest> | undefined, approval:
   const kept = newer(known, approval);
   return kept === known ? old : old.map((existing) => (existing === known ? kept : existing));
 };
+
+const approvalKey = (approvalId: string) => ["approval", approvalId] as const;
+
+/**
+ * One request as the hub has it now, kept live by the journal: the Inbox reads the request open
+ * beside its list this way once it has left the list's window.
+ */
+export const approvalQuery = (approvalId: string) =>
+  queryOptions({
+    queryKey: approvalKey(approvalId),
+    queryFn: syncedApproval(approvalId, () =>
+      call((c) => c.approvals.get({ params: { approvalId: ApprovalId.make(approvalId) } })),
+    ),
+  });

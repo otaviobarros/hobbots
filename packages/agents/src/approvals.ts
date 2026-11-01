@@ -196,6 +196,8 @@ export class ApprovalService extends Context.Service<
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     /** The Inbox's requests (PE-003): every pending one and the most recent closed ones, oldest first. */
     readonly listInbox: Effect.Effect<ReadonlyArray<ApprovalRequest>>;
+    /** One request as stored now, such as the one open in the Inbox after it left the list. */
+    readonly get: (id: ApprovalId) => Effect.Effect<ApprovalRequest, ApprovalNotFound>;
   }
 >()("@hobbots/agents/ApprovalService") {
   static readonly layer = Layer.effect(
@@ -427,6 +429,16 @@ export class ApprovalService extends Context.Service<
         expireForAgent,
         listForThread: repo.listForThread,
         listInbox: repo.listRecent(INBOX_HISTORY),
+        get: (id) =>
+          repo
+            .find(id)
+            .pipe(
+              Effect.flatMap((found) =>
+                Option.isSome(found)
+                  ? Effect.succeed(found.value)
+                  : Effect.fail(new ApprovalNotFound({ approvalId: id })),
+              ),
+            ),
       });
     }),
   );

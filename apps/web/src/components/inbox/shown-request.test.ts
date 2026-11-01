@@ -46,6 +46,23 @@ describe("withShown", () => {
     expect(all.at(-1)).toBe(oldest);
   });
 
+  it("[TC-IN-009] shows the request as the hub has it now when a fresh snapshot leaves it out", () => {
+    const closed = Array.from({ length: INBOX_HISTORY }, (_, n) => request(n + 1000, "denied"));
+    const selected = request(500, "pending");
+    // The user had the pending request open; it was decided while the client was away, and the
+    // fresh list no longer holds it, since newer decisions fill History.
+    const snapshot = inboxWindow([
+      ...closed,
+      new ApprovalRequest({ ...selected, state: "approved", decidedAt: at(600) }),
+    ]);
+    expect(snapshot.some((r) => r.id === selected.id)).toBe(false);
+
+    const fresh = new ApprovalRequest({ ...selected, state: "approved", decidedAt: at(600), revision: 2 });
+    const shown = tabRequests(withShown(snapshot, fresh, selected.id), "all", selected.id);
+    expect(selectedRequest(shown, selected.id)).toBe(fresh);
+    expect(shown.some((r) => r.state === "pending")).toBe(false);
+  });
+
   it("adds nothing once another request is picked, or when the open one is still listed", () => {
     const listed = [request(1, "denied"), request(2, "pending")];
     const gone = request(0, "expired");

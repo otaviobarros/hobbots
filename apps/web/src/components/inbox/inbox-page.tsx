@@ -32,10 +32,10 @@ const EMPTY: Record<Exclude<InboxTab, "history">, { readonly title: string; read
  */
 export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string | undefined }) {
   const inbox = useQuery(inboxQuery);
-  const approvals = useWithShown(inbox.data ?? NONE, requestId);
+  const { approvals, resolving } = useWithShown(inbox.data ?? NONE, requestId, inbox.isSuccess);
   const directory = useInboxDirectory(approvals);
   const requests = tabRequests(approvals, tab, requestId);
-  const selected = tab === "history" ? undefined : selectedRequest(requests, requestId);
+  const selected = tab === "history" || resolving ? undefined : selectedRequest(requests, requestId);
   const waiting = pendingCount(approvals);
   const now = useNow();
   const navigate = useNavigate();
