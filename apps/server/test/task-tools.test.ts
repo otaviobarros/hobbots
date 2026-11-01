@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { HobbotsRepository, HobTools, RuntimeAdapter, type RuntimeEvent, TaskRepository } from "@hobbots/agents";
 import {
   Agent,
@@ -62,7 +62,11 @@ const Persistence = Layer.mergeAll(
   TaskToolCallsLive,
   EventJournal.layer,
 ).pipe(Layer.provideMerge(TestDatabase));
-const App = TaskTools.layer({ maxDepth: 2, maxOpenTasksPerHob: 4, maxOpenTasksPerTree: 10 }).pipe(
+const App = TaskTools.layer(sep === "\\" ? "\\" : "/", {
+  maxDepth: 2,
+  maxOpenTasksPerHob: 4,
+  maxOpenTasksPerTree: 10,
+}).pipe(
   Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, NodeFolderChecks, TestHobTools, FakeRuntimeLayer())),
 );
 
@@ -254,6 +258,18 @@ describe("hob tools for Tasks and Quests", () => {
     const given = (await tree()).delegations.find((each) => each.childTaskId === pip);
     expect(given?.authority.overrides).toMatchObject({ push: "deny", "run-commands": "ask" });
     expect(given?.authority.folders).toEqual([join(work, "copy")]);
+
+    // Only the hub's own separator divides folders: on macOS and Linux this one sits beside Quill's.
+    if (sep === "/") {
+      mkdirSync(join(work, "copy\\outside"));
+      const sibling = await refused(QUILL, quill, "delegate_task", {
+        key: "sibling",
+        hob: "Rook",
+        brief: "Work next door",
+        authority: { folders: [join(work, "copy\\outside")] },
+      });
+      expect(sibling.reason).toBe("authority-wider");
+    }
   });
 
   // covers OR-001, OR-004
@@ -344,6 +360,39 @@ describe("hob tools for Tasks and Quests", () => {
     expect(self.reason).toBe("own-hob");
     expect((await tree()).tasks).toHaveLength(4);
     expect((await head()).sequence).toBeGreaterThan(before.sequence);
+  });
+
+  // covers OR-004
+  it("[TC-OR-024] a Quest started above another one later still limits the work under both", async () => {
+    await run(seed);
+    const planned = await done(ALDRIC, TOP, "plan_steps", { key: "s", steps: [{ brief: "Research" }] });
+    const [step] = (planned.details.steps as Array<{ readonly task_id: string }>).map((each) =>
+      TaskIdSchema.make(each.task_id),
+    );
+    if (step === undefined) throw new Error("expected a step");
+    // The step's Quest starts first, with the hub's limits; the top Task's starts after, narrower.
+    await done(ALDRIC, TOP, "start_quest", { key: "inner", task_id: step, goal: "Research" });
+    await done(ALDRIC, TOP, "start_quest", {
+      key: "outer",
+      goal: "Campaign",
+      max_depth: 1,
+      deadline: "2099-01-01T00:00:00.000Z",
+    });
+
+    const rook = await delegate(ALDRIC, TOP, "Rook", "rook", { task_id: step });
+    const deep = await refused(ROOK, rook, "delegate_task", { key: "deep", hob: "Pip", brief: "One more level" });
+    expect(deep.reason).toBe("depth-limit");
+
+    const more = await done(ALDRIC, TOP, "plan_steps", { key: "more", task_id: step, steps: [{ brief: "Sources" }] });
+    const sources = String((more.details.steps as Array<{ readonly task_id: string }>)[0]?.task_id);
+    const later = await refused(ALDRIC, TOP, "start_quest", {
+      key: "later",
+      task_id: sources,
+      goal: "Sources",
+      deadline: "2099-06-01T00:00:00.000Z",
+    });
+    expect(later.reason).toBe("authority-wider");
+    expect(later.message).toContain("2099-01-01T00:00:00.000Z");
   });
 
   // covers OR-004

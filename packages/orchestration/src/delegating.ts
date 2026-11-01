@@ -8,16 +8,17 @@ import {
   MilestoneId,
   type Quest,
   QuestId,
-  questChain,
+  questsAbove,
   type Task,
   TaskId,
   type TaskToolInput,
   type TaskToolRefused,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import { type Authority, delegatedAuthority, narrowBy } from "./authority.ts";
+import { type Authority, delegatedAuthority, narrowBy, type PathSeparator } from "./authority.ts";
 import {
   type CallScope,
+  depthWithin,
   fromRecords,
   journalOf,
   ledTask,
@@ -40,6 +41,7 @@ interface Deps {
     readonly own: (agentId: AgentId) => Effect.Effect<Authority>;
   };
   readonly limits: TaskToolLimits;
+  readonly separator: PathSeparator;
 }
 
 type DelegateInput = Omit<TaskToolInput<"delegate_task">, "key">;
@@ -58,15 +60,6 @@ const findHob = (hobs: Deps["hobs"], named: string): Effect.Effect<Agent, TaskTo
     return hob;
   });
 
-/** The Quest on `task`, if it has one, and every Quest above it, nearest first. */
-const questsAround = (scope: CallScope, task: Task): ReadonlyArray<Quest> => {
-  const path = new Set([task.id, ...ancestorsOf(task, scope.tree.tasks).map((each) => each.id)]);
-  const nearest = [task, ...ancestorsOf(task, scope.tree.tasks)]
-    .map((each) => scope.tree.quests.find((quest) => quest.taskId === each.id))
-    .find((quest) => quest !== undefined);
-  return nearest === undefined ? [] : questChain(nearest, scope.tree.quests).filter((q) => path.has(q.taskId));
-};
-
 /** Checks the member can take this Task: not the caller itself, and not a hob that already leads its lineage. */
 const checkMember = (scope: CallScope, task: Task, member: Agent) => {
   if (member.id === scope.caller.agentId) {
@@ -76,7 +69,7 @@ const checkMember = (scope: CallScope, task: Task, member: Agent) => {
   if (lineage.some((each) => each.ownerId === member.id)) {
     return refuse("cycle", `${member.name} already owns work this Task is part of, so it cannot be given part of it.`);
   }
-  const passed = questsAround(scope, task).find(
+  const passed = questsAbove(task, scope.tree.tasks, scope.tree.quests).find(
     (quest) => quest.limits.deadline !== null && Date.parse(quest.limits.deadline) <= Date.parse(scope.at),
   );
   if (passed !== undefined)
@@ -99,7 +92,7 @@ const timeoutFor = (scope: CallScope, task: Task, minutes: number | undefined) =
 };
 
 /** Tools a lead brings in other hobs and moves results between them with. */
-export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority, limits }: Deps) => {
+export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority, limits, separator }: Deps) => {
   /**
    * The member's authority: the caller's on this Task, narrowed by what the brief asks for and by
    * the member's own policy, so it holds the intersection of the lead's and its own (STD-SEC-003).
@@ -114,13 +107,17 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
                 .check(folder)
                 .pipe(Effect.catch(() => refuse("invalid-input", `${folder} is not a folder on this hub.`))),
             );
-      const narrowed = delegatedAuthority(yield* authority.of(scope, task), {
-        ...(requested?.decisions === undefined ? {} : { decisions: requested.decisions }),
-        ...(folders === undefined ? {} : { folders }),
-      });
+      const narrowed = delegatedAuthority(
+        yield* authority.of(scope, task),
+        {
+          ...(requested?.decisions === undefined ? {} : { decisions: requested.decisions }),
+          ...(folders === undefined ? {} : { folders }),
+        },
+        separator,
+      );
       if (narrowed._tag === "Wider") return yield* refuse("authority-wider", narrowed.message);
       const own = yield* authority.own(member.id);
-      const both = narrowBy(own, narrowed.authority);
+      const both = narrowBy(own, narrowed.authority, separator);
       return { overrides: both.decisions, folders: [...both.folders] };
     });
 
@@ -135,6 +132,8 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         const journal = journalOf();
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
+        // A Quest started above this one later may allow less depth than when this one started.
+        if (existing !== undefined) yield* depthWithin(scope, limits, task);
         const quest =
           existing ??
           journal.keep(

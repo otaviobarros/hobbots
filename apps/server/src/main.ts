@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
 import {
   ApprovalService,
@@ -92,7 +92,7 @@ const ServerLive = Layer.unwrap(
             PermissionSummary.layer,
             JournalCompaction,
             // Served to turns that work on a Task (ADR 018); the hub checks every call.
-            TaskTools.layer(config.taskLimits),
+            TaskTools.layer(sep === "\\" ? "\\" : "/", config.taskLimits),
           ),
         ),
       )

@@ -10,6 +10,7 @@ import {
   POLICY_OPERATIONS,
   type QuestLimits,
   questPlacement,
+  questsAbove,
   StaleTask,
   type Task,
   type TaskId,
@@ -18,7 +19,7 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import { type Authority, NO_AUTHORITY, narrowBy } from "./authority.ts";
+import { type Authority, NO_AUTHORITY, narrowBy, type PathSeparator } from "./authority.ts";
 
 /**
  * Limits the hub holds every call to (orchestration contract). Depth counts Quests, not steps.
@@ -141,6 +142,24 @@ const deadlineWithin = (scope: CallScope, above: string | null, asked: string | 
     return deadline;
   });
 
+/**
+ * Where a Quest on `task` sits, refused when it would be deeper than the hub or any Quest above it
+ * allows. Every Quest on the way up counts, whichever started first.
+ */
+export const depthWithin = (scope: CallScope, limits: TaskToolLimits, task: Task) =>
+  Effect.gen(function* () {
+    const { depth } = questPlacement(task, scope.tree.tasks, scope.tree.quests);
+    const above = questsAbove(task, scope.tree.tasks, scope.tree.quests).filter((quest) => quest.taskId !== task.id);
+    const allowed = Math.min(limits.maxDepth, ...above.map((quest) => quest.limits.maxDepth));
+    if (depth > allowed) {
+      return yield* refuse(
+        "depth-limit",
+        `This would be a Quest ${depth} deep, past the limit of ${allowed}. Do this work yourself, or split it into steps.`,
+      );
+    }
+    return { above, allowed };
+  });
+
 /** The Quest limits a new Quest on `task` gets: within the hub's and every Quest's above it. */
 export const questLimitsFor = (
   scope: CallScope,
@@ -149,17 +168,15 @@ export const questLimitsFor = (
   requested: { readonly max_depth?: number; readonly deadline?: string },
 ): Effect.Effect<QuestLimits, TaskToolRefused> =>
   Effect.gen(function* () {
-    const { outer, depth } = questPlacement(task, scope.tree.tasks, scope.tree.quests);
-    const allowed = Math.min(limits.maxDepth, outer?.limits.maxDepth ?? limits.maxDepth);
-    if (depth > allowed) {
-      return yield* refuse(
-        "depth-limit",
-        `This would be a Quest ${depth} deep, past the limit of ${allowed}. Do this work yourself, or split it into steps.`,
-      );
-    }
+    const { above, allowed } = yield* depthWithin(scope, limits, task);
     const maxDepth = requested.max_depth ?? allowed;
     if (maxDepth > allowed) return yield* refuse("authority-wider", `The depth limit here is at most ${allowed}.`);
-    const deadline = yield* deadlineWithin(scope, outer?.limits.deadline ?? null, requested.deadline);
+    const deadlines = above.flatMap((quest) => (quest.limits.deadline === null ? [] : [quest.limits.deadline]));
+    const earliest = deadlines.reduce<string | null>(
+      (first, each) => (first === null || Date.parse(each) < Date.parse(first) ? each : first),
+      null,
+    );
+    const deadline = yield* deadlineWithin(scope, earliest, requested.deadline);
     return { maxDepth, deadline };
   });
 
@@ -190,32 +207,33 @@ export const makeCapacity = (limits: TaskToolLimits) =>
  * What the caller may do on `task`: its own policy now, narrowed by every Delegation on the way
  * down to the Task, so a member never passes on more than it was given (STD-SEC-003).
  */
-export const makeAuthorityOf = Effect.gen(function* () {
-  const hobs = yield* HobbotsRepository;
-  const hobTools = yield* HobTools;
-  /** What a hob's own policy lets it do now. */
-  const ownAuthority = (agentId: AgentId) =>
-    Effect.gen(function* () {
-      const agent = yield* hobs.findAgent(agentId);
-      const access = Option.isNone(agent) ? null : yield* hobTools.access(agent.value);
-      const own: Authority =
-        access === null
-          ? NO_AUTHORITY
-          : {
-              decisions: Object.fromEntries(
-                POLICY_OPERATIONS.map((operation) => [operation, operationDecision(access.policy, operation)]),
-              ) as Authority["decisions"],
-              folders: access.folders,
-            };
-      return own;
-    });
-  const of = (scope: CallScope, task: Task) =>
-    Effect.gen(function* () {
-      const own = yield* ownAuthority(scope.caller.agentId);
-      const path = new Set([task.id, ...ancestorsOf(task, scope.tree.tasks).map((each) => each.id)]);
-      return scope.tree.delegations
-        .filter((delegation) => path.has(delegation.childTaskId))
-        .reduce((authority, delegation) => narrowBy(authority, delegation.authority), own);
-    });
-  return { of, own: ownAuthority };
-});
+export const makeAuthorityOf = (separator: PathSeparator) =>
+  Effect.gen(function* () {
+    const hobs = yield* HobbotsRepository;
+    const hobTools = yield* HobTools;
+    /** What a hob's own policy lets it do now. */
+    const ownAuthority = (agentId: AgentId) =>
+      Effect.gen(function* () {
+        const agent = yield* hobs.findAgent(agentId);
+        const access = Option.isNone(agent) ? null : yield* hobTools.access(agent.value);
+        const own: Authority =
+          access === null
+            ? NO_AUTHORITY
+            : {
+                decisions: Object.fromEntries(
+                  POLICY_OPERATIONS.map((operation) => [operation, operationDecision(access.policy, operation)]),
+                ) as Authority["decisions"],
+                folders: access.folders,
+              };
+        return own;
+      });
+    const of = (scope: CallScope, task: Task) =>
+      Effect.gen(function* () {
+        const own = yield* ownAuthority(scope.caller.agentId);
+        const path = new Set([task.id, ...ancestorsOf(task, scope.tree.tasks).map((each) => each.id)]);
+        return scope.tree.delegations
+          .filter((delegation) => path.has(delegation.childTaskId))
+          .reduce((authority, delegation) => narrowBy(authority, delegation.authority, separator), own);
+      });
+    return { of, own: ownAuthority };
+  });

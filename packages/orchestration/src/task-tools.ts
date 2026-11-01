@@ -20,6 +20,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { makeAsking } from "./asking.ts";
+import type { PathSeparator } from "./authority.ts";
 import {
   type CallScope,
   DEFAULT_TASK_TOOL_LIMITS,
@@ -56,7 +57,11 @@ export class TaskTools extends Context.Service<
     readonly forTurn: (caller: TaskToolCaller) => HubTools;
   }
 >()("@hobbots/orchestration/TaskTools") {
-  static readonly layer = (limits: TaskToolLimits = DEFAULT_TASK_TOOL_LIMITS) =>
+  /**
+   * `separator` is the hub's own path separator, which alone divides the folders a hob may be
+   * given (STD-SEC-003).
+   */
+  static readonly layer = (separator: PathSeparator, limits: TaskToolLimits = DEFAULT_TASK_TOOL_LIMITS) =>
     Layer.effect(
       TaskTools,
       Effect.gen(function* () {
@@ -64,12 +69,12 @@ export class TaskTools extends Context.Service<
         const ledger = yield* TaskToolCalls;
         const publisher = yield* EventPublisher;
         const capacity = yield* makeCapacity(limits);
-        const authority = yield* makeAuthorityOf;
+        const authority = yield* makeAuthorityOf(separator);
         const folderChecks = yield* FolderChecks;
         const hobs = yield* HobbotsRepository;
         const handlers: Record<TaskToolName, ToolHandler> = {
           ...makePlanning({ tasks, capacity, limits }),
-          ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs }),
+          ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
           ...makeAsking({ tasks }),
         };
 

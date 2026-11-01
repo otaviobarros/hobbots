@@ -279,20 +279,41 @@ export const taskToolText = (outcome: TaskToolDone | TaskToolRefused): string =>
       : `${outcome.message}\n${JSON.stringify(outcome.details)}`;
 
 /**
- * Where a Quest on `task` would sit: the nearest Quest above it, and its depth. Steps never add
- * depth, so a Quest on its lead's own step sits at that Quest's depth.
+ * The Quests on `task` and on every Task above it, nearest first. It follows the Tasks, not each
+ * Quest's parent, so a Quest started above another one later still counts.
+ */
+export const questsAbove = (
+  task: Task,
+  tree: ReadonlyArray<Task>,
+  quests: ReadonlyArray<Quest>,
+): ReadonlyArray<Quest> => {
+  const byTask = new Map(quests.map((quest) => [quest.taskId, quest]));
+  return [task, ...ancestorsOf(task, tree)].flatMap((each) => {
+    const quest = byTask.get(each.id);
+    return quest === undefined ? [] : [quest];
+  });
+};
+
+/**
+ * Where a Quest on `task` would sit: the nearest Quest above it, and its depth. Depth counts each
+ * change of lead on the way down, from the Tasks as they are now, so a Quest started above
+ * another one later still counts. Steps never add depth, so a Quest on its lead's own step sits at
+ * that Quest's depth.
  */
 export const questPlacement = (
   task: Task,
   tree: ReadonlyArray<Task>,
   quests: ReadonlyArray<Quest>,
 ): { readonly outer: Quest | null; readonly depth: number } => {
-  const byTask = new Map(quests.map((quest) => [quest.taskId, quest]));
-  const outer = ancestorsOf(task, tree)
-    .map((each) => byTask.get(each.id))
-    .find((quest) => quest !== undefined);
+  const above = questsAbove(task, tree, quests).filter((quest) => quest.taskId !== task.id);
+  const outer = above[0];
   if (outer === undefined) return { outer: null, depth: 1 };
-  return { outer, depth: outer.leadId === task.ownerId ? outer.depth : outer.depth + 1 };
+  let depth = 1;
+  above.reduceRight<string | null>((lead, quest) => {
+    if (lead !== null && quest.leadId !== lead) depth += 1;
+    return quest.leadId;
+  }, null);
+  return { outer, depth: outer.leadId === task.ownerId ? depth : depth + 1 };
 };
 
 /** The Quests from `quest` up to its top one, `quest` first. */
