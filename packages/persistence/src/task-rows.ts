@@ -13,13 +13,14 @@ import {
   Task,
   type TaskId,
   TaskTree,
+  TaskWait,
   type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import type { SqlClient } from "effect/sql";
 import { oldestFirst } from "./journal.ts";
 
-// The stored shape of each record (migration 0024): JSON text columns, numbers that PostgreSQL
+// The stored shape of each record (migrations 0024 and 0025): JSON text columns, numbers that PostgreSQL
 // reads as bigints, and a Task's result split into two columns.
 type Row = Record<string, unknown>;
 
@@ -52,6 +53,7 @@ const fromRow = {
   }),
   artifact: (row: Row) => row,
   handOff: (row: Row) => row,
+  wait: (row: Row) => ({ taskId: row.taskId, on: json(row.waitsOn), mode: row.mode, createdAt: row.createdAt }),
 };
 
 const decoders = {
@@ -64,6 +66,7 @@ const decoders = {
   question: Schema.decodeUnknownEffect(Schema.Array(Question)),
   artifact: Schema.decodeUnknownEffect(Schema.Array(ArtifactRef)),
   handOff: Schema.decodeUnknownEffect(Schema.Array(HandOff)),
+  wait: Schema.decodeUnknownEffect(Schema.Array(TaskWait)),
 };
 
 interface Records {
@@ -76,6 +79,7 @@ interface Records {
   readonly question: Question;
   readonly artifact: ArtifactRef;
   readonly handOff: HandOff;
+  readonly wait: TaskWait;
 }
 
 /** Decodes stored rows as records of `kind`. A row that does not decode is a defect: the hub wrote it. */
@@ -171,6 +175,8 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
           ORDER BY ${orderBy(sql, ["created_at", "artifact_id", "to_task_id"])}`.pipe(
           Effect.flatMap(decodeRows("handOff")),
         ),
+        waits: yield* sql<Row>`SELECT * FROM task_waits WHERE ${inTree("task_id")}
+          ORDER BY ${orderBy(sql, ["created_at", "task_id"])}`.pipe(Effect.flatMap(decodeRows("wait"))),
       });
     });
 

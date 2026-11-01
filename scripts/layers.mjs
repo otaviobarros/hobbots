@@ -8,6 +8,8 @@ export const layers = {
   "@hobbots/domain": { layer: "domain", may: [], external: ["effect"] },
   "@hobbots/api": { layer: "contract", may: ["@hobbots/domain"] },
   "@hobbots/agents": { layer: "application", may: ["@hobbots/domain", "@hobbots/api"] },
+  // Tasks, Quests and delegation, as use cases over the ports in agents (ADR 018).
+  "@hobbots/orchestration": { layer: "application", may: ["@hobbots/domain", "@hobbots/agents"] },
   "@hobbots/permissions": { layer: "adapter", may: ["@hobbots/domain"] },
   "@hobbots/persistence": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/api", "@hobbots/agents"] },
   "@hobbots/runtimes": {
@@ -24,6 +26,7 @@ export const layers = {
       "@hobbots/domain",
       "@hobbots/api",
       "@hobbots/agents",
+      "@hobbots/orchestration",
       "@hobbots/permissions",
       "@hobbots/persistence",
       "@hobbots/runtimes",

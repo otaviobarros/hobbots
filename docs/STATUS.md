@@ -31,7 +31,9 @@ Built, but not proven end to end, or proven only in part.
 
 - **2026-11-01 · Switching a thread's brain.** A thread can move to another runtime or model and keep its context through a briefing the hub writes, proven with the fake runtime standing in for Claude Code and Codex. The Codex adapter is not built, so a real hub can only switch Claude Code models. ([#169](https://github.com/otaviobarros/hobbots/issues/169), [#12](https://github.com/otaviobarros/hobbots/issues/12))
 
-Delegation, inboxes, Quests, other runtimes, the Workbench and remote access are not built yet. The [slices](https://github.com/otaviobarros/hobbots/issues?q=label%3A%22type%3A+slice%22) list them in order.
+- **2026-11-01 · Hob tools for Tasks and Quests.** Hobs can plan steps, start a Quest, delegate, report, ask, answer, escalate, hand off, wait, complete and cancel through tools the hub checks. Proven at hub level with the fake runtime on SQLite and PostgreSQL. No turn offers them yet, and serving them to a real Claude Code is not verified. ([#271](https://github.com/otaviobarros/hobbots/issues/271), [#272](https://github.com/otaviobarros/hobbots/issues/272), [#273](https://github.com/otaviobarros/hobbots/issues/273))
+
+Running steps and delegated work, inboxes, other runtimes, the Workbench and remote access are not built yet. The [slices](https://github.com/otaviobarros/hobbots/issues?q=label%3A%22type%3A+slice%22) list them in order.
 
 ## Keep this page current
 

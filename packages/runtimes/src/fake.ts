@@ -222,6 +222,62 @@ export const scriptedToolEvents = (
   );
 };
 
+/**
+ * A prompt line `fake:hub <tool> <JSON input>` asks the fake runtime to call that Hobbots tool
+ * through the turn's hub tools (ADR 018), so every Task and Quest tool can be scripted without a
+ * model. Input that is not JSON is passed as text, which the hub refuses as invalid.
+ */
+export const FAKE_HUB_DIRECTIVE = "fake:hub";
+
+const parsedInput = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
+/**
+ * The hub tool calls a prompt scripts, each shown as a step. What the hub answers is added to
+ * `answers`, one `<tool>: <answer>` each, for the reply to end with as a model would read it.
+ */
+export const scriptedHubEvents = (request: PromptRequest, answers: Array<string>): Stream.Stream<RuntimeEvent> => {
+  const hub = request.hubTools;
+  if (!hub) return Stream.empty;
+  const calls = request.prompt
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith(`${FAKE_HUB_DIRECTIVE} `))
+    .map((line, index) => {
+      const [name = "", ...rest] = line
+        .slice(FAKE_HUB_DIRECTIVE.length + 1)
+        .trim()
+        .split(" ");
+      return { id: `fake-hub-${index + 1}`, name, input: parsedInput(rest.join(" ")) };
+    });
+  return Stream.fromIterable(calls).pipe(
+    Stream.flatMap((call) =>
+      Stream.make<Array<RuntimeEvent>>({
+        _tag: "StepStarted",
+        id: call.id,
+        kind: "tool",
+        label: hub.tools.find((tool) => tool.name === call.name)?.label ?? call.name,
+      }).pipe(
+        Stream.concat(
+          Stream.fromEffect(
+            hub.call(call.name, call.input).pipe(
+              Effect.map((answer): RuntimeEvent => {
+                answers.push(`${call.name}: ${answer.text}`);
+                return { _tag: "StepEnded", id: call.id };
+              }),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+};
+
 /** How a directive in the prompt makes the fake end its reply. */
 const fakeEnding = (prompt: string) =>
   prompt.startsWith(FAKE_DIRECTIVES.cutOff)
@@ -266,22 +322,31 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     sessions.set(sessionId, followed);
     // A briefing is echoed ahead of the prompt, so a test can see what the session was told.
     const told = request.briefing ? `${request.briefing}\n\n${request.prompt}` : request.prompt;
-    const reply = request.prompt === fakeInstructionsPrompt ? followed : `Echo: ${told}`;
-    const words = reply.split(/(?<= )/);
+    const echo = request.prompt === fakeInstructionsPrompt ? followed : `Echo: ${told}`;
     const ending = fakeEnding(request.prompt);
-    const events: Array<RuntimeEvent> = [
+    const answers: Array<string> = [];
+    // The reply ends with what the hub answered its scripted calls, known once they are made.
+    const written = Stream.suspend(() => {
+      const reply = answers.length === 0 ? echo : [echo, ...answers].join("\n\n");
+      const words = reply.split(/(?<= )/);
+      return Stream.fromIterable<RuntimeEvent>([
+        ...(ending === "complete" ? words : words.slice(0, 2)).map(
+          (text): RuntimeEvent => ({ _tag: "TextDelta", text }),
+        ),
+        ...(ending === "complete" ? [{ _tag: "Completed", sessionId, text: reply } as const] : []),
+      ]);
+    });
+    const failure = fakeFailure(ending);
+    // Tool calls come after the thinking step, before the reply is written.
+    const stream = Stream.fromIterable<RuntimeEvent>([
       { _tag: "SessionStarted", sessionId, billing: "fake" },
       // Every reply thinks first, so the step display can be seen and tested.
       { _tag: "StepStarted", id: "thinking-1", kind: "thinking", label: "Thinking" },
       { _tag: "StepEnded", id: "thinking-1" },
-      ...(ending === "complete" ? words : words.slice(0, 2)).map((text): RuntimeEvent => ({ _tag: "TextDelta", text })),
-      ...(ending === "complete" ? [{ _tag: "Completed", sessionId, text: reply } as const] : []),
-    ];
-    const failure = fakeFailure(ending);
-    // Tool calls come after the thinking step, before the reply is written.
-    const stream = Stream.fromIterable(events.slice(0, 3)).pipe(
+    ]).pipe(
       Stream.concat(scriptedToolEvents(request, options.engine, sandbox)),
-      Stream.concat(Stream.fromIterable(events.slice(3))),
+      Stream.concat(scriptedHubEvents(request, answers)),
+      Stream.concat(written),
       Stream.concat(failure),
     );
     const paced = options.delay ? stream.pipe(Stream.tap(() => Effect.sleep(options.delay as "10 millis"))) : stream;

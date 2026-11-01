@@ -157,6 +157,7 @@ const newTree = (task: Task, milestones: ReadonlyArray<Milestone>): TaskTree =>
     questions: [],
     artifacts: [],
     handOffs: [],
+    waits: [],
   });
 
 /**

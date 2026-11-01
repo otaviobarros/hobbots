@@ -163,6 +163,7 @@ export const tree = (fields: Partial<ConstructorParameters<typeof TaskTree>[0]> 
     questions: [],
     artifacts: [],
     handOffs: [],
+    waits: [],
     ...fields,
   });
 

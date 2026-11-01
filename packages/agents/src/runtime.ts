@@ -179,6 +179,30 @@ export interface TurnApprovals {
   readonly used: (grantIds: ReadonlyArray<GrantId>) => Effect.Effect<void>;
 }
 
+/** A Hobbots tool a runtime offers over its control channel (ADR 018). The hub checks every call. */
+export interface HubTool {
+  readonly name: string;
+  /** What the tool does, as the model reads it. */
+  readonly description: string;
+  /** The input's JSON Schema, as the model reads it. The hub decodes every input again. */
+  readonly inputSchema: Readonly<Record<string, unknown>>;
+  /** Short words for the step a call shows in the reply, such as "Delegating a Task". */
+  readonly label: string;
+}
+
+/** What a hub tool call returns to the hob: text it can act on, and whether the hub refused the call. */
+export interface HubToolAnswer {
+  readonly text: string;
+  readonly refused: boolean;
+}
+
+/** The Hobbots tools a turn offers, and how a call reaches the hub, which checks it. */
+export interface HubTools {
+  readonly tools: ReadonlyArray<HubTool>;
+  /** Never fails: a refused call is an answer with the reason. */
+  readonly call: (name: string, input: unknown) => Effect.Effect<HubToolAnswer>;
+}
+
 export interface PromptRequest {
   readonly prompt: string;
   /**
@@ -214,6 +238,11 @@ export interface PromptRequest {
    * it starts.
    */
   readonly recordToolStart?: ((event: ToolStartedEvent) => Effect.Effect<boolean>) | null;
+  /**
+   * Hobbots tools the turn offers over the runtime's control channel, for a turn that works on a
+   * Task (ADR 018). Absent or null, it offers none. The hub decides each call, not the policy hook.
+   */
+  readonly hubTools?: HubTools | null;
 }
 
 /** Why a tool call is refused when Hobbots could not record it before it ran. */

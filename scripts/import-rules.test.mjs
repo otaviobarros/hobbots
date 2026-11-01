@@ -18,6 +18,7 @@ const probes = {
   "packages/domain/src/subpath.ts": 'import { Schema } from "effect/Schema";\n',
   "packages/domain/src/node.ts": 'import { readFileSync } from "fs";\n',
   "packages/agents/src/node.ts": 'import { readFileSync } from "fs";\n',
+  "packages/orchestration/src/node.ts": 'import { readFileSync } from "fs";\n',
   "packages/api/src/node.ts": 'import { readFileSync } from "fs";\n',
   "packages/ui/src/node.ts": 'import { readFileSync } from "fs";\n',
   "apps/web/src/node.ts": 'import { readFileSync } from "fs";\n',
@@ -63,7 +64,14 @@ test("the domain rejects any other package", () => {
 });
 
 test("bare Node imports fail outside the adapters", () => {
-  for (const file of ["packages/domain", "packages/agents", "packages/api", "packages/ui", "apps/web"]) {
+  for (const file of [
+    "packages/domain",
+    "packages/agents",
+    "packages/orchestration",
+    "packages/api",
+    "packages/ui",
+    "apps/web",
+  ]) {
     fails(`${file}/src/node.ts`, "lint/correctness/noNodejsModules");
   }
 });
