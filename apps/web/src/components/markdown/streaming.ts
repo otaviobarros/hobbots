@@ -1,29 +1,41 @@
+import remarkParse from "remark-parse";
 import remend from "remend";
+import { unified } from "unified";
 
-// A fence line opens or closes a code block: ``` or ~~~, indented any amount inside list items.
-const FENCE = /^\s*(`{3,}|~{3,})/;
 // A table's delimiter row, such as `| --- | :-: |` or `--- | ---`: only pipes, dashes, colons and spaces.
 const DELIMITER_ROW = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+// The start of a delimiter row still arriving, such as `  `, `-` or `--- | :-`, after any quote marks.
+const DELIMITER_START = /^[\s|:-]*$/;
 // A table may sit inside a quote, so its rows can start with `>`.
 const unquoted = (line: string) => line.replace(/^\s*(>\s?)*/, "");
 // A row of a table, with or without outer pipes, holds a pipe.
 const isTableLine = (line: string) => unquoted(line).includes("|");
-// The start of a delimiter row still arriving, such as `>`, `-` or `--- | :-`: only dashes, colons, pipes and spaces after any quote marks.
-const DELIMITER_START = /^[\s|:-]*$/;
+
+/** The parts of a Markdown syntax tree (mdast) node needed to find its code blocks. */
+interface MdNode {
+  readonly type: string;
+  readonly position?:
+    | { readonly start: { readonly line: number }; readonly end: { readonly line: number } }
+    | undefined;
+  readonly children?: ReadonlyArray<MdNode>;
+}
+
+const parser = unified().use(remarkParse);
 
 /**
- * Whether the text before `lines[end]` leaves a code block open. A fence closes only on the same
- * character, at least as long as the one that opened it.
+ * The lines, counted from 0, that belong to a code block, as the Markdown parser reads them: fenced
+ * or indented, inside quotes and list items, and still open at the end of the text.
  */
-const insideFence = (lines: ReadonlyArray<string>, end: number) => {
-  let open: string | null = null;
-  for (const line of lines.slice(0, end).map(unquoted)) {
-    const fence = FENCE.exec(line)?.[1];
-    if (fence === undefined) continue;
-    if (open === null) open = fence;
-    else if (fence[0] === open[0] && fence.length >= open.length && line.trim() === fence) open = null;
-  }
-  return open !== null;
+const codeLines = (text: string): ReadonlySet<number> => {
+  const lines = new Set<number>();
+  const visit = (node: MdNode) => {
+    if (node.type === "code" && node.position) {
+      for (let line = node.position.start.line; line <= node.position.end.line; line += 1) lines.add(line - 1);
+    }
+    node.children?.forEach(visit);
+  };
+  visit(parser.parse(text));
+  return lines;
 };
 
 /**
@@ -33,21 +45,21 @@ const insideFence = (lines: ReadonlyArray<string>, end: number) => {
  */
 export const holdBackPartialTable = (text: string): string => {
   const lines = text.split("\n");
+  const code = codeLines(text);
+  const tableLine = (index: number) => !code.has(index) && isTableLine(lines[index] ?? "");
   const last = lines.length - 1;
   const partial = lines[last] ?? "";
   // A row still being written waits, and so does the start of a delimiter row under a table line,
   // such as `---` before its `| ---` arrives.
-  const delimiterStarting =
-    partial.trim() !== "" && DELIMITER_START.test(unquoted(partial)) && isTableLine(lines[last - 1] ?? "");
-  if ((isTableLine(partial) || delimiterStarting) && !insideFence(lines, last)) lines[last] = "";
+  const delimiterStarting = !code.has(last) && DELIMITER_START.test(unquoted(partial)) && tableLine(last - 1);
+  if (tableLine(last) || delimiterStarting) lines[last] = "";
 
   // The table lines just before the end, if any, and whether they are still only a header.
   const end = lines[last] === "" ? last : lines.length;
   let start = end;
-  while (start > 0 && isTableLine(lines[start - 1] ?? "")) start -= 1;
+  while (start > 0 && tableLine(start - 1)) start -= 1;
   const block = lines.slice(start, end);
-  const headerOnly = block.length > 0 && !block.some((line) => DELIMITER_ROW.test(unquoted(line)));
-  if (headerOnly && !insideFence(lines, start)) lines.splice(start, end - start);
+  if (block.length > 0 && !block.some((line) => DELIMITER_ROW.test(unquoted(line)))) lines.splice(start, end - start);
   return lines.join("\n");
 };
 

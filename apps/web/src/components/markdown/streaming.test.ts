@@ -75,6 +75,20 @@ describe("holdBackPartialTable, chunk by chunk", () => {
     }
   });
 
+  it("keeps a header hidden while indentation and a delimiter row arrive", () => {
+    const full = "Name | Score\n  --- | ---\n";
+    for (let cut = full.indexOf("\n") + 1; cut < full.length; cut += 1) {
+      expect(holdBackPartialTable(full.slice(0, cut)), `after ${JSON.stringify(full.slice(0, cut))}`).toBe("");
+    }
+    expect(holdBackPartialTable(full)).toBe(full);
+  });
+
+  it("keeps lines in an open code block visible, even after a quoted fence inside it", () => {
+    const text = "```md\n> ```sh\n> echo hi\n> ```\nls | wc -l\n";
+    expect(holdBackPartialTable(text)).toBe(text);
+    expect(holdBackPartialTable(`${text}| sort`)).toBe(`${text}| sort`);
+  });
+
   it("keeps code with pipes visible inside a quoted code block", () => {
     const text = "> ```sh\n> ls | wc -l\n";
     expect(holdBackPartialTable(text)).toBe(text);
