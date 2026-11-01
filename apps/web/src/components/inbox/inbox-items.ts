@@ -1,5 +1,5 @@
 import type { ApprovalRequest, ThreadId } from "@hobbots/domain";
-import { bytewise } from "../../api/sync.ts";
+import { byClosing } from "../../api/inbox-window.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
 import { exactAction } from "../approvals/approval-text.ts";
 import { messages } from "./messages.ts";
@@ -31,10 +31,6 @@ export const tabRequests = (
   if (tab === "all") return [...approvals].reverse();
   return approvals.filter((approval) => approval.state !== "pending").sort(byClosing);
 };
-
-// The most recently decided or expired first.
-const byClosing = (a: ApprovalRequest, b: ApprovalRequest) =>
-  bytewise(b.decidedAt ?? b.createdAt, a.decidedAt ?? a.createdAt) || bytewise(b.id, a.id);
 
 export interface InboxGroup {
   readonly threadId: ThreadId;

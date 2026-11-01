@@ -18,6 +18,7 @@ import {
   Grant,
   GrantId,
   type GrantRule,
+  INBOX_HISTORY,
   type MessageId,
   ruleOperation,
   stableJson,
@@ -94,9 +95,6 @@ export interface ApprovalDecisionInput {
 
 /** How long a pending request stays open at most, while its turn waits (ADR 015). */
 export const APPROVAL_TTL = Duration.hours(24);
-
-/** How many decided and expired requests the Inbox lists beside the pending ones. */
-export const INBOX_HISTORY = 200;
 
 /** A turn's approvals, and the way to close them once the turn has ended. */
 export interface TurnApprovalsHandle {

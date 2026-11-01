@@ -1,6 +1,7 @@
 import type { ApprovalDecision, ApprovalLifetime, ApprovalRequest, GrantRule, ThreadId } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
+import { inboxWindow } from "./inbox-window.ts";
 import { newer, recordApproval, syncedApprovals, syncedInbox } from "./sync.ts";
 
 export const approvalsKey = (threadId: ThreadId) => ["threads", threadId, "approvals"] as const;
@@ -18,7 +19,10 @@ export const storeApproval = (queryClient: QueryClient, approval: ApprovalReques
   queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(approval.threadId), (old) =>
     withApproval(old, approval),
   );
-  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(inboxKey, (old) => withApproval(old, approval));
+  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(inboxKey, (old) => {
+    const updated = withApproval(old, approval);
+    return updated === old || updated === undefined ? updated : inboxWindow(updated);
+  });
 };
 
 export interface Decision {

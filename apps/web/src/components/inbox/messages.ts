@@ -1,3 +1,6 @@
+import { INBOX_HISTORY } from "@hobbots/domain";
+import { formatCount, formatIn, plural } from "../../lib/format.ts";
+
 /** User-facing copy for the Inbox page and the Needs you counts (STD-I18N-001). */
 export const messages = {
   title: "Inbox",
@@ -5,7 +8,11 @@ export const messages = {
   tabsLabel: "Inbox filters",
   tabs: { needs: "Needs you", all: "All", history: "History" },
   listLabel: "Requests",
-  waiting: ({ count }: { count: number }) => (count === 1 ? "1 request needs you" : `${count} requests need you`),
+  waiting: ({ count }: { count: number }) =>
+    plural(count, {
+      one: `${formatCount(count)} request needs you`,
+      other: `${formatCount(count)} requests need you`,
+    }),
   from: ({ name }: { name: string }) => `${name} → you`,
   group: ({ name, thread }: { name: string; thread: string }) => `${name} · ${thread}`,
   untitledThread: "A thread",
@@ -21,8 +28,8 @@ export const messages = {
   },
   expiry: {
     soon: "expires in under a minute",
-    minutes: ({ count }: { count: number }) => (count === 1 ? "expires in 1 min" : `expires in ${count} min`),
-    hours: ({ count }: { count: number }) => (count === 1 ? "expires in 1 h" : `expires in ${count} h`),
+    minutes: ({ count }: { count: number }) => `expires ${formatIn(count, "minute")}`,
+    hours: ({ count }: { count: number }) => `expires ${formatIn(count, "hour")}`,
   },
   allClear: "Nothing needs you",
   allClearHint: "Your hobs are working. New approvals land here.",
@@ -51,15 +58,21 @@ export const messages = {
   history: {
     heading: "Decision history",
     title: "What you allowed and denied",
-    intro: "Your latest 200 decisions, most recent first, with who asked and what it was for.",
+    intro: `Your latest ${formatCount(INBOX_HISTORY)} decisions, most recent first, with who asked and what it was for.`,
     verdict: { once: "Once", always: "Always", quest: "Quest", denied: "Denied", expired: "Expired" },
     meta: ({ when, thread }: { when: string; thread: string }) => `${when} · ${thread}`,
     action: ({ name, action }: { name: string; action: string }) => `${name}: ${action}`,
   },
   home: {
-    more: ({ count }: { count: number }) => (count === 1 ? "1 more in the Inbox" : `${count} more in the Inbox`),
+    more: ({ count }: { count: number }) => `${formatCount(count)} more in the Inbox`,
+    empty:
+      "Nothing needs you right now. When a hob asks permission or has a question, it waits here and you can open it in the Inbox.",
     open: "Open the Inbox",
   },
   rail: ({ count }: { count: number }) =>
-    count === 1 ? "Inbox, 1 request needs you" : `Inbox, ${count} requests need you`,
+    plural(count, {
+      one: `Inbox, ${formatCount(count)} request needs you`,
+      other: `Inbox, ${formatCount(count)} requests need you`,
+    }),
+  count: ({ count }: { count: number }) => formatCount(count),
 } as const;

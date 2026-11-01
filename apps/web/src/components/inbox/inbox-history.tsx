@@ -24,7 +24,7 @@ export function InboxHistory({
   directory: InboxDirectory;
 }) {
   return (
-    <section aria-label={copy.history.heading} className="flex max-w-[860px] flex-col gap-3 px-7 py-[22px]">
+    <section aria-label={copy.history.heading} className="flex max-w-215 flex-col gap-3 px-7 py-5.5">
       <span className="lbl text-xs text-label">{copy.history.heading}</span>
       <h2 className="m-0 font-pixel text-2xl font-bold text-moonlight">{copy.history.title}</h2>
       <p className="m-0 text-sm text-secondary-text">{copy.history.intro}</p>
@@ -39,9 +39,9 @@ export function InboxHistory({
               <li
                 key={request.id}
                 data-state={request.state}
-                className="flex items-center gap-3 border-b-2 border-line py-[11px] last:border-b-0"
+                className="flex items-center gap-3 border-b-2 border-line py-2.75 last:border-b-0"
               >
-                <Badge variant={VERDICT[request.state]} className="w-[86px] justify-center">
+                <Badge variant={VERDICT[request.state]} className="w-21.5 justify-center">
                   {verdictText(request)}
                 </Badge>
                 {hob && <HobSprite hob={hob} size={22} />}
@@ -71,7 +71,7 @@ export function Empty({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
       <span className="font-pixel text-lg font-bold text-moonlight">{title}</span>
-      <span className="text-[13px] text-secondary-text">{hint}</span>
+      <span className="text-sm text-secondary-text">{hint}</span>
     </div>
   );
 }

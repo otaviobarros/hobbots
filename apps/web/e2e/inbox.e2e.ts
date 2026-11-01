@@ -90,7 +90,7 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   await expect(list.getByRole("link", { name: /Push your work/ })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("tablist", { name: "Inbox filters" })).toContainText("Needs you1");
   const detail = page.getByRole("article", { name: "Request from Pip: Push your work" });
-  await expect(detail).toContainText("expires in 23 h");
+  await expect(detail).toContainText("expires in 23 hours");
   const card = detail.getByRole("region", { name: "Pip asks permission" });
   await expect(card.getByText("git push origin feature", { exact: true })).toBeVisible();
 

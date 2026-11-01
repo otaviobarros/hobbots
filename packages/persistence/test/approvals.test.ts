@@ -147,6 +147,8 @@ describe("ApprovalRepository.listRecent", () => {
       return yield* approvals.listRecent(2);
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
+    // One statement reads them, so each request is listed once, in one state.
+    expect(new Set(listed.map((a) => a.id)).size).toBe(listed.length);
     expect(listed.map((a) => [a.id, a.state])).toEqual([
       ["p-old", "pending"],
       ["c2", "expired"],

@@ -32,19 +32,19 @@ export function InboxDetail({
     <article
       key={request.id}
       aria-label={copy.detail.label({ name: hob.name, action: title.what })}
-      className="flex max-w-[760px] animate-hb-in flex-col gap-3.5 px-7 py-5"
+      className="flex max-w-190 animate-hb-in flex-col gap-3.5 px-7 py-5"
     >
       <header className="flex flex-col gap-2.5">
-        <span className="flex items-center gap-2.5 text-[13px] text-secondary-text">
+        <span className="flex items-center gap-2.5 text-sm text-secondary-text">
           <HobSprite hob={hob} size={22} state={pending ? "needs-you" : "idle"} />
           {copy.from({ name: hob.name })}
-          <Badge variant={request.state === "expired" ? "muted" : "needs-you"} className="ml-auto">
+          <Badge variant={request.state === "expired" ? "muted" : "needs-you"} className="ms-auto">
             {request.state === "expired" ? copy.kind.expired : copy.kind.approval}
           </Badge>
         </span>
-        <h2 className="m-0 font-pixel text-[26px] leading-tight font-bold text-moonlight">{title.what}</h2>
+        <h2 className="m-0 font-pixel text-2xl leading-tight font-bold text-moonlight">{title.what}</h2>
       </header>
-      <dl className="m-0 grid grid-cols-[120px_1fr] text-sm">
+      <dl className="m-0 grid grid-cols-[auto_1fr] text-sm">
         <Fact term={copy.detail.thread}>{threadTitle}</Fact>
         <Fact term={copy.detail.asked}>{formatWhen(request.createdAt)}</Fact>
         {pending && request.expiresAt !== null && (
@@ -76,7 +76,7 @@ export function InboxDetail({
 function Fact({ term, children }: { term: string; children: React.ReactNode }) {
   return (
     <>
-      <dt className="border-b-2 border-line py-2 text-label">{term}</dt>
+      <dt className="min-w-30 border-b-2 border-line py-2 pe-3 text-label">{term}</dt>
       <dd className="m-0 border-b-2 border-line py-2">{children}</dd>
     </>
   );

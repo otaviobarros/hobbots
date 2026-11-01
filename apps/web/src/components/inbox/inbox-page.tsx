@@ -47,7 +47,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
-      <aside aria-label={copy.title} className="flex w-[380px] flex-none flex-col border-r-4 border-line bg-panel">
+      <aside aria-label={copy.title} className="flex w-95 flex-none flex-col border-e-4 border-line bg-panel">
         <InboxHeader waiting={waiting} />
         <InboxTabs tab={tab} waiting={waiting} />
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -92,21 +92,21 @@ function Selected({
 /** The mailbox at the top of the list; its flag goes up and pulses while requests wait. */
 function InboxHeader({ waiting }: { waiting: number }) {
   return (
-    <div className="relative h-[92px] flex-none overflow-hidden border-b-2 border-line bg-deep">
+    <div className="relative h-23 flex-none overflow-hidden border-b-2 border-line bg-deep">
       <Stars count={8} height={40} />
-      <span aria-hidden className="absolute inset-x-[22px] bottom-0 h-2.5 bg-line" />
-      <span aria-hidden className="absolute bottom-2.5 left-[170px] h-[30px] w-10 bg-wood" />
-      <span aria-hidden className="absolute bottom-[30px] left-[176px] h-1 w-7 bg-ground" />
-      <span aria-hidden className="absolute bottom-0 left-[186px] h-2.5 w-2 bg-wood" />
+      <span aria-hidden className="absolute inset-x-5.5 bottom-0 h-2.5 bg-line" />
+      <span aria-hidden className="absolute bottom-2.5 start-42.5 h-7.5 w-10 bg-wood" />
+      <span aria-hidden className="absolute bottom-7.5 start-44 h-1 w-7 bg-ground" />
+      <span aria-hidden className="absolute bottom-0 start-46.5 h-2.5 w-2 bg-wood" />
       <span
         aria-hidden
         className={cn(
-          "absolute bottom-[30px] left-[210px] h-[18px] w-1 origin-bottom bg-rose",
+          "absolute bottom-7.5 start-52.5 h-4.5 w-1 origin-bottom bg-rose",
           waiting > 0 ? "animate-hb-blink" : "rotate-90",
         )}
       />
-      <h1 className="absolute top-2.5 left-4 m-0 font-pixel text-xl font-bold text-moonlight">{copy.title}</h1>
-      <p className="absolute top-9 left-4 m-0 text-xs text-secondary-text">
+      <h1 className="absolute top-2.5 start-4 m-0 font-pixel text-xl font-bold text-moonlight">{copy.title}</h1>
+      <p className="absolute top-9 start-4 m-0 text-xs text-secondary-text">
         {waiting > 0 ? copy.waiting({ count: waiting }) : copy.intro}
       </p>
     </div>

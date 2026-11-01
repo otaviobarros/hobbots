@@ -101,9 +101,9 @@ function RailLink({
       {badge > 0 && (
         <span
           aria-hidden
-          className="absolute top-1 right-2 flex h-4 min-w-4 items-center justify-center bg-lantern px-0.5 text-[11px] font-bold text-ground"
+          className="absolute end-2 top-1 flex h-4 min-w-4 items-center justify-center bg-lantern px-0.5 text-xs font-bold text-ground"
         >
-          {badge}
+          {inboxCopy.count({ count: badge })}
         </span>
       )}
     </Link>

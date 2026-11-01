@@ -34,10 +34,6 @@ const recentlyClosedFirst = (sql: SqlClient.SqlClient) =>
     orElse: () => sql.literal("COALESCE(decided_at, created_at) DESC, id DESC"),
   });
 
-// Oldest first, as the queries order them.
-const byCreation = (a: ApprovalRequest, b: ApprovalRequest) =>
-  a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-
 /** The SQL store of approval requests, for SQLite and PostgreSQL (ADR 011). */
 export const ApprovalRepositoryLive = Layer.effect(
   ApprovalRepository,
@@ -67,20 +63,17 @@ export const ApprovalRepositoryLive = Layer.effect(
         ),
     });
 
-    // The most recently decided or expired requests first, so the Inbox can show the latest of them.
-    const listClosed = SqlSchema.findAll({
+    // One statement, so a request decided while it runs is read once, in one state.
+    const listRecent = SqlSchema.findAll({
       Request: Schema.Number,
       Result: ApprovalRequest,
       execute: (limit) =>
-        sql`SELECT * FROM approval_requests WHERE state <> 'pending' ORDER BY ${recentlyClosedFirst(sql)} LIMIT ${limit}`.pipe(
-          Effect.map(approvalRows),
-        ),
+        sql`SELECT * FROM approval_requests
+          WHERE state = 'pending' OR id IN (
+            SELECT id FROM approval_requests WHERE state <> 'pending' ORDER BY ${recentlyClosedFirst(sql)} LIMIT ${limit}
+          )
+          ORDER BY ${oldestFirst(sql)}`.pipe(Effect.map(approvalRows)),
     });
-    const listRecent = (limit: number) =>
-      Effect.all([listPending(), listClosed(limit)]).pipe(
-        Effect.map(([pending, closed]) => [...pending, ...closed].sort(byCreation)),
-        Effect.orDie,
-      );
 
     const insert = (input: ApprovalRequest) =>
       journaled(1, (revision) =>
@@ -147,7 +140,7 @@ export const ApprovalRepositoryLive = Layer.effect(
       find: (id) => find(id).pipe(Effect.orDie),
       listForThread: (threadId) => listForThread(threadId).pipe(Effect.orDie),
       listPending: listPending().pipe(Effect.orDie),
-      listRecent,
+      listRecent: (limit) => listRecent(limit).pipe(Effect.orDie),
       insert,
       resolve,
     });

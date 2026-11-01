@@ -21,6 +21,7 @@ import {
 import { sceneOrder, withRequests } from "../lib/hob-state.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
 import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
+import { messages as inboxCopy } from "./inbox/messages.ts";
 import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
 import { WaitingRequests } from "./inbox/waiting-requests.tsx";
 import { messages } from "./messages.ts";
@@ -238,10 +239,7 @@ function NeedsYou() {
     <Card label="Needs you" className="border-[3px] border-lantern" labelClass="text-lantern">
       <WaitingRequests
         empty={
-          <p className="m-0 border-t-2 border-line pt-3 leading-normal text-secondary-text">
-            Nothing needs you right now. When a hob asks permission or has a question, it waits here and you can open it
-            in the Inbox.
-          </p>
+          <p className="m-0 border-t-2 border-line pt-3 leading-normal text-secondary-text">{inboxCopy.home.empty}</p>
         }
       />
     </Card>

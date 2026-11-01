@@ -1,5 +1,6 @@
 import type { Agent, AgentId, ApprovalRequest, Message, Thread, ThreadId } from "@hobbots/domain";
 import type { QueryClient, QueryFunctionContext } from "@tanstack/react-query";
+import { inboxWindow } from "./inbox-window.ts";
 
 /**
  * Keeps the Query cache consistent while query responses and events arrive in either order
@@ -169,14 +170,6 @@ export const syncedMessages = (
 export const syncedApprovals = (threadId: ThreadId, fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
   synced(fetch, "approval", (approval) => approval.threadId === threadId);
 
-/** The Inbox's requests from every thread, oldest first, as the hub lists them. */
+/** The Inbox's requests from every thread, kept to the hub's window and order. */
 export const syncedInbox = (fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
-  synced(
-    fetch,
-    "approval",
-    () => true,
-    (items) => items.sort((a, b) => bytewise(a.createdAt, b.createdAt) || bytewise(a.id, b.id)),
-  );
-
-/** Compares text by code unit, as the hub's queries order it (`COLLATE "C"` on PostgreSQL). */
-export const bytewise = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+  synced(fetch, "approval", () => true, inboxWindow);

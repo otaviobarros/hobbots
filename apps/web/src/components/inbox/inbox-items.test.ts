@@ -80,8 +80,8 @@ describe("groupByThread", () => {
 
 describe("statusText and expiryText", () => {
   it("says how long a pending request has left", () => {
-    expect(statusText(request("a", "pending"), now)).toBe("Waiting on you · expires in 23 h");
-    expect(expiryText("2026-11-01T10:42:30.000Z", now)).toBe("expires in 42 min");
+    expect(statusText(request("a", "pending"), now)).toBe("Waiting on you · expires in 23 hours");
+    expect(expiryText("2026-11-01T10:42:30.000Z", now)).toBe("expires in 42 minutes");
     expect(expiryText("2026-11-01T10:00:20.000Z", now)).toBe("expires in under a minute");
     expect(expiryText(null, now)).toBe("");
   });
