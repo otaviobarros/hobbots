@@ -203,7 +203,13 @@ const isSettled = (word: string) => !/[$`*?[{]/.test(word) && !/^~[^/]/.test(wor
  * `logical` and takes `..` off the spelling. A folder Hobbots cannot work out is written as the words
  * that named it, which are never an absolute path, so the engine cannot resolve it and stays closed.
  */
-const moveTo = (base: string, target: string | undefined, home: string, spelling: string, logical = false): string => {
+const moveTo = (
+  base: string,
+  target: string | undefined,
+  home: string | null,
+  spelling: string,
+  logical = false,
+): string => {
   if (!isAbsolute(base)) return base;
   if (target === undefined || !isSettled(target)) return spelling;
   const expanded = expandHome(target, home);
@@ -211,9 +217,12 @@ const moveTo = (base: string, target: string | undefined, home: string, spelling
   return isAbsolute(expanded) ? expanded : `${base}${sep}${expanded}`;
 };
 
-/** A path a command names, with `~` spelled out. */
-const expandHome = (word: string, home: string) =>
-  word === "~" ? home : word.startsWith("~/") ? `${home}${word.slice(1)}` : word;
+/**
+ * A path a command names, with `~` spelled out. With no home the word is kept as written: a `~`
+ * the command reader read was quoted, so the shell passes it on as a literal `~` (ADR 015).
+ */
+const expandHome = (word: string, home: string | null) =>
+  home === null ? word : word === "~" ? home : word.startsWith("~/") ? `${home}${word.slice(1)}` : word;
 
 /**
  * Programs that run the words after their options as the command: the options that take a value,
@@ -359,7 +368,11 @@ const pushRequests = (args: ReadonlyArray<string>, cwd: string, literal: boolean
 };
 
 /** The folder `git` works in after its `-C` options, and the index of its subcommand. */
-const gitFolder = (args: ReadonlyArray<string>, folder: string, home: string): { folder: string; sub: number } => {
+const gitFolder = (
+  args: ReadonlyArray<string>,
+  folder: string,
+  home: string | null,
+): { folder: string; sub: number } => {
   let i = 0;
   let where = folder;
   while (i < args.length && (args[i] as string).startsWith("-")) {
@@ -372,7 +385,7 @@ const gitFolder = (args: ReadonlyArray<string>, folder: string, home: string): {
 const MAKE_CHDIR = new Set(["-C", "--directory"]);
 
 /** The folder `make` runs in after its `-C` options. */
-const makeFolder = (args: ReadonlyArray<string>, folder: string, home: string): string => {
+const makeFolder = (args: ReadonlyArray<string>, folder: string, home: string | null): string => {
   let where = folder;
   for (let i = 0; i < args.length; ) {
     const option = (args[i] as string).startsWith("-") ? readOption(args, i, MAKE_CHDIR) : { name: "", used: 1 };
@@ -398,8 +411,10 @@ const programRequests = (
   const [name, ...args] = words;
   if (name === undefined) return [];
   const program = basename(name);
+  // The reader reads no unquoted `~`, so in literal words every `~` is the shell's literal `~`.
+  const tilde = literal === null ? home : null;
   if (program === "git") {
-    const git = gitFolder(args, folder, home);
+    const git = gitFolder(args, folder, tilde);
     // Options before the subcommand, such as `-C` or `-c`, change where or how a push runs.
     return args[git.sub] === "push"
       ? pushRequests(args.slice(git.sub + 1), git.folder, literal !== null && git.sub === 0)
@@ -408,11 +423,11 @@ const programRequests = (
   const run: PolicyRequest = {
     _tag: "Command",
     operation: "run-commands",
-    cwd: program === "make" ? makeFolder(args, folder, home) : folder,
+    cwd: program === "make" ? makeFolder(args, folder, tilde) : folder,
     words: literal,
   };
   if (!DELETE_PROGRAMS.has(program)) return [run];
-  const paths = args.filter((a) => !a.startsWith("-")).map((a) => expandHome(a, home));
+  const paths = args.filter((a) => !a.startsWith("-")).map((a) => expandHome(a, tilde));
   // Paths from a line the reader could not read may expand into other files, so no rule covers them.
   return [
     {
