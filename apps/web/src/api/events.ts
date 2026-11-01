@@ -8,7 +8,6 @@ import {
   MessageDelta,
   STREAM_FRAME,
   StreamReady,
-  type Thread,
 } from "@hobbots/domain";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";
@@ -19,7 +18,7 @@ import { API_URL } from "./client.ts";
 import type { ConnectionState } from "./live.ts";
 import { setConnection } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
-import { queryKeys, sortArchived, sortThreads, upsertById, upsertMessage } from "./queries.ts";
+import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import {
   newer,
   recordAgent,
@@ -92,9 +91,8 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       return;
     case "ThreadUpserted":
       recordThread(queryClient, event.thread);
-      queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(event.thread.agentId), (old) =>
-        old ? sortThreads(upsertNewer(old, event.thread)) : old,
-      );
+      // A thread archived or restored elsewhere moves between the hob's two lists.
+      placeThread(queryClient, event.thread);
       return;
     case "MessageUpserted":
       recordMessage(queryClient, event.message);

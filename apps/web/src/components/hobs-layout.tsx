@@ -1,10 +1,10 @@
 import type { AgentId, ThreadId } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { threadsQuery } from "../api/queries.ts";
 import { readStored, writeStored } from "../lib/storage.ts";
-import { ChatView } from "./chat-view.tsx";
+import { ThreadMain, type WorkspaceMainProps } from "./archived-threads/archived-threads.tsx";
 import { HobList } from "./hob-list.tsx";
 import { SidePanel } from "./side-panel.tsx";
 
@@ -17,16 +17,21 @@ const usePersistentToggle = (key: string) => {
   return [open, set] as const;
 };
 
-/** The chat workspace: hob list, chat, and the Quest panel. Both side panels collapse. */
+/**
+ * The chat workspace: hob list, its middle, and the Quest panel. Both side panels collapse. The
+ * middle is the thread's chat unless the route fills it with `main`, such as the hob's archived threads.
+ */
 export function HobsLayout({
   hobId,
   threadId,
   focusMessageId,
+  main = (props) => <ThreadMain {...props} />,
 }: {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
   /** A message to scroll to and mark, such as a search match. */
   focusMessageId?: string | undefined;
+  main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
 }) {
   const [navOpen, setNavOpen] = usePersistentToggle("layout.navOpen");
   const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
@@ -35,16 +40,15 @@ export function HobsLayout({
   return (
     <div className="flex min-w-0 flex-1">
       {navOpen && <HobList hobId={hobId} threadId={threadId} onHide={() => setNavOpen(false)} />}
-      <ChatView
-        key={threadId ?? `new-${hobId}`}
-        hobId={hobId}
-        threadId={threadId}
-        focusMessageId={focusMessageId}
-        navOpen={navOpen}
-        panelOpen={panelOpen}
-        onShowNav={() => setNavOpen(true)}
-        onTogglePanel={() => setPanelOpen(!panelOpen)}
-      />
+      {main({
+        hobId,
+        threadId,
+        focusMessageId,
+        navOpen,
+        panelOpen,
+        onShowNav: () => setNavOpen(true),
+        onTogglePanel: () => setPanelOpen(!panelOpen),
+      })}
       {panelOpen && <SidePanel hobId={hobId} threadId={threadId} />}
     </div>
   );

@@ -4,7 +4,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { agentsQuery } from "../api/queries.ts";
 import { HobSprite } from "./hob-sprite.tsx";
-import { ResultDetail, resultLink, type SearchResult, useSearchResults } from "./search-results.tsx";
+import { messages } from "./messages.ts";
+import { ArchivedTag, ResultDetail, resultLink, type SearchResult, useSearchResults } from "./search-results.tsx";
+
+const copy = messages.jump;
 
 /** ⌘K (Ctrl+K elsewhere) from any page opens a finder that jumps to a hob, or to a thread by its title or messages. */
 export function HobJump() {
@@ -34,7 +37,7 @@ export function HobJump() {
     // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard closes the dialog with Escape; the click is for the backdrop.
     <dialog
       ref={dialog}
-      aria-label="Jump anywhere"
+      aria-label={copy.label}
       onClose={() => setOpen(false)}
       onClick={(event) => {
         // A click on the backdrop lands on the dialog itself; inside it lands on its content.
@@ -82,8 +85,8 @@ function JumpList({ onDone }: { onDone: () => void }) {
         aria-expanded
         aria-controls="hob-jump-list"
         aria-activedescendant={activeKey ? `hob-jump-${activeKey}` : undefined}
-        aria-label="Find a hob, thread or message"
-        placeholder="Jump to a hob or thread…"
+        aria-label={copy.input}
+        placeholder={copy.placeholder}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value);
@@ -105,7 +108,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
       <div
         id="hob-jump-list"
         role="listbox"
-        aria-label="Hobs and threads"
+        aria-label={copy.list}
         className="flex max-h-[320px] flex-col overflow-y-auto p-0"
       >
         {options.map((option, index) => (
@@ -128,17 +131,22 @@ function JumpList({ onDone }: { onDone: () => void }) {
               </>
             ) : (
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm font-bold">{option.hit.thread.title}</span>
+                <span className="flex min-w-0 items-center gap-1.5 text-sm font-bold">
+                  <span className="truncate">{option.hit.thread.title}</span>
+                  <ArchivedTag result={option} />
+                </span>
                 <span className="truncate text-[13px] text-secondary-text">
                   <ResultDetail result={option} />
                 </span>
               </span>
             )}
-            {index === current && <span className="text-xs text-label">↵ open</span>}
+            {index === current && <span className="text-xs text-label">{copy.open}</span>}
           </div>
         ))}
         {query.trim() !== "" && !found.pending && options.length === 0 && (
-          <p className="m-0 px-2 py-1.5 text-sm text-secondary-text">Nothing matches “{query.trim()}”.</p>
+          <p className="m-0 px-2 py-1.5 text-sm text-secondary-text">
+            {messages.search.nothing({ query: query.trim() })}
+          </p>
         )}
       </div>
     </div>
