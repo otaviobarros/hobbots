@@ -24,7 +24,8 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": ["HOBBOTS_*"]
     }
   }
 }
