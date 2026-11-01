@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { basename, isAbsolute, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
 import { operationDecision } from "@hobbots/agents";
 import { narrowest, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
 import {
@@ -302,7 +302,7 @@ const unwrap = (words: ReadonlyArray<string>, folder: string, home: string): Unw
   }
 };
 
-// Git options that take a separate value before the subcommand.
+// Git options that take a value before the subcommand.
 const GIT_VALUE_OPTIONS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"]);
 
 const DEFAULT_BRANCHES = new Set(["main", "master", "trunk", "develop"]);
@@ -367,19 +367,39 @@ const pushRequests = (args: ReadonlyArray<string>, cwd: string, literal: boolean
   });
 };
 
-/** The folder `git` works in after its `-C` options, and the index of its subcommand. */
-const gitFolder = (
+/** The folder a Git directory belongs to: the one holding it when it is a `.git`, else itself, a bare repository. */
+const repositoryOf = (gitDir: string) => (isAbsolute(gitDir) && basename(gitDir) === ".git" ? dirname(gitDir) : gitDir);
+
+/**
+ * The folders `git` works in after its `-C`, `--git-dir` and `--work-tree` options, the repository
+ * first, and the index of its subcommand. Git takes every `-C` before it resolves the other two, and
+ * finds the repository from the folder it runs in unless `--git-dir` names one; a working tree is
+ * that folder unless `--work-tree` names another. Each folder Git may change is named, so the
+ * folder it runs in always is.
+ */
+const gitFolders = (
   args: ReadonlyArray<string>,
   folder: string,
   home: string | null,
-): { folder: string; sub: number } => {
+): { folders: ReadonlyArray<string>; sub: number } => {
   let i = 0;
   let where = folder;
+  const named: Array<{ name: "--git-dir" | "--work-tree"; value: string | undefined }> = [];
   while (i < args.length && (args[i] as string).startsWith("-")) {
-    if (args[i] === "-C") where = moveTo(where, args[i + 1], home, `git -C ${args[i + 1] ?? ""}`);
-    i += GIT_VALUE_OPTIONS.has(args[i] as string) ? 2 : 1;
+    const option = readOption(args, i, GIT_VALUE_OPTIONS);
+    if (option.name === "-C") where = moveTo(where, option.value, home, `git -C ${option.value ?? ""}`);
+    else if (option.name === "--git-dir" || option.name === "--work-tree")
+      named.push({ name: option.name, value: option.value });
+    i += option.used;
   }
-  return { folder: where, sub: i };
+  const last = (name: "--git-dir" | "--work-tree") => {
+    const option = named.findLast((o) => o.name === name);
+    return option === undefined ? undefined : moveTo(where, option.value, home, `git ${name} ${option.value ?? ""}`);
+  };
+  const gitDir = last("--git-dir");
+  // Git still writes some files, such as `archive -o` or `format-patch`, in the folder it runs in.
+  const folders = [gitDir === undefined ? where : repositoryOf(gitDir), last("--work-tree") ?? where, where];
+  return { folders: [...new Set(folders)], sub: i };
 };
 
 const MAKE_CHDIR = new Set(["-C", "--directory"]);
@@ -414,11 +434,11 @@ const programRequests = (
   // The reader reads no unquoted `~`, so in literal words every `~` is the shell's literal `~`.
   const tilde = literal === null ? home : null;
   if (program === "git") {
-    const git = gitFolder(args, folder, tilde);
+    const git = gitFolders(args, folder, tilde);
     // Options before the subcommand, such as `-C` or `-c`, change where or how a push runs.
     return args[git.sub] === "push"
-      ? pushRequests(args.slice(git.sub + 1), git.folder, literal !== null && git.sub === 0)
-      : [{ _tag: "Command", operation: "local-git", cwd: git.folder, words: literal }];
+      ? pushRequests(args.slice(git.sub + 1), git.folders[0] as string, literal !== null && git.sub === 0)
+      : git.folders.map((cwd) => ({ _tag: "Command", operation: "local-git", cwd, words: literal }));
   }
   const run: PolicyRequest = {
     _tag: "Command",
@@ -623,9 +643,162 @@ export const toolRequests = (
 
 const shorten = (value: string, limit = 60) => (value.length > limit ? `${value.slice(0, limit - 1)}…` : value);
 
+/** How long a command label gets before it is cut. */
+const COMMAND_LABEL_LIMIT = 100;
+
+/** One piece of a command line as written, a word with its quotes or a separator, and whether a space came before it. */
+type RawToken = ({ readonly word: string } | { readonly separator: string }) & { readonly spaced: boolean };
+
+/** A command line as written, split into words and separators, with quotes kept. */
+const rawTokens = (line: string): ReadonlyArray<RawToken> => {
+  const tokens: Array<RawToken> = [];
+  let word = "";
+  let spaced = false;
+  const endWord = () => {
+    if (word !== "") tokens.push({ word, spaced });
+    if (word !== "") spaced = false;
+    word = "";
+  };
+  let i = 0;
+  while (i < line.length) {
+    const c = line[i] as string;
+    const separator = separatorAt(line, i, word);
+    if (c === "'" || c === '"') {
+      const next = readQuoted(line, i + 1, c).next;
+      word += line.slice(i, next);
+      i = next;
+    } else if (c === "\\" && i + 1 < line.length) {
+      word += line.slice(i, i + 2);
+      i += 2;
+    } else if (separator !== null) {
+      endWord();
+      tokens.push({ separator: line.slice(i, i + separator.length), spaced });
+      spaced = false;
+      i += separator.length;
+    } else {
+      if (c === " " || c === "\t") {
+        endWord();
+        spaced = true;
+      } else word += c;
+      i++;
+    }
+  }
+  endWord();
+  return tokens;
+};
+
+/** A word as the shell reads it, quotes taken off. */
+const unquoted = (word: string) => simpleCommands(word)[0]?.[0] ?? word;
+
+/**
+ * Variables that only set how output looks or which settings are left out, so a label can leave
+ * them out. Any other may change what runs (`GIT_SSH_COMMAND`, `NODE_OPTIONS`, `PATH`), so it stays.
+ */
+const PLAIN_VARIABLES =
+  /^(GIT_CONFIG_NOSYSTEM|GIT_TERMINAL_PROMPT|CI|FORCE_COLOR|NO_COLOR|TERM|COLUMNS|LANG|LC_[A-Z]+|TZ|NODE_ENV)$/;
+
+/** Git's own config files, which a label can leave out only when they are switched off. */
+const CONFIG_FILES = /^GIT_CONFIG_(GLOBAL|SYSTEM)$/;
+
+/**
+ * A leading `VAR=value` word that only sets the program's environment, so the label can leave it
+ * out: `GIT_CONFIG_GLOBAL=/dev/null`, `NO_COLOR=1`. A value that runs code or expands is kept.
+ */
+const isPlainAssignment = (word: string) => {
+  const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s.exec(word);
+  if (match === null) return false;
+  const [, name = "", value = ""] = match;
+  if (/[$`<>]/.test(value)) return false;
+  return PLAIN_VARIABLES.test(name) || (CONFIG_FILES.test(name) && value === "/dev/null");
+};
+
+/**
+ * A Git command's words without the options that name its folder, which the step lists under On:
+ * `git -C ~/project log` reads `git log`.
+ */
+const withoutGitFolder = <T extends { readonly word: string }>(words: ReadonlyArray<T>): ReadonlyArray<T> => {
+  const args = words.map(({ word }) => unquoted(word));
+  const kept = [words[0] as T];
+  let i = 1;
+  while (i < args.length && (args[i] as string).startsWith("-")) {
+    const option = readOption(args, i, GIT_VALUE_OPTIONS);
+    if (!["-C", "--git-dir", "--work-tree"].includes(option.name)) kept.push(...words.slice(i, i + option.used));
+    i += option.used;
+  }
+  return [...kept, ...words.slice(i)];
+};
+
+/** A path in a word, from its start or after `=`, `:` or a quote, up to its end or a quote. */
+const LONG_PATH = /(^|[=:'"])(~?(?:\/[^/\s'"]+)+)(?=$|['"])/;
+
+/** A path of four parts or more cut to its last two, `…/src/app.ts`, so the rest of the command stays in view. */
+const shortPath = (word: string) =>
+  word.replace(LONG_PATH, (match, before: string, path: string) => {
+    const parts = path.split("/");
+    return parts.length > 4 ? `${before}…/${parts.slice(-2).join("/")}` : match;
+  });
+
+/**
+ * A command line as a step label: its first line, without leading assignments, with long paths cut
+ * to their end, and for a lone Git command without the folder options the step already shows.
+ */
+const commandLabel = (line: string): string => {
+  const tokens = rawTokens(line);
+  const lone = tokens.every((token) => "word" in token);
+  const pieces: Array<{ text: string; spaced: boolean }> = [];
+  let words: Array<{ word: string; spaced: boolean }> = [];
+  const endCommand = () => {
+    const start = words.findIndex(({ word }) => !isPlainAssignment(word));
+    // A line of nothing but assignments sets variables, so it is shown as it is.
+    const program = start === -1 ? words : words.slice(start);
+    const git = lone && start !== -1 && basename(unquoted(program[0]?.word ?? "")) === "git";
+    for (const { word, spaced } of git ? withoutGitFolder(program) : program)
+      pieces.push({ text: shortPath(word), spaced });
+    words = [];
+  };
+  for (const token of tokens) {
+    if ("word" in token) words.push({ word: token.word, spaced: token.spaced });
+    else {
+      endCommand();
+      pieces.push({ text: token.separator, spaced: token.spaced });
+    }
+  }
+  endCommand();
+  return pieces.map(({ text, spaced }, i) => (i > 0 && spaced ? ` ${text}` : text)).join("");
+};
+
+/** Private-use characters that stand in for a redaction marker, which holds spaces, while the line is read. */
+const STANDIN_OPEN = "\uE000";
+const STANDIN_CLOSE = "\uE001";
+const STANDIN = new RegExp(`${STANDIN_OPEN}(\\d+)${STANDIN_CLOSE}`, "g");
+const MARKER = /\[redacted: [^\]]+\]/g;
+
+/** A label cut to `limit`, before any marker the cut would split, so a marker always reads whole. */
+const shortenLabel = (label: string, limit: number) => {
+  if (label.length <= limit) return label;
+  let cut = limit - 1;
+  for (const marker of label.matchAll(MARKER)) {
+    if (marker.index < cut && marker.index + marker[0].length > cut) cut = marker.index;
+  }
+  return `${label.slice(0, cut).trimEnd()}…`;
+};
+
+/** A command's label, read after its secrets are redacted with each marker kept as one word. */
+const redactedCommandLabel = (command: string, redact: (text: string) => string): string => {
+  const markers: Array<string> = [];
+  const masked = redact(command)
+    .replaceAll(STANDIN_OPEN, "")
+    .replaceAll(STANDIN_CLOSE, "")
+    .replace(MARKER, (marker) => `${STANDIN_OPEN}${markers.push(marker) - 1}${STANDIN_CLOSE}`);
+  const line = masked.split("\n").find((l) => l.trim() !== "") ?? "";
+  const label = commandLabel(line).replace(STANDIN, (_, n: string) => markers[Number(n)] ?? "");
+  return shortenLabel(label, COMMAND_LABEL_LIMIT);
+};
+
 /**
  * Short words for a tool step, from the call's own arguments. Secrets are redacted with `redact`
- * before anything is shortened, so a cut never leaves part of one behind.
+ * before anything is shortened, so a cut never leaves part of one behind, and a command's label is
+ * never cut inside a marker.
  */
 export const toolLabel = (
   tool: string,
@@ -649,8 +822,10 @@ export const toolLabel = (
     case "Glob":
     case "Grep":
       return `Searching for ${shorten(redact(text(input, "pattern") ?? "files"))}`;
-    case "Bash":
-      return `Running ${shorten(redact(text(input, "command") ?? "a command").split("\n")[0] ?? "a command")}`;
+    case "Bash": {
+      const command = text(input, "command");
+      return `Running ${command === undefined ? "a command" : redactedCommandLabel(command, redact)}`;
+    }
     default:
       return `Using ${tool}`;
   }

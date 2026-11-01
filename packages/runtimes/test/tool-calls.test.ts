@@ -305,15 +305,130 @@ describe("Claude Code tool calls as policy requests", () => {
 
   it("redacts secrets in a label before shortening it, so no part of one is left", () => {
     const token = `ghp_${"a".repeat(36)}`;
-    // Cut at 60 characters, the label would end with the token's first characters.
-    const command = `git remote set-url origin https://x:${token}@github.com/acme/app.git`;
-    expect(toolLabel("Bash", { command })).toBe("Running git remote set-url origin https://x:[redacted: GitHub token…");
+    // Cut at 100 characters, the label would end inside the marker, so it is cut before it.
+    const command = `git remote set-url --push upstream-mirror-of-the-entire-project-here https://x:${token}@github.com/acme/app.git`;
+    expect(toolLabel("Bash", { command })).toBe(
+      "Running git remote set-url --push upstream-mirror-of-the-entire-project-here https://x:…",
+    );
+    // A marker holds spaces but reads as one word, so it stays whole.
+    expect(toolLabel("Bash", { command: `GITHUB_TOKEN=${token} gh pr list` })).toBe(
+      "Running GITHUB_TOKEN=[redacted: GitHub token] gh pr list",
+    );
     const known = "a-known-hub-value-123456";
     const redact = (text: string) => text.replaceAll(known, "[redacted: HUB_TOKEN]");
     expect(toolLabel("Bash", { command: `printf %s ${known} | wc -c` }, redact)).toBe(
       "Running printf %s [redacted: HUB_TOKEN] | wc -c",
     );
     expect(toolLabel("Grep", { pattern: token })).toBe("Searching for [redacted: GitHub token]");
+  });
+});
+
+describe("[#210] command step labels", () => {
+  const label = (command: string) => toolLabel("Bash", { command });
+
+  it("leaves out leading assignments and the folder a lone Git command names, which On shows", () => {
+    expect(label("GIT_CONFIG_GLOBAL=/dev/null git -C /Users/me/Development/projects/hobbots log --oneline -30")).toBe(
+      "Running git log --oneline -30",
+    );
+    expect(label("git --git-dir=/srv/app/.git --work-tree /srv/app -c core.pager=cat status")).toBe(
+      "Running git -c core.pager=cat status",
+    );
+    // A line of nothing but assignments is shown as it is.
+    expect(label("FOO=1")).toBe("Running FOO=1");
+  });
+
+  it("keeps assignments that run code, expand, or change which repository or program is used", () => {
+    expect(label('X="$(rm -rf /tmp/x)" git status')).toBe('Running X="$(rm -rf /tmp/x)" git status');
+    expect(label("X=`rm -rf ~` git status")).toBe("Running X=`rm -rf ~` git status");
+    expect(label("GIT_DIR=/outside/.git git commit -m x")).toBe("Running GIT_DIR=/outside/.git git commit -m x");
+    expect(label("PATH=/tmp/bin:$PATH make")).toBe("Running PATH=/tmp/bin:$PATH make");
+    expect(label("LD_PRELOAD=/tmp/x.so ls")).toBe("Running LD_PRELOAD=/tmp/x.so ls");
+    expect(label('GIT_SSH_COMMAND="ssh -i k" git fetch')).toBe('Running GIT_SSH_COMMAND="ssh -i k" git fetch');
+    expect(label("NODE_OPTIONS=--require=x.js npm test")).toBe("Running NODE_OPTIONS=--require=x.js npm test");
+    // A config file left out is plain; one put in its place may run code.
+    expect(label("GIT_CONFIG_GLOBAL=~/evil git status")).toBe("Running GIT_CONFIG_GLOBAL=~/evil git status");
+    expect(label("NO_COLOR=1 CI=true pnpm test")).toBe("Running pnpm test");
+  });
+
+  it("keeps the line's own spacing around separators", () => {
+    expect(label("echo $(date)")).toBe("Running echo $(date)");
+    expect(label("cat <(ls) | wc -l")).toBe("Running cat <(ls) | wc -l");
+    expect(label("(cd x; ls)&&pwd")).toBe("Running (cd x; ls)&&pwd");
+  });
+
+  it("never mistakes the command's own text for a redaction marker", () => {
+    expect(label("echo \uE0000\uE001 x")).toBe("Running echo 0 x");
+  });
+
+  it("keeps the folder options of a Git command that shares its line, since On names one folder", () => {
+    expect(label("cd /srv && git -C app log")).toBe("Running cd /srv && git -C app log");
+  });
+
+  it("cuts long paths to their last two parts and keeps quotes, redirections and URLs", () => {
+    expect(label("pnpm exec vitest run /Users/me/dev/hobbots/apps/web/src/x.test.ts 2>&1 | tail -5")).toBe(
+      "Running pnpm exec vitest run …/src/x.test.ts 2>&1 | tail -5",
+    );
+    expect(label("cp --target-directory=/Users/me/dev/out a.txt")).toBe(
+      "Running cp --target-directory=…/dev/out a.txt",
+    );
+    expect(label(`grep -n "two  spaces" '/Users/me/dev/hobbots/notes.md'`)).toBe(
+      `Running grep -n "two  spaces" '…/hobbots/notes.md'`,
+    );
+    expect(label("curl https://github.com/acme/app/pulls/1")).toBe("Running curl https://github.com/acme/app/pulls/1");
+    expect(label("ls /tmp/a/b")).toBe("Running ls /tmp/a/b");
+  });
+
+  it("labels from the first line that says something", () => {
+    expect(label("\n\nls -la\npwd")).toBe("Running ls -la");
+  });
+});
+
+describe("[#210] the folder a Git command works in", () => {
+  const folders = (command: string) =>
+    commandRequests(command, "/work").map((r) => (r._tag === "Web" ? r.host : r.cwd));
+
+  it("names the repository first, then the working tree --work-tree points at", () => {
+    // Without --git-dir, Git finds the repository from the folder it runs in.
+    expect(commandRequests("git --work-tree=/srv/app status", "/work")).toEqual([
+      { _tag: "Command", operation: "local-git", cwd: "/work", words: ["git", "--work-tree=/srv/app", "status"] },
+      { _tag: "Command", operation: "local-git", cwd: "/srv/app", words: ["git", "--work-tree=/srv/app", "status"] },
+    ]);
+    expect(folders("git --git-dir /srv/app/.git --work-tree=/srv/app log")).toEqual(["/srv/app", "/work"]);
+    // A bare repository is its own folder.
+    expect(folders("git --git-dir=/srv/app.git --work-tree=/srv/app log")).toEqual([
+      "/srv/app.git",
+      "/srv/app",
+      "/work",
+    ]);
+    expect(commandRequests("git -C /srv --work-tree=app push origin feature", "/work")[0]).toMatchObject({
+      _tag: "Push",
+      cwd: "/srv",
+    });
+  });
+
+  it("resolves --git-dir and --work-tree after every -C, as Git does", () => {
+    expect(folders("git -C /outside --work-tree=/hob commit")).toEqual(["/outside", "/hob"]);
+    expect(folders("git --work-tree=/hob -C /outside commit")).toEqual(["/outside", "/hob"]);
+    expect(folders("git --work-tree=. -C /outside commit")).toEqual(["/outside", "/outside/."]);
+    expect(folders("git --git-dir=.git --work-tree=. -C /outside commit")).toEqual(["/outside", "/outside/."]);
+    // Git still writes some files where it runs, so that folder is decided as well.
+    expect(folders("git -C /outside --git-dir=/hob/.git --work-tree=/hob archive -o out.tar HEAD")).toEqual([
+      "/hob",
+      "/outside",
+    ]);
+    expect(
+      commandRequests("cd /outside && git --work-tree=/hob add f", "/work").map((r) =>
+        r._tag === "Web" ? r.host : r.cwd,
+      ),
+    ).toEqual(["/work", "/outside", "/hob"]);
+  });
+
+  it("also names the folder Git runs in when a Git directory has no working tree", () => {
+    // Git then works on the folder it runs in, so both are decided.
+    expect(folders("git --git-dir=/srv/app/.git checkout .")).toEqual(["/srv/app", "/work"]);
+    expect(folders("git --git-dir=/srv/app.git log")).toEqual(["/srv/app.git", "/work"]);
+    // A folder Hobbots cannot work out stays closed.
+    expect(isAbsolute(folders('git --git-dir="$DIR" log')[0] ?? "/")).toBe(false);
   });
 });
 
