@@ -142,7 +142,7 @@ function ThreadLink({ hob, thread, current, live }: { hob: Agent; thread: Thread
         params={{ hobId: hob.id, threadId: thread.id }}
         aria-current={current ? "page" : undefined}
         className={cn(
-          "flex w-full items-center gap-2 py-[7px] pe-2.5 ps-[34px] text-sm text-text no-underline hover:bg-hover hover:text-text",
+          "flex w-full animate-hb-in items-center gap-2 py-[7px] pe-2.5 ps-[34px] text-sm text-text no-underline hover:bg-hover hover:text-text",
           current && "bg-line text-moonlight hover:text-moonlight",
         )}
       >
