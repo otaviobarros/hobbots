@@ -28,6 +28,7 @@ import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
 
 let handler: (request: Request) => Promise<Response>;
+let admission: typeof HobAdmission.Service;
 let dispose: () => Promise<void>;
 
 // A fresh database per test: the whole API over the test database, with the fake runtime.
@@ -56,7 +57,9 @@ beforeEach(() => {
         Layer.mergeAll(
           Persistence,
           EventBus.layer,
-          HobAdmission.layer,
+          Layer.effectDiscard(HobAdmission.use((held) => Effect.sync(() => (admission = held)))).pipe(
+            Layer.provideMerge(HobAdmission.layer),
+          ),
           NodeFolderChecks,
           FakeRuntimeLayer(),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/data" }),
@@ -155,5 +158,31 @@ describe("the archive API", () => {
     const refused = await request("POST", `/api/threads/${thread.id}/archive`);
     expect(refused.status).toBe(409);
     expect(refused.body).toMatchObject({ _tag: "ThreadArchiveRefused", reason: "hob-retired" });
+  });
+
+  // covers CH-009
+  it("[TC-CH-148] never changes the hob's default brain for a thread archived while the switch waits", async () => {
+    const agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const brain = { brain: { runtime: "claude-code", model: "fake-quick", effort: null }, makeDefault: true };
+    // While the hob's lock is held, the archive queues first and the switch after it.
+    const pending = await Effect.runPromise(
+      admission.withHob(
+        agent.id,
+        Effect.promise(async () => {
+          const archived = request("POST", `/api/threads/${thread.id}/archive`);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          const switched = request("PUT", `/api/threads/${thread.id}/brain`, brain);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return { archived, switched };
+        }),
+      ),
+    );
+    expect((await pending.archived).status).toBe(200);
+    const switched = await pending.switched;
+    expect(switched.status).toBe(409);
+    expect(switched.body).toMatchObject({ _tag: "ThreadArchived" });
+    const after = (await request("GET", "/api/agents")).body[0];
+    expect([after.configVersion, after.model]).toEqual([agent.configVersion, agent.model]);
   });
 });

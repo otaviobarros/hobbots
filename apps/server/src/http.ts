@@ -8,7 +8,7 @@ import {
   missingRuntimeModels,
   runtimeAdapters,
 } from "@hobbots/agents";
-import { HobbotsApi, type SetBrainPayload, ThreadArchived, ThreadNotFound } from "@hobbots/api";
+import { HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
 import { RuntimeKind, type ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -63,12 +63,11 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
               Option.match({ onNone: () => Effect.fail(new ThreadNotFound({ threadId })), onSome: Effect.succeed }),
             ),
           );
-        // An archived thread changes nothing, not even its hob's default.
-        if (thread.archivedAt !== null) {
-          return yield* new ThreadArchived({ threadId, archivedAt: thread.archivedAt });
-        }
-        yield* hobs.update(thread.agentId, brain);
-        return yield* chat.setBrain(threadId, null);
+        // One step under the hob's lock: an archived thread changes nothing, not even its hob's
+        // default, and no archive lands between the hob's edit and the thread following it.
+        return yield* hobs.updateThen(thread.agentId, brain, chat.checkBrainSwitch(threadId), () =>
+          chat.followHob(threadId),
+        );
       });
     return handlers.handleAll({
       messages: ({ params }) =>

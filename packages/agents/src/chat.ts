@@ -138,6 +138,18 @@ export class ChatService extends Context.Service<
       brain: Brain | null,
     ) => Effect.Effect<Thread, ThreadNotFound | HobUnavailable | InvalidHob | ThreadArchived>;
     /**
+     * Refuses a brain switch the thread cannot take now: its hob retired or the thread archived.
+     * Reads without the hob's lock: call it while holding the lock (`HobService.updateThen`).
+     */
+    readonly checkBrainSwitch: (
+      threadId: ThreadId,
+    ) => Effect.Effect<void, ThreadNotFound | HobUnavailable | ThreadArchived>;
+    /**
+     * Clears the thread's own brain, so it follows its hob again. Takes no hob lock: call it while
+     * holding the lock, after `checkBrainSwitch`.
+     */
+    readonly followHob: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound>;
+    /**
      * Archives the thread, which then takes no new messages until it is restored. Refused while a
      * reply runs or waits in its queue, while an approval waits, or when its hob is retired.
      * Archiving an archived thread returns it unchanged.
@@ -768,6 +780,22 @@ export class ChatService extends Context.Service<
         yield* Effect.forEach(narrowed, ([threadId]) => FiberMap.remove(turns, threadId), { discard: true });
       });
 
+      const checkBrainSwitch = Effect.fn("ChatService.checkBrainSwitch")(function* (threadId: ThreadId) {
+        const thread = yield* findThread(threadId);
+        const agent = yield* repo.findAgent(thread.agentId).pipe(Effect.map(Option.getOrThrow));
+        if (agent.status === "retired") yield* requireActive(agent);
+        yield* requireLive(thread);
+      });
+
+      const followHob = Effect.fn("ChatService.followHob")(function* (threadId: ThreadId) {
+        const thread = yield* findThread(threadId);
+        const updatedAt = yield* nowIso;
+        const changed = yield* changeThread(threadId, (latest) =>
+          latest.brain === null ? null : new Thread({ ...latest, brain: null, updatedAt }),
+        );
+        return Option.getOrElse(changed, () => thread);
+      });
+
       const setBrain = Effect.fn("ChatService.setBrain")(function* (threadId: ThreadId, brain: Brain | null) {
         return yield* withThreadHob(threadId, (thread, agent) =>
           Effect.gen(function* () {
@@ -854,6 +882,8 @@ export class ChatService extends Context.Service<
         interruptAgent,
         reviewAuthority,
         setBrain,
+        checkBrainSwitch,
+        followHob,
         archive,
         restore,
         drainAgent,
