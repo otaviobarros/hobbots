@@ -1,5 +1,6 @@
 /**
- * What the main process takes from the hub's event stream (ADR 013): when it connected, and which
+ * What the main process takes from the hub's event stream (ADR 013): when it connected, whether it
+ * resumed, and which
  * of its own reads a change makes stale. It reads the stream instead of polling, so an idle app
  * sends no requests.
  */
@@ -25,14 +26,26 @@ const HubEntry = Schema.Struct({
   ),
 });
 const decodeEntry = Schema.decodeUnknownOption(Schema.fromJsonString(HubEntry));
+const decodeReady = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ resumed: Schema.Boolean })));
 
 /**
- * What a frame means for the main process: `connected` for the stream's first frame, the read a
+ * The stream connected. `resumed` is true when the hub replays every entry after the cursor the
+ * main process sent, so nothing was missed while it was away (ADR 013).
+ */
+export interface HubConnected {
+  readonly _tag: "Connected";
+  readonly resumed: boolean;
+}
+
+/**
+ * What a frame means for the main process: `Connected` for the stream's first frame, the read a
  * journal entry makes stale, or null when it changes nothing the main process shows. A hob starts
  * and ends its turns through its reply, so only a reply's upsert changes who is working.
  */
-export const frameChange = (frame: Pick<Event, "event" | "data">): HubChange | "connected" | null => {
-  if (frame.event === "ready") return "connected";
+export const frameChange = (frame: Pick<Event, "event" | "data">): HubChange | HubConnected | null => {
+  if (frame.event === "ready") {
+    return { _tag: "Connected", resumed: Option.getOrUndefined(decodeReady(frame.data))?.resumed === true };
+  }
   if (frame.event !== "message") return null;
   const entry = Option.getOrUndefined(decodeEntry(frame.data));
   switch (entry?.type) {

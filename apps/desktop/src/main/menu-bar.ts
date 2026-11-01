@@ -93,6 +93,7 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
   supervisor.onChange(refresh);
   refresh();
 
+  const checkHealth = () => supervisor.check();
   const names = (hobs: ReadonlyArray<WorkingHob>) => hobs.map((hob) => hob.name);
   // Read again when a reply starts or ends, until the read agrees with the event.
   const workingReads = workingHobs({
@@ -104,11 +105,22 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
   });
 
   /**
-   * Checks the server and reads which hobs are working, when the event stream connects, ends or
-   * cannot connect.
-   * The open stream is what shows the server is alive, so nothing is checked on a timer.
+   * The event stream connected. Unless it resumed, events may have been missed, so which hobs are
+   * working starts from a new snapshot. The open stream shows the server is alive, so nothing is
+   * checked on a timer.
    */
-  const checkServer = () => workingReads.startOver(() => supervisor.check());
+  const serverConnected = (resumed: boolean) =>
+    resumed ? workingReads.recheck(checkHealth) : workingReads.startOver(checkHealth);
+
+  /**
+   * The event stream ended or could not connect. A server that stopped runs no turns, so what
+   * events said about them is forgotten; otherwise the stream's replay brings what is missed.
+   */
+  const serverLost = () =>
+    workingReads.recheck(async () => {
+      await checkHealth();
+      if (!supervisor.mayAnswer) workingReads.forget();
+    });
 
   const guard = (window: BrowserWindow) => {
     windows.add(window);
@@ -197,5 +209,5 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
     });
   });
 
-  return { startServer, showWindow, checkServer, activityChanged: workingReads.changed };
+  return { startServer, showWindow, serverConnected, serverLost, activityChanged: workingReads.changed };
 };

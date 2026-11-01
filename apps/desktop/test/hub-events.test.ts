@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { coalesce } from "../src/main/coalesce.ts";
 import { followHub, type HubEventsOptions } from "../src/main/hub-events.ts";
 import { frameChange } from "../src/main/hub-events-model.ts";
-import { entryFrame, fakeEventStream, readyFrame } from "./fake-event-stream.ts";
+import { entryFrame, fakeEventStream, readyFrame, resumedFrame } from "./fake-event-stream.ts";
 
 const stops: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -16,7 +16,7 @@ const follow = (options: Partial<HubEventsOptions> = {}, opening?: string) => {
   const following = followHub({
     url: "http://127.0.0.1:4317/api/events",
     canConnect: () => true,
-    onConnected: () => void heard.push("connected"),
+    onConnected: (resumed) => void heard.push(resumed ? "resumed" : "connected"),
     onChange: (change) =>
       void heard.push(change._tag === "Approvals" ? "approvals" : `activity ${change.threadId} ${change.working}`),
     onLost: () => void heard.push("lost"),
@@ -105,10 +105,29 @@ describe("following the hub's event stream", () => {
   });
 });
 
+// covers DP-002, UX-001
+it("[TC-DP-049] resumes after the last entry it received, so the hub replays what it missed", async () => {
+  const { hub, heard } = follow();
+  await expect.poll(() => hub.connections.length).toBe(1);
+  expect(hub.connections[0]?.lastEventId).toBeNull();
+  hub.last().write(readyFrame);
+  hub.last().write(entryFrame("MessageUpserted", reply("assistant", "complete"), 7));
+  await expect.poll(() => heard).toEqual(["connected", "activity t1 false"]);
+  hub.last().close();
+  await expect.poll(() => hub.connections.length).toBe(2);
+  expect(hub.connections[1]?.lastEventId).toBe("e.7");
+  hub.last().write(resumedFrame("e.7"));
+  await expect.poll(() => heard).toEqual(["connected", "activity t1 false", "lost", "resumed"]);
+});
+
 describe("the event stream model", () => {
   it("names the read each entry makes stale", () => {
     const message = (data: string) => frameChange({ event: "message", data });
-    expect(frameChange({ event: "ready", data: "{}" })).toBe("connected");
+    expect(frameChange({ event: "ready", data: "{}" })).toEqual({ _tag: "Connected", resumed: false });
+    expect(frameChange({ event: "ready", data: '{"cursor":"e.3","resumed":true}' })).toEqual({
+      _tag: "Connected",
+      resumed: true,
+    });
     expect(frameChange({ event: "delta", data: "{}" })).toBeNull();
     expect(message(JSON.stringify({ type: "ApprovalResolved" }))).toEqual({ _tag: "Approvals" });
     expect(message(JSON.stringify({ type: "MessageUpserted", payload: reply("assistant") }))).toEqual({

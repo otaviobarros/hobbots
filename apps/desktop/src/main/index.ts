@@ -150,20 +150,20 @@ const requestNoticesOn = (open: (requestId: string) => void) =>
  * polling: they read the hub again only when the stream connects, is lost, or reports a change.
  */
 const followHubFor = (
-  menuBar: Pick<ReturnType<typeof startMenuBar>, "checkServer" | "activityChanged">,
+  menuBar: Pick<ReturnType<typeof startMenuBar>, "serverConnected" | "serverLost" | "activityChanged">,
   notices: ReturnType<typeof requestNotices>,
 ) => {
   const hub = followHub({
     url: `${apiUrl}/api/events`,
     headers: { origin: apiUrl },
     canConnect: () => supervisor.mayAnswer,
-    onConnected: () => {
-      void menuBar.checkServer();
+    onConnected: (resumed) => {
+      void menuBar.serverConnected(resumed);
       void notices.check();
     },
     onChange: (change) =>
       void (change._tag === "Approvals" ? notices.check() : menuBar.activityChanged(change.threadId, change.working)),
-    onLost: () => void menuBar.checkServer(),
+    onLost: () => void menuBar.serverLost(),
   });
   // Followed only while the server may answer; a server started again is followed at once.
   supervisor.onChange(() => hub.sync());

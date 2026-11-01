@@ -14,8 +14,11 @@ export interface HubEventsOptions {
   readonly headers?: Readonly<Record<string, string>>;
   /** Whether the hub may answer now; the stream is followed only while it may. */
   readonly canConnect: () => boolean;
-  /** The stream connected: anything may have changed since the last connection. */
-  readonly onConnected: () => void;
+  /**
+   * The stream connected. Unless `resumed`, the hub could not replay what was missed since the last
+   * connection, so anything may have changed.
+   */
+  readonly onConnected: (resumed: boolean) => void;
   readonly onChange: (change: HubChange) => void;
   /**
    * A connection ended or could not be made: the hub stopped, stopped answering, or dropped it.
@@ -60,11 +63,16 @@ const sseEvents = <E, R>(text: Stream.Stream<string, E, R>) =>
 /** Follows the stream until interrupted, connecting again after each loss on a doubling, capped schedule. */
 const follow = (options: HubEventsOptions) => {
   const { url, headers = {}, onConnected, onChange, onLost } = options;
+  // The cursor of the last entry received. Each connection resumes after it, so the hub replays
+  // what was missed while the stream was down (ADR 013).
+  let cursor: string | undefined;
   // Any bytes, keep-alives included, show the hub still answers; silence past the limit ends it.
   const bytes = HttpClientResponse.stream(
-    HttpClient.get(url, { headers: { accept: "text/event-stream", ...headers } }).pipe(
-      Effect.flatMap(HttpClientResponse.filterStatusOk),
-    ),
+    Effect.suspend(() =>
+      HttpClient.get(url, {
+        headers: { accept: "text/event-stream", ...headers, ...(cursor !== undefined && { "last-event-id": cursor }) },
+      }),
+    ).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk)),
   ).pipe(Stream.timeout(Duration.millis(options.silenceMs ?? SILENCE_MS)));
   const retry = Schedule.min([
     Schedule.exponential(Duration.millis(options.firstRetryMs ?? 1_000)),
@@ -79,12 +87,10 @@ const follow = (options: HubEventsOptions) => {
     Stream.retry(retry),
     Stream.runForEach((frame) =>
       Effect.sync(() => {
+        if (frame.id !== undefined) cursor = frame.id;
         const change = frameChange(frame);
-        if (change === "connected") {
-          onConnected();
-        } else if (change !== null) {
-          onChange(change);
-        }
+        if (change?._tag === "Connected") onConnected(change.resumed);
+        else if (change !== null) onChange(change);
       }),
     ),
     Effect.provide(FetchHttpClient.layer),

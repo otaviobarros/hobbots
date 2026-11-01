@@ -4,7 +4,13 @@
  */
 export const fakeEventStream = (opening?: string) => {
   const encoder = new TextEncoder();
-  const connections: Array<{ write: (text: string) => void; close: () => void; aborted: boolean }> = [];
+  const connections: Array<{
+    write: (text: string) => void;
+    close: () => void;
+    aborted: boolean;
+    /** The cursor the connection resumes after, from its `Last-Event-ID` header. */
+    lastEventId: string | null;
+  }> = [];
   const fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
     let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
     const body = new ReadableStream<Uint8Array>({
@@ -15,6 +21,7 @@ export const fakeEventStream = (opening?: string) => {
     });
     const connection = {
       aborted: false,
+      lastEventId: new Headers(init?.headers).get("last-event-id"),
       write: (text: string) => controller?.enqueue(encoder.encode(text)),
       close: () => controller?.close(),
     };
@@ -37,8 +44,10 @@ export const fakeEventStream = (opening?: string) => {
   return { fetch, connections, last };
 };
 
-/** The first frame of every connection, as the hub writes it. */
+/** The first frame of every connection, as the hub writes it: fresh, or resuming after `cursor`. */
 export const readyFrame = 'retry: 1000\n\nid: e.0\nevent: ready\ndata: {"cursor":"e.0","resumed":false}\n\n';
+export const resumedFrame = (cursor: string) =>
+  `retry: 1000\n\nid: ${cursor}\nevent: ready\ndata: {"cursor":"${cursor}","resumed":true}\n\n`;
 
 /** A journal entry frame, with only what the main process reads. */
 export const entryFrame = (type: string, payload: unknown, sequence = 1) =>
