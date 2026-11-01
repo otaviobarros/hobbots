@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
 import { ChiefMark, type ChiefMood } from "./chief-mark.tsx";
+import { chiefLabel, chiefMood } from "./chief-mood.ts";
 import { messages as inboxCopy } from "./inbox/messages.ts";
 import { useWaitingCount } from "./inbox/use-waiting-count.ts";
 
@@ -16,12 +17,7 @@ const ITEMS = [
   { label: "Usage", to: "/usage" },
 ] as const satisfies ReadonlyArray<{ label: IconName; to: string }>;
 
-/**
- * Requests waiting for you in the Inbox. The Inbox has no requests in this build, so this is 0
- * until it does (#43); in development, `?chief=needs-you` or `?chief=working` previews a mood.
- */
-const useNeedsYou = (): number => 0;
-
+/** In development, `?chief=needs-you`, `?chief=working` or `?chief=idle` previews a mood. */
 const previewMood = (): ChiefMood | null => {
   if (!import.meta.env.DEV) return null;
   const mood = new URLSearchParams(window.location.search).get("chief");
@@ -33,16 +29,10 @@ export function Rail() {
   const isActive = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
   const [looks, setLooks] = useState(0);
   const activity = useActivity();
-  const needsYou = useNeedsYou();
+  // The Inbox's pending requests, kept live by the event stream, light the needs-you lantern.
   const waiting = useWaitingCount();
-  const mood: ChiefMood =
-    previewMood() ?? (needsYou > 0 ? "needs-you" : Object.keys(activity).length > 0 ? "working" : "idle");
-  const label =
-    mood === "needs-you"
-      ? `Hobbots inbox, ${needsYou > 1 ? `${needsYou} requests need` : "a request needs"} you`
-      : mood === "working"
-        ? "Hobbots home, hobs are working"
-        : "Hobbots home";
+  const mood = chiefMood({ waiting, working: Object.keys(activity).length > 0, preview: previewMood() });
+  const label = chiefLabel(mood, waiting);
 
   return (
     <nav
