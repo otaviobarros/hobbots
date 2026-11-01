@@ -224,56 +224,33 @@ test("[TC-IN-011] the open request keeps its place when it cannot be read on its
 });
 
 /**
- * Stands in for the desktop app and the system's notifications: the window is not focused, the
- * preload bridge is there, and each notification the page sends is kept on `window.notices`.
+ * Stands in for the desktop app's preload bridge: `window.openRequest` plays the main process
+ * asking the window to show a request, as a click on its system notification does.
  */
-const asDesktopInBackground = () => {
+const asDesktop = () => {
   const page = window as unknown as Record<string, unknown>;
-  const notices: Array<{ title: string; body: string; closed: boolean; onclick: (() => void) | null }> = [];
-  page.notices = notices;
-  page.raised = 0;
+  let listener: ((requestId: string) => void) | undefined;
   page.hobbots = {
     apiUrl: window.location.origin,
-    showWindow: async () => {
-      page.raised = (page.raised as number) + 1;
+    onOpenRequest: (next: (requestId: string) => void) => {
+      listener = next;
+      return () => {
+        listener = undefined;
+      };
     },
   };
-  document.hasFocus = () => false;
-  class SystemNotice {
-    static permission = "granted";
-    static requestPermission = async () => "granted";
-    readonly body: string;
-    closed = false;
-    onclick: (() => void) | null = null;
-    constructor(
-      readonly title: string,
-      options: { body: string },
-    ) {
-      this.body = options.body;
-      notices.push(this);
-    }
-    close() {
-      this.closed = true;
-    }
-  }
-  page.Notification = SystemNotice;
+  page.openRequest = (requestId: string) => listener?.(requestId);
 };
 
 // covers PE-003, UX-001
-test("[TC-IN-014] a new request sends a system notification while the window is not focused, and clicking it opens the request", async ({
-  page,
-}) => {
-  await page.addInitScript(asDesktopInBackground);
-  await pipAsksToPush(page);
-  await expect
-    .poll(() => page.evaluate(() => (window as unknown as { notices: Array<{ title: string; body: string }> }).notices))
-    .toEqual([
-      expect.objectContaining({ title: "Pip asks permission", body: "Push your work: git push origin feature" }),
-    ]);
+test("[TC-IN-014] the desktop app opens a request in the Inbox when its notification is clicked", async ({ page }) => {
+  await page.addInitScript(asDesktop);
+  const { current } = await pipAsksToPush(page);
+  const [asked] = await api<ReadonlyArray<Approval>>(current, "GET", "/api/approvals");
+  if (asked === undefined) throw new Error("No approval request");
 
-  await page.evaluate(() => (window as unknown as { notices: Array<{ onclick: () => void }> }).notices[0]?.onclick());
+  await page.evaluate((id) => (window as unknown as { openRequest: (id: string) => void }).openRequest(id), asked.id);
   await expect(page.getByRole("article", { name: "Request from Pip: Push your work" })).toBeVisible();
+  expect(page.url()).toContain(`request=${asked.id}`);
   expect(page.url()).toContain("tab=needs");
-  expect(await page.evaluate(() => (window as unknown as { raised: number }).raised)).toBe(1);
-  await expect(chief(page)).toHaveAccessibleName("Hobbots inbox, a request needs you");
 });

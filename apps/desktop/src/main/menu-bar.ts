@@ -131,8 +131,11 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
     });
   };
 
-  /** Shows the window, opening one if none is open; reports a server that is not running. */
-  const showWindow = async () => {
+  /**
+   * Shows the window, opening one if none is open, and answers it; reports a server that is not
+   * running and answers undefined when it stays stopped.
+   */
+  const showWindow = async (): Promise<BrowserWindow | undefined> => {
     await starting;
     if (!isRunning()) {
       const model = trayModel(supervisor.status, [], port);
@@ -150,12 +153,14 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
     }
     if (process.platform === "darwin") app.setActivationPolicy("regular");
     const existing = [...windows][0];
-    if (existing) reveal(existing);
-    else {
-      const window = await createWindow();
-      guard(window);
-      reveal(window);
+    if (existing) {
+      reveal(existing);
+      return existing;
     }
+    const window = await createWindow();
+    guard(window);
+    reveal(window);
+    return window;
   };
 
   // With the switch on, the app outlives its windows on every platform; off, the close guard quits.

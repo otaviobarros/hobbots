@@ -76,8 +76,4 @@ export const messages = {
       other: `Inbox, ${formatCount(count)} requests need you`,
     }),
   count: ({ count }: { count: number }) => formatCount(count),
-  notice: {
-    title: ({ name }: { name: string }) => `${name} asks permission`,
-    body: ({ what, exact }: { what: string; exact: string }) => (exact === what ? what : `${what}: ${exact}`),
-  },
 } as const;

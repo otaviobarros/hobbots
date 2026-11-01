@@ -28,8 +28,11 @@ declare global {
       };
       /** Opens the system folder picker; resolves with the chosen folder, or null when cancelled. */
       readonly chooseFolder?: () => Promise<string | null>;
-      /** Brings this window forward, showing it if it is hidden or minimized. */
-      readonly showWindow?: () => Promise<void>;
+      /**
+       * Calls `listener` with each request the desktop app asks to show in the Inbox, as when its
+       * notification is clicked; answers a function that stops listening.
+       */
+      readonly onOpenRequest?: (listener: (requestId: string) => void) => () => void;
     };
   }
 }

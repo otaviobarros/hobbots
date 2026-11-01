@@ -2,7 +2,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { Outlet } from "@tanstack/react-router";
 import { useHobbotsEvents } from "../api/events.ts";
 import { HobJump } from "./hob-jump.tsx";
-import { useRequestNotices } from "./inbox/use-request-notices.ts";
+import { useOpenRequests } from "./inbox/use-open-requests.ts";
 import { Rail } from "./rail.tsx";
 
 /** The window: its title bar and whichever page fills it, with or without the rail. */
@@ -20,7 +20,8 @@ export function AppWindow() {
 
 /** The app once setup is done: live events, the rail and the current page. */
 export function AppShell() {
-  const connection = useHobbotsEvents(useRequestNotices());
+  const connection = useHobbotsEvents();
+  useOpenRequests();
 
   return (
     <>
