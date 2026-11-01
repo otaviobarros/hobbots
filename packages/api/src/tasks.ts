@@ -1,7 +1,15 @@
-import { AgentId, MemberWork, Quest, QuestId, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
+import { AgentId, MemberWork, Quest, QuestId, Question, QuestionId, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { AgentNotFound, QuestNotFound, TaskNotFound, ThreadNotFound } from "./errors.ts";
+import {
+  AgentNotFound,
+  QuestionClosed,
+  QuestionNotFound,
+  QuestNotFound,
+  TaskNotFound,
+  ThreadNotFound,
+} from "./errors.ts";
+import { UserSessionOnly } from "./user-session.ts";
 
 /**
  * A read of a Task tree, with the event stream cursor taken just before it (ADR 013). Opening the
@@ -55,4 +63,25 @@ export class TasksGroup extends HttpApiGroup.make("tasks")
       error: AgentNotFound,
     }),
   )
+  .prefix("/api") {}
+
+export const AnswerQuestionPayload = Schema.Struct({
+  answer: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(4000)),
+});
+export type AnswerQuestionPayload = typeof AnswerQuestionPayload.Type;
+
+/**
+ * Your answer to a question that climbed every lead and reached you (ADR 018). It goes back down
+ * the same chain to the hob that asked. User sessions only: a hob never answers for you (PE-006).
+ */
+export class QuestionsGroup extends HttpApiGroup.make("questions")
+  .add(
+    HttpApiEndpoint.post("answer", "/questions/:questionId/answer", {
+      params: { questionId: QuestionId },
+      payload: AnswerQuestionPayload,
+      success: Question,
+      error: [QuestionNotFound, QuestionClosed],
+    }),
+  )
+  .middleware(UserSessionOnly)
   .prefix("/api") {}

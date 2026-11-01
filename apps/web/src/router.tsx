@@ -1,4 +1,4 @@
-import { AgentId, ThreadId } from "@hobbots/domain";
+import { AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createHashHistory,
@@ -157,12 +157,14 @@ const archivedThreadsRoute = createRoute({
   },
 });
 
-// `?message=` names a message to scroll to, as a search result does.
+// `?message=` names a message to scroll to, as a search result does; `?task=` a Task to open in
+// the drawer beside the chat.
 const threadRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId/threads/$threadId",
-  validateSearch: (search: Record<string, unknown>): { message?: string | undefined } => ({
+  validateSearch: (search: Record<string, unknown>): { message?: string | undefined; task?: string | undefined } => ({
     message: typeof search.message === "string" ? search.message : undefined,
+    task: typeof search.task === "string" ? search.task : undefined,
   }),
   beforeLoad: ({ params }) => {
     writeStored(lastHobKey, params.hobId);
@@ -170,12 +172,13 @@ const threadRoute = createRoute({
   },
   component: function ThreadPage() {
     const params = threadRoute.useParams();
-    const { message } = threadRoute.useSearch();
+    const { message, task } = threadRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
         threadId={ThreadId.make(params.threadId)}
         focusMessageId={message}
+        taskId={task === undefined ? undefined : TaskId.make(task)}
       />
     );
   },

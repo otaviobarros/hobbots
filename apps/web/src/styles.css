@@ -57,6 +57,13 @@
   --spacing-transcript-y: 18px;
   --spacing-chat-min: 360px;
   --spacing-bubble-max: 460px;
+  /* A request's work in the chat: the card and question width, the drawer beside it. */
+  --text-title: 17px;
+  --spacing-tag-x: 7px;
+  --spacing-meter: 5px;
+  --spacing-work-max: 604px;
+  --spacing-drawer: 420px;
+  --shadow-drawer: -14px 0 34px rgb(0 0 0 / 0.5);
 
   /* Motion is stepped, like pixel art. */
   --animate-hb-bob: hb-bob 1.2s steps(2) infinite;
