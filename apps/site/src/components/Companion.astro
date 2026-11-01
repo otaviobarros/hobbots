@@ -16,6 +16,10 @@ import Hob from "./Hob.astro";
 </div>
 
 <style>
+  /* The walk-in starts off the right edge; clip it so phones cannot scroll sideways. The hob sits above its section, so only x is clipped. */
+  :global(section:has(> [data-companion])) {
+    overflow-x: clip;
+  }
   .comp {
     position: absolute;
     top: -64px;
