@@ -16,14 +16,17 @@ import { MessageRow, messageElementId } from "../message-row.tsx";
 import { messages as chatCopy } from "../messages.ts";
 import { messages } from "./messages.ts";
 
-type ChatProps = ComponentProps<typeof ChatView>;
+/** What the chat workspace gives whatever fills its middle: the hob, the thread and the side panels' state. */
+export type WorkspaceMainProps = ComponentProps<typeof ChatView>;
+type ChatProps = WorkspaceMainProps;
 
 /**
- * The middle of the chat workspace: the hob's archived threads with `archivedList`, an archived
- * thread read-only, and otherwise the chat. A thread archived or restored on any device switches
- * between the chat and the read-only view as its event arrives, and its unsent draft stays.
+ * The middle of the chat workspace for a thread: the chat, or the thread read-only while it is
+ * archived. A thread opened by its address shows neither until its hob's lists say which it is, so
+ * an archived thread never offers a composer. A thread archived or restored on any device switches
+ * between the two as its event arrives, and its unsent draft stays.
  */
-export function ThreadMain({ archivedList = false, ...props }: ChatProps & { archivedList?: boolean | undefined }) {
+export function ThreadMain(props: WorkspaceMainProps) {
   const { hobId, threadId } = props;
   const live = useQuery({ ...threadsQuery(hobId), select: (threads) => threads.some((t) => t.id === threadId) });
   const archived = useQuery({
@@ -31,11 +34,46 @@ export function ThreadMain({ archivedList = false, ...props }: ChatProps & { arc
     select: (threads) => threads.find((t) => t.id === threadId),
   });
 
-  if (archivedList) return <ArchivedThreadList {...props} />;
   if (archived.data) return <ArchivedThreadView {...props} thread={archived.data} />;
-  // A thread that is not live may be archived: wait for that list rather than offer a composer.
-  if (threadId !== undefined && live.data === false && archived.isPending) return <main className="flex-1" />;
-  return <ChatView key={threadId ?? `new-${hobId}`} {...props} />;
+  if (threadId === undefined || live.data === true) return <ChatView key={threadId ?? `new-${hobId}`} {...props} />;
+  if (live.isError || archived.isError) {
+    return (
+      <ThreadLookup>
+        <p role="alert" className="m-0 text-rose">
+          {messages.lookupFailed}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            if (live.isError) void live.refetch();
+            if (archived.isError) void archived.refetch();
+          }}
+        >
+          {messages.tryAgain}
+        </Button>
+      </ThreadLookup>
+    );
+  }
+  if (live.isPending || archived.isPending) {
+    return (
+      <ThreadLookup>
+        <p role="status" className="m-0 text-label">
+          {messages.lookingUp}
+        </p>
+      </ThreadLookup>
+    );
+  }
+  // Neither list holds it, so it is not archived: the chat says what the hub answers for it.
+  return <ChatView key={threadId} {...props} />;
+}
+
+function ThreadLookup({ children }: { children: ReactNode }) {
+  return (
+    <main aria-label={messages.chat} className="flex min-w-chat-min flex-1 flex-col items-center justify-center gap-3">
+      {children}
+    </main>
+  );
 }
 
 /**
@@ -57,13 +95,13 @@ export function ArchivedEntry({ hobId, threadId }: { hobId: AgentId; threadId?: 
       aria-current={current ? "page" : undefined}
       aria-label={messages.entryLabel({ count })}
       className={cn(
-        "flex w-full items-center gap-2 py-[7px] ps-[34px] pe-2.5 text-sm text-text no-underline hover:bg-hover hover:text-text",
+        "flex w-full items-center gap-2 py-row-y ps-thread-indent pe-2.5 text-sm text-text no-underline hover:bg-hover hover:text-text",
         current && "bg-line text-moonlight hover:text-moonlight",
       )}
     >
       <span aria-hidden className="size-2.5 flex-none border-2 border-secondary-text" />
       <span className="min-w-0 flex-1 truncate">{messages.entry}</span>
-      <span className="text-[11px] whitespace-nowrap text-label">{count}</span>
+      <span className="text-meta whitespace-nowrap text-label">{count}</span>
     </Link>
   );
 }
@@ -135,8 +173,8 @@ const restoreError = (error: Error, hob: Agent, thread: Thread) =>
     ? messages.restoreRetired({ name: hob.name, title: thread.title })
     : messages.restoreFailed({ title: thread.title });
 
-/** The hob's archived threads in place of the chat, most recently archived first, each with Restore. */
-function ArchivedThreadList(props: ChatProps) {
+/** The hob's archived threads, which its route puts in the middle of the chat workspace, most recently archived first, each with Restore. */
+export function ArchivedThreadList(props: WorkspaceMainProps) {
   const hob = useHob(props.hobId);
   const archived = useQuery(archivedThreadsQuery(props.hobId));
   const current = hob.data;
@@ -144,14 +182,14 @@ function ArchivedThreadList(props: ChatProps) {
   const count = archived.data?.length ?? 0;
 
   return (
-    <main aria-label={messages.title} className="flex min-w-[360px] flex-1 flex-col">
+    <main aria-label={messages.title} className="flex min-w-chat-min flex-1 flex-col">
       <ArchivedHeader
         hob={current}
         props={props}
         title={messages.title}
         detail={archived.data ? messages.threadCount({ count }) : ""}
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-[18px]">
+      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-transcript-y">
         {archived.isPending && <p className="m-0 text-label">{messages.loading}</p>}
         {archived.isError && <p className="m-0 text-sm text-rose">{messages.loadFailed}</p>}
         {archived.data && count === 0 && <EmptyArchive hob={current} />}
@@ -163,7 +201,6 @@ function ArchivedThreadList(props: ChatProps) {
                 <ArchivedRow key={thread.id} hob={current} thread={thread} />
               ))}
             </ul>
-            <p className="m-0 text-[13px] text-label">{messages.hint}</p>
           </>
         )}
       </div>
@@ -175,7 +212,7 @@ function EmptyArchive({ hob }: { hob: Agent }) {
   return (
     <section
       aria-label={messages.empty}
-      className="flex max-w-[460px] animate-hb-in flex-col gap-2 bg-deep px-4 py-3.5 text-secondary-text"
+      className="flex max-w-bubble-max animate-hb-in flex-col gap-2 bg-deep px-4 py-3.5 text-secondary-text"
     >
       <h2 className="m-0 font-pixel text-base font-semibold text-text">{messages.empty}</h2>
       <p className="m-0 text-sm">{messages.emptyBody({ name: hob.name })}</p>
@@ -197,7 +234,7 @@ function ArchivedRow({ hob, thread }: { hob: Agent; thread: Thread }) {
           className="flex min-w-0 flex-1 flex-col gap-0.5 text-text no-underline hover:text-moonlight"
         >
           <span className="truncate font-bold">{thread.title}</span>
-          <span className="text-[13px] text-secondary-text">
+          <span className="text-detail text-secondary-text">
             {messages.rowDetail({
               archived: thread.archivedAt ? archivedWhen(thread.archivedAt) : messages.justNow,
               last: formatWhen(thread.updatedAt),
@@ -270,7 +307,7 @@ function ArchivedThreadView({ thread, ...props }: ChatProps & { thread: Thread }
   const draftKept = readDraft(thread.id).trim() !== "";
 
   return (
-    <main aria-label="Chat" className="flex min-w-[360px] flex-1 flex-col">
+    <main aria-label={messages.chat} className="flex min-w-chat-min flex-1 flex-col">
       <ArchivedHeader hob={current} props={props} title={thread.title} detail={messages.readOnly} tagged />
       <section
         aria-label={messages.tag}
@@ -286,7 +323,7 @@ function ArchivedThreadView({ thread, ...props }: ChatProps & { thread: Thread }
           onRestore={() => restore.mutate(thread.id)}
         />
       </section>
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-[18px]">
+      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-transcript-y">
         {transcript.isPending && <p className="text-label">{messages.loadingMessages}</p>}
         {transcript.isError && <p className="text-sm text-rose">{messages.loadMessagesFailed}</p>}
         {transcript.data?.map((message) => (

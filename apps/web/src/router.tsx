@@ -12,6 +12,7 @@ import { agentsQuery, archivedAgentsQuery, threadsQuery } from "./api/queries.ts
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
 import { ArchivedHobView } from "./components/archived-hobs.tsx";
+import { ArchivedThreadList } from "./components/archived-threads/archived-threads.tsx";
 import { HobProfile } from "./components/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
@@ -152,7 +153,7 @@ const archivedThreadsRoute = createRoute({
   beforeLoad: ({ params }) => writeStored(lastHobKey, params.hobId),
   component: function ArchivedThreadsPage() {
     const params = archivedThreadsRoute.useParams();
-    return <HobsLayout hobId={AgentId.make(params.hobId)} archivedList />;
+    return <HobsLayout hobId={AgentId.make(params.hobId)} main={(props) => <ArchivedThreadList {...props} />} />;
   },
 });
 

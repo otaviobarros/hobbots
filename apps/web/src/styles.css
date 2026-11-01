@@ -49,6 +49,15 @@
   --font-pixel: "Pixelify Sans Variable", "Pixelify Sans", system-ui, sans-serif;
   --font-mono: ui-monospace, Menlo, monospace;
 
+  /* Type and measures of the chat workspace. */
+  --text-meta: 11px;
+  --text-detail: 13px;
+  --spacing-row-y: 7px;
+  --spacing-thread-indent: 34px;
+  --spacing-transcript-y: 18px;
+  --spacing-chat-min: 360px;
+  --spacing-bubble-max: 460px;
+
   /* Motion is stepped, like pixel art. */
   --animate-hb-bob: hb-bob 1.2s steps(2) infinite;
   --animate-hb-hop: hb-hop 0.7s steps(6) 1;

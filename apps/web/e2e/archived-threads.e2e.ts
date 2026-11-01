@@ -131,3 +131,51 @@ test("[TC-CH-162] search marks an archived thread and opens it read-only", async
   await expect(chat.getByRole("region", { name: "Archived" })).toBeVisible();
   await expect(chat.getByRole("textbox")).toHaveCount(0);
 });
+
+/** The hub's answer for a hob's archived threads, which these cases hold back or refuse. */
+const archivedList = /\/api\/agents\/[^/]+\/threads\?archived=true$/;
+
+// covers CH-009
+test("[TC-CH-163] an archived thread opened by its address shows no composer while its lists load", async ({
+  page,
+}) => {
+  const { current, hob, archived } = await hubWithArchive();
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(archivedList, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${archived.id}`);
+
+  const chat = page.getByRole("main", { name: "Chat" });
+  await expect(chat.getByRole("status")).toHaveText("Opening the thread…");
+  await expect(chat.getByRole("textbox")).toHaveCount(0);
+
+  release();
+  await expect(chat.getByRole("region", { name: "Archived" })).toBeVisible();
+  await expect(chat.getByRole("textbox")).toHaveCount(0);
+});
+
+// covers CH-009
+test("[TC-CH-164] an archived thread whose lookup fails stays without a composer until Try again", async ({
+  page,
+}) => {
+  const { current, hob, archived } = await hubWithArchive();
+  await page.route(archivedList, (route) => route.fulfill({ status: 500, body: "" }));
+  await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${archived.id}`);
+
+  const chat = page.getByRole("main", { name: "Chat" });
+  // The client asks again a few times before it gives up.
+  await expect(chat.getByRole("alert")).toContainText("could not tell whether this thread is archived", {
+    timeout: 20_000,
+  });
+  await expect(chat.getByRole("textbox")).toHaveCount(0);
+
+  await page.unroute(archivedList);
+  await chat.getByRole("button", { name: "Try again" }).click();
+  await expect(chat.getByRole("region", { name: "Archived" })).toBeVisible();
+  await expect(chat.getByRole("textbox")).toHaveCount(0);
+});

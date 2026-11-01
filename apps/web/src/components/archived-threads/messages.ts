@@ -11,10 +11,9 @@ export const messages = {
     `Threads you archived. They keep every message and still show up in search. Open one to read it, or restore it to ${name}'s list.`,
   rowDetail: ({ archived, last }: { archived: string; last: string }) => `archived ${archived} · last message ${last}`,
   justNow: "just now",
-  hint: "To archive a thread, open its ⋯ menu or press ⌃⌘A.",
   empty: "No archived threads",
   emptyBody: ({ name }: { name: string }) =>
-    `Archive a thread from its ⋯ menu to tidy ${name}'s list. It keeps every message and stays in search.`,
+    `Archived threads leave ${name}'s list. They keep every message and stay in search.`,
   backToThreads: ({ name }: { name: string }) => `‹ Back to ${name}'s threads`,
   loading: "Loading archived threads…",
   loadFailed: "Hobbots could not read the archived threads. Try again in a moment.",
@@ -36,4 +35,7 @@ export const messages = {
   loadMessagesFailed: "Hobbots could not read this thread. Try again.",
   loadingMessages: "Loading messages…",
   editHob: "Edit hob",
+  chat: "Chat",
+  lookingUp: "Opening the thread…",
+  lookupFailed: "Hobbots could not tell whether this thread is archived. Try again in a moment.",
 };

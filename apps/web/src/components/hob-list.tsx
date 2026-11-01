@@ -10,7 +10,10 @@ import { agentsQuery, threadsQuery } from "../api/queries.ts";
 import { formatWhen } from "../lib/time.ts";
 import { ArchivedEntry } from "./archived-threads/archived-threads.tsx";
 import { HobSprite, hobState, stateLabel } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
 import { SearchResults } from "./search-results.tsx";
+
+const copy = messages.hobPanel;
 
 /** Left panel: search, each hob with its threads, Rooms (later) and Summon. A search shows its results instead of the hobs. */
 export function HobList({
@@ -28,7 +31,7 @@ export function HobList({
 
   return (
     <nav
-      aria-label="Hobs and threads"
+      aria-label={copy.label}
       className="flex w-64 flex-none flex-col gap-2.5 border-r-4 border-line bg-panel px-2.5 py-3"
     >
       <div className="flex gap-1.5">
@@ -36,11 +39,11 @@ export function HobList({
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search hobs, threads, messages"
-          aria-label="Search hobs, threads and messages"
+          placeholder={copy.search}
+          aria-label={copy.searchLabel}
           className="min-w-0 flex-1 border-2 border-control bg-deep px-[9px] py-[7px] text-sm text-text placeholder:text-label"
         />
-        <Button variant="icon" size="icon" onClick={onHide} aria-label="Hide hob list" title="Hide hob list">
+        <Button variant="icon" size="icon" onClick={onHide} aria-label={copy.hide} title={copy.hide}>
           «
         </Button>
       </div>
@@ -49,9 +52,9 @@ export function HobList({
         <SearchResults query={query} onOpen={() => setQuery("")} />
       ) : (
         <div className="flex min-h-0 flex-col gap-px overflow-y-auto">
-          <span className="lbl px-2 pb-1.5 text-label">Hobs</span>
-          {agents.isPending && <p className="px-2 text-sm text-label">Loading hobs…</p>}
-          {agents.isError && <p className="px-2 text-sm text-rose">Could not load your hobs.</p>}
+          <span className="lbl px-2 pb-1.5 text-label">{copy.hobs}</span>
+          {agents.isPending && <p className="px-2 text-sm text-label">{copy.loading}</p>}
+          {agents.isError && <p className="px-2 text-sm text-rose">{copy.loadFailed}</p>}
           {agents.data?.map((hob) => (
             <HobEntry key={hob.id} hob={hob} open={hob.id === hobId} threadId={threadId} />
           ))}
@@ -60,13 +63,13 @@ export function HobList({
 
       <div className="mt-auto flex flex-col gap-2">
         <div className="flex items-center gap-2 border-2 border-dashed border-control px-2.5 py-2">
-          <span className="flex-1 font-pixel text-sm font-semibold text-moonlight">Rooms: the great hall</span>
-          <Badge variant="later">Later</Badge>
+          <span className="flex-1 font-pixel text-sm font-semibold text-moonlight">{copy.rooms}</span>
+          <Badge variant="later">{copy.later}</Badge>
         </div>
         <Button asChild>
-          <Link to="/summon">+ Summon a hob</Link>
+          <Link to="/summon">{copy.summon}</Link>
         </Button>
-        <span className="text-center text-xs text-label">⌘K jump anywhere · ⌥↑ ⌥↓ switch threads</span>
+        <span className="text-center text-xs text-label">{copy.keys}</span>
       </div>
     </nav>
   );
@@ -101,7 +104,7 @@ function HobEntry({ hob, open, threadId }: { hob: Agent; open: boolean; threadId
           </span>
           <span className="flex min-w-0 gap-1.5 text-xs text-label">
             <span className="truncate font-bold text-moonlight">{hob.roleTitle}</span>
-            <span className="whitespace-nowrap">· {count === 1 ? "1 thread" : `${count} threads`}</span>
+            <span className="whitespace-nowrap">· {copy.threadCount({ count })}</span>
           </span>
         </span>
       </Link>
@@ -121,7 +124,7 @@ function HobEntry({ hob, open, threadId }: { hob: Agent; open: boolean; threadId
             params={{ hobId: hob.id }}
             className="flex w-full items-center py-[7px] pr-2.5 pl-[34px] text-sm text-lantern no-underline hover:bg-hover"
           >
-            + New thread
+            {copy.newThread}
           </Link>
           <ArchivedEntry hobId={hob.id} threadId={threadId} />
         </div>
@@ -152,7 +155,7 @@ function ThreadLink({
       )}
     >
       <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-      {live && <span role="img" aria-label="Working" className="size-[7px] flex-none animate-hb-blink bg-mint" />}
+      {live && <span role="img" aria-label={copy.working} className="size-[7px] flex-none animate-hb-blink bg-mint" />}
       <span className="text-[11px] whitespace-nowrap text-label">{formatWhen(thread.updatedAt)}</span>
     </Link>
   );
