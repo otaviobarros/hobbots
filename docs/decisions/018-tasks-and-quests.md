@@ -162,7 +162,7 @@ Checking every rule in the server, not in the prompt, is what makes a recursive 
 
 The scenarios that would show this decision holds. Each names the issue that will prove it.
 
-- Records keep lineage and their invariants, and each change is journaled with its event: not proven yet, [#270](https://github.com/otaviobarros/hobbots/issues/270).
+- Records keep lineage and their invariants, and each change is journaled with its event: `[TC-OR-001]`, `[TC-OR-002]`, `[TC-OR-003]`, `[TC-OR-004]`, `[TC-OR-005]`, `[TC-OR-008]`, `[TC-OR-009]`, `[TC-EX-016]`, on SQLite and PostgreSQL. A Task tree and a Quest read with a cursor the event stream resumes from: `[TC-OR-006]`.
 - Each hob tool is refused for a caller outside its subtree, past the depth limit, in a cycle or with wider authority, and a retried call is idempotent: not proven yet, [#271](https://github.com/otaviobarros/hobbots/issues/271).
 - Aldric splits a long Task into steps; the card shows "step 2 of 4" and he keeps only checkpoints, not each step's session: not proven yet, [#272](https://github.com/otaviobarros/hobbots/issues/272).
 - Aldric leads a Quest with Quill and Ada in parallel; Ada waits on Quill's copy, which reaches her through Aldric: not proven yet, [#273](https://github.com/otaviobarros/hobbots/issues/273).

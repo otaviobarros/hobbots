@@ -4,6 +4,8 @@ import { ApprovalRequest } from "./approval.ts";
 import { Grant } from "./grant.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { Message } from "./message.ts";
+import { ArtifactRef, Checkpoint, Delegation, HandOff, Milestone, Quest, Question } from "./quest.ts";
+import { Attempt, Task } from "./task.ts";
 import { Thread } from "./thread.ts";
 
 const AgentUpserted = Schema.TaggedStruct("AgentUpserted", { agent: Agent });
@@ -29,6 +31,38 @@ const ApprovalResolved = Schema.TaggedStruct("ApprovalResolved", { approval: App
 const GrantCreated = Schema.TaggedStruct("GrantCreated", { grant: Grant });
 /** A grant stopped applying: the user removed it, or a change took away the authority it relied on. */
 const GrantRevoked = Schema.TaggedStruct("GrantRevoked", { grant: Grant });
+/** A Task, a step or a delegated Task was created, with its Delegation and planned Milestones (ADR 018). */
+const TaskCreated = Schema.TaggedStruct("TaskCreated", {
+  task: Task,
+  delegation: Schema.NullOr(Delegation),
+  milestones: Schema.Array(Milestone),
+});
+/**
+ * A Task's state or current Attempt changed: a start, a retry, a wait, a cancel, or its Attempt
+ * moving on. `attempt` is the current one when it changed; `quest` the Task's Quest when it ended with it.
+ */
+const TaskStateChanged = Schema.TaggedStruct("TaskStateChanged", {
+  task: Task,
+  attempt: Schema.NullOr(Attempt),
+  quest: Schema.NullOr(Quest),
+});
+/** A Task gained its Quest record: its owner brought in another hob. */
+const QuestStarted = Schema.TaggedStruct("QuestStarted", { quest: Quest });
+/** A Checkpoint was recorded; `milestone` is the one it reached, now with `reachedAt`. */
+const CheckpointRecorded = Schema.TaggedStruct("CheckpointRecorded", {
+  checkpoint: Checkpoint,
+  milestone: Schema.NullOr(Milestone),
+});
+const QuestionAsked = Schema.TaggedStruct("QuestionAsked", { question: Question });
+const QuestionAnswered = Schema.TaggedStruct("QuestionAnswered", { question: Question });
+/** A lead passed a question up: to the next lead, or to the user when `recipientId` is null. */
+const QuestionEscalated = Schema.TaggedStruct("QuestionEscalated", { question: Question });
+/** A lead gave one Task's artifact to another Task. */
+const HandedOff = Schema.TaggedStruct("HandedOff", { handOff: HandOff, artifact: ArtifactRef });
+/** A Task passed the completion gate, with its result and the artifacts it made. */
+const TaskCompleted = Schema.TaggedStruct("TaskCompleted", { task: Task, artifacts: Schema.Array(ArtifactRef) });
+/** The Task that holds a Quest passed the completion gate. */
+const QuestCompleted = Schema.TaggedStruct("QuestCompleted", { quest: Quest });
 /**
  * A piece of a streaming reply. Transient: its text reaches durable state through the message (ADR 013).
  * `offset` is where the piece starts in the message's text, in UTF-16 code units, so a client
@@ -57,6 +91,16 @@ export const JournaledEvent = Schema.Union([
   ApprovalResolved,
   GrantCreated,
   GrantRevoked,
+  TaskCreated,
+  TaskStateChanged,
+  QuestStarted,
+  CheckpointRecorded,
+  QuestionAsked,
+  QuestionAnswered,
+  QuestionEscalated,
+  HandedOff,
+  TaskCompleted,
+  QuestCompleted,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -81,6 +125,16 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ApprovalResolved: 1,
   GrantCreated: 1,
   GrantRevoked: 1,
+  TaskCreated: 1,
+  TaskStateChanged: 1,
+  QuestStarted: 1,
+  CheckpointRecorded: 1,
+  QuestionAsked: 1,
+  QuestionAnswered: 1,
+  QuestionEscalated: 1,
+  HandedOff: 1,
+  TaskCompleted: 1,
+  QuestCompleted: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

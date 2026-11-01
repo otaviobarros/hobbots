@@ -7,7 +7,9 @@ import {
   GrantId,
   MessageId,
   PolicyOperation,
+  QuestId,
   SafetyPreset,
+  TaskId,
   ThreadId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
@@ -159,5 +161,17 @@ export class GrantRuleRefused extends Schema.TaggedError<GrantRuleRefused>()(
 export class GrantNotFound extends Schema.TaggedError<GrantNotFound>()(
   "GrantNotFound",
   { grantId: GrantId },
+  { httpApiStatus: 404 },
+) {}
+
+export class TaskNotFound extends Schema.TaggedError<TaskNotFound>()(
+  "TaskNotFound",
+  { taskId: TaskId },
+  { httpApiStatus: 404 },
+) {}
+
+export class QuestNotFound extends Schema.TaggedError<QuestNotFound>()(
+  "QuestNotFound",
+  { questId: QuestId },
   { httpApiStatus: 404 },
 ) {}
