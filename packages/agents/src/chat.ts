@@ -172,14 +172,11 @@ export class ChatService extends Context.Service<
     readonly restore: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
     /** Starts the hob's queued messages in threads with no turn running, as when it wakes. */
     readonly drainAgent: (agentId: AgentId) => Effect.Effect<void>;
-    /** Threads with a turn in progress in this process. */
-    readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
     /**
-     * Threads whose reply is still streaming or stopping, as stored. A reply changes state in the
-     * same write the journal records, so this always agrees with the event stream; a turn's runtime
-     * may still be shutting down after its reply ended (`activeThreads`).
+     * Threads with a turn in progress in this process, until its runtime has exited. Each change is
+     * announced as the transient `TurnStarted` or `TurnEnded`, published once it has happened.
      */
-    readonly workingThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
+    readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
     /** The replies still streaming or stopping, with all the text held in memory so far. */
     readonly streamingReplies: Effect.Effect<ReadonlyArray<Message>>;
   }
@@ -645,12 +642,28 @@ export class ChatService extends Context.Service<
           replies.set(thread.id, reply);
           // The drain is forked outside the turn: it waits for the hob's lock, which a retirement
           // may hold while it waits for this very turn to stop.
-          yield* FiberMap.run(
+          const turn = yield* FiberMap.run(
             turns,
             thread.id,
             runTurn(agent, config, thread, brain, prompt, briefing, reply, changed).pipe(
               Effect.ensuring(Effect.forkIn(drain(thread.id), scope)),
             ),
+          );
+          yield* announceTurn(thread.id, agent.id, turn);
+        });
+
+      // Tells clients when a turn joins the running turns and when it has left them, so a read of
+      // `activeThreads` made on either event already agrees with it. The map drops a turn in the
+      // observer it added first, so it is gone before this await returns, after the runtime exited.
+      const announceTurn = (threadId: ThreadId, agentId: AgentId, turn: Fiber.Fiber<unknown, unknown>) =>
+        Effect.gen(function* () {
+          // A turn that already ended never joined the map for long; its end is announced below.
+          if (yield* FiberMap.has(turns, threadId)) {
+            yield* bus.publishTransient({ _tag: "TurnStarted", threadId, agentId });
+          }
+          yield* Fiber.await(turn).pipe(
+            Effect.andThen(bus.publishTransient({ _tag: "TurnEnded", threadId, agentId })),
+            Effect.forkIn(scope),
           );
         });
 
@@ -827,9 +840,6 @@ export class ChatService extends Context.Service<
       });
 
       const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
-      const workingThreads = repo.listUnfinishedMessages.pipe(
-        Effect.map((replies) => Array.from(new Set(replies.map((reply) => reply.threadId)))),
-      );
       const streamingReplies = Effect.suspend(() =>
         Effect.forEach(Array.from(replies.values()), (reply) => Ref.get(reply.current)),
       ).pipe(Effect.map((messages) => messages.filter((message) => isInProgress(message.status))));
@@ -966,7 +976,6 @@ export class ChatService extends Context.Service<
         restore,
         drainAgent,
         activeThreads,
-        workingThreads,
         streamingReplies,
       });
     }),
