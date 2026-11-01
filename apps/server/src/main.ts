@@ -158,7 +158,8 @@ const ServerLive = Layer.unwrap(
             WebClientRoutes(config.webDir),
             LoopbackHostOnly,
             QuietRoutineReads,
-            HttpRouter.cors({ allowedOrigins: config.allowedOrigins }),
+            // Browsers cache a preflight for this long, in seconds (Chromium's upper limit), rather than 5.
+            HttpRouter.cors({ allowedOrigins: config.allowedOrigins, maxAge: 7200 }),
           ),
         ),
       ),

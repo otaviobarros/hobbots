@@ -1,7 +1,7 @@
 import { RuntimeHealth } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { enforcementFixture } from "../test/enforcement.ts";
-import { canContinueSetup, runtimeProblem, runtimeStaleTime } from "./runtime-health.ts";
+import { canContinueSetup, runtimeProblem, runtimeRefetchOnFocus } from "./runtime-health.ts";
 
 const health = (availability: RuntimeHealth["availability"], version: string | null) =>
   new RuntimeHealth({
@@ -26,13 +26,14 @@ describe("runtimeProblem", () => {
   });
 });
 
-describe("runtimeStaleTime", () => {
-  it("keeps a ready provider for a minute", () => expect(runtimeStaleTime([health("ready", "2.1.301")])).toBe(60_000));
-  it("checks a provider that needs fixing every time", () => {
-    expect(runtimeStaleTime([health("unavailable", null)])).toBe(0);
-    expect(runtimeStaleTime([health("outdated", "2.1.200")])).toBe(0);
-    expect(runtimeStaleTime([health("signedOut", "2.1.301")])).toBe(0);
-    expect(runtimeStaleTime(undefined)).toBe(0);
+describe("runtimeRefetchOnFocus", () => {
+  it("checks ready providers on focus only once a minute has passed", () =>
+    expect(runtimeRefetchOnFocus([health("ready", "2.1.301")])).toBe(true));
+  it("checks again on every focus while a provider needs fixing", () => {
+    expect(runtimeRefetchOnFocus([health("unavailable", null)])).toBe("always");
+    expect(runtimeRefetchOnFocus([health("outdated", "2.1.200")])).toBe("always");
+    expect(runtimeRefetchOnFocus([health("signedOut", "2.1.301")])).toBe("always");
+    expect(runtimeRefetchOnFocus(undefined)).toBe("always");
   });
 });
 

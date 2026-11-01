@@ -1,6 +1,6 @@
 import { HobbotsApi } from "@hobbots/api";
 import { Cause, Effect, Exit } from "effect";
-import { FetchHttpClient } from "effect/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 
 /** What macOS reports for the desktop app's login item; `unavailable` outside the installed Mac app. */
@@ -46,8 +46,15 @@ export const API_URL: string =
 
 type Client = HttpApiClient.ForApi<typeof HobbotsApi>;
 
+// The web client exports no traces, so requests go without trace headers. Those headers are not
+// CORS-safelisted, and with them the browser would preflight every read from the Vite dev server.
 const clientPromise: Promise<Client> = Effect.runPromise(
-  HttpApiClient.make(HobbotsApi, { baseUrl: API_URL }).pipe(Effect.provide(FetchHttpClient.layer)),
+  HttpApiClient.make(HobbotsApi, {
+    baseUrl: API_URL,
+    transformClient: HttpClient.transform((request) =>
+      Effect.provideService(request, HttpClient.TracerPropagationEnabled, false),
+    ),
+  }).pipe(Effect.provide(FetchHttpClient.layer)),
 );
 
 export class ApiError extends Error {
