@@ -164,8 +164,8 @@ const followHubFor = (
     onChange: (change) => void (change === "approvals" ? notices.check() : menuBar.readWorking()),
     onLost: () => void menuBar.checkServer(),
   });
-  // A server started again, or one that recovered, is followed at once.
-  supervisor.onChange(() => hub.wake());
+  // Followed only while the server may answer; a server started again is followed at once.
+  supervisor.onChange(() => hub.sync());
   app.on("will-quit", () => void hub.stop());
 };
 

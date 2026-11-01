@@ -3,20 +3,23 @@
  * notifications learn of changes as they happen, with every window closed, and an idle app sends
  * no requests. Electron stays out of this file; index.ts passes the hub in.
  */
-import { frameChange, type HubChange, parseSse } from "./hub-events-model.ts";
+import { Data, Duration, Effect, Fiber, Schedule, Stream } from "effect";
+import { type Event, makeParser } from "effect/encoding/Sse";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
+import { frameChange, type HubChange } from "./hub-events-model.ts";
 
 export interface HubEventsOptions {
   /** The hub's `/api/events` URL. */
   readonly url: string;
   readonly headers?: Readonly<Record<string, string>>;
-  /** Whether the hub may answer now; while it may not, the stream waits for `wake`. */
+  /** Whether the hub may answer now; the stream is followed only while it may. */
   readonly canConnect: () => boolean;
   /** The stream connected: anything may have changed since the last connection. */
   readonly onConnected: () => void;
   readonly onChange: (change: HubChange) => void;
   /** A connected stream ended: the hub stopped, stopped answering, or dropped this connection. */
   readonly onLost: () => void;
-  readonly fetch?: typeof fetch;
+  readonly fetch?: typeof globalThis.fetch;
   /** The wait before connecting again, doubling after each failed try up to `maxRetryMs`. */
   readonly firstRetryMs?: number;
   readonly maxRetryMs?: number;
@@ -27,101 +30,88 @@ export interface HubEventsOptions {
 /** The hub sends a keep-alive every 15 seconds; three missed ones mean it stopped answering. */
 const SILENCE_MS = 45_000;
 
-/** Connects at once and again after each loss. Answers `wake`, to connect now, and `stop`. */
-export const followHub = (options: HubEventsOptions) => {
-  const { url, headers = {}, canConnect, onConnected, onChange, onLost } = options;
-  const request = options.fetch ?? fetch;
-  const firstRetryMs = options.firstRetryMs ?? 1_000;
-  const maxRetryMs = options.maxRetryMs ?? 30_000;
-  const silenceMs = options.silenceMs ?? SILENCE_MS;
-  let stopped = false;
-  let retryMs = firstRetryMs;
-  let connection: AbortController | null = null;
-  let wakeUp: (() => void) | null = null;
+/** The connection ended: closed by the hub, or silent too long. Reconnecting follows the schedule. */
+class StreamEnded extends Data.TaggedError("StreamEnded") {}
 
-  const wait = (ms: number) =>
-    new Promise<void>((resolve) => {
-      const timer = setTimeout(done, ms);
-      function done() {
-        clearTimeout(timer);
-        wakeUp = null;
-        resolve();
-      }
-      wakeUp = done;
+/**
+ * The server-sent events in a text stream. The hub's `retry` hint is dropped: when to connect again
+ * is this follower's schedule.
+ */
+const sseEvents = <E, R>(text: Stream.Stream<string, E, R>) =>
+  Stream.suspend(() => {
+    let parsed: Array<Event> = [];
+    const parser = makeParser((event) => {
+      if (event._tag === "Event") parsed.push(event);
     });
+    return text.pipe(
+      Stream.mapEffect((chunk) => {
+        const tooLarge = parser.feed(chunk);
+        const events = parsed;
+        parsed = [];
+        return tooLarge ? Effect.fail(tooLarge) : Effect.succeed(events);
+      }),
+      Stream.flattenIterable,
+    );
+  });
 
-  /** Reads one connection until it ends; answers whether it connected. */
-  const connect = async () => {
-    const abort = new AbortController();
-    connection = abort;
-    let silence: ReturnType<typeof setTimeout> | undefined;
-    const heard = () => {
-      clearTimeout(silence);
-      silence = setTimeout(() => abort.abort(), silenceMs);
-    };
-    let connected = false;
-    try {
-      heard();
-      const response = await request(url, {
-        headers: { accept: "text/event-stream", ...headers },
-        signal: abort.signal,
-      });
-      if (!response.ok || !response.body) return false;
-      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-      let rest = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        heard();
-        const parsed = parseSse(rest + value);
-        rest = parsed.rest;
-        for (const frame of parsed.frames) {
-          const change = frameChange(frame);
-          if (change === "connected") {
-            connected = true;
-            retryMs = firstRetryMs;
-            onConnected();
-          } else if (change !== null) {
-            onChange(change);
-          }
+/** Follows the stream until interrupted, connecting again after each loss on a doubling, capped schedule. */
+const follow = (options: HubEventsOptions) => {
+  const { url, headers = {}, onConnected, onChange, onLost } = options;
+  let connected = false;
+  // Any bytes, keep-alives included, show the hub still answers; silence past the limit ends it.
+  const bytes = HttpClientResponse.stream(
+    HttpClient.get(url, { headers: { accept: "text/event-stream", ...headers } }).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+    ),
+  ).pipe(Stream.timeout(Duration.millis(options.silenceMs ?? SILENCE_MS)));
+  const retry = Schedule.min([
+    Schedule.exponential(Duration.millis(options.firstRetryMs ?? 1_000)),
+    Schedule.spaced(Duration.millis(options.maxRetryMs ?? 30_000)),
+  ]);
+  return bytes.pipe(
+    Stream.decodeText,
+    sseEvents,
+    Stream.concat(Stream.fail(new StreamEnded())),
+    Stream.tapError(() =>
+      Effect.sync(() => {
+        if (!connected) return;
+        connected = false;
+        onLost();
+      }),
+    ),
+    // The schedule starts over once a connection delivers its first frame.
+    Stream.retry(retry),
+    Stream.runForEach((frame) =>
+      Effect.sync(() => {
+        const change = frameChange(frame);
+        if (change === "connected") {
+          connected = true;
+          onConnected();
+        } else if (change !== null) {
+          onChange(change);
         }
-      }
-    } catch {
-      // A refused, aborted or broken connection ends like a closed one.
-    } finally {
-      clearTimeout(silence);
-      connection = null;
-    }
-    return connected;
-  };
+      }),
+    ),
+    Effect.provide(FetchHttpClient.layer),
+    Effect.provideService(FetchHttpClient.Fetch, options.fetch ?? globalThis.fetch),
+  );
+};
 
-  const run = async () => {
-    while (!stopped) {
-      if (!canConnect()) {
-        await wait(maxRetryMs);
-        continue;
-      }
-      const connected = await connect();
-      if (stopped) return;
-      if (connected) onLost();
-      await wait(retryMs);
-      retryMs = Math.min(retryMs * 2, maxRetryMs);
-    }
+/**
+ * Follows the stream while the hub may answer. Answers `sync`, to call whenever that may have
+ * changed, which connects at once to a hub that just started, and `stop`.
+ */
+export const followHub = (options: HubEventsOptions) => {
+  let following: Fiber.Fiber<unknown, unknown> | null = null;
+  const halt = async () => {
+    const fiber = following;
+    following = null;
+    if (fiber) await Effect.runPromise(Fiber.interrupt(fiber));
   };
-  const running = run();
-
-  return {
-    /** Connects now instead of after the current wait, for a hub that just started. */
-    wake: () => {
-      retryMs = firstRetryMs;
-      wakeUp?.();
-    },
-    /** Closes the stream for good; resolves once it closed. */
-    stop: () => {
-      stopped = true;
-      connection?.abort();
-      wakeUp?.();
-      return running;
-    },
+  const sync = () => {
+    if (options.canConnect()) following ??= Effect.runFork(follow(options));
+    else void halt();
   };
+  sync();
+  return { sync, stop: halt };
 };

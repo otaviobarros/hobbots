@@ -3,65 +3,34 @@
  * of its own reads a change makes stale. It reads the stream instead of polling, so an idle app
  * sends no requests.
  */
-
-/** One server-sent event: its name and its data lines joined. */
-export interface SseFrame {
-  readonly event: string;
-  readonly data: string;
-}
-
-/**
- * Splits server-sent events text into complete frames. `rest` is the unfinished frame at the end,
- * to put before the next chunk. Comments, such as keep-alives, and frames without data are skipped.
- */
-export const parseSse = (text: string): { readonly frames: ReadonlyArray<SseFrame>; readonly rest: string } => {
-  const blocks = text.split("\n\n");
-  const rest = blocks.pop() ?? "";
-  const frames = blocks.flatMap((block): Array<SseFrame> => {
-    let event = "message";
-    const data: Array<string> = [];
-    for (const line of block.split("\n")) {
-      const colon = line.indexOf(":");
-      if (colon === 0) continue;
-      const field = colon === -1 ? line : line.slice(0, colon);
-      const value = colon === -1 ? "" : line.slice(colon + 1).replace(/^ /, "");
-      if (field === "event") event = value;
-      else if (field === "data") data.push(value);
-    }
-    return data.length === 0 ? [] : [{ event, data: data.join("\n") }];
-  });
-  return { frames, rest };
-};
+import { Option, Schema } from "effect";
+import type { Event } from "effect/encoding/Sse";
 
 /** A read the main process makes again: the Inbox's requests, or which hobs are working. */
 export type HubChange = "approvals" | "activity";
 
-const parse = (data: string): unknown => {
-  try {
-    return JSON.parse(data);
-  } catch {
-    return null;
-  }
-};
-
-const field = (value: unknown, key: string): unknown =>
-  typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
+/** The part of a journal entry the main process reads; the rest of the envelope is ignored. */
+const HubEntry = Schema.Struct({
+  type: Schema.String,
+  payload: Schema.optional(Schema.Struct({ message: Schema.optional(Schema.Struct({ role: Schema.String })) })),
+});
+const decodeEntry = Schema.decodeUnknownOption(Schema.fromJsonString(HubEntry));
 
 /**
  * What a frame means for the main process: `connected` for the stream's first frame, the read a
  * journal entry makes stale, or null when it changes nothing the main process shows. A hob starts
  * and ends its turns through its reply, so only a reply's upsert changes who is working.
  */
-export const frameChange = (frame: SseFrame): HubChange | "connected" | null => {
+export const frameChange = (frame: Pick<Event, "event" | "data">): HubChange | "connected" | null => {
   if (frame.event === "ready") return "connected";
   if (frame.event !== "message") return null;
-  const entry = parse(frame.data);
-  switch (field(entry, "type")) {
+  const entry = Option.getOrUndefined(decodeEntry(frame.data));
+  switch (entry?.type) {
     case "ApprovalRequested":
     case "ApprovalResolved":
       return "approvals";
     case "MessageUpserted":
-      return field(field(field(entry, "payload"), "message"), "role") === "assistant" ? "activity" : null;
+      return entry.payload?.message?.role === "assistant" ? "activity" : null;
     default:
       return null;
   }

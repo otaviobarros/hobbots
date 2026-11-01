@@ -229,6 +229,9 @@ importers:
       '@types/node':
         specifier: 26.6.5
         version: 26.6.5
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.0
       electron:
         specifier: 45.0.0
         version: 45.0.0(supports-color@7.2.0)

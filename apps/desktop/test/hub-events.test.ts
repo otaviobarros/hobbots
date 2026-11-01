@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { coalesce } from "../src/main/coalesce.ts";
 import { followHub, type HubEventsOptions } from "../src/main/hub-events.ts";
-import { frameChange, parseSse } from "../src/main/hub-events-model.ts";
+import { frameChange } from "../src/main/hub-events-model.ts";
 import { entryFrame, fakeEventStream, readyFrame } from "./fake-event-stream.ts";
 
 const stops: Array<() => Promise<void>> = [];
@@ -10,8 +10,8 @@ afterEach(async () => {
 });
 
 /** Follows a fake hub and records what the main process hears. */
-const follow = (options: Partial<HubEventsOptions> = {}) => {
-  const hub = fakeEventStream();
+const follow = (options: Partial<HubEventsOptions> = {}, opening?: string) => {
+  const hub = fakeEventStream(opening);
   const heard: Array<string> = [];
   const following = followHub({
     url: "http://127.0.0.1:4317/api/events",
@@ -55,25 +55,30 @@ describe("following the hub's event stream", () => {
 
   // covers DP-002
   it("[TC-DP-043] counts a silent stream as lost, so a hub that stopped answering shows", async () => {
-    const { hub, heard } = follow({ silenceMs: 30 });
-    await expect.poll(() => hub.connections.length).toBe(1);
-    hub.last().write(readyFrame);
+    const { hub, heard } = follow({ silenceMs: 30, maxRetryMs: 60_000, firstRetryMs: 60_000 }, readyFrame);
     await expect.poll(() => heard).toEqual(["connected", "lost"]);
+    expect(hub.connections).toHaveLength(1);
     expect(hub.connections[0]?.aborted).toBe(true);
   });
 
-  it("waits while the hub cannot answer, connects on wake, and stops for good", async () => {
+  it("follows only while the hub may answer, connects at once when it may again, and stops for good", async () => {
     let running = false;
-    const { hub, heard, wake, stop } = follow({ canConnect: () => running, maxRetryMs: 60_000 });
+    const { hub, heard, sync, stop } = follow({ canConnect: () => running, maxRetryMs: 60_000 });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(hub.connections).toHaveLength(0);
     running = true;
-    wake();
+    sync();
     await expect.poll(() => hub.connections.length).toBe(1);
     hub.last().write(readyFrame);
     await expect.poll(() => heard).toEqual(["connected"]);
+    running = false;
+    sync();
+    await expect.poll(() => hub.connections[0]?.aborted).toBe(true);
+    running = true;
+    sync();
+    await expect.poll(() => hub.connections.length).toBe(2);
     await stop();
-    expect(hub.connections[0]?.aborted).toBe(true);
+    await expect.poll(() => hub.connections[1]?.aborted).toBe(true);
     expect(heard).toEqual(["connected"]);
   });
 
@@ -87,18 +92,6 @@ describe("following the hub's event stream", () => {
 });
 
 describe("the event stream model", () => {
-  it("splits frames, skips comments and keeps an unfinished frame for the next chunk", () => {
-    expect(parseSse(': keep-alive\n\nevent: ready\ndata: {"a":1}\n\ndata: one\ndata: two\n\nid: 3\ndata: par')).toEqual(
-      {
-        frames: [
-          { event: "ready", data: '{"a":1}' },
-          { event: "message", data: "one\ntwo" },
-        ],
-        rest: "id: 3\ndata: par",
-      },
-    );
-  });
-
   it("names the read each entry makes stale", () => {
     const message = (data: string) => frameChange({ event: "message", data });
     expect(frameChange({ event: "ready", data: "{}" })).toBe("connected");

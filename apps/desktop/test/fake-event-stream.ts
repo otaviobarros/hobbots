@@ -1,5 +1,8 @@
-/** A hub's `/api/events` for tests: each request opens a connection the test writes frames to. */
-export const fakeEventStream = () => {
+/**
+ * A hub's `/api/events` for tests: each request opens a connection the test writes frames to,
+ * starting with `opening` when given.
+ */
+export const fakeEventStream = (opening?: string) => {
   const encoder = new TextEncoder();
   const connections: Array<{ write: (text: string) => void; close: () => void; aborted: boolean }> = [];
   const fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -7,6 +10,7 @@ export const fakeEventStream = () => {
     const body = new ReadableStream<Uint8Array>({
       start: (c) => {
         controller = c;
+        if (opening) c.enqueue(encoder.encode(opening));
       },
     });
     const connection = {
