@@ -137,6 +137,22 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(result.events[0]?._tag === "ToolDenied" && result.events[0].reason).toContain("cannot ask you");
   });
 
+  it("[#209] decides a push behind a wrapper as a push, and a delete after cd in the folder moved to", async () => {
+    for (const command of [
+      "env -i git push origin main",
+      "timeout 30 git push origin main",
+      "nice git push origin main",
+    ]) {
+      const result = await call("Bash", { command });
+      expect(result.events[0], command).toMatchObject({ _tag: "ToolDenied", operation: "push" });
+    }
+    const outsideDelete = await call("Bash", { command: `cd ${outside} && rm -rf x` });
+    expect(outsideDelete.decision).toBe("deny");
+    expect(outsideDelete.events[0]).toMatchObject({ _tag: "ToolDenied", operation: "outside-folders" });
+    const unknown = await call("Bash", { command: 'cd "$DIR" && rm -rf x' });
+    expect(unknown.decision).toBe("deny");
+  });
+
   /** Approvals that answer every request with `answer`, recording what was asked. */
   const approvalsAnswering = (
     answer: (action: ApprovalAction) => Effect.Effect<ApprovalOutcome>,

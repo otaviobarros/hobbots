@@ -47,6 +47,38 @@ const WRAPPERS = new Set([
  */
 const FOLDER_CHANGES = new Set(["cd", "pushd", "popd"]);
 
+/**
+ * Shell keywords and builtins that make the line more than a list of simple commands: conditionals,
+ * loops, groups, and commands that run a string or change how later words run. The reader does not
+ * follow them, so a line that has one reads as nothing.
+ */
+const CONTROL = new Set([
+  "if",
+  "then",
+  "elif",
+  "else",
+  "fi",
+  "for",
+  "while",
+  "until",
+  "do",
+  "done",
+  "case",
+  "esac",
+  "select",
+  "function",
+  "coproc",
+  "{",
+  "}",
+  "[[",
+  "]]",
+  "!",
+  "trap",
+  "alias",
+  "unalias",
+  "enable",
+]);
+
 /** One simple command of a command line: its literal words, or null when it cannot be granted. */
 export type ReadCommand = ReadonlyArray<string> | null;
 
@@ -141,9 +173,18 @@ export const readCommandLine = (line: string): ReadonlyArray<ReadCommand> | null
   if (commands === null || commands.length === 0) return null;
   // A wrapper runs later words as a command, `command cd` and `env -C` included, and a folder change
   // moves what follows. Either, after any leading assignments, makes the whole line read as nothing.
+  // Shell keywords such as `if` and `then`, and a `cd`-like word anywhere, do the same: only a plain
+  // list of simple commands is read.
   const opaque = (words: ReadonlyArray<string>) => {
     const program = words.find((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word));
-    return program !== undefined && (FOLDER_CHANGES.has(basename(program)) || WRAPPERS.has(basename(program)));
+    if (program === undefined) return false;
+    const name = basename(program);
+    return (
+      FOLDER_CHANGES.has(name) ||
+      WRAPPERS.has(name) ||
+      CONTROL.has(program) ||
+      words.some((word) => FOLDER_CHANGES.has(basename(word)))
+    );
   };
   if (commands.some(opaque)) return null;
   return commands.map((words) => (grantable(words) ? words : null));
