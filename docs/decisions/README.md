@@ -20,4 +20,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [016 — Client stores for unsent messages](016-client-stores-outside-react.md)
 - [017 — Switching a thread's brain](017-switching-brains.md)
 - [018 — Tasks and Quests](018-tasks-and-quests.md)
-- [019 — A hob's satchel and continuations](019-hob-satchel-and-continuations.md)
+- [019 — A hob's inbox and continuations](019-hob-inbox-and-continuations.md)
