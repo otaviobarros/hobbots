@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { agentsQuery, threadsQuery } from "../api/queries.ts";
 import { formatWhen } from "../lib/time.ts";
+import { ArchivedEntry } from "./archived-threads/archived-threads.tsx";
 import { HobSprite, hobState, stateLabel } from "./hob-sprite.tsx";
 import { SearchResults } from "./search-results.tsx";
 
@@ -122,6 +123,7 @@ function HobEntry({ hob, open, threadId }: { hob: Agent; open: boolean; threadId
           >
             + New thread
           </Link>
+          <ArchivedEntry hobId={hob.id} threadId={threadId} />
         </div>
       )}
     </div>

@@ -207,7 +207,7 @@ export const upsertMessage = (list: ReadonlyArray<Message>, message: Message): A
     : upsertById(list, message);
 };
 
-export const sortThreads = (threads: Array<Thread>) => threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+const sortThreads = (threads: Array<Thread>) => threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
 const sortArchivedThreads = (threads: Array<Thread>) =>
   threads.sort((a, b) => (b.archivedAt ?? "").localeCompare(a.archivedAt ?? ""));

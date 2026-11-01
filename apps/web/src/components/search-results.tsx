@@ -1,4 +1,5 @@
 import type { Agent, AgentId, SearchHit, SnippetPart, ThreadId } from "@hobbots/domain";
+import { Badge } from "@hobbots/ui/components/badge";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -6,6 +7,7 @@ import { agentsQuery } from "../api/queries.ts";
 import { useSearch } from "../api/search.ts";
 import { matchesHob } from "../lib/crew.ts";
 import { formatWhen } from "../lib/time.ts";
+import { messages as archivedCopy } from "./archived-threads/messages.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 
 /** One thing a search found: a hob by its name or role, or a thread by its title or messages. */
@@ -73,6 +75,12 @@ function Snippet({ parts }: { parts: ReadonlyArray<SnippetPart> }) {
   );
 }
 
+/** Marks a thread result that is archived; it opens read-only, with Restore. */
+export function ArchivedTag({ result }: { result: SearchResult }) {
+  if (result.kind !== "thread" || result.hit.thread.archivedAt === null) return null;
+  return <Badge variant="archived">{archivedCopy.tag}</Badge>;
+}
+
 /** A result's second line: the hob's role, or who owns the thread and what matched. */
 export function ResultDetail({ result }: { result: SearchResult }) {
   if (result.kind === "hob") return <>{result.hob.roleTitle}</>;
@@ -111,8 +119,9 @@ export function SearchResults({ query, onOpen }: { query: string; onOpen: () => 
             <HobSprite hob={result.hob} size={22} state={result.hob.status === "paused" ? "paused" : "idle"} />
           </span>
           <span className="flex min-w-0 flex-col gap-px">
-            <span className="text-sm font-bold">
+            <span className="flex items-center gap-1.5 text-sm font-bold">
               {result.kind === "hob" ? result.hob.name : result.hit.thread.title}
+              <ArchivedTag result={result} />
             </span>
             <span className="line-clamp-2 text-xs text-secondary-text">
               <ResultDetail result={result} />

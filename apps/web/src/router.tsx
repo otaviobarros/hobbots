@@ -145,6 +145,17 @@ const newThreadRoute = createRoute({
   },
 });
 
+// The hob's archived threads, most recently archived first, in place of the chat (CH-009).
+const archivedThreadsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "hobs/$hobId/archived",
+  beforeLoad: ({ params }) => writeStored(lastHobKey, params.hobId),
+  component: function ArchivedThreadsPage() {
+    const params = archivedThreadsRoute.useParams();
+    return <HobsLayout hobId={AgentId.make(params.hobId)} archivedList />;
+  },
+});
+
 // `?message=` names a message to scroll to, as a search result does.
 const threadRoute = createRoute({
   getParentRoute: () => shellRoute,
@@ -254,6 +265,7 @@ const routeTree = rootRoute.addChildren([
     hobsRoute,
     hobRoute,
     newThreadRoute,
+    archivedThreadsRoute,
     threadRoute,
     profileRoute,
     summonRoute,

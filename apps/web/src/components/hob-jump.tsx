@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { agentsQuery } from "../api/queries.ts";
 import { HobSprite } from "./hob-sprite.tsx";
-import { ResultDetail, resultLink, type SearchResult, useSearchResults } from "./search-results.tsx";
+import { ArchivedTag, ResultDetail, resultLink, type SearchResult, useSearchResults } from "./search-results.tsx";
 
 /** ⌘K (Ctrl+K elsewhere) from any page opens a finder that jumps to a hob, or to a thread by its title or messages. */
 export function HobJump() {
@@ -128,7 +128,10 @@ function JumpList({ onDone }: { onDone: () => void }) {
               </>
             ) : (
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm font-bold">{option.hit.thread.title}</span>
+                <span className="flex min-w-0 items-center gap-1.5 text-sm font-bold">
+                  <span className="truncate">{option.hit.thread.title}</span>
+                  <ArchivedTag result={option} />
+                </span>
                 <span className="truncate text-[13px] text-secondary-text">
                   <ResultDetail result={option} />
                 </span>

@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { threadsQuery } from "../api/queries.ts";
 import { readStored, writeStored } from "../lib/storage.ts";
-import { ChatView } from "./chat-view.tsx";
+import { ThreadMain } from "./archived-threads/archived-threads.tsx";
 import { HobList } from "./hob-list.tsx";
 import { SidePanel } from "./side-panel.tsx";
 
@@ -17,16 +17,19 @@ const usePersistentToggle = (key: string) => {
   return [open, set] as const;
 };
 
-/** The chat workspace: hob list, chat, and the Quest panel. Both side panels collapse. */
+/** The chat workspace: hob list, chat (or the hob's archived threads), and the Quest panel. Both side panels collapse. */
 export function HobsLayout({
   hobId,
   threadId,
   focusMessageId,
+  archivedList,
 }: {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
   /** A message to scroll to and mark, such as a search match. */
   focusMessageId?: string | undefined;
+  /** Shows the hob's archived threads in place of the chat. */
+  archivedList?: boolean | undefined;
 }) {
   const [navOpen, setNavOpen] = usePersistentToggle("layout.navOpen");
   const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
@@ -35,8 +38,8 @@ export function HobsLayout({
   return (
     <div className="flex min-w-0 flex-1">
       {navOpen && <HobList hobId={hobId} threadId={threadId} onHide={() => setNavOpen(false)} />}
-      <ChatView
-        key={threadId ?? `new-${hobId}`}
+      <ThreadMain
+        archivedList={archivedList}
         hobId={hobId}
         threadId={threadId}
         focusMessageId={focusMessageId}
