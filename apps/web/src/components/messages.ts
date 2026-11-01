@@ -1,4 +1,4 @@
-import { formatCount, plural } from "../lib/format.ts";
+import { formatCount, plural as pluralForm } from "../lib/format.ts";
 
 /**
  * User-facing copy for the components in this folder, grouped by feature (STD-I18N-001). Copy moves
@@ -27,7 +27,7 @@ export const messages = {
     home: "Hobbots home",
     working: "Hobbots home, hobs are working",
     needsYou: ({ count }: { count: number }) =>
-      plural(count, {
+      pluralForm(count, {
         one: "Hobbots inbox, a request needs you",
         other: `Hobbots inbox, ${formatCount(count)} requests need you`,
       }),
