@@ -1,10 +1,12 @@
 import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
-import { app, BrowserWindow, dialog, ipcMain, screen, shell, utilityProcess } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, screen, shell, utilityProcess } from "electron";
 import { handleFolderDialogIpc } from "./folder-dialog.ts";
 import { handleKeepRunningIpc } from "./keep-running.ts";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
 import { startMenuBar } from "./menu-bar.ts";
+import { openRequestIn } from "./open-request.ts";
+import { requestNotices } from "./request-notices.ts";
 import { ServerSupervisor, StartTimedOut } from "./server.ts";
 import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server-identity.ts";
 import { fileSettingsStore } from "./settings.ts";
@@ -114,6 +116,40 @@ const createWindow = async () => {
   return window;
 };
 
+/** How often the main process reads the Inbox for requests to announce. */
+const NOTICE_POLL_MS = 3_000;
+
+/**
+ * Sends a system notification for each new request while no Hobbots window is focused, from the
+ * main process so it works with every window closed. The main process reads the Inbox as the app
+ * itself, on the hub's own origin, as its window does (PE-006).
+ */
+const startRequestNotices = (open: (requestId: string) => void) => {
+  const notices = requestNotices({
+    read: async (path) => {
+      try {
+        const response = await fetch(`${apiUrl}${path}`, {
+          headers: { origin: apiUrl },
+          signal: AbortSignal.timeout(2000),
+        });
+        return response.ok ? await response.json() : null;
+      } catch {
+        return null;
+      }
+    },
+    isFocused: () => BrowserWindow.getFocusedWindow() !== null,
+    notify: ({ title, body }, onClick) => {
+      const notice = new Notification({ title, body });
+      notice.on("click", onClick);
+      notice.show();
+      return notice;
+    },
+    open,
+  });
+  const { stop } = notices.start(NOTICE_POLL_MS);
+  app.on("will-quit", stop);
+};
+
 app.whenReady().then(async () => {
   if (!primary) return;
   const settings = fileSettingsStore(join(app.getPath("userData"), "desktop-settings.json"));
@@ -164,6 +200,10 @@ app.whenReady().then(async () => {
     return;
   }
   onSecondLaunch(() => void menuBar.showWindow());
+  startRequestNotices(async (requestId) => {
+    const window = await menuBar.showWindow();
+    if (window) openRequestIn(window, requestId);
+  });
   // The Dock icon or opening the app from Finder; macOS already fronts a visible window.
   app.on("activate", (_event, hasVisibleWindows) => {
     if (!hasVisibleWindows) void menuBar.showWindow();

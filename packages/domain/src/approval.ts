@@ -111,3 +111,22 @@ export const stableJson = (value: unknown): string => {
   }
   return JSON.stringify(value);
 };
+
+/** The arguments that say exactly what a call does, in the order they are looked for. */
+const EXACT_KEYS = ["command", "url", "file_path", "notebook_path", "path", "pattern", "query"] as const;
+
+/**
+ * The exact action to show for a request: the command, address, file or pattern the call was made
+ * with, or the step's words when the call has none of these. The approval card, the Inbox and the
+ * desktop app's notifications all show this.
+ */
+export const exactAction = (approval: {
+  readonly arguments: Readonly<Record<string, unknown>>;
+  readonly label: string;
+}): string => {
+  for (const key of EXACT_KEYS) {
+    const value = approval.arguments[key];
+    if (typeof value === "string" && value.trim() !== "") return value;
+  }
+  return approval.label;
+};

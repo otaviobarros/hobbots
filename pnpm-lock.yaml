@@ -220,6 +220,9 @@ importers:
 
   apps/desktop:
     devDependencies:
+      '@hobbots/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@hobbots/server':
         specifier: workspace:*
         version: link:../server

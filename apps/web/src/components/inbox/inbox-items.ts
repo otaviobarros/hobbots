@@ -1,7 +1,6 @@
-import type { ApprovalRequest, ThreadId } from "@hobbots/domain";
+import { type ApprovalRequest, exactAction, type ThreadId } from "@hobbots/domain";
 import { byClosing } from "../../api/inbox-window.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
-import { exactAction } from "../approvals/approval-text.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages;

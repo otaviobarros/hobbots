@@ -1,3 +1,5 @@
+import { formatCount, plural as pluralForm } from "../lib/format.ts";
+
 /**
  * User-facing copy for the components in this folder, grouped by feature (STD-I18N-001). Copy moves
  * here from a component when that component next changes.
@@ -20,6 +22,15 @@ export const messages = {
   summon: {
     checkAgain: "Check again",
     checking: "Checking…",
+  },
+  chief: {
+    home: "Hobbots home",
+    working: "Hobbots home, hobs are working",
+    needsYou: ({ count }: { count: number }) =>
+      pluralForm(count, {
+        one: "Hobbots inbox, a request needs you",
+        other: `Hobbots inbox, ${formatCount(count)} requests need you`,
+      }),
   },
   home: {
     openChat: ({ name, role, state }: { name: string; role: string; state: string }) =>

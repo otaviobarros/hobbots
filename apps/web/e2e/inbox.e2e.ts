@@ -74,12 +74,21 @@ const pipAsksToPush = async (page: Page) => {
 const inboxLink = (page: Page) =>
   page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Inbox/ });
 
+/** The chief of the hobs on the rail, which raises its lantern while a request needs you. */
+const chief = (page: Page) =>
+  page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Hobbots/ });
+
 // covers PE-003, UX-001, UX-005
 test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, and approving it there resumes the turn", async ({
   page,
 }) => {
   await pipAsksToPush(page);
   await expect(inboxLink(page)).toHaveAccessibleName("Inbox, 1 request needs you");
+
+  // The chief raises its lantern as soon as the request arrives, and leads to the Inbox.
+  await expect(chief(page)).toHaveAccessibleName("Hobbots inbox, a request needs you");
+  await chief(page).click();
+  await expect(page.getByRole("list", { name: "Requests" })).toContainText("Push your work");
 
   // Home lists it and opens it in the Inbox.
   await page.getByRole("link", { name: "Home", exact: true }).click();
@@ -115,6 +124,7 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   await expect(page.locator('[data-state="done"]', { hasText: "git push" })).toBeVisible();
   await expect(page.getByText(/^Echo: Ship it/)).toBeVisible();
   await expect(inboxLink(page)).toHaveAccessibleName("Inbox");
+  await expect(chief(page)).toHaveAccessibleName(/^Hobbots home/);
 });
 
 // covers PE-003, UX-004
@@ -211,4 +221,36 @@ test("[TC-IN-011] the open request keeps its place when it cannot be read on its
   await failed.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByRole("article", { name: "Request from Pip: Push your work" })).toBeVisible();
   expect(page.url()).toContain(`request=${asked.id}`);
+});
+
+/**
+ * Stands in for the desktop app's preload bridge: `window.openRequest` plays the main process
+ * asking the window to show a request, as a click on its system notification does.
+ */
+const asDesktop = () => {
+  const page = window as unknown as Record<string, unknown>;
+  let listener: ((requestId: string) => void) | undefined;
+  page.hobbots = {
+    apiUrl: window.location.origin,
+    onOpenRequest: (next: (requestId: string) => void) => {
+      listener = next;
+      return () => {
+        listener = undefined;
+      };
+    },
+  };
+  page.openRequest = (requestId: string) => listener?.(requestId);
+};
+
+// covers PE-003, UX-001
+test("[TC-IN-014] the desktop app opens a request in the Inbox when its notification is clicked", async ({ page }) => {
+  await page.addInitScript(asDesktop);
+  const { current } = await pipAsksToPush(page);
+  const [asked] = await api<ReadonlyArray<Approval>>(current, "GET", "/api/approvals");
+  if (asked === undefined) throw new Error("No approval request");
+
+  await page.evaluate((id) => (window as unknown as { openRequest: (id: string) => void }).openRequest(id), asked.id);
+  await expect(page.getByRole("article", { name: "Request from Pip: Push your work" })).toBeVisible();
+  expect(page.url()).toContain(`request=${asked.id}`);
+  expect(page.url()).toContain("tab=needs");
 });
