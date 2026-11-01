@@ -147,6 +147,11 @@ export const messages = {
   approval: {
     asks: ({ name }: { name: string }) => `${name} asks permission`,
     expires: "Expires if this reply stops or Hobbots restarts.",
+    expiresToday: ({ time }: { time: string }) =>
+      `Expires at ${time} if nobody decides, or sooner if this reply stops or Hobbots restarts.`,
+    expiresTomorrow: ({ time }: { time: string }) =>
+      `Expires tomorrow at ${time} if nobody decides, or sooner if this reply stops or Hobbots restarts.`,
+    expiresNow: "Expiring now. Nobody decided in time.",
     action: "Action",
     target: "On",
     noTarget: "Nothing in particular",
@@ -155,6 +160,38 @@ export const messages = {
     why: "Why now",
     risk: "Risk",
     allowOnce: "Allow once",
+    always: "Always for this site",
+    alwaysIntro: ({ name }: { name: string }) =>
+      `Hobbots saves this rule, and ${name} stops asking for what it covers. You can remove it later.`,
+    rulesLabel: "The rule to save",
+    narrowLabel: "What the rule covers",
+    wholeFolder: "Every file directly in the folder",
+    exactFiles: "Only the files of this action",
+    saveRule: "Save the rule and allow",
+    noRule: "No saved rule can answer this action, so Hobbots asks each time.",
+    rule: {
+      folder: {
+        "read-files": ({ name, folder }: { name: string; folder: string }) =>
+          `Always let ${name} read files directly in ${folder}`,
+        "edit-files": ({ name, folder }: { name: string; folder: string }) =>
+          `Always let ${name} create and edit files directly in ${folder}`,
+        "delete-files": ({ name, folder }: { name: string; folder: string }) =>
+          `Always let ${name} delete files directly in ${folder}`,
+      },
+      paths: {
+        "read-files": ({ name, paths }: { name: string; paths: string }) => `Always let ${name} read ${paths}`,
+        "edit-files": ({ name, paths }: { name: string; paths: string }) =>
+          `Always let ${name} create and edit ${paths}`,
+        "delete-files": ({ name, paths }: { name: string; paths: string }) => `Always let ${name} delete ${paths}`,
+      },
+      command: ({ name, command, folder }: { name: string; command: string; folder: string }) =>
+        `Always let ${name} run ${command} in ${folder}`,
+      host: ({ name, host }: { name: string; host: string }) => `Always let ${name} use ${host}`,
+      push: ({ name, branch, remote, folder }: { name: string; branch: string; remote: string; folder: string }) =>
+        `Always let ${name} push ${folder} to ${branch} on ${remote}`,
+      runner: ({ name, command, file }: { name: string; command: string; file: string }) =>
+        `${command} runs what this folder's ${file} says. If ${name} changes that file, the rule runs the new version.`,
+    },
     highRisk: "High risk · once only",
     confirm: ({ name }: { name: string }) => `I checked this action. Let ${name} do it this once.`,
     notConfirmed: "Tick the box to confirm this action first.",
@@ -164,6 +201,7 @@ export const messages = {
     cancel: "Cancel",
     sending: "Sending your decision…",
     approved: ({ name }: { name: string }) => `✓ Allowed once. ${name} carries on.`,
+    approvedAlways: ({ name }: { name: string }) => `✓ Allowed, and the rule is saved. ${name} carries on.`,
     denied: ({ name }: { name: string }) => `✕ Denied. ${name} was told it may not.`,
     deniedWithReason: ({ name, reason }: { name: string; reason: string }) =>
       `✕ Denied: “${reason}”. ${name} was told why.`,
@@ -171,6 +209,7 @@ export const messages = {
     closed: "This request was already decided or has expired.",
     changed: "This action changed since it was shown. Check it again.",
     failed: "Hobbots could not send your decision. Try again.",
+    ruleRefused: "Hobbots could not save this rule. Cancel to allow it once instead.",
     /** What could go wrong if the action runs, by operation. */
     riskOf: {
       "read-files": "Reads only. Nothing changes.",
