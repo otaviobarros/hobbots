@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
 import { threadsQuery } from "../api/queries.ts";
 import { readStored, writeStored } from "../lib/storage.ts";
+import { ArchiveProvider } from "./archive/archive-context.tsx";
 import { ThreadMain, type WorkspaceMainProps } from "./archived-threads/archived-threads.tsx";
 import { HobList } from "./hob-list.tsx";
 import { SidePanel } from "./side-panel.tsx";
@@ -17,22 +18,28 @@ const usePersistentToggle = (key: string) => {
   return [open, set] as const;
 };
 
-/**
- * The chat workspace: hob list, its middle, and the Quest panel. Both side panels collapse. The
- * middle is the thread's chat unless the route fills it with `main`, such as the hob's archived threads.
- */
-export function HobsLayout({
-  hobId,
-  threadId,
-  focusMessageId,
-  main = (props) => <ThreadMain {...props} />,
-}: {
+interface WorkspaceProps {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
   /** A message to scroll to and mark, such as a search match. */
   focusMessageId?: string | undefined;
   main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
-}) {
+}
+
+/**
+ * The chat workspace: hob list, its middle, and the Quest panel. Both side panels collapse. The
+ * middle is the thread's chat unless the route fills it with `main`, such as the hob's archived
+ * threads. Threads are archived from their menus or with ⌃⌘A, with Undo in a toast.
+ */
+export function HobsLayout(props: WorkspaceProps) {
+  return (
+    <ArchiveProvider hobId={props.hobId} threadId={props.threadId}>
+      <Workspace {...props} />
+    </ArchiveProvider>
+  );
+}
+
+function Workspace({ hobId, threadId, focusMessageId, main = (props) => <ThreadMain {...props} /> }: WorkspaceProps) {
   const [navOpen, setNavOpen] = usePersistentToggle("layout.navOpen");
   const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
   useThreadKeys(hobId, threadId);
