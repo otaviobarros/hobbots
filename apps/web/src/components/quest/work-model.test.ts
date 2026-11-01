@@ -47,6 +47,23 @@ describe("workCard", () => {
     expect(card?.party).toEqual([]);
   });
 
+  it("keeps a failed step in view instead of folding it into done or skipping past it", () => {
+    const only = workCard(
+      tree({ tasks: [task(CAMPAIGN), task(TaskId.make("draft"), { state: "failed", second: 1 })] }),
+    );
+    expect(only?.rows.map((row) => [row.task.id, row.status])).toEqual([["draft", "failed"]]);
+    expect(only?.done).toBe(0);
+
+    const steps = [
+      task(TaskId.make("outline"), { state: "failed", second: 1 }),
+      task(TaskId.make("draft"), { state: "queued", second: 2 }),
+    ];
+    const card = workCard(tree({ tasks: [task(CAMPAIGN), ...steps] }));
+    expect(card?.rows.map((row) => [row.task.id, row.status, row.step])).toEqual([
+      ["outline", "failed", { index: 1, total: 2 }],
+    ]);
+  });
+
   it("folds done rows into a count and keeps at most four", () => {
     const members = ["a", "b", "c", "d", "e", "f"].map((id, index) =>
       task(TaskId.make(id), { ownerId: QUILL, state: index === 0 ? "completed" : "active", second: index + 1 }),

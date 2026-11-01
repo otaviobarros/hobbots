@@ -99,9 +99,15 @@ const waitsOnOf = (tree: TaskTree, task: Task): ReadonlyArray<AgentId> => [
   ),
 ];
 
-/** The step that runs now: the first that has not ended, or the last one once all have. */
+/** A step that ended without failing: its work is behind the Task. */
+const settled = (task: Task) => task.state === "completed" || task.state === "cancelled";
+
+/**
+ * The step the row stands for: the first that failed or has not ended, so a failed step stays in
+ * view ahead of later ones, or the last step once all have settled.
+ */
 const currentStep = (steps: ReadonlyArray<Task>) => {
-  const index = steps.findIndex((step) => !isTerminalTask(step.state));
+  const index = steps.findIndex((step) => !settled(step));
   return index === -1 ? steps.length - 1 : index;
 };
 
@@ -120,10 +126,9 @@ const workRows = (tree: TaskTree, top: Task): ReadonlyArray<WorkRow> => {
     }));
   const current = steps[currentStep(steps)];
   if (current !== undefined) {
-    const allDone = steps.every((step) => isTerminalTask(step.state));
     rows.unshift({
       task: current,
-      status: allDone ? "done" : rowStatus(tree, current),
+      status: steps.every(settled) ? "done" : rowStatus(tree, current),
       waitsOn: waitsOnOf(tree, current),
       step: { index: steps.indexOf(current) + 1, total: steps.length },
       latest: latestOf(tree, current),

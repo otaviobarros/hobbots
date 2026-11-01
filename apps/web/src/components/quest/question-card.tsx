@@ -35,11 +35,11 @@ export function QuestionCard({
     <section
       aria-label={copy.asks({ name: asker.name })}
       className={cn(
-        "cut ms-9 flex max-w-[584px] animate-hb-in flex-col gap-2.5 border-2 bg-card px-3.5 py-3",
+        "cut ms-9 flex max-w-work-max animate-hb-in flex-col gap-2.5 border-2 bg-card px-3.5 py-3",
         open ? "border-lantern" : "border-mint-deep",
       )}
     >
-      <header className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <HobSprite hob={asker} size={20} state={open ? "needs-you" : "idle"} />
         <span className="lbl text-lantern">{copy.asks({ name: asker.name })}</span>
         {task !== undefined && (
@@ -47,7 +47,7 @@ export function QuestionCard({
             {copy.about({ title: taskTitle(task) })}
           </Button>
         )}
-      </header>
+      </div>
       <p className="m-0 leading-normal whitespace-pre-wrap">{question.text}</p>
       {open ? (
         <AnswerForm question={question} askerName={asker.name} />
@@ -105,7 +105,7 @@ export function LeadAnsweredLine({ question, hobs }: { question: Question; hobs:
   const lead = hobs(question.answeredBy.agentId);
   const asker = hobs(question.askerId);
   return (
-    <p className="ms-9 my-0 flex max-w-[604px] animate-hb-in items-start gap-2 text-detail text-secondary-text">
+    <p className="ms-9 my-0 flex max-w-work-max animate-hb-in items-start gap-2 text-detail text-secondary-text">
       <HobSprite hob={lead} size={16} />
       <span className="flex flex-col gap-0.5">
         <span className="font-bold text-text">{copy.leadAnswered({ lead: lead.name, asker: asker.name })}</span>

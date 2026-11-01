@@ -54,11 +54,11 @@ export function QuestCard({
     <section
       aria-label={copy.label({ name: lead.name, title })}
       className={cn(
-        "cut ms-9 flex max-w-[604px] animate-hb-in flex-col gap-2.5 border-2 bg-card px-3.5 py-3",
+        "cut ms-9 flex max-w-work-max animate-hb-in flex-col gap-2.5 border-2 bg-card px-3.5 py-3",
         ring(card),
       )}
     >
-      <header className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <HobSprite hob={lead} size={20} state={card.status === "running" ? "working" : "idle"} />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="font-pixel text-base font-semibold">{heading(card, lead.name)}</span>
@@ -67,7 +67,7 @@ export function QuestCard({
         {total > 0 && (
           <span className="text-detail whitespace-nowrap text-label">{copy.progress({ done, total })}</span>
         )}
-      </header>
+      </div>
       {total > 0 && <Progress done={done} total={total} />}
       {members.length > 0 && (
         <p className="m-0 flex items-center gap-1.5 text-detail text-secondary-text">
@@ -86,22 +86,21 @@ export function QuestCard({
           ))}
         </ul>
       )}
-      {(card.done > 0 || card.more > 0) && (
-        <footer className="flex items-center gap-2 text-detail text-label">
-          {card.more > 0 && <span>{copy.moreCount({ count: card.more })}</span>}
-          {card.done > 0 && <span>{copy.doneCount({ count: card.done })}</span>}
-          <Button variant="link" size="xs" className="ms-auto" onClick={() => onOpen(card.top.id)}>
-            {copy.showAll}
-          </Button>
-        </footer>
-      )}
+      {/* Always there, so a Task without rows still opens its brief and output once it ends. */}
+      <div className="flex items-center gap-2 text-detail text-label">
+        {card.more > 0 && <span>{copy.moreCount({ count: card.more })}</span>}
+        {card.done > 0 && <span>{copy.doneCount({ count: card.done })}</span>}
+        <Button variant="link" size="xs" className="ms-auto" onClick={() => onOpen(card.top.id)}>
+          {card.rows.length + card.done + card.more > 0 ? copy.showAll : copy.details}
+        </Button>
+      </div>
     </section>
   );
 }
 
 function Progress({ done, total }: { done: number; total: number }) {
   return (
-    <div aria-hidden className="h-[5px] bg-deep">
+    <div aria-hidden className="h-meter bg-deep">
       <div className="h-full bg-mint" style={{ width: `${Math.round((done / total) * 100)}%` }} />
     </div>
   );

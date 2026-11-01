@@ -81,12 +81,17 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
 
-  // A note in the drawer goes to Aldric as a message about that Task.
+  // A note in the drawer goes to Aldric as a message about that Task, and stays with that Task.
   await strip.getByRole("button", { name: "Show Aldric's work" }).click();
   const quest = page.getByRole("complementary", { name: "Plan the Black Friday campaign, Task details" });
   await quest.getByRole("button", { name: /Draft the landing copy/ }).click();
   const note = page.getByRole("textbox", { name: "Tell Aldric about this task" });
   await note.fill("Keep the headlines short.");
+  await page.getByRole("button", { name: "Back to Plan the Black Friday campaign" }).click();
+  await expect(quest).toBeVisible();
+  await expect(note).toHaveValue("");
+  await quest.getByRole("button", { name: /Draft the landing copy/ }).click();
+  await expect(note).toHaveValue("Keep the headlines short.");
   await note.press("Enter");
   await expect(page.getByText("About “Draft the landing copy”: Keep the headlines short.")).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
@@ -98,4 +103,8 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(card).toContainText("Aldric finished this", { timeout: 15_000 });
   await expect(strip).toBeHidden();
   await expect(page.getByText("The Black Friday campaign is ready.")).toBeVisible();
+
+  // Once it ends, the card still opens the Task with its output.
+  await card.getByRole("button", { name: "Show all" }).click();
+  await expect(quest).toContainText("Black Friday campaign ready");
 });

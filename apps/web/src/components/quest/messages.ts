@@ -19,6 +19,7 @@ export const messages = {
     moreCount: ({ count }: { count: number }) => plural(count, { one: "1 more", other: `${formatCount(count)} more` }),
     rowDetail: ({ name, detail }: { name: string; detail: string }) => `${name} · ${detail}`,
     showAll: "Show all",
+    details: "Show details",
     open: ({ title }: { title: string }) => `Look inside ${title}`,
   },
   status: {

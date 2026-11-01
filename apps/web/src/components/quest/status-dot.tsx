@@ -26,5 +26,5 @@ export function StatusDot({ status, className }: { status: RowStatus; className?
 
 /** Where work stands, in words. */
 export function StatusTag({ status, children }: { status: RowStatus; children: string }) {
-  return <span className={cn("px-[7px] py-0.5 text-xs font-bold whitespace-nowrap", tag[status])}>{children}</span>;
+  return <span className={cn("px-tag-x py-0.5 text-xs font-bold whitespace-nowrap", tag[status])}>{children}</span>;
 }

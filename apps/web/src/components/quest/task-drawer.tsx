@@ -23,6 +23,8 @@ export function TaskDrawer({ hobId, threadId, taskId }: { hobId: AgentId; thread
   const hobs = useHobLookup();
   const open = useOpenTask(hobId, threadId);
   const heading = useRef<HTMLHeadingElement>(null);
+  // Each Task keeps its own unsent note, so moving between Tasks never sends one about another.
+  const [drafts, setDrafts] = useState<ReadonlyMap<TaskId, string>>(new Map());
   // Opening another Task moves focus to its title, so a keyboard user lands in the drawer.
   // biome-ignore lint/correctness/useExhaustiveDependencies: each Task opened moves focus again.
   useEffect(() => {
@@ -37,7 +39,7 @@ export function TaskDrawer({ hobId, threadId, taskId }: { hobId: AgentId; thread
       onKeyDown={(event) => {
         if (event.key === "Escape") open(undefined);
       }}
-      className="absolute inset-y-0 end-0 z-10 flex w-[420px] max-w-full animate-hb-in flex-col border-s-4 border-control bg-panel shadow-[-14px_0_34px_rgb(0_0_0/0.5)]"
+      className="absolute inset-y-0 end-0 z-10 flex w-drawer max-w-full animate-hb-in flex-col border-s-4 border-control bg-panel shadow-drawer"
     >
       <header className="flex items-center gap-2 border-b-2 border-line px-3.5 py-3">
         <Button variant="icon" size="icon" onClick={() => open(undefined)} aria-label={copy.close} title={copy.close}>
@@ -55,13 +57,23 @@ export function TaskDrawer({ hobId, threadId, taskId }: { hobId: AgentId; thread
               {copy.back({ title: taskTitle(found.parent) })}
             </Button>
           )}
-          <h2 ref={heading} tabIndex={-1} className="m-0 truncate font-pixel text-[17px] font-semibold outline-none">
+          <h2 ref={heading} tabIndex={-1} className="m-0 truncate font-pixel text-title font-semibold outline-none">
             {found === null ? copy.notFound : title}
           </h2>
         </span>
       </header>
       {found !== null && <Detail tree={found.tree} task={found.task} hobs={hobs} onOpen={open} />}
-      {found !== null && <NoteBox tree={found.tree} task={found.task} hobs={hobs} fallback={threadId} />}
+      {found !== null && (
+        <NoteBox
+          key={found.task.id}
+          tree={found.tree}
+          task={found.task}
+          hobs={hobs}
+          fallback={threadId}
+          note={drafts.get(found.task.id) ?? ""}
+          setNote={(note) => setDrafts((all) => new Map(all).set(found.task.id, note))}
+        />
+      )}
     </aside>
   );
 }
@@ -213,11 +225,24 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** A note on a Task goes to the lead as a message about that Task, in the lead's chat (ADR 018). */
-function NoteBox({ tree, task, hobs, fallback }: { tree: TaskTree; task: Task; hobs: HobLookup; fallback: ThreadId }) {
+function NoteBox({
+  tree,
+  task,
+  hobs,
+  fallback,
+  note,
+  setNote,
+}: {
+  tree: TaskTree;
+  task: Task;
+  hobs: HobLookup;
+  fallback: ThreadId;
+  note: string;
+  setNote: (note: string) => void;
+}) {
   const top = tree.tasks[0] ?? task;
   const lead = hobs(top.ownerId);
   const send = useSendPrompt(top.threadId ?? fallback);
-  const [note, setNote] = useState("");
   const text = note.trim();
   const submit = () => {
     if (text === "" || send.isPending) return;
