@@ -72,6 +72,11 @@ test("[TC-CH-132] the picker switches the thread's brain, the chat shows it, and
   await expect(page.getByRole("button", { name: /^Thinking with Codex · Fake Coder/ })).toBeVisible();
   await expect(page.getByRole("note")).toContainText("The next reply thinks with Codex · Fake Coder");
 
+  // Effort changes for the thread too, keeping its runtime and model.
+  await page.getByRole("button", { name: /^Thinking with Codex · Fake Coder · Medium/ }).click();
+  await page.getByRole("dialog", { name: "Think with" }).getByRole("button", { name: "High" }).click();
+  await expect(page.getByRole("button", { name: /^Thinking with Codex · Fake Coder · High, ready/ })).toBeVisible();
+
   await send(page, "What is my cat called?");
   await expect(page.getByRole("note")).toContainText("Now thinking with Codex · Fake Coder");
   // The fake echoes its prompt, so the briefing it was given shows the earlier fact.

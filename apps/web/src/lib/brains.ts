@@ -29,15 +29,15 @@ export const lastReplyBrain = (transcript: ReadonlyArray<Message>): ReplyBrain |
 };
 
 /**
- * The brain a pick makes: the runtime and model picked, keeping the hob's effort when the model takes
+ * The brain a pick makes: the runtime and model picked, keeping the thread's effort when the model takes
  * it, otherwise the model's default.
  */
 export const pickedBrain = (
   models: RuntimeModels | undefined,
   runtime: RuntimeKind,
   model: string | null,
-  hobEffort: Effort | null,
+  keepEffort: Effort | null,
 ): Brain => {
   const efforts = models?.models.find((m) => m.id === (model ?? "default"))?.efforts ?? [];
-  return { runtime, model, effort: hobEffort !== null && efforts.includes(hobEffort) ? hobEffort : null };
+  return { runtime, model, effort: keepEffort !== null && efforts.includes(keepEffort) ? keepEffort : null };
 };

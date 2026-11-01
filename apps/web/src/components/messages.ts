@@ -46,6 +46,8 @@ export const messages = {
     scope: "Changes this thread from its next reply.",
     freshPage: "Send a first message, then you can change this thread's brain.",
     defaultModel: "Default model",
+    effort: "Effort",
+    noEffort: ({ model }: { model: string }) => `${model} takes no effort setting.`,
     makeDefault: ({ name }: { name: string }) => `Also make it ${name}'s default`,
     backToDefault: ({ name, brain }: { name: string; brain: string }) => `Back to ${name}'s default: ${brain}`,
     notOnThisHub: ({ runtime }: { runtime: string }) => `Hobbots can't run ${runtime} on this hub yet.`,

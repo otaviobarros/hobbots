@@ -2,6 +2,7 @@ import {
   type Agent,
   type Brain,
   brainLabel,
+  type Effort,
   RUNTIME_NAMES,
   type RuntimeHealth,
   type RuntimeKind,
@@ -15,6 +16,7 @@ import { Switch } from "@hobbots/ui/components/switch";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useId, useState } from "react";
+import { effortWords } from "../api/first-hob.ts";
 import { modelsQuery, runtimesQuery, threadBrain, useSetBrain } from "../api/queries.ts";
 import { modelName, pickedBrain } from "../lib/brains.ts";
 import { messages } from "./messages.ts";
@@ -66,7 +68,8 @@ const unavailableReason = (health: RuntimeHealth) => {
  */
 export function BrainPicker({ hob, thread }: { hob: Agent; thread: Thread | undefined }) {
   const brain = threadBrain(hob, thread);
-  const label = useBrainLabel(brain);
+  const modelLabel = useBrainLabel(brain);
+  const label = brain.effort === null ? modelLabel : `${modelLabel} · ${effortWords(brain.effort).label}`;
   const runtimes = useQuery(runtimesQuery);
   const health = runtimes.data?.find((h) => h.runtime === brain.runtime);
   const state = runtimes.isPending ? "checking" : health ? STATE_WORDS[health.availability] : "unknown";
@@ -154,12 +157,13 @@ function ThreadBrainPicker({
             key={health.runtime}
             health={health}
             current={brain}
-            hobEffort={hob.effort}
+            keepEffort={brain.effort ?? hob.effort}
             pending={setBrain.isPending}
             makeDefault={makeDefault}
             onPick={pick}
           />
         ))}
+        <EffortChoices current={brain} pending={setBrain.isPending} makeDefault={makeDefault} onPick={pick} />
         <span className="flex items-center gap-2 text-sm">
           <Switch id={switchId} checked={makeDefault} onCheckedChange={setMakeDefault} />
           <label htmlFor={switchId}>{copy.makeDefault({ name: hob.name })}</label>
@@ -184,14 +188,14 @@ function ThreadBrainPicker({
 function RuntimeChoices({
   health,
   current,
-  hobEffort,
+  keepEffort,
   pending,
   makeDefault,
   onPick,
 }: {
   health: RuntimeHealth;
   current: Brain;
-  hobEffort: Agent["effort"];
+  keepEffort: Agent["effort"];
   pending: boolean;
   makeDefault: boolean;
   onPick: (brain: Brain) => void;
@@ -212,7 +216,7 @@ function RuntimeChoices({
         <span className="text-xs text-lantern">{reason}</span>
       ) : (
         choices.map((choice) => {
-          const brain = pickedBrain(models.data, health.runtime, choice.model, hobEffort);
+          const brain = pickedBrain(models.data, health.runtime, choice.model, keepEffort);
           const selected = current.runtime === health.runtime && current.model === choice.model;
           return (
             <Button
@@ -234,6 +238,52 @@ function RuntimeChoices({
         })
       )}
     </section>
+  );
+}
+
+/** The efforts the thread's model takes, to think harder or lighter from the next reply. */
+function EffortChoices({
+  current,
+  pending,
+  makeDefault,
+  onPick,
+}: {
+  current: Brain;
+  pending: boolean;
+  makeDefault: boolean;
+  onPick: (brain: Brain) => void;
+}) {
+  const models = useQuery(modelsQuery(current.runtime));
+  const model = models.data?.models.find((m) => m.id === (current.model ?? "default"));
+  if (model === undefined) return null;
+  if (model.efforts.length === 0) {
+    return <span className="text-xs text-label">{copy.noEffort({ model: model.displayName })}</span>;
+  }
+  return (
+    <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
+      <legend className="lbl mb-1 p-0 text-xs text-label">{copy.effort}</legend>
+      <div className="flex flex-wrap border-2 border-control">
+        {model.efforts.map((effort: Effort) => {
+          const on = effort === current.effort;
+          return (
+            <button
+              key={effort}
+              type="button"
+              aria-pressed={on}
+              disabled={pending}
+              className={cn(
+                "cursor-pointer border-0 px-2 py-1 text-xs whitespace-nowrap",
+                on ? "bg-lantern text-ground" : "bg-transparent text-text hover:bg-line",
+              )}
+              // Picking the current effort again changes nothing, unless it is to become the hob's default.
+              onClick={() => (on && !makeDefault ? undefined : onPick({ ...current, effort }))}
+            >
+              {effortWords(effort).label}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 

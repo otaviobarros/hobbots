@@ -36,7 +36,7 @@ The summary is stored as a **checkpoint**: the thread's summary text and the las
 ### A thread's brain is a thread setting
 
 - A thread may name its own brain (runtime, model, effort). When it does, its turns use that brain; when it does not, they use the hob's. It is a thread setting, journaled with the thread (`ThreadUpserted`), not a policy override and not a new hob configuration version. It grants and narrows nothing: tools run under the hob's policy and the chosen runtime's declared enforcement (ADR 014), whatever the brain.
-- The picker in the chat changes the thread only. **Make it the hob's default** instead saves the brain as the hob's next configuration version (AG-002), clears the thread's own choice, and so also applies to the hob's other threads that follow the hob.
+- The picker in the chat sets any of the three, runtime, model and effort, and changes the thread only. A model switch keeps the thread's effort when the new model takes it. **Make it the hob's default** instead saves the brain as the hob's next configuration version (AG-002), clears the thread's own choice, and so also applies to the hob's other threads that follow the hob.
 - The runtime is now part of a hob's versioned configuration, so a turn keeps the runtime it started with even if the hob is edited meanwhile.
 - A brain is accepted only when the hub has an adapter for its runtime and the model is one that runtime offers. Runtimes without an adapter are listed as unavailable with the reason, never hidden.
 - A limited or cut-off reply offers Continue on another brain next to Continue: the thread switches first, then the reply continues in place with a briefing.
@@ -69,4 +69,4 @@ The scenarios that would show this decision holds. Each names the test case or e
 - The summary drops its oldest lines to fit, a reply with many tool calls cannot crowd it out, and text that looks like the briefing's headings or speakers stays quoted: `[TC-CH-134]`.
 - Claude Code receives the briefing between the hob's instructions and the user's prompt: `[TC-CH-133]`.
 - Migration 0020 keeps an existing thread's Claude Code session and records Claude Code and the configured model on existing replies: `[TC-DP-035]`, `[TC-DP-036]`.
-- The chat shows the switch and offers Continue on another brain for a limited reply: `[TC-CH-132]`, in the browser.
+- The chat shows the switch, sets the effort as well as the runtime and model, and offers Continue on another brain for a limited reply: `[TC-CH-132]`, in the browser.
