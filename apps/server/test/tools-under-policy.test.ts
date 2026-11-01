@@ -5,6 +5,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
   ChatService,
+  GrantService,
   HobAdmission,
   HobLifecycle,
   HobService,
@@ -20,7 +21,13 @@ import {
   type Thread,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { ApprovalRepositoryLive, HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
+import {
+  ApprovalRepositoryLive,
+  GrantRepositoryLive,
+  HobbotsRepositoryLive,
+  SearchIndex,
+  SetupRepository,
+} from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule } from "effect";
@@ -57,14 +64,19 @@ beforeEach(() => {
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))
     .pipe(Layer.provideMerge(ChatService.layer))
     .pipe(Layer.provideMerge(ApprovalService.layer))
+    .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))
     .pipe(Layer.provideMerge(CanonicalSharedFolders))
     .pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          Layer.mergeAll(HobbotsRepositoryLive, ApprovalRepositoryLive, SetupRepository.layer, SearchIndex.layer).pipe(
-            Layer.provideMerge(TestDatabase),
-          ),
+          Layer.mergeAll(
+            HobbotsRepositoryLive,
+            ApprovalRepositoryLive,
+            GrantRepositoryLive,
+            SetupRepository.layer,
+            SearchIndex.layer,
+          ).pipe(Layer.provideMerge(TestDatabase)),
           EventBus.layer,
           HobAdmission.layer,
           NodeFolderChecks,

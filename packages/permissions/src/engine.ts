@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
-import { isAbsolute } from "node:path";
+import { dirname, isAbsolute } from "node:path";
 import {
+  type Grant,
+  GrantId,
+  GrantRule,
   type HobPolicy,
   narrowest,
   PolicyDecision,
@@ -24,7 +27,7 @@ import { type CanonicalPath, isInside, PathResolver, type ScopeGitResources } fr
  */
 
 /** Bumped whenever the rules below change meaning, so older decisions name the rules they followed. */
-export const RULES_VERSION = 2;
+export const RULES_VERSION = 3;
 
 /** Everything a decision depends on. Folders are canonical as stored; the engine resolves them again. */
 export interface PolicyContext {
@@ -39,6 +42,13 @@ export interface PolicyContext {
   readonly modelHosts: ReadonlyArray<string>;
   /** Narrowing added by the thread, Quest, task or delegation. Each may only narrow. */
   readonly restrictions: ReadonlyArray<PolicyOverrides>;
+  /**
+   * The hob's live grants, read again for every call (PE-008): not revoked and not expired. Only this
+   * hob's: a grant never applies to another hob. Absent, no grant answers anything.
+   */
+  readonly grants?: ReadonlyArray<Grant>;
+  /** The Quest the work belongs to, which a Quest grant must name; absent or null outside one. */
+  readonly questId?: string | null;
 }
 
 export const FileOperation = Schema.Literals(["read-files", "edit-files", "delete-files"]);
@@ -50,9 +60,37 @@ export const CommandOperation = Schema.Literals(["run-commands", "local-git"]);
  * `cd "$DIR"`: it and the relative paths against it are not resolved, so they are refused.
  */
 export const PolicyRequest = Schema.TaggedUnion({
-  Files: { operation: FileOperation, paths: Schema.Array(Schema.String), cwd: Schema.String },
-  Command: { operation: CommandOperation, cwd: Schema.String },
-  Push: { remote: Schema.String, branch: Schema.String, force: Schema.Boolean, toDefaultBranch: Schema.Boolean },
+  /**
+   * `exact` is false when the paths were read from a command line the hub's command reader cannot
+   * read fully, so the shell may expand them into other files: no grant answers those (ADR 015).
+   */
+  Files: {
+    operation: FileOperation,
+    paths: Schema.Array(Schema.String),
+    cwd: Schema.String,
+    exact: Schema.optionalKey(Schema.Boolean),
+  },
+  /**
+   * `words` are the simple command's literal words when the hub's command reader can read it fully
+   * (`readCommandLine`); absent or null, no rule can describe it, so no grant answers it.
+   */
+  Command: {
+    operation: CommandOperation,
+    cwd: Schema.String,
+    words: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.String))),
+  },
+  /**
+   * One branch a push updates. `cwd` is the folder the push runs in; without it, or with `exact`
+   * false (the command's words do not say everything the push does), no grant answers it.
+   */
+  Push: {
+    remote: Schema.String,
+    branch: Schema.String,
+    force: Schema.Boolean,
+    toDefaultBranch: Schema.Boolean,
+    cwd: Schema.optionalKey(Schema.String),
+    exact: Schema.optionalKey(Schema.Boolean),
+  },
   /** A host the sandbox proxy was asked to reach, with the addresses it resolved to, if known. */
   Web: { host: Schema.String, addresses: Schema.Array(Schema.String) },
 });
@@ -79,6 +117,8 @@ export const ReasonCode = Schema.Literals([
   "protected-push",
   /** A change in a folder too large to search for Git repositories asks, since it could be a hook. */
   "unsearched-folder",
+  /** A standing grant for this hob answers the preset's Ask (ADR 015). */
+  "grant",
 ]);
 export type ReasonCode = typeof ReasonCode.Type;
 
@@ -91,8 +131,14 @@ export const PolicyVerdict = Schema.Struct({
   targets: Schema.Array(Schema.String),
   /** Enforced by a runtime or OS boundary, or only checked by Hobbots (ADR 014). */
   enforcement: Schema.Literals(["enforced", "checked"]),
-  /** An approval for this call cannot be kept beyond the one call. */
+  /** A high-risk action: approved once only, and only with the user's confirmation. */
   onceOnly: Schema.Boolean,
+  /** For Ask, whether a saved rule could answer it, so This Quest and Always are offered (ADR 015). */
+  grantable: Schema.Boolean,
+  /** For a grantable Ask, the rules Always would save: one per folder, command or host that asked. */
+  rules: Schema.Array(GrantRule),
+  /** For Allow, the grants that answered the preset's Ask. */
+  grantIds: Schema.Array(GrantId),
   /** Identifies the rules and the exact policy inputs the decision was made under. */
   policyVersion: Schema.String,
 });
@@ -123,30 +169,46 @@ export type ResolvedRequest =
       readonly _tag: "Files";
       readonly operation: typeof FileOperation.Type;
       readonly targets: ReadonlyArray<ResolvedTarget>;
+      /** False when the paths may not be the files that change, so no rule describes them. */
+      readonly exact?: boolean;
     }
-  | { readonly _tag: "Command"; readonly operation: typeof CommandOperation.Type; readonly cwd: ResolvedTarget }
-  | Extract<PolicyRequest, { readonly _tag: "Push" | "Web" }>;
+  | {
+      readonly _tag: "Command";
+      readonly operation: typeof CommandOperation.Type;
+      readonly cwd: ResolvedTarget;
+      readonly words?: ReadonlyArray<string> | null;
+    }
+  | (Omit<Extract<PolicyRequest, { readonly _tag: "Push" }>, "cwd"> & { readonly cwd?: ResolvedTarget })
+  | Extract<PolicyRequest, { readonly _tag: "Web" }>;
 
-/** A digest of the rules version and every policy input, so an approval binds to the exact policy. */
-export const policyVersion = (context: PolicyContext): string =>
-  `r${RULES_VERSION}-${createHash("sha256").update(stableJson(context)).digest("hex").slice(0, 16)}`;
+/**
+ * A digest of the rules version and every policy input, so an approval binds to the exact policy.
+ * Grants are left out: they are read again for every call and never pin a version (ADR 015).
+ */
+export const policyVersion = ({ grants, ...inputs }: PolicyContext): string =>
+  `r${RULES_VERSION}-${createHash("sha256").update(stableJson(inputs)).digest("hex").slice(0, 16)}`;
 
 interface Layered {
   readonly decision: PolicyDecision;
   readonly code: "preset" | "override" | "restriction";
+  /** Whether the hob's override or any restriction answers Ask or Never, which no grant answers. */
+  readonly narrowed: boolean;
 }
 
 /** The narrowest answer of the preset, the hob's override and each restriction, and who gave it. */
 const layered = (context: PolicyContext, operation: PolicyOperation): Layered => {
-  let result: Layered = { decision: PRESET_DECISIONS[context.preset][operation], code: "preset" };
+  let result: Omit<Layered, "narrowed"> = { decision: PRESET_DECISIONS[context.preset][operation], code: "preset" };
+  let narrowed = false;
   const consider = (decision: PolicyDecision | undefined, code: Layered["code"]) => {
-    if (decision !== undefined && decision !== result.decision && narrowest(result.decision, decision) === decision) {
+    if (decision === undefined) return;
+    if (decision !== "allow") narrowed = true;
+    if (decision !== result.decision && narrowest(result.decision, decision) === decision) {
       result = { decision, code };
     }
   };
   consider(context.hob.overrides[operation], "override");
   for (const restriction of context.restrictions) consider(restriction[operation], "restriction");
-  return result;
+  return { ...result, narrowed };
 };
 
 const LAYER_MESSAGES: Record<Layered["code"], string> = {
@@ -173,16 +235,49 @@ interface Answer {
   readonly operation: PolicyOperation;
   readonly code: ReasonCode;
   readonly message: string;
+  /** For an Ask a grant could answer, the rule Always would save. */
+  readonly rule?: GrantRule;
+  /** For an Allow a grant gave, that grant. */
+  readonly grantId?: GrantId;
 }
 
-const fromLayers = (context: PolicyContext, operation: PolicyOperation): Answer => {
-  const { decision, code } = layered(context, operation);
+/** What a grant would be for: the rule offered for this call, and which saved rules match it. */
+interface Site {
+  readonly rule: GrantRule;
+  readonly matches: (rule: GrantRule) => boolean;
+}
+
+/** The first live grant for this operation and site, bound to this Quest if it names one. */
+const matchingGrant = (context: PolicyContext, operation: PolicyOperation, site: Site): Grant | undefined =>
+  context.grants?.find(
+    (grant) =>
+      grant.operation === operation &&
+      (grant.questId === null || grant.questId === (context.questId ?? null)) &&
+      site.matches(grant.rule),
+  );
+
+/**
+ * The layers' answer, and where only the preset asks, a live grant for the site (ADR 015 steps 5 to
+ * 8). Without a site no rule can describe the call, so nothing is offered beyond once.
+ */
+const fromLayers = (context: PolicyContext, operation: PolicyOperation, site?: Site | null): Answer => {
+  const { decision, code, narrowed } = layered(context, operation);
   const who = LAYER_MESSAGES[code];
-  return {
+  const answer: Answer = {
     decision,
     operation,
     code,
     message: `${who.charAt(0).toUpperCase()}${who.slice(1)} ${DECISION_WORDS[decision]} ${OPERATION_WORDS[operation]}.`,
+  };
+  if (decision !== "ask" || narrowed || !site) return answer;
+  const grant = matchingGrant(context, operation, site);
+  if (grant === undefined) return { ...answer, rule: site.rule };
+  return {
+    decision: "allow",
+    operation,
+    code: "grant",
+    message: `Your saved rule allows ${OPERATION_WORDS[operation]} here.`,
+    grantId: grant.id,
   };
 };
 
@@ -224,11 +319,36 @@ interface Located {
 
 const located = (value: Located | Answer): value is Located => "folder" in value;
 
+/** Whether `other` names the same path as `target`, with the target volume's case rules. */
+const samePath = (target: CanonicalPath, other: string): boolean =>
+  isInside(target, other) && isInside({ path: other, caseSensitive: target.caseSensitive }, target.path);
+
+/**
+ * A file's site (ADR 015): the folder that directly holds it, or for a delete, the exact path, since
+ * the target may itself be a folder and a rule must never reach the folder above it. A file whose
+ * parent is outside the hob's folders is offered as the exact path too.
+ */
+const fileSite = (operation: typeof FileOperation.Type, place: Located): Site => {
+  const { canonical } = place;
+  const parent = dirname(canonical.path);
+  const exact: GrantRule = { _tag: "Paths", operation, paths: [canonical.path] };
+  const inPaths = (rule: GrantRule) => rule._tag === "Paths" && rule.paths.some((p) => samePath(canonical, p));
+  if (operation === "delete-files" || !isInside({ ...canonical, path: parent }, place.folder)) {
+    return { rule: exact, matches: inPaths };
+  }
+  return {
+    rule: { _tag: "Folder", operation, folder: parent },
+    matches: (rule) =>
+      inPaths(rule) || (rule._tag === "Folder" && samePath({ ...canonical, path: parent }, rule.folder)),
+  };
+};
+
 const fileTarget = (
   context: PolicyContext,
   scope: ResolvedScope,
   operation: typeof FileOperation.Type,
   target: ResolvedTarget,
+  exact = true,
 ): Answer => {
   const place = locate(scope, target);
   // Every preset answers Deny outside the folders, and the narrowing layers cannot widen it.
@@ -254,6 +374,7 @@ const fileTarget = (
       );
     }
     if (target.unsearched === true) {
+      // A safety Ask is never answered by a grant, so no site is offered here.
       const answer = fromLayers(context, operation);
       if (answer.decision === "allow") {
         return {
@@ -266,7 +387,7 @@ const fileTarget = (
       return answer;
     }
   }
-  return fromLayers(context, operation);
+  return fromLayers(context, operation, exact ? fileSite(operation, place) : null);
 };
 
 /** Picks the narrowest of several answers, keeping the first on a tie. */
@@ -292,72 +413,137 @@ const needsSandbox = (context: PolicyContext, operation: PolicyOperation): Answe
 const enforcementOf = (context: PolicyContext, operation: PolicyOperation): PolicyVerdict["enforcement"] =>
   ruleEnforcement(operation, (other) => layered(context, other).decision, context.sandbox);
 
-/** Decides a request whose paths are already canonical. Pure: the same inputs give the same verdict. */
-// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
-export const evaluate = (context: PolicyContext, scope: ResolvedScope, request: ResolvedRequest): PolicyVerdict => {
-  let answer: Answer;
-  let targets: ReadonlyArray<string>;
-  let onceOnly = false;
-  switch (request._tag) {
-    case "Files": {
-      targets = request.targets.map((t) => t.canonical?.path ?? t.input);
-      answer =
-        pickNarrowest(request.targets.map((t) => fileTarget(context, scope, request.operation, t))) ??
-        deny(request.operation, "no-target", "The call named no file, so there is nothing to allow.");
-      break;
-    }
-    case "Command": {
-      targets = [request.cwd.canonical?.path ?? request.cwd.input];
-      const place = locate(scope, request.cwd);
-      answer = !located(place)
-        ? place
-        : (needsSandbox(context, request.operation) ?? fromLayers(context, request.operation));
-      break;
-    }
-    case "Push": {
-      targets = [`${request.remote} ${request.branch}`];
-      answer = fromLayers(context, "push");
-      if ((request.force || request.toDefaultBranch) && answer.decision !== "deny") {
-        answer = {
-          ...answer,
-          decision: "ask",
-          code: "protected-push",
-          message: request.force
-            ? "A force push always waits for you, once only."
-            : "A push to the default branch always waits for you, once only.",
+/** The answers a request's parts gave, its targets, and whether it is high risk. */
+interface Evaluated {
+  readonly answers: ReadonlyArray<Answer>;
+  readonly targets: ReadonlyArray<string>;
+  readonly onceOnly?: boolean;
+}
+
+const sameWords = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
+  a.length === b.length && a.every((word, i) => word === b[i]);
+
+/** A command's site: exactly its literal words, in exactly its folder (ADR 015). */
+const commandSite = (
+  operation: typeof CommandOperation.Type,
+  cwd: CanonicalPath,
+  words: ReadonlyArray<string> | null | undefined,
+): Site | null =>
+  words === null || words === undefined || words.length === 0
+    ? null
+    : {
+        rule: { _tag: "Command", operation, cwd: cwd.path, words: [...words] },
+        matches: (rule) =>
+          rule._tag === "Command" &&
+          rule.operation === operation &&
+          samePath(cwd, rule.cwd) &&
+          sameWords(rule.words, words),
+      };
+
+const evaluateFiles = (
+  context: PolicyContext,
+  scope: ResolvedScope,
+  request: Extract<ResolvedRequest, { readonly _tag: "Files" }>,
+): Evaluated => ({
+  targets: request.targets.map((t) => t.canonical?.path ?? t.input),
+  answers:
+    request.targets.length === 0
+      ? [deny(request.operation, "no-target", "The call named no file, so there is nothing to allow.")]
+      : request.targets.map((t) => fileTarget(context, scope, request.operation, t, request.exact !== false)),
+});
+
+const evaluateCommand = (
+  context: PolicyContext,
+  scope: ResolvedScope,
+  request: Extract<ResolvedRequest, { readonly _tag: "Command" }>,
+): Evaluated => {
+  const place = locate(scope, request.cwd);
+  const answer = !located(place)
+    ? place
+    : (needsSandbox(context, request.operation) ??
+      fromLayers(context, request.operation, commandSite(request.operation, place.canonical, request.words)));
+  return { targets: [request.cwd.canonical?.path ?? request.cwd.input], answers: [answer] };
+};
+
+const evaluatePush = (
+  context: PolicyContext,
+  scope: ResolvedScope,
+  request: Extract<ResolvedRequest, { readonly _tag: "Push" }>,
+): Evaluated => {
+  const targets = [`${request.remote} ${request.branch}`];
+  const risky = request.force || request.toDefaultBranch;
+  const place = request.cwd === undefined ? null : locate(scope, request.cwd);
+  const cwd = place !== null && located(place) ? place.canonical : null;
+  // A high-risk push is never granted, and a push from an unknown folder cannot name its site.
+  const site: Site | null =
+    risky || cwd === null || request.exact === false
+      ? null
+      : {
+          rule: { _tag: "Push", cwd: cwd.path, remote: request.remote, branch: request.branch },
+          matches: (rule) =>
+            rule._tag === "Push" &&
+            samePath(cwd, rule.cwd) &&
+            rule.remote === request.remote &&
+            rule.branch === request.branch,
         };
-        onceOnly = true;
-      }
-      break;
-    }
-    case "Web": {
-      const host = normalizeHost(request.host);
-      targets = [host ?? request.host];
-      const addresses = request.addresses.map(normalizeHost);
-      const modelHosts = context.modelHosts.map(normalizeHost);
-      if (host === null) {
-        answer = deny("use-web", "invalid-host", `${request.host} is not a host name or address.`);
-      } else if (isBlockedHost(host) || addresses.some((a) => a === null || isBlockedHost(a))) {
-        answer = deny(
-          "use-web",
-          "blocked-host",
-          `${host} is a loopback, link-local or cloud metadata address, never reachable from the sandbox.`,
-        );
-      } else {
-        answer =
-          needsSandbox(context, "use-web") ??
-          (modelHosts.includes(host)
-            ? {
-                decision: "allow",
-                operation: "use-web",
-                code: "model-host",
-                message: `${host} is the runtime's model API.`,
-              }
-            : fromLayers(context, "use-web"));
-      }
-      break;
-    }
+  const answer = fromLayers(context, "push", site);
+  if (!risky || answer.decision === "deny") return { targets, answers: [answer] };
+  const message = request.force
+    ? "A force push always waits for you, once only."
+    : "A push to the default branch always waits for you, once only.";
+  return {
+    targets,
+    answers: [{ decision: "ask", operation: "push", code: "protected-push", message }],
+    onceOnly: true,
+  };
+};
+
+const evaluateWeb = (
+  context: PolicyContext,
+  request: Extract<ResolvedRequest, { readonly _tag: "Web" }>,
+): Evaluated => {
+  const host = normalizeHost(request.host);
+  const targets = [host ?? request.host];
+  if (host === null)
+    return { targets, answers: [deny("use-web", "invalid-host", `${request.host} is not a host name or address.`)] };
+  const addresses = request.addresses.map(normalizeHost);
+  if (isBlockedHost(host) || addresses.some((a) => a === null || isBlockedHost(a))) {
+    const message = `${host} is a loopback, link-local or cloud metadata address, never reachable from the sandbox.`;
+    return { targets, answers: [deny("use-web", "blocked-host", message)] };
   }
+  const sandbox = needsSandbox(context, "use-web");
+  if (sandbox !== null) return { targets, answers: [sandbox] };
+  if (context.modelHosts.map(normalizeHost).includes(host)) {
+    const message = `${host} is the runtime's model API.`;
+    return { targets, answers: [{ decision: "allow", operation: "use-web", code: "model-host", message }] };
+  }
+  const site: Site = {
+    rule: { _tag: "Host", host },
+    matches: (rule) => rule._tag === "Host" && normalizeHost(rule.host) === host,
+  };
+  return { targets, answers: [fromLayers(context, "use-web", site)] };
+};
+
+const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: ResolvedRequest): Evaluated => {
+  switch (request._tag) {
+    case "Files":
+      return evaluateFiles(context, scope, request);
+    case "Command":
+      return evaluateCommand(context, scope, request);
+    case "Push":
+      return evaluatePush(context, scope, request);
+    case "Web":
+      return evaluateWeb(context, request);
+  }
+};
+
+/** Decides a request whose paths are already canonical. Pure: the same inputs give the same verdict. */
+export const evaluate = (context: PolicyContext, scope: ResolvedScope, request: ResolvedRequest): PolicyVerdict => {
+  const { answers, targets, onceOnly = false } = evaluateParts(context, scope, request);
+  const answer = pickNarrowest(answers) as Answer;
+  // Ask offers a lifetime only when every part that asks could be answered by a rule.
+  const asking = answer.decision === "ask" ? answers.filter((a) => a.decision === "ask") : [];
+  const grantable = !onceOnly && asking.length > 0 && asking.every((a) => a.rule !== undefined);
   return {
     decision: answer.decision,
     operation: answer.operation,
@@ -365,8 +551,22 @@ export const evaluate = (context: PolicyContext, scope: ResolvedScope, request: 
     targets,
     enforcement: enforcementOf(context, answer.operation),
     onceOnly,
+    grantable,
+    rules: grantable ? uniqueRules(asking.flatMap((a) => (a.rule ? [a.rule] : []))) : [],
+    grantIds: answer.decision === "allow" ? [...new Set(answers.flatMap((a) => (a.grantId ? [a.grantId] : [])))] : [],
     policyVersion: policyVersion(context),
   };
+};
+
+/** Each rule once, in order. */
+export const uniqueRules = (rules: ReadonlyArray<GrantRule>): ReadonlyArray<GrantRule> => {
+  const seen = new Set<string>();
+  return rules.filter((rule) => {
+    const key = stableJson(rule);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 };
 
 export class PolicyEngine extends Context.Service<
@@ -437,7 +637,7 @@ export class PolicyEngine extends Context.Service<
         switch (request._tag) {
           case "Files": {
             const done = (targets: ReadonlyArray<ResolvedTarget>) =>
-              ({ _tag: "Files", operation: request.operation, targets }) as const;
+              ({ _tag: "Files", operation: request.operation, targets, exact: request.exact !== false }) as const;
             if (request.operation === "read-files") {
               return Effect.forEach(request.paths, (p) => resolve(p, request.cwd)).pipe(Effect.map(done));
             }
@@ -452,9 +652,20 @@ export class PolicyEngine extends Context.Service<
           case "Command":
             // The runtime reports an absolute folder, so a relative one is a folder a command line moved to unknowably.
             return (isAbsolute(request.cwd) ? resolve(request.cwd, "/") : unresolved(request.cwd)).pipe(
-              Effect.map((cwd) => ({ _tag: "Command", operation: request.operation, cwd }) as const),
+              Effect.map(
+                (cwd) =>
+                  ({ _tag: "Command", operation: request.operation, cwd, words: request.words ?? null }) as const,
+              ),
             );
-          default:
+          case "Push": {
+            const { cwd, ...push } = request;
+            return cwd === undefined
+              ? Effect.succeed(push)
+              : (isAbsolute(cwd) ? resolve(cwd, "/") : unresolved(cwd)).pipe(
+                  Effect.map((resolved) => ({ ...push, cwd: resolved })),
+                );
+          }
+          case "Web":
             return Effect.succeed(request);
         }
       };

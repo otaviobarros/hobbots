@@ -2,6 +2,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
   ChatService,
+  GrantService,
   HobAdmission,
   HobLifecycle,
   HobService,
@@ -9,7 +10,13 @@ import {
   PermissionSummary,
 } from "@hobbots/agents";
 import type { SearchHit } from "@hobbots/domain";
-import { ApprovalRepositoryLive, HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
+import {
+  ApprovalRepositoryLive,
+  GrantRepositoryLive,
+  HobbotsRepositoryLive,
+  SearchIndex,
+  SetupRepository,
+} from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule } from "effect";
@@ -28,6 +35,7 @@ beforeEach(() => {
   const Persistence = Layer.mergeAll(
     HobbotsRepositoryLive,
     ApprovalRepositoryLive,
+    GrantRepositoryLive,
     SetupRepository.layer,
     SearchIndex.layer,
   ).pipe(Layer.provideMerge(TestDatabase));
@@ -37,6 +45,7 @@ beforeEach(() => {
         Layer.mergeAll(
           ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
           ApprovalService.layer,
+          GrantService.layer,
           HobService.layer,
           PermissionSummary.layer,
         ),

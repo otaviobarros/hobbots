@@ -576,7 +576,7 @@ describe("policy engine", () => {
 describe("policy version", () => {
   it("changes with any policy input and not with key order", () => {
     const base = contextFor(home, "balanced");
-    expect(policyVersion(base)).toMatch(/^r2-[0-9a-f]{16}$/);
+    expect(policyVersion(base)).toMatch(/^r3-[0-9a-f]{16}$/);
     expect(policyVersion({ ...base })).toBe(policyVersion(base));
     const reordered = Object.fromEntries(Object.entries(base).reverse()) as unknown as typeof base;
     expect(policyVersion(reordered)).toBe(policyVersion(base));

@@ -22,7 +22,7 @@ import {
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware } from "effect/http-api";
-import { ApprovalsGroup } from "./approvals.ts";
+import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
 import {
   AgentNotFound,
   HobUnavailable,
@@ -264,4 +264,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(RuntimesGroup)
   .add(SearchGroup)
   .add(PermissionsGroup)
-  .add(ApprovalsGroup) {}
+  .add(ApprovalsGroup)
+  .add(GrantsGroup) {}

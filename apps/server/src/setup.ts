@@ -1,4 +1,4 @@
-import { ChatService } from "@hobbots/agents";
+import { ChatService, GrantService, setupLoss } from "@hobbots/agents";
 import { HobbotsApi } from "@hobbots/api";
 import { SetupRepository } from "@hobbots/persistence";
 import { Effect } from "effect";
@@ -9,6 +9,7 @@ export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers
   Effect.gen(function* () {
     const setup = yield* SetupRepository;
     const chat = yield* ChatService;
+    const grants = yield* GrantService;
     return handlers.handleAll({
       get: () => setup.get,
       // Folders are checked on the hub and stored resolved. A folder or provider added twice is
@@ -18,12 +19,15 @@ export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers
           const folders =
             payload.approvedFolders &&
             (yield* Effect.forEach(payload.approvedFolders, (folder) => checkFolder(folder)));
+          const before = yield* setup.get;
           const updated = yield* setup.update({
             ...payload,
             ...(folders && { approvedFolders: [...new Set(folders)] }),
             ...(payload.connectedProviders && { connectedProviders: [...new Set(payload.connectedProviders)] }),
           });
-          // A narrower preset or a removed folder also reaches the turns already running (PE-008).
+          // A narrower preset or a removed folder revokes the grants that relied on it (ADR 015), and
+          // also reaches the turns already running (PE-008).
+          yield* grants.revokeLost(null, setupLoss(before, updated));
           yield* chat.reviewAuthority();
           return updated;
         }),
