@@ -534,6 +534,68 @@ body {
   }
 }
 
+/* The caret of a reply being written follows its last line of text, or the code still arriving. */
+.hb-caret > :is(p, h3, h4, h5, h6):last-child::after,
+.hb-caret > :is(ul, ol):last-child > li:last-child::after,
+.hb-caret > blockquote:last-child > :last-child::after,
+.hb-caret > figure:last-child pre > code::after {
+  content: "";
+  display: inline-block;
+  width: 0.5rem;
+  height: 1rem;
+  margin-inline-start: 0.125rem;
+  vertical-align: -2px;
+  background: var(--color-moonlight);
+  animation: var(--animate-hb-caret);
+}
+
+/* Syntax colors for code in hob replies, on the classes rehype-highlight gives each token. */
+.hb-markdown .hljs-comment,
+.hb-markdown .hljs-quote {
+  color: var(--color-label);
+  font-style: italic;
+}
+.hb-markdown .hljs-keyword,
+.hb-markdown .hljs-selector-tag,
+.hb-markdown .hljs-meta,
+.hb-markdown .hljs-doctag {
+  color: var(--color-lantern);
+}
+.hb-markdown .hljs-string,
+.hb-markdown .hljs-regexp,
+.hb-markdown .hljs-addition,
+.hb-markdown .hljs-template-tag {
+  color: var(--color-mint);
+}
+.hb-markdown .hljs-number,
+.hb-markdown .hljs-literal,
+.hb-markdown .hljs-symbol,
+.hb-markdown .hljs-bullet,
+.hb-markdown .hljs-deletion {
+  color: var(--color-rose);
+}
+.hb-markdown .hljs-title,
+.hb-markdown .hljs-section,
+.hb-markdown .hljs-name,
+.hb-markdown .hljs-selector-id,
+.hb-markdown .hljs-selector-class {
+  color: var(--color-moonlight);
+}
+.hb-markdown .hljs-type,
+.hb-markdown .hljs-built_in,
+.hb-markdown .hljs-attr,
+.hb-markdown .hljs-attribute,
+.hb-markdown .hljs-variable,
+.hb-markdown .hljs-params {
+  color: var(--color-star);
+}
+.hb-markdown .hljs-emphasis {
+  font-style: italic;
+}
+.hb-markdown .hljs-strong {
+  font-weight: 700;
+}
+
 /* Every animation and transition stops with Reduce motion. */
 @media (prefers-reduced-motion: reduce) {
   *,

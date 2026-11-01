@@ -4,6 +4,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import type { ReactNode } from "react";
 import { formatTime, refillText } from "../lib/time.ts";
 import { HobSprite } from "./hob-sprite.tsx";
+import { ReplyMarkdown } from "./markdown/reply-markdown.tsx";
 import { messages } from "./messages.ts";
 import { ReplySteps } from "./reply-steps.tsx";
 
@@ -57,7 +58,6 @@ export function MessageRow({
   );
 }
 
-// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 function ReplyRow({
   message,
   hob,
@@ -87,12 +87,7 @@ function ReplyRow({
         {writing && message.content.length === 0 ? (
           message.steps.length === 0 && <Thinking name={hob.name} />
         ) : (
-          <span className="leading-normal whitespace-pre-wrap">
-            {message.content}
-            {writing && (
-              <span aria-hidden className="ml-0.5 inline-block h-4 w-2 animate-hb-caret bg-moonlight align-[-2px]" />
-            )}
-          </span>
+          <ReplyMarkdown content={message.content} streaming={streaming} caret={writing} />
         )}
         {message.status === "stopping" && (
           <span role="status" className="flex items-center gap-2 text-[13px] text-lantern">
