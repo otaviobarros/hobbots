@@ -88,7 +88,7 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   const list = page.getByRole("list", { name: "Requests" });
   await expect(list).toContainText("Pip · ");
   await expect(list.getByRole("link", { name: /Push your work/ })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("navigation", { name: "Inbox filters" })).toContainText("Needs you1");
+  await expect(page.getByRole("tablist", { name: "Inbox filters" })).toContainText("Needs you1");
   const detail = page.getByRole("article", { name: "Request from Pip: Push your work" });
   await expect(detail).toContainText("expires in 23 h");
   const card = detail.getByRole("region", { name: "Pip asks permission" });
@@ -100,15 +100,15 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   // It stays in view with its outcome, Needs you clears once you look again, and History keeps the decision.
   const item = list.getByRole("link", { name: /Push your work/ });
   await expect(item).toContainText("You allowed this");
-  await page.getByRole("link", { name: "Needs you" }).click();
+  await page.getByRole("tab", { name: /^Needs you/ }).click();
   await expect(page.getByText("Nothing needs you")).toBeVisible();
-  await page.getByRole("link", { name: "History" }).click();
+  await page.getByRole("tab", { name: "History" }).click();
   const history = page.getByRole("region", { name: "Decision history" });
   await expect(history.locator('[data-state="approved"]')).toContainText("Once");
   await expect(history.locator('[data-state="approved"]')).toContainText("Pip: Push your work");
 
   // The paused reply went on in its thread.
-  await page.getByRole("link", { name: "All" }).click();
+  await page.getByRole("tab", { name: "All" }).click();
   await page.getByRole("link", { name: "Open in the chat" }).click();
   await expect(page.locator('[data-state="done"]', { hasText: "git push" })).toBeVisible();
   await expect(page.getByText(/^Echo: Ship it/)).toBeVisible();
@@ -126,12 +126,13 @@ test("[TC-IN-003] a request decided in the chat updates the open Inbox, and one 
   const item = inbox.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Push your work/ });
   await expect(item).toContainText("Waiting on you");
 
-  // Denied in the chat: the Inbox hears it from the journal.
+  // Denied in the chat: the Inbox hears it from the journal and keeps it in view with its outcome.
   await card.getByRole("button", { name: "Deny" }).click();
   await card.getByRole("button", { name: "Deny" }).click();
-  await expect(inbox.getByText("Nothing needs you")).toBeVisible();
-  await inbox.getByRole("link", { name: "All" }).click();
   await expect(item).toContainText("You denied this");
+  await expect(inbox.getByRole("article").getByRole("button", { name: "Allow once" })).toHaveCount(0);
+  await inbox.getByRole("tab", { name: /^Needs you/ }).click();
+  await expect(inbox.getByText("Nothing needs you")).toBeVisible();
 
   // A second request, approved in the Inbox: the chat's card follows.
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
@@ -140,7 +141,7 @@ test("[TC-IN-003] a request decided in the chat updates the open Inbox, and one 
   await composer.press("Enter");
   const second = page.getByRole("region", { name: "Pip asks permission" }).nth(1);
   await expect(second.getByRole("button", { name: "Allow once" })).toBeVisible();
-  await inbox.getByRole("link", { name: "Needs you" }).click();
+  await inbox.getByRole("tab", { name: /^Needs you/ }).click();
   await inbox.getByRole("button", { name: "Allow once" }).click();
   await expect(second.getByRole("status")).toHaveText("✓ Allowed once. Pip carries on.");
 });
@@ -172,7 +173,7 @@ test("[TC-IN-004] an expired request shows as expired and cannot be approved", a
   });
   expect(late.ok).toBe(false);
 
-  await page.getByRole("link", { name: "History" }).click();
+  await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByRole("region", { name: "Decision history" }).locator('[data-state="expired"]')).toContainText(
     "Expired",
   );

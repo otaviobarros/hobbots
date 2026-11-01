@@ -27,11 +27,11 @@ const approvalRows = (rows: ReadonlyArray<ApprovalRow>) =>
     rules: JSON.parse(String(row.rules ?? "[]")),
   }));
 
-// Matches `oldestFirst`, reversed: bytewise on PostgreSQL, as SQLite compares text.
-const newestFirst = (sql: SqlClient.SqlClient) =>
+// The most recently closed first, bytewise on PostgreSQL as SQLite compares text, like `oldestFirst`.
+const recentlyClosedFirst = (sql: SqlClient.SqlClient) =>
   sql.onDialectOrElse({
-    pg: () => sql.literal(`created_at COLLATE "C" DESC, id COLLATE "C" DESC`),
-    orElse: () => sql.literal("created_at DESC, id DESC"),
+    pg: () => sql.literal(`COALESCE(decided_at, created_at) COLLATE "C" DESC, id COLLATE "C" DESC`),
+    orElse: () => sql.literal("COALESCE(decided_at, created_at) DESC, id DESC"),
   });
 
 // Oldest first, as the queries order them.
@@ -67,12 +67,12 @@ export const ApprovalRepositoryLive = Layer.effect(
         ),
     });
 
-    // The most recently created closed requests, newest first, so the Inbox can show the latest of them.
+    // The most recently decided or expired requests first, so the Inbox can show the latest of them.
     const listClosed = SqlSchema.findAll({
       Request: Schema.Number,
       Result: ApprovalRequest,
       execute: (limit) =>
-        sql`SELECT * FROM approval_requests WHERE state <> 'pending' ORDER BY ${newestFirst(sql)} LIMIT ${limit}`.pipe(
+        sql`SELECT * FROM approval_requests WHERE state <> 'pending' ORDER BY ${recentlyClosedFirst(sql)} LIMIT ${limit}`.pipe(
           Effect.map(approvalRows),
         ),
     });

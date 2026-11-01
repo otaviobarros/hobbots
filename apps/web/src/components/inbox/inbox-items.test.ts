@@ -48,6 +48,12 @@ describe("tabRequests", () => {
     expect(pendingCount(all)).toBe(2);
   });
 
+  it("lists History by when each request was decided or expired, the latest first", () => {
+    const early = new ApprovalRequest({ ...request("x", "denied"), decidedAt: "2026-11-01T09:10:00.000Z" });
+    const late = new ApprovalRequest({ ...request("y", "approved"), decidedAt: "2026-11-01T09:50:00.000Z" });
+    expect(tabRequests([late, early], "history").map((r) => r.id)).toEqual(["y", "x"]);
+  });
+
   it("keeps the request the user is looking at in Needs you once it is decided", () => {
     expect(tabRequests(all, "needs", "c").map((r) => r.id)).toEqual(["b", "c", "d"]);
   });

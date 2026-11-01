@@ -5,6 +5,7 @@ import { HobSprite } from "../hob-sprite.tsx";
 import { requestTitle, statusText, tabRequests } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
 import { useInboxDirectory } from "./use-inbox-directory.ts";
+import { useNow } from "./use-now.ts";
 
 const copy = messages;
 
@@ -19,6 +20,7 @@ export function WaitingRequests({ empty }: { empty: React.ReactNode }) {
   const inbox = useQuery(inboxQuery);
   const waiting = tabRequests(inbox.data ?? [], "needs");
   const directory = useInboxDirectory(waiting);
+  const now = useNow();
   if (waiting.length === 0) return empty;
   const more = waiting.length - SHOWN;
   return (
@@ -40,7 +42,7 @@ export function WaitingRequests({ empty }: { empty: React.ReactNode }) {
                 </span>
                 <span className="text-sm leading-snug">{title.what}</span>
                 <code className="truncate font-mono text-xs text-moonlight">{title.exact}</code>
-                <span className="text-xs text-lantern">{statusText(request)}</span>
+                <span className="text-xs text-lantern">{statusText(request, now)}</span>
               </span>
             </Link>
           </li>

@@ -1,7 +1,7 @@
 import type { ApprovalRequest } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { cn } from "@hobbots/ui/lib/utils";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { HobSprite } from "../hob-sprite.tsx";
 import { groupByThread, INBOX_TABS, type InboxTab, requestTitle, statusText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
@@ -9,28 +9,30 @@ import type { InboxDirectory } from "./use-inbox-directory.ts";
 
 const copy = messages;
 
-/** Needs you, All and History, with how many requests need you on the first. */
+/** Needs you, All and History, with how many requests need you on the first. The tab is in the address. */
 export function InboxTabs({ tab, waiting }: { tab: InboxTab; waiting: number }) {
+  const navigate = useNavigate();
   return (
-    <nav aria-label={copy.tabsLabel} className="flex gap-0.5 border-b-2 border-line px-2.5 pt-2">
+    <div role="tablist" aria-label={copy.tabsLabel} className="flex gap-0.5 border-b-2 border-line px-2.5 pt-2">
       {INBOX_TABS.map((name) => (
-        <Link
+        <button
           key={name}
-          to="/inbox"
-          search={{ tab: name }}
-          aria-current={tab === name ? "page" : undefined}
+          type="button"
+          role="tab"
+          aria-selected={tab === name}
+          onClick={() => void navigate({ to: "/inbox", search: { tab: name } })}
           className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold no-underline",
+            "inline-flex cursor-pointer items-center gap-1.5 border-0 px-3 py-2 text-[13px] font-bold",
             tab === name
-              ? "bg-hover text-moonlight shadow-[inset_0_-3px_0_var(--color-lantern)] hover:text-moonlight"
-              : "text-secondary-text hover:bg-hover hover:text-text",
+              ? "bg-hover text-moonlight shadow-[inset_0_-3px_0_var(--color-lantern)]"
+              : "bg-transparent text-secondary-text hover:bg-hover hover:text-text",
           )}
         >
           {copy.tabs[name]}
           {name === "needs" && waiting > 0 && <Badge variant="needs-you">{waiting}</Badge>}
-        </Link>
+        </button>
       ))}
-    </nav>
+    </div>
   );
 }
 
@@ -40,11 +42,13 @@ export function InboxList({
   requests,
   selectedId,
   directory,
+  now,
 }: {
   tab: InboxTab;
   requests: ReadonlyArray<ApprovalRequest>;
   selectedId: string | undefined;
   directory: InboxDirectory;
+  now: Date;
 }) {
   return (
     <ul aria-label={copy.listLabel} className="m-0 flex list-none flex-col p-0 py-1">
@@ -59,7 +63,13 @@ export function InboxList({
             <ul className="m-0 flex list-none flex-col p-0">
               {group.requests.map((request) => (
                 <li key={request.id}>
-                  <InboxItem tab={tab} request={request} selected={request.id === selectedId} directory={directory} />
+                  <InboxItem
+                    tab={tab}
+                    request={request}
+                    selected={request.id === selectedId}
+                    directory={directory}
+                    now={now}
+                  />
                 </li>
               ))}
             </ul>
@@ -75,11 +85,13 @@ function InboxItem({
   request,
   selected,
   directory,
+  now,
 }: {
   tab: InboxTab;
   request: ApprovalRequest;
   selected: boolean;
   directory: InboxDirectory;
+  now: Date;
 }) {
   const hob = directory.hob(request.agentId);
   const pending = request.state === "pending";
@@ -108,7 +120,7 @@ function InboxItem({
         </span>
         <span className="text-sm leading-snug">{title.what}</span>
         <code className="truncate font-mono text-xs text-moonlight">{title.exact}</code>
-        <span className={cn("text-xs", pending ? "text-lantern" : "text-label")}>{statusText(request)}</span>
+        <span className={cn("text-xs", pending ? "text-lantern" : "text-label")}>{statusText(request, now)}</span>
       </span>
     </Link>
   );

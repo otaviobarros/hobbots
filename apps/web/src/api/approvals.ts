@@ -31,7 +31,7 @@ export interface Decision {
 /**
  * Decides one request as the user saw it: the action digest shown goes with the decision, so it
  * never applies to another action. A refused decision refetches the thread's requests, since the
- * request was most likely decided elsewhere or has expired.
+ * request was most likely decided elsewhere or has expired; the Inbox is refetched too.
  */
 export const useDecideApproval = (approval: ApprovalRequest) => {
   const queryClient = useQueryClient();
@@ -49,7 +49,11 @@ export const useDecideApproval = (approval: ApprovalRequest) => {
         }),
       ),
     onSuccess: (decided) => storeApproval(queryClient, decided),
-    onError: () => queryClient.invalidateQueries({ queryKey: approvalsKey(approval.threadId), exact: true }),
+    onError: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: approvalsKey(approval.threadId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: inboxKey, exact: true }),
+      ]),
   });
 };
 

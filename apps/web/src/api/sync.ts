@@ -169,6 +169,11 @@ export const syncedMessages = (
 export const syncedApprovals = (threadId: ThreadId, fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
   synced(fetch, "approval", (approval) => approval.threadId === threadId);
 
-/** The Inbox's requests from every thread. */
+/** The Inbox's requests from every thread, oldest first, as the hub lists them. */
 export const syncedInbox = (fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
-  synced(fetch, "approval", () => true);
+  synced(
+    fetch,
+    "approval",
+    () => true,
+    (items) => items.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+  );

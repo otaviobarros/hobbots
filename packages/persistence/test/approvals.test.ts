@@ -122,7 +122,7 @@ describe("ApprovalRepository", () => {
 
 describe("ApprovalRepository.listRecent", () => {
   // covers PE-003, UX-005
-  it("[TC-IN-001] lists every pending request and only the most recent closed ones, oldest first", async () => {
+  it("[TC-IN-001] lists every pending request and only the most recently closed ones, oldest first", async () => {
     const at = (minute: number) => `2026-10-31T00:${String(minute).padStart(2, "0")}:00.000Z`;
     const listed = await Effect.gen(function* () {
       const approvals = yield* ApprovalRepository;
@@ -134,7 +134,12 @@ describe("ApprovalRepository.listRecent", () => {
           new ApprovalRequest({ ...request(`c${minute}`), createdAt: at(minute) }),
         );
         yield* approvals.resolve(
-          new ApprovalRequest({ ...inserted.value, state: minute % 2 === 0 ? "expired" : "denied", decidedAt: at(9) }),
+          new ApprovalRequest({
+            ...inserted.value,
+            state: minute % 2 === 0 ? "expired" : "denied",
+            // The oldest is decided last; the others close together, so their ids break the tie.
+            decidedAt: at(minute === 2 ? 10 : 9),
+          }),
           "pending",
         );
       }
@@ -144,7 +149,7 @@ describe("ApprovalRepository.listRecent", () => {
 
     expect(listed.map((a) => [a.id, a.state])).toEqual([
       ["p-old", "pending"],
-      ["c4", "expired"],
+      ["c2", "expired"],
       ["c5", "denied"],
       ["p-new", "pending"],
     ]);

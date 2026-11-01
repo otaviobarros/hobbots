@@ -18,7 +18,7 @@ export const pendingCount = (approvals: ReadonlyArray<ApprovalRequest>): number 
 
 /**
  * The tab's requests. Needs you lists the pending ones oldest first, so the one asked first, which
- * expires first, leads; All and History list the newest first. `kept` names a request that stays
+ * expires first, leads; All lists the newest first and History the most recently decided first. `kept` names a request that stays
  * listed in Needs you after it is decided, so the one the user is looking at does not vanish.
  */
 export const tabRequests = (
@@ -27,9 +27,13 @@ export const tabRequests = (
   kept?: string | undefined,
 ): Array<ApprovalRequest> => {
   if (tab === "needs") return approvals.filter((approval) => approval.state === "pending" || approval.id === kept);
-  const shown = tab === "all" ? [...approvals] : approvals.filter((approval) => approval.state !== "pending");
-  return shown.reverse();
+  if (tab === "all") return [...approvals].reverse();
+  return approvals.filter((approval) => approval.state !== "pending").sort(byClosing);
 };
+
+// The most recently decided or expired first.
+const byClosing = (a: ApprovalRequest, b: ApprovalRequest) =>
+  (b.decidedAt ?? b.createdAt).localeCompare(a.decidedAt ?? a.createdAt) || b.id.localeCompare(a.id);
 
 export interface InboxGroup {
   readonly threadId: ThreadId;

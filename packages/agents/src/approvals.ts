@@ -38,7 +38,7 @@ export class ApprovalRepository extends Context.Service<
     /** The thread's requests, oldest first. */
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     readonly listPending: Effect.Effect<ReadonlyArray<ApprovalRequest>>;
-    /** Every pending request and the `limit` most recently asked closed ones, oldest first. */
+    /** Every pending request and the `limit` most recently decided or expired ones, oldest first. */
     readonly listRecent: (limit: number) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     /** Stores a new request with its ApprovalRequested event. */
     readonly insert: (approval: ApprovalRequest) => Effect.Effect<Committed<ApprovalRequest>>;

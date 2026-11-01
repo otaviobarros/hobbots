@@ -18,10 +18,12 @@ export function InboxDetail({
   request,
   hob,
   threadTitle,
+  now,
 }: {
   request: ApprovalRequest;
   hob: Agent;
   threadTitle: string;
+  now: Date;
 }) {
   const pending = request.state === "pending";
   const retired = hob.status === "retired";
@@ -47,7 +49,7 @@ export function InboxDetail({
         <Fact term={copy.detail.asked}>{formatWhen(request.createdAt)}</Fact>
         {pending && request.expiresAt !== null && (
           <Fact term={copy.detail.expires}>
-            {copy.detail.expiresLead({ expiry: expiryText(request.expiresAt), name: hob.name })}
+            {copy.detail.expiresLead({ expiry: expiryText(request.expiresAt, now), name: hob.name })}
           </Fact>
         )}
         {request.decidedAt !== null && <Fact term={copy.detail.decided}>{formatWhen(request.decidedAt)}</Fact>}
