@@ -1,7 +1,8 @@
 /**
  * Which system notifications the desktop app shows for requests waiting in the Inbox. Electron's
- * main process reads the hub's Inbox on a timer, so this works with no window open, and every
- * read is compared with what is shown: a request decided anywhere, missed events included, closes.
+ * main process reads the hub's Inbox whenever the event stream says it changed, so this works with
+ * no window open, and every read is compared with what is shown: a request decided anywhere,
+ * missed events included, closes.
  */
 import { exactAction } from "@hobbots/domain";
 import { messages } from "./messages.ts";

@@ -57,3 +57,13 @@ Copied blocks of code above the detector's threshold fail the check. Tests and g
 - **Why:** a detector finds the copies that review misses.
 - **Enforced by:** jscpd in `pnpm check` (`pnpm lint:dup`), configured in `.jscpd.json`.
 - **Applies to:** all source code except tests and generated files.
+
+### STD-DUP-007 Use what installed libraries provide before writing your own
+
+Before you write a parser, protocol client, retry or backoff loop, timer, cache, queue, validator or similar mechanism, check whether a library the workspace already installs provides it. Check Effect first, then the rest of `pnpm-lock.yaml`. Read the installed version's docs or source (STD-DOCS-005). Use what it provides. Write your own only when no installed library covers the case, or when the library's version does not fit. Say why in a one-line comment, and in the pull request.
+
+- ✅ Effect's `HttpClient`, `Sse.makeParser`, `Stream.retry` with a `Schedule`, and `Stream.timeout` to follow an event stream.
+- ❌ A hand-written SSE parser, fetch loop and backoff timer next to an installed Effect that has all of them.
+- **Why:** a library's version is already tested and maintained, and a copy of it is code this project must test and fix alone.
+- **Enforced by:** review.
+- **Applies to:** all code.

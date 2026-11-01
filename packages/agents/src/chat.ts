@@ -168,6 +168,12 @@ export class ChatService extends Context.Service<
     readonly drainAgent: (agentId: AgentId) => Effect.Effect<void>;
     /** Threads with a turn in progress in this process. */
     readonly activeThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
+    /**
+     * Threads whose reply is still streaming or stopping, as stored. A reply changes state in the
+     * same write the journal records, so this always agrees with the event stream; a turn's runtime
+     * may still be shutting down after its reply ended (`activeThreads`).
+     */
+    readonly workingThreads: Effect.Effect<ReadonlyArray<ThreadId>>;
     /** The replies still streaming or stopping, with all the text held in memory so far. */
     readonly streamingReplies: Effect.Effect<ReadonlyArray<Message>>;
   }
@@ -800,6 +806,9 @@ export class ChatService extends Context.Service<
       });
 
       const activeThreads = Effect.sync(() => Array.from(turns, ([threadId]) => threadId));
+      const workingThreads = repo.listUnfinishedMessages.pipe(
+        Effect.map((replies) => Array.from(new Set(replies.map((reply) => reply.threadId)))),
+      );
       const streamingReplies = Effect.suspend(() =>
         Effect.forEach(Array.from(replies.values()), (reply) => Ref.get(reply.current)),
       ).pipe(Effect.map((messages) => messages.filter((message) => isInProgress(message.status))));
@@ -933,6 +942,7 @@ export class ChatService extends Context.Service<
         restore,
         drainAgent,
         activeThreads,
+        workingThreads,
         streamingReplies,
       });
     }),

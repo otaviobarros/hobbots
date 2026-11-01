@@ -2,6 +2,7 @@ import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
 import { app, BrowserWindow, dialog, ipcMain, Notification, screen, shell, utilityProcess } from "electron";
 import { handleFolderDialogIpc } from "./folder-dialog.ts";
+import { followHub } from "./hub-events.ts";
 import { handleKeepRunningIpc } from "./keep-running.ts";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
 import { startMenuBar } from "./menu-bar.ts";
@@ -116,16 +117,13 @@ const createWindow = async () => {
   return window;
 };
 
-/** How often the main process reads the Inbox for requests to announce. */
-const NOTICE_POLL_MS = 3_000;
-
 /**
  * Sends a system notification for each new request while no Hobbots window is focused, from the
  * main process so it works with every window closed. The main process reads the Inbox as the app
  * itself, on the hub's own origin, as its window does (PE-006).
  */
-const startRequestNotices = (open: (requestId: string) => void) => {
-  const notices = requestNotices({
+const requestNoticesOn = (open: (requestId: string) => void) =>
+  requestNotices({
     read: async (path) => {
       try {
         const response = await fetch(`${apiUrl}${path}`, {
@@ -146,8 +144,30 @@ const startRequestNotices = (open: (requestId: string) => void) => {
     },
     open,
   });
-  const { stop } = notices.start(NOTICE_POLL_MS);
-  app.on("will-quit", stop);
+
+/**
+ * Follows the hub's event stream for the menu-bar icon and the request notifications, instead of
+ * polling: they read the hub again only when the stream connects, is lost, or reports a change.
+ */
+const followHubFor = (
+  menuBar: Pick<ReturnType<typeof startMenuBar>, "serverConnected" | "serverLost" | "activityChanged">,
+  notices: ReturnType<typeof requestNotices>,
+) => {
+  const hub = followHub({
+    url: `${apiUrl}/api/events`,
+    headers: { origin: apiUrl },
+    canConnect: () => supervisor.mayAnswer,
+    onConnected: (resumed) => {
+      void menuBar.serverConnected(resumed);
+      void notices.check();
+    },
+    onChange: (change) =>
+      void (change._tag === "Approvals" ? notices.check() : menuBar.activityChanged(change.threadId, change.working)),
+    onLost: () => void menuBar.serverLost(),
+  });
+  // Followed only while the server may answer; a server started again is followed at once.
+  supervisor.onChange(() => hub.sync());
+  app.on("will-quit", () => void hub.stop());
 };
 
 app.whenReady().then(async () => {
@@ -200,10 +220,11 @@ app.whenReady().then(async () => {
     return;
   }
   onSecondLaunch(() => void menuBar.showWindow());
-  startRequestNotices(async (requestId) => {
+  const notices = requestNoticesOn(async (requestId) => {
     const window = await menuBar.showWindow();
     if (window) openRequestIn(window, requestId);
   });
+  followHubFor(menuBar, notices);
   // The Dock icon or opening the app from Finder; macOS already fronts a visible window.
   app.on("activate", (_event, hasVisibleWindows) => {
     if (!hasVisibleWindows) void menuBar.showWindow();

@@ -50,6 +50,7 @@ export function HobQuestWork({ hob }: { hob: Agent }) {
             <QuestLink
               quest={each.quest}
               threadAgentId={each.threadAgentId}
+              taskId={each.task.id}
               label={messages.openQuest({ name: hob.name, lead: leadName, state })}
               className="flex w-full animate-hb-in items-center gap-1.5 py-[3px] ps-[46px] pe-2 text-xs text-secondary-text no-underline hover:bg-hover hover:text-text"
             >
@@ -95,6 +96,7 @@ function QuestEntry({ group, hobs }: { group: QuestInProgress; hobs: ReadonlyMap
     <QuestLink
       quest={group.quest}
       threadAgentId={group.threadAgentId}
+      taskId={group.quest.taskId}
       className="flex flex-col gap-1.5 text-text no-underline hover:text-moonlight"
     >
       <span className="flex items-center gap-2 text-sm">

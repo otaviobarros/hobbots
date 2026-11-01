@@ -8,6 +8,7 @@ import { closeAction, quitWhileWorkingDialog, renderTrayIcon, TRAY_SIZE, trayMod
 import type { ServerState, ServerSupervisor } from "./server.ts";
 import type { SettingsStore } from "./settings.ts";
 import { reveal } from "./single-instance.ts";
+import { type WorkingHob, workingHobs } from "./working-hobs.ts";
 
 export interface MenuBarOptions {
   readonly supervisor: ServerSupervisor;
@@ -16,8 +17,6 @@ export interface MenuBarOptions {
   readonly port: number;
   readonly createWindow: () => Promise<BrowserWindow>;
 }
-
-const POLL_MS = 5_000;
 
 const trayImage = (state: ServerState) => {
   const image = nativeImage.createEmpty();
@@ -44,14 +43,18 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
    * Names of the hobs with a turn in progress. Null when that is unknown: a server this app
    * launched is alive but did not answer, so its hobs may still be working.
    */
-  const fetchWorking = async (): Promise<ReadonlyArray<string> | null> => {
+  const fetchWorking = async (): Promise<ReadonlyArray<WorkingHob> | null> => {
     if (!isRunning()) return supervisor.ownsProcess ? null : [];
     try {
       const response = await fetch(`${apiUrl}/api/activity`, { signal: AbortSignal.timeout(1000) });
       if (!response.ok) return null;
       const body = (await response.json()) as { working?: unknown };
       if (!Array.isArray(body.working)) return null;
-      return body.working.flatMap((hob: { name?: unknown }) => (typeof hob?.name === "string" ? [hob.name] : []));
+      return body.working.flatMap((hob: { name?: unknown; threadId?: unknown }) =>
+        typeof hob?.name === "string" && typeof hob.threadId === "string"
+          ? [{ name: hob.name, threadId: hob.threadId }]
+          : [],
+      );
     } catch {
       return null;
     }
@@ -90,11 +93,34 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
   supervisor.onChange(refresh);
   refresh();
 
-  const poll = setInterval(async () => {
-    await supervisor.check();
-    working = (await fetchWorking()) ?? working;
-    refresh();
-  }, POLL_MS);
+  const checkHealth = () => supervisor.check();
+  const names = (hobs: ReadonlyArray<WorkingHob>) => hobs.map((hob) => hob.name);
+  // Read again when a reply starts or ends, until the read agrees with the event.
+  const workingReads = workingHobs({
+    read: fetchWorking,
+    onRead: (hobs) => {
+      working = names(hobs);
+      refresh();
+    },
+  });
+
+  /**
+   * The event stream connected. Unless it resumed, events may have been missed, so which hobs are
+   * working starts from a new snapshot. The open stream shows the server is alive, so nothing is
+   * checked on a timer.
+   */
+  const serverConnected = (resumed: boolean) =>
+    resumed ? workingReads.recheck(checkHealth) : workingReads.startOver(checkHealth);
+
+  /**
+   * The event stream ended or could not connect. A server that stopped runs no turns, so what
+   * events said about them is forgotten; otherwise the stream's replay brings what is missed.
+   */
+  const serverLost = () =>
+    workingReads.recheck(async () => {
+      await checkHealth();
+      if (!supervisor.mayAnswer) workingReads.forget();
+    });
 
   const guard = (window: BrowserWindow) => {
     windows.add(window);
@@ -108,7 +134,8 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
       confirming = true;
       void (async () => {
         try {
-          const known = await fetchWorking();
+          const read = await fetchWorking();
+          const known = read && names(read);
           working = known ?? working;
           refresh();
           if (closeAction({ ...options, working: known }) === "quit") return app.quit();
@@ -174,10 +201,7 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
   let stopped = false;
   app.on("before-quit", (event) => {
     quitting = true;
-    if (stopped) {
-      clearInterval(poll);
-      return;
-    }
+    if (stopped) return;
     event.preventDefault();
     shutdown ??= supervisor.shutdown().finally(() => {
       stopped = true;
@@ -185,5 +209,5 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
     });
   });
 
-  return { startServer, showWindow };
+  return { startServer, showWindow, serverConnected, serverLost, activityChanged: workingReads.changed };
 };

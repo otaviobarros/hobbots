@@ -39,6 +39,7 @@ import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { IPv6Loopback } from "./loopback.ts";
+import { QuietRoutineReads } from "./request-log.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
@@ -148,6 +149,7 @@ const ServerLive = Layer.unwrap(
             EventStreamRoute,
             WebClientRoutes(config.webDir),
             LoopbackHostOnly,
+            QuietRoutineReads,
             HttpRouter.cors({ allowedOrigins: config.allowedOrigins }),
           ),
         ),
