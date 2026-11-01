@@ -122,6 +122,9 @@ describe("Claude Code tool calls as policy requests", () => {
     expect(deletes("(cd sub && rm a); rm b").map((r) => r.cwd)).toEqual(["/work/sub", "/work"]);
     expect(deletes("cd sub | cat; rm b")[0]).toMatchObject({ cwd: "/work" });
     expect(deletes("cd sub & rm b")[0]).toMatchObject({ cwd: "/work" });
+    expect(deletes("cd sub && echo ready & rm file")[0]).toMatchObject({ cwd: "/work" });
+    expect(deletes("cd a || cd b & rm file")[0]).toMatchObject({ cwd: "/work" });
+    expect(deletes("cd sub; make & rm file")[0]).toMatchObject({ cwd: "/work/sub" });
   });
 
   it("[#209] takes `..` off the spelling after cd, as the shell does, but not after git -C", () => {
@@ -158,6 +161,13 @@ describe("Claude Code tool calls as policy requests", () => {
     });
     expect(commandRequests(String.raw`rm \> a 2>/dev/null`, "/work")[0]).toMatchObject({ paths: [">", "a"] });
     expect(commandRequests("rm a > 'out file' b", "/work")[0]).toMatchObject({ paths: ["a", "b"] });
+    // A quoted target does not make the operator before it an argument.
+    expect(commandRequests(`git push 2>"log" origin main`, "/work")[0]).toMatchObject({
+      remote: "origin",
+      branch: "main",
+      toDefaultBranch: true,
+    });
+    expect(commandRequests(`rm a >'out' 2>>"err" <in b`, "/work")[0]).toMatchObject({ paths: ["a", "b"] });
   });
 
   it("[#209] moves git -C, make -C and env -C only for their own command", () => {

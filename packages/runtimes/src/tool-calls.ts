@@ -92,20 +92,21 @@ const separatorAt = (command: string, i: number, word: string): { separator: Sep
 const REDIRECTION = /^(\d*|&)(>>|>\||>&|>|<<<|<<|<&|<>|<)/;
 
 /**
- * The words of one simple command as they are read, with redirections left out. Only an unquoted,
- * unescaped operator is a redirection, so `rm '>' file` still names both files. A bare operator
- * (`> out`) also takes the next word, its target.
+ * The words of one simple command as they are read, with redirections left out. `plain` is the part
+ * of the word before its first quote or escape: only an operator there is a redirection, so
+ * `rm '>' file` still names both files while `2>"log"` is a redirection with a quoted target. A bare
+ * operator (`> out`) also takes the next word, its target.
  */
 const commandWords = () => {
   const words: Array<string> = [];
   let target = false;
   return {
     words,
-    add: (word: string, quoted: boolean) => {
-      const operator = quoted ? undefined : REDIRECTION.exec(word)?.[0];
+    add: (word: string, plain: string) => {
+      const operator = REDIRECTION.exec(plain)?.[0];
       if (target) target = false;
       else if (operator === undefined) words.push(word);
-      else target = operator === word;
+      else target = operator === word && plain === word;
     },
   };
 };
@@ -119,10 +120,12 @@ const commandLine = (command: string): ReadonlyArray<CommandToken> => {
   let current = commandWords();
   let word = "";
   let started = false;
+  let plain = "";
   let quoted = false;
   const endWord = () => {
-    if (started) current.add(word, quoted);
+    if (started) current.add(word, plain);
     word = "";
+    plain = "";
     started = false;
     quoted = false;
   };
@@ -154,7 +157,10 @@ const commandLine = (command: string): ReadonlyArray<CommandToken> => {
       i += separator.length;
     } else {
       if (c === " " || c === "\t") endWord();
-      else take(c);
+      else {
+        if (!quoted) plain += c;
+        take(c);
+      }
       i++;
     }
   }
@@ -404,16 +410,19 @@ const single = (folders: ReadonlySet<string>): string =>
  * Follows the folders a command line moves through. Each command runs in every folder the shell may
  * be in by then: `false && cd sub; rm x` may remove `x` in either folder, so that is not worked out.
  * A `cd` is taken to succeed unless `||` follows it, and moves nothing from a subshell, a pipeline
- * or the background.
+ * or a list run in the background (`cd sub && make & rm x` removes `x` where the line started).
  */
 const folderFlow = (cwd: string, home: string) => {
   let flow: Flow = { ok: new Set([cwd]), fail: NONE };
   let separator: Separator | undefined;
   // The pipeline being run: what came before it and how it is joined. Its status is its last command's.
   let pipeline = { separator, before: flow, folders: flow.ok };
-  const subshells: Array<typeof pipeline> = [];
+  // Where the current `&&`/`||` list started, which is where the shell stays when it runs in the background.
+  let list = flow.ok;
+  const subshells: Array<{ pipeline: typeof pipeline; list: ReadonlySet<string> }> = [];
   const start = () => {
     if (separator !== "|") pipeline = { separator, before: flow, folders: entering(flow, separator) };
+    if (separator !== "|" && separator !== "&&" && separator !== "||") list = pipeline.folders;
     return pipeline.folders;
   };
   const finish = (outcome: Flow) => {
@@ -424,19 +433,23 @@ const folderFlow = (cwd: string, home: string) => {
     separator: (next: Separator) => {
       if (next === "(") {
         const folders = start();
-        subshells.push(pipeline);
+        subshells.push({ pipeline, list });
         flow = { ok: folders, fail: NONE };
         separator = undefined;
       } else if (next === ")") {
-        pipeline = subshells.pop() ?? pipeline;
+        const outer = subshells.pop();
+        if (outer !== undefined) ({ pipeline, list } = outer);
         finish({ ok: pipeline.folders, fail: pipeline.folders });
+      } else if (next === "&") {
+        flow = { ok: list, fail: NONE };
+        separator = next;
       } else separator = next;
     },
     /** The folder `words` runs in, moving the flow past it. `after` is the separator that follows it. */
     command: (words: ReadonlyArray<string>, after: Separator | undefined): string => {
       const inPipeline = separator === "|" || after === "|";
       const folders = start();
-      const moves = DIRECTORY_COMMANDS.has(words[0] ?? "") && !inPipeline && after !== "&";
+      const moves = DIRECTORY_COMMANDS.has(words[0] ?? "") && !inPipeline;
       finish(
         moves
           ? {
