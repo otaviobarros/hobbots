@@ -1,17 +1,17 @@
 import { NodeHttpServer } from "@effect/platform-node";
-import { Effect, Layer, Logger, References } from "effect";
+import { Context, Effect, Layer, Logger, type LogLevel, References } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { isRoutineRead, QuietRoutineReads } from "../src/request-log.ts";
 
-const logged: Array<{ url: unknown; status: unknown }> = [];
+const logged: Array<{ level: string; url: unknown; status: unknown }> = [];
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
 beforeAll(() => {
-  const capture = Logger.make(({ fiber }) => {
+  const capture = Logger.make(({ fiber, logLevel }) => {
     const annotations = fiber.getRef(References.CurrentLogAnnotations);
-    logged.push({ url: annotations["http.url"], status: annotations["http.status"] });
+    logged.push({ level: logLevel, url: annotations["http.url"], status: annotations["http.status"] });
   });
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(
@@ -23,13 +23,20 @@ beforeAll(() => {
       Logger.layer([capture]),
     ).pipe(Layer.provide(NodeHttpServer.layerHttpServices)),
   );
-  handler = (request) => web.handler(request);
+  handler = (request) => web.handler(request, Context.make(References.MinimumLogLevel, minimum));
   dispose = web.dispose;
 });
 
 afterAll(() => dispose());
 
+let minimum: LogLevel.LogLevel = "Info";
+
 const send = (method: string, path: string) => handler(new Request(`http://localhost:4317${path}`, { method }));
+
+beforeEach(() => {
+  logged.length = 0;
+  minimum = "Info";
+});
 
 describe("the request log", () => {
   // covers DP-002
@@ -39,9 +46,19 @@ describe("the request log", () => {
     await send("POST", "/api/agents");
     await send("GET", "/api/broken");
     expect(logged).toEqual([
-      { url: "/api/missing", status: 404 },
-      { url: "/api/agents", status: 201 },
-      { url: "/api/broken", status: 500 },
+      { level: "Info", url: "/api/missing", status: 404 },
+      { level: "Info", url: "/api/agents", status: 201 },
+      { level: "Info", url: "/api/broken", status: 500 },
+    ]);
+  });
+
+  it("[TC-DP-054] logs successful reads at Debug when the log level asks for them", async () => {
+    minimum = "Debug";
+    await send("GET", "/api/approvals?thread=1");
+    await send("POST", "/api/agents");
+    expect(logged).toEqual([
+      { level: "Debug", url: "/api/approvals", status: 200 },
+      { level: "Info", url: "/api/agents", status: 201 },
     ]);
   });
 
