@@ -54,7 +54,11 @@ export const sortArchived = (hobs: ReadonlyArray<Agent>): Array<Agent> =>
 export const threadsQuery = (agentId: AgentId) =>
   queryOptions({
     queryKey: queryKeys.threads(agentId),
-    queryFn: syncedThreads(agentId, () => call((c) => c.agents.threads({ params: { agentId } })), sortThreads),
+    queryFn: syncedThreads(
+      agentId,
+      () => call((c) => c.agents.threads({ params: { agentId }, query: {} })),
+      sortThreads,
+    ),
   });
 
 export const messagesQuery = (threadId: ThreadId) =>

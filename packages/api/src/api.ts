@@ -29,6 +29,8 @@ import {
   InvalidHob,
   MessageNotQueued,
   ReplyNotResumable,
+  ThreadArchived,
+  ThreadArchiveRefused,
   ThreadNotFound,
   ToolLogNotFound,
 } from "./errors.ts";
@@ -182,8 +184,10 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       success: Agent,
       error: AgentNotFound,
     }),
+    // Lists the hob's live threads; `?archived=true` lists its archived ones, newest-archived first.
     HttpApiEndpoint.get("threads", "/agents/:agentId/threads", {
       params: { agentId: AgentId },
+      query: { archived: Schema.optionalKey(Schema.Literals(["true", "false"])) },
       success: Schema.Array(Thread),
       error: AgentNotFound,
     }),
@@ -206,7 +210,7 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       payload: SendPromptPayload,
       success: SendPromptResult,
-      error: [ThreadNotFound, HobUnavailable],
+      error: [ThreadNotFound, HobUnavailable, ThreadArchived],
     }),
     HttpApiEndpoint.delete("removeQueued", "/threads/:threadId/messages/:messageId", {
       params: { threadId: ThreadId, messageId: MessageId },
@@ -225,7 +229,7 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
     HttpApiEndpoint.post("continueReply", "/threads/:threadId/messages/:messageId/continue", {
       params: { threadId: ThreadId, messageId: MessageId },
       success: Message,
-      error: [ThreadNotFound, HobUnavailable, ReplyNotResumable],
+      error: [ThreadNotFound, HobUnavailable, ReplyNotResumable, ThreadArchived],
     }),
     // The whole redacted output of a tool step that shows only its start and end, as plain text.
     HttpApiEndpoint.get("toolLog", "/threads/:threadId/messages/:messageId/steps/:stepId/log", {
@@ -238,7 +242,18 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId },
       payload: SetBrainPayload,
       success: Thread,
-      error: [ThreadNotFound, HobUnavailable, InvalidHob, AgentNotFound],
+      error: [ThreadNotFound, HobUnavailable, InvalidHob, AgentNotFound, ThreadArchived],
+    }),
+    // Archiving again, or restoring a live thread, returns the thread unchanged.
+    HttpApiEndpoint.post("archive", "/threads/:threadId/archive", {
+      params: { threadId: ThreadId },
+      success: Thread,
+      error: [ThreadNotFound, ThreadArchiveRefused],
+    }),
+    HttpApiEndpoint.post("restore", "/threads/:threadId/restore", {
+      params: { threadId: ThreadId },
+      success: Thread,
+      error: [ThreadNotFound, ThreadArchiveRefused],
     }),
   )
   .prefix("/api") {}
