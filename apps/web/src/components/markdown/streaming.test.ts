@@ -51,3 +51,33 @@ describe("holdBackPartialTable, harder tables", () => {
     expect(holdBackPartialTable(text)).toBe(text);
   });
 });
+
+describe("holdBackPartialTable, chunk by chunk", () => {
+  it("keeps a header without outer pipes hidden while its delimiter row arrives", () => {
+    const full = "Results:\n\nName | Score\n--- | ---\nPip | 3\n";
+    // From the first pipe, the line may be a table header.
+    const header = full.indexOf("|") + 1;
+    const delimiterEnd = full.indexOf("Pip");
+    for (let cut = header; cut < delimiterEnd; cut += 1) {
+      expect(holdBackPartialTable(full.slice(0, cut)), `after ${JSON.stringify(full.slice(0, cut))}`).toBe(
+        "Results:\n\n",
+      );
+    }
+    expect(holdBackPartialTable(full.slice(0, delimiterEnd))).toBe("Results:\n\nName | Score\n--- | ---\n");
+  });
+
+  it("never shows a header without its delimiter row, at any cut", () => {
+    for (const full of ["| Hob | Task |\n| --- | --- |\n| Pip | Writing |\n", "> | Hob | Task |\n> | :-- | --: |\n"]) {
+      for (let cut = 1; cut <= full.length; cut += 1) {
+        const shown = holdBackPartialTable(full.slice(0, cut));
+        if (shown.includes("Hob")) expect(shown, `after ${JSON.stringify(full.slice(0, cut))}`).toMatch(/-- \|/);
+      }
+    }
+  });
+
+  it("keeps code with pipes visible inside a quoted code block", () => {
+    const text = "> ```sh\n> ls | wc -l\n";
+    expect(holdBackPartialTable(text)).toBe(text);
+    expect(holdBackPartialTable("> ```sh\n> ls | wc -l")).toBe("> ```sh\n> ls | wc -l");
+  });
+});

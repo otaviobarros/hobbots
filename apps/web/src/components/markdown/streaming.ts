@@ -8,6 +8,8 @@ const DELIMITER_ROW = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 const unquoted = (line: string) => line.replace(/^\s*(>\s?)*/, "");
 // A row of a table, with or without outer pipes, holds a pipe.
 const isTableLine = (line: string) => unquoted(line).includes("|");
+// The start of a delimiter row still arriving, such as `>`, `-` or `--- | :-`: only dashes, colons, pipes and spaces after any quote marks.
+const DELIMITER_START = /^[\s|:-]*$/;
 
 /**
  * Whether the text before `lines[end]` leaves a code block open. A fence closes only on the same
@@ -15,7 +17,7 @@ const isTableLine = (line: string) => unquoted(line).includes("|");
  */
 const insideFence = (lines: ReadonlyArray<string>, end: number) => {
   let open: string | null = null;
-  for (const line of lines.slice(0, end)) {
+  for (const line of lines.slice(0, end).map(unquoted)) {
     const fence = FENCE.exec(line)?.[1];
     if (fence === undefined) continue;
     if (open === null) open = fence;
@@ -32,7 +34,12 @@ const insideFence = (lines: ReadonlyArray<string>, end: number) => {
 export const holdBackPartialTable = (text: string): string => {
   const lines = text.split("\n");
   const last = lines.length - 1;
-  if (isTableLine(lines[last] ?? "") && !insideFence(lines, last)) lines[last] = "";
+  const partial = lines[last] ?? "";
+  // A row still being written waits, and so does the start of a delimiter row under a table line,
+  // such as `---` before its `| ---` arrives.
+  const delimiterStarting =
+    partial.trim() !== "" && DELIMITER_START.test(unquoted(partial)) && isTableLine(lines[last - 1] ?? "");
+  if ((isTableLine(partial) || delimiterStarting) && !insideFence(lines, last)) lines[last] = "";
 
   // The table lines just before the end, if any, and whether they are still only a header.
   const end = lines[last] === "" ? last : lines.length;
