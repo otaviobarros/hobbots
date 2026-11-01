@@ -1,5 +1,6 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { secretShapeIn } from "@hobbots/domain";
 
 /**
  * The user's own Git config files, which the sandbox opens for reading (ADR 014). The home folder is
@@ -18,9 +19,6 @@ export type GitConfigAccess =
 // Words that name credentials, such as `http.extraHeader = Authorization: Bearer …` or a credential
 // helper written inline as `!f() { echo password=…; }; f`.
 const SECRET_WORDS = ["token", "password", "passwd", "secret", "extraheader", "authorization", "apikey", "api-key"];
-// Token shapes that can sit anywhere: GitHub, GitLab and Slack tokens, AWS access keys.
-const TOKEN_SHAPE =
-  /\b(?:gh[pousr]_[A-Za-z\d]{20,}|github_pat_\w{20,}|glpat-[\w-]{20,}|xox[abprs]-[\w-]{10,}|AKIA[A-Z\d]{16})\b/;
 
 // Plain string scans rather than backtracking patterns, since the files are the user's to shape.
 const isSpace = (c: string | undefined) => c === " " || c === "\t" || c === "\r";
@@ -93,7 +91,7 @@ export type GitFileKind = "config" | "list";
  * scanned, comments included, since the sandbox opens the file as it is. In a config file any line
  * naming a token, password, secret or authorization header counts, in a key, a value (an inline
  * credential helper) or a comment, apart from file paths, which name programs such as 1Password's
- * signer. Pattern lists only count URL passwords and token shapes, since
+ * signer. Pattern lists only count URL passwords and the secret shapes Hobbots redacts, since
  * entries such as `secrets/` or `*.token` are common there.
  */
 export const secretIn = (text: string, kind: GitFileKind = "config"): string | null => {
@@ -104,7 +102,8 @@ export const secretIn = (text: string, kind: GitFileKind = "config"): string | n
   };
   if (kind === "config" && lines.some(names)) return "it names a token, password, secret or authorization header";
   if (lines.some(hasUrlPassword)) return "it holds a URL with a password";
-  if (lines.some((line) => TOKEN_SHAPE.test(line))) return "it holds what looks like an access token";
+  const shape = lines.map(secretShapeIn).find((kind) => kind !== null);
+  if (shape !== undefined) return `it holds what looks like a secret (${shape})`;
   return null;
 };
 

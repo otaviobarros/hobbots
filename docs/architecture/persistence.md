@@ -12,7 +12,7 @@ Runtime tool side effects are not inside a SQL transaction. Record intent and re
 
 Back up relational state and artifact storage consistently. Define migration, retention, redaction and restore policy before release. Each installation has one database; there are no replicas to synchronize. Test duplicate handling, crash boundaries, leases, migrations and restore against SQLite, and against PostgreSQL before offering it.
 
-The journal keeps 7 days and at least the latest 10,000 entries; an older cursor gets an explicit snapshot refresh. It serves client resume only: durable work keeps its own records, so compaction never discards what open responsibilities need. Exclude secrets from payloads and restrict artifact access through executor/workspace policy.
+The journal keeps 7 days and at least the latest 10,000 entries; an older cursor gets an explicit snapshot refresh. It serves client resume only: durable work keeps its own records, so compaction never discards what open responsibilities need. Exclude secrets from payloads ([redaction](permissions.md#secrets-in-tool-activity)) and restrict artifact access through executor/workspace policy.
 
 ## Search
 

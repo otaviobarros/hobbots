@@ -1,4 +1,4 @@
-import { actionDigest, type RuntimeEvent, type TurnApprovals } from "@hobbots/agents";
+import { actionDigest, type Redactor, type RuntimeEvent, type TurnApprovals } from "@hobbots/agents";
 import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
@@ -65,11 +65,12 @@ export const decideCall = (
   approvals: TurnApprovals | null | undefined,
   call: ToolCall,
   report: (event: RuntimeEvent) => void,
+  redaction?: Redactor | null,
 ): Effect.Effect<CallDecision> =>
   Effect.gen(function* () {
     let verdict = yield* decideIn(engine, context, call);
     if (verdict === undefined) return { _tag: "Refuse", verdict, reason: UNKNOWN_TOOL(call.tool) } as const;
-    const label = toolLabel(call.tool, call.input);
+    const label = toolLabel(call.tool, call.input, redaction?.text);
     while (verdict.decision === "ask") {
       if (!approvals) return { _tag: "Refuse", verdict, reason: refusal(verdict) } as const;
       const asked: PolicyVerdict = verdict;

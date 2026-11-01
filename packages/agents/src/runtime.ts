@@ -10,6 +10,7 @@ import type {
   SafetyPreset,
 } from "@hobbots/domain";
 import { Context, type Effect, Schema, type Stream } from "effect";
+import type { Redactor } from "./secrets.ts";
 
 /** Normalized runtime output. Vendor message shapes stay inside each adapter. */
 export type RuntimeEvent =
@@ -171,6 +172,11 @@ export interface PromptRequest {
   readonly tools?: ToolAccess | null;
   /** Asks the user about calls the policy answers Ask for; absent or null, those calls are refused. */
   readonly approvals?: TurnApprovals | null;
+  /**
+   * Redacts secrets from what the adapter reports about a tool call, before it shortens a label. An
+   * adapter that puts a credential in the tools' environment remembers it here.
+   */
+  readonly redaction?: Redactor | null;
 }
 
 export interface RuntimeAdapterShape {

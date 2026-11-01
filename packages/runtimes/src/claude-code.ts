@@ -20,6 +20,7 @@ import {
 import {
   operationDecision,
   type PromptRequest,
+  type Redactor,
   RuntimeAdapter,
   RuntimeError,
   type RuntimeEvent,
@@ -609,7 +610,9 @@ export const policyHooks = (
   turn: ToolTurn,
   report: (event: RuntimeEvent) => void,
   approvals?: TurnApprovals | null,
+  redaction?: Redactor | null,
 ): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
+  const label = (tool: string, input: Record<string, unknown>) => toolLabel(tool, input, redaction?.text);
   const started = new Set<string>();
   // Each call as the hook saw it, so the permission callback decides the same call in the same folder.
   const seen = new Map<string, ToolCall>();
@@ -621,7 +624,7 @@ export const policyHooks = (
       tool,
       operation: verdict.operation,
       targets: verdict.targets,
-      label: toolLabel(tool, input),
+      label: label(tool, input),
     });
   };
   const refuse = (id: string, tool: string, input: Record<string, unknown>, decision: CallDecision) => {
@@ -633,7 +636,7 @@ export const policyHooks = (
       // An unknown tool is refused as anything outside what the hob may do.
       operation: decision.verdict?.operation ?? "outside-folders",
       targets: decision.verdict?.targets ?? [],
-      label: toolLabel(tool, input),
+      label: label(tool, input),
       reason,
       decidedBy: decision._tag === "Refuse" && decision.decidedBy === "user" ? "user" : "policy",
     });
@@ -647,8 +650,8 @@ export const policyHooks = (
     const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
-    const decision = await Effect.runPromise(decideCall(engine, turn.context, null, call, report)).catch(() =>
-      failed(tool),
+    const decision = await Effect.runPromise(decideCall(engine, turn.context, null, call, report, redaction)).catch(
+      () => failed(tool),
     );
     if (decision._tag === "Run") {
       begin(call.id, tool, toolInput, decision.verdict);
@@ -701,7 +704,7 @@ export const policyHooks = (
     }
     const call = { id: options.toolUseID, tool, input, cwd: hooked?.cwd ?? (turn.folders[0] as string) };
     // An aborted call stops waiting, which expires its request.
-    const decision = await Effect.runPromise(decideCall(engine, turn.context, approvals, call, report), {
+    const decision = await Effect.runPromise(decideCall(engine, turn.context, approvals, call, report, redaction), {
       signal: options.signal,
     }).catch(() => failed(tool));
     if (decision._tag === "Run") {
@@ -840,6 +843,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           // The sandbox opens the binary's folder, so it must be a real path, never the hub's own folder.
           const absoluteBinary = sandboxed ? yield* resolveBinary(binary) : binary;
           const login = sandboxed ? yield* sandboxLogin(binary) : {};
+          // The sign-in sits in the tools' environment, where any command can print it.
+          for (const value of Object.values(login)) request.redaction?.remember({ value, kind: "Claude sign-in" });
           // A sandboxed turn keeps its sessions in the hob's runtime folder, and one without tools in the
           // user's own, so a thread resumes wherever its last turn ran.
           const { sessionId } = request;
@@ -903,7 +908,13 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   ...(tools
                     ? toolOptions(
                         tools,
-                        policyHooks(engine, tools, (event) => Queue.offerUnsafe(queue, event), request.approvals),
+                        policyHooks(
+                          engine,
+                          tools,
+                          (event) => Queue.offerUnsafe(queue, event),
+                          request.approvals,
+                          request.redaction,
+                        ),
                         base.env,
                       )
                     : {}),

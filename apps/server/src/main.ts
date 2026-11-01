@@ -9,7 +9,9 @@ import {
   HobLifecycle,
   HobService,
   PermissionSummary,
+  SecretRedaction,
 } from "@hobbots/agents";
+import { secretsFromEnv } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
@@ -85,7 +87,16 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(CanonicalSharedFolders))
       .pipe(
         Layer.provideMerge(
-          Layer.mergeAll(Persistence, EventBus.layer, HobAdmission.layer, NodeFolderChecks, Runtime, identity),
+          Layer.mergeAll(
+            Persistence,
+            EventBus.layer,
+            HobAdmission.layer,
+            NodeFolderChecks,
+            Runtime,
+            identity,
+            // The hub's credentials, provider keys included, are redacted by value from what tools report.
+            SecretRedaction.layer(secretsFromEnv(process.env)),
+          ),
         ),
       );
 

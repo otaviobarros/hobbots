@@ -93,6 +93,19 @@ describe("Claude Code tool calls as policy requests", () => {
     expect(toolLabel("Grep", { pattern: "TODO" })).toBe("Searching for TODO");
     expect(toolLabel("Mystery", {})).toBe("Using Mystery");
   });
+
+  it("redacts secrets in a label before shortening it, so no part of one is left", () => {
+    const token = `ghp_${"a".repeat(36)}`;
+    // Cut at 60 characters, the label would end with the token's first characters.
+    const command = `git remote set-url origin https://x:${token}@github.com/acme/app.git`;
+    expect(toolLabel("Bash", { command })).toBe("Running git remote set-url origin https://x:[redacted: GitHub token…");
+    const known = "a-known-hub-value-123456";
+    const redact = (text: string) => text.replaceAll(known, "[redacted: HUB_TOKEN]");
+    expect(toolLabel("Bash", { command: `printf %s ${known} | wc -c` }, redact)).toBe(
+      "Running printf %s [redacted: HUB_TOKEN] | wc -c",
+    );
+    expect(toolLabel("Grep", { pattern: token })).toBe("Searching for [redacted: GitHub token]");
+  });
 });
 
 describe("tools offered for a turn", () => {

@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import { operationDecision } from "@hobbots/agents";
-import { narrowest, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS } from "@hobbots/domain";
+import { narrowest, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
 import type { PolicyContext, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 
 /**
@@ -199,11 +199,18 @@ export const toolRequests = (
 
 const shorten = (value: string, limit = 60) => (value.length > limit ? `${value.slice(0, limit - 1)}…` : value);
 
-/** Short words for a tool step, from the call's own arguments. */
-export const toolLabel = (tool: string, input: Record<string, unknown>): string => {
+/**
+ * Short words for a tool step, from the call's own arguments. Secrets are redacted with `redact`
+ * before anything is shortened, so a cut never leaves part of one behind.
+ */
+export const toolLabel = (
+  tool: string,
+  input: Record<string, unknown>,
+  redact: (text: string) => string = redactSecrets,
+): string => {
   const file = (key: string) => {
     const path = text(input, key);
-    return path === undefined ? "a file" : basename(path);
+    return path === undefined ? "a file" : basename(redact(path));
   };
   switch (tool) {
     case "Read":
@@ -217,9 +224,9 @@ export const toolLabel = (tool: string, input: Record<string, unknown>): string 
       return `Editing ${file("notebook_path")}`;
     case "Glob":
     case "Grep":
-      return `Searching for ${shorten(text(input, "pattern") ?? "files")}`;
+      return `Searching for ${shorten(redact(text(input, "pattern") ?? "files"))}`;
     case "Bash":
-      return `Running ${shorten(text(input, "command")?.split("\n")[0] ?? "a command")}`;
+      return `Running ${shorten(redact(text(input, "command") ?? "a command").split("\n")[0] ?? "a command")}`;
     default:
       return `Using ${tool}`;
   }
