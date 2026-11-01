@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { useAnswerQuestion } from "../../api/tasks.ts";
 import { HobSprite } from "../hob-sprite.tsx";
+import { enterSends } from "./enter-sends.ts";
 import { messages } from "./messages.ts";
 import type { HobLookup } from "./use-work.ts";
 import { taskTitle } from "./work-model.ts";
@@ -81,12 +82,7 @@ function AnswerForm({ question, askerName }: { question: Question; askerName: st
         placeholder={copy.answerPlaceholder}
         value={answer}
         onChange={(event) => setAnswer(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-            event.preventDefault();
-            submit();
-          }
-        }}
+        onKeyDown={enterSends(submit)}
         className="min-h-10 rounded-none border-2 border-control bg-deep text-text"
       />
       <span className="flex items-center gap-2">

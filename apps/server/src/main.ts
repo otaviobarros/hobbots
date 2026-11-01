@@ -32,6 +32,7 @@ import { HttpRouter } from "effect/http";
 import { ServerConfig } from "./config.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
+import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
@@ -93,6 +94,9 @@ const ServerLive = Layer.unwrap(
             JournalCompaction,
             // Served to turns that work on a Task (ADR 018); the hub checks every call.
             TaskTools.layer(sep === "\\" ? "\\" : "/", config.taskLimits),
+            config.runtime === "fake" && config.fakeQuest === "black-friday"
+              ? FakeQuestLive(FAKE_QUEST_STEP)
+              : Layer.empty,
           ),
         ),
       )

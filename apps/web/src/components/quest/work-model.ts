@@ -85,8 +85,10 @@ const rowStatus = (tree: TaskTree, task: Task): RowStatus => {
   }
 };
 
+/** What the Task's owner last reported; automatic checkpoints only repeat its state. */
 const latestOf = (tree: TaskTree, task: Task): string | null =>
-  tree.checkpoints.findLast((checkpoint) => checkpoint.taskId === task.id)?.summary ?? null;
+  tree.checkpoints.findLast((checkpoint) => checkpoint.taskId === task.id && checkpoint.source !== "automatic")
+    ?.summary ?? null;
 
 const waitsOnOf = (tree: TaskTree, task: Task): ReadonlyArray<AgentId> => [
   ...new Set(

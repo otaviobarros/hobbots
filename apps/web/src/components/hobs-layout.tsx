@@ -56,18 +56,21 @@ function Workspace({
   return (
     <div className="flex min-w-0 flex-1">
       {navOpen && <HobList hobId={hobId} threadId={threadId} onHide={() => setNavOpen(false)} />}
-      {main({
-        hobId,
-        threadId,
-        focusMessageId,
-        navOpen,
-        panelOpen,
-        onShowNav: () => setNavOpen(true),
-        onTogglePanel: () => setPanelOpen(!panelOpen),
-      })}
-      {threadId !== undefined && taskId !== undefined && (
-        <TaskDrawer key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} />
-      )}
+      {/* The drawer opens over the end of the chat, so the conversation keeps its width. */}
+      <div className="relative flex min-w-0 flex-1">
+        {main({
+          hobId,
+          threadId,
+          focusMessageId,
+          navOpen,
+          panelOpen,
+          onShowNav: () => setNavOpen(true),
+          onTogglePanel: () => setPanelOpen(!panelOpen),
+        })}
+        {threadId !== undefined && taskId !== undefined && (
+          <TaskDrawer key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} />
+        )}
+      </div>
       {panelOpen && <SidePanel hobId={hobId} threadId={threadId} />}
     </div>
   );

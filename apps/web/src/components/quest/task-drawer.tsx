@@ -5,6 +5,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useSendPrompt } from "../../api/queries.ts";
 import { formatTime } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
+import { enterSends } from "./enter-sends.ts";
 import { messages } from "./messages.ts";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import { type HobLookup, useHobLookup, useOpenTask, useThreadTrees } from "./use-work.ts";
@@ -36,7 +37,7 @@ export function TaskDrawer({ hobId, threadId, taskId }: { hobId: AgentId; thread
       onKeyDown={(event) => {
         if (event.key === "Escape") open(undefined);
       }}
-      className="flex w-[420px] shrink-0 animate-hb-in flex-col border-s-4 border-control bg-panel"
+      className="absolute inset-y-0 end-0 z-10 flex w-[420px] max-w-full animate-hb-in flex-col border-s-4 border-control bg-panel shadow-[-14px_0_34px_rgb(0_0_0/0.5)]"
     >
       <header className="flex items-center gap-2 border-b-2 border-line px-3.5 py-3">
         <Button variant="icon" size="icon" onClick={() => open(undefined)} aria-label={copy.close} title={copy.close}>
@@ -137,7 +138,7 @@ function Detail({
                 <span className="h-fit shrink-0 bg-line px-1.5 text-xs font-bold text-moonlight">
                   {messages.checkpoint[checkpoint.kind]}
                 </span>
-                <span>{checkpoint.summary}</span>
+                {checkpoint.source !== "automatic" && <span>{checkpoint.summary}</span>}
               </li>
             ))}
           </ol>
@@ -236,12 +237,7 @@ function NoteBox({ tree, task, hobs, fallback }: { tree: TaskTree; task: Task; h
           placeholder={copy.noteLabel({ name: lead.name })}
           value={note}
           onChange={(event) => setNote(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              submit();
-            }
-          }}
+          onKeyDown={enterSends(submit)}
           className="min-h-9 flex-1 rounded-none border-2 border-control bg-deep text-sm text-text"
         />
         <Button type="submit" size="sm" disabled={text === "" || send.isPending}>
