@@ -1,7 +1,7 @@
 import { AgentId, ApprovalId, ApprovalRequest, MessageId, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
-import { decisionErrorText, exactAction, resultText } from "./approval-text.ts";
+import { decisionErrorText, exactAction, expiryText, resultText } from "./approval-text.ts";
 
 const request = (fields: Partial<ApprovalRequest> = {}) =>
   new ApprovalRequest({
@@ -42,6 +42,9 @@ describe("exactAction", () => {
 describe("resultText", () => {
   it("says how the request ended, with the deny reason when there is one", () => {
     expect(resultText(request({ state: "approved" }), "Pip")).toBe("✓ Allowed once. Pip carries on.");
+    expect(resultText(request({ state: "approved", lifetime: "always" }), "Pip")).toBe(
+      "✓ Allowed, and the rule is saved. Pip carries on.",
+    );
     expect(resultText(request({ state: "denied" }), "Pip")).toBe("✕ Denied. Pip was told it may not.");
     expect(resultText(request({ state: "denied", denyReason: "Not on Fridays" }), "Pip")).toBe(
       "✕ Denied: “Not on Fridays”. Pip was told why.",
@@ -50,10 +53,25 @@ describe("resultText", () => {
   });
 });
 
+describe("expiryText", () => {
+  it("says when a pending request expires, today or tomorrow", () => {
+    const now = new Date(2026, 9, 31, 9, 0);
+    const later = new Date(2026, 9, 31, 21, 30).toISOString();
+    const tomorrow = new Date(2026, 10, 1, 8, 15).toISOString();
+    expect(expiryText(request({ expiresAt: later }), now)).toMatch(/^Expires at .+ if nobody decides/);
+    expect(expiryText(request({ expiresAt: tomorrow }), now)).toMatch(/^Expires tomorrow at .+ if nobody decides/);
+    expect(expiryText(request({ expiresAt: new Date(2026, 9, 31, 8, 0).toISOString() }), now)).toBe(
+      "Expiring now. Nobody decided in time.",
+    );
+    expect(expiryText(request({ expiresAt: null }), now)).toBe("Expires if this reply stops or Hobbots restarts.");
+  });
+});
+
 describe("decisionErrorText", () => {
   it("tells a closed or changed request from a failed send", () => {
     expect(decisionErrorText(new ApiError("", "ApprovalClosed"))).toMatch(/already decided/);
     expect(decisionErrorText(new ApiError("", "ApprovalActionChanged"))).toMatch(/changed/);
+    expect(decisionErrorText(new ApiError("", "GrantRuleRefused"))).toMatch(/could not save this rule/);
     expect(decisionErrorText(new Error("offline"))).toMatch(/could not send/);
   });
 });

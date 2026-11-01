@@ -40,13 +40,15 @@ interface Approval {
 const push = (branch: string) => `Ship it\nfake:tool Bash git push origin ${branch}`;
 
 /** A hub where Pip works in one shared folder under Balanced, with its chat open on a fresh page. */
-const pipAsksToPush = async (page: Page, branch = "feature") => {
+const pipAsksToPush = async (page: Page, branch = "feature") => pipAsks(page, push(branch));
+
+const pipAsks = async (page: Page, prompt: string, safetyPreset = "balanced") => {
   const current = await startHub(dataDir);
   hub = current;
   await api(current, "PATCH", "/api/setup", {
     completed: true,
     connectedProviders: ["claude-code"],
-    safetyPreset: "balanced",
+    safetyPreset,
     approvedFolders: [shared],
   });
   const pip = await api<{ id: string }>(current, "POST", "/api/agents", {
@@ -65,7 +67,7 @@ const pipAsksToPush = async (page: Page, branch = "feature") => {
   });
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Pip/ });
-  await composer.fill(push(branch));
+  await composer.fill(prompt);
   await composer.press("Enter");
   const card = page.getByRole("region", { name: "Pip asks permission" });
   await expect(card).toBeVisible();
@@ -105,6 +107,9 @@ test("[TC-PE-078] a push to the default branch is high risk and needs the confir
 }) => {
   const { card } = await pipAsksToPush(page, "main");
   await expect(card).toContainText("High risk · once only");
+  // High risk is once only: no Always, and no note about rules, since the check box says why.
+  await expect(card.getByRole("button", { name: "Always for this site" })).toHaveCount(0);
+  await expect(card).not.toContainText("cannot save a rule");
   const allow = card.getByRole("button", { name: "Allow once" });
   await expect(allow).toBeDisabled();
 
@@ -167,4 +172,85 @@ test("[TC-PE-076] the card follows a decision made elsewhere, and a stopped repl
   await page.getByRole("button", { name: "■ Stop" }).click();
   await expect(second.getByRole("status")).toHaveText("◷ Expired before anyone decided. Nothing ran.");
   await expect(second.getByRole("button", { name: "Allow once" })).toBeHidden();
+});
+
+interface Grant {
+  readonly rule: unknown;
+  readonly lifetime: string;
+}
+
+// Balanced asks before deleting files, and Careful before editing them; the fake runtime decides
+// the call without running it.
+const remove = (file: string) => `Tidy up\nfake:tool Bash rm ${file}`;
+const write = (file: string) => `Draft it\nfake:tool Write ${file}`;
+
+/** Sends a prompt once the last reply has ended. */
+const sendNext = async (page: Page, prompt: string) => {
+  await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden();
+  const composer = page.getByRole("textbox", { name: /^Message Pip/ });
+  await composer.fill(prompt);
+  await composer.press("Enter");
+};
+
+// covers PE-007
+test("[TC-PE-101] Always shows the rule it saves, saves exactly that rule, and only matching calls skip asking", async ({
+  page,
+}) => {
+  const { current, card } = await pipAsks(page, remove("old.txt"));
+  await expect(card).toContainText(/Expires (tomorrow )?at .+ if nobody decides/);
+  await card.getByRole("button", { name: "Always for this site" }).click();
+  const form = card.getByRole("form", { name: "Always for this site" });
+  // A delete's rule names the exact path, never the folder above it, so there is nothing to narrow.
+  await expect(form.getByRole("list", { name: "The rule to save" })).toHaveText(
+    `Always let Pip delete ${shared}/old.txt`,
+  );
+  await expect(form.getByRole("radio")).toHaveCount(0);
+
+  // Escape takes the rule back without saving it, with focus on Always.
+  await page.keyboard.press("Escape");
+  await expect(card.getByRole("button", { name: "Always for this site" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(form.getByRole("button", { name: "Save the rule and allow" })).toBeFocused();
+  await page.keyboard.press("Enter");
+
+  await expect(card.getByRole("status")).toHaveText("✓ Allowed, and the rule is saved. Pip carries on.");
+  await expect(card.getByRole("status")).toBeFocused();
+  const grants = await api<ReadonlyArray<Grant>>(current, "GET", "/api/grants");
+  expect(grants.map((grant) => [grant.lifetime, grant.rule])).toEqual([
+    ["always", { _tag: "Paths", operation: "delete-files", paths: [`${shared}/old.txt`] }],
+  ]);
+
+  // The rule answers the same delete: it runs with no new card.
+  const cards = page.getByRole("region", { name: "Pip asks permission" });
+  await sendNext(page, remove("old.txt"));
+  await expect(page.getByText(/^Echo: Tidy up/)).toHaveCount(2);
+  await expect(cards).toHaveCount(1);
+  // Another file is not covered, so it asks again.
+  await sendNext(page, remove("other.txt"));
+  await expect(cards).toHaveCount(2);
+});
+
+// covers PE-007
+test("[TC-PE-102] Always narrowed to the action's files saves only those files, and another file still asks", async ({
+  page,
+}) => {
+  const { current, card } = await pipAsks(page, write("notes.md"), "careful");
+  await card.getByRole("button", { name: "Always for this site" }).click();
+  const form = card.getByRole("form", { name: "Always for this site" });
+  const rules = form.getByRole("list", { name: "The rule to save" });
+  await expect(rules).toHaveText(`Always let Pip create and edit files directly in ${shared}`);
+  await expect(form.getByRole("radio", { name: "Every file directly in the folder" })).toBeChecked();
+  await form.getByRole("radio", { name: "Only the files of this action" }).check();
+  await expect(rules).toHaveText(`Always let Pip create and edit ${shared}/notes.md`);
+  await form.getByRole("button", { name: "Save the rule and allow" }).click();
+
+  await expect(card.getByRole("status")).toHaveText("✓ Allowed, and the rule is saved. Pip carries on.");
+  const grants = await api<ReadonlyArray<Grant>>(current, "GET", "/api/grants");
+  expect(grants.map((grant) => grant.rule)).toEqual([
+    { _tag: "Paths", operation: "edit-files", paths: [`${shared}/notes.md`] },
+  ]);
+
+  // Another file in the same folder is not covered, so it asks again.
+  await sendNext(page, write("other.md"));
+  await expect(page.getByRole("region", { name: "Pip asks permission" })).toHaveCount(2);
 });
