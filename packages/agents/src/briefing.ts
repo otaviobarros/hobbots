@@ -49,6 +49,7 @@ const STEP_STATES: Record<ReplyStep["state"], string> = {
   failed: "failed",
   denied: "denied",
   unfinished: "outcome unknown",
+  uncertain: "cut off while it ran, outcome unknown: check before running it again",
 };
 
 const ENDINGS: Partial<Record<Message["status"], string>> = {

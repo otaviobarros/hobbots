@@ -1,6 +1,6 @@
 import type { ReplyStep } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { nextSteps } from "../src/steps.ts";
+import { nextSteps, uncertainCalls } from "../src/steps.ts";
 
 const call = { tool: "Bash", operation: "run-commands", targets: ["/work"] } as const;
 const started = { _tag: "ToolStarted", id: "t1", ...call, label: "Running pnpm test" } as const;
@@ -19,8 +19,9 @@ describe("nextSteps", () => {
     expect(awaiting).toEqual([
       { id: "t1", kind: "tool", label: "Running pnpm test", state: "awaiting", call, approvalId: "a1" },
     ]);
-    const running = nextSteps(awaiting ?? [], 0, started);
+    const running = nextSteps(awaiting ?? [], 0, started, "2026-11-01T01:00:00.000Z");
     expect(states(running)).toEqual(["t1:running"]);
+    expect(running?.[0]?.startedAt).toBe("2026-11-01T01:00:00.000Z");
     const failed = nextSteps(running ?? [], 0, { _tag: "ToolFinished", id: "t1", failed: true });
     expect(states(failed)).toEqual(["t1:failed"]);
     // A late or repeated end changes nothing, and text is not a step.
@@ -60,5 +61,29 @@ describe("nextSteps", () => {
       "thinking-1:done",
       "thinking-1@1:done",
     ]);
+  });
+});
+
+describe("uncertainCalls", () => {
+  it("names each tool call left uncertain, with what it acted on, and nothing else", () => {
+    const steps: ReadonlyArray<ReplyStep> = [
+      { id: "k1", kind: "thinking", label: "Thinking", state: "unfinished" },
+      { id: "t1", kind: "tool", label: "Running pnpm test", state: "done", call },
+      {
+        id: "t2",
+        kind: "tool",
+        label: "Running git push",
+        state: "uncertain",
+        call: { ...call, operation: "push", targets: ["origin"] },
+      },
+      { id: "t3", kind: "tool", label: "Listing files", state: "uncertain", call: { ...call, targets: [] } },
+    ];
+    const told = uncertainCalls(steps) ?? "";
+    expect(told.split("\n").filter((line) => line.startsWith("- "))).toEqual([
+      "- Running git push (Bash, push on origin)",
+      "- Listing files (Bash, run-commands)",
+    ]);
+    expect(told).toContain("Do not run any of them again");
+    expect(uncertainCalls(steps.slice(0, 2))).toBeNull();
   });
 });

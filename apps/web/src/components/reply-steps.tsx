@@ -2,6 +2,7 @@ import type { ReplyStep, ToolCall } from "@hobbots/domain";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@hobbots/ui/components/collapsible";
 import { cn } from "@hobbots/ui/lib/utils";
 import { operationLabel, shownSteps } from "../lib/reply-steps.ts";
+import { formatTime } from "../lib/time.ts";
 import { messages } from "./messages.ts";
 
 type StepState = ReplyStep["state"];
@@ -16,6 +17,7 @@ const MARK: Record<StepState, { readonly glyph: string; readonly className: stri
   failed: { glyph: "✗", className: "text-rose" },
   denied: { glyph: "⊘", className: "text-rose" },
   unfinished: { glyph: "■", className: "text-label" },
+  uncertain: { glyph: "?", className: "font-bold text-lantern" },
 };
 
 /**
@@ -71,6 +73,8 @@ const stepNote = (step: ReplyStep, outcome: StepState): string | null => {
       return copy.failed;
     case "unfinished":
       return copy.unfinished;
+    case "uncertain":
+      return copy.uncertain;
     case "denied":
       return DENIED[step.decidedBy ?? "policy"]({ reason: step.reason ?? "" });
     default:
@@ -103,6 +107,12 @@ function ToolStep({ step, call, outcome }: { step: ReplyStep; call: ToolCall; ou
           <dd className="m-0">{operationLabel(call.operation)}</dd>
           <dt className="text-label">{copy.targets}</dt>
           <dd className="m-0 break-all">{call.targets.length === 0 ? copy.noTargets : call.targets.join(", ")}</dd>
+          {outcome === "uncertain" && step.startedAt !== undefined && (
+            <>
+              <dt className="text-label">{copy.started}</dt>
+              <dd className="m-0">{formatTime(step.startedAt)}</dd>
+            </>
+          )}
         </dl>
       </CollapsibleContent>
     </Collapsible>

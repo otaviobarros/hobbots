@@ -92,13 +92,14 @@ describe("a reply cut off or limited by the provider", () => {
 });
 
 describe("a reply's steps when its turn ends", () => {
-  // covers CH-004, CH-007
-  it("[TC-CH-113] leaves running and awaiting steps unfinished for good, so Continue cannot revive them", () => {
+  // covers CH-004, CH-007, EX-004
+  it("[TC-CH-113] leaves a running tool call uncertain and other steps unfinished for good, so Continue cannot revive them", () => {
     const call = { tool: "Bash", operation: "run-commands", targets: ["/work"] } as const;
     const withSteps = MessageTransitions.setSteps(MessageTransitions.appendDelta(streaming, "Hel") as Message, [
       { id: "t1", kind: "tool", label: "Running pnpm test", state: "running", call },
       { id: "t2", kind: "tool", label: "Pushing", state: "awaiting", call, approvalId: "a1" },
       { id: "t3", kind: "tool", label: "Editing a.ts", state: "done", call },
+      { id: "k1", kind: "thinking", label: "Thinking", state: "running" },
     ]) as Message;
     for (const ended of [
       MessageTransitions.interrupt(withSteps),
@@ -106,11 +107,16 @@ describe("a reply's steps when its turn ends", () => {
       MessageTransitions.limit(withSteps, null),
       MessageTransitions.complete(withSteps),
     ]) {
-      expect((ended as Message).steps.map((step) => step.state)).toEqual(["unfinished", "unfinished", "done"]);
+      expect((ended as Message).steps.map((step) => step.state)).toEqual([
+        "uncertain",
+        "unfinished",
+        "done",
+        "unfinished",
+      ]);
     }
     const resumed = MessageTransitions.resume(MessageTransitions.interrupt(withSteps) as Message) as Message;
     expect(resumed.status).toBe("streaming");
-    expect(resumed.steps.map((step) => step.state)).toEqual(["unfinished", "unfinished", "done"]);
+    expect(resumed.steps.map((step) => step.state)).toEqual(["uncertain", "unfinished", "done", "unfinished"]);
   });
 });
 

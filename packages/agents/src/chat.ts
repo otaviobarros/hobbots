@@ -35,9 +35,9 @@ import { buildBriefing } from "./briefing.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
-import { type RuntimeEvent, runtimeAdapters, type ToolAccess } from "./runtime.ts";
+import { type RuntimeEvent, runtimeAdapters, type ToolAccess, type ToolStartedEvent } from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
-import { nextSteps } from "./steps.ts";
+import { nextSteps, uncertainCalls } from "./steps.ts";
 import { HobTools, narrows } from "./tools.ts";
 
 interface Reply {
@@ -52,15 +52,21 @@ interface Reply {
 /** How much of a cut-off reply the runtime is shown when asked to continue it. */
 const CONTINUE_CONTEXT = 4_000;
 
-/** The prompt that resumes a reply that ended early, so the runtime picks up where it left off. */
-const continuePrompt = (content: string) =>
-  [
+/**
+ * The prompt that resumes a reply that ended early, so the runtime picks up where it left off. Tool
+ * calls the reply left uncertain are named, so none is run again before it is checked (EX-004).
+ */
+const continuePrompt = (reply: Message) => {
+  const uncertain = uncertainCalls(reply.steps);
+  return [
     "Your previous reply was cut off before it finished. It ends with this text:",
     "",
-    content.slice(-CONTINUE_CONTEXT),
+    reply.content.slice(-CONTINUE_CONTEXT),
     "",
+    ...(uncertain === null ? [] : [uncertain, ""]),
     "Continue from exactly where it stops. Do not repeat what is already written.",
   ].join("\n");
+};
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
@@ -363,6 +369,20 @@ export class ChatService extends Context.Service<
           yield* checkpoint.pipe(Effect.delay("1 second"), Effect.forever, Effect.forkScoped);
           const update = (f: (message: Message) => Message | unknown) => transition(reply, f, saveMessage);
 
+          // Saves a step's change with the reply. A tool call that starts is stamped with when.
+          const saveStep = (event: RuntimeEvent) =>
+            Effect.gen(function* () {
+              const now = yield* nowIso;
+              return yield* update((m) => {
+                const steps = nextSteps(m.steps, reply.stepsFrom, event, now);
+                return steps === null ? undefined : MessageTransitions.setSteps(m, steps);
+              });
+            });
+          // A tool call the policy allowed is saved before it runs, so a crash while it runs leaves it
+          // uncertain rather than unknown (EX-004). A reply that has ended takes no new step: refused.
+          const recordToolStart = (event: ToolStartedEvent) =>
+            saveStep(redactEvent(event, redactor)).pipe(Effect.map(Option.isSome));
+
           // Secrets are redacted before a tool call's step is saved, journaled or announced, so a client
           // that reads the reply later never receives them either.
           const handle = (raw: RuntimeEvent) => {
@@ -406,10 +426,7 @@ export class ChatService extends Context.Service<
                 return update((m) => MessageTransitions.complete(m, reply.prefix + event.text));
               // Steps, a tool call's included, are saved with the reply, so they replay on reconnect.
               default:
-                return update((m) => {
-                  const steps = nextSteps(m.steps, reply.stepsFrom, event);
-                  return steps === null ? undefined : MessageTransitions.setSteps(m, steps);
-                });
+                return saveStep(event);
             }
           };
 
@@ -435,6 +452,7 @@ export class ChatService extends Context.Service<
               tools: yield* grant(thread.id, agent),
               approvals: turnApprovals?.approvals ?? null,
               redaction: redactor,
+              recordToolStart,
             })
             .pipe(
               Stream.runForEach(handle),
@@ -714,7 +732,7 @@ export class ChatService extends Context.Service<
             const saved = yield* saveMessage(
               new Message({ ...resumed, configVersion: config.version, runtime: brain.runtime, model: brain.model }),
             );
-            yield* launch(agent, config, thread, continuePrompt(message.content), saved, null, message);
+            yield* launch(agent, config, thread, continuePrompt(message), saved, null, message);
             return saved;
           }),
         );
