@@ -1,5 +1,6 @@
 import type { Agent, AgentId, ApprovalRequest, Message, Thread, ThreadId } from "@hobbots/domain";
 import type { QueryClient, QueryFunctionContext } from "@tanstack/react-query";
+import { inboxWindow } from "./inbox-window.ts";
 
 /**
  * Keeps the Query cache consistent while query responses and events arrive in either order
@@ -168,3 +169,24 @@ export const syncedMessages = (
 
 export const syncedApprovals = (threadId: ThreadId, fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
   synced(fetch, "approval", (approval) => approval.threadId === threadId);
+
+/**
+ * One request, as the hub has it now, unless an event this generation brought a newer version. A
+ * response that lands after a new generation began is fetched again.
+ */
+export const syncedApproval =
+  (approvalId: string, fetch: () => Promise<ApprovalRequest>) =>
+  async ({ client }: QueryFunctionContext): Promise<ApprovalRequest> => {
+    const state = syncState(client);
+    for (;;) {
+      const generation = state.generation;
+      const fetched = await fetch();
+      if (state.generation !== generation) continue;
+      const known = state.overlay.get(`approval:${approvalId}`);
+      return known?.kind === "approval" ? newer(fetched, known.value) : fetched;
+    }
+  };
+
+/** The Inbox's requests from every thread, kept to the hub's window and order. */
+export const syncedInbox = (fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
+  synced(fetch, "approval", () => true, inboxWindow);

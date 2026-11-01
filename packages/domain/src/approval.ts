@@ -87,6 +87,9 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   revision: Revision,
 }) {}
 
+/** How many decided and expired requests the Inbox lists beside the pending ones: the most recently closed. */
+export const INBOX_HISTORY = 200;
+
 /** What the user decides on a pending request: Approve with a lifetime, or Deny with an optional reason. */
 export const ApprovalDecision = Schema.Literals(["approve", "deny"]);
 export type ApprovalDecision = typeof ApprovalDecision.Type;

@@ -15,6 +15,7 @@ import { UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  ApprovalId,
   type ApprovalRequest,
   EMPTY_HOB_POLICY,
   isInProgress,
@@ -289,7 +290,10 @@ describe("Ask decisions", () => {
           approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
         );
         const events = yield* PubSub.takeAll(subscription);
-        return { denied, done, late, events };
+        // The Inbox reads a request on its own once it leaves the list's window.
+        const stored = yield* approvals.get(request.id);
+        const unknown = yield* Effect.exit(approvals.get(ApprovalId.make("missing")));
+        return { denied, done, late, events, stored, unknown };
       }),
     );
 
@@ -301,6 +305,8 @@ describe("Ask decisions", () => {
       reason: expect.stringContaining("Not on Fridays"),
     });
     expect(Exit.isFailure(result.late) && JSON.stringify(result.late.cause)).toContain("ApprovalClosed");
+    expect(result.stored).toMatchObject({ id: result.denied.id, state: "denied", denyReason: "Not on Fridays" });
+    expect(Exit.isFailure(result.unknown) && JSON.stringify(result.unknown.cause)).toContain("ApprovalNotFound");
   });
 
   // covers PE-007

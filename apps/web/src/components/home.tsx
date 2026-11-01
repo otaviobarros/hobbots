@@ -18,9 +18,12 @@ import {
   SCENE_LIMIT,
   splitScene,
 } from "../lib/crew.ts";
-import { sceneOrder } from "../lib/hob-state.ts";
+import { sceneOrder, withRequests } from "../lib/hob-state.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
 import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
+import { messages as inboxCopy } from "./inbox/messages.ts";
+import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
+import { WaitingRequests } from "./inbox/waiting-requests.tsx";
 import { messages } from "./messages.ts";
 import { Stars } from "./scene.tsx";
 
@@ -31,6 +34,7 @@ export function Home() {
   const hobs = agents.data ?? [];
   const threadLists = useQueries({ queries: hobs.map((hob) => threadsQuery(hob.id)) });
   const activity = useActivity();
+  const waitingHobs = useWaitingHobs();
   const [folded, setFolded] = useState<Partial<Record<CrewGroup, boolean>>>({});
   const [query, setQuery] = useState("");
   const filterRef = useRef<HTMLInputElement>(null);
@@ -38,7 +42,7 @@ export function Home() {
   const crew = sceneOrder(
     hobs.map((hob, index) => {
       const threads = threadLists[index]?.data ?? [];
-      return { hob, threads, state: hobState(hob, threads, activity) };
+      return { hob, threads, state: withRequests(hobState(hob, threads, activity), waitingHobs.has(hob.id)) };
     }),
   );
   const { stage, hall } = splitScene(crew);
@@ -233,10 +237,11 @@ function LiveDot() {
 function NeedsYou() {
   return (
     <Card label="Needs you" className="border-[3px] border-lantern" labelClass="text-lantern">
-      <p className="m-0 border-t-2 border-line pt-3 leading-normal text-secondary-text">
-        Nothing needs you right now. When a hob asks permission or has a question, it waits here and you can answer in
-        place.
-      </p>
+      <WaitingRequests
+        empty={
+          <p className="m-0 border-t-2 border-line pt-3 leading-normal text-secondary-text">{inboxCopy.home.empty}</p>
+        }
+      />
     </Card>
   );
 }

@@ -20,6 +20,8 @@ export const ApprovalsHandlers = HttpApiBuilder.group(HobbotsApi, "approvals", (
                 : approvals.listForThread(params.threadId),
             ),
           ),
+      list: () => approvals.listInbox,
+      get: ({ params }) => approvals.get(params.approvalId),
       decide: ({ params, payload }) => approvals.decide(params.approvalId, payload),
     });
   }),

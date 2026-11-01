@@ -19,6 +19,7 @@ import {
   Grant,
   GrantId,
   type GrantRule,
+  INBOX_HISTORY,
   type MessageId,
   ruleOperation,
   stableJson,
@@ -39,6 +40,8 @@ export class ApprovalRepository extends Context.Service<
     /** The thread's requests, oldest first. */
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     readonly listPending: Effect.Effect<ReadonlyArray<ApprovalRequest>>;
+    /** Every pending request and the `limit` most recently decided or expired ones, oldest first. */
+    readonly listRecent: (limit: number) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     /** Stores a new request with its ApprovalRequested event. */
     readonly insert: (approval: ApprovalRequest) => Effect.Effect<Committed<ApprovalRequest>>;
     /**
@@ -193,6 +196,10 @@ export class ApprovalService extends Context.Service<
     /** Expires the hob's pending requests, as when it retires: a retired hob is never approved anything. */
     readonly expireForAgent: (agentId: AgentId) => Effect.Effect<void>;
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
+    /** The Inbox's requests (PE-003): every pending one and the most recent closed ones, oldest first. */
+    readonly listInbox: Effect.Effect<ReadonlyArray<ApprovalRequest>>;
+    /** One request as stored now, such as the one open in the Inbox after it left the list. */
+    readonly get: (id: ApprovalId) => Effect.Effect<ApprovalRequest, ApprovalNotFound>;
   }
 >()("@hobbots/agents/ApprovalService") {
   static readonly layer = Layer.effect(
@@ -419,7 +426,23 @@ export class ApprovalService extends Context.Service<
           ),
         );
 
-      return ApprovalService.of({ forTurn, decide, expireForAgent, listForThread: repo.listForThread });
+      return ApprovalService.of({
+        forTurn,
+        decide,
+        expireForAgent,
+        listForThread: repo.listForThread,
+        listInbox: repo.listRecent(INBOX_HISTORY),
+        get: (id) =>
+          repo
+            .find(id)
+            .pipe(
+              Effect.flatMap((found) =>
+                Option.isSome(found)
+                  ? Effect.succeed(found.value)
+                  : Effect.fail(new ApprovalNotFound({ approvalId: id })),
+              ),
+            ),
+      });
     }),
   );
 }

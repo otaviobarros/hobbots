@@ -15,11 +15,13 @@ import { ArchivedHobView } from "./components/archived-hobs.tsx";
 import { HobProfile } from "./components/hob-profile.tsx";
 import { HobsLayout } from "./components/hobs-layout.tsx";
 import { Home } from "./components/home.tsx";
+import { type InboxTab, isInboxTab } from "./components/inbox/inbox-items.ts";
+import { InboxPage } from "./components/inbox/inbox-page.tsx";
 import { OnboardingFirstHob } from "./components/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
-import { ArchivedHobsPage, InboxPage, SettingsPage, UsagePage } from "./components/pages.tsx";
+import { ArchivedHobsPage, SettingsPage, UsagePage } from "./components/pages.tsx";
 import { Summon } from "./components/summon.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
@@ -185,7 +187,19 @@ const summonRoute = createRoute({
   component: Summon,
 });
 
-const inboxRoute = createRoute({ getParentRoute: () => shellRoute, path: "inbox", component: InboxPage });
+// `?tab=` picks Needs you, All or History and `?request=` the request shown beside the list.
+const inboxRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "inbox",
+  validateSearch: (search: Record<string, unknown>): { tab?: InboxTab | undefined; request?: string | undefined } => ({
+    tab: isInboxTab(search.tab) ? search.tab : undefined,
+    request: typeof search.request === "string" ? search.request : undefined,
+  }),
+  component: function Inbox() {
+    const { tab, request } = inboxRoute.useSearch();
+    return <InboxPage tab={tab ?? "needs"} requestId={request} />;
+  },
+});
 const usageRoute = createRoute({ getParentRoute: () => shellRoute, path: "usage", component: UsagePage });
 const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "settings", component: SettingsPage });
 // Settings › Archived hobs: retired hobs, whose threads open read-only (AG-006).

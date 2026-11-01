@@ -1,7 +1,15 @@
-import type { ApprovalDecision, ApprovalLifetime, ApprovalRequest, GrantRule, ThreadId } from "@hobbots/domain";
+import {
+  type ApprovalDecision,
+  ApprovalId,
+  type ApprovalLifetime,
+  type ApprovalRequest,
+  type GrantRule,
+  type ThreadId,
+} from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
-import { newer, recordApproval, syncedApprovals } from "./sync.ts";
+import { inboxWindow } from "./inbox-window.ts";
+import { newer, recordApproval, syncedApproval, syncedApprovals, syncedInbox } from "./sync.ts";
 
 export const approvalsKey = (threadId: ThreadId) => ["threads", threadId, "approvals"] as const;
 
@@ -15,12 +23,15 @@ export const approvalsQuery = (threadId: ThreadId) =>
 /** Keeps the newer version of a request in its thread's list, adding it when it is new. */
 export const storeApproval = (queryClient: QueryClient, approval: ApprovalRequest) => {
   recordApproval(queryClient, approval);
-  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(approval.threadId), (old) => {
-    if (old === undefined) return old;
-    const known = old.find((existing) => existing.id === approval.id);
-    if (known === undefined) return [...old, approval];
-    const kept = newer(known, approval);
-    return kept === known ? old : old.map((existing) => (existing === known ? kept : existing));
+  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(approval.threadId), (old) =>
+    withApproval(old, approval),
+  );
+  queryClient.setQueryData<ApprovalRequest>(approvalKey(approval.id), (old) =>
+    old === undefined ? old : newer(old, approval),
+  );
+  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(inboxKey, (old) => {
+    const updated = withApproval(old, approval);
+    return updated === old || updated === undefined ? updated : inboxWindow(updated);
   });
 };
 
@@ -38,7 +49,7 @@ export interface Decision {
 /**
  * Decides one request as the user saw it: the action digest shown goes with the decision, so it
  * never applies to another action. A refused decision refetches the thread's requests, since the
- * request was most likely decided elsewhere or has expired.
+ * request was most likely decided elsewhere or has expired; the Inbox is refetched too.
  */
 export const useDecideApproval = (approval: ApprovalRequest) => {
   const queryClient = useQueryClient();
@@ -58,6 +69,41 @@ export const useDecideApproval = (approval: ApprovalRequest) => {
         }),
       ),
     onSuccess: (decided) => storeApproval(queryClient, decided),
-    onError: () => queryClient.invalidateQueries({ queryKey: approvalsKey(approval.threadId), exact: true }),
+    onError: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: approvalsKey(approval.threadId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: inboxKey, exact: true }),
+      ]),
   });
 };
+
+/** The Inbox's requests from every thread: every pending one and the most recent closed ones, oldest first. */
+const inboxKey = ["approvals"] as const;
+
+export const inboxQuery = queryOptions({
+  queryKey: inboxKey,
+  queryFn: syncedInbox(() => call((c) => c.approvals.list())),
+});
+
+/** A cached list with the newer version of the request, added when it is new. */
+const withApproval = (old: ReadonlyArray<ApprovalRequest> | undefined, approval: ApprovalRequest) => {
+  if (old === undefined) return old;
+  const known = old.find((existing) => existing.id === approval.id);
+  if (known === undefined) return [...old, approval];
+  const kept = newer(known, approval);
+  return kept === known ? old : old.map((existing) => (existing === known ? kept : existing));
+};
+
+const approvalKey = (approvalId: string) => ["approval", approvalId] as const;
+
+/**
+ * One request as the hub has it now, kept live by the journal: the Inbox reads the request open
+ * beside its list this way once it has left the list's window.
+ */
+export const approvalQuery = (approvalId: string) =>
+  queryOptions({
+    queryKey: approvalKey(approvalId),
+    queryFn: syncedApproval(approvalId, () =>
+      call((c) => c.approvals.get({ params: { approvalId: ApprovalId.make(approvalId) } })),
+    ),
+  });

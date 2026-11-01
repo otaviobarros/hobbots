@@ -51,6 +51,16 @@ export class ApprovalsGroup extends HttpApiGroup.make("approvals")
       success: Schema.Array(ApprovalRequest),
       error: ThreadNotFound,
     }),
+    // The Inbox's requests (PE-003): every pending one and the most recent decided and expired ones, oldest first.
+    HttpApiEndpoint.get("list", "/approvals", {
+      success: Schema.Array(ApprovalRequest),
+    }),
+    // One request as stored now, whatever its state.
+    HttpApiEndpoint.get("get", "/approvals/:approvalId", {
+      params: { approvalId: ApprovalId },
+      success: ApprovalRequest,
+      error: ApprovalNotFound,
+    }),
     // Deciding a request again the same way returns it unchanged.
     HttpApiEndpoint.post("decide", "/approvals/:approvalId/decision", {
       params: { approvalId: ApprovalId },

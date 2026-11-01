@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hobState, sceneOrder, threadState } from "./hob-state.ts";
+import { hobState, sceneOrder, threadState, withRequests } from "./hob-state.ts";
 
 describe("hobState", () => {
   const hob = { status: "active" } as const;
@@ -37,4 +37,13 @@ describe("sceneOrder", () => {
     ];
     expect(sceneOrder(crew).map((c) => c.name)).toEqual(["Cy", "Ed", "Bo", "Di", "Ada"]);
   });
+});
+
+describe("withRequests", () => {
+  it("needs you while a request waits, whatever the hob is doing", () => {
+    expect(withRequests("working", true)).toBe("needs-you");
+    expect(withRequests("idle", true)).toBe("needs-you");
+    expect(withRequests("working", false)).toBe("working");
+  });
+  it("keeps a paused hob paused", () => expect(withRequests("paused", true)).toBe("paused"));
 });

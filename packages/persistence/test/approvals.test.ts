@@ -120,6 +120,44 @@ describe("ApprovalRepository", () => {
   });
 });
 
+describe("ApprovalRepository.listRecent", () => {
+  // covers PE-003, UX-005
+  it("[TC-IN-001] lists every pending request and only the most recently closed ones, oldest first", async () => {
+    const at = (minute: number) => `2026-10-31T00:${String(minute).padStart(2, "0")}:00.000Z`;
+    const listed = await Effect.gen(function* () {
+      const approvals = yield* ApprovalRepository;
+      yield* seed;
+      // An old pending request stays listed however many closed ones came after it.
+      yield* approvals.insert(new ApprovalRequest({ ...request("p-old"), createdAt: at(1) }));
+      for (const minute of [2, 3, 4, 5]) {
+        const inserted = yield* approvals.insert(
+          new ApprovalRequest({ ...request(`c${minute}`), createdAt: at(minute) }),
+        );
+        yield* approvals.resolve(
+          new ApprovalRequest({
+            ...inserted.value,
+            state: minute % 2 === 0 ? "expired" : "denied",
+            // The oldest is decided last; the others close together, so their ids break the tie.
+            decidedAt: at(minute === 2 ? 10 : 9),
+          }),
+          "pending",
+        );
+      }
+      yield* approvals.insert(new ApprovalRequest({ ...request("p-new"), createdAt: at(6) }));
+      return yield* approvals.listRecent(2);
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    // One statement reads them, so each request is listed once, in one state.
+    expect(new Set(listed.map((a) => a.id)).size).toBe(listed.length);
+    expect(listed.map((a) => [a.id, a.state])).toEqual([
+      ["p-old", "pending"],
+      ["c2", "expired"],
+      ["c5", "denied"],
+      ["p-new", "pending"],
+    ]);
+  });
+});
+
 const grantFor = (approvalId: string, id: string) =>
   new Grant({
     id: GrantId.make(id),

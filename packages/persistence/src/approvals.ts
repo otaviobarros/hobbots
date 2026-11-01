@@ -27,6 +27,13 @@ const approvalRows = (rows: ReadonlyArray<ApprovalRow>) =>
     rules: JSON.parse(String(row.rules ?? "[]")),
   }));
 
+// The most recently closed first, bytewise on PostgreSQL as SQLite compares text, like `oldestFirst`.
+const recentlyClosedFirst = (sql: SqlClient.SqlClient) =>
+  sql.onDialectOrElse({
+    pg: () => sql.literal(`COALESCE(decided_at, created_at) COLLATE "C" DESC, id COLLATE "C" DESC`),
+    orElse: () => sql.literal("COALESCE(decided_at, created_at) DESC, id DESC"),
+  });
+
 /** The SQL store of approval requests, for SQLite and PostgreSQL (ADR 011). */
 export const ApprovalRepositoryLive = Layer.effect(
   ApprovalRepository,
@@ -54,6 +61,18 @@ export const ApprovalRepositoryLive = Layer.effect(
         sql`SELECT * FROM approval_requests WHERE state = 'pending' ORDER BY ${oldestFirst(sql)}`.pipe(
           Effect.map(approvalRows),
         ),
+    });
+
+    // One statement, so a request decided while it runs is read once, in one state.
+    const listRecent = SqlSchema.findAll({
+      Request: Schema.Number,
+      Result: ApprovalRequest,
+      execute: (limit) =>
+        sql`SELECT * FROM approval_requests
+          WHERE state = 'pending' OR id IN (
+            SELECT id FROM approval_requests WHERE state <> 'pending' ORDER BY ${recentlyClosedFirst(sql)} LIMIT ${limit}
+          )
+          ORDER BY ${oldestFirst(sql)}`.pipe(Effect.map(approvalRows)),
     });
 
     const insert = (input: ApprovalRequest) =>
@@ -121,6 +140,7 @@ export const ApprovalRepositoryLive = Layer.effect(
       find: (id) => find(id).pipe(Effect.orDie),
       listForThread: (threadId) => listForThread(threadId).pipe(Effect.orDie),
       listPending: listPending().pipe(Effect.orDie),
+      listRecent: (limit) => listRecent(limit).pipe(Effect.orDie),
       insert,
       resolve,
     });

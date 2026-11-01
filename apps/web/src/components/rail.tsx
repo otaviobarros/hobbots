@@ -5,6 +5,8 @@ import { useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
 import { ChiefMark, type ChiefMood } from "./chief-mark.tsx";
+import { messages as inboxCopy } from "./inbox/messages.ts";
+import { useWaitingCount } from "./inbox/use-waiting-count.ts";
 
 // The MVP rail from the Hobbots design. Routines and Memory return after the MVP.
 const ITEMS = [
@@ -32,6 +34,7 @@ export function Rail() {
   const [looks, setLooks] = useState(0);
   const activity = useActivity();
   const needsYou = useNeedsYou();
+  const waiting = useWaitingCount();
   const mood: ChiefMood =
     previewMood() ?? (needsYou > 0 ? "needs-you" : Object.keys(activity).length > 0 ? "working" : "idle");
   const label =
@@ -55,36 +58,54 @@ export function Rail() {
         <ChiefMark size={40} mood={mood} looks={looks} />
       </Link>
       {ITEMS.map((item) => (
-        <RailLink key={item.label} label={item.label} to={item.to} active={isActive(item.to)} />
+        <RailLink
+          key={item.label}
+          label={item.label}
+          to={item.to}
+          active={isActive(item.to)}
+          badge={item.label === "Inbox" && !isActive(item.to) ? waiting : 0}
+        />
       ))}
       <RailLink label="Settings" to="/settings" active={isActive("/settings")} className="mt-auto" />
     </nav>
   );
 }
 
+/** A section link; `badge` counts what waits there, such as the Inbox's requests that need you. */
 function RailLink({
   label,
   to,
   active,
+  badge = 0,
   className,
 }: {
   label: IconName;
   to: string;
   active: boolean;
+  badge?: number;
   className?: string;
 }) {
   return (
     <Link
       to={to}
       aria-current={active ? "page" : undefined}
+      aria-label={badge > 0 ? inboxCopy.rail({ count: badge }) : undefined}
       className={cn(
-        "cut flex w-[62px] flex-col items-center gap-[5px] pt-2 pb-[7px] text-xs no-underline",
+        "cut relative flex w-[62px] flex-col items-center gap-[5px] pt-2 pb-[7px] text-xs no-underline",
         active ? "bg-line text-moonlight hover:text-moonlight" : "text-label hover:bg-hover hover:text-text",
         className,
       )}
     >
       <PixelArt rows={ICONS[label]} palette={iconPalette(active)} size={24} />
       {label}
+      {badge > 0 && (
+        <span
+          aria-hidden
+          className="absolute end-2 top-1 flex h-4 min-w-4 items-center justify-center bg-lantern px-0.5 text-xs font-bold text-ground"
+        >
+          {inboxCopy.count({ count: badge })}
+        </span>
+      )}
     </Link>
   );
 }
