@@ -19,11 +19,16 @@ export const repositorySlug = (repository: GitHubRepository): string => `${repos
 const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 const NAME = /^[A-Za-z0-9._-]{1,100}$/;
 
+/** The text without its trailing slashes, cut by hand: a `/\/+$/` pattern backtracks on long input. */
+export const trimTrailingSlashes = (text: string): string => {
+  let end = text.length;
+  while (end > 0 && text[end - 1] === "/") end--;
+  return text.slice(0, end);
+};
+
 const fromPath = (path: string): GitHubRepository | null => {
-  const parts = path
-    .replace(/\/+$/, "")
-    .replace(/\.git$/, "")
-    .split("/");
+  const trimmed = trimTrailingSlashes(path);
+  const parts = (trimmed.endsWith(".git") ? trimmed.slice(0, -4) : trimmed).split("/");
   if (parts.length !== 2) return null;
   const [owner, name] = parts as [string, string];
   return OWNER.test(owner) && NAME.test(name) && name !== "." && name !== ".." ? { owner, name } : null;

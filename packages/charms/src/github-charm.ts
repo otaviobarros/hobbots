@@ -11,6 +11,7 @@ import {
   githubToolJsonSchema,
   isGitHubToolName,
   repositorySlug,
+  trimTrailingSlashes,
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine } from "@hobbots/permissions";
 import { Data, Effect, Layer, Schema } from "effect";
@@ -39,7 +40,7 @@ const policyContext = (access: ToolAccess): PolicyContext => ({
   modelHosts: [],
 });
 
-const withoutSlash = (folder: string) => (folder.length > 1 ? folder.replace(/\/+$/, "") : folder);
+const withoutSlash = (folder: string) => (folder.length > 1 ? trimTrailingSlashes(folder) || "/" : folder);
 
 export const GitHubCharmTools = Layer.effect(
   CharmTools,

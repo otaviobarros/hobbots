@@ -46,6 +46,16 @@ describe("GitHub remotes", () => {
       expect(githubRepositoryOf(remote)).toBeNull();
     }
   });
+
+  it("reads a long run of slashes in linear time", () => {
+    const started = performance.now();
+    expect(githubRepositoryOf(`https://github.com/${"/".repeat(100_000)}x`)).toBeNull();
+    expect(githubRepositoryOf(`https://github.com/otaviobarros/hobbots${"/".repeat(100_000)}`)).toEqual({
+      owner: "otaviobarros",
+      name: "hobbots",
+    });
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
 });
 
 describe("GitHub tools", () => {
