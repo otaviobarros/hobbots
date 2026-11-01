@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/otaviobarros/hobbots/compare/site-v0.1.0...site-v0.1.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **site:** add space before wait-list email and stop sideways scroll on phones ([#247](https://github.com/otaviobarros/hobbots/issues/247)) ([a0e2fe5](https://github.com/otaviobarros/hobbots/commit/a0e2fe54cbe06a47881ec36a7c682595ef4037f1)), closes [#246](https://github.com/otaviobarros/hobbots/issues/246)
+
 ## 0.1.0 (2026-10-31)
 
 
