@@ -12,6 +12,7 @@ import type {
   Committed,
   DelegationAuthority,
   DelegationId,
+  EventEnvelope,
   HandOff,
   IllegalTaskTransition,
   MilestoneId,
@@ -26,8 +27,13 @@ import type {
   TaskId,
   TaskRefused,
   TaskTarget,
+  TaskToolDone,
+  TaskToolName,
+  TaskToolRefused,
   TaskTree,
+  TaskWait,
   ThreadId,
+  WaitMode,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
 
@@ -116,6 +122,13 @@ export interface NewQuestion {
   readonly createdAt: string;
 }
 
+/** What a Task's owner waits for. */
+export interface NewWait {
+  readonly on: ReadonlyArray<TaskId>;
+  readonly mode: WaitMode;
+  readonly at: string;
+}
+
 type Changed<A, E = TaskRefused> = Effect.Effect<Committed<A>, E>;
 type TaskChange = TaskRefused | StaleTask | IllegalTaskTransition;
 
@@ -170,8 +183,50 @@ export class TaskRepository extends Context.Service<
     readonly escalateQuestion: (questionId: QuestionId, by: AgentId) => Changed<Question>;
     /** Gives an artifact to another Task in its tree. Handing it to the same Task again changes nothing. */
     readonly handOff: (artifactId: ArtifactId, toTaskId: TaskId, at: string) => Changed<HandOff>;
+    /**
+     * Records that the Task's owner waits for Tasks under it, replacing any earlier wait, and shows
+     * the Task as waiting.
+     */
+    readonly waitFor: (
+      taskId: TaskId,
+      revision: number,
+      wait: NewWait,
+    ) => Changed<{ readonly task: Task; readonly wait: TaskWait }, TaskChange>;
     /** The Task and everything under it. */
     readonly readTree: (taskId: TaskId) => Effect.Effect<Option.Option<TaskTree>>;
     readonly findQuest: (questId: QuestId) => Effect.Effect<Option.Option<Quest>>;
+    /** How many Tasks the hob owns that have not ended, across every tree. */
+    readonly openTaskCount: (ownerId: AgentId) => Effect.Effect<number>;
   }
 >()("@hobbots/agents/TaskRepository") {}
+
+/** A hob's call to a Task tool, as the ledger keys it: by hob and key, with the input it carried. */
+export interface TaskToolCall {
+  readonly agentId: AgentId;
+  readonly key: string;
+  readonly tool: TaskToolName;
+  /** The input without its key, as stable JSON, so a key reused for another call is told apart. */
+  readonly input: string;
+  readonly at: string;
+}
+
+/** What a call did, and the journal entries to announce; none when it was a retry. */
+export interface TaskToolOutcome {
+  readonly done: TaskToolDone;
+  readonly entries: ReadonlyArray<EventEnvelope>;
+}
+
+/**
+ * Makes each Task tool call happen once per hob and key (ADR 018). The call's writes and its
+ * result are stored in one transaction, so a retried call returns the first result and never
+ * writes again; a refused call stores nothing and can be retried.
+ */
+export class TaskToolCalls extends Context.Service<
+  TaskToolCalls,
+  {
+    readonly once: <E>(
+      call: TaskToolCall,
+      run: Effect.Effect<TaskToolOutcome, E>,
+    ) => Effect.Effect<TaskToolOutcome, E | TaskToolRefused>;
+  }
+>()("@hobbots/agents/TaskToolCalls") {}

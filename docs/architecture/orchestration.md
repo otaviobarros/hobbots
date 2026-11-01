@@ -41,6 +41,15 @@ Expose controlled Hobbots tools through MCP or a supported equivalent adapter in
 
 On every call the server checks who may call it (the Task's owner or a lead above it in the tree), depth, concurrency and time limits, that the delegation makes no cycle, that the child's authority only narrows, and the call's idempotency key, so a retried call never creates a second Task, Question or hand-off.
 
+How the hub holds these today ([#271](https://github.com/otaviobarros/hobbots/issues/271)):
+
+- The caller is the hob whose turn it is and the Task that turn works on, never anything in the input. A call reaches only Tasks in that Task's tree.
+- Every input carries a `key`. The hub keeps each call's result per hob and key, written in the same transaction as the call's records, so a retry returns the first result and writes nothing. A key sent again with a different call is refused. A refused call stores nothing, so its key stays free.
+- A refused call writes nothing and returns a reason the hob can act on, such as `not-owner`, `not-lead`, `outside-subtree`, `cycle`, `depth-limit`, `concurrency-limit`, `authority-wider`, `deadline-passed` or `key-reused`, or the records' own reason.
+- A member's Delegation stores the lead's authority on its Task, narrowed by every Delegation above it and by what the brief asks for. A brief that asks for more is refused, not trimmed.
+- Open-Task limits count Tasks that have not ended: per hob (16 by default) and per request's tree (32 by default), with depth 2 by default. `HOBBOTS_QUEST_MAX_DEPTH`, `HOBBOTS_MAX_OPEN_TASKS_PER_HOB` and `HOBBOTS_MAX_OPEN_TASKS_PER_TREE` change them. Running concurrency per runtime session and Task deadlines while work runs belong to the scheduler.
+- `wait_for` records a wait and shows the Task as waiting. Waking the owner when the wait is met belongs to the inbox.
+
 Structured tasks/results coexist with conversational exchanges. Questions preserve sender, recipient and relevant task/delegation ID, and the chain of leads they passed through. A request to clarify a date range does not need a new Quest. Natural-language messages cannot bypass structural lifecycle and policy validation.
 
 ## Coordination loop

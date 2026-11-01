@@ -166,6 +166,12 @@ const makeJournalWriter = (sql: SqlClient.SqlClient) => {
   return { reserve, append, lock, advance };
 };
 
+/**
+ * Takes the journal's head row for the rest of the transaction, so writers that span several
+ * journaled changes still take turns on PostgreSQL.
+ */
+export const lockJournal = (sql: SqlClient.SqlClient) => makeJournalWriter(sql).lock.pipe(Effect.asVoid);
+
 // A conditional write found nothing to change; its transaction rolls back, releasing its sequences.
 class NothingChanged extends Data.TaggedError("NothingChanged") {}
 

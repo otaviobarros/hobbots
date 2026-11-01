@@ -13,6 +13,7 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import { secretsFromEnv } from "@hobbots/domain";
+import { TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
@@ -23,6 +24,7 @@ import {
   SetupRepository,
   SqliteLive,
   TaskRepositoryLive,
+  TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { ClaudeCodeLayer, FakeAdditionalRuntimesLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
 import { Effect, Layer, Option } from "effect";
@@ -62,6 +64,7 @@ const ServerLive = Layer.unwrap(
       ApprovalRepositoryLive,
       GrantRepositoryLive,
       TaskRepositoryLive,
+      TaskToolCallsLive,
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
@@ -83,7 +86,14 @@ const ServerLive = Layer.unwrap(
     const App = HobLifecycle.layer
       .pipe(
         Layer.provideMerge(
-          Layer.mergeAll(EventStream.layer, HobService.layer, PermissionSummary.layer, JournalCompaction),
+          Layer.mergeAll(
+            EventStream.layer,
+            HobService.layer,
+            PermissionSummary.layer,
+            JournalCompaction,
+            // Served to turns that work on a Task (ADR 018); the hub checks every call.
+            TaskTools.layer(config.taskLimits),
+          ),
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))

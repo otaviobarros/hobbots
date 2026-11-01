@@ -1,4 +1,4 @@
-import { HobbotsRepository, type NewAttempt, type NewTask, TaskRepository } from "@hobbots/agents";
+import { HobbotsRepository, type NewAttempt, type NewTask, TaskRepository, TaskToolCalls } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
@@ -20,14 +20,14 @@ import {
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive } from "../src/index.ts";
+import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
-const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, TaskRepositoryLive, EventJournal.layer).pipe(
+const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive, EventJournal.layer).pipe(
   Layer.provideMerge(TestDatabase),
 );
 const run = <A, E>(
-  effect: Effect.Effect<A, E, HobbotsRepository | TaskRepository | EventJournal | SqlClient.SqlClient>,
+  effect: Effect.Effect<A, E, HobbotsRepository | TaskRepository | TaskToolCalls | EventJournal | SqlClient.SqlClient>,
 ) => effect.pipe(Effect.provide(TestLayer), Effect.runPromise);
 
 const now = "2026-11-01T00:00:00.000Z";
@@ -682,5 +682,97 @@ describe("Task records", () => {
       task: { id: "top", state: "active" },
       quest: { id: "q-top", state: "active", endedAt: null },
     });
+  });
+});
+
+describe("waits and Task tool calls", () => {
+  // covers OR-003, EX-002
+  it("[TC-OR-019] a wait records what the owner waits for and shows the Task waiting", async () => {
+    await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const id = TaskId.make("campaign");
+        const started = yield* tasks.startAttempt(
+          id,
+          (yield* tasks.readTree(id)).pipe(Option.getOrThrow).tasks[0]?.revision ?? 0,
+          attempt("a1"),
+        );
+        const on = [TaskId.make("copy"), TaskId.make("build")];
+        const waited = yield* tasks.waitFor(id, started.value.task.revision, { on, mode: "all", at: later });
+        expect(waited.value.task.state).toBe("waiting");
+        expect(tags(waited.entries)).toEqual(["TaskStateChanged", "CheckpointRecorded"]);
+        const { stored, returned } = yield* journaled(waited);
+        expect(stored).toEqual(returned);
+        // A new wait replaces the last one; the Task already waits, so no new automatic checkpoint.
+        const again = yield* tasks.waitFor(id, waited.value.task.revision, {
+          on: [TaskId.make("copy")],
+          mode: "any",
+          at: later,
+        });
+        expect(tags(again.entries)).toEqual(["TaskStateChanged"]);
+        const tree = (yield* tasks.readTree(id)).pipe(Option.getOrThrow);
+        expect(tree.waits).toEqual([expect.objectContaining({ taskId: id, on: ["copy"], mode: "any" })]);
+        const outside = yield* Effect.flip(
+          tasks.waitFor(id, again.value.task.revision, { on: [id], mode: "all", at: later }),
+        );
+        expect(outside).toMatchObject({ _tag: "TaskRefused", reason: "wait-outside-subtree" });
+        expect(yield* tasks.openTaskCount(QUILL)).toBe(1);
+        expect(yield* tasks.openTaskCount(PIP)).toBe(0);
+      }),
+    );
+  });
+
+  // covers OR-001, EX-001
+  it("[TC-OR-020] a call runs once per hob and key, and a refused one leaves nothing behind", async () => {
+    await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const tasks = yield* TaskRepository;
+        const ledger = yield* TaskToolCalls;
+        const journal = yield* EventJournal;
+        let runs = 0;
+        const create = (id: string) =>
+          Effect.gen(function* () {
+            runs++;
+            const created = yield* tasks.createTask({
+              task: newTask(id, ALDRIC, null),
+              delegation: null,
+              milestones: [],
+            });
+            return { done: { message: `Created ${id}`, details: { task_id: id } }, entries: created.entries };
+          });
+        const call = { agentId: ALDRIC, key: "k1", tool: "plan_steps" as const, input: '{"steps":[]}', at: now };
+        const first = yield* ledger.once(call, create("one"));
+        expect(first.entries).toHaveLength(1);
+        const again = yield* ledger.once(call, create("two"));
+        expect(again).toEqual({ done: first.done, entries: [] });
+        expect(runs).toBe(1);
+        expect(Option.isNone(yield* tasks.readTree(TaskId.make("two")))).toBe(true);
+        // The same key for another call is refused; another hob's key is its own.
+        const reused = yield* Effect.flip(ledger.once({ ...call, input: '{"steps":[1]}' }, create("three")));
+        expect(reused).toMatchObject({ _tag: "TaskToolRefused", reason: "key-reused" });
+        yield* ledger.once({ ...call, agentId: QUILL }, create("four"));
+        expect(runs).toBe(2);
+
+        // A call refused after a write rolls the write back and keeps its key free.
+        const before = yield* journal.head;
+        const failing = Effect.flatMap(create("five"), () => Effect.fail("refused" as const));
+        expect(yield* Effect.flip(ledger.once({ ...call, key: "k2" }, failing))).toBe("refused");
+        expect(Option.isNone(yield* tasks.readTree(TaskId.make("five")))).toBe(true);
+        expect(yield* journal.head).toEqual(before);
+        const retried = yield* ledger.once({ ...call, key: "k2" }, create("six"));
+        expect(retried.done.message).toBe("Created six");
+
+        // Two deliveries of one call at once: the second waits for the first and returns its result.
+        const runsBefore = runs;
+        const both = yield* Effect.all(
+          [ledger.once({ ...call, key: "k3" }, create("seven")), ledger.once({ ...call, key: "k3" }, create("eight"))],
+          { concurrency: 2 },
+        );
+        expect(both[1].done).toEqual(both[0].done);
+        expect(runs).toBe(runsBefore + 1);
+      }),
+    );
   });
 });

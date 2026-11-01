@@ -222,12 +222,27 @@ export const TaskRefusal = Schema.Literals([
   "not-recipient",
   "question-answered",
   "artifact-outside-tree",
+  "wait-outside-subtree",
 ]);
 export type TaskRefusal = typeof TaskRefusal.Type;
 
 export class TaskRefused extends Schema.TaggedError<TaskRefused>()("TaskRefused", {
   reason: TaskRefusal,
   message: Schema.String,
+}) {}
+
+export const WaitMode = Schema.Literals(["any", "all"]);
+export type WaitMode = typeof WaitMode.Type;
+
+/**
+ * A Task's owner waits for any or all of the Tasks under it, without blocking its chat. The Task
+ * shows as waiting until they end; what wakes the owner is decided by the inbox, not here.
+ */
+export class TaskWait extends Schema.Class<TaskWait>("TaskWait")({
+  taskId: TaskId,
+  on: Schema.Array(TaskId),
+  mode: WaitMode,
+  createdAt: Schema.String,
 }) {}
 
 /** A Task and everything under it. */
@@ -242,6 +257,8 @@ export class TaskTree extends Schema.Class<TaskTree>("TaskTree")({
   questions: Schema.Array(Question),
   artifacts: Schema.Array(ArtifactRef),
   handOffs: Schema.Array(HandOff),
+  /** The latest wait of each Task in the tree that has one. */
+  waits: Schema.Array(TaskWait),
 }) {}
 
 /** The hobs a Quest brought in, in the order they joined: its party. */

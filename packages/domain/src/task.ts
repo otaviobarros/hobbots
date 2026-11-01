@@ -153,3 +153,15 @@ export const descendantsOf = (task: Task, tree: ReadonlyArray<Task>): ReadonlyAr
   }
   return tree.filter((each) => under.has(each.id));
 };
+
+/** The Tasks above `task` among `tree`, its parent first and its root last. */
+export const ancestorsOf = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<Task> => {
+  const byId = new Map(tree.map((each) => [each.id, each]));
+  const above: Array<Task> = [];
+  for (let at = task.parentId === null ? undefined : byId.get(task.parentId); at !== undefined; ) {
+    if (above.includes(at)) break;
+    above.push(at);
+    at = at.parentId === null ? undefined : byId.get(at.parentId);
+  }
+  return above;
+};
