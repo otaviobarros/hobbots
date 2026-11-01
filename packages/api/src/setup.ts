@@ -2,6 +2,7 @@ import { InstallationSetup, RuntimeKind, SafetyPreset } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { InvalidFolder } from "./errors.ts";
+import { UserSessionOnly } from "./user-session.ts";
 
 /**
  * A change to the installation's setup; fields left out keep their value. Setup can be completed
@@ -25,4 +26,5 @@ export class SetupGroup extends HttpApiGroup.make("setup")
       error: InvalidFolder,
     }),
   )
+  .middleware(UserSessionOnly)
   .prefix("/api") {}

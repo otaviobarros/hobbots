@@ -31,5 +31,5 @@ A hob that delegates work gives the receiver at most its own authority. Delegati
 The Hobbots MCP tools never grant approvals, manage credentials, delete records administratively or start, stop or remove computers.
 
 - **Why:** a hob must not approve its own requests or raise its own authority. The [permissions contract](../architecture/permissions.md) lists the exclusions.
-- **Enforced by:** deciding approvals and revoking grants require a user session that only the hub's user-session middleware provides (`[TC-PE-112]`), and review.
+- **Enforced by:** deciding approvals and revoking grants require a user session that only the hub's user-session middleware provides, and a test fails when other code names it (`[TC-PE-112]`); review.
 - **Applies to:** the Hobbots MCP server.

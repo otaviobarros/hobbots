@@ -30,7 +30,8 @@ interface Message {
 const api = async <A>(current: Hub, method: string, path: string, body?: unknown): Promise<A> => {
   const response = await fetch(`${current.url}/api${path}`, {
     method,
-    ...(body !== undefined && { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    headers: { origin: current.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);
   return (await response.json()) as A;
@@ -143,7 +144,7 @@ test("[TC-AG-098] three hobs with different models chat at once in the app, an e
   await api(current, "POST", `/agents/${ash.id}/retire`, { activeWork: "finish" });
   const refused = await fetch(`${current.url}/api/threads/${ashChat.thread}/messages`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", origin: current.url },
     body: JSON.stringify({ content: "again" }),
   });
   expect(refused.status).toBe(409);

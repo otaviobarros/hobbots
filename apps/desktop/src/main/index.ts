@@ -68,6 +68,8 @@ const supervisor = new ServerSupervisor({
         HOBBOTS_DATA_DIR: app.getPath("userData"),
         HOBBOTS_VERSION: app.getVersion(),
         HOBBOTS_WEB_DIR: webDir,
+        // A development build's window loads the Vite dev server, which then acts for the user.
+        ...(!app.isPackaged && { HOBBOTS_ALLOWED_ORIGINS: devWebUrl }),
       },
     });
     server.on("exit", (code) => console.log(`Hobbots server exited with code ${code}`));

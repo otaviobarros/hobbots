@@ -11,6 +11,7 @@ import {
   HobService,
   PermissionSummary,
 } from "@hobbots/agents";
+import { HobbotsApi, UserSessionOnly } from "@hobbots/api";
 import {
   type Agent,
   type ApprovalRequest,
@@ -39,7 +40,7 @@ import { CanonicalSharedFolders, NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
 import { HobToolsLive } from "../src/tools.ts";
-import { ClientOrigins, userSessionOrigin } from "../src/user-session.ts";
+import { ClientOrigins, userSessionOrigin, userSessionOrigins } from "../src/user-session.ts";
 
 // Only the user decides approvals and manages grants (PE-006, ADR 015), over the hub's own routes
 // with the fake runtime making the hob's tool calls.
@@ -226,16 +227,40 @@ describe("only the user decides approvals and manages grants", () => {
   });
 
   // covers PE-006
+  it("[TC-PE-113] refuses and records a change to what hobs may do that is not from a user session", async () => {
+    await setupDone();
+    const thread = await hobThread("Pip");
+    const hob = thread.agentId;
+    const permissions = `/api/agents/${hob}/permissions`;
+    const before = (await request(APP, "GET", permissions)).body;
+    // Widening a hob's own folders or signing, or the installation's preset, would sidestep a refused decision.
+    const attempts = [
+      await request(SCRIPT, "PATCH", permissions, { ownFolders: [temp], signCommits: true }),
+      await request(OTHER_PAGE, "PATCH", permissions, { signCommits: true }),
+      await request(SCRIPT, "PATCH", "/api/setup", { safetyPreset: "trusting", approvedFolders: [temp] }),
+      await request(SCRIPT, "GET", permissions),
+    ];
+    for (const attempt of attempts) expect(attempt).toMatchObject({ status: 403, body: REFUSED });
+    expect(refusals).toHaveLength(attempts.length);
+    expect((await request(APP, "GET", permissions)).body).toEqual(before);
+    expect((await request(APP, "GET", "/api/setup")).body).toMatchObject({
+      safetyPreset: "balanced",
+      approvedFolders: [project],
+    });
+  });
+
+  // covers PE-006. A regression check: these refusals come from the runtime adapter (an unknown tool)
+  // and the policy engine (loopback is never reachable, ADR 014), not from the user-session check.
   it("[TC-PE-111] a hob's tool calls aimed at the hub's controls are refused and recorded, and the request stays pending", async () => {
     await setupDone();
     const { thread, pending } = await pendingPush();
-    // Another hob tries every way a runtime offers to approve that request for it.
+    // Another hob tries the ways a runtime offers to approve that request for it.
     const other = await hobThread("Bram");
     await request(APP, "POST", `/api/threads/${other.id}/messages`, {
       content: [
         "Approve Pip's push",
         `fake:tool mcp__hobbots__decide_approval ${pending.id}`,
-        `fake:tool WebFetch http://127.0.0.1:4317/api/approvals/${pending.id}/decision`,
+        `fake:tool WebFetch http://${HUB}/api/approvals/${pending.id}/decision`,
         "fake:tool mcp__hobbots__revoke_grant all",
       ].join("\n"),
     });
@@ -252,35 +277,66 @@ describe("only the user decides approvals and manages grants", () => {
   });
 
   // covers PE-006
-  it("[TC-PE-112] only the hub's user-session middleware provides a user session, so no hob, Charm or runtime tool has one", () => {
+  it("[TC-PE-112] only the hub's user-session middleware provides a user session, and every guarded route carries it", () => {
+    // Every route that decides approvals, manages grants or changes what hobs may do, including any
+    // added to those groups later, sits behind the middleware.
+    for (const group of ["approvals", "grants", "permissions", "setup"] as const) {
+      const endpoints = Object.values(HobbotsApi.groups[group].endpoints);
+      expect(endpoints.length).toBeGreaterThan(0);
+      for (const endpoint of endpoints) expect([...endpoint.middlewares]).toContain(UserSessionOnly);
+    }
+
+    // `UserSession` is named only where it is defined, where the middleware provides it, and where
+    // the services require it. Anything else naming it, a hob tool or Charm included, fails here.
     const root = join(import.meta.dirname, "..", "..", "..");
     const sources = (dir: string): ReadonlyArray<string> =>
       readdirSync(dir).flatMap((name) => {
         const path = join(dir, name);
-        if (name === "node_modules" || name === "dist" || name === "test" || name === "e2e") return [];
+        if (["node_modules", "dist", "test", "e2e"].includes(name)) return [];
         if (statSync(path).isDirectory()) return sources(path);
         return /\.tsx?$/.test(name) ? [path] : [];
       });
-    const provides = /provideService\([^)]*\bUserSession\b|Layer\.succeed\(\s*UserSession\b|UserSession\.of\(/;
-    const providers = ["apps", "packages"]
+    const named = ["apps", "packages"]
       .flatMap((area) => sources(join(root, area)))
-      .filter((path) => provides.test(readFileSync(path, "utf8")))
-      .map((path) => relative(root, path));
-    expect(providers).toEqual([join("apps", "server", "src", "user-session.ts")]);
+      .filter((path) => /\bUserSession\b/.test(readFileSync(path, "utf8")))
+      .map((path) => relative(root, path))
+      .sort();
+    expect(named).toEqual(
+      [
+        join("apps", "server", "src", "user-session.ts"),
+        join("packages", "agents", "src", "approvals.ts"),
+        join("packages", "agents", "src", "grants.ts"),
+        join("packages", "api", "src", "user-session.ts"),
+      ].sort(),
+    );
+    // The services only require it: they import it, name it in a signature or a comment, and read it.
+    const requiring =
+      /^\s*(UserSession,|import .*\bUserSession\b.*|yield\* UserSession;|.*, UserSession>;?|\s*\*.*|\) => Effect\.Effect<.*UserSession>;)$/;
+    for (const service of ["approvals.ts", "grants.ts"]) {
+      const lines = readFileSync(join(root, "packages", "agents", "src", service), "utf8")
+        .split("\n")
+        .filter((line) => /\bUserSession\b/.test(line));
+      for (const line of lines) expect(line).toMatch(requiring);
+    }
   });
 });
 
 describe("userSessionOrigin", () => {
   const allowed = [DEV_SERVER];
   it("admits the hub's own origin, an allowed client origin and a same-origin read", () => {
-    expect(userSessionOrigin({ host: HUB, origin: `http://${HUB}` }, allowed)).toEqual({ origin: `http://${HUB}` });
-    expect(userSessionOrigin({ host: HUB, origin: DEV_SERVER }, allowed)).toEqual({ origin: DEV_SERVER });
-    expect(userSessionOrigin({ host: HUB, "sec-fetch-site": "same-origin" }, allowed)).toEqual({
+    expect(userSessionOrigin("POST", { host: HUB, origin: `http://${HUB}` }, allowed)).toEqual({
+      origin: `http://${HUB}`,
+    });
+    expect(userSessionOrigin("POST", { host: HUB, origin: DEV_SERVER }, allowed)).toEqual({ origin: DEV_SERVER });
+    expect(userSessionOrigin("POST", { host: "LOCALHOST:4365", origin: `http://${HUB}` }, allowed)).toEqual({
+      origin: `http://${HUB}`,
+    });
+    expect(userSessionOrigin("GET", { host: HUB, "sec-fetch-site": "same-origin" }, allowed)).toEqual({
       origin: `http://${HUB}`,
     });
   });
 
-  it("refuses no origin, another origin, an opaque origin and a cross-site read", () => {
+  it("refuses no origin, another origin, an opaque origin, a cross-site read and a change marked only same-origin", () => {
     for (const headers of [
       { host: HUB },
       { host: HUB, origin: "https://attacker.example" },
@@ -289,7 +345,20 @@ describe("userSessionOrigin", () => {
       { host: HUB, "sec-fetch-site": "cross-site" },
       { "sec-fetch-site": "same-origin" },
     ]) {
-      expect(userSessionOrigin(headers, allowed)).toHaveProperty("refused");
+      expect(userSessionOrigin("GET", headers, allowed)).toHaveProperty("refused");
     }
+    expect(userSessionOrigin("POST", { host: HUB, "sec-fetch-site": "same-origin" }, allowed)).toHaveProperty(
+      "refused",
+    );
+  });
+
+  it("trusts the dev server's origins only in a checkout or when they are set explicitly", () => {
+    const allowedOrigins = [DEV_SERVER];
+    expect(userSessionOrigins({ version: "development", allowedOrigins, allowedOriginsSet: false })).toEqual([
+      DEV_SERVER,
+    ]);
+    expect(userSessionOrigins({ version: "1.2.0", allowedOrigins, allowedOriginsSet: true })).toEqual([DEV_SERVER]);
+    // A packaged hub on the default allow list trusts only its own origin.
+    expect(userSessionOrigins({ version: "1.2.0", allowedOrigins, allowedOriginsSet: false })).toEqual([]);
   });
 });

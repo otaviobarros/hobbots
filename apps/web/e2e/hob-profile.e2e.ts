@@ -34,7 +34,8 @@ interface Message {
 const api = async <A>(current: Hub, method: string, path: string, body?: unknown): Promise<A> => {
   const response = await fetch(`${current.url}${path}`, {
     method,
-    ...(body !== undefined && { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    headers: { origin: current.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);
   return (await response.json()) as A;
