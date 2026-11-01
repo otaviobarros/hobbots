@@ -22,7 +22,7 @@ Trusted Workspace is the default. The [design](../decisions/008-design.md) names
 
 Careful keeps investigation automatic and asks before modifications and consequential work. Trusting is deliberately broad inside the hob's folders and the sandbox, with clear disclosure of actual runtime privileges; it never grants self-approval or Hobbots administration. Per-hob overrides only narrow the table; a widening needs a separately recorded user grant. The UI says **Never** for Deny.
 
-A rule is **enforced** when a runtime or OS boundary holds it whatever the hob does, and **checked** when Hobbots recognizes and decides the operation but a permitted command could perform it another way. Delete files is checked, and so is a push to a remote that accepts pushes without credentials when commands and the web are both allowed; pushes needing credentials are enforced. The Permissions tab says so.
+A rule is **enforced** when a runtime or OS boundary holds it whatever the hob does, and **checked** when Hobbots recognizes and decides the operation but a permitted command could perform it another way. Delete files is checked, and so is a push to a remote that accepts pushes without credentials when commands and the web are both allowed; pushes needing credentials are enforced. Local Git is checked where its answer is narrower than Run commands, since any permitted command can run Git another way. The Permissions tab says so. Commands are recognized through assignments and wrappers such as `env` and `timeout`, and in the folder a `cd` earlier in the line moved to; [ADR 014](../decisions/014-tool-policy-and-enforcement.md) has the details.
 
 ## Folders
 
