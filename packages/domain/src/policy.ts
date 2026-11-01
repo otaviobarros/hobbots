@@ -113,12 +113,16 @@ export type PolicyOverrides = typeof PolicyOverrides.Type;
 
 /**
  * A hob's own policy configuration. Folders are stored canonical. `hiddenSharedFolders` hides
- * shared folders from this hob only; a hob cannot add a folder to itself.
+ * shared folders from this hob only; a hob cannot add a folder to itself. `signCommits` lets the
+ * hob's commands sign Git commits with the user's 1Password SSH key, which opens 1Password's SSH
+ * agent to them: the agent cannot be limited to signing, so it also lets them log in over SSH with
+ * the user's keys. Off unless the user turns it on.
  */
 export const HobPolicy = Schema.Struct({
   ownFolders: Schema.Array(Schema.String),
   hiddenSharedFolders: Schema.Array(Schema.String),
   overrides: PolicyOverrides,
+  signCommits: Schema.optionalKey(Schema.Boolean),
 });
 export type HobPolicy = typeof HobPolicy.Type;
 

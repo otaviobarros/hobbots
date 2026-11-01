@@ -175,6 +175,13 @@ export const messages = {
       "outside-folders": "Acts outside the folders this hob may use.",
     },
   },
+  signing: {
+    label: "Sign commits with my 1Password key",
+    off: ({ name }: { name: string }) =>
+      `${name}'s commits are unsigned. Turning this on lets ${name}'s commands reach 1Password's SSH agent, so commits are signed when your Git config asks for it (commit.gpgsign with 1Password's op-ssh-sign). The agent can also log in to servers and push over SSH with your keys. macOS only.`,
+    on: ({ name }: { name: string }) =>
+      `${name}'s commands can reach 1Password's SSH agent, so commits are signed when your Git config asks for it (commit.gpgsign with 1Password's op-ssh-sign). They can also use your SSH keys to log in to servers and push over SSH, whenever 1Password allows it. Turning this off stops ${name}'s running reply.`,
+  },
   enforcement: {
     heading: "Held on this hub",
     intro: ({ name }: { name: string }) =>

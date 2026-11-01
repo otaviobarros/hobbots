@@ -40,7 +40,7 @@ import {
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
 import { type CallDecision, decideCall, refusal, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
-import { CLAUDE_CODE_MODEL_HOSTS, ProcessSandbox } from "./sandbox.ts";
+import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox } from "./sandbox.ts";
 import { offeredTools, toolLabel } from "./tool-calls.ts";
 
 export interface ClaudeCodeConfig {
@@ -858,6 +858,9 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               : [userConfigFolder(), request.tools.runtimeFolder];
             yield* Effect.promise(() => adoptSession(target, [source], sessionId));
           }
+          // The hob signs commits with the user's 1Password key only when the user turned that on.
+          const signingAgent =
+            sandboxed && tools.context.hob.signCommits === true ? onePasswordAgentSocket() : undefined;
           const prepared = sandboxed
             ? yield* Effect.acquireRelease(
                 sandbox.prepare({
@@ -870,6 +873,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   dataFolder: tools.context.dataFolder,
                   binary: absoluteBinary,
                   runtimeFolder: tools.runtimeFolder,
+                  ...(signingAgent ? { signingAgent } : {}),
                   allowedHosts: CLAUDE_CODE_MODEL_HOSTS,
                   decideHost: (host) =>
                     Effect.runPromise(
@@ -931,6 +935,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                     append: request.instructions,
                   },
                   ...(request.sessionId ? { resume: request.sessionId } : {}),
+                  // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
+                  ...(signingAgent ? { sandbox: { network: { allowUnixSockets: [signingAgent] } } } : {}),
                   ...brainOptions(request),
                 },
               }),

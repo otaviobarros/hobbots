@@ -26,12 +26,14 @@ interface AgentRow {
   readonly ownFolders?: unknown;
   readonly hiddenSharedFolders?: unknown;
   readonly policyOverrides?: unknown;
+  readonly signCommits?: unknown;
 }
 
 // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every look seed and revision fits a number.
-// The policy's three JSON text columns (migration 0015) become the hob's one `policy` field.
+// The policy's three JSON text columns (migration 0015) and its signing flag (0021) become the hob's
+// one `policy` field.
 const agentRows = (rows: ReadonlyArray<AgentRow>) =>
-  rows.map(({ ownFolders, hiddenSharedFolders, policyOverrides, ...row }) => ({
+  rows.map(({ ownFolders, hiddenSharedFolders, policyOverrides, signCommits, ...row }) => ({
     ...row,
     lookSeed: Number(row.lookSeed),
     ...(row.revision === undefined ? {} : { revision: Number(row.revision) }),
@@ -39,6 +41,7 @@ const agentRows = (rows: ReadonlyArray<AgentRow>) =>
       ownFolders: JSON.parse(String(ownFolders)),
       hiddenSharedFolders: JSON.parse(String(hiddenSharedFolders)),
       overrides: JSON.parse(String(policyOverrides)),
+      ...(Number(signCommits) === 1 ? { signCommits: true } : {}),
     },
   }));
 
@@ -47,6 +50,7 @@ const policyColumns = (policy: HobPolicy) => ({
   own_folders: JSON.stringify(policy.ownFolders),
   hidden_shared_folders: JSON.stringify(policy.hiddenSharedFolders),
   policy_overrides: JSON.stringify(policy.overrides),
+  sign_commits: policy.signCommits === true ? 1 : 0,
 });
 // The columns one configuration version sets, on the hob and in its history.
 const configColumns = (agent: Agent) => ({

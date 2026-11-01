@@ -21,14 +21,15 @@ export const operationDecision = (
   );
 
 /**
- * Whether `after` takes away anything `before` gave: a folder, the tools altogether, or an operation
- * whose answer gets narrower. A turn granted `before` must then stop, since its calls and commands
- * already run under what it was given (PE-008).
+ * Whether `after` takes away anything `before` gave: a folder, the tools altogether, the user's
+ * signing agent (`signCommits`), or an operation whose answer gets narrower. A turn granted `before`
+ * must then stop, since its calls and commands already run under what it was given (PE-008).
  */
 export const narrows = (before: ToolAccess | null, after: ToolAccess | null): boolean => {
   if (before === null) return false;
   if (after === null || after.policy.dataFolder !== before.policy.dataFolder) return true;
   if (before.folders.some((folder) => !after.folders.includes(folder))) return true;
+  if (before.policy.hob.signCommits === true && after.policy.hob.signCommits !== true) return true;
   return POLICY_OPERATIONS.some((operation) => {
     const was = operationDecision(before.policy, operation);
     const is = operationDecision(after.policy, operation);
