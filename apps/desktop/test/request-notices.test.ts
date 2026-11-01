@@ -40,7 +40,7 @@ const setup = () => {
       };
     },
     open: (id) => void opened.push(id),
-    retry: { firstRetryMs: 1, retries: 3 },
+    retry: { firstRetryMs: 1, maxRetryMs: 4 },
   });
   return { hub, notices, opened, check };
 };
@@ -82,7 +82,11 @@ describe("request notifications", () => {
     hub.inbox = [approval("a", "pending")];
     await check();
     hub.inbox = null;
-    await check();
+    const reading = check();
+    await expect.poll(() => hub.reads).toBeGreaterThan(5);
+    expect(notices[0]?.closed).toBe(false);
+    hub.inbox = [approval("a", "pending")];
+    await reading;
     expect(notices[0]?.closed).toBe(false);
   });
 
@@ -112,15 +116,16 @@ describe("request notifications", () => {
   });
 
   // covers UX-001
-  it("[TC-IN-019] reads the Inbox again when a read did not answer, since no later event may come", async () => {
+  it("[TC-IN-019] reads the Inbox again until a read answers, however long that takes, since no later event may come", async () => {
     const { hub, notices, check } = setup();
     hub.inbox = [];
     await check();
-    // The request event arrives, and the hub answers the read that follows only on its third try.
-    hub.answers = [null, null];
+    // The request event arrives, and the hub answers only after more failed reads than the first
+    // version of this retry allowed.
+    hub.answers = Array.from({ length: 8 }, () => null);
     hub.inbox = [approval("a", "pending")];
     await check();
-    expect(hub.reads).toBe(4);
+    expect(hub.reads).toBe(10);
     expect(notices.map((notice) => notice.body)).toEqual(["git push origin feature"]);
   });
 

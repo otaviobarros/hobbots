@@ -110,7 +110,8 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
    */
   const checkServer = async () => {
     await supervisor.check();
-    await workingReads.refresh();
+    // A fresh connection, or a hub that went away, starts from a new snapshot.
+    await workingReads.reset();
   };
 
   const guard = (window: BrowserWindow) => {
