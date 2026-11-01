@@ -23,6 +23,29 @@ Every kind except progress is **actionable** and can wake the hob. Progress, inc
 
 Adapters and Hobbots services record real evidence. Inactivity is not acknowledgement. An item whose turn ends early goes back to Pending with a new attempt; it never counts as resolved.
 
+## Records
+
+The backpack is built in `@hobbots/inbox`, `@hobbots/persistence` and migration 0026 ([#290](https://github.com/otaviobarros/hobbots/issues/290)). Delivery and the dispatcher are not built yet.
+
+- **`BackpackItem`** (`@hobbots/domain`): recipient, kind, actionable, priority, state, the Task, Quest, Attempt and thread it belongs to, dedupe key, payload, not-before time, claim, fencing token, deliveries, disposition and error. Its `questId` is the nearest Quest above its Task, the one whose lead runs the work.
+- **`backpackItemsFor`** (`@hobbots/inbox`): the pure rule that turns a change's journal events into items. The repositories call it inside every journaled change, so the hob tools need no change. Routine progress is recorded too; it is not actionable. The hub's own ending checkpoints make no item, because the result or failure says it.
+- **`Backpack`** (`@hobbots/inbox`, `BackpackLive` in `@hobbots/persistence`): claim, renew, deliver, acknowledge, process, requeue, resolve, fail and expire claims, plus reads of a hob's, a Quest's and the workspace's open items. Every step after the claim checks the owner, the token, the lease by the database's clock and the step's starting states in one conditional update. A refused step writes nothing.
+- **Tables:** `backpack_items`, unique on recipient and dedupe key, holds the claim's owner, token and lease; `backpack_deliveries` keeps each delivery with the token it was made under and the runtime's acknowledgement.
+- **Events:** `BackpackItemRecorded` follows the change's own events in the same transaction, and `BackpackItemChanged` records every later step.
+
+| Item kind | Made from | Recipient |
+|---|---|---|
+| Task | `TaskCreated` for a step or a delegated Task | The new Task's owner |
+| Result | `TaskCompleted` | The parent Task's owner |
+| Failure | `TaskStateChanged` to failed, blocked or cancelled | The parent Task's owner |
+| Checkpoint | `CheckpointRecorded` for a milestone, finding, blocker or question | The nearest lead |
+| Progress | `CheckpointRecorded` for progress, started or waiting | The nearest lead |
+| Question | `QuestionAsked`, `QuestionEscalated` | The lead it is with; none once it reaches you |
+| Answer | `QuestionAnswered` | The hob that asked |
+| Hand-off | `HandedOff` | The receiving Task's owner |
+
+Messages, approval outcomes and deadlines have their kinds and payloads but no source yet. They come with the commands and the dispatcher that make them.
+
 ## Delivery and recovery
 
 1. Commit the item in the same transaction as the change that caused it. The backpack row is the outbox.

@@ -16,6 +16,7 @@ import {
   isLiveAttempt,
   isTerminalTask,
   type JournaledEvent,
+  leadsAbove,
   Milestone,
   Quest,
   Question,
@@ -58,14 +59,6 @@ const QUEST_END: Partial<Record<TaskState, QuestState>> = {
   failed: "failed",
   cancelled: "cancelled",
 };
-
-/**
- * The leads above a Task, nearest first: the owners of its ancestors other than its own owner.
- * A question climbs this list, and reaches the user past its end.
- */
-const leadsAbove = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<AgentId> => [
-  ...new Set(ancestorsOf(task, tree).flatMap((each) => (each.ownerId === task.ownerId ? [] : [each.ownerId]))),
-];
 
 /** The SQL store of Tasks, Quests and their records, for SQLite and PostgreSQL (ADR 011, ADR 018). */
 export const TaskRepositoryLive = Layer.effect(

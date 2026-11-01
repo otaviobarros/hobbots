@@ -18,7 +18,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import type { SqlClient } from "effect/sql";
-import { oldestFirst } from "./journal.ts";
+import { oldestFirst } from "./order.ts";
 
 // The stored shape of each record (migrations 0024 and 0025): JSON text columns, numbers that PostgreSQL
 // reads as bigints, and a Task's result split into two columns.

@@ -16,6 +16,7 @@ import {
 import { type Agent, type Message, PRESET_DECISIONS, roleFields } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
+  BackpackLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -109,6 +110,7 @@ const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailab
                 GrantRepositoryLive,
                 TaskRepositoryLive,
                 EventJournal.layer,
+                BackpackLive,
                 SetupRepository.layer,
                 SearchIndex.layer,
               ).pipe(Layer.provideMerge(TestDatabase)),

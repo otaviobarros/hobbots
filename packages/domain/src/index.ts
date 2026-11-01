@@ -1,5 +1,6 @@
 export * from "./agent.ts";
 export * from "./approval.ts";
+export * from "./backpack.ts";
 export * from "./brain.ts";
 export * from "./events.ts";
 export * from "./grant.ts";

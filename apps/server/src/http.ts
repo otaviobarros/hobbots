@@ -15,6 +15,7 @@ import { RuntimeKind, type ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ApprovalsHandlers } from "./approvals.ts";
+import { BackpackHandlers } from "./backpack.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { Installation } from "./installation.ts";
@@ -165,5 +166,6 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     GrantsHandlers,
     TasksHandlers,
     QuestionsHandlers,
+    BackpackHandlers,
   ]),
 );

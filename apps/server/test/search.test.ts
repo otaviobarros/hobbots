@@ -12,6 +12,7 @@ import {
 import type { SearchHit } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
+  BackpackLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -41,6 +42,7 @@ beforeEach(() => {
     GrantRepositoryLive,
     TaskRepositoryLive,
     EventJournal.layer,
+    BackpackLive,
     SetupRepository.layer,
     SearchIndex.layer,
   ).pipe(Layer.provideMerge(TestDatabase));

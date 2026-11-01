@@ -202,8 +202,9 @@ describe("Task records", () => {
     // A subtree holds only what is under its Task.
     expect(result.sub.tasks.map((task) => task.id)).toEqual(["build", "research", "keywords"]);
     expect(result.sub.quests.map((quest) => quest.id)).toEqual(["q2"]);
-    // Each change is journaled with its event, correlated with the Task's owner and thread.
-    expect(tags(result.step.entries)).toEqual(["TaskCreated"]);
+    // Each change is journaled with its event, correlated with the Task's owner and thread. A new
+    // step also lands in its owner's backpack, journaled after it (ADR 019).
+    expect(tags(result.step.entries)).toEqual(["TaskCreated", "BackpackItemRecorded"]);
     expect(result.step.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
     expect(result.step.value.revision).toBe(result.step.entries[0]?.sequence);
     expect(tags(result.nested.entries)).toEqual(["QuestStarted"]);
@@ -300,12 +301,14 @@ describe("Task records", () => {
       }),
     );
 
-    expect(tags(result.first.entries)).toEqual(["TaskStateChanged", "CheckpointRecorded"]);
+    // The hub's started checkpoint reaches Quill's lead as routine progress (ADR 019).
+    expect(tags(result.first.entries)).toEqual(["TaskStateChanged", "CheckpointRecorded", "BackpackItemRecorded"]);
     expect(result.first.value.task).toMatchObject({ state: "active", currentAttemptId: "a1" });
     expect(result.twice).toMatchObject({ _tag: "TaskRefused", reason: "attempt-live" });
     expect(result.running.value.attempt).toMatchObject({ state: "running", sessionId: "s1" });
     expect(result.stale).toMatchObject({ _tag: "StaleTask", taskId: "copy" });
-    expect(tags(result.moved.entries)).toEqual(["TaskStateChanged", "CheckpointRecorded"]);
+    // Quill's failure lands in its lead's backpack (ADR 019).
+    expect(tags(result.moved.entries)).toEqual(["TaskStateChanged", "CheckpointRecorded", "BackpackItemRecorded"]);
     expect(result.illegal).toMatchObject({ _tag: "IllegalTaskTransition", from: "failed", to: "waiting" });
     expect(result.unchanged).toEqual(result.head);
     // The retry is the same Task with a second Attempt; the first keeps its outcome.
@@ -467,15 +470,16 @@ describe("Task records", () => {
     expect(result.notAsker).toMatchObject({ _tag: "TaskRefused", reason: "not-asker" });
     // Pip's step asks: its own Task is Pip's, so the nearest lead is Ada, then Aldric, then you.
     expect(result.asked.value).toMatchObject({ recipientId: ADA, chain: [], state: "open" });
-    expect(tags(result.asked.entries)).toEqual(["QuestionAsked"]);
+    // Each step of the question lands in the backpack of the hob it reaches (ADR 019).
+    expect(tags(result.asked.entries)).toEqual(["QuestionAsked", "BackpackItemRecorded"]);
     expect(result.asked.entries[0]?.correlation).toEqual({ agentId: PIP, threadId, messageId: null });
     expect(result.wrong).toMatchObject({ _tag: "TaskRefused", reason: "not-recipient" });
     expect(result.up.value).toMatchObject({ recipientId: ALDRIC, chain: [ADA] });
-    expect(tags(result.up.entries)).toEqual(["QuestionEscalated"]);
+    expect(tags(result.up.entries)).toEqual(["QuestionEscalated", "BackpackItemRecorded"]);
     expect(result.top.value).toMatchObject({ recipientId: null, chain: [ADA, ALDRIC] });
     expect(result.byLead).toMatchObject({ _tag: "TaskRefused", reason: "not-recipient" });
     expect(result.answered.value).toMatchObject({ state: "answered", answer: "EU", answeredBy: { _tag: "User" } });
-    expect(tags(result.answered.entries)).toEqual(["QuestionAnswered"]);
+    expect(tags(result.answered.entries)).toEqual(["QuestionAnswered", "BackpackItemRecorded"]);
     expect(result.again).toMatchObject({ _tag: "TaskRefused", reason: "question-answered" });
     // The lead of the top Task has no lead above it: its question comes straight to you.
     expect(result.topAsk.value.recipientId).toBeNull();
@@ -532,7 +536,7 @@ describe("Task records", () => {
       }),
     );
 
-    expect(tags(result.reached.entries)).toEqual(["CheckpointRecorded"]);
+    expect(tags(result.reached.entries)).toEqual(["CheckpointRecorded", "BackpackItemRecorded"]);
     expect(result.reached.entries[0]?.payload).toMatchObject({
       checkpoint: { source: "planned", kind: "milestone", milestoneId: "m-draft" },
       milestone: { id: "m-draft", reachedAt: later },
@@ -540,7 +544,7 @@ describe("Task records", () => {
     expect(result.twice).toMatchObject({ _tag: "TaskRefused", reason: "milestone-mismatch" });
     expect(result.wrongSource).toMatchObject({ _tag: "TaskRefused", reason: "checkpoint-kind" });
     expect(result.finding.value).toMatchObject({ source: "unplanned", kind: "finding", attemptId: null });
-    expect(tags(result.handed.entries)).toEqual(["HandedOff"]);
+    expect(tags(result.handed.entries)).toEqual(["HandedOff", "BackpackItemRecorded"]);
     expect(result.handed.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
     expect(result.again.entries).toEqual([]);
     expect(result.again.value).toEqual(result.handed.value);
