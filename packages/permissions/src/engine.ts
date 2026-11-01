@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isAbsolute } from "node:path";
 import {
   type HobPolicy,
   narrowest,
@@ -23,7 +24,7 @@ import { type CanonicalPath, isInside, PathResolver, type ScopeGitResources } fr
  */
 
 /** Bumped whenever the rules below change meaning, so older decisions name the rules they followed. */
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 2;
 
 /** Everything a decision depends on. Folders are canonical as stored; the engine resolves them again. */
 export interface PolicyContext {
@@ -43,7 +44,11 @@ export interface PolicyContext {
 export const FileOperation = Schema.Literals(["read-files", "edit-files", "delete-files"]);
 export const CommandOperation = Schema.Literals(["run-commands", "local-git"]);
 
-/** A normalized operation on its concrete resource. Relative paths resolve against `cwd`. */
+/**
+ * A normalized operation on its concrete resource. Relative paths resolve against `cwd`. A relative
+ * `cwd` names a folder a command line moved to that could not be worked out, such as after
+ * `cd "$DIR"`: it and the relative paths against it are not resolved, so they are refused.
+ */
 export const PolicyRequest = Schema.TaggedUnion({
   Files: { operation: FileOperation, paths: Schema.Array(Schema.String), cwd: Schema.String },
   Command: { operation: CommandOperation, cwd: Schema.String },
@@ -375,29 +380,37 @@ export class PolicyEngine extends Context.Service<
     PolicyEngine,
     Effect.gen(function* () {
       const resolver = yield* PathResolver;
+      // A relative path against a relative base, such as the folder after `cd "$DIR"` that the
+      // command line could not settle, has no known location, so it is not resolved and stays closed.
+      const unknown = (input: string, base: string) => !isAbsolute(input) && !isAbsolute(base);
+      const unresolved = (input: string) => Effect.succeed<ResolvedTarget>({ input, canonical: null });
       const resolve = (input: string, base: string) =>
-        resolver.canonicalize(input, base).pipe(
-          Effect.map((canonical): ResolvedTarget => ({ input, canonical })),
-          Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
-        );
+        unknown(input, base)
+          ? unresolved(input)
+          : resolver.canonicalize(input, base).pipe(
+              Effect.map((canonical): ResolvedTarget => ({ input, canonical })),
+              Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
+            );
       const folder = (input: string) => resolve(input, "/");
       /** `inScope` holds the Git resources found across the hob's folders (`protectedGitPathsIn`). */
       const resolveChange = (input: string, base: string, inScope: ScopeGitResources) =>
-        resolver.canonicalize(input, base).pipe(
-          Effect.flatMap((canonical) =>
-            resolver.protectedGitPaths(canonical).pipe(
-              Effect.map(
-                (own): ResolvedTarget => ({
-                  input,
-                  canonical,
-                  protectedPaths: [...own, ...inScope.paths],
-                  unsearched: inScope.unsearched.some((folder) => isInside(canonical, folder)),
-                }),
+        unknown(input, base)
+          ? unresolved(input)
+          : resolver.canonicalize(input, base).pipe(
+              Effect.flatMap((canonical) =>
+                resolver.protectedGitPaths(canonical).pipe(
+                  Effect.map(
+                    (own): ResolvedTarget => ({
+                      input,
+                      canonical,
+                      protectedPaths: [...own, ...inScope.paths],
+                      unsearched: inScope.unsearched.some((folder) => isInside(canonical, folder)),
+                    }),
+                  ),
+                ),
               ),
-            ),
-          ),
-          Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
-        );
+              Effect.orElseSucceed((): ResolvedTarget => ({ input, canonical: null })),
+            );
 
       const scopeOf = Effect.fnUntraced(function* (context: PolicyContext) {
         const shared = yield* Effect.forEach(context.sharedFolders, folder);
@@ -437,7 +450,8 @@ export class PolicyEngine extends Context.Service<
             );
           }
           case "Command":
-            return resolve(request.cwd, "/").pipe(
+            // The runtime reports an absolute folder, so a relative one is a folder a command line moved to unknowably.
+            return (isAbsolute(request.cwd) ? resolve(request.cwd, "/") : unresolved(request.cwd)).pipe(
               Effect.map((cwd) => ({ _tag: "Command", operation: request.operation, cwd }) as const),
             );
           default:
