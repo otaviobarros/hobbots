@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-01
 - **Issue:** [#217](https://github.com/otaviobarros/hobbots/issues/217)
-- **Pull request:** [#PR](https://github.com/otaviobarros/hobbots/pull/PR)
+- **Pull request:** [#300](https://github.com/otaviobarros/hobbots/pull/300)
 - **Commit:** not yet on `main` (ran on the pull request branch, based on `ca45e4a`)
 - **Setup:** Automated only, with the fake runtime, which decides each scripted tool call with the hub's policy engine and runs nothing. Linux x86_64, Node 22.23.4. The hub-level cases go through the HTTP API with the hub's own composition (the setup's preset and folders, one policy engine, grants) and ran on SQLite in memory and on PostgreSQL 16.15; CI runs them on SQLite and PostgreSQL 18. The 24-hour case moves the hub's clock forward instead of waiting a day. The browser cases ran with Playwright 1.64.1 and Chromium's headless shell against a hub from source on a SQLite file.
 - **Result:** Passed with gaps. An Always rule shows in History, answers the next matching action and, once removed, the next one asks again; a doubled approval runs the action once and saves one rule; a request left a day expires and cannot be approved; and the Inbox and the chat decide the same way. Real Claude Code was not part of this run.
