@@ -1,18 +1,21 @@
 import { ApprovalRepository } from "@hobbots/agents";
-import { ApprovalRequest, type ApprovalState } from "@hobbots/domain";
+import { ApprovalRequest, type ApprovalState, type Grant } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { makeJournaled } from "./journal.ts";
+import { grantRow } from "./grants.ts";
+import { makeJournaled, oldestFirst } from "./journal.ts";
 
 interface ApprovalRow {
   readonly targets?: unknown;
   readonly arguments?: unknown;
   readonly revision?: unknown;
   readonly onceOnly?: unknown;
+  readonly grantable?: unknown;
+  readonly rules?: unknown;
 }
 
 // Targets and arguments are JSON text (migration 0018); the revision is a bigint on PostgreSQL;
-// once_only is 0 or 1 (migration 0019).
+// once_only is 0 or 1 (migration 0019); grantable is 0 or 1 and rules are JSON text (migration 0022).
 const approvalRows = (rows: ReadonlyArray<ApprovalRow>) =>
   rows.map((row) => ({
     ...row,
@@ -20,6 +23,8 @@ const approvalRows = (rows: ReadonlyArray<ApprovalRow>) =>
     arguments: JSON.parse(String(row.arguments)),
     revision: Number(row.revision),
     onceOnly: Number(row.onceOnly) === 1,
+    grantable: Number(row.grantable) === 1,
+    rules: JSON.parse(String(row.rules ?? "[]")),
   }));
 
 /** The SQL store of approval requests, for SQLite and PostgreSQL (ADR 011). */
@@ -28,11 +33,6 @@ export const ApprovalRepositoryLive = Layer.effect(
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const journaled = makeJournaled(sql);
-    // Oldest first; text compares byte by byte on both, as the other repositories' sort keys do.
-    const oldestFirst = sql.onDialectOrElse({
-      pg: () => sql.literal(`created_at COLLATE "C", id COLLATE "C"`),
-      orElse: () => sql.literal("created_at, id"),
-    });
 
     const find = SqlSchema.findOneOption({
       Request: Schema.String,
@@ -43,7 +43,7 @@ export const ApprovalRepositoryLive = Layer.effect(
       Request: Schema.String,
       Result: ApprovalRequest,
       execute: (threadId) =>
-        sql`SELECT * FROM approval_requests WHERE thread_id = ${threadId} ORDER BY ${oldestFirst}`.pipe(
+        sql`SELECT * FROM approval_requests WHERE thread_id = ${threadId} ORDER BY ${oldestFirst(sql)}`.pipe(
           Effect.map(approvalRows),
         ),
     });
@@ -51,7 +51,7 @@ export const ApprovalRepositoryLive = Layer.effect(
       Request: Schema.Void,
       Result: ApprovalRequest,
       execute: () =>
-        sql`SELECT * FROM approval_requests WHERE state = 'pending' ORDER BY ${oldestFirst}`.pipe(
+        sql`SELECT * FROM approval_requests WHERE state = 'pending' ORDER BY ${oldestFirst(sql)}`.pipe(
           Effect.map(approvalRows),
         ),
     });
@@ -75,9 +75,13 @@ export const ApprovalRepositoryLive = Layer.effect(
             action_digest: approval.actionDigest,
             policy_version: approval.policyVersion,
             once_only: approval.onceOnly ? 1 : 0,
+            grantable: approval.grantable ? 1 : 0,
+            rules: JSON.stringify(approval.rules),
             state: approval.state,
+            lifetime: approval.lifetime,
             deny_reason: approval.denyReason,
             created_at: approval.createdAt,
+            expires_at: approval.expiresAt,
             decided_at: approval.decidedAt,
             revision,
           })}`;
@@ -85,17 +89,31 @@ export const ApprovalRepositoryLive = Layer.effect(
         }),
       ).pipe(Effect.map(Option.getOrThrow));
 
-    // The state check lets a decision and an expiry race safely: only one moves it out of `from`.
-    const resolve = (input: ApprovalRequest, from: ApprovalState) =>
-      journaled(1, (revision) =>
+    // The state check lets a decision and an expiry race safely: only one moves it out of `from`,
+    // and only that one saves the decision's grants (ADR 015).
+    const resolve = (input: ApprovalRequest, from: ApprovalState, grants: ReadonlyArray<Grant> = []) =>
+      journaled(1 + grants.length, (revision) =>
         Effect.gen(function* () {
           const approval = new ApprovalRequest({ ...input, revision });
           const updated = yield* sql`UPDATE approval_requests
-            SET state = ${approval.state}, deny_reason = ${approval.denyReason},
+            SET state = ${approval.state}, lifetime = ${approval.lifetime}, deny_reason = ${approval.denyReason},
               decided_at = ${approval.decidedAt}, revision = ${revision}
             WHERE id = ${approval.id} AND state = ${from} RETURNING id`;
           if (updated.length === 0) return null;
-          return { value: approval, events: [{ _tag: "ApprovalResolved", approval } as const] };
+          const saved = yield* Effect.forEach(grants, (grant, index) =>
+            Effect.gen(function* () {
+              const row = grantRow(grant, revision + 1 + index);
+              yield* sql`INSERT INTO grants ${sql.insert(row.columns)}`;
+              return row.grant;
+            }),
+          );
+          return {
+            value: approval,
+            events: [
+              { _tag: "ApprovalResolved", approval } as const,
+              ...saved.map((grant) => ({ _tag: "GrantCreated", grant }) as const),
+            ],
+          };
         }),
       );
 

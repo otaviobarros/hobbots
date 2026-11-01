@@ -4,6 +4,7 @@ import { Context, DateTime, Effect, Layer, Option } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { ChatService } from "./chat.ts";
+import { GrantService } from "./grants.ts";
 import { foundAgent } from "./hobs.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -25,6 +26,7 @@ export class HobLifecycle extends Context.Service<
       const chat = yield* ChatService;
       const admission = yield* HobAdmission;
       const approvals = yield* Effect.serviceOption(ApprovalService);
+      const grants = yield* Effect.serviceOption(GrantService);
 
       const findAgent = (agentId: AgentId) => repo.findAgent(agentId).pipe(Effect.flatMap(foundAgent(agentId)));
 
@@ -70,6 +72,8 @@ export class HobLifecycle extends Context.Service<
             );
             // A reply left to finish gets no approval: what it waits for is refused.
             if (Option.isSome(approvals)) yield* approvals.value.expireForAgent(agentId);
+            // A retired hob keeps none of its rules, and coming back would not restore them (ADR 015).
+            if (Option.isSome(grants)) yield* grants.value.revokeForAgent(agentId, "retired");
             if (activeWork === "stop") yield* chat.interruptAgent(agentId);
             return retired;
           }),

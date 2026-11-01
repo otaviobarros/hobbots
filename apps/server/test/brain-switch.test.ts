@@ -3,6 +3,7 @@ import {
   AdditionalRuntimes,
   ApprovalService,
   ChatService,
+  GrantService,
   HobAdmission,
   HobLifecycle,
   HobService,
@@ -15,7 +16,13 @@ import {
   type RuntimeEvent,
 } from "@hobbots/agents";
 import { type Agent, isInProgress, type Message, type RuntimeKind, roleFields, type Thread } from "@hobbots/domain";
-import { ApprovalRepositoryLive, HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
+import {
+  ApprovalRepositoryLive,
+  GrantRepositoryLive,
+  HobbotsRepositoryLive,
+  SearchIndex,
+  SetupRepository,
+} from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FAKE_DIRECTIVES, makeFakeRuntime } from "@hobbots/runtimes";
 import { Layer, Stream } from "effect";
@@ -99,6 +106,7 @@ const start = (options: { readonly codex?: boolean } = {}) => {
         Layer.mergeAll(
           ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
           ApprovalService.layer,
+          GrantService.layer,
           HobService.layer,
           PermissionSummary.layer,
         ),
@@ -107,9 +115,13 @@ const start = (options: { readonly codex?: boolean } = {}) => {
     .pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          Layer.mergeAll(HobbotsRepositoryLive, ApprovalRepositoryLive, SetupRepository.layer, SearchIndex.layer).pipe(
-            Layer.provideMerge(TestDatabase),
-          ),
+          Layer.mergeAll(
+            HobbotsRepositoryLive,
+            ApprovalRepositoryLive,
+            GrantRepositoryLive,
+            SetupRepository.layer,
+            SearchIndex.layer,
+          ).pipe(Layer.provideMerge(TestDatabase)),
           EventBus.layer,
           HobAdmission.layer,
           NodeFolderChecks,

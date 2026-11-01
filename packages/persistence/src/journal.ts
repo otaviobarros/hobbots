@@ -35,6 +35,9 @@ const correlationOf = (event: JournaledEventType): EventCorrelation => {
         threadId: event.approval.threadId,
         messageId: event.approval.messageId,
       };
+    case "GrantCreated":
+    case "GrantRevoked":
+      return { agentId: event.grant.agentId, threadId: null, messageId: null };
     case "MessageUpserted":
     case "MessageQueued":
       return { agentId: null, threadId: event.message.threadId, messageId: event.message.id };
@@ -214,3 +217,10 @@ export class EventJournal extends Context.Service<
     }),
   );
 }
+
+/** Oldest first, by `created_at` then `id`; text compares byte by byte on both dialects. */
+export const oldestFirst = (sql: SqlClient.SqlClient) =>
+  sql.onDialectOrElse({
+    pg: () => sql.literal(`created_at COLLATE "C", id COLLATE "C"`),
+    orElse: () => sql.literal("created_at, id"),
+  });

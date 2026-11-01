@@ -61,14 +61,21 @@ describe("Claude Code tool calls as policy requests", () => {
 
   it("recognizes Git, pushes and deletes inside a command", () => {
     expect(commandRequests("pnpm test", "/work")).toEqual([
-      { _tag: "Command", operation: "run-commands", cwd: "/work" },
+      { _tag: "Command", operation: "run-commands", cwd: "/work", words: ["pnpm", "test"] },
     ]);
     expect(commandRequests("git -C sub status", "/work")).toEqual([
-      { _tag: "Command", operation: "local-git", cwd: "/work" },
+      { _tag: "Command", operation: "local-git", cwd: "/work", words: ["git", "-C", "sub", "status"] },
     ]);
+    // A leading assignment cannot be granted; the next simple command still can.
     expect(commandRequests("FOO=1 rm -rf build && ls", "/work")).toEqual([
-      { _tag: "Files", operation: "delete-files", paths: ["build"], cwd: "/work" },
-      { _tag: "Command", operation: "run-commands", cwd: "/work" },
+      { _tag: "Files", operation: "delete-files", paths: ["build"], cwd: "/work", exact: false },
+      { _tag: "Command", operation: "run-commands", cwd: "/work", words: null },
+      { _tag: "Command", operation: "run-commands", cwd: "/work", words: ["ls"] },
+    ]);
+    // A line the reader cannot read gives no words to any of its commands.
+    expect(commandRequests("rm *.tmp; ls", "/work")).toEqual([
+      { _tag: "Files", operation: "delete-files", paths: ["*.tmp"], cwd: "/work", exact: false },
+      { _tag: "Command", operation: "run-commands", cwd: "/work", words: null },
     ]);
   });
 
@@ -80,6 +87,7 @@ describe("Claude Code tool calls as policy requests", () => {
       branch: "feature",
       force: false,
       toDefaultBranch: false,
+      cwd: "/work",
     });
     expect(push("git push")).toMatchObject({ remote: "origin", toDefaultBranch: true });
     expect(push("git push origin HEAD:refs/heads/main")).toMatchObject({ branch: "main", toDefaultBranch: true });
@@ -159,6 +167,9 @@ describe("combining verdicts", () => {
     targets: [],
     enforcement: "enforced",
     onceOnly: false,
+    grantable: false,
+    rules: [],
+    grantIds: [],
     policyVersion: "v",
   });
 
