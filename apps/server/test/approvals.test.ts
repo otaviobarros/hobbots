@@ -455,6 +455,8 @@ describe("Ask decisions", () => {
           reason: "Pushing asks first.",
           policyVersion: "r1-test",
           onceOnly: false,
+          grantable: false,
+          rules: [],
         });
         const [request] = yield* approvals.listForThread(thread.id);
         const decision = { decision: "approve", actionDigest: (request as ApprovalRequest).actionDigest } as const;
@@ -501,6 +503,8 @@ describe("Ask decisions", () => {
           reason: "Pushing asks first.",
           policyVersion: "r1-test",
           onceOnly: false,
+          grantable: false,
+          rules: [],
         });
         return yield* approvals.listForThread(thread.id);
       }).pipe(Effect.provide(Layer.fresh(ApprovalService.layer)));

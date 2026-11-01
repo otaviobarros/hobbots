@@ -5,6 +5,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
   ChatService,
+  GrantService,
   HobAdmission,
   HobLifecycle,
   HobService,
@@ -13,7 +14,13 @@ import {
   RuntimeAdapter,
 } from "@hobbots/agents";
 import { type Agent, type Message, PRESET_DECISIONS, roleFields } from "@hobbots/domain";
-import { ApprovalRepositoryLive, HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
+import {
+  ApprovalRepositoryLive,
+  GrantRepositoryLive,
+  HobbotsRepositoryLive,
+  SearchIndex,
+  SetupRepository,
+} from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { fakeEnforcement, makeFakeRuntime } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule, Stream } from "effect";
@@ -82,6 +89,7 @@ const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailab
         Layer.mergeAll(
           ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
           ApprovalService.layer,
+          GrantService.layer,
           HobService.layer,
           PermissionSummary.layer,
         ),
@@ -96,6 +104,7 @@ const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailab
               Layer.mergeAll(
                 HobbotsRepositoryLive,
                 ApprovalRepositoryLive,
+                GrantRepositoryLive,
                 SetupRepository.layer,
                 SearchIndex.layer,
               ).pipe(Layer.provideMerge(TestDatabase)),

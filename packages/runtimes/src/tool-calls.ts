@@ -1,7 +1,13 @@
 import { basename } from "node:path";
 import { operationDecision } from "@hobbots/agents";
 import { narrowest, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
-import type { PolicyContext, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
+import {
+  type PolicyContext,
+  type PolicyRequest,
+  type PolicyVerdict,
+  readCommandLine,
+  uniqueRules,
+} from "@hobbots/permissions";
 
 /**
  * Claude Code's tool calls in the policy engine's terms (ADR 014). Only what the call itself says is
@@ -110,7 +116,7 @@ const GIT_VALUE_OPTIONS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--na
 const DEFAULT_BRANCHES = new Set(["main", "master", "trunk", "develop"]);
 
 /** A `git push` as a Push request. Unknown remotes and branches are assumed the riskiest. */
-const pushRequest = (args: ReadonlyArray<string>): PolicyRequest => {
+const pushRequest = (args: ReadonlyArray<string>, cwd: string): PolicyRequest => {
   const positional = args.filter((a) => !a.startsWith("-"));
   const force = args.some(
     (a) => a === "-f" || a === "--force" || a.startsWith("--force-with-lease") || a === "--mirror",
@@ -127,35 +133,56 @@ const pushRequest = (args: ReadonlyArray<string>): PolicyRequest => {
     branch: branch ?? "(current branch)",
     force: force || refspec?.startsWith("+") === true,
     toDefaultBranch: branch === undefined || DEFAULT_BRANCHES.has(branch),
+    cwd,
   };
 };
 
-/** The requests one shell command makes: running it, plus any Git, push or delete it is recognized as. */
+/** A `git` command as a Push request, or as Local Git with its literal words. */
+const gitRequest = (args: ReadonlyArray<string>, cwd: string, words: ReadonlyArray<string> | null): PolicyRequest => {
+  let i = 0;
+  while (i < args.length && (args[i] as string).startsWith("-")) i += GIT_VALUE_OPTIONS.has(args[i] as string) ? 2 : 1;
+  return args[i] === "push"
+    ? pushRequest(args.slice(i + 1), cwd)
+    : { _tag: "Command", operation: "local-git", cwd, words };
+};
+
+/**
+ * The requests one shell command makes: running it, plus any Git, push or delete it is recognized as.
+ * Each command request carries its simple command's literal words when the hub's command reader can
+ * read the whole line, so a grant can match it exactly (ADR 015); otherwise none can.
+ */
 export const commandRequests = (command: string, cwd: string): ReadonlyArray<PolicyRequest> => {
   const requests: Array<PolicyRequest> = [];
   const add = (request: PolicyRequest) => {
     const key = JSON.stringify(request);
     if (!requests.some((r) => JSON.stringify(r) === key)) requests.push(request);
   };
-  for (const raw of simpleCommands(command)) {
+  const simple = simpleCommands(command);
+  const read = readCommandLine(command);
+  // The reader splits a line it can read where this does, so the parts line up one to one.
+  const literal = read !== null && read.length === simple.length ? read : null;
+  for (const [index, raw] of simple.entries()) {
+    const literalWords = literal?.[index] ?? null;
     const words = commandWords(raw);
     const [name, ...args] = words;
     if (name === undefined) continue;
     const program = basename(name);
     if (program === "git") {
-      let i = 0;
-      while (i < args.length && (args[i] as string).startsWith("-"))
-        i += GIT_VALUE_OPTIONS.has(args[i] as string) ? 2 : 1;
-      const sub = args[i];
-      if (sub === "push") add(pushRequest(args.slice(i + 1)));
-      else add({ _tag: "Command", operation: "local-git", cwd });
+      add(gitRequest(args, cwd, literalWords));
       continue;
     }
     if (program === "rm" || program === "rmdir" || program === "unlink") {
       const paths = args.filter((a) => !a.startsWith("-"));
-      add({ _tag: "Files", operation: "delete-files", paths: paths.length > 0 ? paths : ["."], cwd });
+      // Paths from a line the reader could not read may expand into other files, so no rule covers them.
+      add({
+        _tag: "Files",
+        operation: "delete-files",
+        paths: paths.length > 0 ? paths : ["."],
+        cwd,
+        exact: literalWords !== null,
+      });
     }
-    add({ _tag: "Command", operation: "run-commands", cwd });
+    add({ _tag: "Command", operation: "run-commands", cwd, words: literalWords });
   }
   if (requests.length === 0) add({ _tag: "Command", operation: "run-commands", cwd });
   return requests;
@@ -232,9 +259,13 @@ export const toolLabel = (
   }
 };
 
-/** The narrowest of several verdicts, keeping the first on a tie. */
-export const narrowestVerdict = (verdicts: ReadonlyArray<PolicyVerdict>): PolicyVerdict | undefined =>
-  verdicts.reduce<PolicyVerdict | undefined>(
+/**
+ * The narrowest of several verdicts, keeping the first on a tie, for one call's requests. An Ask is
+ * high risk when any part that asks is, and grantable only when every part that asks is, with the
+ * rules of each (ADR 015). An Allow names every grant that answered a part.
+ */
+export const narrowestVerdict = (verdicts: ReadonlyArray<PolicyVerdict>): PolicyVerdict | undefined => {
+  const verdict = verdicts.reduce<PolicyVerdict | undefined>(
     (current, next) =>
       current === undefined ||
       (next.decision !== current.decision && narrowest(current.decision, next.decision) === next.decision)
@@ -242,3 +273,16 @@ export const narrowestVerdict = (verdicts: ReadonlyArray<PolicyVerdict>): Policy
         : current,
     undefined,
   );
+  if (verdict === undefined || verdict.decision === "deny") return verdict;
+  if (verdict.decision === "allow") return { ...verdict, grantIds: [...new Set(verdicts.flatMap((v) => v.grantIds))] };
+  const asking = verdicts.filter((v) => v.decision === "ask");
+  const onceOnly = asking.some((v) => v.onceOnly);
+  const grantable = !onceOnly && asking.every((v) => v.grantable);
+  return {
+    ...verdict,
+    onceOnly,
+    grantable,
+    rules: grantable ? uniqueRules(asking.flatMap((v) => v.rules)) : [],
+    grantIds: [],
+  };
+};

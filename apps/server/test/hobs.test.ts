@@ -3,6 +3,7 @@ import {
   ApprovalService,
   ChatService,
   checkBrain,
+  GrantService,
   HobAdmission,
   HobLifecycle,
   HobService,
@@ -20,7 +21,13 @@ import {
   starterRole,
   toneLines,
 } from "@hobbots/domain";
-import { ApprovalRepositoryLive, HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
+import {
+  ApprovalRepositoryLive,
+  GrantRepositoryLive,
+  HobbotsRepositoryLive,
+  SearchIndex,
+  SetupRepository,
+} from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { fakeInstructionsPrompt, makeFakeRuntime } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule, Stream } from "effect";
@@ -88,6 +95,7 @@ beforeEach(() => {
         Layer.mergeAll(
           ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
           ApprovalService.layer,
+          GrantService.layer,
           HobService.layer,
           PermissionSummary.layer,
         ),
@@ -96,9 +104,13 @@ beforeEach(() => {
     .pipe(
       Layer.provideMerge(
         Layer.mergeAll(
-          Layer.mergeAll(HobbotsRepositoryLive, ApprovalRepositoryLive, SetupRepository.layer, SearchIndex.layer).pipe(
-            Layer.provideMerge(TestDatabase),
-          ),
+          Layer.mergeAll(
+            HobbotsRepositoryLive,
+            ApprovalRepositoryLive,
+            GrantRepositoryLive,
+            SetupRepository.layer,
+            SearchIndex.layer,
+          ).pipe(Layer.provideMerge(TestDatabase)),
           EventBus.layer,
           HobAdmission.layer,
           NodeFolderChecks,
