@@ -290,6 +290,7 @@ describe("tool calls in a reply", () => {
         kind: "tool",
         label: "Editing a.ts",
         state: "done",
+        startedAt: expect.any(String),
         call: { tool: "Edit", operation: "edit-files", targets: [join(folder, "a.ts")] },
       },
       {
@@ -297,6 +298,7 @@ describe("tool calls in a reply", () => {
         kind: "tool",
         label: "Running pnpm test",
         state: "done",
+        startedAt: expect.any(String),
         call: { tool: "Bash", operation: "run-commands", targets: [folder] },
       },
       expect.objectContaining({

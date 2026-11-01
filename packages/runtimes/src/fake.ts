@@ -5,6 +5,7 @@ import {
   RuntimeError,
   type RuntimeEvent,
   RuntimeLimitReached,
+  UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
   RUNTIME_NAMES,
@@ -17,7 +18,7 @@ import {
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Clock, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
-import { decideCall } from "./approval.ts";
+import { decideCall, startCall } from "./approval.ts";
 import { toolTurn } from "./claude-code.ts";
 import { toolLabel, toolRequests } from "./tool-calls.ts";
 
@@ -108,7 +109,10 @@ export const fakeCutOffError = "Claude stopped responding";
 /** Asked this, the fake runtime answers with the instructions its session follows instead of an echo. */
 export const fakeInstructionsPrompt = "/instructions";
 
-/** A prompt line `fake:tool <Tool> <argument>` asks the fake runtime to make that tool call. */
+/**
+ * A prompt line `fake:tool <Tool> <argument>` asks the fake runtime to make that tool call. A
+ * `Bash sleep …` call keeps running until its turn ends, as a long command does.
+ */
 export const FAKE_TOOL_DIRECTIVE = "fake:tool";
 
 const scriptedInput = (tool: string, argument: string): Record<string, unknown> => {
@@ -180,9 +184,18 @@ export const scriptedToolEvents = (
             request.redaction,
           );
           const label = toolLabel(call.tool, call.input, request.redaction?.text);
-          if (decision._tag === "Run") {
-            const { operation, targets } = decision.verdict;
-            yield* Queue.offer(queue, { _tag: "ToolStarted", id: call.id, tool: call.tool, operation, targets, label });
+          const ran =
+            decision._tag === "Run" &&
+            (yield* startCall(request.recordToolStart, (event) => Queue.offerUnsafe(queue, event), {
+              _tag: "ToolStarted",
+              id: call.id,
+              tool: call.tool,
+              operation: decision.verdict.operation,
+              targets: decision.verdict.targets,
+              label,
+            }));
+          if (ran) {
+            if (call.tool === "Bash" && String(call.input.command).startsWith("sleep ")) return yield* Effect.never;
             const output = scriptedOutput(call.tool, call.input);
             yield* Queue.offer(queue, {
               _tag: "ToolFinished",
@@ -198,8 +211,8 @@ export const scriptedToolEvents = (
               operation: decision.verdict?.operation ?? "outside-folders",
               targets: decision.verdict?.targets ?? [],
               label,
-              reason: decision.reason,
-              decidedBy: decision.decidedBy ?? "policy",
+              reason: decision._tag === "Run" ? UNRECORDED_TOOL_CALL : decision.reason,
+              decidedBy: (decision._tag === "Refuse" && decision.decidedBy) || "policy",
             });
           }
           yield* Queue.end(queue);

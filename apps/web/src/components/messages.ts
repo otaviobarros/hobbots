@@ -123,11 +123,14 @@ export const messages = {
       failed: "failed",
       denied: "not allowed",
       unfinished: "did not finish",
+      uncertain: "outcome unknown",
     },
     running: ({ label }: { label: string }) => `${label}…`,
     awaiting: "Waiting for your approval.",
     failed: "The tool reported an error.",
     unfinished: "The reply ended before this step finished.",
+    uncertain:
+      "Cut off while it ran, so it may or may not have taken effect. Hobbots won't run it again. Check it before you continue.",
     deniedByPolicy: ({ reason }: { reason: string }) => `Not allowed by the hob's permissions: ${reason}`,
     deniedBySandbox: ({ reason }: { reason: string }) => `Blocked by the sandbox: ${reason}`,
     deniedByUser: ({ reason }: { reason: string }) => `You denied this: ${reason}`,
@@ -139,6 +142,7 @@ export const messages = {
     omitted: ({ size }: { size: string }) => `${size} left out here`,
     openLog: ({ size }: { size: string }) => `Open the full log (${size})`,
     noLog: "The full log could not be kept.",
+    started: "Started",
   },
   approval: {
     asks: ({ name }: { name: string }) => `${name} asks permission`,

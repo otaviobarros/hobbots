@@ -31,8 +31,9 @@ export const replyStepId = (steps: ReadonlyArray<ReplyStep>, from: number, id: s
   steps.slice(0, from).some((step) => step.id === id) ? `${id}@${from}` : id;
 
 /**
- * The steps a reply has after a runtime event, or null when the event changes none. `output` is
- * what a finished tool call printed, as the step keeps it.
+ * The steps a reply has after a runtime event, or null when the event changes none. `now` is when a
+ * tool call that starts is recorded (ISO 8601), and `output` what a finished tool call printed, as
+ * the step keeps it.
  *
  * Steps before `from` belong to the reply's earlier turns (before a Continue) and never change.
  * Every step id stays unique within its reply (see `replyStepId`).
@@ -41,6 +42,7 @@ export const nextSteps = (
   steps: ReadonlyArray<ReplyStep>,
   from: number,
   event: RuntimeEvent,
+  now?: string,
   output?: ToolOutput,
 ): ReadonlyArray<ReplyStep> | null => {
   const own = (id: string) => replyStepId(steps, from, id);
@@ -57,7 +59,7 @@ export const nextSteps = (
       if (event._tag === "ToolAwaitingApproval") {
         return upsert(steps, { ...step, state: "awaiting", approvalId: event.approvalId });
       }
-      if (event._tag === "ToolStarted") return upsert(steps, step);
+      if (event._tag === "ToolStarted") return upsert(steps, now === undefined ? step : { ...step, startedAt: now });
       return upsert(steps, { ...step, state: "denied", reason: event.reason, decidedBy: event.decidedBy });
     }
     case "ToolFinished":
@@ -65,4 +67,22 @@ export const nextSteps = (
     default:
       return null;
   }
+};
+
+/**
+ * What a turn is told about tool calls left uncertain (EX-004): each call, and that it must check
+ * before running any again. Null when there are none.
+ */
+export const uncertainCalls = (steps: ReadonlyArray<ReplyStep>): string | null => {
+  const calls = steps.flatMap((step) => {
+    if (step.state !== "uncertain" || !step.call) return [];
+    const on = step.call.targets.length > 0 ? ` on ${step.call.targets.join(", ")}` : "";
+    return [`- ${step.label} (${step.call.tool}, ${step.call.operation}${on})`];
+  });
+  if (calls.length === 0) return null;
+  return [
+    "Earlier in this thread, these tool calls were running when a reply was cut off, so Hobbots does not know whether they took effect:",
+    ...calls,
+    "Do not run any of them again until you have checked whether it took effect, and tell the user what you found.",
+  ].join("\n");
 };

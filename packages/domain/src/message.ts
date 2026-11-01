@@ -41,10 +41,22 @@ export const isResumable = (status: MessageStatus): boolean => status === "inter
  * - `done`: ended; a tool call ended without an error.
  * - `failed`: a tool call ended with an error, a sandbox refusal included.
  * - `denied`: a tool call never ran; `reason` says why and `decidedBy` who refused it.
- * - `unfinished`: its turn ended while it was running or awaiting, so its outcome is unknown. Final:
- *   Continue starts new steps and never revives it.
+ * - `unfinished`: its turn ended before it finished: a thinking step, or a tool call still awaiting
+ *   approval, which never ran. Steps saved before `uncertain` existed may also be tool calls that ran.
+ * - `uncertain`: its turn ended (a crash, a restart, a stop or a runtime failure) while the tool call
+ *   was running, so it may or may not have taken effect. Hobbots never runs it again on its own.
+ *
+ * `unfinished` and `uncertain` are final: Continue starts new steps and never revives them.
  */
-export const ReplyStepState = Schema.Literals(["running", "awaiting", "done", "failed", "denied", "unfinished"]);
+export const ReplyStepState = Schema.Literals([
+  "running",
+  "awaiting",
+  "done",
+  "failed",
+  "denied",
+  "unfinished",
+  "uncertain",
+]);
 export type ReplyStepState = typeof ReplyStepState.Type;
 
 /** A tool call the step stands for, as the policy decided it (ADR 014). */
@@ -67,6 +79,8 @@ export const ReplyStep = Schema.Struct({
   state: ReplyStepState,
   /** For a tool step: the call. */
   call: Schema.optionalKey(ToolCall),
+  /** For a tool step that started: when the policy allowed it and it was recorded, just before it ran (ISO 8601). */
+  startedAt: Schema.optionalKey(Schema.String),
   /** For an `awaiting` step: the approval it waits on. */
   approvalId: Schema.optionalKey(Schema.String),
   /** For a `denied` step: why the call was refused. */
@@ -118,14 +132,24 @@ export class InvalidMessageTransition extends Schema.TaggedError<InvalidMessageT
   { messageId: MessageId, from: MessageStatus, action: Schema.String },
 ) {}
 
-/** A turn's end: every step still running or awaiting is left unfinished, so it never reads as active again. */
+/** A step's state once its turn ends: one still under way can never read as active again. */
+const endedState = (step: ReplyStep): ReplyStepState => {
+  if (step.state === "running") return step.kind === "tool" ? "uncertain" : "unfinished";
+  return step.state === "awaiting" ? "unfinished" : step.state;
+};
+
+/**
+ * A turn's end. A tool call cut off while it ran is uncertain: it may have taken effect. Anything
+ * else still under way, thinking or a call awaiting approval, is unfinished.
+ */
 const endTurn = (message: Message, fields: Partial<Message>): Message =>
   new Message({
     ...message,
     ...fields,
-    steps: message.steps.map((step) =>
-      step.state === "running" || step.state === "awaiting" ? { ...step, state: "unfinished" as const } : step,
-    ),
+    steps: message.steps.map((step) => {
+      const state = endedState(step);
+      return state === step.state ? step : { ...step, state };
+    }),
   });
 
 const requireInProgress = (message: Message, action: string) =>

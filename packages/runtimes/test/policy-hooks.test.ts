@@ -21,9 +21,11 @@ import {
   type ApprovalAction,
   type ApprovalOutcome,
   actionDigest,
+  type PromptRequest,
   type RuntimeEvent,
   type ToolAccess,
   type TurnApprovals,
+  UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import { ApprovalId, EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -60,11 +62,12 @@ const call = async (
   toolInput: Record<string, unknown>,
   outcome: "success" | "failure" = "success",
   sandbox: "on" | "unavailable" = "on",
+  record?: PromptRequest["recordToolStart"],
 ) => {
   const turn = toolTurn(access(), sandbox);
   if (turn === null) throw new Error("expected a tool turn");
   const events: Array<RuntimeEvent> = [];
-  const { hooks } = policyHooks(engine, turn, (event) => events.push(event));
+  const { hooks } = policyHooks(engine, turn, (event) => events.push(event), null, null, record);
   const signal = new AbortController().signal;
   const base = {
     session_id: "s",
@@ -114,6 +117,29 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(tests.decision).toBe("allow");
     // A failed call's error is its output.
     expect(tests.events.at(-1)).toEqual({ _tag: "ToolFinished", id: "t1", failed: true, output: "x" });
+  });
+
+  // covers EX-004
+  it("[TC-EX-011] lets an allowed call run only once Hobbots has recorded it, and refuses one it could not record", async () => {
+    const recorded: Array<RuntimeEvent> = [];
+    const saved = await call("Edit", { file_path: join(project, "a.ts") }, "success", "on", (event) =>
+      Effect.sync(() => {
+        recorded.push(event);
+        return true;
+      }),
+    );
+    expect(saved.decision).toBe("allow");
+    expect(recorded).toEqual([expect.objectContaining({ _tag: "ToolStarted", id: "t1", tool: "Edit" })]);
+    // Recorded, so it is not reported a second time; its end still is.
+    expect(saved.events).toEqual([{ _tag: "ToolFinished", id: "t1", failed: false }]);
+
+    for (const record of [() => Effect.succeed(false), () => Effect.die("database gone")]) {
+      const refused = await call("Bash", { command: "pnpm test" }, "success", "on", record);
+      expect(refused.decision).toBe("deny");
+      expect(refused.events).toEqual([
+        expect.objectContaining({ _tag: "ToolDenied", id: "t1", reason: UNRECORDED_TOOL_CALL, decidedBy: "policy" }),
+      ]);
+    }
   });
 
   // covers PE-002

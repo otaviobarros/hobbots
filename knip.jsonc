@@ -15,6 +15,6 @@
       "ignoreDependencies": ["cloudflare"]
     }
   },
-  // macOS system tool the icon script calls.
-  "ignoreBinaries": ["iconutil"]
+  // System tools: the icon script calls iconutil (macOS) and a runtimes test calls mkfifo.
+  "ignoreBinaries": ["iconutil", "mkfifo"]
 }
