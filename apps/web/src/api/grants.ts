@@ -12,10 +12,14 @@ export const grantsQuery = queryOptions({
 
 /**
  * A grant was saved or ended, here or elsewhere: the list is read again, so it shows only the
- * grants that apply now whatever order the event and a pending read arrive in.
+ * grants that apply now whatever order the event and a pending read arrive in. A read already in
+ * flight may have been taken before the change, and while the list has no data yet Query would
+ * hand that read back instead of starting another, so it is cancelled first.
  */
-export const grantsChanged = (queryClient: QueryClient) =>
-  queryClient.invalidateQueries({ queryKey: grantsKey, exact: true });
+export const grantsChanged = async (queryClient: QueryClient) => {
+  await queryClient.cancelQueries({ queryKey: grantsKey, exact: true });
+  await queryClient.invalidateQueries({ queryKey: grantsKey, exact: true });
+};
 
 /**
  * The user removes a standing rule. The hub keeps it as revoked, and the next call it matched asks
