@@ -4,6 +4,7 @@ import {
   type HobbotsEvent,
   type Milestone,
   type Quest,
+  type Question,
   type Task,
   type TaskId,
   TaskTree,
@@ -72,50 +73,65 @@ const withTask = (tree: TaskTree, task: Task, attempt: Attempt | null): Partial<
 const withQuest = (tree: TaskTree, quest: Quest | null, ids: ReadonlySet<TaskId>): Partial<TaskTree> =>
   quest !== null && ids.has(quest.taskId) ? { quests: upsertNewer(tree.quests, quest) } : {};
 
-const changes = (tree: TaskTree, event: TaskEvent, ids: ReadonlySet<TaskId>): Partial<TaskTree> | null => {
-  switch (event._tag) {
-    case "TaskCreated": {
-      const { task, delegation, milestones } = event;
-      if (!ids.has(task.id) && (task.parentId === null || !ids.has(task.parentId))) return null;
-      return {
-        tasks: upsertNewer(tree.tasks, task),
-        delegations: delegation === null ? tree.delegations : upsert(tree.delegations, delegation),
-        milestones: milestones.reduce(upsertMilestone, tree.milestones),
-      };
-    }
-    case "TaskStateChanged":
-      if (!ids.has(event.task.id)) return null;
-      return { ...withTask(tree, event.task, event.attempt), ...withQuest(tree, event.quest, ids) };
-    case "TaskCompleted":
-      if (!ids.has(event.task.id)) return null;
-      return { ...withTask(tree, event.task, null), artifacts: upsertArtifacts(tree.artifacts, event.artifacts, ids) };
-    case "QuestStarted":
-    case "QuestCompleted":
-      return ids.has(event.quest.taskId) ? withQuest(tree, event.quest, ids) : null;
-    case "CheckpointRecorded": {
-      const { checkpoint, milestone } = event;
-      if (!ids.has(checkpoint.taskId)) return null;
-      return {
-        checkpoints: [...upsertNewer(tree.checkpoints, checkpoint)].sort((a, b) => a.revision - b.revision),
-        milestones: milestone === null ? tree.milestones : upsertMilestone(tree.milestones, milestone),
-      };
-    }
-    case "QuestionAsked":
-    case "QuestionAnswered":
-    case "QuestionEscalated":
-      return ids.has(event.question.taskId) ? { questions: upsertNewer(tree.questions, event.question) } : null;
-    case "HandedOff": {
-      const { handOff, artifact } = event;
-      if (!ids.has(handOff.toTaskId) && !ids.has(artifact.taskId)) return null;
-      const known = tree.handOffs.some(
-        (each) => each.artifactId === handOff.artifactId && each.toTaskId === handOff.toTaskId,
-      );
-      return {
-        artifacts: upsertArtifacts(tree.artifacts, [artifact], ids),
-        handOffs: known || !ids.has(handOff.toTaskId) ? tree.handOffs : [...tree.handOffs, handOff],
-      };
-    }
-  }
+type Change<T extends TaskEvent["_tag"]> = (
+  tree: TaskTree,
+  event: Extract<TaskEvent, { readonly _tag: T }>,
+  ids: ReadonlySet<TaskId>,
+) => Partial<TaskTree> | null;
+
+const questionChange = (
+  tree: TaskTree,
+  event: { readonly question: Question },
+  ids: ReadonlySet<TaskId>,
+): Partial<TaskTree> | null =>
+  ids.has(event.question.taskId) ? { questions: upsertNewer(tree.questions, event.question) } : null;
+
+const questChange = (
+  tree: TaskTree,
+  event: { readonly quest: Quest },
+  ids: ReadonlySet<TaskId>,
+): Partial<TaskTree> | null => (ids.has(event.quest.taskId) ? withQuest(tree, event.quest, ids) : null);
+
+/** What each event changes in a tree it belongs to, or null for an event about another tree. */
+const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
+  TaskCreated: (tree, { task, delegation, milestones }, ids) =>
+    ids.has(task.id) || (task.parentId !== null && ids.has(task.parentId))
+      ? {
+          tasks: upsertNewer(tree.tasks, task),
+          delegations: delegation === null ? tree.delegations : upsert(tree.delegations, delegation),
+          milestones: milestones.reduce(upsertMilestone, tree.milestones),
+        }
+      : null,
+  TaskStateChanged: (tree, event, ids) =>
+    ids.has(event.task.id)
+      ? { ...withTask(tree, event.task, event.attempt), ...withQuest(tree, event.quest, ids) }
+      : null,
+  TaskCompleted: (tree, event, ids) =>
+    ids.has(event.task.id)
+      ? { ...withTask(tree, event.task, null), artifacts: upsertArtifacts(tree.artifacts, event.artifacts, ids) }
+      : null,
+  QuestStarted: questChange,
+  QuestCompleted: questChange,
+  CheckpointRecorded: (tree, { checkpoint, milestone }, ids) =>
+    ids.has(checkpoint.taskId)
+      ? {
+          checkpoints: [...upsertNewer(tree.checkpoints, checkpoint)].sort((a, b) => a.revision - b.revision),
+          milestones: milestone === null ? tree.milestones : upsertMilestone(tree.milestones, milestone),
+        }
+      : null,
+  QuestionAsked: questionChange,
+  QuestionAnswered: questionChange,
+  QuestionEscalated: questionChange,
+  HandedOff: (tree, { handOff, artifact }, ids) => {
+    if (!ids.has(handOff.toTaskId) && !ids.has(artifact.taskId)) return null;
+    const known = tree.handOffs.some(
+      (each) => each.artifactId === handOff.artifactId && each.toTaskId === handOff.toTaskId,
+    );
+    return {
+      artifacts: upsertArtifacts(tree.artifacts, [artifact], ids),
+      handOffs: known || !ids.has(handOff.toTaskId) ? tree.handOffs : [...tree.handOffs, handOff],
+    };
+  },
 };
 
 /**
@@ -125,7 +141,7 @@ const changes = (tree: TaskTree, event: TaskEvent, ids: ReadonlySet<TaskId>): Pa
  */
 export const applyToTree = (tree: TaskTree, event: TaskEvent): TaskTree => {
   const ids = new Set(tree.tasks.map((task) => task.id));
-  const changed = changes(tree, event, ids);
+  const changed = (CHANGES[event._tag] as Change<TaskEvent["_tag"]>)(tree, event, ids);
   return changed === null ? tree : new TaskTree({ ...tree, ...changed });
 };
 
