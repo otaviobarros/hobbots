@@ -25,7 +25,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { ApprovalRepositoryLive, GrantRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Effect, Exit, Layer, PubSub, Schedule, type Scope } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, type Scope } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 
@@ -371,5 +371,75 @@ describe("Standing grants", () => {
 
     expect(result.before).toHaveLength(1);
     expect(result.after[0]).toMatchObject({ revokedBy: "hub", revokeReason: "retired" });
+  });
+
+  // covers PE-007
+  it("[TC-PE-097] asks again for a push that also updates another branch, and offers no rule after a folder change", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const first = yield* runCommand("git push origin feature");
+        const asked = first.pending as ApprovalRequest;
+        yield* approvals.decide(asked.id, {
+          decision: "approve",
+          actionDigest: asked.actionDigest,
+          lifetime: "always",
+        });
+        yield* settled(first.thread.id);
+        const again = yield* runCommand("git push origin feature");
+        const both = yield* runCommand("git push origin feature main");
+        if (both.pending) yield* dismiss(both.pending, both.thread.id);
+        const sibling = yield* runCommand("git -C ../sibling push origin feature");
+        if (sibling.pending) yield* dismiss(sibling.pending, sibling.thread.id);
+        const moved = yield* runCommand("cd sub && rm build");
+        if (moved.pending) yield* dismiss(moved.pending, moved.thread.id);
+        return { again, both, sibling, moved };
+      }),
+    );
+
+    expect(result.again.pending).toBeUndefined();
+    // The push to main is high risk: once only, with the check box, whatever was granted before.
+    expect(result.both.pending).toMatchObject({ onceOnly: true, grantable: false });
+    expect(result.sibling.pending).toMatchObject({ grantable: false });
+    expect(result.moved.pending).toMatchObject({ operation: "delete-files", grantable: false, rules: [] });
+  });
+
+  // covers PE-007, PE-008
+  it("[TC-PE-098] saves no grant once the authority it relies on is narrowed, even while the request waits", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const grants = yield* GrantService;
+        const asked = yield* runCommand("rm build");
+        const request = asked.pending as ApprovalRequest;
+        // Delete files narrows to Ask for this work while the card is open.
+        restrictions = [{ "delete-files": "ask" }];
+        const always = yield* Effect.exit(
+          approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest, lifetime: "always" }),
+        );
+        const saved = yield* grants.list({ agentId: SCOUT, all: true });
+        const stillPending = (yield* approvals.listForThread(asked.thread.id))[0];
+        restrictions = [];
+        yield* dismiss(request, asked.thread.id);
+
+        // A revocation for a change waits while a decision saves grants, so it sees what was saved.
+        const release = yield* Deferred.make<void>();
+        const held = yield* Effect.forkChild(grants.exclusive(Deferred.await(release)));
+        const revoking = yield* Effect.forkChild(grants.revokeLost(SCOUT, { folders: [folder], operations: [] }));
+        yield* Effect.sleep("50 millis");
+        const waited = revoking.pollUnsafe() === undefined;
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(held);
+        yield* Fiber.join(revoking);
+        return { always, saved, stillPending, waited };
+      }),
+    );
+
+    expect(Exit.isFailure(result.always) && JSON.stringify(result.always.cause)).toContain("ApprovalNotGrantable");
+    expect(result.saved).toEqual([]);
+    expect(result.stillPending?.state).toBe("pending");
+    expect(result.waited).toBe(true);
   });
 });

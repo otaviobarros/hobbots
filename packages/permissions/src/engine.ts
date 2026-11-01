@@ -75,13 +75,17 @@ export const PolicyRequest = Schema.TaggedUnion({
     cwd: Schema.String,
     words: Schema.optionalKey(Schema.NullOr(Schema.Array(Schema.String))),
   },
-  /** `cwd` is the folder the push runs in; without it a push cannot be granted. */
+  /**
+   * One branch a push updates. `cwd` is the folder the push runs in; without it, or with `exact`
+   * false (the command's words do not say everything the push does), no grant answers it.
+   */
   Push: {
     remote: Schema.String,
     branch: Schema.String,
     force: Schema.Boolean,
     toDefaultBranch: Schema.Boolean,
     cwd: Schema.optionalKey(Schema.String),
+    exact: Schema.optionalKey(Schema.Boolean),
   },
   /** A host the sandbox proxy was asked to reach, with the addresses it resolved to, if known. */
   Web: { host: Schema.String, addresses: Schema.Array(Schema.String) },
@@ -468,7 +472,7 @@ const evaluatePush = (
   const cwd = place !== null && located(place) ? place.canonical : null;
   // A high-risk push is never granted, and a push from an unknown folder cannot name its site.
   const site: Site | null =
-    risky || cwd === null
+    risky || cwd === null || request.exact === false
       ? null
       : {
           rule: { _tag: "Push", cwd: cwd.path, remote: request.remote, branch: request.branch },

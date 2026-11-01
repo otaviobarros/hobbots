@@ -15,9 +15,6 @@ const LITERAL = /^[A-Za-z0-9_@%+=:,./-]$/;
  * their words alone do not say what runs (ADR 015).
  */
 const WRAPPERS = new Set([
-  "cd",
-  "pushd",
-  "popd",
   "eval",
   "exec",
   "source",
@@ -43,6 +40,12 @@ const WRAPPERS = new Set([
   "command",
   "builtin",
 ]);
+
+/**
+ * Programs that move the rest of the line to another folder. A line with one reads as nothing, so
+ * none of its commands, and none of the paths they name, is granted against the wrong folder.
+ */
+const FOLDER_CHANGES = new Set(["cd", "pushd", "popd"]);
 
 /** One simple command of a command line: its literal words, or null when it cannot be granted. */
 export type ReadCommand = ReadonlyArray<string> | null;
@@ -131,10 +134,12 @@ const grantable = (words: ReadonlyArray<string>): boolean => {
 /**
  * Reads a command line into its simple commands, split at `&&`, `||`, `;`, `|` and newlines, each
  * with its literal words after quotes are removed, or null where it cannot be granted. Null for
- * the whole line when any part of it is unreadable, since the parts could not be told apart safely.
+ * the whole line when any part of it is unreadable, since the parts could not be told apart safely,
+ * or when it changes folder with `cd`, `pushd` or `popd`, since its commands may run elsewhere.
  */
 export const readCommandLine = (line: string): ReadonlyArray<ReadCommand> | null => {
   const commands = split(line);
   if (commands === null || commands.length === 0) return null;
+  if (commands.some(([program]) => program !== undefined && FOLDER_CHANGES.has(basename(program)))) return null;
   return commands.map((words) => (grantable(words) ? words : null));
 };

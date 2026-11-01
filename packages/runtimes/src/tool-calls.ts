@@ -115,35 +115,75 @@ const GIT_VALUE_OPTIONS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--na
 
 const DEFAULT_BRANCHES = new Set(["main", "master", "trunk", "develop"]);
 
-/** A `git push` as a Push request. Unknown remotes and branches are assumed the riskiest. */
-const pushRequest = (args: ReadonlyArray<string>, cwd: string): PolicyRequest => {
-  const positional = args.filter((a) => !a.startsWith("-"));
-  const force = args.some(
-    (a) => a === "-f" || a === "--force" || a.startsWith("--force-with-lease") || a === "--mirror",
-  );
-  const refspec = positional[1];
-  const branch = refspec
-    ?.split(":")
-    .at(-1)
-    ?.replace(/^\+/, "")
-    .replace(/^refs\/heads\//, "");
-  return {
-    _tag: "Push",
-    remote: positional[0] ?? "origin",
-    branch: branch ?? "(current branch)",
-    force: force || refspec?.startsWith("+") === true,
-    toDefaultBranch: branch === undefined || DEFAULT_BRANCHES.has(branch),
-    cwd,
-  };
+/** Push options that change nothing about which refs go where. */
+const PLAIN_PUSH_OPTIONS = new Set(["-u", "--set-upstream", "-q", "--quiet", "-v", "--verbose", "--progress"]);
+
+/** Push options after which the refs pushed cannot be read from the words. */
+const UNNAMED_REFS = new Set([
+  "--all",
+  "--branches",
+  "--mirror",
+  "--tags",
+  "--follow-tags",
+  "--delete",
+  "-d",
+  "--prune",
+]);
+
+const isForce = (a: string) => a === "-f" || a === "--force" || a.startsWith("--force-with-lease") || a === "--mirror";
+
+/** One refspec's branch, and whether it forces or deletes. */
+const refspecBranch = (refspec: string) => {
+  const forced = refspec.startsWith("+");
+  const [source, destination] = refspec.replace(/^\+/, "").split(":");
+  const branch = (destination ?? source ?? "").replace(/^refs\/heads\//, "");
+  // `:branch` deletes the branch on the remote.
+  return { branch, forced: forced || source === "" };
 };
 
-/** A `git` command as a Push request, or as Local Git with its literal words. */
-const gitRequest = (args: ReadonlyArray<string>, cwd: string, words: ReadonlyArray<string> | null): PolicyRequest => {
+/**
+ * A `git push` as one Push request per refspec, so every branch it updates is decided. Unknown
+ * remotes and branches are assumed the riskiest. `exact` is false when the words do not say
+ * everything the push does, so no grant answers it (ADR 015).
+ */
+const pushRequests = (args: ReadonlyArray<string>, cwd: string, literal: boolean): ReadonlyArray<PolicyRequest> => {
+  const options = args.filter((a) => a.startsWith("-"));
+  const positional = args.filter((a) => !a.startsWith("-"));
+  const force = options.some(isForce);
+  const remote = positional[0] ?? "origin";
+  const exact = literal && options.every((a) => PLAIN_PUSH_OPTIONS.has(a));
+  const push = (branch: string, forced: boolean, toDefaultBranch: boolean, exactPush: boolean): PolicyRequest => ({
+    _tag: "Push",
+    remote,
+    branch,
+    force: force || forced,
+    toDefaultBranch,
+    cwd,
+    exact: exactPush,
+  });
+  if (options.some((a) => UNNAMED_REFS.has(a))) return [push("(several branches)", false, true, false)];
+  const refspecs = positional.slice(1);
+  if (refspecs.length === 0) return [push("(current branch)", false, true, false)];
+  return refspecs.map((refspec) => {
+    const { branch, forced } = refspecBranch(refspec);
+    return push(branch, forced, branch === "" || DEFAULT_BRANCHES.has(branch), exact);
+  });
+};
+
+/**
+ * A `git` command as Push requests, or as Local Git with its literal words. Options before the
+ * subcommand, such as `-C` or `-c`, can change where or how it runs, so they make a push inexact.
+ */
+const gitRequests = (
+  args: ReadonlyArray<string>,
+  cwd: string,
+  words: ReadonlyArray<string> | null,
+): ReadonlyArray<PolicyRequest> => {
   let i = 0;
   while (i < args.length && (args[i] as string).startsWith("-")) i += GIT_VALUE_OPTIONS.has(args[i] as string) ? 2 : 1;
   return args[i] === "push"
-    ? pushRequest(args.slice(i + 1), cwd)
-    : { _tag: "Command", operation: "local-git", cwd, words };
+    ? pushRequests(args.slice(i + 1), cwd, words !== null && i === 0)
+    : [{ _tag: "Command", operation: "local-git", cwd, words }];
 };
 
 /**
@@ -168,7 +208,7 @@ export const commandRequests = (command: string, cwd: string): ReadonlyArray<Pol
     if (name === undefined) continue;
     const program = basename(name);
     if (program === "git") {
-      add(gitRequest(args, cwd, literalWords));
+      for (const request of gitRequests(args, cwd, literalWords)) add(request);
       continue;
     }
     if (program === "rm" || program === "rmdir" || program === "unlink") {

@@ -14,11 +14,13 @@ import {
   type PolicyDecision,
   type PolicyOperation,
   PRESET_DECISIONS,
+  ruleOperation,
   type SafetyPreset,
   stableJson,
 } from "@hobbots/domain";
-import { Context, DateTime, Effect, Layer, Option } from "effect";
+import { Context, DateTime, Effect, Layer, Option, Semaphore } from "effect";
 import { EventPublisher } from "./ports.ts";
+import type { ToolAccess } from "./runtime.ts";
 
 /** Where grants are stored. Grants are created with the decision that saves them (`ApprovalRepository`). */
 export class GrantRepository extends Context.Service<
@@ -88,6 +90,21 @@ export const ruleOffered = (approval: ApprovalRequest, rule: GrantRule): boolean
   );
 };
 
+/**
+ * Whether the hob's access now still gives a rule the authority it relies on (ADR 015): only the
+ * preset asks for its operation, no override or restriction asks or answers Never, and its folders
+ * are still the hob's. A decision checks this as it saves, so a grant never outlives a narrowing.
+ */
+export const ruleHolds = (access: ToolAccess | null, rule: GrantRule): boolean => {
+  if (access === null) return false;
+  const operation = ruleOperation(rule);
+  const { preset, hob, restrictions } = access.policy;
+  if (PRESET_DECISIONS[preset][operation] !== "ask") return false;
+  const layers = [hob.overrides[operation], ...restrictions.map((restriction) => restriction[operation])];
+  if (layers.some((decision) => decision !== undefined && decision !== "allow")) return false;
+  return rulePaths(rule).every((path) => access.folders.some((folder) => within(path, folder)));
+};
+
 /** What a change took away: folders that left the hob's folders, and operations narrowed to Ask or Never. */
 export interface AuthorityLoss {
   readonly folders: ReadonlyArray<string>;
@@ -152,6 +169,11 @@ export class GrantService extends Context.Service<
     /** Revokes every grant of a hob that retired. */
     readonly revokeForAgent: (agentId: AgentId, reason: GrantRevokeReason) => Effect.Effect<void>;
     readonly used: (ids: ReadonlyArray<GrantId>) => Effect.Effect<void>;
+    /**
+     * Runs `effect` while no revocation for a change runs, so a grant saved inside it is either seen
+     * by the revocation that follows a change, or saved after checking the authority as changed.
+     */
+    readonly exclusive: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   }
 >()("@hobbots/agents/GrantService") {
   static readonly layer = Layer.effect(
@@ -159,6 +181,8 @@ export class GrantService extends Context.Service<
     Effect.gen(function* () {
       const repo = yield* GrantRepository;
       const bus = yield* EventPublisher;
+      // Saving grants and revoking them for a change take turns (see `exclusive`).
+      const lock = yield* Semaphore.make(1);
 
       const liveOf = (grants: ReadonlyArray<Grant>) =>
         Effect.map(nowIso, (now) => grants.filter((grant) => isLiveGrant(grant, now)));
@@ -173,13 +197,16 @@ export class GrantService extends Context.Service<
         });
 
       const revokeWhere = (agentId: AgentId | null, reasonOf: (grant: Grant) => GrantRevokeReason | null) =>
-        Effect.gen(function* () {
-          const grants = yield* liveOf(yield* repo.list(agentId ?? undefined));
-          for (const grant of grants) {
-            const reason = reasonOf(grant);
-            if (reason !== null) yield* end(grant, "hub", reason);
-          }
-        });
+        Semaphore.withPermit(
+          lock,
+          Effect.gen(function* () {
+            const grants = yield* liveOf(yield* repo.list(agentId ?? undefined));
+            for (const grant of grants) {
+              const reason = reasonOf(grant);
+              if (reason !== null) yield* end(grant, "hub", reason);
+            }
+          }),
+        );
 
       return GrantService.of({
         live: (agentId) => Effect.flatMap(repo.list(agentId), liveOf),
@@ -199,6 +226,7 @@ export class GrantService extends Context.Service<
             ? Effect.void
             : revokeWhere(agentId, (grant) => lostAuthority(grant, loss)),
         revokeForAgent: (agentId, reason) => revokeWhere(agentId, () => reason),
+        exclusive: (effect) => Semaphore.withPermit(lock, effect),
         used: (ids) => (ids.length === 0 ? Effect.void : Effect.flatMap(nowIso, (at) => repo.touch(ids, at))),
       });
     }),
