@@ -36,6 +36,7 @@ import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semapho
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing } from "./briefing.ts";
+import { CharmTools, combineHubTools } from "./charms.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -200,6 +201,8 @@ export class ChatService extends Context.Service<
       const toolLogs = yield* Effect.serviceOption(ToolLogs);
       // Without Task work, turns offer no Task tools and hobs run no steps.
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
+      // Without Charms, turns offer only the Task tools.
+      const charms = yield* Effect.serviceOption(CharmTools);
       const turns = yield* FiberMap.make<ThreadId>();
       const scope = yield* Effect.scope;
       // The reply each running turn is writing, so a stop request can reach it.
@@ -533,7 +536,12 @@ export class ChatService extends Context.Service<
               approvals: turnApprovals?.approvals ?? null,
               redaction: redactor,
               recordToolStart,
-              hubTools: taskTurn?.hubTools ?? null,
+              hubTools: combineHubTools(
+                taskTurn?.hubTools ?? null,
+                Option.isSome(charms)
+                  ? charms.value.forTurn({ agentId: agent.id, currentAccess: currentAccess(agent.id), redactor })
+                  : null,
+              ),
             })
             .pipe(
               Stream.runForEach(handle),

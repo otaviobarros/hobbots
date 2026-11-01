@@ -5,6 +5,7 @@ import {
   enforcement,
   folderName,
   foldersShared,
+  offeredAnswer,
   PRESETS,
   pickAnswer,
   presetInfo,
@@ -50,9 +51,16 @@ describe("per-hob rules", () => {
       "outside-folders",
       "push",
       "read-files",
+      "read-github",
       "run-commands",
       "use-web",
     ]);
+  });
+
+  it("shows an Ask that Read GitHub cannot give as the Never it acts as", () => {
+    expect(offeredAnswer("read-github", "ask")).toBe("deny");
+    expect(offeredAnswer("read-github", "allow")).toBe("allow");
+    expect(offeredAnswer("push", "ask")).toBe("ask");
   });
 
   it("offers only the preset's answer and narrower ones", () => {
@@ -76,6 +84,7 @@ describe("per-hob rules", () => {
       "local-git": "allow",
       push: "ask",
       "use-web": "allow",
+      "read-github": "allow",
       "outside-folders": "deny",
     } as const;
     expect(enforcement("delete-files", balanced)).toBe("checked");
@@ -94,6 +103,7 @@ describe("per-hob rules", () => {
       "local-git": "allow",
       push: "ask",
       "use-web": "allow",
+      "read-github": "allow",
       "outside-folders": "deny",
     } as const;
     expect(enforcement("local-git", balanced)).toBe("enforced");

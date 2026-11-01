@@ -22,6 +22,11 @@ export const layers = {
     // The runtime adapters ask the policy engine before each tool call (ADR 014).
     may: ["@hobbots/domain", "@hobbots/api", "@hobbots/agents", "@hobbots/permissions"],
   },
+  // Charms (ADR 014): hub tools that reach other apps with credentials the sandbox never holds.
+  "@hobbots/charms": {
+    layer: "adapter",
+    may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"],
+  },
   // Pixel art that the app and the site both draw. Plain data and pure functions.
   "@hobbots/art": { layer: "adapter", may: ["@hobbots/domain"] },
   "@hobbots/ui": { layer: "adapter", may: ["@hobbots/art"] },
@@ -31,6 +36,7 @@ export const layers = {
       "@hobbots/domain",
       "@hobbots/api",
       "@hobbots/agents",
+      "@hobbots/charms",
       "@hobbots/inbox",
       "@hobbots/orchestration",
       "@hobbots/permissions",

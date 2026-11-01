@@ -37,6 +37,8 @@ Built, but not proven end to end, or proven only in part.
 
 - **2026-11-01 · A hob's backpack is recorded.** A delegated Task, a result, a failure, a report, a question, an answer and a hand-off each land in the backpack of the hob that has to deal with them, in the same transaction as the change. A retried tool call records nothing new, and a write under a stale claim is refused. Proven at the repository and hub level on SQLite and PostgreSQL. Nothing delivers the items or wakes a hob yet. ([#290](https://github.com/otaviobarros/hobbots/issues/290), [#291](https://github.com/otaviobarros/hobbots/issues/291), [#292](https://github.com/otaviobarros/hobbots/issues/292))
 
+- **2026-11-01 · Hobs read their repository's issues and pull requests on GitHub.** The GitHub Charm reads the repository of a hob's own folder, its issues and its pull requests on the hub with the user's GitHub sign-in, so no credential reaches the sandbox, under the hob's Read GitHub rule. Proven with a stand-in for GitHub and the fake runtime at hub level; a real Claude Code turn with a real sign-in is not verified. ([#317](https://github.com/otaviobarros/hobbots/issues/317), [#325](https://github.com/otaviobarros/hobbots/issues/325))
+
 Running delegated work, delivering backpack items, other runtimes, the Workbench and remote access are not built yet. The [slices](https://github.com/otaviobarros/hobbots/issues?q=label%3A%22type%3A+slice%22) list them in order.
 
 ## Keep this page current

@@ -262,7 +262,20 @@ export const messages = {
       "local-git": "Changes the Git history in its folder.",
       push: "Sends commits to a remote, where others can see them.",
       "use-web": "Reaches a site outside this hub.",
+      "read-github": "Reads only. Nothing changes.",
       "outside-folders": "Acts outside the folders this hob may use.",
+    },
+  },
+  charms: {
+    github: {
+      name: "GitHub",
+      reads: ({ name }: { name: string }) =>
+        `Reads the repository of ${name}'s folders: its details, issues and pull requests. The hub signs in with your GitHub account, so no key reaches ${name}.`,
+      pushLater: ({ name, push }: { name: string; push: string }) =>
+        `Pushing ${name}'s commits comes later. Push is ${push} for ${name}.`,
+      read: "Read",
+      push: "Push",
+      later: "Later",
     },
   },
   signing: {

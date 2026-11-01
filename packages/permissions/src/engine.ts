@@ -93,6 +93,11 @@ export const PolicyRequest = Schema.TaggedUnion({
   },
   /** A host the sandbox proxy was asked to reach, with the addresses it resolved to, if known. */
   Web: { host: Schema.String, addresses: Schema.Array(Schema.String) },
+  /**
+   * A GitHub Charm read (#317) of `repository` (`owner/name`), which the hub found from the remote of
+   * `folder`. The hub reads it outside the sandbox, so it is decided on the folder alone.
+   */
+  GitHub: { folder: Schema.String, repository: Schema.String },
 });
 export type PolicyRequest = typeof PolicyRequest.Type;
 
@@ -179,7 +184,8 @@ export type ResolvedRequest =
       readonly words?: ReadonlyArray<string> | null;
     }
   | (Omit<Extract<PolicyRequest, { readonly _tag: "Push" }>, "cwd"> & { readonly cwd?: ResolvedTarget })
-  | Extract<PolicyRequest, { readonly _tag: "Web" }>;
+  | Extract<PolicyRequest, { readonly _tag: "Web" }>
+  | { readonly _tag: "GitHub"; readonly folder: ResolvedTarget; readonly repository: string };
 
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
@@ -227,6 +233,7 @@ const OPERATION_WORDS: Record<PolicyOperation, string> = {
   "local-git": "local Git work",
   push: "pushing",
   "use-web": "using the web",
+  "read-github": "reading GitHub",
   "outside-folders": "anything outside the hob's folders",
 };
 
@@ -524,6 +531,19 @@ const evaluateWeb = (
   return { targets, answers: [fromLayers(context, "use-web", site)] };
 };
 
+/**
+ * A GitHub read: the folder it was found from must be the hob's. No grant answers an Ask, since the
+ * Charm cannot pause for an approval yet (#317), so an Ask refuses the call.
+ */
+const evaluateGitHub = (
+  context: PolicyContext,
+  scope: ResolvedScope,
+  request: Extract<ResolvedRequest, { readonly _tag: "GitHub" }>,
+): Evaluated => {
+  const place = locate(scope, request.folder);
+  return { targets: [request.repository], answers: [located(place) ? fromLayers(context, "read-github") : place] };
+};
+
 const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: ResolvedRequest): Evaluated => {
   switch (request._tag) {
     case "Files":
@@ -534,6 +554,8 @@ const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: Re
       return evaluatePush(context, scope, request);
     case "Web":
       return evaluateWeb(context, request);
+    case "GitHub":
+      return evaluateGitHub(context, scope, request);
   }
 };
 
@@ -667,6 +689,10 @@ export class PolicyEngine extends Context.Service<
           }
           case "Web":
             return Effect.succeed(request);
+          case "GitHub":
+            return (isAbsolute(request.folder) ? resolve(request.folder, "/") : unresolved(request.folder)).pipe(
+              Effect.map((folder) => ({ ...request, folder })),
+            );
         }
       };
 

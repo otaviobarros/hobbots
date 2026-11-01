@@ -248,6 +248,8 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
   await page.getByRole("tab", { name: "Charms" }).click();
   const files = page.getByRole("listitem").filter({ hasText: "Files" });
   await expect(files).toContainText("Delete is checked by Hobbots");
+  // The GitHub Charm reads on the hub, Allow under Balanced; pushing comes later.
+  await expect(page.getByText("Reads the repository of Pip's folders")).toBeVisible();
   await page.getByRole("button", { name: "Change what Pip may do" }).click();
   await expect(page.getByRole("tab", { name: "Permissions" })).toHaveAttribute("aria-selected", "true");
 
@@ -275,6 +277,18 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
     decisions: { "run-commands": "ask", "delete-files": "ask" },
   });
 
+  // Read GitHub cannot ask, so it offers Allow and Never only.
+  const github = page.getByRole("radiogroup", { name: "Read GitHub" });
+  await expect(github.getByRole("radio")).toHaveCount(2);
+  await expect(github.getByRole("radio", { name: "Allow" })).toBeChecked();
+  await github.getByText("Never", { exact: true }).click();
+  await expect(github.getByRole("radio", { name: "Never" })).toBeChecked();
+  await expect
+    .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
+    .toMatchObject({ decisions: { "read-github": "deny" } });
+  await github.getByText("Allow", { exact: true }).click();
+  await expect(github.getByRole("radio", { name: "Allow" })).toBeChecked();
+
   // Picking the preset's answer again drops the override; removing the folder empties the list.
   await commands.getByText("Allow", { exact: true }).click();
   await expect(commands.getByRole("radio", { name: "Allow" })).toBeChecked();
@@ -282,7 +296,7 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
   await expect(page.getByText("None yet. Only Pip can work in a folder added here.")).toBeVisible();
   await expect
     .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
-    .toMatchObject({ configVersion: 5, folders: [], policy: { ownFolders: [], overrides: {} } });
+    .toMatchObject({ configVersion: 7, folders: [], policy: { ownFolders: [], overrides: {} } });
 });
 
 // covers AG-004, PE-005

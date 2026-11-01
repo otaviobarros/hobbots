@@ -20,6 +20,7 @@ import {
   answersWithin,
   enforcement,
   folderName,
+  offeredAnswer,
   pickAnswer,
   presetInfo,
   RULES,
@@ -304,7 +305,7 @@ function Rule({
   const noteId = useId();
   const preset = PRESET_DECISIONS[permissions.preset][rule.operation];
   const allowed = answersWithin(preset);
-  const current = shown ?? permissions.decisions[rule.operation];
+  const current = shown ?? offeredAnswer(rule.operation, permissions.decisions[rule.operation]);
   // Why the rule is blocked whatever its answer, or null when the hub can hold it.
   const gap = needsSandbox(rule.operation, permissions.enforcement) ? sandboxGap(permissions.enforcement) : null;
   const blocked = gap !== null;
@@ -334,7 +335,7 @@ function Rule({
         aria-describedby={noteId}
         className="flex border-2 border-control"
       >
-        {(["allow", "ask", "deny"] as const).map((answer) => {
+        {(rule.answers ?? (["allow", "ask", "deny"] as const)).map((answer) => {
           const on = current === answer;
           const offered = allowed.includes(answer);
           return (

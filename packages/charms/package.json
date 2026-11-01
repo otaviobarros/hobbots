@@ -1,0 +1,23 @@
+{
+  "name": "@hobbots/charms",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hobbots/agents": "workspace:*",
+    "@hobbots/domain": "workspace:*",
+    "@hobbots/permissions": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@types/node": "26.6.5",
+    "vitest": "5.0.5"
+  }
+}
