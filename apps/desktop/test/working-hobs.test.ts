@@ -85,7 +85,7 @@ describe("which hobs are working", () => {
   });
 
   // covers UX-001
-  it("[TC-DP-050] keeps waiting for an ended turn across a dropped connection", async () => {
+  it("[TC-DP-052] keeps waiting for an ended turn across a dropped connection", async () => {
     const { hobs, seen } = setup([...Array.from({ length: 6 }, () => [pip]), null, []]);
     // Pip's reply completes while the hub still cleans up its turn, and the stream drops meanwhile.
     void hobs.changed("t1", false);
