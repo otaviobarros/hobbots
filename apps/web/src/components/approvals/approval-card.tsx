@@ -1,18 +1,14 @@
 import type { Agent, ApprovalRequest, ApprovalState } from "@hobbots/domain";
-import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { useEffect, useId, useRef, useState } from "react";
-import { flushSync } from "react-dom";
-import { type Decision, useDecideApproval } from "../../api/approvals.ts";
+import { useEffect, useRef } from "react";
+import { useDecideApproval } from "../../api/approvals.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { messages } from "../messages.ts";
-import { decisionErrorText, exactAction, resultText } from "./approval-text.ts";
+import { ApprovalActions } from "./approval-actions.tsx";
+import { decisionErrorText, exactAction, expiryText, resultText } from "./approval-text.ts";
 
 const copy = messages.approval;
-
-// Stable, so it runs once when its element mounts rather than on every render.
-const focusOnMount = (element: HTMLElement | null) => element?.focus();
 
 /** The ring around the card and the color of its words, by state. */
 const TONE: Record<ApprovalState, { readonly ring: string; readonly text: string; readonly motion: string }> = {
@@ -24,8 +20,8 @@ const TONE: Record<ApprovalState, { readonly ring: string; readonly text: string
 
 /**
  * A tool call waiting for the user, inline in the reply it paused (PE-003): the exact action, what
- * it acts on, who asked, why the policy asks now and the risk, with Allow once and Deny with an
- * optional reason. It follows the durable request, so a decision made elsewhere or an expiry shows
+ * it acts on, who asked, why the policy asks now, the risk and when it expires, with Allow once,
+ * Always for this site with the rule it saves, and Deny with an optional reason. It follows the durable request, so a decision made elsewhere or an expiry shows
  * here as it happens.
  */
 export function ApprovalCard({ approval, hob }: { approval: ApprovalRequest; hob: Agent }) {
@@ -59,13 +55,13 @@ export function ApprovalCard({ approval, hob }: { approval: ApprovalRequest; hob
       <header className="flex flex-wrap items-center gap-2">
         <HobSprite hob={hob} size={22} state={pending ? "needs-you" : "idle"} />
         <span className={cn("lbl flex-1", tone.text)}>{copy.asks({ name: hob.name })}</span>
-        {pending && <span className="text-xs text-label">{copy.expires}</span>}
+        {pending && <span className="text-xs text-label">{expiryText(approval)}</span>}
       </header>
       <ApprovalDetails approval={approval} hob={hob} />
       {pending && (
         <ApprovalActions
+          approval={approval}
           hob={hob}
-          onceOnly={approval.onceOnly}
           pending={decide.isPending}
           onDecide={(decision) => decide.mutate(decision)}
         />
@@ -110,134 +106,5 @@ function ApprovalDetails({ approval, hob }: { approval: ApprovalRequest; hob: Ag
         <span>{copy.riskOf[approval.operation]}</span>
       </dd>
     </dl>
-  );
-}
-
-/**
- * Allow once and Deny. A high-risk request (`onceOnly`) needs the confirmation box ticked before
- * Allow once can be pressed, and the hub checks the confirmation too (PE-007).
- */
-function ApprovalActions({
-  hob,
-  onceOnly,
-  pending,
-  onDecide,
-}: {
-  hob: Agent;
-  onceOnly: boolean;
-  pending: boolean;
-  onDecide: (decision: Decision) => void;
-}) {
-  const [confirmed, setConfirmed] = useState(false);
-  const [denying, setDenying] = useState(false);
-  const [reason, setReason] = useState("");
-  const denyButton = useRef<HTMLButtonElement>(null);
-  // The buttons stay enabled while a decision is sent, so they keep keyboard focus; repeats are ignored.
-  const send = (decision: Decision) => {
-    if (!pending) onDecide(decision);
-  };
-  // Closing the reason brings the buttons back, with focus on Deny where it was.
-  const closeDeny = () => {
-    if (pending) return;
-    flushSync(() => setDenying(false));
-    denyButton.current?.focus();
-  };
-  return denying ? (
-    <DenyForm
-      name={hob.name}
-      reason={reason}
-      onReason={setReason}
-      onDeny={() => send({ decision: "deny", reason })}
-      onCancel={closeDeny}
-    />
-  ) : (
-    <div className="flex flex-col gap-2">
-      {onceOnly && <ConfirmBox name={hob.name} checked={confirmed} onChange={setConfirmed} />}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="approve"
-          disabled={onceOnly && !confirmed}
-          aria-disabled={pending}
-          onClick={() => send({ decision: "approve", confirmed: onceOnly ? confirmed : undefined })}
-        >
-          {copy.allowOnce}
-        </Button>
-        <Button ref={denyButton} variant="deny" aria-disabled={pending} onClick={() => !pending && setDenying(true)}>
-          {copy.deny}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** The check box a high-risk action needs before Allow once. */
-function ConfirmBox({
-  name,
-  checked,
-  onChange,
-}: {
-  name: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className="flex cursor-pointer items-center gap-2 text-sm">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="size-4 accent-mint"
-      />
-      {copy.confirm({ name })}
-    </label>
-  );
-}
-
-/** The optional reason that goes back to the hob with a Deny. Escape closes it. */
-function DenyForm({
-  name,
-  reason,
-  onReason,
-  onDeny,
-  onCancel,
-}: {
-  name: string;
-  reason: string;
-  onReason: (reason: string) => void;
-  onDeny: () => void;
-  onCancel: () => void;
-}) {
-  const inputId = useId();
-  return (
-    <form
-      className="flex flex-col gap-1.5"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onDeny();
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onCancel();
-      }}
-    >
-      <label htmlFor={inputId} className="text-xs text-label">
-        {copy.reasonLabel({ name })}
-      </label>
-      <span className="flex flex-wrap gap-2">
-        <input
-          id={inputId}
-          ref={focusOnMount}
-          value={reason}
-          maxLength={2000}
-          onChange={(event) => onReason(event.target.value)}
-          className="min-w-[200px] flex-1 border-2 border-control bg-deep px-3 py-1.5 text-text"
-        />
-        <Button type="submit" variant="deny">
-          {copy.confirmDeny}
-        </Button>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          {copy.cancel}
-        </Button>
-      </span>
-    </form>
   );
 }

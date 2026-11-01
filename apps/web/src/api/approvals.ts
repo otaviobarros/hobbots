@@ -1,4 +1,4 @@
-import type { ApprovalDecision, ApprovalRequest, ThreadId } from "@hobbots/domain";
+import type { ApprovalDecision, ApprovalLifetime, ApprovalRequest, GrantRule, ThreadId } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { newer, recordApproval, syncedApprovals, syncedInbox } from "./sync.ts";
@@ -26,6 +26,10 @@ export interface Decision {
   readonly reason?: string | undefined;
   /** The user's confirmation of a high-risk action, which approving it needs. */
   readonly confirmed?: boolean | undefined;
+  /** How long an approval lasts; once when absent. */
+  readonly lifetime?: ApprovalLifetime | undefined;
+  /** The rules This Quest or Always saves, as the card showed them; the request's own when absent. */
+  readonly rules?: ReadonlyArray<GrantRule> | undefined;
 }
 
 /**
@@ -36,7 +40,7 @@ export interface Decision {
 export const useDecideApproval = (approval: ApprovalRequest) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ decision, reason, confirmed }: Decision) =>
+    mutationFn: ({ decision, reason, confirmed, lifetime, rules }: Decision) =>
       call((c) =>
         c.approvals.decide({
           params: { approvalId: approval.id },
@@ -45,6 +49,8 @@ export const useDecideApproval = (approval: ApprovalRequest) => {
             actionDigest: approval.actionDigest,
             ...(reason !== undefined && reason.trim() !== "" && { reason: reason.trim() }),
             ...(confirmed === true && { confirmed }),
+            ...(lifetime !== undefined && { lifetime }),
+            ...(rules !== undefined && { rules }),
           },
         }),
       ),
