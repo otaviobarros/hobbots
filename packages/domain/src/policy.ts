@@ -86,7 +86,9 @@ export type SandboxState = typeof SandboxState.Type;
  * Whether a rule is enforced by a runtime or OS boundary or only checked by Hobbots (ADR 014), given
  * each operation's answer. Push is checked where commands and the web are both allowed in the
  * sandbox, since a command can then push to a remote that needs no credentials, bypassing the Push
- * Charm. Every rule is checked for a hob let out of the sandbox.
+ * Charm. Local Git is checked where its answer is narrower than Run commands, since any permitted
+ * command can run Git another way (`sh -c 'git commit'`). Every rule is checked for a hob let out of
+ * the sandbox.
  */
 export const ruleEnforcement = (
   operation: PolicyOperation,
@@ -94,6 +96,11 @@ export const ruleEnforcement = (
   sandbox: SandboxState,
 ): "enforced" | "checked" => {
   if (sandbox === "off" || CHECKED_OPERATIONS.includes(operation)) return "checked";
+  if (operation === "local-git") {
+    const git = answer("local-git");
+    const commands = answer("run-commands");
+    return git !== commands && narrowest(git, commands) === git ? "checked" : "enforced";
+  }
   const bypass = sandbox === "on" && answer("run-commands") === "allow" && answer("use-web") === "allow";
   return operation === "push" && bypass ? "checked" : "enforced";
 };

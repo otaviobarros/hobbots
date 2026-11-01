@@ -137,6 +137,20 @@ describe("policy engine", () => {
     expect(none).toMatchObject({ decision: "deny", reason: { code: "no-target" } });
   });
 
+  it("[#209] refuses a folder a command line moved to unknowably, and relative paths against it", async () => {
+    const trusting = contextFor(home, "trusting");
+    const command = await decide(trusting, { _tag: "Command", operation: "run-commands", cwd: 'cd "$DIR"' });
+    expect(command).toMatchObject({ decision: "deny", reason: { code: "unresolvable-path" } });
+    const relative = await decide(trusting, files("delete-files", 'cd "$DIR"', "src/index.ts"));
+    expect(relative).toMatchObject({ decision: "deny", reason: { code: "unresolvable-path" } });
+    // An absolute path does not depend on the folder, so it is decided as usual.
+    const absolute = await decide(
+      trusting,
+      files("delete-files", 'cd "$DIR"', path.join(home.project, "src/index.ts")),
+    );
+    expect(absolute.decision).toBe("allow");
+  });
+
   it("lets overrides and restrictions only narrow, and says which one decided", async () => {
     const narrowed = await decide(
       contextFor(home, "trusting", {
@@ -562,7 +576,7 @@ describe("policy engine", () => {
 describe("policy version", () => {
   it("changes with any policy input and not with key order", () => {
     const base = contextFor(home, "balanced");
-    expect(policyVersion(base)).toMatch(/^r1-[0-9a-f]{16}$/);
+    expect(policyVersion(base)).toMatch(/^r3-[0-9a-f]{16}$/);
     expect(policyVersion({ ...base })).toBe(policyVersion(base));
     const reordered = Object.fromEntries(Object.entries(base).reverse()) as unknown as typeof base;
     expect(policyVersion(reordered)).toBe(policyVersion(base));
