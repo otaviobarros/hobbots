@@ -475,11 +475,22 @@ describe("the sandbox note", () => {
 });
 
 describe("the approval note", () => {
-  // covers PE-003
-  it("[#282] tells a turn that can ask the user that it never sees the request, and no other turn", () => {
+  // covers PE-003; regression for #282
+  it("[TC-PE-123] tells a turn that can ask the user that it never sees the request, and no other turn", () => {
     expect(turnInstructions("Be brief.", false, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}`);
     expect(turnInstructions("Be brief.", true, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}\n\n${SANDBOX_NOTE}`);
     expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
     expect(APPROVAL_NOTE).toContain("you do not");
+  });
+
+  // covers PE-003; regression for #282
+  it("[TC-PE-124] carries the approval note to a resumed session with its instructions, since it keeps its system prompt", () => {
+    const request = { prompt: "hi", instructions: "Be brief.", instructionsChanged: true, sessionId: "s1" };
+    const prompt = turnPrompt(request, turnInstructions(request.instructions, false, true));
+    expect(prompt).toContain(`Be brief.\n\n${APPROVAL_NOTE}\n</current-instructions>`);
+    // A session that follows its instructions already has the note in its system prompt.
+    expect(turnPrompt({ ...request, instructionsChanged: false }, turnInstructions("Be brief.", false, true))).toBe(
+      "hi",
+    );
   });
 });

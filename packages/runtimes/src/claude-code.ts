@@ -586,24 +586,26 @@ export const turnEvents = () => {
  * The prompt Claude Code receives. On resume Claude Code keeps the system prompt the session started
  * with, so instructions it may not follow come first in the turn itself. The block may repeat on
  * later turns, so it states the current instructions rather than announcing a change. A briefing on
- * what the session missed (ADR 017) comes next, then the user's prompt.
+ * what the session missed (ADR 017) comes next, then the user's prompt. `instructions` is the
+ * whole text the system prompt would append, notes included, so a resumed session gets them too.
  */
 export const turnPrompt = (
   request: Pick<PromptRequest, "prompt" | "briefing" | "sessionId" | "instructions" | "instructionsChanged">,
+  instructions: string = request.instructions,
 ) => {
-  const instructions =
+  const current =
     request.sessionId && request.instructionsChanged
       ? [
           "<current-instructions>",
           "These are your current instructions. Follow them in place of the ones in your system prompt and any earlier ones:",
           "",
-          request.instructions,
+          instructions,
           "</current-instructions>",
           "",
         ]
       : [];
   const briefing = request.briefing ? [request.briefing, ""] : [];
-  return [...instructions, ...briefing, request.prompt].join("\n");
+  return [...current, ...briefing, request.prompt].join("\n");
 };
 
 /** A turn with tools: the context every call is decided under, its folders and the tools offered. */
@@ -913,6 +915,11 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           // sandbox that starts still wraps the runtime.
           const tools = toolTurn(request.tools, policySandbox(declared));
           const sandboxed = tools !== null && sandbox.state === "on";
+          const instructions = turnInstructions(
+            request.instructions,
+            sandboxed,
+            tools !== null && Boolean(request.approvals),
+          );
           // The sandbox opens the binary's folder, so it must be a real path, never the hub's own folder.
           const absoluteBinary = sandboxed ? yield* resolveBinary(binary) : binary;
           const login = sandboxed ? yield* sandboxLogin(binary) : {};
@@ -988,7 +995,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const turn = yield* Effect.acquireRelease(
             Effect.sync(() =>
               query({
-                prompt: turnPrompt(request),
+                prompt: turnPrompt(request, instructions),
                 options: {
                   ...base,
                   ...(tools
@@ -1011,11 +1018,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   systemPrompt: {
                     type: "preset",
                     preset: "claude_code",
-                    append: turnInstructions(
-                      request.instructions,
-                      sandboxed,
-                      tools !== null && Boolean(request.approvals),
-                    ),
+                    append: instructions,
                   },
                   ...(request.sessionId ? { resume: request.sessionId } : {}),
                   // Claude Code's own command sandbox, where it applies one, must let Git reach the agent too.
