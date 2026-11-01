@@ -133,6 +133,20 @@ describe("Claude Code tool calls as policy requests", () => {
       });
     }
     expect(pushes("git push --all origin")).toMatchObject([{ toDefaultBranch: true, exact: false }]);
+    // Patterns, matching pushes and the current branch do not name the branches they update.
+    for (const command of [
+      "git push origin 'refs/heads/*:refs/heads/*'",
+      "git push origin :",
+      "git push origin +:",
+      "git push origin HEAD",
+      "git push origin @",
+      "git push origin HEAD:HEAD",
+    ]) {
+      expect({ command, pushes: pushes(command) }).toMatchObject({
+        command,
+        pushes: [{ toDefaultBranch: true, exact: false }],
+      });
+    }
     expect(pushes("git push --tags origin feature")).toMatchObject([{ toDefaultBranch: true, exact: false }]);
   });
 

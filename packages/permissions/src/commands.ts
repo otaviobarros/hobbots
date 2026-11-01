@@ -122,24 +122,29 @@ const split = (line: string): Array<Array<string>> | null => {
   return r.commands;
 };
 
-/** A simple command's words when it can be granted: no leading assignment, no wrapper, no `=` program. */
+/** A simple command's words when it can be granted: no leading assignment and no `=` program. */
 const grantable = (words: ReadonlyArray<string>): boolean => {
   const program = words[0];
-  if (program === undefined) return false;
   // `VAR=value cmd`, and zsh's `=cmd`, which expands to a path.
-  if (program.includes("=")) return false;
-  return !WRAPPERS.has(basename(program));
+  return program !== undefined && !program.includes("=");
 };
 
 /**
  * Reads a command line into its simple commands, split at `&&`, `||`, `;`, `|` and newlines, each
  * with its literal words after quotes are removed, or null where it cannot be granted. Null for
  * the whole line when any part of it is unreadable, since the parts could not be told apart safely,
- * or when it changes folder with `cd`, `pushd` or `popd`, since its commands may run elsewhere.
+ * or when any of its commands is `cd`, `pushd`, `popd` or a wrapper such as `command`, `env` or
+ * `sudo`, since the line's commands may then run elsewhere or as something else.
  */
 export const readCommandLine = (line: string): ReadonlyArray<ReadCommand> | null => {
   const commands = split(line);
   if (commands === null || commands.length === 0) return null;
-  if (commands.some(([program]) => program !== undefined && FOLDER_CHANGES.has(basename(program)))) return null;
+  // A wrapper runs later words as a command, `command cd` and `env -C` included, and a folder change
+  // moves what follows. Either, after any leading assignments, makes the whole line read as nothing.
+  const opaque = (words: ReadonlyArray<string>) => {
+    const program = words.find((word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word));
+    return program !== undefined && (FOLDER_CHANGES.has(basename(program)) || WRAPPERS.has(basename(program)));
+  };
+  if (commands.some(opaque)) return null;
   return commands.map((words) => (grantable(words) ? words : null));
 };
