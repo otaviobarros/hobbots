@@ -132,7 +132,8 @@ const request = async (method: string, path: string, body?: unknown) => {
   const response = await handler(
     new Request(`http://localhost:4364${path}`, {
       method,
-      headers: { "content-type": "application/json" },
+      // As the web client sends it: only a user session changes what a hob may do (PE-006).
+      headers: { "content-type": "application/json", host: "localhost:4364", origin: "http://localhost:4364" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );

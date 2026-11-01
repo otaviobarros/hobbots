@@ -1,9 +1,10 @@
 import { ApprovalService, HobbotsRepository } from "@hobbots/agents";
 import { HobbotsApi, ThreadNotFound } from "@hobbots/api";
-import { Effect, Option } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
+import { UserSessionOnlyLive } from "./user-session.ts";
 
-// Tool calls waiting for the user's decision, and the decisions (PE-003).
+// Tool calls waiting for the user's decision, and the decisions (PE-003), for user sessions only (PE-006).
 export const ApprovalsHandlers = HttpApiBuilder.group(HobbotsApi, "approvals", (handlers) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
@@ -24,4 +25,4 @@ export const ApprovalsHandlers = HttpApiBuilder.group(HobbotsApi, "approvals", (
       decide: ({ params, payload }) => approvals.decide(params.approvalId, payload),
     });
   }),
-);
+).pipe(Layer.provide(UserSessionOnlyLive));

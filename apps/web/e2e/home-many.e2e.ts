@@ -18,7 +18,7 @@ const hubWithHobs = async (count: number) => {
   const api = async (method: string, path: string, body: unknown) => {
     const response = await fetch(`${hub?.url}/api${path}`, {
       method,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", origin: String(hub?.url) },
       body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);

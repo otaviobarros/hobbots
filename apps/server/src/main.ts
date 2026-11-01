@@ -37,6 +37,7 @@ import { IPv6Loopback } from "./loopback.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
+import { ClientOrigins, userSessionOrigins } from "./user-session.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
 
 const ServerLive = Layer.unwrap(
@@ -125,7 +126,7 @@ const ServerLive = Layer.unwrap(
       Layer.provideMerge(
         HttpRouter.serve(
           Layer.mergeAll(
-            ApiRoutes,
+            ApiRoutes.pipe(Layer.provide(Layer.succeed(ClientOrigins, userSessionOrigins(config)))),
             EventStreamRoute,
             WebClientRoutes(config.webDir),
             LoopbackHostOnly,
