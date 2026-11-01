@@ -19,6 +19,7 @@ import {
   DelegationId,
   type EventEnvelope,
   QuestId,
+  QuestionId,
   TaskId,
   Thread,
   ThreadId,
@@ -97,6 +98,21 @@ afterEach(() => dispose());
 
 const get = async (path: string): Promise<{ readonly status: number; readonly body: unknown }> => {
   const response = await handler(new Request(`http://localhost:4390${path}`));
+  return { status: response.status, body: await response.json() };
+};
+
+const post = async (path: string, body: unknown, origin?: string) => {
+  const response = await handler(
+    new Request(`http://localhost:4390${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        host: "localhost:4390",
+        ...(origin === undefined ? {} : { origin }),
+      },
+      body: JSON.stringify(body),
+    }),
+  );
   return { status: response.status, body: await response.json() };
 };
 
@@ -231,6 +247,47 @@ describe("Task and Quest reads", () => {
       status: 404,
       body: { _tag: "ThreadNotFound", threadId: "nope" },
     });
+  });
+
+  // covers OR-004, PE-006
+  it("[TC-OR-012] records your answer to a question that reached you, once, from the app only", async () => {
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        yield* quest;
+        const tasks = yield* TaskRepository;
+        // Aldric leads the top Quest, so no lead is above him and his question comes to you.
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-ship"),
+          taskId: TaskId.make("campaign"),
+          askerId: ALDRIC,
+          text: "Ship on Friday?",
+          createdAt: now,
+        });
+      }),
+    );
+    const app = "http://localhost:4390";
+
+    expect((await post("/api/questions/q-ship/answer", { answer: "Yes" })).status).toBe(403);
+    const answered = await post("/api/questions/q-ship/answer", { answer: "Yes" }, app);
+    expect(answered).toMatchObject({
+      status: 200,
+      body: { id: "q-ship", state: "answered", answer: "Yes", answeredBy: { _tag: "User" } },
+    });
+    expect(await post("/api/questions/q-ship/answer", { answer: "No" }, app)).toEqual({
+      status: 409,
+      body: { _tag: "QuestionClosed", questionId: "q-ship" },
+    });
+    expect(await post("/api/questions/nope/answer", { answer: "No" }, app)).toEqual({
+      status: 404,
+      body: { _tag: "QuestionNotFound", questionId: "nope" },
+    });
+    const events = await runtime.runPromise(
+      Effect.gen(function* () {
+        const journal = yield* EventJournal;
+        return yield* journal.readAfter(-1);
+      }),
+    );
+    expect(events.filter((entry) => entry.type === "QuestionAnswered")).toHaveLength(1);
   });
 
   // covers OR-007

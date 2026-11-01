@@ -8,6 +8,7 @@ import {
   MessageId,
   PolicyOperation,
   QuestId,
+  QuestionId,
   SafetyPreset,
   TaskId,
   ThreadId,
@@ -174,4 +175,17 @@ export class QuestNotFound extends Schema.TaggedError<QuestNotFound>()(
   "QuestNotFound",
   { questId: QuestId },
   { httpApiStatus: 404 },
+) {}
+
+export class QuestionNotFound extends Schema.TaggedError<QuestionNotFound>()(
+  "QuestionNotFound",
+  { questionId: QuestionId },
+  { httpApiStatus: 404 },
+) {}
+
+/** A question that is no longer the user's to answer: it was answered, or it is with a lead. */
+export class QuestionClosed extends Schema.TaggedError<QuestionClosed>()(
+  "QuestionClosed",
+  { questionId: QuestionId },
+  { httpApiStatus: 409 },
 ) {}

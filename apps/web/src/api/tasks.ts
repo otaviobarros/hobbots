@@ -1,6 +1,12 @@
 import type { ThreadTasksRead } from "@hobbots/api";
-import type { ThreadId } from "@hobbots/domain";
-import { type QueryClient, type QueryFunctionContext, queryOptions } from "@tanstack/react-query";
+import type { QuestionId, ThreadId } from "@hobbots/domain";
+import {
+  type QueryClient,
+  type QueryFunctionContext,
+  queryOptions,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { syncState } from "./sync.ts";
 import { applyToThreadTrees, type TaskEvent } from "./task-trees.ts";
@@ -87,4 +93,14 @@ export const applyTaskEvent = (client: QueryClient, event: TaskEvent) => {
 const applyToRead = (queryKey: ReadonlyArray<unknown>, read: unknown, event: TaskEvent): unknown => {
   const [, kind, id] = queryKey;
   return kind === "thread" ? applyToThread(id as ThreadId)(read as ThreadTasksRead, event) : read;
+};
+
+/** Sends your answer to a question that reached you; the card shows it at once, before its event. */
+export const useAnswerQuestion = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ questionId, answer }: { questionId: QuestionId; answer: string }) =>
+      call((c) => c.questions.answer({ params: { questionId }, payload: { answer } })),
+    onSuccess: (question) => applyTaskEvent(queryClient, { _tag: "QuestionAnswered", question }),
+  });
 };

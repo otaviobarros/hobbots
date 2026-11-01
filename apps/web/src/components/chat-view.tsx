@@ -45,6 +45,7 @@ import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
 import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
 import { messages } from "./messages.ts";
+import { ThreadWorkStrip, useWorkMoments } from "./quest/thread-work.tsx";
 
 /**
  * Keeps the transcript's end in view while the composer grows or shrinks, so a long draft never
@@ -247,6 +248,7 @@ export function ChatView({
           {panelOpen ? "»" : "«"}
         </Button>
       </header>
+      {threadId && <ThreadWorkStrip hobId={hobId} threadId={threadId} />}
 
       <div
         onScroll={(event) => {
@@ -277,6 +279,7 @@ export function ChatView({
           <Transcript
             transcript={transcript}
             hob={current}
+            threadId={threadId}
             thread={thread.data}
             focusMessageId={focusMessageId}
             streaming={streaming}
@@ -411,6 +414,7 @@ export function ChatView({
 function Transcript({
   transcript,
   hob,
+  threadId,
   thread,
   focusMessageId,
   streaming,
@@ -418,6 +422,7 @@ function Transcript({
 }: {
   transcript: ReadonlyArray<Message>;
   hob: Agent;
+  threadId: ThreadId | undefined;
   thread: Thread | undefined;
   focusMessageId: string | undefined;
   streaming: boolean;
@@ -427,8 +432,11 @@ function Transcript({
   const last = lastReplyBrain(transcript);
   const next = threadBrain(hob, thread);
   const changes = !streaming && last !== null && (last.runtime !== next.runtime || last.model !== next.model);
+  // Tasks and Quests show under the request that started them, with only the moments that matter.
+  const work = useWorkMoments(hob.id, threadId, transcript);
   return (
     <>
+      {work.before}
       {transcript.map((message) => (
         <Fragment key={message.id}>
           {switches.has(message.id) && message.runtime !== null && (
@@ -437,6 +445,7 @@ function Transcript({
           <MessageRow message={message} hob={hob} focused={message.id === focusMessageId} resume={resume(message)}>
             <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
           </MessageRow>
+          {work.after(message.id)}
         </Fragment>
       ))}
       {changes && <BrainSwitchNote brain={next} next />}
