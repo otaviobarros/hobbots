@@ -6,6 +6,7 @@ import {
   type JournaledEvent,
   type ResponsibilityLedger,
   responsibilityLedger,
+  supersededItems,
   type Task,
   TaskRefused,
 } from "@hobbots/domain";
@@ -30,6 +31,8 @@ const carries = (item: BackpackItem, claimLive: boolean, carried: CarriedItem | 
 export interface LedgerRead {
   readonly ledger: ResponsibilityLedger;
   readonly consumes: ReadonlyArray<{ readonly item: BackpackItem; readonly carried: CarriedItem }>;
+  /** Items about ended Tasks under it that the ledger no longer counts; the completion resolves them as late. */
+  readonly superseded: ReturnType<typeof supersededItems>;
 }
 
 /**
@@ -86,7 +89,7 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
       }
       const approvals = yield* pendingApprovals(task, DateTime.formatIso(yield* DateTime.now));
       const ledger = responsibilityLedger(task, { subtree, tree, approvals, items: blocking });
-      return { ledger, consumes } satisfies LedgerRead;
+      return { ledger, consumes, superseded: supersededItems(task, subtree, blocking) } satisfies LedgerRead;
     });
 
   /**
@@ -119,11 +122,33 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
       return events;
     });
 
+  /**
+   * Resolves the items the ledger no longer counts as late, against the version their ended Task
+   * ended at, in the completion's transaction from sequence `first` on. Only an item still pending
+   * and unclaimed at the token read: one a worker holds is left for it to find late.
+   */
+  const retire = (superseded: LedgerRead["superseded"], first: number) =>
+    Effect.gen(function* () {
+      const at = DateTime.formatIso(yield* DateTime.now);
+      const events: Array<JournaledEvent> = [];
+      for (const { item, taskRevision } of superseded) {
+        const updated = yield* sql`UPDATE backpack_items
+          SET state = 'resolved', disposition = ${dispositionColumn({ _tag: "late", taskRevision })},
+            updated_at = ${at}, revision = ${first + events.length}
+          WHERE id = ${item.id} AND state = 'pending' AND claim_owner IS NULL AND claim_token = ${item.fencingToken}
+          RETURNING id`;
+        if (updated.length === 0) continue;
+        const resolved = yield* items.item(item.id as BackpackItemId);
+        if (resolved !== undefined) events.push({ _tag: "BackpackItemChanged", item: resolved });
+      }
+      return events;
+    });
+
   /** Who consumed the items: the `complete_task` call the change runs in, or else the Attempt that produced the result. */
   const consumer = (attemptId: string) =>
     Effect.map(CurrentToolCall, (call) =>
       call === null ? `attempt:${attemptId}` : `tool:${call.agentId}:${call.key}`,
     );
 
-  return { readFor, consume, consumer };
+  return { readFor, consume, retire, consumer };
 };

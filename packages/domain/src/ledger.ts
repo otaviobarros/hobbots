@@ -81,6 +81,28 @@ const OUTCOME_KINDS: ReadonlyArray<BackpackItem["kind"]> = ["result", "failure"]
 const settledElsewhere = (item: BackpackItem, ended: ReadonlySet<string>) =>
   item.kind === "question" || (item.taskId !== null && ended.has(item.taskId) && !OUTCOME_KINDS.includes(item.kind));
 
+/**
+ * The open items about a Task under `task` that has ended, other than its result or failure: the
+ * ledger no longer counts them, and completing `task` resolves them as late (ADR 019).
+ */
+export const supersededItems = (
+  task: Task,
+  subtree: TaskTree,
+  items: ReadonlyArray<BackpackItem>,
+): ReadonlyArray<{ readonly item: BackpackItem; readonly taskRevision: number }> => {
+  const ended = new Map(
+    descendantsOf(task, subtree.tasks)
+      .filter((each) => isTerminalTask(each.state))
+      .map((each) => [each.id as string, each.revision]),
+  );
+  return items.flatMap((item) => {
+    const revision = item.taskId === null ? undefined : ended.get(item.taskId);
+    return revision !== undefined && item.kind !== "question" && !OUTCOME_KINDS.includes(item.kind)
+      ? [{ item, taskRevision: revision }]
+      : [];
+  });
+};
+
 /** The ledger of `task`: everything still open on it, from the records in `sources`. Pure. */
 export const responsibilityLedger = (task: Task, sources: LedgerSources): ResponsibilityLedger => {
   const under = descendantsOf(task, sources.subtree.tasks);

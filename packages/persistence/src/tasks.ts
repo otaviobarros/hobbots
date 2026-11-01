@@ -417,17 +417,17 @@ export const TaskRepositoryLive = Layer.effect(
     /**
      * The completion gate: the result names the Task's current Attempt, and its responsibility
      * ledger is settled but for what the completing turn carries (ADR 019). Returns what the
-     * completion consumes.
+     * completion consumes, and the items about ended Tasks under it that it resolves as late.
      */
     const gate = (task: Task, completion: TaskCompletion) =>
       Effect.gen(function* () {
         if (completion.attemptId !== task.currentAttemptId) {
           return yield* refuse("attempt-mismatch", "A result names its Task's current Attempt");
         }
-        const { ledger: open, consumes } = yield* ledger.readFor(task, completion.carried);
+        const { ledger: open, consumes, superseded } = yield* ledger.readFor(task, completion.carried);
         const refusal = ledgerRefusal(open);
         if (refusal !== null) return yield* refuse(refusal.reason, refusal.message);
-        return consumes;
+        return { consumes, superseded };
       });
 
     const completeTask: TaskRepository["Service"]["completeTask"] = (taskId, expected, completion) =>
@@ -439,7 +439,7 @@ export const TaskRepositoryLive = Layer.effect(
             ...(yield* orFail(TaskTransitions.complete(before, result, completion.at))),
             revision,
           });
-          const consumes = yield* gate(task, completion);
+          const settles = yield* gate(task, completion);
           yield* saveTask(task);
           const artifacts = completion.artifacts.map(
             (artifact) =>
@@ -466,7 +466,8 @@ export const TaskRepositoryLive = Layer.effect(
           const quest = yield* endQuest(task, completion.at, revision + events.length);
           if (quest !== null) events.push({ _tag: "QuestCompleted", quest });
           const by = yield* ledger.consumer(completion.attemptId);
-          events.push(...(yield* ledger.consume(consumes, by, revision + events.length)));
+          events.push(...(yield* ledger.consume(settles.consumes, by, revision + events.length)));
+          events.push(...(yield* ledger.retire(settles.superseded, revision + events.length)));
           return { value: task, events };
         }),
       );

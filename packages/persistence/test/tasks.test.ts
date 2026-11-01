@@ -428,18 +428,22 @@ describe("Task records", () => {
       answeredBy: { _tag: "Lead", agentId: ALDRIC },
     });
     expect(result.unread).toMatchObject({ _tag: "TaskRefused", reason: "items-open" });
-    // The completion consumes what it carried, in its own transaction.
+    // The completion consumes what it carried, and retires what no longer counts, in its own transaction.
     expect(tags(result.done.entries).slice(0, 3)).toEqual(["TaskCompleted", "CheckpointRecorded", "QuestCompleted"]);
     expect(
       result.done.entries
         .slice(3)
         .map(({ payload }) =>
-          payload._tag === "BackpackItemChanged" ? [payload.item.kind, payload.item.taskId, payload.item.state] : null,
+          payload._tag === "BackpackItemChanged"
+            ? [payload.item.kind, payload.item.taskId, payload.item.disposition?._tag]
+            : null,
         ),
     ).toEqual([
-      ["answer", "campaign", "resolved"],
-      ["result", "copy", "resolved"],
-      ["result", "build", "resolved"],
+      ["answer", "campaign", "consumed"],
+      ["result", "copy", "consumed"],
+      ["result", "build", "consumed"],
+      // Copy's milestone report has nothing left to act on once copy ended: it resolves as late.
+      ["checkpoint", "copy", "late"],
     ]);
     expect(result.done.value).toMatchObject({
       state: "completed",
