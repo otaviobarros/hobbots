@@ -70,12 +70,13 @@ const clipMiddle = (text: string) => {
 
 /**
  * The tool calls a reply made, as Hobbots stored them, as one line: the first few, each clipped, and
- * how many more. Thinking is left out.
+ * how many more. An uncertain call is always listed, past the limit too (EX-004). Thinking is left out.
  */
 const toolSteps = (message: Message) => {
   const tools = message.steps.filter((step) => step.kind === "tool");
   if (tools.length === 0) return null;
-  const shown = tools.slice(0, BRIEFING_LIMITS.steps).map((step) => {
+  const listed = tools.filter((step, index) => index < BRIEFING_LIMITS.steps || step.state === "uncertain");
+  const shown = listed.map((step) => {
     const outcome =
       step.state === "denied" && step.reason
         ? `denied: ${clip(oneLine(step.reason), BRIEFING_LIMITS.step)}`

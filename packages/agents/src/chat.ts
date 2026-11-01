@@ -37,7 +37,7 @@ import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { type RuntimeEvent, runtimeAdapters, type ToolAccess, type ToolStartedEvent } from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
-import { nextSteps, uncertainCalls } from "./steps.ts";
+import { nextSteps, stepsSinceCompleted, uncertainCalls } from "./steps.ts";
 import { HobTools, narrows } from "./tools.ts";
 
 interface Reply {
@@ -541,7 +541,11 @@ export class ChatService extends Context.Service<
           // A reply continued on another brain is told too, with the text and tool steps its first
           // brain left, so the new one does not redo or contradict that work.
           const switched = continued !== null && continued.runtime !== brain.runtime;
-          const briefing = yield* brief(thread, brain.runtime, switched ? [...before, continued] : before, switched);
+          const briefed = yield* brief(thread, brain.runtime, switched ? [...before, continued] : before, switched);
+          // Every turn hears of the calls cut off since the thread's last completed reply, whichever
+          // brain runs it, so none is repeated before it is checked (EX-004). Continue names its own.
+          const uncertain = uncertainCalls(stepsSinceCompleted(before));
+          const briefing = [briefed, uncertain].filter((part) => part !== null).join("\n\n") || null;
           const changed = yield* instructionsChanged(
             thread,
             brain.runtime,

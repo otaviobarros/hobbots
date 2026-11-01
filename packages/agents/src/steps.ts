@@ -1,4 +1,4 @@
-import type { ReplyStep } from "@hobbots/domain";
+import type { Message, ReplyStep } from "@hobbots/domain";
 import type { RuntimeEvent } from "./runtime.ts";
 
 /** Replaces the step with `step.id`, merged into it, or appends `step` when there is none. */
@@ -61,21 +61,28 @@ export const nextSteps = (
 };
 
 /**
- * What a turn is told about the tool calls its reply left uncertain (EX-004): each call, and that
- * it must check before running any again. Null when there are none.
+ * What a turn is told about tool calls left uncertain (EX-004): each call, and that it must check
+ * before running any again. Null when there are none.
  */
 export const uncertainCalls = (steps: ReadonlyArray<ReplyStep>): string | null => {
-  const calls = steps.flatMap((step) =>
-    step.state === "uncertain" && step.call
-      ? [
-          `- ${step.label} (${step.call.tool}, ${step.call.operation}${step.call.targets.length > 0 ? ` on ${step.call.targets.join(", ")}` : ""})`,
-        ]
-      : [],
-  );
+  const calls = steps.flatMap((step) => {
+    if (step.state !== "uncertain" || !step.call) return [];
+    const on = step.call.targets.length > 0 ? ` on ${step.call.targets.join(", ")}` : "";
+    return [`- ${step.label} (${step.call.tool}, ${step.call.operation}${on})`];
+  });
   if (calls.length === 0) return null;
   return [
-    "These tool calls were running when the reply was cut off, so Hobbots does not know whether they took effect:",
+    "These tool calls were running when a reply was cut off, so Hobbots does not know whether they took effect:",
     ...calls,
     "Do not run any of them again until you have checked whether it took effect, and tell the user what you found.",
   ].join("\n");
+};
+
+/**
+ * The steps of the replies since the thread's last reply that completed, oldest first: a completed
+ * turn was told about the uncertain calls before it, so those are left to its answer.
+ */
+export const stepsSinceCompleted = (transcript: ReadonlyArray<Message>): ReadonlyArray<ReplyStep> => {
+  const last = transcript.findLastIndex((m) => m.role === "assistant" && m.status === "complete");
+  return transcript.slice(last + 1).flatMap((m) => (m.role === "assistant" ? m.steps : []));
 };
