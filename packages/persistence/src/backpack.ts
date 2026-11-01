@@ -13,7 +13,7 @@ import { Backpack, type BackpackScope, type HeldClaim } from "@hobbots/inbox";
 import { DateTime, Duration, Effect, Layer } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
 import { dispositionColumn, makeItemReads } from "./backpack-rows.ts";
-import { makeJournaledChange } from "./journal.ts";
+import { lockJournal, makeJournaledChange } from "./journal.ts";
 
 /**
  * Leases are timed by the database's clock, so every hub process that shares a database agrees on
@@ -208,8 +208,11 @@ export const BackpackLive = Layer.effect(
 
     const fenced: Backpack["Service"]["fenced"] = (itemId, held, effect, options = {}) =>
       Effect.gen(function* () {
-        // Taking the row's lock here holds off an expiry until the transaction ends, so the
-        // claim checked is the claim the effect commits under.
+        // The journal's head first, as every journaled change takes it, so this never waits on a
+        // renewal or an expiry that holds the head and waits on the item. Then the item's row:
+        // holding it keeps an expiry off until the transaction ends, so the claim checked is the
+        // claim the effect commits under.
+        yield* lockJournal(sql);
         const live = yield* sql`UPDATE backpack_items SET claim_token = claim_token
           WHERE id = ${itemId} AND claim_owner = ${held.owner} AND claim_token = ${held.token}
             AND ${clock.leaseLive} AND state IN ('acknowledged', 'processing')

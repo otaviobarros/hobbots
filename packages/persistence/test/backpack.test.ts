@@ -16,7 +16,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
-import { Effect, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import {
@@ -435,5 +435,52 @@ describe("A hob's backpack", () => {
     expect(result.workspace).toHaveLength(4);
     expect(result.workspace[0]?.kind).toBe("answer");
     expect(result.missing).toMatchObject({ _tag: "BackpackItemMissing" });
+  });
+
+  // covers IN-002, IN-003
+  it("[TC-IN-032] lets a renewal wait for an effect fenced by the same claim, never deadlock with it", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { copy } = yield* campaign;
+        const tasks = yield* TaskRepository;
+        const backpack = yield* Backpack;
+        const id = recorded(copy).id;
+        const claimed = yield* backpack.claim(id, "hub-1:turn-1", "1 minute");
+        const held = { owner: "hub-1:turn-1", token: claimed.value.fencingToken };
+        yield* backpack.deliver(id, held, { target: "thread:t1", turnId: "turn-1" });
+        yield* backpack.acknowledge(id, held, "session-1");
+        const checked = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        // The effect passes the claim check, then waits while a renewal starts, then journals a change.
+        const effect = yield* Effect.forkChild(
+          backpack.fenced(
+            id,
+            held,
+            Deferred.succeed(checked, undefined).pipe(
+              Effect.andThen(Deferred.await(release)),
+              Effect.andThen(
+                tasks.recordCheckpoint({
+                  id: CheckpointId.make("c-fenced"),
+                  taskId: TaskId.make("copy"),
+                  source: "unplanned",
+                  kind: "finding",
+                  milestoneId: null,
+                  summary: "Fenced",
+                  createdAt: now,
+                }),
+              ),
+            ),
+          ),
+        );
+        yield* Deferred.await(checked);
+        const renewal = yield* Effect.forkChild(backpack.renew(id, held, "1 minute"));
+        yield* Effect.sleep("200 millis");
+        yield* Deferred.succeed(release, undefined);
+        return { effect: yield* Fiber.join(effect), renewal: yield* Fiber.join(renewal) };
+      }),
+    );
+
+    expect(result.effect.value.value.id).toBe("c-fenced");
+    expect(result.renewal.value).toMatchObject({ state: "acknowledged", claim: { owner: "hub-1:turn-1" } });
   });
 });
