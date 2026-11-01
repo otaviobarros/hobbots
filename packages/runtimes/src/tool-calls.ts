@@ -713,19 +713,24 @@ const isPlainAssignment = (word: string) => {
 };
 
 /**
- * A Git command's words without the options that name its folder, which the step lists under On:
- * `git -C ~/project log` reads `git log`.
+ * A Git command's words without its `-C` options, whose folder the step lists under On:
+ * `git -C ~/project log` reads `git log`. With `--git-dir` or `--work-tree` the command is decided
+ * on more than one folder and On names only one, and a push shows its remote instead, so there
+ * every folder option stays.
  */
 const withoutGitFolder = <T extends { readonly word: string }>(words: ReadonlyArray<T>): ReadonlyArray<T> => {
   const args = words.map(({ word }) => unquoted(word));
   const kept = [words[0] as T];
   let i = 1;
+  let several = false;
   while (i < args.length && (args[i] as string).startsWith("-")) {
     const option = readOption(args, i, GIT_VALUE_OPTIONS);
-    if (!["-C", "--git-dir", "--work-tree"].includes(option.name)) kept.push(...words.slice(i, i + option.used));
+    if (option.name === "--git-dir" || option.name === "--work-tree") several = true;
+    if (option.name !== "-C") kept.push(...words.slice(i, i + option.used));
     i += option.used;
   }
-  return [...kept, ...words.slice(i)];
+  // A push is shown on its remote and branch, so its repository stays in the label.
+  return several || args[i] === "push" ? words : [...kept, ...words.slice(i)];
 };
 
 /** A path in a word, from its start or after `=`, `:` or a quote, up to its end or a quote. */
@@ -740,11 +745,10 @@ const shortPath = (word: string) =>
 
 /**
  * A command line as a step label: its first line, without leading assignments, with long paths cut
- * to their end, and for a lone Git command without the folder options the step already shows.
+ * to their end, and for a lone Git command without the `-C` folder the step already shows.
  */
-const commandLabel = (line: string): string => {
+const commandLabel = (line: string, lone: boolean): string => {
   const tokens = rawTokens(line);
-  const lone = tokens.every((token) => "word" in token);
   const pieces: Array<{ text: string; spaced: boolean }> = [];
   let words: Array<{ word: string; spaced: boolean }> = [];
   const endCommand = () => {
@@ -791,7 +795,9 @@ const redactedCommandLabel = (command: string, redact: (text: string) => string)
     .replaceAll(STANDIN_CLOSE, "")
     .replace(MARKER, (marker) => `${STANDIN_OPEN}${markers.push(marker) - 1}${STANDIN_CLOSE}`);
   const line = masked.split("\n").find((l) => l.trim() !== "") ?? "";
-  const label = commandLabel(line).replace(STANDIN, (_, n: string) => markers[Number(n)] ?? "");
+  // Only a command that is one simple command, on every line, is decided on the one folder On names.
+  const lone = rawTokens(masked.trim()).every((token) => "word" in token);
+  const label = commandLabel(line, lone).replace(STANDIN, (_, n: string) => markers[Number(n)] ?? "");
   return shortenLabel(label, COMMAND_LABEL_LIMIT);
 };
 

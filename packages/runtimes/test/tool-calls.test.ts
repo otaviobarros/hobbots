@@ -330,9 +330,7 @@ describe("[#210] command step labels", () => {
     expect(label("GIT_CONFIG_GLOBAL=/dev/null git -C /Users/me/Development/projects/hobbots log --oneline -30")).toBe(
       "Running git log --oneline -30",
     );
-    expect(label("git --git-dir=/srv/app/.git --work-tree /srv/app -c core.pager=cat status")).toBe(
-      "Running git -c core.pager=cat status",
-    );
+    expect(label("git -C /srv/app -c core.pager=cat status")).toBe("Running git -c core.pager=cat status");
     // A line of nothing but assignments is shown as it is.
     expect(label("FOO=1")).toBe("Running FOO=1");
   });
@@ -360,8 +358,18 @@ describe("[#210] command step labels", () => {
     expect(label("echo \uE0000\uE001 x")).toBe("Running echo 0 x");
   });
 
-  it("keeps the folder options of a Git command that shares its line, since On names one folder", () => {
+  it("keeps the folder options of a Git command decided on more than one folder, since On names one", () => {
     expect(label("cd /srv && git -C app log")).toBe("Running cd /srv && git -C app log");
+    expect(label("git --work-tree=/srv/app status")).toBe("Running git --work-tree=/srv/app status");
+    expect(label("git -C /srv --git-dir=app/.git log")).toBe("Running git -C /srv --git-dir=app/.git log");
+    // A push shows its remote and branch, not its repository.
+    expect(label("git -C /srv/app push origin feature")).toBe("Running git -C /srv/app push origin feature");
+    // Later lines can be decided on other folders.
+    expect(label("git -C /srv/a log\ngit -C /srv/b log")).toBe("Running git -C /srv/a log");
+    expect(label("git -C /srv/a log\n")).toBe("Running git log");
+    // Each command whose -C the label leaves out is decided on that one folder.
+    for (const command of ["git -C /srv/app log", "GIT_CONFIG_GLOBAL=/dev/null git -C a -C b status"])
+      expect(commandRequests(command, "/work").map((r) => (r._tag === "Web" ? r.host : r.cwd))).toHaveLength(1);
   });
 
   it("cuts long paths to their last two parts and keeps quotes, redirections and URLs", () => {
