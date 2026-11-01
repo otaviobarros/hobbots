@@ -85,7 +85,17 @@ export function BrainPicker({ hob, thread }: { hob: Agent; thread: Thread | unde
       </span>
     );
   }
-  return <ThreadBrainPicker hob={hob} thread={thread} brain={brain} label={label} chip={chip} chipClass={chipClass} />;
+  return (
+    <ThreadBrainPicker
+      hob={hob}
+      thread={thread}
+      brain={brain}
+      label={label}
+      state={state}
+      chip={chip}
+      chipClass={chipClass}
+    />
+  );
 }
 
 function ThreadBrainPicker({
@@ -93,6 +103,7 @@ function ThreadBrainPicker({
   thread,
   brain,
   label,
+  state,
   chip,
   chipClass,
 }: {
@@ -100,6 +111,7 @@ function ThreadBrainPicker({
   thread: Thread;
   brain: Brain;
   label: string;
+  state: string;
   chip: ReactNode;
   chipClass: string;
 }) {
@@ -127,7 +139,7 @@ function ThreadBrainPicker({
         <button
           type="button"
           className={cn(chipClass, "cursor-pointer bg-transparent text-text hover:bg-line")}
-          aria-label={copy.trigger({ brain: label })}
+          aria-label={copy.trigger({ brain: label, state })}
         >
           {chip}
           <span aria-hidden className="text-label">
@@ -144,6 +156,7 @@ function ThreadBrainPicker({
             current={brain}
             hobEffort={hob.effort}
             pending={setBrain.isPending}
+            makeDefault={makeDefault}
             onPick={pick}
           />
         ))}
@@ -173,12 +186,14 @@ function RuntimeChoices({
   current,
   hobEffort,
   pending,
+  makeDefault,
   onPick,
 }: {
   health: RuntimeHealth;
   current: Brain;
   hobEffort: Agent["effort"];
   pending: boolean;
+  makeDefault: boolean;
   onPick: (brain: Brain) => void;
 }) {
   const models = useQuery(modelsQuery(health.runtime));
@@ -207,7 +222,8 @@ function RuntimeChoices({
               aria-pressed={selected}
               disabled={pending}
               className={cn("justify-start", selected && "bg-line")}
-              onClick={() => (selected && sameBrain(brain, current) ? undefined : onPick(brain))}
+              // Picking the current brain again changes nothing, unless it is to become the hob's default.
+              onClick={() => (selected && sameBrain(brain, current) && !makeDefault ? undefined : onPick(brain))}
             >
               <span aria-hidden className="w-3 text-mint">
                 {selected ? "●" : ""}

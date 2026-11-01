@@ -336,7 +336,7 @@ export function ChatView({
         ))}
         {continueOn.isError && (
           <p role="alert" className="text-sm text-rose">
-            Hobbots could not switch {current.name}'s brain. Try again.
+            {copy.brain.continueFailed({ name: current.name })}
           </p>
         )}
         {resume.isError && (

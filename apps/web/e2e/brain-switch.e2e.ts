@@ -89,5 +89,16 @@ test("[TC-CH-132] the picker switches the thread's brain, the chat shows it, and
   await expect(page.getByRole("button", { name: "Continue from here" })).toBeVisible();
   await page.getByRole("button", { name: "Continue with Codex" }).click();
   await expect(page.getByText(/Your previous reply was cut off/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Thinking with Codex\. Change brain/ })).toBeVisible();
+  const onCodex = page.getByRole("button", { name: /^Thinking with Codex, ready\. Change brain/ });
+  await expect(onCodex).toBeVisible();
+
+  // The brain the thread already uses can still become the hob's default.
+  await onCodex.click();
+  const again = page.getByRole("dialog", { name: "Think with" });
+  await again.getByRole("switch", { name: "Also make it Pip's default" }).click();
+  await again.getByRole("region", { name: "Codex" }).getByRole("button", { name: "Default model" }).click();
+  await expect(again).toBeHidden();
+  await expect
+    .poll(async () => (await api<ReadonlyArray<Hob>>(current, "GET", "/api/agents"))[0])
+    .toMatchObject({ runtime: "codex", configVersion: 2 });
 });

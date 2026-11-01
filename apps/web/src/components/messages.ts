@@ -40,7 +40,8 @@ export const messages = {
       `✗ This reply failed: ${error ?? "unknown error"}. Send your message again to retry.`,
   },
   brain: {
-    trigger: ({ brain }: { brain: string }) => `Thinking with ${brain}. Change brain`,
+    trigger: ({ brain, state }: { brain: string; state: string }) => `Thinking with ${brain}, ${state}. Change brain`,
+    continueFailed: ({ name }: { name: string }) => `Hobbots could not switch ${name}'s brain. Try again.`,
     title: "Think with",
     scope: "Changes this thread from its next reply.",
     freshPage: "Send a first message, then you can change this thread's brain.",

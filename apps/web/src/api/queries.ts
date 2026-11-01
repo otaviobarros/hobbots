@@ -268,7 +268,6 @@ export const useStartThread = (agentId: AgentId) => {
   return useMutation({ mutationFn: (content: string) => startThread(queryClient, agentId, content) });
 };
 
-/** Continues a reply that was cut off or hit a limit, in the same message. */
 /**
  * Switches a thread's brain from its next turn (ADR 017). The thread shows its new brain now; with
  * `makeDefault` the hob changes too, and the hob list hears of its new version from its event.
@@ -300,6 +299,7 @@ export const useSetBrain = (agentId: AgentId, threadId: ThreadId) => {
 export const threadBrain = (hob: Agent, thread: Thread | undefined): Brain =>
   thread?.brain ?? { runtime: hob.runtime, model: hob.model, effort: hob.effort };
 
+/** Continues a reply that was cut off or hit a limit, in the same message. */
 export const useContinueReply = (threadId: ThreadId) => {
   const queryClient = useQueryClient();
   return useMutation({

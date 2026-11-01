@@ -157,6 +157,8 @@ describe("switching a thread's brain", () => {
     expect(briefed.briefing).toMatch(/^## This thread so far/);
     expect(briefed.briefing).toContain("My cat is called Miso.");
     expect(reply).toMatchObject({ runtime: "codex", model: "fake-coder", status: "complete" });
+    // The fake echoes what it was told, so this shows the fact reached Codex's turn. A real model
+    // using it is for the Codex adapter to prove (#12).
     expect(reply.content).toContain("Miso");
     const sessions = (await thread(agent, id)).sessions;
     expect(sessions.map((s) => s.runtime)).toEqual(["claude-code", "codex"]);
@@ -188,7 +190,7 @@ describe("switching a thread's brain", () => {
     expect(resumed.briefing).toMatch(/^## Since your last reply/);
     // Only what came after its own reply, which it saw itself: Codex's turn.
     expect(resumed.briefing).toContain(
-      "### Latest messages\n\n**User:**\nShe is three.\n\n**You, thinking with Codex · fake-coder:**",
+      "### Latest messages\n\n**User:**\n> She is three.\n\n**You, thinking with Codex · fake-coder:**",
     );
     expect(resumed.briefing).not.toContain("### Earlier, in summary");
     expect(reply.runtime).toBe("claude-code");

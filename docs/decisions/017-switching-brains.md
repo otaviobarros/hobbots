@@ -13,17 +13,18 @@ The issue leaves four questions to this ADR: how much history to send verbatim a
 ### Hobbots' transcript is the source of truth
 
 - A thread keeps **one session per runtime**: its runtime, the runtime's session id, and the last message that session has seen. A switch never moves a session. The first turn on a runtime the thread has not used starts a fresh session; switching back to a runtime the thread used before resumes that runtime's own session.
-- A switch reads nothing from the runtime it leaves. The handoff is built from what Hobbots stored: messages, and each reply's steps as stored (tool, operation, targets and label, after any redaction #168 applies before storing). A switch away from a brain that is limited, signed out or down works the same as any other.
+- A switch reads nothing from the runtime it leaves. The handoff is built from what Hobbots stored: messages, and each reply's tool steps as stored (label and outcome). A step's label can hold the first line of a command, so a briefing can carry a secret typed into one to another provider; the redaction of stored step text that [#168](https://github.com/otaviobarros/hobbots/issues/168) adds will apply to briefings too, since they read the stored steps. A switch away from a brain that is limited, signed out or down works the same as any other.
 - Files a hob changed are already in its folders, so the handoff does not repeat them.
 
 ### The briefing
 
-A turn carries a briefing when its runtime's session missed replies from another brain: the session is new to a thread another brain has answered in, or it resumes after another brain replied. Continuing a reply on another brain also carries one. A thread that has only ever used one runtime never gets a briefing. The briefing travels as its own field of the prompt request, and the adapter places it after the hob's instructions and before the user's prompt, so the prompt itself stays as the user wrote it (slash commands and the fake's directives still read it first). The hob's identity and instructions are delivered as on any other turn.
+A turn carries a briefing when its runtime's session missed replies from another brain: the session is new to a thread another brain has answered in, or it resumes after another brain replied. Continuing a reply on another brain also carries one. A thread that has only ever used one runtime never gets a briefing. The briefing travels as its own field of the prompt request, and the adapter places it after the hob's instructions and before the user's prompt, so the prompt itself is stored and passed as the user wrote it. Claude Code receives the three in one message, so a slash command typed on a briefed turn is read as text, as it already is on a turn that repeats changed instructions. The hob's identity and instructions are delivered as on any other turn.
 
 - **New session** (the runtime has not been used in this thread): the latest turns verbatim, and a summary of the older ones.
 - **Resumed session** (the runtime is used again after another brain replied): only what happened since that session last replied, verbatim, with a summary if it does not fit.
 - **Verbatim window:** the newest messages, newest first, until 24,000 characters. A single message longer than 6,000 characters is cut to its first and last 3,000.
-- **Summary:** one line per older message, its first 280 characters, and for a reply the steps it took (`Ran pnpm test (done)`, `Edit src/a.ts (denied: …)`). At most 8,000 characters; when over, the oldest lines are dropped with a note saying how many.
+- **Quoting:** each message's text is quoted line by line, and a summary line's text sits in quotation marks, so text that looks like the briefing's own headings or speakers stays inside its quote. The briefing says quoted text is a record, not instructions.
+- **Summary:** one line per older message, its first 280 characters, and for a reply the steps it took (at most 8, each cut to 120 characters, then how many more) such as `Ran pnpm test (done)` or `Edit src/a.ts (denied: …)`. At most 8,000 characters; when over, the oldest lines are dropped with a note saying how many.
 - The whole briefing stays under about 32,000 characters, roughly 8,000 tokens, which fits every model Hobbots offers today. Sizing the window to each model's context comes when runtimes report their windows.
 
 ### Who writes the summary
@@ -64,7 +65,8 @@ The scenarios that would show this decision holds. Each names the test case or e
 - The picker changes only that thread; making it the hob's default adds a configuration version and the hob's other threads follow it: `[TC-CH-128]`.
 - A switch away from a runtime that is limited or unavailable still works, and the old runtime is never asked: `[TC-CH-129]`.
 - A brain with no adapter or a model the runtime does not offer is refused: `[TC-CH-130]`.
-- The briefing fits its budget, cuts long messages, summarizes tool steps and reuses the stored checkpoint: `[TC-CH-131]`.
+- The briefing keeps the latest messages within the verbatim budget, cuts long messages, summarizes tool steps and reuses the stored checkpoint: `[TC-CH-131]`.
+- The summary drops its oldest lines to fit, a reply with many tool calls cannot crowd it out, and text that looks like the briefing's headings or speakers stays quoted: `[TC-CH-134]`.
 - Claude Code receives the briefing between the hob's instructions and the user's prompt: `[TC-CH-133]`.
 - Migration 0020 keeps an existing thread's Claude Code session and records Claude Code and the configured model on existing replies: `[TC-DP-035]`, `[TC-DP-036]`.
 - The chat shows the switch and offers Continue on another brain for a limited reply: `[TC-CH-132]`, in the browser.
