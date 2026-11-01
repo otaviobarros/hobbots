@@ -7,20 +7,16 @@ export interface ReadUntilOptions {
 }
 
 /**
- * Reads until the answer settles: the read answered, not null, and `settled` holds for it. Tries
- * again on a doubling wait, capped, for as long as it takes, since no later event may come to ask
- * again. `settled` is asked at each answer, so it can follow what changed meanwhile.
+ * Reads until the hub answers: a read that answered null is made again on a doubling wait, capped,
+ * for as long as it takes, since no later event may come to ask again.
  */
 export const readUntil = <A>(
   read: () => Promise<A | null>,
-  settled: (answer: A) => boolean = () => true,
   { firstRetryMs = 250, maxRetryMs = 30_000 }: ReadUntilOptions = {},
 ): Promise<A> =>
   Effect.runPromise(
     Effect.promise(read).pipe(
-      Effect.flatMap((answer) =>
-        answer !== null && settled(answer) ? Effect.succeed(answer) : Effect.fail("unsettled" as const),
-      ),
+      Effect.flatMap((answer) => (answer !== null ? Effect.succeed(answer) : Effect.fail("unanswered" as const))),
       Effect.retry(
         Schedule.min([
           Schedule.exponential(Duration.millis(firstRetryMs)),

@@ -105,10 +105,10 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
 
-    // A hob is working while one of its threads has a reply in progress. Read from the store, so a
-    // snapshot agrees with the event stream: a reply that ended is not reported while its turn's
-    // runtime is still shutting down.
-    const activity = chat.workingThreads.pipe(
+    // A hob is working while one of its threads has a turn running, until the turn's runtime has
+    // exited. `TurnStarted` and `TurnEnded` announce each change once it has happened, so a read made
+    // on either event already agrees with it.
+    const activity = chat.activeThreads.pipe(
       Effect.flatMap((threadIds) =>
         Effect.forEach(threadIds, (threadId) =>
           repo.findThread(threadId).pipe(
