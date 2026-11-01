@@ -21,7 +21,9 @@ test.afterEach(async () => {
 const api = async <A>(current: Hub, method: string, path: string, body?: unknown): Promise<A> => {
   const response = await fetch(`${current.url}${path}`, {
     method,
-    ...(body !== undefined && { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    // As another window of the app, on the hub's own origin: approvals answer only the user (PE-006).
+    headers: { origin: current.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);
   return (await response.json()) as A;
@@ -168,10 +170,13 @@ test("[TC-IN-004] an expired request shows as expired and cannot be approved", a
   expect(expired.state).toBe("expired");
   const late = await fetch(`${current.url}/api/approvals/${expired.id}/decision`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { origin: current.url, "content-type": "application/json" },
     body: JSON.stringify({ decision: "approve", actionDigest: expired.actionDigest }),
   });
   expect(late.ok).toBe(false);
+  expect(await late.text()).toContain("ApprovalClosed");
+  // Read on its own, as the Inbox does once it leaves the list, it is still expired.
+  expect(await api<Approval>(current, "GET", `/api/approvals/${expired.id}`)).toMatchObject({ state: "expired" });
 
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByRole("region", { name: "Decision history" }).locator('[data-state="expired"]')).toContainText(
