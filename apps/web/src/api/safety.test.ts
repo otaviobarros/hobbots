@@ -84,6 +84,24 @@ describe("per-hob rules", () => {
     expect(enforcement("read-files", balanced)).toBe("enforced");
     expect(enforcement("read-files", balanced, "off")).toBe("checked");
   });
+
+  it("marks Local Git checked when it is narrower than Run commands, since any command can run Git", () => {
+    const balanced = {
+      "read-files": "allow",
+      "edit-files": "allow",
+      "delete-files": "ask",
+      "run-commands": "allow",
+      "local-git": "allow",
+      push: "ask",
+      "use-web": "allow",
+      "outside-folders": "deny",
+    } as const;
+    expect(enforcement("local-git", balanced)).toBe("enforced");
+    expect(enforcement("local-git", { ...balanced, "local-git": "deny" })).toBe("checked");
+    expect(enforcement("local-git", { ...balanced, "local-git": "ask" })).toBe("checked");
+    expect(enforcement("local-git", { ...balanced, "run-commands": "ask", "local-git": "ask" })).toBe("enforced");
+    expect(enforcement("local-git", { ...balanced, "run-commands": "deny" })).toBe("enforced");
+  });
 });
 
 describe("folders", () => {
