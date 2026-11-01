@@ -18,6 +18,8 @@ import {
   POLICY_OPERATIONS,
   PRESET_DECISIONS,
   type RoleId,
+  RUNTIME_NAMES,
+  type RuntimeKind,
   type RuntimeModels,
   type SafetyPreset,
   starterRole,
@@ -27,7 +29,7 @@ import { HobAdmission } from "./admission.ts";
 import { sameFolderIn } from "./folders.ts";
 import { EventPublisher, FolderChecks, InstallationSettings } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
-import { RuntimeAdapter } from "./runtime.ts";
+import { type RuntimeAdapters, runtimeAdapters } from "./runtime.ts";
 
 /**
  * Checks a new hob's model and effort against what the runtime offers. A null model is the
@@ -51,6 +53,23 @@ export const checkBrain = (
     });
   }
   return undefined;
+};
+
+/**
+ * Checks a brain against the runtimes this hub serves and what its runtime offers (ADR 017): a
+ * runtime with no adapter, or a model or effort it does not offer, is refused.
+ */
+export const checkRuntimeBrain = (
+  adapters: RuntimeAdapters,
+  brain: { readonly runtime: RuntimeKind; readonly model: string | null; readonly effort: Effort | null },
+): Effect.Effect<InvalidHob | undefined> => {
+  const adapter = adapters(brain.runtime);
+  if (adapter === undefined) {
+    return Effect.succeed(
+      new InvalidHob({ field: "runtime", message: `Hobbots cannot run ${RUNTIME_NAMES[brain.runtime]} on this hub` }),
+    );
+  }
+  return Effect.map(adapter.models, (offered) => checkBrain(offered, brain));
 };
 
 /** The hob a lookup found, or `AgentNotFound` when there is none with this ID. */
@@ -116,6 +135,7 @@ const editableFields = [
   ...toneFields,
   "lookSeed",
   "lookColor",
+  "runtime",
   "model",
   "effort",
   "instructions",
@@ -143,7 +163,7 @@ export class HobService extends Context.Service<
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const bus = yield* EventPublisher;
-      const runtime = yield* RuntimeAdapter;
+      const adapters = yield* runtimeAdapters;
       const admission = yield* HobAdmission;
       const setup = yield* InstallationSettings;
       const folders = yield* FolderChecks;
@@ -183,7 +203,7 @@ export class HobService extends Context.Service<
         // Reconcile first, so a retry succeeds even if the runtime's model list changed since.
         const earlier = Option.getOrUndefined(yield* repo.findAgent(id));
         if (earlier !== undefined) return yield* retried(earlier, payload);
-        const invalid = checkRole(payload) ?? checkBrain(yield* runtime.models, payload);
+        const invalid = checkRole(payload) ?? (yield* checkRuntimeBrain(adapters, payload));
         if (invalid !== undefined) return yield* invalid;
         const agent = new Agent({
           ...fields,
@@ -213,8 +233,9 @@ export class HobService extends Context.Service<
               return agent;
             }
             // A brain left as it was stays valid even if the runtime stopped offering it.
-            if (payload.model !== undefined || payload.effort !== undefined) {
-              const invalid = checkBrain(yield* runtime.models, {
+            if (payload.runtime !== undefined || payload.model !== undefined || payload.effort !== undefined) {
+              const invalid = yield* checkRuntimeBrain(adapters, {
+                runtime: payload.runtime ?? agent.runtime,
                 model: payload.model === undefined ? agent.model : payload.model,
                 effort: payload.effort === undefined ? agent.effort : payload.effort,
               });

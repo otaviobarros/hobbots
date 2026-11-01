@@ -1,5 +1,21 @@
-import type { CreateAgentPayload, HobPermissions, UpdateAgentPayload, UpdateHobPermissionsPayload } from "@hobbots/api";
-import type { Agent, AgentId, Message, MessageId, RetireWork, RuntimeKind, Thread, ThreadId } from "@hobbots/domain";
+import type {
+  CreateAgentPayload,
+  HobPermissions,
+  SetBrainPayload,
+  UpdateAgentPayload,
+  UpdateHobPermissionsPayload,
+} from "@hobbots/api";
+import type {
+  Agent,
+  AgentId,
+  Brain,
+  Message,
+  MessageId,
+  RetireWork,
+  RuntimeKind,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
 import { runtimeStaleTime } from "./runtime-health.ts";
@@ -253,6 +269,37 @@ export const useStartThread = (agentId: AgentId) => {
 };
 
 /** Continues a reply that was cut off or hit a limit, in the same message. */
+/**
+ * Switches a thread's brain from its next turn (ADR 017). The thread shows its new brain now; with
+ * `makeDefault` the hob changes too, and the hob list hears of its new version from its event.
+ */
+export const useSetBrain = (agentId: AgentId, threadId: ThreadId) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SetBrainPayload) => call((c) => c.threads.setBrain({ params: { threadId }, payload })),
+    onSuccess: (thread, payload) => {
+      queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId), (old) =>
+        old
+          ? sortThreads(
+              upsertById(
+                old,
+                newer(
+                  old.find((t) => t.id === thread.id),
+                  thread,
+                ),
+              ),
+            )
+          : old,
+      );
+      if (payload.makeDefault) void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+    },
+  });
+};
+
+/** The brain a thread thinks with: its own, else its hob's. */
+export const threadBrain = (hob: Agent, thread: Thread | undefined): Brain =>
+  thread?.brain ?? { runtime: hob.runtime, model: hob.model, effort: hob.effort };
+
 export const useContinueReply = (threadId: ThreadId) => {
   const queryClient = useQueryClient();
   return useMutation({

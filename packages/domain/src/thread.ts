@@ -1,4 +1,5 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { Brain, RuntimeSession } from "./brain.ts";
 import { AgentId, ThreadId } from "./ids.ts";
 import { Revision } from "./revision.ts";
 
@@ -6,8 +7,19 @@ export class Thread extends Schema.Class<Thread>("Thread")({
   id: ThreadId,
   agentId: AgentId,
   title: Schema.String,
-  /** Runtime-owned session id (e.g. a Claude Code session), kept separate from the app identity. */
-  runtimeSessionId: Schema.NullOr(Schema.String),
+  /**
+   * One session per runtime the thread has used, kept separate from the thread's identity (ADR 017).
+   * Thread events journaled before this carry none; their Claude Code session moved here in migration 0020.
+   */
+  sessions: Schema.Array(RuntimeSession).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
+  /** The thread's own brain, or null to think with the hob's. A thread setting: it grants nothing. */
+  brain: Schema.NullOr(Brain).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   createdAt: Schema.String,
   updatedAt: Schema.String,
   revision: Revision,

@@ -6,9 +6,18 @@ import { Revision } from "./revision.ts";
 import { DEFAULT_SIGIL, RoleHat, RoleId, RoleTool } from "./roles.ts";
 import { DEFAULT_LENGTH, DEFAULT_VOICE, ReplyLength, Voice } from "./tone.ts";
 
-/** Runtimes an agent can run on. Only Claude Code is wired in the first slice. */
-export const RuntimeKind = Schema.Literals(["claude-code"]);
+/**
+ * Runtimes a hob can think with. A hub serves those it has an adapter for and lists the others as
+ * unavailable (ADR 017); Codex has no adapter yet (#12).
+ */
+export const RuntimeKind = Schema.Literals(["claude-code", "codex"]);
 export type RuntimeKind = typeof RuntimeKind.Type;
+
+/** What the UI calls each runtime. */
+export const RUNTIME_NAMES: Record<RuntimeKind, string> = { "claude-code": "Claude Code", codex: "Codex" };
+
+/** The runtime every hob thought with before a hob's runtime was versioned with its configuration. */
+export const DEFAULT_RUNTIME: RuntimeKind = "claude-code";
 
 /** How much a hob thinks before answering; the runtime reports which levels each model accepts. */
 export const Effort = Schema.Literals(["low", "medium", "high", "xhigh", "max"]);
@@ -101,6 +110,11 @@ export class AgentConfiguration extends Schema.Class<AgentConfiguration>("AgentC
   ...roleSchemaFields,
   ...toneSchemaFields,
   ...policySchemaFields,
+  /** Versioned since ADR 017, so a turn keeps the runtime it started with. */
+  runtime: RuntimeKind.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(DEFAULT_RUNTIME)),
+    Schema.withConstructorDefault(Effect.succeed(DEFAULT_RUNTIME)),
+  ),
   model: Schema.NullOr(Schema.String),
   effort: Schema.NullOr(Effort),
   instructions: Schema.String,

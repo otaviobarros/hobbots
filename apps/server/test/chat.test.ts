@@ -99,8 +99,10 @@ describe("ChatService", () => {
     const firstSession = Option.getOrUndefined(result.threadAfterFirst);
     const secondSession = Option.getOrUndefined(result.threadAfterSecond);
     expect(firstSession?.title).toBe("hello");
-    expect(firstSession?.runtimeSessionId).toMatch(/^fake-/);
-    expect(secondSession?.runtimeSessionId).toBe(firstSession?.runtimeSessionId);
+    expect(firstSession?.sessions).toMatchObject([
+      { runtime: "claude-code", sessionId: expect.stringMatching(/^fake-/) },
+    ]);
+    expect(secondSession?.sessions[0]?.sessionId).toBe(firstSession?.sessions[0]?.sessionId);
   });
 
   // covers EX-005

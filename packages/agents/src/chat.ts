@@ -1,8 +1,16 @@
-import { AgentNotFound, HobUnavailable, MessageNotQueued, ReplyNotResumable, ThreadNotFound } from "@hobbots/api";
+import {
+  AgentNotFound,
+  HobUnavailable,
+  type InvalidHob,
+  MessageNotQueued,
+  ReplyNotResumable,
+  ThreadNotFound,
+} from "@hobbots/api";
 import {
   type Agent,
   type AgentConfiguration,
   type AgentId,
+  type Brain,
   type Committed,
   DEFAULT_THREAD_TITLE,
   isInProgress,
@@ -11,17 +19,23 @@ import {
   MessageId,
   MessageTransitions,
   QueuedMessageTransitions,
+  RUNTIME_NAMES,
+  type RuntimeKind,
+  sameBrain,
   systemInstructions,
   Thread,
+  ThreadCheckpoint,
   ThreadId,
   titleFromPrompt,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
+import { buildBriefing } from "./briefing.ts";
+import { checkRuntimeBrain } from "./hobs.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
-import { RuntimeAdapter, type RuntimeEvent, type ToolAccess } from "./runtime.ts";
+import { type RuntimeEvent, runtimeAdapters, type ToolAccess } from "./runtime.ts";
 import { nextSteps } from "./steps.ts";
 import { HobTools, narrows } from "./tools.ts";
 
@@ -48,6 +62,24 @@ const continuePrompt = (content: string) =>
   ].join("\n");
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
+
+/** The brain a thread's turn thinks with: the thread's own, else the hob's configuration's. */
+const brainFor = (thread: Thread, config: AgentConfiguration): Brain =>
+  thread.brain ?? { runtime: config.runtime, model: config.model, effort: config.effort };
+
+const sameOwnBrain = (a: Brain | null, b: Brain | null) => (a === null || b === null ? a === b : sameBrain(a, b));
+
+/**
+ * The messages a runtime's session missed (ADR 017): everything after the last one it saw, and that
+ * one too when another brain continued it since. Without a record of what it saw, everything after
+ * its own latest reply.
+ */
+const missedBy = (runtime: RuntimeKind, seenThrough: string | null, before: ReadonlyArray<Message>) => {
+  const seen = before.findIndex((m) => m.id === seenThrough);
+  if (seen !== -1) return before.slice(before[seen]?.runtime === runtime ? seen + 1 : seen);
+  const own = before.findLastIndex((m) => m.role === "assistant" && m.runtime === runtime);
+  return before.slice(own + 1);
+};
 
 export class ChatService extends Context.Service<
   ChatService,
@@ -89,6 +121,15 @@ export class ChatService extends Context.Service<
      * (PE-008). Call it once a change to the policy is saved.
      */
     readonly reviewAuthority: (agentId?: AgentId) => Effect.Effect<void>;
+    /**
+     * Switches the thread to its own brain, or back to the hob's with null (ADR 017), from its next
+     * turn. A brain the same as the hob's follows the hob. Refused for a retired hob, a runtime the
+     * hub cannot run, or a model or effort the runtime does not offer.
+     */
+    readonly setBrain: (
+      threadId: ThreadId,
+      brain: Brain | null,
+    ) => Effect.Effect<Thread, ThreadNotFound | HobUnavailable | InvalidHob>;
     /** Starts the hob's queued messages in threads with no turn running, as when it wakes. */
     readonly drainAgent: (agentId: AgentId) => Effect.Effect<void>;
     /** Threads with a turn in progress in this process. */
@@ -102,7 +143,7 @@ export class ChatService extends Context.Service<
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const bus = yield* EventPublisher;
-      const runtime = yield* RuntimeAdapter;
+      const adapters = yield* runtimeAdapters;
       const admission = yield* HobAdmission;
       const hobTools = yield* HobTools;
       // Without approvals, a call the policy answers Ask for is refused, as in hubs and tests that ask nothing.
@@ -138,6 +179,19 @@ export class ChatService extends Context.Service<
       const announce = <A>(committed: Committed<A>) => Effect.as(bus.publish(committed.entries), committed.value);
       const saveThread = (thread: Thread) => repo.upsertThread(thread).pipe(Effect.flatMap(announce));
       const saveMessage = (message: Message) => repo.upsertMessage(message).pipe(Effect.flatMap(announce));
+      // Changes the thread as it is stored now, one change at a time, so a turn recording its session
+      // and a brain switch never overwrite each other. `change` returns null to leave it as it is.
+      const threadWrites = yield* Semaphore.make(1);
+      const changeThread = (threadId: ThreadId, change: (thread: Thread) => Thread | null) =>
+        Semaphore.withPermit(
+          threadWrites,
+          Effect.gen(function* () {
+            const stored = yield* repo.findThread(threadId);
+            if (Option.isNone(stored)) return stored;
+            const next = change(stored.value);
+            return Option.some(next === null ? stored.value : yield* saveThread(next));
+          }),
+        );
 
       // A previous process may have died mid-turn; those turns cannot resume. A reply the user had
       // asked to stop is stopped; any other is interrupted.
@@ -179,7 +233,6 @@ export class ChatService extends Context.Service<
               id: ThreadId.make(crypto.randomUUID()),
               agentId,
               title: DEFAULT_THREAD_TITLE,
-              runtimeSessionId: null,
               createdAt: now,
               updatedAt: now,
             });
@@ -210,9 +263,9 @@ export class ChatService extends Context.Service<
       // others carries them. Which a session follows is not stored: a stopped or failed turn may or may
       // not have delivered its own, and threads from before #164 never received theirs. So a thread
       // whose replies all ran on the current instructions needs nothing, and any other carries them.
-      const instructionsChanged = (thread: Thread, agent: Agent, instructions: string) =>
+      const instructionsChanged = (thread: Thread, runtime: RuntimeKind, agent: Agent, instructions: string) =>
         Effect.gen(function* () {
-          if (thread.runtimeSessionId === null) return false;
+          if (!thread.sessions.some((session) => session.runtime === runtime)) return false;
           const versions = new Set(
             (yield* repo.listMessages(thread.id)).flatMap((m) =>
               m.role === "assistant" && m.configVersion !== null ? [m.configVersion] : [],
@@ -223,6 +276,30 @@ export class ChatService extends Context.Service<
             if (Option.isNone(config) || systemInstructions(agent.name, config.value) !== instructions) return true;
           }
           return false;
+        });
+
+      // What the turn's session missed, told ahead of the prompt (ADR 017), built from the stored
+      // transcript without asking the brain the thread left. `before` is the transcript before the
+      // turn's own prompt and reply. `switched` when the reply itself moves from another brain, as on
+      // Continue. A summary made anew is stored for the next handoff.
+      const brief = (thread: Thread, runtime: RuntimeKind, before: ReadonlyArray<Message>, switched: boolean) =>
+        Effect.gen(function* () {
+          const session = thread.sessions.find((s) => s.runtime === runtime);
+          const missed = session === undefined ? before : missedBy(runtime, session.seenThrough, before);
+          // Only a switch needs one: a session is told what other brains wrote that it did not see.
+          const others = missed.some((m) => m.role === "assistant" && m.runtime !== null && m.runtime !== runtime);
+          if (!switched && !others) return null;
+          const briefing = buildBriefing({
+            kind: session === undefined ? "new" : "resumed",
+            messages: missed,
+            checkpoint: session === undefined ? Option.getOrNull(yield* repo.findCheckpoint(thread.id)) : null,
+          });
+          if (briefing?.checkpoint) {
+            yield* repo.saveCheckpoint(
+              new ThreadCheckpoint({ threadId: thread.id, ...briefing.checkpoint, createdAt: yield* nowIso }),
+            );
+          }
+          return briefing?.text ?? null;
         });
 
       // What each running turn was given to work with, so a narrower policy stops it. Reading a grant
@@ -251,13 +328,23 @@ export class ChatService extends Context.Service<
         agent: Agent,
         config: AgentConfiguration,
         thread: Thread,
+        brain: Brain,
         prompt: string,
+        briefing: string | null,
         reply: Reply,
         changed: boolean,
       ) =>
         Effect.gen(function* () {
           const name = agent.name;
-          const threadRef = yield* Ref.make(thread);
+          const adapter = adapters(brain.runtime);
+          if (adapter === undefined) {
+            yield* transition(
+              reply,
+              (m) => MessageTransitions.cutOff(m, `Hobbots cannot run ${RUNTIME_NAMES[brain.runtime]} on this hub`),
+              saveMessage,
+            );
+            return;
+          }
           // Saves the streamed text about once a second without journaling it, so a crash keeps
           // all but the last moment of it (ADR 013). Ending the reply saves it in full.
           let checkpointed = "";
@@ -275,19 +362,25 @@ export class ChatService extends Context.Service<
 
           const handle = (event: RuntimeEvent) => {
             switch (event._tag) {
+              // The session has now seen the thread through this reply.
               case "SessionStarted":
                 return Effect.gen(function* () {
-                  const latest = yield* Ref.get(threadRef);
-                  if (latest.runtimeSessionId === event.sessionId) return;
-                  const next = new Thread({
-                    ...latest,
-                    runtimeSessionId: event.sessionId,
-                    updatedAt: yield* nowIso,
+                  const seenThrough = (yield* Ref.get(reply.current)).id;
+                  const updatedAt = yield* nowIso;
+                  const session = { runtime: brain.runtime, sessionId: event.sessionId, seenThrough };
+                  yield* changeThread(thread.id, (latest) => {
+                    const known = latest.sessions.find((s) => s.runtime === brain.runtime);
+                    if (known?.sessionId === session.sessionId && known.seenThrough === seenThrough) return null;
+                    const sessions =
+                      known === undefined
+                        ? [...latest.sessions, session]
+                        : latest.sessions.map((s) => (s.runtime === brain.runtime ? session : s));
+                    return new Thread({ ...latest, sessions, updatedAt });
                   });
-                  yield* Ref.set(threadRef, next);
-                  yield* saveThread(next);
                   if (event.billing && !event.billing.startsWith("subscription") && event.billing !== "fake") {
-                    yield* Effect.logWarning(`Claude Code is billing via ${event.billing}, not the subscription`);
+                    yield* Effect.logWarning(
+                      `${RUNTIME_NAMES[brain.runtime]} is billing via ${event.billing}, not the subscription`,
+                    );
                   }
                 });
               case "TextDelta":
@@ -324,14 +417,15 @@ export class ChatService extends Context.Service<
                 (handle) => handle.close,
               )
             : null;
-          yield* runtime
+          yield* adapter
             .sendPrompt({
               prompt,
-              sessionId: thread.runtimeSessionId,
+              briefing,
+              sessionId: thread.sessions.find((s) => s.runtime === brain.runtime)?.sessionId ?? null,
               instructions: systemInstructions(name, config),
               instructionsChanged: changed,
-              model: config.model,
-              effort: config.effort,
+              model: brain.model,
+              effort: brain.effort,
               tools: yield* grant(thread.id, agent),
               approvals: turnApprovals?.approvals ?? null,
             })
@@ -363,11 +457,12 @@ export class ChatService extends Context.Service<
       const beginTurn = (
         thread: Thread,
         agent: Agent,
-        prompt: string,
+        prompt: Message,
         saveReply: (reply: Message) => Effect.Effect<Message | null> = saveMessage,
       ) =>
         Effect.gen(function* () {
           const config = yield* repo.findAgentConfig(agent.id, agent.configVersion).pipe(Effect.map(Option.getOrThrow));
+          const brain = brainFor(thread, config);
           const now = yield* nowIso;
           const assistantMessage = new Message({
             id: MessageId.make(crypto.randomUUID()),
@@ -377,24 +472,54 @@ export class ChatService extends Context.Service<
             status: "streaming",
             error: null,
             configVersion: config.version,
+            runtime: brain.runtime,
+            model: brain.model,
             createdAt: now,
-          });
-          const updated = new Thread({
-            ...thread,
-            title: thread.title === DEFAULT_THREAD_TITLE ? titleFromPrompt(prompt) : thread.title,
-            updatedAt: now,
           });
           const saved = yield* saveReply(assistantMessage);
           if (saved === null) return null;
-          yield* saveThread(updated);
-          yield* launch(agent, config, updated, prompt, saved);
+          const updated = yield* changeThread(thread.id, (latest) =>
+            latest.title === DEFAULT_THREAD_TITLE
+              ? new Thread({ ...latest, title: titleFromPrompt(prompt.content), updatedAt: now })
+              : new Thread({ ...latest, updatedAt: now }),
+          ).pipe(Effect.map(Option.getOrElse(() => thread)));
+          yield* launch(agent, config, updated, prompt.content, saved, prompt.id);
           return saved;
         });
 
-      // Runs a turn for a reply that is already saved as streaming. Runs under the hob's lock.
-      const launch = (agent: Agent, config: AgentConfiguration, thread: Thread, prompt: string, saved: Message) =>
+      // Runs a turn for a reply that is already saved as streaming, on the thread's brain, with what
+      // its session missed told first. `promptId` is the turn's own prompt, when it is a message;
+      // `continuedFrom` the brain that wrote a reply Continue resumes.
+      // Runs under the hob's lock.
+      const launch = (
+        agent: Agent,
+        config: AgentConfiguration,
+        thread: Thread,
+        prompt: string,
+        saved: Message,
+        promptId: MessageId | null,
+        continuedFrom: RuntimeKind | null = null,
+      ) =>
         Effect.gen(function* () {
-          const changed = yield* instructionsChanged(thread, agent, systemInstructions(agent.name, config));
+          const brain = brainFor(thread, config);
+          const transcript = (yield* repo.listMessages(thread.id)).filter((m) => m.status !== "queued");
+          const before = transcript
+            .slice(
+              0,
+              Math.max(
+                0,
+                transcript.findIndex((m) => m.id === saved.id),
+              ),
+            )
+            .filter((m) => m.id !== promptId);
+          const switched = continuedFrom !== null && continuedFrom !== brain.runtime;
+          const briefing = yield* brief(thread, brain.runtime, before, switched);
+          const changed = yield* instructionsChanged(
+            thread,
+            brain.runtime,
+            agent,
+            systemInstructions(agent.name, config),
+          );
           busy.add(thread.id);
           // Registered before the turn starts, so a stop sent right away still reaches it.
           const reply: Reply = {
@@ -409,7 +534,7 @@ export class ChatService extends Context.Service<
           yield* FiberMap.run(
             turns,
             thread.id,
-            runTurn(agent, config, thread, prompt, reply, changed).pipe(
+            runTurn(agent, config, thread, brain, prompt, briefing, reply, changed).pipe(
               Effect.ensuring(Effect.forkIn(drain(thread.id), scope)),
             ),
           );
@@ -430,7 +555,7 @@ export class ChatService extends Context.Service<
           const started = QueuedMessageTransitions.start(next);
           if (!(started instanceof Message)) return;
           // The message starts together with its reply, so a crash cannot leave it started but unanswered.
-          yield* beginTurn(thread.value, agent.value, started.content, (reply) => saveStarted(started, reply));
+          yield* beginTurn(thread.value, agent.value, started, (reply) => saveStarted(started, reply));
         });
 
       // After a turn ends, frees its thread and starts what queued behind it.
@@ -507,7 +632,7 @@ export class ChatService extends Context.Service<
             });
             const saved = yield* saveMessage(userMessage);
             if (waits) return { userMessage: saved, assistantMessage: null };
-            const assistantMessage = yield* beginTurn(thread, agent, content);
+            const assistantMessage = yield* beginTurn(thread, agent, saved);
             return { userMessage: saved, assistantMessage };
           }),
         );
@@ -574,8 +699,12 @@ export class ChatService extends Context.Service<
             const config = yield* repo
               .findAgentConfig(agent.id, agent.configVersion)
               .pipe(Effect.map(Option.getOrThrow));
-            const saved = yield* saveMessage(new Message({ ...resumed, configVersion: config.version }));
-            yield* launch(agent, config, thread, continuePrompt(message.content), saved);
+            // The reply is now the brain's that continues it.
+            const brain = brainFor(thread, config);
+            const saved = yield* saveMessage(
+              new Message({ ...resumed, configVersion: config.version, runtime: brain.runtime, model: brain.model }),
+            );
+            yield* launch(agent, config, thread, continuePrompt(message.content), saved, null, message.runtime);
             return saved;
           }),
         );
@@ -607,6 +736,25 @@ export class ChatService extends Context.Service<
         yield* Effect.forEach(narrowed, ([threadId]) => FiberMap.remove(turns, threadId), { discard: true });
       });
 
+      const setBrain = Effect.fn("ChatService.setBrain")(function* (threadId: ThreadId, brain: Brain | null) {
+        return yield* withThreadHob(threadId, (thread, agent) =>
+          Effect.gen(function* () {
+            if (agent.status === "retired") yield* requireActive(agent);
+            if (brain !== null) {
+              const invalid = yield* checkRuntimeBrain(adapters, brain);
+              if (invalid !== undefined) return yield* invalid;
+            }
+            const hob = { runtime: agent.runtime, model: agent.model, effort: agent.effort };
+            const own = brain !== null && sameBrain(brain, hob) ? null : brain;
+            const updatedAt = yield* nowIso;
+            const changed = yield* changeThread(threadId, (latest) =>
+              sameOwnBrain(latest.brain, own) ? null : new Thread({ ...latest, brain: own, updatedAt }),
+            );
+            return Option.getOrElse(changed, () => thread);
+          }),
+        );
+      });
+
       const drainAgent = Effect.fn("ChatService.drainAgent")(function* (agentId: AgentId) {
         const threads = yield* repo.threadsWithQueuedMessages;
         const own = yield* Effect.filter(threads, (threadId) =>
@@ -627,6 +775,7 @@ export class ChatService extends Context.Service<
         continueReply,
         interruptAgent,
         reviewAuthority,
+        setBrain,
         drainAgent,
         activeThreads,
         streamingReplies,

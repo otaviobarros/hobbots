@@ -1,8 +1,19 @@
-import { type AgentId, isInProgress, isResumable, type ThreadId } from "@hobbots/domain";
+import {
+  type Agent,
+  type AgentId,
+  isInProgress,
+  isResumable,
+  type Message,
+  type MessageId,
+  RUNTIME_NAMES,
+  type RuntimeKind,
+  type Thread,
+  type ThreadId,
+} from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { approvalsQuery } from "../api/approvals.ts";
 import { useConnection } from "../api/live.ts";
@@ -21,6 +32,7 @@ import {
   agentsQuery,
   messagesQuery,
   runtimesQuery,
+  threadBrain,
   threadsQuery,
   useContinueReply,
   useInterrupt,
@@ -28,15 +40,18 @@ import {
   useRemoveQueued,
   useSendNow,
   useSendPrompt,
+  useSetBrain,
   useStartThread,
 } from "../api/queries.ts";
 import { runtimeProblem } from "../api/runtime-health.ts";
+import { brainSwitches, lastReplyBrain } from "../lib/brains.ts";
 import { sendErrorText } from "../lib/send-error.ts";
 import { ReplyApprovals } from "./approvals/reply-approvals.tsx";
+import { BrainPicker, BrainSwitchNote, useOtherReadyRuntimes } from "./brain-picker.tsx";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
-import { MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
-import { RuntimeChip } from "./runtime.tsx";
+import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
+import { messages as copy } from "./messages.ts";
 
 const BRAIN_PROBLEM: Record<NonNullable<ReturnType<typeof runtimeProblem>>, string> = {
   notFound: "is not installed on this Mac",
@@ -88,7 +103,12 @@ export function ChatView({
   const outbox = useOutbox(place);
   const waiting = outbox.messages;
   const connection = useConnection();
-  const brain = useQuery({ ...runtimesQuery, select: (runtimes) => runtimeProblem(runtimes[0]) });
+  // The problem of the runtime this thread thinks with, not only Claude Code's.
+  const runtime = hob.data ? threadBrain(hob.data, thread.data).runtime : "claude-code";
+  const brain = useQuery({
+    ...runtimesQuery,
+    select: (runtimes) => runtimeProblem(runtimes.find((health) => health.runtime === runtime)),
+  });
   const bottom = useRef<HTMLDivElement>(null);
 
   const send = useSendPrompt(threadId ?? ("" as ThreadId));
@@ -98,6 +118,7 @@ export function ChatView({
   const remove = useRemoveQueued(threadId ?? ("" as ThreadId));
   const sendNow = useSendNow(threadId ?? ("" as ThreadId));
   const resume = useContinueReply(threadId ?? ("" as ThreadId));
+  const continueOn = useContinueOn(hobId, threadId ?? ("" as ThreadId), runtime, resume);
 
   const streaming = messages.data?.some((m) => isInProgress(m.status)) ?? false;
   // Stopping lasts from the hub recording the request until the runtime confirms the turn ended.
@@ -204,7 +225,7 @@ export function ChatView({
           </span>
           <span className="text-xs text-label">{stateLabel[state]}</span>
         </div>
-        <RuntimeChip />
+        <BrainPicker hob={current} thread={thread.data} />
         <Button asChild variant="outline">
           <Link to="/hobs/$hobId/profile" params={{ hobId }}>
             Edit hob
@@ -249,21 +270,24 @@ export function ChatView({
             </div>
           </div>
         )}
-        {transcript?.map((message) => (
-          <MessageRow
-            key={message.id}
-            message={message}
+        {transcript && (
+          <Transcript
+            transcript={transcript}
             hob={current}
-            focused={message.id === focusMessageId}
-            resume={
+            thread={thread.data}
+            focusMessageId={focusMessageId}
+            streaming={streaming}
+            resume={(message) =>
               message.id === resumable?.id
-                ? { pending: resume.isPending, onContinue: () => resume.mutate(message.id) }
+                ? {
+                    pending: resume.isPending || continueOn.isPending,
+                    onContinue: () => resume.mutate(message.id),
+                    alternatives: continueOn.alternatives(message.id),
+                  }
                 : undefined
             }
-          >
-            <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={current} />
-          </MessageRow>
-        ))}
+          />
+        )}
         {queued.map((message) => (
           <QueuedRow
             key={message.id}
@@ -310,6 +334,11 @@ export function ChatView({
             </span>
           </section>
         ))}
+        {continueOn.isError && (
+          <p role="alert" className="text-sm text-rose">
+            Hobbots could not switch {current.name}'s brain. Try again.
+          </p>
+        )}
         {resume.isError && (
           <p role="alert" className="text-sm text-rose">
             {current.name} could not continue that reply. {sendErrorText(resume.error, current)}
@@ -339,7 +368,7 @@ export function ChatView({
           className="mx-4 mb-2 flex flex-wrap items-center gap-2.5 bg-card px-3.5 py-2.5 text-sm"
         >
           <span className="flex-1 text-lantern">
-            {current.name} can't think right now: Claude Code {BRAIN_PROBLEM[brainProblem]}.
+            {current.name} can't think right now: {RUNTIME_NAMES[runtime]} {BRAIN_PROBLEM[brainProblem]}.
           </span>
           <Button asChild variant="outline" size="xs">
             <Link to="/settings" hash="ai-providers">
@@ -365,4 +394,71 @@ export function ChatView({
       />
     </main>
   );
+}
+
+/**
+ * The thread's messages, with a note where a reply's brain differs from the one before it, and at the
+ * end when the next reply will think with another brain than the last one (ADR 017).
+ */
+function Transcript({
+  transcript,
+  hob,
+  thread,
+  focusMessageId,
+  streaming,
+  resume,
+}: {
+  transcript: ReadonlyArray<Message>;
+  hob: Agent;
+  thread: Thread | undefined;
+  focusMessageId: string | undefined;
+  streaming: boolean;
+  resume: (message: Message) => ContinueReply | undefined;
+}) {
+  const switches = brainSwitches(transcript);
+  const last = lastReplyBrain(transcript);
+  const next = threadBrain(hob, thread);
+  const changes = !streaming && last !== null && (last.runtime !== next.runtime || last.model !== next.model);
+  return (
+    <>
+      {transcript.map((message) => (
+        <Fragment key={message.id}>
+          {switches.has(message.id) && message.runtime !== null && (
+            <BrainSwitchNote brain={{ runtime: message.runtime, model: message.model }} />
+          )}
+          <MessageRow message={message} hob={hob} focused={message.id === focusMessageId} resume={resume(message)}>
+            <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
+          </MessageRow>
+        </Fragment>
+      ))}
+      {changes && <BrainSwitchNote brain={next} next />}
+    </>
+  );
+}
+
+/**
+ * Continue on another brain: each other runtime that is ready offers it next to Continue. The thread
+ * switches to that runtime's default model first, then the reply continues in place.
+ */
+function useContinueOn(
+  hobId: AgentId,
+  threadId: ThreadId,
+  runtime: RuntimeKind,
+  resume: ReturnType<typeof useContinueReply>,
+) {
+  const others = useOtherReadyRuntimes(runtime);
+  const setBrain = useSetBrain(hobId, threadId);
+  return {
+    isPending: setBrain.isPending,
+    isError: setBrain.isError,
+    alternatives: (messageId: MessageId) =>
+      others.map((other) => ({
+        label: copy.brain.continueWith({ runtime: RUNTIME_NAMES[other] }),
+        onContinue: () =>
+          setBrain.mutate(
+            { brain: { runtime: other, model: null, effort: null } },
+            { onSuccess: () => resume.mutate(messageId) },
+          ),
+      })),
+  };
 }

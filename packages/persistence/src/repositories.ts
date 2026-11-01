@@ -10,6 +10,7 @@ import {
   type MessageId,
   messageEvents,
   Thread,
+  ThreadCheckpoint,
   ThreadId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option, Schema } from "effect";
@@ -62,9 +63,20 @@ const configColumns = (agent: Agent) => ({
   instructions: agent.instructions,
   look_seed: agent.lookSeed,
   look_color: agent.lookColor,
+  runtime: agent.runtime,
 });
-const revisedRows = (rows: ReadonlyArray<{ readonly revision?: unknown }>) =>
-  rows.map((row) => ({ ...row, revision: Number(row.revision) }));
+// A thread's sessions and own brain are JSON text columns (migration 0020).
+export const threadRows = (
+  rows: ReadonlyArray<{ readonly revision?: unknown; readonly sessions?: unknown; readonly brain?: unknown }>,
+) =>
+  rows.map((row) => ({
+    ...row,
+    revision: Number(row.revision),
+    sessions: JSON.parse(String(row.sessions ?? "[]")),
+    brain: row.brain == null ? null : JSON.parse(String(row.brain)),
+  }));
+const checkpointRows = (rows: ReadonlyArray<{ readonly lines?: unknown; readonly omitted?: unknown }>) =>
+  rows.map((row) => ({ ...row, lines: JSON.parse(String(row.lines)), omitted: Number(row.omitted) }));
 // A message's steps are one JSON text column (migration 0017).
 const messageRows = (rows: ReadonlyArray<{ readonly revision?: unknown; readonly steps?: unknown }>) =>
   rows.map((row) => ({ ...row, revision: Number(row.revision), steps: JSON.parse(String(row.steps ?? "[]")) }));
@@ -116,13 +128,19 @@ export const HobbotsRepositoryLive = Layer.effect(
       Result: Thread,
       execute: (agentId) =>
         sql`SELECT * FROM threads WHERE agent_id = ${agentId} ORDER BY updated_at DESC, ${byId}`.pipe(
-          Effect.map(revisedRows),
+          Effect.map(threadRows),
         ),
     });
     const findThread = SqlSchema.findOneOption({
       Request: Schema.String,
       Result: Thread,
-      execute: (id) => sql`SELECT * FROM threads WHERE id = ${id}`.pipe(Effect.map(revisedRows)),
+      execute: (id) => sql`SELECT * FROM threads WHERE id = ${id}`.pipe(Effect.map(threadRows)),
+    });
+    const findCheckpoint = SqlSchema.findOneOption({
+      Request: Schema.String,
+      Result: ThreadCheckpoint,
+      execute: (threadId) =>
+        sql`SELECT * FROM thread_checkpoints WHERE thread_id = ${threadId}`.pipe(Effect.map(checkpointRows)),
     });
     const listMessages = SqlSchema.findAll({
       Request: Schema.String,
@@ -173,7 +191,6 @@ export const HobbotsRepositoryLive = Layer.effect(
             id: agent.id,
             name: agent.name,
             ...configColumns(agent),
-            runtime: agent.runtime,
             config_version: agent.configVersion,
             status: agent.status,
             retired_at: agent.retiredAt,
@@ -221,13 +238,15 @@ export const HobbotsRepositoryLive = Layer.effect(
             id: thread.id,
             agent_id: thread.agentId,
             title: thread.title,
-            runtime_session_id: thread.runtimeSessionId,
+            sessions: JSON.stringify(thread.sessions),
+            brain: thread.brain === null ? null : JSON.stringify(thread.brain),
             created_at: thread.createdAt,
             updated_at: thread.updatedAt,
             revision,
           })} ON CONFLICT (id) DO UPDATE SET
             title = excluded.title,
-            runtime_session_id = excluded.runtime_session_id,
+            sessions = excluded.sessions,
+            brain = excluded.brain,
             updated_at = excluded.updated_at,
             revision = excluded.revision`;
           return { value: thread, events: [{ _tag: "ThreadUpserted", thread }] };
@@ -236,10 +255,11 @@ export const HobbotsRepositoryLive = Layer.effect(
 
     // Writes the message row only; the caller journals its events in the same transaction.
     const writeMessage = (message: Message) =>
-      sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, resets_at, steps, created_at, revision, seq)
+      sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, runtime, model, resets_at, steps, created_at, revision, seq)
         VALUES (
           ${message.id}, ${message.threadId}, ${message.role}, ${message.content},
-          ${message.status}, ${message.error}, ${message.configVersion}, ${message.resetsAt}, ${JSON.stringify(message.steps)},
+          ${message.status}, ${message.error}, ${message.configVersion}, ${message.runtime}, ${message.model},
+          ${message.resetsAt}, ${JSON.stringify(message.steps)},
           ${message.createdAt}, ${message.revision},
           (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE thread_id = ${message.threadId})
         )
@@ -248,6 +268,8 @@ export const HobbotsRepositoryLive = Layer.effect(
           status = excluded.status,
           error = excluded.error,
           config_version = excluded.config_version,
+          runtime = excluded.runtime,
+          model = excluded.model,
           resets_at = excluded.resets_at,
           steps = excluded.steps,
           revision = excluded.revision`;
@@ -326,6 +348,20 @@ export const HobbotsRepositoryLive = Layer.effect(
       ),
       startQueuedMessage,
       removeQueuedMessage,
+      findCheckpoint: (threadId) => findCheckpoint(threadId).pipe(Effect.orDie),
+      // Not journaled: the summary is the hub's own record, never shown to clients.
+      saveCheckpoint: (checkpoint) =>
+        sql`INSERT INTO thread_checkpoints ${sql.insert({
+          thread_id: checkpoint.threadId,
+          through_message_id: checkpoint.throughMessageId,
+          lines: JSON.stringify(checkpoint.lines),
+          omitted: checkpoint.omitted,
+          created_at: checkpoint.createdAt,
+        })} ON CONFLICT (thread_id) DO UPDATE SET
+          through_message_id = excluded.through_message_id,
+          lines = excluded.lines,
+          omitted = excluded.omitted,
+          created_at = excluded.created_at`.pipe(Effect.asVoid, Effect.orDie),
     });
   }),
 );

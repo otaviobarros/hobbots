@@ -2,6 +2,7 @@ import {
   Agent,
   AgentId,
   AgentStatus,
+  Brain,
   Effort,
   HobColor,
   LookSeed,
@@ -83,6 +84,8 @@ export const UpdateAgentPayload = Schema.Struct({
   length: Schema.optionalKey(ReplyLength),
   lookSeed: Schema.optionalKey(LookSeed),
   lookColor: Schema.optionalKey(HobColor),
+  /** A runtime this hub serves; the model and effort are checked against it. */
+  runtime: Schema.optionalKey(RuntimeKind),
   model: Schema.optionalKey(Schema.NullOr(Schema.NonEmptyString)),
   effort: Schema.optionalKey(Schema.NullOr(Effort)),
   instructions: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(20_000))),
@@ -109,6 +112,16 @@ export const SendPromptResult = Schema.Struct({
   userMessage: Message,
   assistantMessage: Schema.NullOr(Message),
 });
+
+/**
+ * A thread's own brain, or null to think with the hob's again (ADR 017). With `makeDefault`, the
+ * brain becomes the hob's next configuration version instead, and the thread follows the hob.
+ */
+export const SetBrainPayload = Schema.Struct({
+  brain: Schema.NullOr(Brain),
+  makeDefault: Schema.optionalKey(Schema.Boolean),
+});
+export type SetBrainPayload = typeof SetBrainPayload.Type;
 
 /**
  * What the health endpoint returns: enough for a client to tell this installation's server from
@@ -212,6 +225,13 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       params: { threadId: ThreadId, messageId: MessageId },
       success: Message,
       error: [ThreadNotFound, HobUnavailable, ReplyNotResumable],
+    }),
+    // Switches the thread's brain from its next turn; a reply already running keeps its own.
+    HttpApiEndpoint.put("setBrain", "/threads/:threadId/brain", {
+      params: { threadId: ThreadId },
+      payload: SetBrainPayload,
+      success: Thread,
+      error: [ThreadNotFound, HobUnavailable, InvalidHob, AgentNotFound],
     }),
   )
   .prefix("/api") {}

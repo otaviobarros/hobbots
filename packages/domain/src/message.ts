@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { ConfigVersion } from "./agent.ts";
+import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { MessageId, ThreadId } from "./ids.ts";
 import { PolicyOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
@@ -84,6 +84,18 @@ export class Message extends Schema.Class<Message>("Message")({
   error: Schema.NullOr(Schema.String),
   /** For an assistant message, the hob configuration version that produced it; null for the user's. */
   configVersion: Schema.NullOr(ConfigVersion),
+  /**
+   * For an assistant message, the runtime and model of its latest turn (ADR 017): what the chat shows
+   * a switch by and what usage is attributed to. Null for the user's, and for a model left to the runtime.
+   */
+  runtime: Schema.NullOr(RuntimeKind).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  model: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /** For a `limited` reply, when the provider's allowance refills (ISO 8601), if it said. */
   resetsAt: Schema.NullOr(Schema.String).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),

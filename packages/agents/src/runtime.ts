@@ -1,15 +1,17 @@
-import type {
-  ApprovalId,
-  Effort,
-  HobPolicy,
-  PolicyOperation,
-  PolicyOverrides,
-  RuntimeEnforcement,
+import {
+  type ApprovalId,
+  type Effort,
+  type HobPolicy,
+  type PolicyOperation,
+  type PolicyOverrides,
+  RUNTIME_NAMES,
+  type RuntimeEnforcement,
   RuntimeHealth,
+  type RuntimeKind,
   RuntimeModels,
-  SafetyPreset,
+  type SafetyPreset,
 } from "@hobbots/domain";
-import { Context, type Effect, Schema, type Stream } from "effect";
+import { Context, Effect, Option, Schema, type Stream } from "effect";
 
 /** Normalized runtime output. Vendor message shapes stay inside each adapter. */
 export type RuntimeEvent =
@@ -155,6 +157,11 @@ export interface TurnApprovals {
 
 export interface PromptRequest {
   readonly prompt: string;
+  /**
+   * What the session missed while other brains replied in the thread (ADR 017), to deliver ahead of
+   * the prompt in the same turn. Absent or null when it saw everything.
+   */
+  readonly briefing?: string | null;
   /** Runtime session to resume, or null to start a new one. */
   readonly sessionId: string | null;
   readonly instructions: string;
@@ -183,6 +190,47 @@ export interface RuntimeAdapterShape {
   readonly sendPrompt: (request: PromptRequest) => Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached>;
 }
 
+/** The Claude Code adapter, the runtime every hub serves. */
 export class RuntimeAdapter extends Context.Service<RuntimeAdapter, RuntimeAdapterShape>()(
   "@hobbots/agents/RuntimeAdapter",
 ) {}
+
+/** Adapters for the other runtimes this hub serves, by kind (ADR 017). Absent, it serves Claude Code only. */
+export class AdditionalRuntimes extends Context.Service<
+  AdditionalRuntimes,
+  ReadonlyMap<RuntimeKind, RuntimeAdapterShape>
+>()("@hobbots/agents/AdditionalRuntimes") {}
+
+/** Finds the adapter for a runtime, or none when this hub cannot run it. */
+export type RuntimeAdapters = (runtime: RuntimeKind) => RuntimeAdapterShape | undefined;
+
+/** The adapter of each runtime the hub serves: Claude Code's, then any additional ones. */
+export const runtimeAdapters: Effect.Effect<RuntimeAdapters, never, RuntimeAdapter> = Effect.gen(function* () {
+  const claude = yield* RuntimeAdapter;
+  const others = Option.getOrElse(yield* Effect.serviceOption(AdditionalRuntimes), () => new Map());
+  return (runtime) => (runtime === "claude-code" ? claude : others.get(runtime));
+});
+
+const unsupported = { status: "unsupported", evidence: "This hub has no adapter for the runtime." } as const;
+
+/** The health of a runtime this hub has no adapter for: unavailable, and enforcing nothing. */
+export const missingRuntimeHealth = (runtime: RuntimeKind): RuntimeHealth =>
+  new RuntimeHealth({
+    runtime,
+    availability: "unavailable",
+    billing: null,
+    version: null,
+    detail: `Hobbots cannot run ${RUNTIME_NAMES[runtime]} yet`,
+    checkedAt: null,
+    enforcement: {
+      toolInterception: unsupported,
+      processSandbox: unsupported,
+      hubTools: unsupported,
+      toolEvents: unsupported,
+      toolInterruption: unsupported,
+    },
+  });
+
+/** The models of a runtime this hub has no adapter for: none. */
+export const missingRuntimeModels = (runtime: RuntimeKind): RuntimeModels =>
+  new RuntimeModels({ runtime, source: "fallback", models: [] });

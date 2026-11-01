@@ -54,9 +54,7 @@ describe("ApprovalRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertThread(
-        new Thread({ id: threadId, agentId, title: "t", runtimeSessionId: null, createdAt: now, updatedAt: now }),
-      );
+      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "t", createdAt: now, updatedAt: now }));
       yield* repo.upsertMessage(
         new Message({
           id: messageId,
