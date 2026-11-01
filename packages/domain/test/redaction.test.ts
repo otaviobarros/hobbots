@@ -16,12 +16,17 @@ describe("redactSecrets", () => {
   });
 
   it("ignores known values too short or too plain to be secrets", () => {
-    expect(redactSecrets("true 1234 /Users/me/.ssh/id", [{ value: "true", kind: "A" }])).toBe(
-      "true 1234 /Users/me/.ssh/id",
-    );
     expect(
-      redactSecrets("/Users/me/.ssh/agent.sock", [{ value: "/Users/me/.ssh/agent.sock", kind: "SSH_AUTH_SOCK" }]),
-    ).toBe("/Users/me/.ssh/agent.sock");
+      redactSecrets("true 1234 12345678", [
+        { value: "true", kind: "A" },
+        { value: "12345678", kind: "B" },
+      ]),
+    ).toBe("true 1234 12345678");
+  });
+
+  it("redacts a known value that starts with a slash", () => {
+    const known = [{ value: "/aB7cD9eF2gH4jK6", kind: "DEPLOY_SECRET" }];
+    expect(redactSecrets("echo /aB7cD9eF2gH4jK6", known)).toBe("echo [redacted: DEPLOY_SECRET]");
   });
 
   it("redacts a private key block it does not know, and one cut short", () => {
@@ -69,6 +74,18 @@ describe("redactSecrets", () => {
     );
     expect(redactSecrets("https://admin:admin@host/x")).toBe("https://admin:[redacted: password]@host/x");
     expect(redactSecrets("API_TOKEN_ABCDEFGH=ABCDEFGH")).toBe("API_TOKEN_ABCDEFGH=[redacted: credential]");
+  });
+
+  it("redacts a quoted assigned value to its closing quote and leaves references alone", () => {
+    expect(redactSecrets('DATABASE_PASSWORD="correct-horse battery-staple" next')).toBe(
+      "DATABASE_PASSWORD=[redacted: credential] next",
+    );
+    expect(redactSecrets("DB_PASSWORD='ab cd ef gh' next")).toBe("DB_PASSWORD=[redacted: credential] next");
+    for (const text of ['API_TOKEN="$API_TOKEN"', `API_TOKEN="\${API_TOKEN}"`, 'MAX_TOKENS="100000000"']) {
+      expect(redactSecrets(text)).toBe(text);
+    }
+    const once = redactSecrets('GH_TOKEN="abcdefgh123456 x"', [{ value: "abcdefgh123456", kind: "GH_TOKEN" }]);
+    expect(redactSecrets(once)).toBe(once);
   });
 
   it("names a known value inside an assignment once, and redacting again changes nothing", () => {
@@ -129,6 +146,8 @@ describe("secretsFromEnv", () => {
         GH_TOKEN: "gh-value-1234",
         HOME: "/Users/me",
         SSH_AUTH_SOCK: "/tmp/agent.sock",
+        GOOGLE_CREDENTIALS_FILE: "/Users/me/.config/gcloud/key.json",
+        DEPLOY_SECRET: "/aB7cD9eF2gH4jK6",
         FEATURE_TOKEN: "on",
         MAX_TOKENS: "100000000",
         GIT_AUTHOR_NAME: "Ada Lovelace",
@@ -139,6 +158,7 @@ describe("secretsFromEnv", () => {
     ).toEqual([
       { value: "sk-ant-value-123", kind: "ANTHROPIC_API_KEY" },
       { value: "gh-value-1234", kind: "GH_TOKEN" },
+      { value: "/aB7cD9eF2gH4jK6", kind: "DEPLOY_SECRET" },
       { value: "pg-password-1", kind: "PGPASSWORD" },
     ]);
   });

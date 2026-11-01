@@ -26,6 +26,8 @@ mkdirSync(folder);
 
 // A credential the hub holds, as one from its environment would be.
 const DEPLOY_TOKEN = "hub-known-deploy-value-7f3a9c";
+// One that starts with a slash, as an opaque password or base64 value can.
+const DEPLOY_SECRET = "/aB7cD9eF2gH4jK6";
 // Values Hobbots does not know, recognized by their shape.
 const GITHUB_TOKEN = `ghp_${"a1B2".repeat(9)}`;
 const PRIVATE_KEY = "-----BEGIN OPENSSH PRIVATE KEY----- b3BlbnNzaC1rZXktdjEAAAAA -----END OPENSSH PRIVATE KEY-----";
@@ -79,7 +81,10 @@ const TestLayer = ChatService.layer.pipe(
       EventBus.layer,
       HobAdmission.layer,
       FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
-      SecretRedaction.layer([{ value: DEPLOY_TOKEN, kind: "DEPLOY_TOKEN" }]),
+      SecretRedaction.layer([
+        { value: DEPLOY_TOKEN, kind: "DEPLOY_TOKEN" },
+        { value: DEPLOY_SECRET, kind: "DEPLOY_SECRET" },
+      ]),
     ),
   ),
 );
@@ -88,7 +93,7 @@ const TestLayer = ChatService.layer.pipe(
 // URL with a token in it, which asks.
 const PROMPT = [
   "Deploy it",
-  `fake:tool Bash echo ${DEPLOY_TOKEN}`,
+  `fake:tool Bash echo ${DEPLOY_TOKEN} ${DEPLOY_SECRET}`,
   `fake:tool Bash echo ${PRIVATE_KEY}`,
   `fake:tool Bash git push https://wren:${GITHUB_TOKEN}@github.com/acme/app.git feature`,
 ].join("\n");
@@ -103,7 +108,9 @@ const run = <A, E>(
 
 const leaks = (value: unknown) => {
   const text = JSON.stringify(value);
-  return [DEPLOY_TOKEN, GITHUB_TOKEN, "b3BlbnNzaC1rZXktdjEAAAAA"].filter((secret) => text.includes(secret));
+  return [DEPLOY_TOKEN, DEPLOY_SECRET, GITHUB_TOKEN, "b3BlbnNzaC1rZXktdjEAAAAA"].filter((secret) =>
+    text.includes(secret),
+  );
 };
 
 describe("secrets in tool calls", () => {
@@ -146,7 +153,7 @@ describe("secrets in tool calls", () => {
         JSON.stringify(value, (key, inner) => (["content", "title", "delta"].includes(key) ? undefined : inner)),
       );
     expect(result.reply.steps.filter((step) => step.kind === "tool").map((step) => step.label)).toEqual([
-      "Running echo [redacted: DEPLOY_TOKEN]",
+      "Running echo [redacted: DEPLOY_TOKEN] [redacted: DEPLOY_SECRET]",
       "Running echo [redacted: private key]",
       "Running git push https://wren:[redacted: GitHub token]@github.com/a…",
     ]);

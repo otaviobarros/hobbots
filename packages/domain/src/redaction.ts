@@ -23,17 +23,24 @@ export const redactionMarker = (kind: string) => `[redacted: ${kind}]`;
 const SECRET_ENV_NAME = /TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|APIKEY|(?:^|_)(?:KEYS?|AUTH)(?:_|$)/;
 
 /**
+ * Variables that name where a credential lives rather than hold it, such as `SSH_AUTH_SOCK` or
+ * `GOOGLE_APPLICATION_CREDENTIALS_FILE`. Their values are paths that appear in ordinary output.
+ */
+const LOCATION_ENV_NAME = /_(?:SOCK|SOCKET|PATH|FILE|DIR|HOME)$/;
+
+/**
  * Values too short or too plain to treat as secrets: replacing every `true` or `1` in tool output
- * would hide more than it protects. A path names a file and is not itself a secret.
+ * would hide more than it protects. Any other value counts, whatever character it starts with.
  */
 const MIN_KNOWN_LENGTH = 8;
-const usableSecret = (value: string) =>
-  value.trim().length >= MIN_KNOWN_LENGTH && !value.startsWith("/") && !/^\d+$/.test(value.trim());
+const usableSecret = (value: string) => value.trim().length >= MIN_KNOWN_LENGTH && !/^\d+$/.test(value.trim());
 
 /** The credentials an environment holds: each variable whose name says it holds one. */
 export const secretsFromEnv = (env: Readonly<Record<string, string | undefined>>): ReadonlyArray<KnownSecret> =>
   Object.entries(env).flatMap(([name, value]) =>
-    value !== undefined && SECRET_ENV_NAME.test(name) && usableSecret(value) ? [{ value, kind: name }] : [],
+    value !== undefined && SECRET_ENV_NAME.test(name) && !LOCATION_ENV_NAME.test(name) && usableSecret(value)
+      ? [{ value, kind: name }]
+      : [],
   );
 
 interface SecretShape {
@@ -72,12 +79,13 @@ const SHAPES: ReadonlyArray<SecretShape> = [
     kind: "password",
     pattern: /(?<prefix>\b[a-z][a-z0-9+.-]{0,30}:\/\/[^\s:/@]{1,256}:)(?<secret>[^\s@/]{1,256})(?=@)/gi,
   },
-  // An environment-style assignment, as `env` or a `.env` file prints it: `GH_TOKEN=…`. A value
+  // An environment-style assignment, as `env` or a `.env` file prints it: `GH_TOKEN=…`. A quoted
+  // value is taken to its closing quote, spaces included; an unquoted one to the next space. A value
   // that is a variable, a marker or a plain number, such as `MAX_TOKENS=100000`, is not a secret.
   {
     kind: "credential",
     pattern:
-      /(?<prefix>\b[A-Z0-9_]{0,64}(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_KEY|PRIVATE_KEY)[A-Z0-9_]{0,64}=)(?<secret>["']?(?!\d+["']?(?:\s|$))[^\s"'$[][^\s"']{7,}["']?)/g,
+      /(?<prefix>\b[A-Z0-9_]{0,64}(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_KEY|PRIVATE_KEY)[A-Z0-9_]{0,64}=)(?<secret>"(?!\d+")[^"\n$[][^"\n]{7,}"|'(?!\d+')[^'\n$[][^'\n]{7,}'|(?!\d+(?:\s|$))[^\s"'$[][^\s"']{7,})/g,
   },
 ];
 
