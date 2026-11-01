@@ -194,11 +194,21 @@ export class ServerSupervisor {
     }
   }
 
-  /** Checks the server once; call it on an interval so the menu-bar icon notices a server that went away. */
-  async check() {
+  /**
+   * Whether the server may answer: it runs, or a server this app launched stopped answering but is
+   * still alive, so it may recover.
+   */
+  get mayAnswer() {
     const { state, stopping } = this.#status;
-    // An owned server that stopped answering is checked too, so it shows as running once it recovers.
-    if (stopping || (state !== "running" && !(state === "error" && this.#process))) return;
+    return !stopping && (state === "running" || (state === "error" && this.#process !== null));
+  }
+
+  /**
+   * Checks the server once, when the menu-bar app's event stream connects or is lost, so the icon
+   * notices a server that went away or recovered.
+   */
+  async check() {
+    if (!this.mayAnswer) return;
     const found = await this.options.probe().catch(() => "none" as const);
     this.#emit({ type: found === "ours" ? "healthy" : "unreachable" });
   }

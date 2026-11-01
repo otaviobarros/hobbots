@@ -35,7 +35,9 @@ Built, but not proven end to end, or proven only in part.
 
 - **2026-11-01 · A Task's steps run in fresh sessions.** A hob splits the request it is working on into steps; each runs in a session of its own from its brief, within limits per hob and per request, while the hob keeps chatting, and the hob gets back their checkpoints and results, never their sessions. Proven at hub level with the fake runtime. A step cannot ask for approval or ask a question, its hob hears of results only on its next turn, and real Claude Code is not verified. ([#272](https://github.com/otaviobarros/hobbots/issues/272), [#292](https://github.com/otaviobarros/hobbots/issues/292))
 
-Running delegated work, inboxes, other runtimes, the Workbench and remote access are not built yet. The [slices](https://github.com/otaviobarros/hobbots/issues?q=label%3A%22type%3A+slice%22) list them in order.
+- **2026-11-01 · A hob's backpack is recorded.** A delegated Task, a result, a failure, a report, a question, an answer and a hand-off each land in the backpack of the hob that has to deal with them, in the same transaction as the change. A retried tool call records nothing new, and a write under a stale claim is refused. Proven at the repository and hub level on SQLite and PostgreSQL. Nothing delivers the items or wakes a hob yet. ([#290](https://github.com/otaviobarros/hobbots/issues/290), [#291](https://github.com/otaviobarros/hobbots/issues/291), [#292](https://github.com/otaviobarros/hobbots/issues/292))
+
+Running delegated work, delivering backpack items, other runtimes, the Workbench and remote access are not built yet. The [slices](https://github.com/otaviobarros/hobbots/issues?q=label%3A%22type%3A+slice%22) list them in order.
 
 ## Keep this page current
 

@@ -2,6 +2,7 @@ import { TaskToolCalls } from "@hobbots/agents";
 import { TaskToolDone, TaskToolRefused } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
+import { CurrentToolCall } from "./backpack-rows.ts";
 import { lockJournal } from "./journal.ts";
 
 const encodeDone = Schema.encodeSync(Schema.fromJsonString(TaskToolDone));
@@ -32,7 +33,10 @@ export const TaskToolCallsLive = Layer.effect(
             }
             return { done: yield* Effect.orDie(decodeDone(stored.result)), entries: [] };
           }
-          const outcome = yield* run;
+          // The backpack items the call's writes record take their keys from the call's (ADR 019).
+          const outcome = yield* run.pipe(
+            Effect.provideService(CurrentToolCall, { agentId: call.agentId, key: call.key }),
+          );
           yield* sql`INSERT INTO task_tool_calls ${sql.insert({
             agent_id: call.agentId,
             call_key: call.key,

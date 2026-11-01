@@ -8,6 +8,7 @@ import { ArchiveProvider } from "./archive/archive-context.tsx";
 import { ThreadMain, type WorkspaceMainProps } from "./archived-threads/archived-threads.tsx";
 import { HobList } from "./hob-list.tsx";
 import { TaskDrawer } from "./quest/task-drawer.tsx";
+import { usePins } from "./quest/use-work.ts";
 import { SidePanel } from "./side-panel.tsx";
 
 const usePersistentToggle = (key: string) => {
@@ -51,6 +52,8 @@ function Workspace({
 }: WorkspaceProps) {
   const [navOpen, setNavOpen] = usePersistentToggle("layout.navOpen");
   const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
+  // Pinned Quests show in the Quest tab of every thread and open in its drawer.
+  const pins = usePins();
   useThreadKeys(hobId, threadId);
 
   return (
@@ -68,10 +71,10 @@ function Workspace({
           onTogglePanel: () => setPanelOpen(!panelOpen),
         })}
         {threadId !== undefined && taskId !== undefined && (
-          <TaskDrawer key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} />
+          <TaskDrawer key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} pinned={pins.pinned} />
         )}
       </div>
-      {panelOpen && <SidePanel hobId={hobId} threadId={threadId} />}
+      {panelOpen && <SidePanel hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />}
     </div>
   );
 }

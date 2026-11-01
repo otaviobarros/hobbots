@@ -18,6 +18,7 @@
     "@hobbots/domain": "workspace:*",
     "@hobbots/server": "workspace:*",
     "@types/node": "26.6.5",
+    "effect": "catalog:",
     "electron": "45.0.0",
     "electron-builder": "26.18.0",
     "electron-vite": "6.0.0"

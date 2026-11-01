@@ -67,7 +67,7 @@ const questionsForYou = (tree: TaskTree): ReadonlyArray<Question> =>
   tree.questions.filter((question) => question.recipientId === null && question.state === "open");
 
 /** Where a Task stands for you: a question waiting for you anywhere under it comes first. */
-const rowStatus = (tree: TaskTree, task: Task): RowStatus => {
+export const rowStatus = (tree: TaskTree, task: Task): RowStatus => {
   const under = subtreeIds(tree, task.id);
   if (questionsForYou(tree).some((question) => under.has(question.taskId))) return "needs-you";
   switch (task.state) {
@@ -90,7 +90,7 @@ const latestOf = (tree: TaskTree, task: Task): string | null =>
   tree.checkpoints.findLast((checkpoint) => checkpoint.taskId === task.id && checkpoint.source !== "automatic")
     ?.summary ?? null;
 
-const waitsOnOf = (tree: TaskTree, task: Task): ReadonlyArray<AgentId> => [
+export const waitsOnOf = (tree: TaskTree, task: Task): ReadonlyArray<AgentId> => [
   ...new Set(
     task.dependsOn.flatMap((id) => {
       const dependency = tree.tasks.find((each) => each.id === id);

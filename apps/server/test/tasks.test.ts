@@ -11,7 +11,7 @@ import {
   PermissionSummary,
   TaskRepository,
 } from "@hobbots/agents";
-import { MemberWorkRead, QuestRead, TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
+import { BackpackRead, MemberWorkRead, QuestRead, TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
@@ -26,6 +26,7 @@ import {
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
+  BackpackLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -62,6 +63,7 @@ const App = HobLifecycle.layer.pipe(
         GrantRepositoryLive,
         TaskRepositoryLive,
         EventJournal.layer,
+        BackpackLive,
         SetupRepository.layer,
         SearchIndex.layer,
       ).pipe(Layer.provideMerge(TestDatabase)),
@@ -211,7 +213,12 @@ describe("Task and Quest reads", () => {
       }),
     );
     expect(replayed.map((entry) => entry.sequence)).toEqual(moved.entries.map((entry) => entry.sequence));
-    expect(replayed.map((entry) => entry.type)).toEqual(["TaskStateChanged", "CheckpointRecorded"]);
+    // The cancel also lands in Aldric's backpack, in the same change (ADR 019).
+    expect(replayed.map((entry) => entry.type)).toEqual([
+      "TaskStateChanged",
+      "CheckpointRecorded",
+      "BackpackItemRecorded",
+    ]);
   });
 
   // covers OR-001, OR-007
@@ -317,5 +324,46 @@ describe("Task and Quest reads", () => {
       status: 404,
       body: { _tag: "AgentNotFound", agentId: "nope" },
     });
+  });
+});
+
+describe("Backpack reads", () => {
+  // covers IN-001
+  it("[TC-IN-026] reads a hob's, a Quest's and the workspace's open backpack items with a cursor, and answers 404 for what is not there", async () => {
+    const copy = await runtime.runPromise(quest);
+    const read = async (path: string) => {
+      const response = await get(path);
+      expect(response.status).toBe(200);
+      return Schema.decodeUnknownSync(BackpackRead)(response.body);
+    };
+
+    const quill = await read("/api/agents/quill/backpack");
+    expect(quill.items.map((item) => [item.recipientId, item.kind, item.taskId, item.state])).toEqual([
+      [QUILL, "task", "copy", "pending"],
+    ]);
+    expect(quill.items[0]?.payload).toMatchObject({ _tag: "task", delegation: { brief: "Draft the copy" } });
+    expect((await read("/api/agents/aldric/backpack")).items).toEqual([]);
+    expect((await read("/api/quests/q1/backpack")).items).toEqual(quill.items);
+    const workspace = await read("/api/backpack");
+    expect(workspace.items).toEqual(quill.items);
+
+    // A change after the read is exactly what the stream replays after the read's cursor.
+    const moved = await runtime.runPromise(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        return yield* tasks.moveTask(copy.value.id, copy.value.revision, "cancelled", now);
+      }),
+    );
+    const replayed: ReadonlyArray<EventEnvelope> = await runtime.runPromise(
+      Effect.gen(function* () {
+        const journal = yield* EventJournal;
+        return yield* journal.readAfter(parseCursor(workspace.cursor)?.sequence ?? -1);
+      }),
+    );
+    expect(replayed.map((entry) => entry.sequence)).toEqual(moved.entries.map((entry) => entry.sequence));
+    expect((await read("/api/agents/aldric/backpack")).items.map((item) => item.kind)).toEqual(["failure"]);
+
+    expect((await get("/api/agents/nobody/backpack")).status).toBe(404);
+    expect((await get("/api/quests/q-none/backpack")).status).toBe(404);
   });
 });

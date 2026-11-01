@@ -15,6 +15,7 @@ import { RuntimeKind, type ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ApprovalsHandlers } from "./approvals.ts";
+import { BackpackHandlers } from "./backpack.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { Installation } from "./installation.ts";
@@ -104,8 +105,10 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
 
-    // A hob is working while one of its threads has a turn in progress.
-    const activity = chat.activeThreads.pipe(
+    // A hob is working while one of its threads has a reply in progress. Read from the store, so a
+    // snapshot agrees with the event stream: a reply that ended is not reported while its turn's
+    // runtime is still shutting down.
+    const activity = chat.workingThreads.pipe(
       Effect.flatMap((threadIds) =>
         Effect.forEach(threadIds, (threadId) =>
           repo.findThread(threadId).pipe(
@@ -163,5 +166,6 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     GrantsHandlers,
     TasksHandlers,
     QuestionsHandlers,
+    BackpackHandlers,
   ]),
 );

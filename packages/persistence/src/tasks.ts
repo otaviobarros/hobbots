@@ -16,6 +16,7 @@ import {
   isLiveAttempt,
   isTerminalTask,
   type JournaledEvent,
+  leadsAbove,
   Milestone,
   Quest,
   Question,
@@ -58,14 +59,6 @@ const QUEST_END: Partial<Record<TaskState, QuestState>> = {
   failed: "failed",
   cancelled: "cancelled",
 };
-
-/**
- * The leads above a Task, nearest first: the owners of its ancestors other than its own owner.
- * A question climbs this list, and reaches the user past its end.
- */
-const leadsAbove = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<AgentId> => [
-  ...new Set(ancestorsOf(task, tree).flatMap((each) => (each.ownerId === task.ownerId ? [] : [each.ownerId]))),
-];
 
 /** The SQL store of Tasks, Quests and their records, for SQLite and PostgreSQL (ADR 011, ADR 018). */
 export const TaskRepositoryLive = Layer.effect(
@@ -365,7 +358,7 @@ export const TaskRepositoryLive = Layer.effect(
           return {
             value: { task, attempt },
             events: [
-              { _tag: "TaskStateChanged", task, attempt, quest } as const,
+              { _tag: "TaskStateChanged", task, attempt, quest, wait: null } as const,
               ...(yield* automatic(task, input.startedAt, revision + 1)),
             ],
           };
@@ -395,7 +388,7 @@ export const TaskRepositoryLive = Layer.effect(
           yield* saveTask(task);
           return {
             value: { task, attempt },
-            events: [{ _tag: "TaskStateChanged", task, attempt, quest: null } as const],
+            events: [{ _tag: "TaskStateChanged", task, attempt, quest: null, wait: null } as const],
           };
         }),
       );
@@ -411,7 +404,7 @@ export const TaskRepositoryLive = Layer.effect(
           return {
             value: task,
             events: [
-              { _tag: "TaskStateChanged", task, attempt: null, quest } as const,
+              { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null } as const,
               ...(yield* automatic(task, at, revision + 1)),
             ],
           };
@@ -647,7 +640,7 @@ export const TaskRepositoryLive = Layer.effect(
           const automatically = before.state === "waiting" ? [] : yield* automatic(task, input.at, revision + 1);
           return {
             value: { task, wait },
-            events: [{ _tag: "TaskStateChanged", task, attempt: null, quest: null } as const, ...automatically],
+            events: [{ _tag: "TaskStateChanged", task, attempt: null, quest: null, wait } as const, ...automatically],
           };
         }),
       );

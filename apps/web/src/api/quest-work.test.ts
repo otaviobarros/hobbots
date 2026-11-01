@@ -48,7 +48,7 @@ describe("Quest work from the event stream", () => {
   it("refetches the owner of a Task that moved or completed", () => {
     const { client, campaign, stale } = loaded();
     const work = memberWork("build", "ada", campaign, "blocked");
-    applyEvent(client, { _tag: "TaskStateChanged", task: work.task, attempt: null, quest: null });
+    applyEvent(client, { _tag: "TaskStateChanged", task: work.task, attempt: null, quest: null, wait: null });
     expect(stale()).toEqual([ADA]);
     applyEvent(client, { _tag: "TaskCompleted", task: memberWork("copy", "quill", campaign).task, artifacts: [] });
     expect(stale()).toEqual([QUILL, ADA]);

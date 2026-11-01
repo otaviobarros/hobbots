@@ -8,6 +8,7 @@ import {
   type Task,
   type TaskId,
   TaskTree,
+  type TaskWait,
   type ThreadId,
 } from "@hobbots/domain";
 
@@ -70,6 +71,17 @@ const withTask = (tree: TaskTree, task: Task, attempt: Attempt | null): Partial<
   };
 };
 
+/** A Task's new wait replaces the one it had, unless the change is older than the Task known. */
+const withWait = (
+  tree: TaskTree,
+  event: { readonly task: Task; readonly wait: TaskWait | null },
+): Partial<TaskTree> => {
+  const { wait } = event;
+  const known = tree.tasks.find((each) => each.id === event.task.id);
+  if (wait === null || (known !== undefined && event.task.revision < known.revision)) return {};
+  return { waits: [...tree.waits.filter((each) => each.taskId !== wait.taskId), wait] };
+};
+
 const withQuest = (tree: TaskTree, quest: Quest | null, ids: ReadonlySet<TaskId>): Partial<TaskTree> =>
   quest !== null && ids.has(quest.taskId) ? { quests: upsertNewer(tree.quests, quest) } : {};
 
@@ -104,7 +116,7 @@ const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
       : null,
   TaskStateChanged: (tree, event, ids) =>
     ids.has(event.task.id)
-      ? { ...withTask(tree, event.task, event.attempt), ...withQuest(tree, event.quest, ids) }
+      ? { ...withTask(tree, event.task, event.attempt), ...withQuest(tree, event.quest, ids), ...withWait(tree, event) }
       : null,
   TaskCompleted: (tree, event, ids) =>
     ids.has(event.task.id)

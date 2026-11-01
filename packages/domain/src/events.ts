@@ -1,10 +1,11 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
+import { BackpackItem } from "./backpack.ts";
 import { Grant } from "./grant.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { Message } from "./message.ts";
-import { ArtifactRef, Checkpoint, Delegation, HandOff, Milestone, Quest, Question } from "./quest.ts";
+import { ArtifactRef, Checkpoint, Delegation, HandOff, Milestone, Quest, Question, TaskWait } from "./quest.ts";
 import { Attempt, Task } from "./task.ts";
 import { Thread } from "./thread.ts";
 
@@ -39,12 +40,14 @@ const TaskCreated = Schema.TaggedStruct("TaskCreated", {
 });
 /**
  * A Task's state or current Attempt changed: a start, a retry, a wait, a cancel, or its Attempt
- * moving on. `attempt` is the current one when it changed; `quest` the Task's Quest when it ended with it.
+ * moving on. `attempt` is the current one when it changed; `quest` the Task's Quest when it ended with it;
+ * `wait` the wait its owner started or replaced, so who it waits on shows live.
  */
 const TaskStateChanged = Schema.TaggedStruct("TaskStateChanged", {
   task: Task,
   attempt: Schema.NullOr(Attempt),
   quest: Schema.NullOr(Quest),
+  wait: Schema.NullOr(TaskWait).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
 });
 /** A Task gained its Quest record: its owner brought in another hob. */
 const QuestStarted = Schema.TaggedStruct("QuestStarted", { quest: Quest });
@@ -63,6 +66,10 @@ const HandedOff = Schema.TaggedStruct("HandedOff", { handOff: HandOff, artifact:
 const TaskCompleted = Schema.TaggedStruct("TaskCompleted", { task: Task, artifacts: Schema.Array(ArtifactRef) });
 /** The Task that holds a Quest passed the completion gate. */
 const QuestCompleted = Schema.TaggedStruct("QuestCompleted", { quest: Quest });
+/** A backpack item was committed with the change that caused it (ADR 019). */
+const BackpackItemRecorded = Schema.TaggedStruct("BackpackItemRecorded", { item: BackpackItem });
+/** A backpack item was claimed, delivered, acknowledged, processed, put back, resolved or failed. */
+const BackpackItemChanged = Schema.TaggedStruct("BackpackItemChanged", { item: BackpackItem });
 /**
  * A piece of a streaming reply. Transient: its text reaches durable state through the message (ADR 013).
  * `offset` is where the piece starts in the message's text, in UTF-16 code units, so a client
@@ -101,6 +108,8 @@ export const JournaledEvent = Schema.Union([
   HandedOff,
   TaskCompleted,
   QuestCompleted,
+  BackpackItemRecorded,
+  BackpackItemChanged,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -126,6 +135,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   GrantCreated: 1,
   GrantRevoked: 1,
   TaskCreated: 1,
+  // A change's `wait` was added with a default, compatibly.
   TaskStateChanged: 1,
   QuestStarted: 1,
   CheckpointRecorded: 1,
@@ -135,6 +145,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   HandedOff: 1,
   TaskCompleted: 1,
   QuestCompleted: 1,
+  BackpackItemRecorded: 1,
+  BackpackItemChanged: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */

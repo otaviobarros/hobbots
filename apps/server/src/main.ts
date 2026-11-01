@@ -17,6 +17,7 @@ import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
+  BackpackLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -38,6 +39,7 @@ import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { IPv6Loopback } from "./loopback.ts";
+import { QuietRoutineReads } from "./request-log.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
@@ -66,6 +68,7 @@ const ServerLive = Layer.unwrap(
       GrantRepositoryLive,
       TaskRepositoryLive,
       TaskToolCallsLive,
+      BackpackLive,
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
@@ -154,6 +157,7 @@ const ServerLive = Layer.unwrap(
             EventStreamRoute,
             WebClientRoutes(config.webDir),
             LoopbackHostOnly,
+            QuietRoutineReads,
             HttpRouter.cors({ allowedOrigins: config.allowedOrigins }),
           ),
         ),

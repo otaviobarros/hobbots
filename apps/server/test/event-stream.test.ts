@@ -169,6 +169,40 @@ describe("event stream", () => {
     }
   });
 
+  it("[TC-DP-053] reports a thread working exactly while its reply is in progress, not while its runtime shuts down", async () => {
+    const result = await run((turn) =>
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const thread = yield* chat.createThread(HOB_ID);
+        yield* chat.sendPrompt(thread.id, "hello");
+        // Working as soon as the streaming reply is announced, before the runtime says anything.
+        const started = yield* chat.workingThreads;
+        yield* Queue.offerAll(turn, [
+          { _tag: "SessionStarted", sessionId: "s1", billing: "fake" },
+          { _tag: "Completed", sessionId: "s1", text: "Hello" },
+        ]);
+        const repo = yield* HobbotsRepository;
+        yield* Effect.suspend(() =>
+          repo
+            .listMessages(thread.id)
+            .pipe(
+              Effect.flatMap((list) =>
+                list.some((m) => m.role === "assistant" && m.status === "complete")
+                  ? Effect.void
+                  : Effect.fail("not yet" as const),
+              ),
+            ),
+        ).pipe(Effect.retry({ schedule: Schedule.spaced("5 millis"), times: 400 }), Effect.orDie);
+        // The reply completed, but the runtime's stream has not ended, so the turn is still running.
+        return { threadId: thread.id, started, running: yield* chat.activeThreads, ended: yield* chat.workingThreads };
+      }),
+    );
+
+    expect(result.started).toEqual([result.threadId]);
+    expect(result.running).toEqual([result.threadId]);
+    expect(result.ended).toEqual([]);
+  });
+
   // covers CH-004, PE-002
   it("[TC-CH-110] replays a reply's tool steps to a client that reconnects after they ran", async () => {
     const result = await run((turn) =>

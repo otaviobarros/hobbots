@@ -10,6 +10,7 @@ import {
 } from "@hobbots/domain";
 import { Context, Data, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
+import { recordBackpackItems } from "./backpack-rows.ts";
 
 /** Where the journal stands: its epoch (new for every fresh database) and the last committed sequence. */
 export interface JournalHead {
@@ -83,6 +84,9 @@ const correlationOf = (event: JournaledEventType): RowCorrelation => {
     case "GrantCreated":
     case "GrantRevoked":
       return { ...NONE, agentId: event.grant.agentId };
+    case "BackpackItemRecorded":
+    case "BackpackItemChanged":
+      return { ...NONE, agentId: event.item.recipientId, threadId: event.item.threadId, taskId: event.item.taskId };
     case "MessageUpserted":
     case "MessageQueued":
       return { ...NONE, threadId: event.message.threadId, messageId: event.message.id };
@@ -178,7 +182,8 @@ class NothingChanged extends Data.TaggedError("NothingChanged") {}
 /**
  * Runs a change in one transaction with the journal sequences its events take, from `first`,
  * reserved before it writes, and appends its events before commit: the journal is the outbox
- * (ADR 013). A change that returns null wrote nothing, and rolls back.
+ * (ADR 013). The backpack items its events call for are recorded in the same transaction, with
+ * their own events after the change's (ADR 019). A change that returns null wrote nothing, and rolls back.
  */
 export const makeJournaled =
   (sql: SqlClient.SqlClient) =>
@@ -199,7 +204,10 @@ export const makeJournaled =
       if (change.events.length !== count) {
         return yield* Effect.die(new Error(`Reserved ${count} journal sequences for ${change.events.length} events`));
       }
-      return { value: change.value, entries: yield* journal.append(first, change.events) };
+      // The backpack items the change calls for take the sequences after its own (ADR 019).
+      const items = yield* recordBackpackItems(sql, change.events, first + count);
+      if (items.length > 0) yield* journal.reserve(items.length);
+      return { value: change.value, entries: yield* journal.append(first, [...change.events, ...items]) };
     }).pipe(
       sql.withTransaction,
       Effect.map(Option.some),
@@ -228,8 +236,12 @@ export const makeJournaledChange =
     return Effect.gen(function* () {
       const first = yield* journal.lock;
       const change = yield* write(first);
-      yield* journal.advance(first, change.events.length);
-      return { value: change.value, entries: yield* journal.append(first, change.events) };
+      const events = [
+        ...change.events,
+        ...(yield* recordBackpackItems(sql, change.events, first + change.events.length)),
+      ];
+      yield* journal.advance(first, events.length);
+      return { value: change.value, entries: yield* journal.append(first, events) };
     }).pipe(
       sql.withTransaction,
       Effect.catchIf(
@@ -324,10 +336,3 @@ export class EventJournal extends Context.Service<
     }),
   );
 }
-
-/** Oldest first, by `created_at` then `id`; text compares byte by byte on both dialects. */
-export const oldestFirst = (sql: SqlClient.SqlClient) =>
-  sql.onDialectOrElse({
-    pg: () => sql.literal(`created_at COLLATE "C", id COLLATE "C"`),
-    orElse: () => sql.literal("created_at, id"),
-  });

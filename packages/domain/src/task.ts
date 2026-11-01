@@ -165,3 +165,11 @@ export const ancestorsOf = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArra
   }
   return above;
 };
+
+/**
+ * The leads above a Task, nearest first: the owners of its ancestors other than its own owner.
+ * A question climbs this list, and reaches the user past its end; a member's reports go to the first.
+ */
+export const leadsAbove = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<AgentId> => [
+  ...new Set(ancestorsOf(task, tree).flatMap((each) => (each.ownerId === task.ownerId ? [] : [each.ownerId]))),
+];
