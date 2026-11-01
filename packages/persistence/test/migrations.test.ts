@@ -12,7 +12,7 @@ import hobTone from "../src/migrations/0014_hob_tone.ts";
 import hobPolicy from "../src/migrations/0015_hob_policy.ts";
 import threadBrains from "../src/migrations/0020_thread_brains.ts";
 import hobSignCommits from "../src/migrations/0021_hob_sign_commits.ts";
-import threadArchivedAt from "../src/migrations/0025_thread_archived_at.ts";
+import threadArchivedAt from "../src/migrations/0023_thread_archived_at.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -692,7 +692,7 @@ describe("0021_hob_sign_commits", () => {
   });
 });
 
-describe("0025_thread_archived_at", () => {
+describe("0023_thread_archived_at", () => {
   // covers CH-009, DP-003
   it("[TC-DP-040] keeps every existing thread live, and still reads thread events journaled before archiving", async () => {
     const before = {
@@ -708,7 +708,7 @@ describe("0025_thread_archived_at", () => {
         revision: 1,
       },
     };
-    const database = TestDatabaseAt(migrationsBefore("0025"));
+    const database = TestDatabaseAt(migrationsBefore("0023"));
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
