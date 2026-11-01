@@ -1,8 +1,10 @@
-import type { Agent, AgentId, TaskId, ThreadId } from "@hobbots/domain";
-import { useQuery } from "@tanstack/react-query";
+import type { Agent, AgentId, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { agentsQuery } from "../../api/queries.ts";
-import { threadTasksQuery } from "../../api/tasks.ts";
+import { taskTreeQuery, threadTasksQuery } from "../../api/tasks.ts";
+import { readStored, writeStored } from "../../lib/storage.ts";
 import { messages } from "./messages.ts";
 
 /** The trees of the Tasks this thread's requests started, empty while they load. */
@@ -34,4 +36,36 @@ export const useOpenTask = (hobId: AgentId, threadId: ThreadId) => {
       params: { hobId, threadId },
       search: taskId === undefined ? {} : { task: taskId },
     });
+};
+
+const PINS_KEY = "quest.pinned";
+
+/** The top Tasks you pinned, kept on this device, so their Quests stay in view in every thread. */
+export interface Pins {
+  readonly pinned: ReadonlyArray<TaskId>;
+  readonly toggle: (taskId: TaskId) => void;
+}
+
+export const usePins = (): Pins => {
+  const [pinned, setPinned] = useState<ReadonlyArray<TaskId>>(() => readStored<Array<TaskId>>(PINS_KEY, []));
+  const toggle = (taskId: TaskId) => {
+    const next = pinned.includes(taskId) ? pinned.filter((id) => id !== taskId) : [...pinned, taskId];
+    writeStored(PINS_KEY, next);
+    setPinned(next);
+  };
+  return { pinned, toggle };
+};
+
+/**
+ * The trees a thread follows: the Tasks its own requests started, and the pinned ones that started
+ * elsewhere, in the order they were pinned. A pinned Task the hub no longer has is left out.
+ */
+export const useFollowedTrees = (threadId: ThreadId | undefined, pinned: ReadonlyArray<TaskId>) => {
+  const thread = useThreadTrees(threadId);
+  const others = pinned.filter((id) => !thread.some((tree) => tree.tasks[0]?.id === id));
+  const elsewhere = useQueries({
+    queries: others.map((taskId) => ({ ...taskTreeQuery(taskId), select: (read: { tree: TaskTree }) => read.tree })),
+    combine: (results) => results.flatMap((result) => (result.data === undefined ? [] : [result.data])),
+  });
+  return { thread, elsewhere };
 };

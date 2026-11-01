@@ -8,7 +8,7 @@ import { HobSprite } from "../hob-sprite.tsx";
 import { enterSends } from "./enter-sends.ts";
 import { messages } from "./messages.ts";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
-import { type HobLookup, useHobLookup, useOpenTask, useThreadTrees } from "./use-work.ts";
+import { type HobLookup, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
 import { findTask, taskDetail, taskTitle } from "./work-model.ts";
 
 const copy = messages.drawer;
@@ -16,10 +16,23 @@ const copy = messages.drawer;
 /**
  * The drawer beside the chat that opens a Task or step (ADR 018): its brief, checkpoints, questions
  * and output, the Tasks under it, and a note that goes to the lead. The Task is in the address, so
- * a link opens it; Escape or Close shuts it.
+ * a link opens it; Escape or Close shuts it. A Task of a Quest pinned from another thread opens here
+ * too, and its note still goes to that Quest's lead.
  */
-export function TaskDrawer({ hobId, threadId, taskId }: { hobId: AgentId; threadId: ThreadId; taskId: TaskId }) {
-  const trees = useThreadTrees(threadId);
+export function TaskDrawer({
+  hobId,
+  threadId,
+  taskId,
+  pinned,
+}: {
+  hobId: AgentId;
+  threadId: ThreadId;
+  taskId: TaskId;
+  /** Pinned Tasks from other threads, which open here too. */
+  pinned: ReadonlyArray<TaskId>;
+}) {
+  const followed = useFollowedTrees(threadId, pinned);
+  const trees = [...followed.thread, ...followed.elsewhere];
   const hobs = useHobLookup();
   const open = useOpenTask(hobId, threadId);
   const heading = useRef<HTMLHeadingElement>(null);

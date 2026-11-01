@@ -1,7 +1,7 @@
-import type { ThreadTasksRead } from "@hobbots/api";
+import type { TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BUILD, blackFriday, COPY, QUILL, THREAD, task, tree } from "../test/quests.ts";
+import { BUILD, blackFriday, CAMPAIGN, COPY, QUILL, THREAD, task, tree } from "../test/quests.ts";
 import * as client from "./client.ts";
 import { startGeneration } from "./sync.ts";
 import { applyTaskEvent, taskKeys, threadTasksQuery } from "./tasks.ts";
@@ -51,6 +51,19 @@ describe("Task reads kept live", () => {
     const thread = queryClient.getQueryData<ThreadTasksRead>(taskKeys.thread(THREAD));
     expect(thread?.trees[0]?.tasks.find((each) => each.id === BUILD)?.state).toBe("active");
     expect(queryClient.getQueryData(["tasks", "elsewhere"])).toEqual({ untouched: true });
+  });
+
+  it("keeps a single tree read live too, such as a Quest pinned from another thread", () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData<TaskTreeRead>(taskKeys.tree(CAMPAIGN), { cursor: "1:1", tree: blackFriday() });
+    applyTaskEvent(queryClient, {
+      _tag: "TaskStateChanged",
+      task: task(COPY, { ownerId: QUILL, state: "failed", revision: 4 }),
+      attempt: null,
+      quest: null,
+    });
+    const pinned = queryClient.getQueryData<TaskTreeRead>(taskKeys.tree(CAMPAIGN));
+    expect(pinned?.tree.tasks.find((each) => each.id === COPY)?.state).toBe("failed");
   });
 
   it("reads again when a new sync generation began while the read was on its way", async () => {
