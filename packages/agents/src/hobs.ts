@@ -149,6 +149,17 @@ export class HobService extends Context.Service<
     /** Applies an edit as the hob's next configuration version; an edit that changes nothing adds none. */
     readonly update: (id: AgentId, payload: UpdateAgentPayload) => Effect.Effect<Agent, InvalidHob | AgentNotFound>;
     /**
+     * `update` with `check` run first and `then` after it, all under the hob's lock, so nothing else
+     * that takes the lock (a thread archived, a turn started) lands between them. A failed check
+     * stores nothing. Neither step may take the hob's lock itself.
+     */
+    readonly updateThen: <A, E>(
+      id: AgentId,
+      payload: UpdateAgentPayload,
+      check: Effect.Effect<void, E>,
+      then: (agent: Agent) => Effect.Effect<A, E>,
+    ) => Effect.Effect<A, E | InvalidHob | AgentNotFound>;
+    /**
      * Changes the hob's own folders, hidden shared folders or overrides as its next configuration
      * version, checked against the installation's current preset and shared folders (ADR 014).
      * A change that changes nothing adds no version.
@@ -173,25 +184,25 @@ export class HobService extends Context.Service<
       // a retirement publishes after it and a stale change cannot re-list a retired hob. Another
       // change may land between reading the hob and storing the next version; then `change` applies
       // again on top of that one, so both survive. `change` returns the hob unchanged for a no-op.
-      const nextVersion = <E>(id: AgentId, change: (agent: Agent) => Effect.Effect<Agent, E>) =>
-        admission.withHob(
-          id,
-          Effect.gen(function* () {
-            while (true) {
-              const current = yield* repo.findAgent(id);
-              if (Option.isNone(current)) return yield* new AgentNotFound({ agentId: id });
-              const next = yield* change(current.value);
-              if (next === current.value) return next;
-              const updated = yield* repo.updateAgentConfig(
-                new Agent({ ...next, configVersion: current.value.configVersion + 1 }),
-              );
-              if (Option.isSome(updated)) {
-                yield* bus.publish(updated.value.entries);
-                return updated.value.value;
-              }
+      // Runs under the hob's lock.
+      const storeVersion = <E>(id: AgentId, change: (agent: Agent) => Effect.Effect<Agent, E>) =>
+        Effect.gen(function* () {
+          while (true) {
+            const current = yield* repo.findAgent(id);
+            if (Option.isNone(current)) return yield* new AgentNotFound({ agentId: id });
+            const next = yield* change(current.value);
+            if (next === current.value) return next;
+            const updated = yield* repo.updateAgentConfig(
+              new Agent({ ...next, configVersion: current.value.configVersion + 1 }),
+            );
+            if (Option.isSome(updated)) {
+              yield* bus.publish(updated.value.entries);
+              return updated.value.value;
             }
-          }),
-        );
+          }
+        });
+      const nextVersion = <E>(id: AgentId, change: (agent: Agent) => Effect.Effect<Agent, E>) =>
+        admission.withHob(id, storeVersion(id, change));
 
       // A retry carries the same id and fields; the same id with other fields is another hob.
       const retried = (existing: Agent, payload: CreateAgentPayload) =>
@@ -222,13 +233,14 @@ export class HobService extends Context.Service<
         return inserted.value.value;
       });
 
-      const update = Effect.fn("HobService.update")(function* (id: AgentId, edit: UpdateAgentPayload) {
+      // The edit applied to the hob as it is stored now; the hob itself when it changes nothing.
+      const applyEdit = (edit: UpdateAgentPayload) => {
         // Taking a starter role brings its title.
         const payload =
           edit.role != null && edit.roleTitle === undefined
             ? { ...edit, roleTitle: starterRole(edit.role).title }
             : edit;
-        return yield* nextVersion(id, (agent) =>
+        return (agent: Agent) =>
           Effect.gen(function* () {
             if (editableFields.every((field) => payload[field] === undefined || payload[field] === agent[field])) {
               return agent;
@@ -246,9 +258,22 @@ export class HobService extends Context.Service<
             const invalidRole = checkRole(next);
             if (invalidRole !== undefined) return yield* invalidRole;
             return next;
-          }),
-        );
+          });
+      };
+
+      const update = Effect.fn("HobService.update")(function* (id: AgentId, edit: UpdateAgentPayload) {
+        return yield* nextVersion(id, applyEdit(edit));
       });
+
+      const updateThen = <A, E>(
+        id: AgentId,
+        edit: UpdateAgentPayload,
+        check: Effect.Effect<void, E>,
+        then: (agent: Agent) => Effect.Effect<A, E>,
+      ) =>
+        admission
+          .withHob(id, check.pipe(Effect.andThen(storeVersion(id, applyEdit(edit))), Effect.flatMap(then)))
+          .pipe(Effect.withSpan("HobService.updateThen"));
 
       const updatePolicy = Effect.fn("HobService.updatePolicy")(function* (
         id: AgentId,
@@ -303,7 +328,7 @@ export class HobService extends Context.Service<
         );
       });
 
-      return HobService.of({ create, update, updatePolicy });
+      return HobService.of({ create, update, updateThen, updatePolicy });
     }),
   );
 }

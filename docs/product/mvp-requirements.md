@@ -27,6 +27,7 @@ In the UI agents are called **hobs** ([ADR 008](../decisions/008-design.md)); th
 | CH-006 | Search thread titles and persisted messages. | Results link back to their owning agent/thread. |
 | CH-007 | Stop a turn without deleting its thread. | Cancellation request and confirmed outcome are distinguishable. |
 | CH-008 | Messages sent while a thread's reply runs, or while its hob is paused, wait in a durable per-thread queue. | Queued messages start one turn at a time in the order sent, also after a restart and once a paused hob wakes; each can be removed before it starts or sent now, which stops the running reply. |
+| CH-009 | Archive threads the user is done with, and restore them. | An archived thread leaves the hob's thread list, is still found by search and readable, and takes no new messages until restored; a thread with a running or queued reply or a pending approval cannot be archived until that work ends. |
 
 Thread forking with context snapshots is an open extension.
 

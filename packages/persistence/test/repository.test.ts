@@ -89,6 +89,46 @@ describe("HobbotsRepository", () => {
     expect(result.unfinished.map((m) => m.id)).toEqual(["a", "c"]);
   });
 
+  // covers CH-009, DP-003
+  it("[TC-DP-041] stores when a thread was archived and lists live and archived threads apart", async () => {
+    const thread = (id: string, archivedAt: string | null) =>
+      new Thread({ id: ThreadId.make(id), agentId, title: id, archivedAt, createdAt: now, updatedAt: now });
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(
+        new Agent({
+          id: agentId,
+          name: "Aldric",
+          roleTitle: "Guide",
+          runtime: "claude-code",
+          model: null,
+          effort: null,
+          instructions: "",
+          lookSeed: 1,
+          lookColor: "moss",
+          configVersion: 1,
+          createdAt: now,
+        }),
+      );
+      yield* repo.upsertThread(thread("live", null));
+      yield* repo.upsertThread(thread("older", "2026-10-29T00:00:00.000Z"));
+      yield* repo.upsertThread(thread("newer", "2026-10-30T00:00:00.000Z"));
+      // Restoring is the same write with no archived time.
+      yield* repo.upsertThread(thread("restored", "2026-10-31T00:00:00.000Z"));
+      yield* repo.upsertThread(thread("restored", null));
+      return {
+        live: (yield* repo.listThreads(agentId)).map((t) => t.id),
+        archived: (yield* repo.listArchivedThreads(agentId)).map((t) => [t.id, t.archivedAt]),
+      };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result.live).toEqual(["live", "restored"]);
+    expect(result.archived).toEqual([
+      ["newer", "2026-10-30T00:00:00.000Z"],
+      ["older", "2026-10-29T00:00:00.000Z"],
+    ]);
+  });
+
   // covers DP-003, AG-001
   it("[TC-DP-002] stores the full look seed range and orders ties the same on every database", async () => {
     const agent = (id: string, lookSeed: number) =>

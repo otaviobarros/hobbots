@@ -28,6 +28,7 @@ import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
 
 let handler: (request: Request) => Promise<Response>;
+let admission: typeof HobAdmission.Service;
 let dispose: () => Promise<void>;
 
 // A fresh database per test: the whole API over the test database, with the fake runtime.
@@ -56,7 +57,9 @@ beforeEach(() => {
         Layer.mergeAll(
           Persistence,
           EventBus.layer,
-          HobAdmission.layer,
+          Layer.effectDiscard(HobAdmission.use((held) => Effect.sync(() => (admission = held)))).pipe(
+            Layer.provideMerge(HobAdmission.layer),
+          ),
           NodeFolderChecks,
           FakeRuntimeLayer(),
           Layer.succeed(Installation, { app: "hobbots", installationId: "test", version: "0.0.0", dataDir: "/data" }),
@@ -127,5 +130,59 @@ describe("the search API", () => {
     expect((await search("")).body).toEqual([]);
     expect((await search("nothing here")).body).toEqual([]);
     expect((await search("x".repeat(201))).status).toBe(400);
+  });
+});
+
+describe("the archive API", () => {
+  // covers CH-009
+  it("[TC-CH-147] archives and restores over HTTP: archived threads listed apart, sends refused", async () => {
+    const agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+
+    const archived = await request("POST", `/api/threads/${thread.id}/archive`);
+    expect(archived.status).toBe(200);
+    expect(archived.body.archivedAt).toEqual(expect.any(String));
+    expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toEqual([]);
+    const listed = (await request("GET", `/api/agents/${agent.id}/threads?archived=true`)).body;
+    expect(listed.map((t: { id: string }) => t.id)).toEqual([thread.id]);
+
+    const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content: "More" });
+    expect(sent.status).toBe(409);
+    expect(sent.body).toMatchObject({ _tag: "ThreadArchived", threadId: thread.id });
+
+    const restored = await request("POST", `/api/threads/${thread.id}/restore`);
+    expect(restored.body.archivedAt).toBeNull();
+    expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toHaveLength(1);
+
+    await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "finish" });
+    const refused = await request("POST", `/api/threads/${thread.id}/archive`);
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ _tag: "ThreadArchiveRefused", reason: "hob-retired" });
+  });
+
+  // covers CH-009
+  it("[TC-CH-148] never changes the hob's default brain for a thread archived while the switch waits", async () => {
+    const agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const brain = { brain: { runtime: "claude-code", model: "fake-quick", effort: null }, makeDefault: true };
+    // While the hob's lock is held, the archive queues first and the switch after it.
+    const pending = await Effect.runPromise(
+      admission.withHob(
+        agent.id,
+        Effect.promise(async () => {
+          const archived = request("POST", `/api/threads/${thread.id}/archive`);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          const switched = request("PUT", `/api/threads/${thread.id}/brain`, brain);
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return { archived, switched };
+        }),
+      ),
+    );
+    expect((await pending.archived).status).toBe(200);
+    const switched = await pending.switched;
+    expect(switched.status).toBe(409);
+    expect(switched.body).toMatchObject({ _tag: "ThreadArchived" });
+    const after = (await request("GET", "/api/agents")).body[0];
+    expect([after.configVersion, after.model]).toEqual([agent.configVersion, agent.model]);
   });
 });

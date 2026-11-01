@@ -34,6 +34,28 @@ export class ThreadNotFound extends Schema.TaggedError<ThreadNotFound>()(
   { httpApiStatus: 404 },
 ) {}
 
+/**
+ * Why a thread cannot be archived or restored now. `reply-running`: a reply is running or a
+ * message waits in its queue. `approval-pending`: a tool call waits for the user's decision, which
+ * wins when both apply. `hob-retired`: a retired hob's threads stay as they are.
+ */
+export const ThreadArchiveRefusal = Schema.Literals(["reply-running", "approval-pending", "hob-retired"]);
+export type ThreadArchiveRefusal = typeof ThreadArchiveRefusal.Type;
+
+/** The thread was not archived or restored, for `reason`; nothing changed. */
+export class ThreadArchiveRefused extends Schema.TaggedError<ThreadArchiveRefused>()(
+  "ThreadArchiveRefused",
+  { threadId: ThreadId, reason: ThreadArchiveRefusal },
+  { httpApiStatus: 409 },
+) {}
+
+/** An archived thread is read-only: it takes no new messages, replies or brain switch until it is restored. */
+export class ThreadArchived extends Schema.TaggedError<ThreadArchived>()(
+  "ThreadArchived",
+  { threadId: ThreadId, archivedAt: Schema.String },
+  { httpApiStatus: 409 },
+) {}
+
 /** A message that is not waiting in the thread's queue: it already started, was removed, or is elsewhere. */
 export class MessageNotQueued extends Schema.TaggedError<MessageNotQueued>()(
   "MessageNotQueued",

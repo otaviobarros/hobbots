@@ -33,7 +33,10 @@ export class HobbotsRepository extends Context.Service<
      * when the hob's current version is no longer the one before it (another edit landed first).
      */
     readonly updateAgentConfig: (agent: Agent) => Effect.Effect<Option.Option<Committed<Agent>>>;
+    /** The hob's live threads, most recently active first; archived threads are left out. */
     readonly listThreads: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Thread>>;
+    /** The hob's archived threads, most recently archived first. */
+    readonly listArchivedThreads: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Thread>>;
     readonly findThread: (id: ThreadId) => Effect.Effect<Option.Option<Thread>>;
     readonly upsertThread: (thread: Thread) => Effect.Effect<Committed<Thread>>;
     readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;

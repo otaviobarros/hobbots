@@ -34,10 +34,12 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
       pause: ({ params }) => lifecycle.pause(params.agentId),
       wake: ({ params }) => lifecycle.wake(params.agentId),
       retire: ({ params, payload }) => lifecycle.retire(params.agentId, payload.activeWork),
-      threads: ({ params }) =>
+      threads: ({ params, query }) =>
         repo.findAgent(params.agentId).pipe(
           Effect.flatMap(foundAgent(params.agentId)),
-          Effect.flatMap(() => repo.listThreads(params.agentId)),
+          Effect.flatMap(() =>
+            query.archived === "true" ? repo.listArchivedThreads(params.agentId) : repo.listThreads(params.agentId),
+          ),
         ),
       createThread: ({ params }) => chat.createThread(params.agentId),
     });
@@ -61,8 +63,11 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
               Option.match({ onNone: () => Effect.fail(new ThreadNotFound({ threadId })), onSome: Effect.succeed }),
             ),
           );
-        yield* hobs.update(thread.agentId, brain);
-        return yield* chat.setBrain(threadId, null);
+        // One step under the hob's lock: an archived thread changes nothing, not even its hob's
+        // default, and no archive lands between the hob's edit and the thread following it.
+        return yield* hobs.updateThen(thread.agentId, brain, chat.checkBrainSwitch(threadId), () =>
+          chat.followHob(threadId),
+        );
       });
     return handlers.handleAll({
       messages: ({ params }) =>
@@ -80,6 +85,8 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
       interrupt: ({ params }) => chat.stop(params.threadId),
       continueReply: ({ params }) => chat.continueReply(params.threadId, params.messageId),
       setBrain: ({ params, payload }) => setBrain(params.threadId, payload),
+      archive: ({ params }) => chat.archive(params.threadId),
+      restore: ({ params }) => chat.restore(params.threadId),
     });
   }),
 );
