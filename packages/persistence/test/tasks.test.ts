@@ -778,6 +778,8 @@ describe("waits and Task tool calls", () => {
           at: later,
         });
         expect(tags(again.entries)).toEqual(["TaskStateChanged"]);
+        // The change carries the new wait, so a screen shows who the Task waits on without reading again.
+        expect(again.entries[0]?.payload).toMatchObject({ wait: { taskId: id, on: ["copy"], mode: "any" } });
         const tree = (yield* tasks.readTree(id)).pipe(Option.getOrThrow);
         expect(tree.waits).toEqual([expect.objectContaining({ taskId: id, on: ["copy"], mode: "any" })]);
         const outside = yield* Effect.flip(

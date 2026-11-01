@@ -1,5 +1,5 @@
-import type { ThreadTasksRead } from "@hobbots/api";
-import type { QuestionId, ThreadId } from "@hobbots/domain";
+import type { TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
+import type { QuestionId, TaskId, ThreadId } from "@hobbots/domain";
 import {
   type QueryClient,
   type QueryFunctionContext,
@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { syncState } from "./sync.ts";
-import { applyToThreadTrees, type TaskEvent } from "./task-trees.ts";
+import { applyToThreadTrees, applyToTree, type TaskEvent } from "./task-trees.ts";
 
 /**
  * Task reads (ADR 018), kept live by the journal. A read can land after an event it does
@@ -20,6 +20,7 @@ import { applyToThreadTrees, type TaskEvent } from "./task-trees.ts";
 export const taskKeys = {
   all: ["tasks"] as const,
   thread: (threadId: ThreadId) => ["tasks", "thread", threadId] as const,
+  tree: (taskId: TaskId) => ["tasks", "tree", taskId] as const,
 };
 
 interface Replay {
@@ -76,6 +77,18 @@ export const threadTasksQuery = (threadId: ThreadId) =>
     queryFn: synced(() => call((c) => c.tasks.threadTasks({ params: { threadId } })), applyToThread(threadId)),
   });
 
+const applyToTreeRead = (read: TaskTreeRead, event: TaskEvent): TaskTreeRead => {
+  const tree = applyToTree(read.tree, event);
+  return tree === read.tree ? read : { ...read, tree };
+};
+
+/** A Task and everything under it, such as a Quest pinned from another thread. */
+export const taskTreeQuery = (taskId: TaskId) =>
+  queryOptions({
+    queryKey: taskKeys.tree(taskId),
+    queryFn: synced(() => call((c) => c.tasks.tree({ params: { taskId } })), applyToTreeRead),
+  });
+
 /**
  * Applies a Task event to every cached Task read and keeps it for reads still on their way. Reads
  * not loaded yet are left alone; they get the event when they land.
@@ -92,7 +105,8 @@ export const applyTaskEvent = (client: QueryClient, event: TaskEvent) => {
 
 const applyToRead = (queryKey: ReadonlyArray<unknown>, read: unknown, event: TaskEvent): unknown => {
   const [, kind, id] = queryKey;
-  return kind === "thread" ? applyToThread(id as ThreadId)(read as ThreadTasksRead, event) : read;
+  if (kind === "thread") return applyToThread(id as ThreadId)(read as ThreadTasksRead, event);
+  return kind === "tree" ? applyToTreeRead(read as TaskTreeRead, event) : read;
 };
 
 /** Sends your answer to a question that reached you; the card shows it at once, before its event. */

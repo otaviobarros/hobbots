@@ -1,3 +1,4 @@
+import { type TaskId, TaskWait } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   ADA,
@@ -44,6 +45,21 @@ describe("applyToTree", () => {
     );
   });
 
+  it("keeps who a Task waits on live: a wait made or replaced after the read lands", () => {
+    const waiting = (on: ReadonlyArray<TaskId>, revision: number): TaskEvent => ({
+      _tag: "TaskStateChanged",
+      task: task(CAMPAIGN, { state: "waiting", revision }),
+      attempt: null,
+      quest: null,
+      wait: new TaskWait({ taskId: CAMPAIGN, on, mode: "all", createdAt: "2026-11-01T10:01:00.000Z" }),
+    });
+    const first = applyToTree(blackFriday(), waiting([COPY], 4));
+    expect(first.waits.map((each) => each.on)).toEqual([[COPY]]);
+    const replaced = applyToTree(first, waiting([COPY, BUILD], 6));
+    expect(replaced.waits.map((each) => each.on)).toEqual([[COPY, BUILD]]);
+    expect(applyToTree(replaced, waiting([BUILD], 5)).waits.map((each) => each.on)).toEqual([[COPY, BUILD]]);
+  });
+
   it("never moves a Task, its Attempt or a Question back to an older version", () => {
     const start = blackFriday();
     const done: TaskEvent = {
@@ -51,12 +67,14 @@ describe("applyToTree", () => {
       task: task(COPY, { ownerId: QUILL, state: "blocked", revision: 5 }),
       attempt: attempt(COPY, "completed"),
       quest: null,
+      wait: null,
     };
     const older: TaskEvent = {
       _tag: "TaskStateChanged",
       task: task(COPY, { ownerId: QUILL, state: "active", revision: 3 }),
       attempt: attempt(COPY, "running"),
       quest: null,
+      wait: null,
     };
     const next = [done, older].reduce(applyToTree, start);
     expect(next.tasks.find((each) => each.id === COPY)?.state).toBe("blocked");

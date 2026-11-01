@@ -1,5 +1,5 @@
 import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
-import type { Agent, ThreadId } from "@hobbots/domain";
+import type { Agent, AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -9,13 +9,26 @@ import { useActivity } from "../api/activity.ts";
 import { agentsQuery } from "../api/queries.ts";
 import { readStored, writeStored } from "../lib/storage.ts";
 import { HobSprite } from "./hob-sprite.tsx";
+import { QuestTab } from "./quest/quest-tab.tsx";
+import type { Pins } from "./quest/use-work.ts";
 import { Stars } from "./scene.tsx";
 
 const TABS = ["Quest", "Inbox", "Workshop"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Right panel of the chat workspace: Quest, Inbox and the live Workshop scene. */
-export function SidePanel({ hobId, threadId }: { hobId: string; threadId?: ThreadId | undefined }) {
+export function SidePanel({
+  hobId,
+  threadId,
+  taskId,
+  pins,
+}: {
+  hobId: AgentId;
+  threadId?: ThreadId | undefined;
+  /** The Task open in the drawer, marked in the Quest tab. */
+  taskId?: TaskId | undefined;
+  pins: Pins;
+}) {
   const [tab, setTab] = useState<Tab>(() => readStored<Tab>("layout.panelTab", "Quest"));
   const id = useId();
   const pick = (next: Tab) => {
@@ -53,12 +66,7 @@ export function SidePanel({ hobId, threadId }: { hobId: string; threadId?: Threa
         aria-labelledby={`${id}-${tab}`}
         className="min-h-0 flex-1 overflow-y-auto"
       >
-        {tab === "Quest" && (
-          <Empty title="No Quest in this thread">
-            When a hob splits work or asks other hobs for help, the Quest shows up here: who is on each task, what they
-            wait on, and how far it got. Quests arrive with the MVP.
-          </Empty>
-        )}
+        {tab === "Quest" && <QuestTab key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />}
         {tab === "Inbox" && (
           <Empty title="Nothing here yet">
             Questions, approvals, problems and results for this thread land here, each with its delivery state.
