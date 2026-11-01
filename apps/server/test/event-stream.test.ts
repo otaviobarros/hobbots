@@ -224,8 +224,8 @@ describe("event stream", () => {
     ]);
   });
 
-  // covers CH-004, CH-007
-  it("[TC-CH-114] keeps a tool step cut off by an interruption unfinished when Continue resumes the reply", async () => {
+  // covers CH-004, CH-007, EX-004
+  it("[TC-CH-114] keeps a tool step cut off by an interruption uncertain when Continue resumes the reply", async () => {
     const steps = await run((turn) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -268,9 +268,9 @@ describe("event stream", () => {
       }),
     );
 
-    expect(steps.interrupted.map((step) => [step.id, step.state])).toEqual([["t1", "unfinished"]]);
+    expect(steps.interrupted.map((step) => [step.id, step.state])).toEqual([["t1", "uncertain"]]);
     expect(steps.completed.map((step) => [step.id, step.state])).toEqual([
-      ["t1", "unfinished"],
+      ["t1", "uncertain"],
       ["t1@1", "done"],
     ]);
   });

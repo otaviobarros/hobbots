@@ -109,3 +109,24 @@ describe("buildBriefing", () => {
     expect(quoted.match(/^\*\*User:\*\*/gm)).toBeNull();
   });
 });
+
+describe("a briefing's uncertain tool calls", () => {
+  // covers EX-004, RT-001
+  it("[TC-EX-014] lists a call cut off while it ran even past the briefing's tool limit", () => {
+    const finished = Array.from({ length: BRIEFING_LIMITS.steps + 2 }, (_, i) => tool(`Ran step ${i}`, "done"));
+    const reply = message("assistant", "Pushing now", {
+      status: "interrupted",
+      steps: [
+        ...finished.slice(0, BRIEFING_LIMITS.steps),
+        tool("Running git push", "uncertain"),
+        ...finished.slice(BRIEFING_LIMITS.steps),
+      ],
+    });
+    const text =
+      buildBriefing({ kind: "new", messages: [message("user", "Ship it"), reply], checkpoint: null })?.text ?? "";
+    expect(text).toContain("Running git push (cut off while it ran, outcome unknown: check before running it again)");
+    // The finished calls past the limit are still only counted.
+    expect(text).toContain("; and 2 more");
+    expect(text).not.toContain(`Ran step ${BRIEFING_LIMITS.steps}`);
+  });
+});
