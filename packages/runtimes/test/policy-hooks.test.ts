@@ -27,7 +27,16 @@ import {
   type TurnApprovals,
   UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
-import { ApprovalId, EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
+import {
+  AgentId,
+  ApprovalId,
+  type ApprovalLifetime,
+  EMPTY_HOB_POLICY,
+  Grant,
+  GrantId,
+  type HobPolicy,
+  ruleOperation,
+} from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
@@ -216,13 +225,14 @@ describe("Claude Code tool calls under the policy hook", () => {
     };
     return { asked, approvals };
   };
-  const approve = (action: ApprovalAction) =>
+  const approve = (action: ApprovalAction, lifetime: ApprovalLifetime = "once") =>
     Effect.map(
       actionDigest(action),
       (digest): ApprovalOutcome => ({
         _tag: "Approved",
         actionDigest: digest,
         policyVersion: action.policyVersion,
+        lifetime,
       }),
     );
 
@@ -292,7 +302,12 @@ describe("Claude Code tool calls under the policy hook", () => {
     let round = 0;
     const changed = approvalsAnswering((action) =>
       ++round === 1
-        ? Effect.succeed({ _tag: "Approved", actionDigest: "other", policyVersion: action.policyVersion })
+        ? Effect.succeed({
+            _tag: "Approved",
+            actionDigest: "other",
+            policyVersion: action.policyVersion,
+            lifetime: "once",
+          })
         : approve(action),
     );
     const again = await askedCall(changed.approvals);
@@ -332,6 +347,107 @@ describe("Claude Code tool calls under the policy hook", () => {
     await hook("t2", "rm -rf build");
     expect(await canUseTool("Bash", { command: "rm -rf /" }, options("t2"))).toMatchObject({ behavior: "deny" });
     expect(asked).toHaveLength(1);
+  });
+
+  /** The saved grants an Always approval of `action` makes. */
+  const grantsFor = (action: ApprovalAction) =>
+    action.rules.map(
+      (rule, i) =>
+        new Grant({
+          id: GrantId.make(`grant-${i}`),
+          agentId: AgentId.make("hob-1"),
+          operation: ruleOperation(rule),
+          rule,
+          lifetime: "always",
+          questId: null,
+          approvalId: null,
+          grantedBy: "user",
+          createdAt: "2026-11-01T00:00:00.000Z",
+          expiresAt: null,
+          lastUsedAt: null,
+          revokedAt: null,
+          revokedBy: null,
+          revokeReason: null,
+        }),
+    );
+
+  /** Runs `rm -rf build` through every hook as Claude Code would, with what the hob is told after it ran. */
+  const deleteCall = async (approvals: TurnApprovals, outcome: "success" | "failure" = "success") => {
+    const turn = toolTurn(access(), "on");
+    if (turn === null) throw new Error("expected a tool turn");
+    const { hooks, canUseTool } = policyHooks(engine, turn, () => {}, approvals);
+    const signal = new AbortController().signal;
+    const input = { command: "rm -rf build" };
+    const base = { session_id: "s", transcript_path: "", cwd: project, tool_name: "Bash", tool_input: input };
+    const hook = (event: string, fields: Record<string, unknown> = {}) =>
+      ({ ...base, tool_use_id: "t1", hook_event_name: event, ...fields }) as HookInput;
+    const pre = await hooks.PreToolUse?.[0]?.hooks[0]?.(hook("PreToolUse"), "t1", { signal });
+    expect(pre).toMatchObject({ hookSpecificOutput: { permissionDecision: "ask" } });
+    const result = await canUseTool("Bash", input, { signal, toolUseID: "t1" } as Parameters<typeof canUseTool>[2]);
+    if (result?.behavior !== "allow") return { result, note: undefined };
+    const event = outcome === "success" ? "PostToolUse" : "PostToolUseFailure";
+    const post = await (outcome === "success" ? hooks.PostToolUse : hooks.PostToolUseFailure)?.[0]?.hooks[0]?.(
+      hook(event, { tool_response: "", error: "x" }),
+      "t1",
+      { signal },
+    );
+    const note = (post as { hookSpecificOutput?: { additionalContext?: string } }).hookSpecificOutput
+      ?.additionalContext;
+    return { result, note };
+  };
+
+  // covers PE-003
+  it("[#282] tells the hob, with the result, that the user approved the call and for how long", async () => {
+    const once = await deleteCall(approvalsAnswering(approve).approvals);
+    expect(once.result).toMatchObject({ behavior: "allow" });
+    expect(once.note).toContain("approval request for this call");
+    expect(once.note).toContain("just this once");
+    // A failed call was still approved.
+    expect((await deleteCall(approvalsAnswering(approve).approvals, "failure")).note).toContain("just this once");
+    // Approving always saves grants first, and they answer the call: it is still the user's approval.
+    let saved: ReadonlyArray<Grant> = [];
+    const always: TurnApprovals = {
+      ...approvalsAnswering((action) => {
+        saved = grantsFor(action);
+        return approve(action, "always");
+      }).approvals,
+      grants: Effect.suspend(() => Effect.succeed(saved)),
+    };
+    expect(saved).toEqual([]);
+    const first = await deleteCall(always);
+    expect(saved.length).toBeGreaterThan(0);
+    expect(first.result).toMatchObject({ behavior: "allow" });
+    expect(first.note).toContain("approved calls like it always");
+  });
+
+  // covers PE-003
+  it("[#282] tells the hob when an approval the user saved earlier let the call run without asking", async () => {
+    const { asked, approvals } = approvalsAnswering(approve);
+    await deleteCall(approvals);
+    const action = asked[0];
+    if (action === undefined) throw new Error("expected an approval request");
+    const granted = await deleteCall({ ...approvals, grants: Effect.succeed(grantsFor(action)) });
+    expect(asked).toHaveLength(1);
+    expect(granted.result).toMatchObject({ behavior: "allow" });
+    expect(granted.note).toContain("an approval the user saved earlier covers it");
+    // A call the policy allows on its own comes back without a note.
+    const turn = toolTurn(access(), "on");
+    if (turn === null) throw new Error("expected a tool turn");
+    const { hooks } = policyHooks(engine, turn, () => {}, approvals);
+    const signal = new AbortController().signal;
+    const input = { file_path: join(project, "a.ts") };
+    const base = { session_id: "s", transcript_path: "", cwd: project, tool_name: "Edit", tool_input: input };
+    await hooks.PreToolUse?.[0]?.hooks[0]?.(
+      { ...base, tool_use_id: "t2", hook_event_name: "PreToolUse" } as HookInput,
+      "t2",
+      { signal },
+    );
+    const post = await hooks.PostToolUse?.[0]?.hooks[0]?.(
+      { ...base, tool_use_id: "t2", hook_event_name: "PostToolUse", tool_response: "" } as HookInput,
+      "t2",
+      { signal },
+    );
+    expect(post).toEqual({});
   });
 
   // covers PE-005

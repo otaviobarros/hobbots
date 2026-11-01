@@ -19,6 +19,7 @@ import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
 import {
+  APPROVAL_NOTE,
   brainOptions,
   type ClaudeCodeConfig,
   claudeCandidates,
@@ -470,5 +471,15 @@ describe("the sandbox note", () => {
     expect(turnInstructions("", true)).toBe(SANDBOX_NOTE);
     expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
     expect(SANDBOX_NOTE).toContain("could not write config file .git/config: Operation not permitted");
+  });
+});
+
+describe("the approval note", () => {
+  // covers PE-003
+  it("[#282] tells a turn that can ask the user that it never sees the request, and no other turn", () => {
+    expect(turnInstructions("Be brief.", false, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}`);
+    expect(turnInstructions("Be brief.", true, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}\n\n${SANDBOX_NOTE}`);
+    expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
+    expect(APPROVAL_NOTE).toContain("you do not");
   });
 });
