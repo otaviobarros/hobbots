@@ -1,6 +1,6 @@
 # Security standards
 
-Rules for permissions and authority. Read the [permissions contract](../architecture/permissions.md) and [ADR 014](../decisions/014-tool-policy-and-enforcement.md) before you change them.
+Rules for permissions, authority and untrusted input. Read the [permissions contract](../architecture/permissions.md) and [ADR 014](../decisions/014-tool-policy-and-enforcement.md) before you change them.
 
 ### STD-SEC-001 Hobs default to Trusted Workspace autonomy
 
@@ -33,3 +33,18 @@ The Hobbots MCP tools never grant approvals, manage credentials, delete records 
 - **Why:** a hob must not approve its own requests or raise its own authority. The [permissions contract](../architecture/permissions.md) lists the exclusions.
 - **Enforced by:** deciding approvals and revoking grants require a user session that only the hub's user-session middleware provides, and a test fails when other code names it (`[TC-PE-112]`); review.
 - **Applies to:** the Hobbots MCP server.
+
+### STD-SEC-005 Patterns on untrusted text run in linear time
+
+A regular expression that reads text from outside the code, such as a hob's tool input, a model's output, a Git remote, a file or an HTTP answer, must not backtrack. Two repeated parts that can match the same characters next to each other, such as `/\/+$/`, `/\s*x?\s*$/` or `(a+)+`, take polynomial or exponential time on a long run of those characters. Cut ends with string methods (`endsWith`, `slice`, `trim`, a loop) instead, and test a pattern on a trimmed value so no two runs of spaces meet.
+
+```ts
+// ❌ quadratic on a remote ending in many slashes
+const trimmed = remote.replace(/\/+$/, "");
+// ✅ linear
+const trimmed = trimTrailingSlashes(remote);
+```
+
+- **Why:** one crafted string can stall the hub or the browser for every hob and person on it.
+- **Enforced by:** CodeQL code scanning on every pull request (`js/polynomial-redos`, `js/redos`) and review.
+- **Applies to:** all code.

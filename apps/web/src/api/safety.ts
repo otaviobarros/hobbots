@@ -7,6 +7,7 @@ import {
   ruleEnforcement,
   type SafetyPreset,
   type SandboxState,
+  trimTrailingSlashes,
 } from "@hobbots/domain";
 
 /**
@@ -146,7 +147,7 @@ export const ruleColor = (answer: RuleAnswer) =>
 
 /** A folder's last part for its row; the root folder keeps its slash. */
 export const folderName = (folder: string): string => {
-  const trimmed = folder.replace(/\/+$/, "");
+  const trimmed = trimTrailingSlashes(folder);
   return trimmed === "" ? "/" : (trimmed.split("/").pop() ?? trimmed);
 };
 

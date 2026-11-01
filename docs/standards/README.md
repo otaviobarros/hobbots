@@ -17,7 +17,7 @@ grep -rn "### STD-REACT-004" docs/standards
 | `STD-DUP` | Reuse, dead code and duplication | [duplication.md](duplication.md) |
 | `STD-EFFECT` | Backend code with Effect | [effect.md](effect.md) |
 | `STD-DATA` | Durable state and SQL | [data.md](data.md) |
-| `STD-SEC` | Permissions and authority | [security.md](security.md) |
+| `STD-SEC` | Permissions, authority and untrusted input | [security.md](security.md) |
 | `STD-REACT` | React state, components and hooks | [react.md](react.md) |
 | `STD-UI` | Styling, design and accessibility | [ui.md](ui.md) |
 | `STD-I18N` | Internationalization | [i18n.md](i18n.md) |
@@ -92,6 +92,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-SEC-002 | Permissions are enforced at real boundaries | Active |
 | STD-SEC-003 | Delegation never widens authority | Active |
 | STD-SEC-004 | Hobbots MCP controls exclude administrative powers | Active |
+| STD-SEC-005 | Patterns on untrusted text run in linear time | Active |
 | STD-REACT-001 | Server state comes only from query hooks | Active |
 | STD-REACT-002 | Route-level state lives in the URL | Active |
 | STD-REACT-003 | Local UI state stays local | Active |

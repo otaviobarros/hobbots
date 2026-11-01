@@ -3,7 +3,9 @@ import remend from "remend";
 import { unified } from "unified";
 
 // A table's delimiter row, such as `| --- | :-: |` or `--- | ---`: only pipes, dashes, colons and spaces.
-const DELIMITER_ROW = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+// Tested on a trimmed line, so no two runs of spaces meet and the pattern stays linear (STD-SEC-005).
+const DELIMITER_ROW = /^\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?$/;
+const isDelimiterRow = (line: string) => DELIMITER_ROW.test(unquoted(line).trim());
 // The start of a delimiter row still arriving, such as `  `, `-` or `--- | :-`, after any quote marks.
 const DELIMITER_START = /^[\s|:-]*$/;
 // A table may sit inside a quote, so its rows can start with `>`.
@@ -59,7 +61,7 @@ export const holdBackPartialTable = (text: string): string => {
   let start = end;
   while (start > 0 && tableLine(start - 1)) start -= 1;
   const block = lines.slice(start, end);
-  if (block.length > 0 && !block.some((line) => DELIMITER_ROW.test(unquoted(line)))) lines.splice(start, end - start);
+  if (block.length > 0 && !block.some((line) => isDelimiterRow(line))) lines.splice(start, end - start);
   return lines.join("\n");
 };
 
