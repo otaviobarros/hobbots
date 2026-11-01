@@ -2,8 +2,8 @@
 
 - **Date:** 2026-11-01
 - **Issue:** [#257](https://github.com/otaviobarros/hobbots/issues/257)
-- **Pull request:** not yet opened
-- **Commit:** not yet on `main` (ran on the pull request branch, on top of `ca45e4a`)
+- **Pull request:** [#299](https://github.com/otaviobarros/hobbots/pull/299)
+- **Commit:** not yet on `main` (ran on the pull request branch at `0cfef05`)
 - **Setup:** Automated only, with the fake runtime, which writes each reply word by word and decides scripted tool calls with the hub's policy engine. Linux x86_64, Node 22.23.4. The hub-level cases go through the HTTP API with the hub's own composition (setup, policy engine, approvals and search) and ran on SQLite in memory and on PostgreSQL 16; CI runs them on SQLite and PostgreSQL 18. The browser cases ran with Playwright 1.64.1 and Chromium 153 against a hub from source on a SQLite file.
 - **Result:** Passed. An archived thread leaves the hob's list, is found in the Archived list and by search, opens read-only and comes back whole on Restore, and archiving is refused while a reply runs or an approval waits, without interrupting either.
 
