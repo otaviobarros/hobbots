@@ -119,7 +119,9 @@ test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and ope
   };
   const thread = await call<{ readonly id: string }>("POST", `/agents/${ids.aldric}/threads`);
   campaign(ids, thread.id);
-  const questThread = new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}$`);
+  // Every link opens Aldric's thread, with the drawer on the Task it names.
+  const questThread = (task: string) => new RegExp(`/hobs/${ids.aldric}/threads/${thread.id}\\?task=${task}$`);
+  const drawer = (brief: string) => page.getByRole("complementary", { name: `${brief}, Task details` });
 
   await page.goto(hub.url);
   const quests = page.getByRole("region", { name: "Quests in progress" });
@@ -128,7 +130,8 @@ test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and ope
   await expect(entry).toContainText(/Quill\s*On Aldric's quest\s*Working/);
   await expect(entry).toContainText(/Ada\s*On Aldric's quest\s*Not started/);
   await entry.click();
-  await expect(page).toHaveURL(questThread);
+  await expect(page).toHaveURL(questThread("campaign"));
+  await expect(drawer("Brief for campaign")).toBeVisible();
 
   await page.goto(`${hub.url}/#/hobs/${ids.quill}`);
   const panel = page.getByRole("navigation", { name: "Hobs and threads" });
@@ -142,16 +145,19 @@ test("[TC-UX-020] Home and Quill's panel show her Task on Aldric's quest and ope
   // Quill's work is not one of her threads.
   expect(await call<ReadonlyArray<unknown>>("GET", `/agents/${ids.quill}/threads`)).toEqual([]);
   await work.click();
-  await expect(page).toHaveURL(questThread);
+  await expect(page).toHaveURL(questThread("copy"));
+  await expect(drawer("Brief for copy")).toBeVisible();
 
   // Ada leads Pip's nested Quest, but it is followed in Aldric's thread, so the link opens his chat.
   const nested = panel.getByRole("link", { name: "Pip is on Ada's quest, Working. Open the Quest" });
   await nested.click();
-  await expect(page).toHaveURL(questThread);
+  await expect(page).toHaveURL(questThread("keywords"));
+  await expect(drawer("Brief for keywords")).toBeVisible();
   await expect(page.getByRole("main", { name: "Chat" }).locator("header")).toContainText("Aldric");
   await page.goto(hub.url);
   const keywords = quests.getByRole("link", { name: /Landing page keywords/ });
   await expect(keywords).toContainText(/Pip\s*On Ada's quest\s*Working/);
   await keywords.click();
-  await expect(page).toHaveURL(questThread);
+  await expect(page).toHaveURL(questThread("build"));
+  await expect(drawer("Brief for build")).toBeVisible();
 });
