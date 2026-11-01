@@ -32,6 +32,13 @@ export const hobState = (
 };
 
 /**
+ * A hob with a request waiting for the user needs you, whatever its threads are doing; a paused
+ * hob stays paused, since its lifecycle comes first.
+ */
+export const withRequests = (state: HobState, waiting: boolean): HobState =>
+  waiting && state !== "paused" ? "needs-you" : state;
+
+/**
  * One thread's state for the chat header. The hob's lifecycle wins here too, so the header agrees
  * with the rail and Home while a reply started before the pause finishes.
  */

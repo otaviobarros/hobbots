@@ -120,6 +120,37 @@ describe("ApprovalRepository", () => {
   });
 });
 
+describe("ApprovalRepository.listRecent", () => {
+  // covers PE-003, UX-005
+  it("[TC-IN-001] lists every pending request and only the most recent closed ones, oldest first", async () => {
+    const at = (minute: number) => `2026-10-31T00:${String(minute).padStart(2, "0")}:00.000Z`;
+    const listed = await Effect.gen(function* () {
+      const approvals = yield* ApprovalRepository;
+      yield* seed;
+      // An old pending request stays listed however many closed ones came after it.
+      yield* approvals.insert(new ApprovalRequest({ ...request("p-old"), createdAt: at(1) }));
+      for (const minute of [2, 3, 4, 5]) {
+        const inserted = yield* approvals.insert(
+          new ApprovalRequest({ ...request(`c${minute}`), createdAt: at(minute) }),
+        );
+        yield* approvals.resolve(
+          new ApprovalRequest({ ...inserted.value, state: minute % 2 === 0 ? "expired" : "denied", decidedAt: at(9) }),
+          "pending",
+        );
+      }
+      yield* approvals.insert(new ApprovalRequest({ ...request("p-new"), createdAt: at(6) }));
+      return yield* approvals.listRecent(2);
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(listed.map((a) => [a.id, a.state])).toEqual([
+      ["p-old", "pending"],
+      ["c4", "expired"],
+      ["c5", "denied"],
+      ["p-new", "pending"],
+    ]);
+  });
+});
+
 const grantFor = (approvalId: string, id: string) =>
   new Grant({
     id: GrantId.make(id),

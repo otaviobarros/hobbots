@@ -58,23 +58,6 @@ function Panel({
   );
 }
 
-export function InboxPage() {
-  return (
-    <Page
-      icon="Inbox"
-      title="Inbox"
-      intro="Questions, approvals, problems and results from every hob, grouped by Quest."
-    >
-      <Panel label="Needs you">
-        <p className="m-0 text-secondary-text">
-          Nothing needs you. Approvals arrive with the MVP: you will see the exact action, who asked, the risk, and pick
-          how long your answer lasts (just this once, for this Quest, or always for this site).
-        </p>
-      </Panel>
-    </Page>
-  );
-}
-
 export function UsagePage() {
   return (
     <Page icon="Usage" title="Usage" intro="One potion per connected AI plan, and who used what.">

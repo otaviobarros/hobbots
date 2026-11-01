@@ -168,3 +168,7 @@ export const syncedMessages = (
 
 export const syncedApprovals = (threadId: ThreadId, fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
   synced(fetch, "approval", (approval) => approval.threadId === threadId);
+
+/** The Inbox's requests from every thread. */
+export const syncedInbox = (fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
+  synced(fetch, "approval", () => true);

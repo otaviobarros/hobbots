@@ -1,7 +1,7 @@
 import type { ApprovalDecision, ApprovalRequest, ThreadId } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
-import { newer, recordApproval, syncedApprovals } from "./sync.ts";
+import { newer, recordApproval, syncedApprovals, syncedInbox } from "./sync.ts";
 
 export const approvalsKey = (threadId: ThreadId) => ["threads", threadId, "approvals"] as const;
 
@@ -15,13 +15,10 @@ export const approvalsQuery = (threadId: ThreadId) =>
 /** Keeps the newer version of a request in its thread's list, adding it when it is new. */
 export const storeApproval = (queryClient: QueryClient, approval: ApprovalRequest) => {
   recordApproval(queryClient, approval);
-  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(approval.threadId), (old) => {
-    if (old === undefined) return old;
-    const known = old.find((existing) => existing.id === approval.id);
-    if (known === undefined) return [...old, approval];
-    const kept = newer(known, approval);
-    return kept === known ? old : old.map((existing) => (existing === known ? kept : existing));
-  });
+  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(approval.threadId), (old) =>
+    withApproval(old, approval),
+  );
+  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(inboxKey, (old) => withApproval(old, approval));
 };
 
 export interface Decision {
@@ -54,4 +51,21 @@ export const useDecideApproval = (approval: ApprovalRequest) => {
     onSuccess: (decided) => storeApproval(queryClient, decided),
     onError: () => queryClient.invalidateQueries({ queryKey: approvalsKey(approval.threadId), exact: true }),
   });
+};
+
+/** The Inbox's requests from every thread: every pending one and the most recent closed ones, oldest first. */
+const inboxKey = ["approvals"] as const;
+
+export const inboxQuery = queryOptions({
+  queryKey: inboxKey,
+  queryFn: syncedInbox(() => call((c) => c.approvals.list())),
+});
+
+/** A cached list with the newer version of the request, added when it is new. */
+const withApproval = (old: ReadonlyArray<ApprovalRequest> | undefined, approval: ApprovalRequest) => {
+  if (old === undefined) return old;
+  const known = old.find((existing) => existing.id === approval.id);
+  if (known === undefined) return [...old, approval];
+  const kept = newer(known, approval);
+  return kept === known ? old : old.map((existing) => (existing === known ? kept : existing));
 };

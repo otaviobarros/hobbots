@@ -38,6 +38,8 @@ export class ApprovalRepository extends Context.Service<
     /** The thread's requests, oldest first. */
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     readonly listPending: Effect.Effect<ReadonlyArray<ApprovalRequest>>;
+    /** Every pending request and the `limit` most recently asked closed ones, oldest first. */
+    readonly listRecent: (limit: number) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     /** Stores a new request with its ApprovalRequested event. */
     readonly insert: (approval: ApprovalRequest) => Effect.Effect<Committed<ApprovalRequest>>;
     /**
@@ -92,6 +94,9 @@ export interface ApprovalDecisionInput {
 
 /** How long a pending request stays open at most, while its turn waits (ADR 015). */
 export const APPROVAL_TTL = Duration.hours(24);
+
+/** How many decided and expired requests the Inbox lists beside the pending ones. */
+export const INBOX_HISTORY = 200;
 
 /** A turn's approvals, and the way to close them once the turn has ended. */
 export interface TurnApprovalsHandle {
@@ -191,6 +196,8 @@ export class ApprovalService extends Context.Service<
     /** Expires the hob's pending requests, as when it retires: a retired hob is never approved anything. */
     readonly expireForAgent: (agentId: AgentId) => Effect.Effect<void>;
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
+    /** The Inbox's requests (PE-003): every pending one and the most recent closed ones, oldest first. */
+    readonly listInbox: Effect.Effect<ReadonlyArray<ApprovalRequest>>;
   }
 >()("@hobbots/agents/ApprovalService") {
   static readonly layer = Layer.effect(
@@ -416,7 +423,13 @@ export class ApprovalService extends Context.Service<
           ),
         );
 
-      return ApprovalService.of({ forTurn, decide, expireForAgent, listForThread: repo.listForThread });
+      return ApprovalService.of({
+        forTurn,
+        decide,
+        expireForAgent,
+        listForThread: repo.listForThread,
+        listInbox: repo.listRecent(INBOX_HISTORY),
+      });
     }),
   );
 }
