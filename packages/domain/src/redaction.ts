@@ -80,12 +80,13 @@ const SHAPES: ReadonlyArray<SecretShape> = [
     pattern: /(?<prefix>\b[a-z][a-z0-9+.-]{0,30}:\/\/[^\s:/@]{1,256}:)(?<secret>[^\s@/]{1,256})(?=@)/gi,
   },
   // An environment-style assignment, as `env` or a `.env` file prints it: `GH_TOKEN=…`. A quoted
-  // value is taken to its closing quote, spaces included; an unquoted one to the next space. A value
+  // value is taken to its closing quote, spaces and escaped quotes (`\"`) included, or to the end of
+  // the line when it has none; an unquoted one to the next space. A value
   // that is a variable, a marker or a plain number, such as `MAX_TOKENS=100000`, is not a secret.
   {
     kind: "credential",
     pattern:
-      /(?<prefix>\b[A-Z0-9_]{0,64}(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_KEY|PRIVATE_KEY)[A-Z0-9_]{0,64}=)(?<secret>"(?!\d+")[^"\n$[][^"\n]{7,}"|'(?!\d+')[^'\n$[][^'\n]{7,}'|(?!\d+(?:\s|$))[^\s"'$[][^\s"']{7,})/g,
+      /(?<prefix>\b[A-Z0-9_]{0,64}(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_KEY|PRIVATE_KEY)[A-Z0-9_]{0,64}=)(?<secret>"(?!\d+")(?:[^"\\\n$[]|\\.)(?:[^"\\\n]|\\.){7,}(?:"|(?=\n)|$)|'(?!\d+')[^'\n$[][^'\n]{7,}(?:'|(?=\n)|$)|(?!\d+(?:\s|$))[^\s"'$[][^\s"']{7,})/g,
   },
 ];
 

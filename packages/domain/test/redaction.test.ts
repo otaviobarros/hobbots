@@ -81,6 +81,16 @@ describe("redactSecrets", () => {
       "DATABASE_PASSWORD=[redacted: credential] next",
     );
     expect(redactSecrets("DB_PASSWORD='ab cd ef gh' next")).toBe("DB_PASSWORD=[redacted: credential] next");
+    // An escaped quote does not end the value, and neither does a missing closing quote.
+    expect(redactSecrets('DATABASE_PASSWORD="correct\\"horse battery-staple" next')).toBe(
+      "DATABASE_PASSWORD=[redacted: credential] next",
+    );
+    expect(redactSecrets('DATABASE_PASSWORD="\\"quoted\\" and more secret" next')).toBe(
+      "DATABASE_PASSWORD=[redacted: credential] next",
+    );
+    expect(redactSecrets('API_TOKEN="cut off mid value\nnext line')).toBe(
+      "API_TOKEN=[redacted: credential]\nnext line",
+    );
     for (const text of ['API_TOKEN="$API_TOKEN"', `API_TOKEN="\${API_TOKEN}"`, 'MAX_TOKENS="100000000"']) {
       expect(redactSecrets(text)).toBe(text);
     }
