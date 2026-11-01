@@ -7,3 +7,4 @@ export * from "./repositories.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./sqlite.ts";
+export * from "./tasks.ts";

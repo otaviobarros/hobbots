@@ -1,0 +1,551 @@
+import { HobbotsRepository, type NewAttempt, type NewTask, TaskRepository } from "@hobbots/agents";
+import {
+  Agent,
+  AgentId,
+  ArtifactId,
+  AttemptId,
+  CheckpointId,
+  type Committed,
+  DEFAULT_QUEST_LIMITS,
+  DelegationId,
+  type EventEnvelope,
+  MilestoneId,
+  partyOf,
+  QuestId,
+  QuestionId,
+  TaskId,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
+import { Effect, Layer, Option } from "effect";
+import { SqlClient } from "effect/sql";
+import { describe, expect, it } from "vitest";
+import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive } from "../src/index.ts";
+import { TestDatabase } from "../src/testing.ts";
+
+const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, TaskRepositoryLive, EventJournal.layer).pipe(
+  Layer.provideMerge(TestDatabase),
+);
+const run = <A, E>(
+  effect: Effect.Effect<A, E, HobbotsRepository | TaskRepository | EventJournal | SqlClient.SqlClient>,
+) => effect.pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+const now = "2026-11-01T00:00:00.000Z";
+const later = "2026-11-01T01:00:00.000Z";
+const ALDRIC = AgentId.make("aldric");
+const QUILL = AgentId.make("quill");
+const ADA = AgentId.make("ada");
+const PIP = AgentId.make("pip");
+const threadId = ThreadId.make("t1");
+
+const seed = Effect.gen(function* () {
+  const repo = yield* HobbotsRepository;
+  for (const [id, name] of [
+    [ALDRIC, "Aldric"],
+    [QUILL, "Quill"],
+    [ADA, "Ada"],
+    [PIP, "Pip"],
+  ] as const) {
+    yield* repo.insertAgent(
+      new Agent({
+        id,
+        name,
+        roleTitle: "Guide",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        configVersion: 1,
+        createdAt: now,
+      }),
+    );
+  }
+  yield* repo.upsertThread(
+    new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+  );
+});
+
+// Each new Task is a second younger than the last, so oldest first is the order they were created in.
+let clock = 0;
+const newTask = (
+  id: string,
+  ownerId: AgentId,
+  parentId: string | null,
+  dependsOn: ReadonlyArray<string> = [],
+): NewTask => ({
+  id: TaskId.make(id),
+  ownerId,
+  parentId: parentId === null ? null : TaskId.make(parentId),
+  threadId,
+  brief: `Brief for ${id}`,
+  dependsOn: dependsOn.map((each) => TaskId.make(each)),
+  createdAt: new Date(Date.parse(now) + 1000 * ++clock).toISOString(),
+});
+
+const brief = (id: string) => ({
+  id: DelegationId.make(id),
+  brief: `Delegated ${id}`,
+  expectedOutput: null,
+  authority: { overrides: { push: "deny" as const }, folders: null },
+  timeoutMs: null,
+});
+
+const attempt = (id: string): NewAttempt => ({
+  id: AttemptId.make(id),
+  runtime: "claude-code",
+  sessionId: null,
+  configVersion: 1,
+  policyVersion: "r3-0123456789abcdef",
+  startedAt: now,
+});
+
+/** Aldric's campaign: a Quest with Quill drafting copy and Ada building the campaign once it exists. */
+const campaign = Effect.gen(function* () {
+  yield* seed;
+  const tasks = yield* TaskRepository;
+  yield* tasks.createTask({ task: newTask("campaign", ALDRIC, null), delegation: null, milestones: [] });
+  yield* tasks.startQuest({
+    id: QuestId.make("q1"),
+    taskId: TaskId.make("campaign"),
+    goal: "A Black Friday campaign",
+    acceptance: ["Copy approved", "Campaign built"],
+    limits: DEFAULT_QUEST_LIMITS,
+    createdAt: now,
+  });
+  yield* tasks.createTask({
+    task: newTask("copy", QUILL, "campaign"),
+    delegation: brief("d-copy"),
+    milestones: [{ id: MilestoneId.make("m-draft"), title: "First draft" }],
+  });
+  yield* tasks.createTask({
+    task: newTask("build", ADA, "campaign", ["copy"]),
+    delegation: brief("d-build"),
+    milestones: [],
+  });
+});
+
+/** The journal entries a write appended, as stored: the same as the write returned. */
+const journaled = <A>(committed: Committed<A>) =>
+  Effect.gen(function* () {
+    const journal = yield* EventJournal;
+    const first = committed.entries[0]?.sequence ?? 0;
+    const stored = yield* journal.readAfter(first - 1, committed.entries.length);
+    return { stored, returned: committed.entries };
+  });
+
+const tags = (entries: ReadonlyArray<EventEnvelope>) => entries.map((entry) => entry.type);
+
+describe("Task records", () => {
+  // covers OR-002, EX-001
+  it("[TC-OR-001] keeps each Task's owner, parent and root, adds a Quest to the same Task, and nests a member's Quest one deeper", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const step = yield* tasks.createTask({
+          task: newTask("research", ADA, "build"),
+          delegation: null,
+          milestones: [],
+        });
+        const nested = yield* tasks.startQuest({
+          id: QuestId.make("q2"),
+          taskId: TaskId.make("build"),
+          goal: "Keywords",
+          acceptance: [],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        yield* tasks.createTask({
+          task: newTask("keywords", PIP, "build"),
+          delegation: brief("d-keywords"),
+          milestones: [],
+        });
+        const tree = yield* tasks.readTree(TaskId.make("campaign"));
+        const sub = yield* tasks.readTree(TaskId.make("build"));
+        return { step, nested, tree: Option.getOrThrow(tree), sub: Option.getOrThrow(sub) };
+      }),
+    );
+
+    expect(result.tree.tasks.map((task) => [task.id, task.ownerId, task.parentId, task.rootId, task.threadId])).toEqual(
+      [
+        ["campaign", ALDRIC, null, "campaign", threadId],
+        ["copy", QUILL, "campaign", "campaign", threadId],
+        ["build", ADA, "campaign", "campaign", threadId],
+        ["research", ADA, "build", "campaign", threadId],
+        ["keywords", PIP, "build", "campaign", threadId],
+      ],
+    );
+    expect(result.tree.tasks.find((task) => task.id === "build")?.dependsOn).toEqual(["copy"]);
+    expect(
+      result.tree.quests.map((quest) => [quest.id, quest.taskId, quest.leadId, quest.parentQuestId, quest.depth]),
+    ).toEqual([
+      ["q1", "campaign", ALDRIC, null, 1],
+      ["q2", "build", ADA, "q1", 2],
+    ]);
+    // A step has its parent's owner and no Delegation; a member's Task has one, from its lead.
+    expect(
+      result.tree.delegations.map((d) => [d.id, d.questId, d.leadId, d.memberId, d.parentTaskId, d.childTaskId]),
+    ).toEqual([
+      ["d-copy", "q1", ALDRIC, QUILL, "campaign", "copy"],
+      ["d-build", "q1", ALDRIC, ADA, "campaign", "build"],
+      ["d-keywords", "q2", ADA, PIP, "build", "keywords"],
+    ]);
+    expect(result.tree.delegations[0]?.authority).toEqual({ overrides: { push: "deny" }, folders: null });
+    expect(result.tree.milestones.map((m) => [m.id, m.taskId, m.position, m.reachedAt])).toEqual([
+      ["m-draft", "copy", 0, null],
+    ]);
+    const [q1, q2] = result.tree.quests;
+    expect(q1 && partyOf(q1, result.tree.delegations)).toEqual([QUILL, ADA]);
+    expect(q2 && partyOf(q2, result.tree.delegations)).toEqual([PIP]);
+    // A subtree holds only what is under its Task.
+    expect(result.sub.tasks.map((task) => task.id)).toEqual(["build", "research", "keywords"]);
+    expect(result.sub.quests.map((quest) => quest.id)).toEqual(["q2"]);
+    // Each change is journaled with its event, correlated with the Task's owner and thread.
+    expect(tags(result.step.entries)).toEqual(["TaskCreated"]);
+    expect(result.step.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
+    expect(result.step.value.revision).toBe(result.step.entries[0]?.sequence);
+    expect(tags(result.nested.entries)).toEqual(["QuestStarted"]);
+    expect(result.nested.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
+  });
+
+  // covers OR-002, EX-002
+  it("[TC-OR-002] refuses a Task without an owner, an orphan, a step under another owner, and a dependency outside its tree, writing nothing", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const journal = yield* EventJournal;
+        const sql = yield* SqlClient.SqlClient;
+        const refused = (input: Parameters<typeof tasks.createTask>[0]) =>
+          tasks.createTask(input).pipe(
+            Effect.flip,
+            Effect.map((error) => (error._tag === "TaskRefused" ? error.reason : error._tag)),
+          );
+        yield* tasks.createTask({ task: newTask("other", PIP, null), delegation: null, milestones: [] });
+        const head = yield* journal.head;
+        const reasons = [
+          yield* refused({ task: newTask("x1", AgentId.make("nobody"), null), delegation: null, milestones: [] }),
+          yield* refused({ task: newTask("x2", ALDRIC, "missing"), delegation: null, milestones: [] }),
+          yield* refused({ task: newTask("x3", PIP, "campaign"), delegation: null, milestones: [] }),
+          yield* refused({ task: newTask("x4", ALDRIC, "campaign"), delegation: brief("d-x4"), milestones: [] }),
+          yield* refused({ task: newTask("x5", ALDRIC, "other"), delegation: null, milestones: [] }),
+          yield* refused({ task: newTask("x6", ALDRIC, "other"), delegation: brief("d-x6"), milestones: [] }),
+          yield* refused({ task: newTask("x7", ADA, "build", ["other"]), delegation: null, milestones: [] }),
+          yield* refused({ task: newTask("x8", ALDRIC, null), delegation: brief("d-x8"), milestones: [] }),
+        ];
+        const stored = yield* sql<{ readonly id: string }>`SELECT id FROM tasks ORDER BY id`;
+        return { head, after: yield* journal.head, reasons, stored: stored.map((row) => row.id) };
+      }),
+    );
+
+    expect(result.reasons).toEqual([
+      "owner-missing",
+      "parent-missing",
+      "step-owner",
+      "delegation-mismatch",
+      "step-owner",
+      "quest-missing",
+      "dependency-outside-tree",
+      "delegation-mismatch",
+    ]);
+    // Every refused Task left no row and no journal entry.
+    expect(result.stored).toEqual(["build", "campaign", "copy", "other"]);
+    expect(result.after).toEqual(result.head);
+  });
+
+  // covers EX-001, EX-002
+  it("[TC-EX-016] adds an Attempt for each retry, refuses a stale or illegal change without writing, and journals each change in its transaction", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const journal = yield* EventJournal;
+        const copy = TaskId.make("copy");
+        const created = Option.getOrThrow(yield* tasks.readTree(copy)).tasks[0];
+        if (created === undefined) throw new Error("no Task");
+        const first = yield* tasks.startAttempt(copy, created.revision, attempt("a1"));
+        const twice = yield* tasks.startAttempt(copy, first.value.task.revision, attempt("a-twice")).pipe(Effect.flip);
+        const running = yield* tasks.updateAttempt(AttemptId.make("a1"), {
+          state: "running",
+          sessionId: "s1",
+          at: now,
+        });
+        const stale = yield* tasks.moveTask(copy, created.revision, "waiting", now).pipe(Effect.flip);
+        const failed = yield* tasks.updateAttempt(AttemptId.make("a1"), {
+          state: "failed",
+          outcome: "Timed out",
+          at: now,
+        });
+        const moved = yield* tasks.moveTask(copy, failed.value.task.revision, "failed", now);
+        const head = yield* journal.head;
+        const illegal = yield* tasks.moveTask(copy, moved.value.revision, "waiting", now).pipe(Effect.flip);
+        const unchanged = yield* journal.head;
+        const retry = yield* tasks.startAttempt(copy, moved.value.revision, attempt("a2"));
+        const tree = Option.getOrThrow(yield* tasks.readTree(copy));
+        return {
+          first,
+          twice,
+          running,
+          stale,
+          moved,
+          head,
+          illegal,
+          unchanged,
+          retry,
+          tree,
+          journal: yield* journaled(retry),
+        };
+      }),
+    );
+
+    expect(tags(result.first.entries)).toEqual(["TaskStateChanged", "CheckpointRecorded"]);
+    expect(result.first.value.task).toMatchObject({ state: "active", currentAttemptId: "a1" });
+    expect(result.twice).toMatchObject({ _tag: "TaskRefused", reason: "attempt-live" });
+    expect(result.running.value.attempt).toMatchObject({ state: "running", sessionId: "s1" });
+    expect(result.stale).toMatchObject({ _tag: "StaleTask", taskId: "copy" });
+    expect(tags(result.moved.entries)).toEqual(["TaskStateChanged", "CheckpointRecorded"]);
+    expect(result.illegal).toMatchObject({ _tag: "IllegalTaskTransition", from: "failed", to: "waiting" });
+    expect(result.unchanged).toEqual(result.head);
+    // The retry is the same Task with a second Attempt; the first keeps its outcome.
+    expect(result.retry.value.task).toMatchObject({ id: "copy", state: "active", currentAttemptId: "a2" });
+    expect(result.tree.tasks.map((task) => task.id)).toEqual(["copy"]);
+    expect(result.tree.attempts.map((a) => [a.id, a.number, a.agentId, a.state, a.outcome])).toEqual([
+      ["a1", 1, QUILL, "failed", "Timed out"],
+      ["a2", 2, QUILL, "starting", null],
+    ]);
+    expect(result.tree.checkpoints.map((c) => [c.source, c.kind, c.attemptId])).toEqual([
+      ["automatic", "started", "a1"],
+      ["automatic", "failed", "a1"],
+      ["automatic", "started", "a2"],
+    ]);
+    expect(result.journal.stored).toEqual(result.journal.returned);
+  });
+
+  // covers EX-001, OR-006
+  it("[TC-OR-004] completes a Task only with its own Attempt, a finished subtree and no open questions, and its Quest with it", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const campaignId = TaskId.make("campaign");
+        const finish = (id: string, attemptId: string, at: string) =>
+          Effect.gen(function* () {
+            const task = Option.getOrThrow(yield* tasks.readTree(TaskId.make(id))).tasks[0];
+            if (task === undefined) throw new Error("no Task");
+            const started = yield* tasks.startAttempt(task.id, task.revision, attempt(attemptId));
+            return yield* tasks.completeTask(task.id, started.value.task.revision, {
+              summary: `${id} done`,
+              attemptId: AttemptId.make(attemptId),
+              artifacts: [{ id: ArtifactId.make(`art-${id}`), kind: "text", label: id, value: `${id} text` }],
+              at,
+            });
+          });
+        const root = Option.getOrThrow(yield* tasks.readTree(campaignId)).tasks[0];
+        if (root === undefined) throw new Error("no Task");
+        const started = yield* tasks.startAttempt(campaignId, root.revision, attempt("a-root"));
+        const revision = started.value.task.revision;
+        const completion = (attemptId: string) => ({
+          summary: "Campaign ready",
+          attemptId: AttemptId.make(attemptId),
+          artifacts: [],
+          at: later,
+        });
+        const otherAttempt = yield* tasks.completeTask(campaignId, revision, completion("a1")).pipe(Effect.flip);
+        const childrenOpen = yield* tasks.completeTask(campaignId, revision, completion("a-root")).pipe(Effect.flip);
+        yield* finish("copy", "a1", "2026-11-01T00:30:00.000Z");
+        const question = yield* tasks.askQuestion({
+          id: QuestionId.make("q-build"),
+          taskId: TaskId.make("build"),
+          askerId: ADA,
+          text: "Which tone?",
+          createdAt: now,
+        });
+        const ask = yield* tasks.answerQuestion(question.value.id, { _tag: "Lead", agentId: ALDRIC }, "Playful", now);
+        yield* finish("build", "a2", "2026-11-01T00:40:00.000Z");
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-root"),
+          taskId: campaignId,
+          askerId: ALDRIC,
+          text: "Ship on Friday?",
+          createdAt: now,
+        });
+        const current = Option.getOrThrow(yield* tasks.readTree(campaignId)).tasks[0];
+        if (current === undefined) throw new Error("no Task");
+        const questionsOpen = yield* tasks
+          .completeTask(campaignId, current.revision, completion("a-root"))
+          .pipe(Effect.flip);
+        yield* tasks.answerQuestion(QuestionId.make("q-root"), { _tag: "User" }, "Yes", now);
+        const done = yield* tasks.completeTask(campaignId, current.revision, completion("a-root"));
+        return {
+          otherAttempt,
+          childrenOpen,
+          ask,
+          questionsOpen,
+          done,
+          tree: Option.getOrThrow(yield* tasks.readTree(campaignId)),
+        };
+      }),
+    );
+
+    expect(result.otherAttempt).toMatchObject({ _tag: "TaskRefused", reason: "attempt-mismatch" });
+    expect(result.childrenOpen).toMatchObject({ _tag: "TaskRefused", reason: "children-open" });
+    expect(result.questionsOpen).toMatchObject({ _tag: "TaskRefused", reason: "questions-open" });
+    expect(result.ask.value).toMatchObject({
+      state: "answered",
+      answer: "Playful",
+      answeredBy: { _tag: "Lead", agentId: ALDRIC },
+    });
+    expect(tags(result.done.entries)).toEqual(["TaskCompleted", "CheckpointRecorded", "QuestCompleted"]);
+    expect(result.done.value).toMatchObject({
+      state: "completed",
+      result: { summary: "Campaign ready", attemptId: "a-root" },
+    });
+    expect(result.tree.quests[0]).toMatchObject({ id: "q1", state: "completed", endedAt: later });
+    expect(result.tree.quests[0]?.revision).toBe(result.done.entries[2]?.sequence);
+    // Each artifact names the Task and Attempt that made it.
+    expect(result.tree.artifacts.map((a) => [a.id, a.taskId, a.attemptId])).toEqual([
+      ["art-copy", "copy", "a1"],
+      ["art-build", "build", "a2"],
+    ]);
+  });
+
+  // covers OR-003
+  it("[TC-OR-003] sends a question to the nearest lead, climbs one lead at a time to the user, and lets only its recipient answer", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        yield* tasks.startQuest({
+          id: QuestId.make("q2"),
+          taskId: TaskId.make("build"),
+          goal: "Keywords",
+          acceptance: [],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        yield* tasks.createTask({ task: newTask("keywords", PIP, "build"), delegation: brief("d-k"), milestones: [] });
+        yield* tasks.createTask({ task: newTask("keyword-step", PIP, "keywords"), delegation: null, milestones: [] });
+        const notAsker = yield* tasks
+          .askQuestion({
+            id: QuestionId.make("x"),
+            taskId: TaskId.make("keywords"),
+            askerId: ADA,
+            text: "?",
+            createdAt: now,
+          })
+          .pipe(Effect.flip);
+        const asked = yield* tasks.askQuestion({
+          id: QuestionId.make("q-pip"),
+          taskId: TaskId.make("keyword-step"),
+          askerId: PIP,
+          text: "Which market?",
+          createdAt: now,
+        });
+        const wrong = yield* tasks
+          .answerQuestion(asked.value.id, { _tag: "Lead", agentId: ALDRIC }, "EU", now)
+          .pipe(Effect.flip);
+        const up = yield* tasks.escalateQuestion(asked.value.id, ADA, now);
+        const top = yield* tasks.escalateQuestion(asked.value.id, ALDRIC, now);
+        const byLead = yield* tasks
+          .answerQuestion(asked.value.id, { _tag: "Lead", agentId: ALDRIC }, "EU", now)
+          .pipe(Effect.flip);
+        const answered = yield* tasks.answerQuestion(asked.value.id, { _tag: "User" }, "EU", later);
+        const again = yield* tasks.answerQuestion(asked.value.id, { _tag: "User" }, "US", later).pipe(Effect.flip);
+        const topAsk = yield* tasks.askQuestion({
+          id: QuestionId.make("q-aldric"),
+          taskId: TaskId.make("campaign"),
+          askerId: ALDRIC,
+          text: "Budget?",
+          createdAt: now,
+        });
+        return { notAsker, asked, wrong, up, top, byLead, answered, again, topAsk };
+      }),
+    );
+
+    expect(result.notAsker).toMatchObject({ _tag: "TaskRefused", reason: "not-asker" });
+    // Pip's step asks: its own Task is Pip's, so the nearest lead is Ada, then Aldric, then you.
+    expect(result.asked.value).toMatchObject({ recipientId: ADA, chain: [], state: "open" });
+    expect(tags(result.asked.entries)).toEqual(["QuestionAsked"]);
+    expect(result.asked.entries[0]?.correlation).toEqual({ agentId: PIP, threadId, messageId: null });
+    expect(result.wrong).toMatchObject({ _tag: "TaskRefused", reason: "not-recipient" });
+    expect(result.up.value).toMatchObject({ recipientId: ALDRIC, chain: [ADA] });
+    expect(tags(result.up.entries)).toEqual(["QuestionEscalated"]);
+    expect(result.top.value).toMatchObject({ recipientId: null, chain: [ADA, ALDRIC] });
+    expect(result.byLead).toMatchObject({ _tag: "TaskRefused", reason: "not-recipient" });
+    expect(result.answered.value).toMatchObject({ state: "answered", answer: "EU", answeredBy: { _tag: "User" } });
+    expect(tags(result.answered.entries)).toEqual(["QuestionAnswered"]);
+    expect(result.again).toMatchObject({ _tag: "TaskRefused", reason: "question-answered" });
+    // The lead of the top Task has no lead above it: its question comes straight to you.
+    expect(result.topAsk.value.recipientId).toBeNull();
+  });
+
+  // covers OR-003, OR-004
+  it("[TC-OR-005] records milestones and reports by their source, and hands an artifact to a Task in the same tree once", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = TaskId.make("copy");
+        const report = (
+          id: string,
+          source: "planned" | "unplanned",
+          kind: "milestone" | "finding" | "progress",
+          milestone: string | null,
+        ) =>
+          tasks.recordCheckpoint({
+            id: CheckpointId.make(id),
+            taskId: copy,
+            source,
+            kind,
+            milestoneId: milestone === null ? null : MilestoneId.make(milestone),
+            summary: `${kind} ${id}`,
+            createdAt: later,
+          });
+        const reached = yield* report("c1", "planned", "milestone", "m-draft");
+        const twice = yield* report("c2", "planned", "milestone", "m-draft").pipe(Effect.flip);
+        const wrongSource = yield* report("c3", "unplanned", "milestone", "m-draft").pipe(Effect.flip);
+        const finding = yield* report("c4", "unplanned", "finding", null);
+
+        const task = Option.getOrThrow(yield* tasks.readTree(copy)).tasks[0];
+        if (task === undefined) throw new Error("no Task");
+        const started = yield* tasks.startAttempt(copy, task.revision, attempt("a1"));
+        yield* tasks.completeTask(copy, started.value.task.revision, {
+          summary: "Copy",
+          attemptId: AttemptId.make("a1"),
+          artifacts: [{ id: ArtifactId.make("copy-doc"), kind: "file", label: "Copy", value: "/work/copy.md" }],
+          at: later,
+        });
+        yield* tasks.createTask({ task: newTask("elsewhere", PIP, null), delegation: null, milestones: [] });
+        const handed = yield* tasks.handOff(ArtifactId.make("copy-doc"), TaskId.make("build"), later);
+        const again = yield* tasks.handOff(
+          ArtifactId.make("copy-doc"),
+          TaskId.make("build"),
+          "2026-11-02T00:00:00.000Z",
+        );
+        const outside = yield* tasks
+          .handOff(ArtifactId.make("copy-doc"), TaskId.make("elsewhere"), later)
+          .pipe(Effect.flip);
+        const tree = Option.getOrThrow(yield* tasks.readTree(TaskId.make("campaign")));
+        return { reached, twice, wrongSource, finding, handed, again, outside, tree };
+      }),
+    );
+
+    expect(tags(result.reached.entries)).toEqual(["CheckpointRecorded"]);
+    expect(result.reached.entries[0]?.payload).toMatchObject({
+      checkpoint: { source: "planned", kind: "milestone", milestoneId: "m-draft" },
+      milestone: { id: "m-draft", reachedAt: later },
+    });
+    expect(result.twice).toMatchObject({ _tag: "TaskRefused", reason: "milestone-mismatch" });
+    expect(result.wrongSource).toMatchObject({ _tag: "TaskRefused", reason: "checkpoint-kind" });
+    expect(result.finding.value).toMatchObject({ source: "unplanned", kind: "finding", attemptId: null });
+    expect(tags(result.handed.entries)).toEqual(["HandedOff"]);
+    expect(result.handed.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
+    expect(result.again.entries).toEqual([]);
+    expect(result.again.value).toEqual(result.handed.value);
+    expect(result.outside).toMatchObject({ _tag: "TaskRefused", reason: "artifact-outside-tree" });
+    expect(result.tree.handOffs).toEqual([result.handed.value]);
+    expect(result.tree.milestones[0]?.reachedAt).toBe(later);
+  });
+});

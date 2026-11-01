@@ -4,4 +4,5 @@ export * from "./errors.ts";
 export * from "./permissions.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
+export * from "./tasks.ts";
 export * from "./user-session.ts";

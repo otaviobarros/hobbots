@@ -21,6 +21,7 @@ import { Installation } from "./installation.ts";
 import { PermissionsHandlers } from "./permissions.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
+import { TasksHandlers } from "./tasks.ts";
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
 const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
@@ -160,5 +161,6 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     PermissionsHandlers,
     ApprovalsHandlers,
     GrantsHandlers,
+    TasksHandlers,
   ]),
 );

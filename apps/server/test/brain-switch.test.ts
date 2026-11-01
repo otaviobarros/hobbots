@@ -18,10 +18,12 @@ import {
 import { type Agent, isInProgress, type Message, type RuntimeKind, roleFields, type Thread } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
+  EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   SearchIndex,
   SetupRepository,
+  TaskRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FAKE_DIRECTIVES, makeFakeRuntime } from "@hobbots/runtimes";
@@ -119,6 +121,8 @@ const start = (options: { readonly codex?: boolean } = {}) => {
             HobbotsRepositoryLive,
             ApprovalRepositoryLive,
             GrantRepositoryLive,
+            TaskRepositoryLive,
+            EventJournal.layer,
             SetupRepository.layer,
             SearchIndex.layer,
           ).pipe(Layer.provideMerge(TestDatabase)),
