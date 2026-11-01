@@ -27,6 +27,7 @@ import {
   RuntimeLimitReached,
   type ToolAccess,
   type TurnApprovals,
+  UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
   policySandbox,
@@ -39,7 +40,7 @@ import {
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
-import { type CallDecision, decideCall, refusal, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
+import { type CallDecision, decideCall, refusal, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox } from "./sandbox.ts";
 import { offeredTools, toolLabel } from "./tool-calls.ts";
 
@@ -630,21 +631,25 @@ export const policyHooks = (
   report: (event: RuntimeEvent) => void,
   approvals?: TurnApprovals | null,
   redaction?: Redactor | null,
+  record?: PromptRequest["recordToolStart"],
 ): { readonly hooks: NonNullable<Options["hooks"]>; readonly canUseTool: CanUseTool } => {
   const label = (tool: string, input: Record<string, unknown>) => toolLabel(tool, input, redaction?.text);
   const started = new Set<string>();
   // Each call as the hook saw it, so the permission callback decides the same call in the same folder.
   const seen = new Map<string, ToolCall>();
-  const begin = (id: string, tool: string, input: Record<string, unknown>, verdict: PolicyVerdict) => {
-    started.add(id);
-    report({
+  // Answers whether the call may run: it is recorded first when the turn records calls (EX-004).
+  const begin = async (id: string, tool: string, input: Record<string, unknown>, verdict: PolicyVerdict) => {
+    const event = {
       _tag: "ToolStarted",
       id,
       tool,
       operation: verdict.operation,
       targets: verdict.targets,
       label: label(tool, input),
-    });
+    } as const;
+    const recorded = await Effect.runPromise(startCall(record, report, event));
+    if (recorded) started.add(id);
+    return recorded;
   };
   const refuse = (id: string, tool: string, input: Record<string, unknown>, decision: CallDecision) => {
     const reason = decision._tag === "Refuse" ? decision.reason : "";
@@ -662,6 +667,11 @@ export const policyHooks = (
     return reason;
   };
   const failed = (tool: string): CallDecision => ({ _tag: "Refuse", verdict: undefined, reason: UNKNOWN_TOOL(tool) });
+  const unrecorded = (decision: CallDecision): CallDecision => ({
+    _tag: "Refuse",
+    verdict: decision.verdict,
+    reason: UNRECORDED_TOOL_CALL,
+  });
 
   const preToolUse: HookCallback = async (input): Promise<HookJSONOutput> => {
     if (input.hook_event_name !== "PreToolUse") return {};
@@ -673,7 +683,16 @@ export const policyHooks = (
       () => failed(tool),
     );
     if (decision._tag === "Run") {
-      begin(call.id, tool, toolInput, decision.verdict);
+      if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
+        const reason = refuse(call.id, tool, toolInput, unrecorded(decision));
+        return {
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: reason,
+          },
+        };
+      }
       return {
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
@@ -727,9 +746,11 @@ export const policyHooks = (
       signal: options.signal,
     }).catch(() => failed(tool));
     if (decision._tag === "Run") {
-      // A call the hook allowed was reported then.
-      if (!started.has(call.id)) begin(call.id, tool, input, decision.verdict);
-      return { behavior: "allow", updatedInput: input };
+      // A call the hook allowed was recorded then.
+      if (started.has(call.id) || (await begin(call.id, tool, input, decision.verdict))) {
+        return { behavior: "allow", updatedInput: input };
+      }
+      return { behavior: "deny", message: refuse(call.id, tool, input, unrecorded(decision)) };
     }
     return { behavior: "deny", message: refuse(call.id, tool, input, decision) };
   };
@@ -946,6 +967,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                           (event) => Queue.offerUnsafe(queue, event),
                           request.approvals,
                           request.redaction,
+                          request.recordToolStart,
                         ),
                         base.env,
                       )

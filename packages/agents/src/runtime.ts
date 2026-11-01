@@ -17,6 +17,19 @@ import {
 import { Context, Effect, Option, Schema, type Stream } from "effect";
 import type { Redactor } from "./secrets.ts";
 
+/** The policy allowed a tool call and it began. `id` is unique within the turn. */
+export interface ToolStartedEvent {
+  readonly _tag: "ToolStarted";
+  readonly id: string;
+  /** The runtime's own name for the tool, such as `Bash` or `Edit`. */
+  readonly tool: string;
+  readonly operation: PolicyOperation;
+  /** The canonical paths, the command's folder, or the remote the call was decided on. */
+  readonly targets: ReadonlyArray<string>;
+  /** Short words for the step, such as "Running pnpm test". */
+  readonly label: string;
+}
+
 /** Normalized runtime output. Vendor message shapes stay inside each adapter. */
 export type RuntimeEvent =
   | {
@@ -33,18 +46,7 @@ export type RuntimeEvent =
       readonly label: string;
     }
   | { readonly _tag: "StepEnded"; readonly id: string }
-  /** The policy allowed a tool call and it began. `id` is unique within the turn. */
-  | {
-      readonly _tag: "ToolStarted";
-      readonly id: string;
-      /** The runtime's own name for the tool, such as `Bash` or `Edit`. */
-      readonly tool: string;
-      readonly operation: PolicyOperation;
-      /** The canonical paths, the command's folder, or the remote the call was decided on. */
-      readonly targets: ReadonlyArray<string>;
-      /** Short words for the step, such as "Running pnpm test". */
-      readonly label: string;
-    }
+  | ToolStartedEvent
   /**
    * The policy answered Ask: the tool call waits for the user's decision on `approvalId`. It then
    * starts with the same `id`, or is denied.
@@ -195,7 +197,17 @@ export interface PromptRequest {
    * adapter that puts a credential in the tools' environment remembers it here.
    */
   readonly redaction?: Redactor | null;
+  /**
+   * Records a tool call the policy allowed, durably, before it runs (EX-004). The adapter waits for
+   * it and then lets the call run without reporting it again; false, or a defect, and the call is
+   * refused, so no call ever runs without a record. Absent or null, the adapter reports the call as
+   * it starts.
+   */
+  readonly recordToolStart?: ((event: ToolStartedEvent) => Effect.Effect<boolean>) | null;
 }
+
+/** Why a tool call is refused when Hobbots could not record it before it ran. */
+export const UNRECORDED_TOOL_CALL = "Hobbots could not record this step before it ran, so it did not run.";
 
 export interface RuntimeAdapterShape {
   readonly health: Effect.Effect<RuntimeHealth>;

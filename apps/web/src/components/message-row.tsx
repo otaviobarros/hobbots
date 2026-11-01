@@ -103,17 +103,17 @@ function ReplyRow({
           </span>
         )}
         {message.status === "stopped" && (
-          <span role="status" className="animate-hb-pop origin-left text-[13px] text-lantern">
+          <span role="status" className="animate-hb-in text-[13px] text-lantern">
             {copy.stopped({ name: hob.name })}
           </span>
         )}
         {message.status === "interrupted" && (
-          <span className="animate-hb-pop origin-left text-[13px] text-rose">
+          <span className="animate-hb-in text-[13px] text-rose">
             {message.error === null ? copy.interrupted({ name: hob.name }) : copy.cutOff({ error: message.error })}
           </span>
         )}
         {message.status === "limited" && (
-          <span role="status" className="animate-hb-pop origin-left text-[13px] text-lantern">
+          <span role="status" className="animate-hb-in text-[13px] text-lantern">
             {copy.limited({
               name: hob.name,
               provider: providerName(message),
@@ -123,9 +123,7 @@ function ReplyRow({
         )}
         {resume && <ResumeControls resume={resume} name={hob.name} />}
         {message.status === "failed" && (
-          <span className="animate-hb-pop origin-left text-[13px] text-rose">
-            {copy.failed({ error: message.error })}
-          </span>
+          <span className="animate-hb-in text-[13px] text-rose">{copy.failed({ error: message.error })}</span>
         )}
       </div>
     </div>

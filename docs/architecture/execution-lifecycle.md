@@ -23,7 +23,7 @@ A running attempt may coexist with a pending external question. A task may remai
 | Active/waiting task | Completion requested | Validate children/questions/artifacts/approvals and final result before success. |
 | Any cancellable work | Cancel requested | Persist request and propagate; distinguish requested from confirmed outcome. |
 | Retryable failure | Retry authorized | Create a new attempt under bounded policy, preserving task identity. |
-| Live attempt loses contact | Disconnect/restart | Mark observation unverified; reconcile before retrying uncertain effects. |
+| Live attempt loses contact | Disconnect/restart | Mark observation unverified; reconcile before retrying uncertain effects. A tool call recorded as started with no outcome is shown as uncertain and never run again automatically. |
 | Terminal work | Late event | Record/deduplicate and reconcile; never arbitrarily reopen it. |
 
 Validate each command and persisted state through Effect Schema. Pure transition functions return a next state or typed domain failure. Effect services perform permission checks and expected-version transactional updates with event/outbox records. Only then perform external dispatch. Side effects never occur inside a pure reducer.

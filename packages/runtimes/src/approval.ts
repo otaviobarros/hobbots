@@ -1,4 +1,11 @@
-import { actionDigest, type Redactor, type RuntimeEvent, type TurnApprovals } from "@hobbots/agents";
+import {
+  actionDigest,
+  type PromptRequest,
+  type Redactor,
+  type RuntimeEvent,
+  type ToolStartedEvent,
+  type TurnApprovals,
+} from "@hobbots/agents";
 import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
@@ -19,6 +26,23 @@ const denied = (reason: string | null) =>
 
 const EXPIRED = "The approval request expired before the user decided, so the call did not run.";
 const NO_TOOLS = "The hob no longer has tools, so the approved call did not run.";
+
+/**
+ * Reports a call the policy allowed, just before it runs. With `record`, waits until the call is
+ * recorded durably and answers whether it may run: a call Hobbots could not record never runs
+ * (EX-004). Without it, the call is reported and runs.
+ */
+export const startCall = (
+  record: PromptRequest["recordToolStart"],
+  report: (event: RuntimeEvent) => void,
+  event: ToolStartedEvent,
+): Effect.Effect<boolean> =>
+  record
+    ? record(event).pipe(Effect.catchDefect(() => Effect.succeed(false)))
+    : Effect.sync(() => {
+        report(event);
+        return true;
+      });
 
 /** A tool call as the runtime makes it. */
 export interface ToolCall {

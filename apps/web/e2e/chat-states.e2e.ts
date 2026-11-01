@@ -120,6 +120,37 @@ test("[TC-CH-111] a reply shows the tools it used, a refused one with its reason
   }
 });
 
+// covers EX-004, CH-004
+test("[TC-EX-013] a tool call cut off by a hub crash comes back uncertain, with what is known about it, and does not run again", async ({
+  page,
+}) => {
+  const work = realpathSync(mkdtempSync(`${dataDir}-work-`));
+  try {
+    const { current, pip } = await hubWithPip();
+    await api(current, "PATCH", "/api/setup", { safetyPreset: "balanced", approvedFolders: [work] });
+    await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
+    await send(page, ["Run the long job", "fake:tool Bash sleep 600"].join("\n"));
+    const steps = page.getByRole("list", { name: "Reply steps" });
+    await expect(steps.getByRole("button", { name: "Running sleep 600… in progress" })).toBeVisible();
+
+    await current.kill();
+    hub = await startHub(dataDir);
+    await page.reload();
+
+    const step = steps.getByRole("button", { name: "Running sleep 600 outcome unknown" });
+    await expect(step).toBeVisible();
+    await expect(steps.getByText(/^Cut off while it ran, so it may or may not have taken effect\./)).toBeVisible();
+    await step.click();
+    await expect(steps.getByText("Run commands")).toBeVisible();
+    await expect(steps.getByText("Started")).toBeVisible();
+    // Nothing runs it again: the reply stays interrupted with the one uncertain step.
+    await expect.poll(async () => (await replies(hub as Hub, page)).map((r) => r.status)).toEqual(["interrupted"]);
+    await expect(steps.getByRole("listitem")).toHaveCount(1);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
 // covers CH-004, CH-007
 test("[TC-CH-091] a reply the provider cut off says why, and Continue resumes it in the same message", async ({
   page,
