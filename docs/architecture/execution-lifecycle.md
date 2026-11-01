@@ -1,12 +1,12 @@
 # Execution lifecycle and recovery
 
-**Decided:** explicit domain states, pure validated transitions, transactional Effect services, durable recovery, task/attempt separation, and one dispatcher for every turn you did not start ([ADR 019](../decisions/019-hob-inbox-and-continuations.md)). The transition contract below is conceptual; finalize schema names and exhaustive transition tables before implementation.
+**Decided:** explicit domain states, pure validated transitions, transactional Effect services, durable recovery, task/attempt separation, and one dispatcher for every turn you did not start ([ADR 019](../decisions/019-hob-backpack-and-continuations.md)). The transition contract below is conceptual; finalize schema names and exhaustive transition tables before implementation.
 
 ## Independent dimensions
 
 - Task responsibility: queued, active, waiting on dependency/approval/input, blocked, completed, failed or cancelled.
 - Execution attempt: queued, starting, running, completed, failed, interrupted or cancelled.
-- Communication: the inbox item states (pending, delivered, acknowledged, processing, resolved, failed) defined by the [inbox contract](inbox.md) and [ADR 019](../decisions/019-hob-inbox-and-continuations.md).
+- Communication: the backpack item states (pending, delivered, acknowledged, processing, resolved, failed) defined by the [backpack contract](inbox.md) and [ADR 019](../decisions/019-hob-backpack-and-continuations.md).
 - Observation certainty: verified or unverified/reconciling after lost contact.
 
 A running attempt may coexist with a pending external question. A task may remain open after its current attempt ends. An executor disconnect is not proof of failure or cancellation. These distinctions must be preserved in storage and UI.
@@ -18,9 +18,9 @@ A running attempt may coexist with a pending external question. A task may remai
 | Queued task | Dispatch authorized | Claim work and create attempt; then start runtime. |
 | Starting attempt | Runtime accepts | Record running and runtime correlation. |
 | Active task | Dependency/approval needed | Persist explicit wait/obligation; retain independent useful work where possible. |
-| Waiting responsibility | Relevant result/decision | Commit an inbox item with the change; the dispatcher delivers it to a live turn that waits for it, or starts one continuation when the hob is authorized and has capacity. |
+| Waiting responsibility | Relevant result/decision | Commit a backpack item with the change; the dispatcher delivers it to a live turn that waits for it, or starts one continuation when the hob is authorized and has capacity. |
 | Running attempt | Runtime turn ends | Record attempt outcome; evaluate task obligations separately. Items the turn carried resolve if it completed, or go back to pending if it ended early. The dispatcher picks the next turn. |
-| Active/waiting task | Completion requested | Validate children/questions/artifacts/approvals, unresolved inbox items and final result through the responsibility ledger before success. |
+| Active/waiting task | Completion requested | Validate children/questions/artifacts/approvals, unresolved backpack items and final result through the responsibility ledger before success. |
 | Any cancellable work | Cancel requested | Persist request and propagate; distinguish requested from confirmed outcome. |
 | Retryable failure | Retry authorized | Create a new attempt under bounded policy, preserving task identity. |
 | Live attempt loses contact | Disconnect/restart | Mark observation unverified; reconcile before retrying uncertain effects. A tool call recorded as started with no outcome is shown as uncertain and never run again automatically. |
@@ -30,7 +30,7 @@ Validate each command and persisted state through Effect Schema. Pure transition
 
 ## Recovery sequence
 
-On server startup, identify incomplete attempts, stale leases, pending outbox/inbox work and open responsibilities. Query authorized executors/adapters for live sessions and actual outcomes. Resume supported sessions, reconstruct context only when allowed and labeled, or surface a blocker when safe resumption cannot be established. Expire every inbox claim the earlier process held; their fencing tokens keep a delayed worker from applying stale changes. The dispatcher then reschedules pending items and queued chat messages through the same path it uses at any other time.
+On server startup, identify incomplete attempts, stale leases, pending outbox and backpack work and open responsibilities. Query authorized executors/adapters for live sessions and actual outcomes. Resume supported sessions, reconstruct context only when allowed and labeled, or surface a blocker when safe resumption cannot be established. Expire every backpack claim the earlier process held; their fencing tokens keep a delayed worker from applying stale changes. The dispatcher then reschedules pending items and queued chat messages through the same path it uses at any other time.
 
 An external operation may finish just before a connection fails. Treat this as an unknown outcome requiring reconciliation, not proof that it is safe to repeat. Exactly-once side effects cannot be guaranteed merely by an event journal.
 
@@ -45,8 +45,8 @@ Illegal/stale transition; two workers claiming the same task; cancel racing comp
 
 ## Explicit command idempotency
 
-**Decided** ([ADR 019](../decisions/019-hob-inbox-and-continuations.md#idempotency-keys)). Commands carry stable idempotency keys for task creation, message sending and applying a human approval. Persist the accepted command and result together so reconnect or retry cannot create duplicate records or repeat an already-applied operation. Delivery deduplication alone does not satisfy this command-level requirement.
+**Decided** ([ADR 019](../decisions/019-hob-backpack-and-continuations.md#idempotency-keys)). Commands carry stable idempotency keys for task creation, message sending and applying a human approval. Persist the accepted command and result together so reconnect or retry cannot create duplicate records or repeat an already-applied operation. Delivery deduplication alone does not satisfy this command-level requirement.
 
-- A hob tool call's key is scoped to the calling hob and the tool. The inbox items it makes reuse that key, so a retried call makes no second Task, Question, hand-off or item.
+- A hob tool call's key is scoped to the calling hob and the tool. The backpack items it makes reuse that key, so a retried call makes no second Task, Question, hand-off or item.
 - A hub change keys its items by the source record's id and version. Your answers and notes reuse the client command's key.
 - Keys stay while the top Task is open and for 30 days after it ends, configurable. A duplicate after that is checked against the ended source record and recorded as late.

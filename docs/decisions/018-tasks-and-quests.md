@@ -156,7 +156,7 @@ Checking every rule in the server, not in the prompt, is what makes a recursive 
 - ADR 015's grant table binds This Quest grants to the top Task instead of a Quest, and the approval card offers the lifetime from Slice 9 on.
 - The depth limit default is 2. Concurrency, per-hob active Task and timeout defaults stay open and configurable.
 - The chat gets a card, a strip and a drawer; the Quest tab becomes the control room; Home and the hob panel show a member's Quest work.
-- Continuation after a turn ends is decided in [ADR 019](019-hob-inbox-and-continuations.md) for Slice 10: results, questions and hand-offs reach the lead through its inbox, and one dispatcher wakes it. Different runtimes in one Quest (Slice 11) are out of scope.
+- Continuation after a turn ends is decided in [ADR 019](019-hob-backpack-and-continuations.md) for Slice 10: results, questions and hand-offs reach the lead through its backpack, and one dispatcher wakes it. Different runtimes in one Quest (Slice 11) are out of scope.
 
 ## Validation
 

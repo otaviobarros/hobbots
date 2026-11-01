@@ -1,12 +1,12 @@
-# A hob's inbox and continuations
+# A hob's backpack and continuations
 
-**Decided** ([ADR 004](../decisions/004-durable-inbox.md), [ADR 019](../decisions/019-hob-inbox-and-continuations.md)). Each hob has a durable **inbox** of responsibilities, not merely a notification list. An **inbox item** is one thing the hob still has to act on.
+**Decided** ([ADR 004](../decisions/004-durable-inbox.md), [ADR 019](../decisions/019-hob-backpack-and-continuations.md)). Each hob has a durable **backpack** of responsibilities, not merely a notification list. A **backpack item** is one thing the hob still has to act on.
 
-A hob's inbox is not your Inbox. Your Inbox holds what needs you: approval requests and questions no lead could answer. A hob's inbox holds what needs that hob, and is always named with its hob ("Aldric's inbox"). Your answer to an escalated question becomes an inbox item for the hob that asked.
+A hob's backpack is not your Inbox. Your Inbox holds what needs you: approval requests and questions no lead could answer. A hob's backpack holds what needs that hob. Your answer to an escalated question becomes a backpack item for the hob that asked.
 
 ## Item kinds
 
-Kinds are Task, result, failure, checkpoint (milestone, finding or blocker), question, answer, hand-off, message, approval outcome, deadline and progress. [ADR 019](../decisions/019-hob-inbox-and-continuations.md#item-kinds) says who makes each and who receives it.
+Kinds are Task, result, failure, checkpoint (milestone, finding or blocker), question, answer, hand-off, message, approval outcome, deadline and progress. [ADR 019](../decisions/019-hob-backpack-and-continuations.md#item-kinds) says who makes each and who receives it.
 
 Every kind except progress is **actionable** and can wake the hob. Progress, including the hub's started and waiting states, is **routine**. It updates the screens at once and reaches the hob as a digest in its next turn, but never wakes it on its own (IN-005). Deadline reminders support existing work; this does not introduce the deferred general recurring-automation product.
 
@@ -25,14 +25,14 @@ Adapters and Hobbots services record real evidence. Inactivity is not acknowledg
 
 ## Delivery and recovery
 
-1. Commit the item in the same transaction as the change that caused it. The inbox row is the outbox.
+1. Commit the item in the same transaction as the change that caused it. The backpack row is the outbox.
 2. A dispatcher claims the item with a lease and a fencing token, then delivers it with stable identity and correlation. Delivery is at least once.
 3. Record acknowledgement separately from delivery.
 4. Deduplicate by item ID and dedupe key before applying any effect.
 5. Persist the outcome and linked Task changes in one transaction, guarded by the fencing token.
 6. Queue the next continuation or outgoing item durably; publish UI updates after commit.
 
-Each item has a dedupe key, unique per recipient. Keys reuse the hob tools' idempotency keys, the source record's id and version, or your command's key. A worker whose lease expired holds a lower fencing token, so its write changes nothing. Retry transport failures with bounded backoff. For effects outside the database, use provider idempotency where available and reconcile unknown outcomes before retry. [ADR 019](../decisions/019-hob-inbox-and-continuations.md) sets the key scope, retention, lease and retry defaults.
+Each item has a dedupe key, unique per recipient. Keys reuse the hob tools' idempotency keys, the source record's id and version, or your command's key. A worker whose lease expired holds a lower fencing token, so its write changes nothing. Retry transport failures with bounded backoff. For effects outside the database, use provider idempotency where available and reconcile unknown outcomes before retry. [ADR 019](../decisions/019-hob-backpack-and-continuations.md) sets the key scope, retention, lease and retry defaults.
 
 Items for a cancelled or reassigned Task are recorded, checked against the Task's current owner and version, and resolved as late. They never restart work.
 
@@ -50,10 +50,10 @@ An ended parent turn does not discard the continuation obligation. A continuatio
 
 ## Responsibility ledger
 
-The responsibility ledger is a read over the Task tree and the inbox, not a separate store. It covers promised outputs, outstanding child work, questions awaiting answers, dependencies, pending approvals, unresolved inbox items and closure evidence. A supervisor can detect unfinished work without asking the model for status. The completion gate and Quest closure use the same query. It must respect configured budgets and genuine blockers rather than generate unbounded new work.
+The responsibility ledger is a read over the Task tree and the backpack, not a separate store. It covers promised outputs, outstanding child work, questions awaiting answers, dependencies, pending approvals, unresolved backpack items and closure evidence. A supervisor can detect unfinished work without asking the model for status. The completion gate and Quest closure use the same query. It must respect configured budgets and genuine blockers rather than generate unbounded new work.
 
 ## User visibility
 
-Support current-hob, current-Quest and workspace-wide views of what hobs are waiting on in the execution surface. Show who owns a pending item, when it began, its delivery, acknowledgement and processing state, and available interventions. Completed child work stays a pending result in the lead's inbox until the lead actually handles it. The screens are designed with [#297](https://github.com/otaviobarros/hobbots/issues/297).
+Support current-hob, current-Quest and workspace-wide views of what hobs are waiting on in the execution surface. Show who owns a pending item, when it began, its delivery, acknowledgement and processing state, and available interventions. Completed child work stays a pending result in the lead's backpack until the lead actually handles it. The screens are designed with [#297](https://github.com/otaviobarros/hobbots/issues/297).
 
 Verify result arrival while busy, inactive parent sessions, crash after commit and before delivery, duplicate delivery, out-of-order events, expired processing lease, exhausted retries and disabled recipients. No case may silently discard responsibility.
