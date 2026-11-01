@@ -54,7 +54,7 @@ The approval lifetimes are **just this once**, **for this Quest** and **always f
 - **High risk** (a force push, a push to the default branch, a Charm action its Charm marks high risk) is once only with the check box and never granted.
 - **A pending request** stays open for at most 24 hours, and expires sooner when its turn ends.
 - **Revocation:** removing a rule asks first and makes the next matching call ask. Removing or hiding a folder, narrowing an operation to Ask or Never, ungranting a Charm or retiring the hob revokes the grants that relied on it; giving the authority back does not restore them. Grants are checked on every call; revoking a host grant also stops the hob's running turns.
-- **This Quest** is stored now and offered once Quests exist; until then the Inbox groups requests by hob and thread. Standing rules are listed in Inbox History and Settings › Permissions.
+- **This Quest** is bound to the top Task of the request's tree ([ADR 018](../decisions/018-tasks-and-quests.md)). The card says This Task for a Task without a party and This Quest once a party joins; a grant given before the party joined still applies, and it covers every step. The Inbox groups requests by their top Task, and requests outside any Task by hob and thread. Standing rules are listed in Inbox History and Settings › Permissions.
 
 Agents may request authority but cannot manufacture human approval, access user credentials, or call administrative grant routes. Agent MCP credentials are distinct from user sessions and limited to authorized orchestration operations. Approval denial is enforced even if the runtime continues requesting the action.
 

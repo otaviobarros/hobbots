@@ -1,6 +1,6 @@
 # ADR 018 — Tasks and Quests
 
-Status: **Accepted.** Refines [orchestration](../architecture/orchestration.md), the [agent model](../architecture/agent-model.md) and the [screen inventory](../design/screens-and-flows.md) for Slice 9 ([#10](https://github.com/otaviobarros/hobbots/issues/10)).
+Status: **Accepted.** Refines [orchestration](../architecture/orchestration.md), the [agent model](../architecture/agent-model.md), the [screen inventory](../design/screens-and-flows.md) and the This Quest lifetime of [ADR 015](015-approval-lifetimes-and-grants.md) for Slice 9 ([#10](https://github.com/otaviobarros/hobbots/issues/10)).
 
 ## Context
 
@@ -41,6 +41,17 @@ Example: you ask Aldric, the chief of marketing, for a Black Friday campaign. Al
 - **Members never talk to each other.** A result moves from one member to another only as a hand-off through the lead.
 - **Nested Quests.** A member can bring in a hob of its own and lead that subtree under the same rules. The lead of a subtree is the nearest lead for its own members.
 - **Depth counts Quests, not steps.** A Quest is depth 1, and a member's own Quest inside it is depth 2. Steps never add depth. The limit is 2 by default and configurable, so Aldric → Rook → Pip fits and Pip cannot bring in another hob.
+
+### Approvals for this Task or Quest
+
+ADR 015's middle lifetime is bound to the work, not to the word. A grant saved with it is bound to the **top Task** of the request's tree: the Task you asked for, whether or not it has become a Quest.
+
+- The card says **This Task** for a Task without a party and **This Quest** once a party joins. Both are the same lifetime.
+- A Task that grows into a Quest keeps its id, so a grant given before the party joined still applies after.
+- Steps are in the same tree, so one grant covers every step of the Task, even though each runs in a fresh session.
+- A grant still belongs to one hob, and delegation never passes it on (PE-004). A party member asks for its own grant, bound to the same top Task, so it ends with the Quest.
+- The grant ends when the top Task ends, or when it is revoked.
+- The Inbox groups requests by their top Task, named as a Task or a Quest. Requests outside any Task stay grouped by hob and thread.
 
 ### Checkpoints
 
@@ -142,6 +153,7 @@ Checking every rule in the server, not in the prompt, is what makes a recursive 
 
 - The agent model changes: a Task no longer has to belong to a Quest, and a Quest sits on the Task it was added to. Milestone, Checkpoint, Question and Artifact reference are new records.
 - The orchestration contract's tool list becomes the table above. `send_agent_message` reaches only between a lead and its own members, for example to pass on your note; members never message each other. `list_tasks`, `get_task` and `get_quest_status` stay as read tools, scoped to the caller's subtree.
+- ADR 015's grant table binds This Quest grants to the top Task instead of a Quest, and the approval card offers the lifetime from Slice 9 on.
 - The depth limit default is 2. Concurrency, per-hob active Task and timeout defaults stay open and configurable.
 - The chat gets a card, a strip and a drawer; the Quest tab becomes the control room; Home and the hob panel show a member's Quest work.
 - Continuation after a turn ends (Slice 10) and different runtimes in one Quest (Slice 11) are out of scope.
@@ -156,6 +168,7 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - Aldric leads a Quest with Quill and Ada in parallel; Ada waits on Quill's copy, which reaches her through Aldric: not proven yet, [#273](https://github.com/otaviobarros/hobbots/issues/273).
 - Quill's question is answered by Aldric without reaching you; Ada's escalated question reaches you and your answer gets back to her; routine progress never wakes Aldric: not proven yet, [#274](https://github.com/otaviobarros/hobbots/issues/274).
 - A party member that brings in another hob shows nested in the tree, and a recursive delegation loop is stopped by the limits: not proven yet, [#275](https://github.com/otaviobarros/hobbots/issues/275).
+- A This Task grant covers every step of the Task, still applies after the Task becomes a Quest, is never used by another hob, and ends with the top Task: not proven yet, [#273](https://github.com/otaviobarros/hobbots/issues/273).
 - Cancelling the Quest ends with every Task confirmed or explicitly unresolved; Retry adds an Attempt and Reassign keeps history: not proven yet, [#276](https://github.com/otaviobarros/hobbots/issues/276).
 - The card, strip, drawer, Quest tab and "On Aldric's quest" show the work as decided: not proven yet, [#277](https://github.com/otaviobarros/hobbots/issues/277), [#278](https://github.com/otaviobarros/hobbots/issues/278), [#279](https://github.com/otaviobarros/hobbots/issues/279).
 - The whole slice runs end to end with an evidence record: not proven yet, [#280](https://github.com/otaviobarros/hobbots/issues/280).
