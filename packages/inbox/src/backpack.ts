@@ -60,6 +60,22 @@ export class Backpack extends Context.Service<
     readonly resolve: (itemId: BackpackItemId, held: HeldClaim, disposition: BackpackDisposition) => Guarded;
     readonly fail: (itemId: BackpackItemId, held: HeldClaim, error: string) => Guarded;
     /**
+     * Runs `effect` in one transaction that first checks the claim still holds, by owner, token and
+     * lease, and that the runtime accepted the item's turn. When the check fails, nothing of the
+     * effect is written. With `consumes`, the item resolves as consumed by `consumes` in the same
+     * transaction, so the effect and the item's outcome commit together or not at all.
+     */
+    readonly fenced: <A, E, R>(
+      itemId: BackpackItemId,
+      held: HeldClaim,
+      effect: Effect.Effect<A, E, R>,
+      options?: { readonly consumes?: string },
+    ) => Effect.Effect<
+      { readonly value: A; readonly settled: Committed<BackpackItem> | null },
+      E | BackpackItemMissing | StaleBackpackClaim | IllegalBackpackTransition,
+      R
+    >;
+    /**
      * Ends claims without their owners: every claim whose lease ran out, or with `all`, every claim,
      * as at boot when the turns that held them are gone. Each item's token rises and it goes back
      * to pending, so its old worker is refused at once.

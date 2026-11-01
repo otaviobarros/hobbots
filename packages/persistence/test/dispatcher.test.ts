@@ -147,15 +147,20 @@ const campaign = Effect.gen(function* () {
 });
 
 /**
- * Quill's turn: the runtime accepts it, and it applies one effect, a finding on its Task, through
- * the hob tools' ledger under a key made from the item's id. Applying it again finds the first.
- * `runs` counts how often the turn ran; `hold` keeps it running after its effect until released.
+ * Quill's turn: the runtime accepts it, and it commits one effect, a finding on its Task, through
+ * the hob tools' ledger under the delivery's key, so applying it again finds the first. `runs`
+ * counts how often the turn ran. `before` runs between acceptance and the effect, and `after`
+ * between the effect and the turn's end. With `consumes`, the effect resolves the item with it.
  */
 const reportingTurn =
   (
     services: { readonly tasks: TaskRepository["Service"]; readonly ledger: TaskToolCalls["Service"] },
     runs: { count: number },
-    hold: Effect.Effect<void> = Effect.void,
+    options: {
+      readonly before?: Effect.Effect<void>;
+      readonly after?: Effect.Effect<void>;
+      readonly consumes?: boolean;
+    } = {},
   ) =>
   (item: BackpackItem): Turn => ({
     target: `thread:${item.threadId}`,
@@ -164,16 +169,11 @@ const reportingTurn =
       Effect.gen(function* () {
         runs.count++;
         yield* delivery.accepted(`session-${runs.count}`);
+        yield* options.before ?? Effect.void;
         const { tasks, ledger } = services;
-        yield* ledger
+        const report = ledger
           .once(
-            {
-              agentId: QUILL,
-              key: `backpack:${delivery.item.id}`,
-              tool: "report_checkpoint",
-              input: '{"kind":"finding"}',
-              at: now,
-            },
+            { agentId: QUILL, key: delivery.key, tool: "report_checkpoint", input: '{"kind":"finding"}', at: now },
             tasks
               .recordCheckpoint({
                 id: CheckpointId.make(`c-${delivery.item.id}-${runs.count}`),
@@ -189,7 +189,8 @@ const reportingTurn =
               ),
           )
           .pipe(Effect.orDie);
-        yield* hold;
+        yield* delivery.commit(report, { consumes: options.consumes ?? false });
+        yield* options.after ?? Effect.void;
       }),
   });
 
@@ -214,8 +215,8 @@ describe("The dispatcher", () => {
         // Dispatched twice at once and once more after: one turn runs and the item is consumed.
         const together = yield* Effect.all(
           [
-            dispatcher.dispatch(item.id, reportingTurn(services, runs)),
-            dispatcher.dispatch(item.id, reportingTurn(services, runs)),
+            dispatcher.dispatch(item.id, reportingTurn(services, runs, { consumes: true })),
+            dispatcher.dispatch(item.id, reportingTurn(services, runs, { consumes: true })),
           ],
           { concurrency: "unbounded" },
         );
@@ -243,11 +244,9 @@ describe("The dispatcher", () => {
         const first = yield* Effect.forkChild(
           dispatcher.dispatch(
             other.id,
-            reportingTurn(
-              services,
-              redelivered,
-              Deferred.succeed(applied, undefined).pipe(Effect.andThen(Deferred.await(release))),
-            ),
+            reportingTurn(services, redelivered, {
+              after: Deferred.succeed(applied, undefined).pipe(Effect.andThen(Deferred.await(release))),
+            }),
           ),
         );
         yield* Deferred.await(applied);
@@ -290,6 +289,43 @@ describe("The dispatcher", () => {
     });
     // Three turns applied the effect, and it exists twice: once for each item, never twice for one.
     expect(result.checkpoints).toBe(2);
+  });
+
+  // covers IN-002, IN-003
+  it("[TC-IN-031] commits nothing of an effect whose claim expired just before it", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const dispatcher = yield* Dispatcher;
+        const backpack = yield* Backpack;
+        const services = { tasks: yield* TaskRepository, ledger: yield* TaskToolCalls };
+        const accepted = yield* Deferred.make<void>();
+        const expired = yield* Deferred.make<void>();
+        const before = yield* count("checkpoints");
+        // The turn is accepted, and its claim expires before it commits its effect.
+        const first = yield* Effect.forkChild(
+          dispatcher.dispatch(
+            item.id,
+            reportingTurn(
+              services,
+              { count: 0 },
+              {
+                before: Deferred.succeed(accepted, undefined).pipe(Effect.andThen(Deferred.await(expired))),
+              },
+            ),
+          ),
+        );
+        yield* Deferred.await(accepted);
+        yield* backpack.expireClaims({ all: true });
+        yield* Deferred.succeed(expired, undefined);
+        const dropped = yield* Fiber.join(first);
+        return { dropped, written: (yield* count("checkpoints")) - before, stored: yield* backpack.find(item.id) };
+      }),
+    );
+
+    expect(result.dropped).toEqual({ _tag: "Dropped" });
+    expect(result.written).toBe(0);
+    expect(result.stored).toMatchObject({ state: "pending", claim: null, disposition: null, fencingToken: 2 });
   });
 
   // covers IN-002, IN-003

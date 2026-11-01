@@ -2,8 +2,10 @@ import {
   ancestorsOf,
   type BackpackItem,
   type BackpackItemId,
+  BackpackItemMissing,
   type Committed,
   type EventEnvelope,
+  IllegalBackpackTransition,
   isTerminalTask,
   type StaleBackpackClaim,
   type Task,
@@ -37,8 +39,13 @@ export class BackpackTurnFailed extends Schema.TaggedError<BackpackTurnFailed>()
 
 /** What a turn is handed with the item it carries. */
 export interface Delivery {
-  /** The item as its claim left it. Any effect it causes carries `item.id`, so applying it twice finds the first. */
+  /** The item as its claim left it. */
   readonly item: BackpackItem;
+  /**
+   * The idempotency key every effect of the item carries, the same on every delivery of it, so an
+   * effect applied on an earlier delivery is found instead of applied again.
+   */
+  readonly key: string;
   /** 1 for the first delivery, one more for each retry. */
   readonly number: number;
   /**
@@ -46,6 +53,15 @@ export interface Delivery {
    * the item on to processing; a turn that ends without it handled nothing.
    */
   readonly accepted: (sessionId: string) => Effect.Effect<void, StaleBackpackClaim>;
+  /**
+   * Commits one of the item's effects, once the runtime accepted the turn, in a transaction that
+   * checks the claim still holds: a turn whose claim was lost writes nothing, and fails as stale.
+   * With `consumes`, the item resolves as consumed in the same transaction as its last effect.
+   */
+  readonly commit: <A, E>(
+    effect: Effect.Effect<A, E>,
+    options?: { readonly consumes?: boolean },
+  ) => Effect.Effect<A, E | StaleBackpackClaim>;
 }
 
 /** One turn that carries an item: where it runs, its id, and running it until it ends. */
@@ -252,8 +268,24 @@ export class Dispatcher extends Context.Service<
               });
             // The turn stops as soon as its claim is lost: another delivery may already be on its way.
             // A turn that dies or is interrupted sends its item back to pending before the cause goes on.
+            const commit: Delivery["commit"] = (effect, options = {}) =>
+              backpack.fenced(itemId, held, effect, options.consumes === true ? { consumes: turnId } : {}).pipe(
+                Effect.tap(({ settled }) => (settled === null ? Effect.void : announce(settled))),
+                Effect.map(({ value }) => value),
+                // An effect committed before the turn was accepted is a bug in the turn.
+                Effect.catchIf(
+                  (error) => error instanceof BackpackItemMissing || error instanceof IllegalBackpackTransition,
+                  Effect.die,
+                ),
+              );
             const ended = yield* Effect.raceFirst(
-              run({ item: delivered, number: delivered.deliveries.length, accepted }),
+              run({
+                item: delivered,
+                key: `backpack:${itemId}`,
+                number: delivered.deliveries.length,
+                accepted,
+                commit,
+              }),
               renewing(itemId, held),
             ).pipe(
               Effect.onExit((exit) =>
