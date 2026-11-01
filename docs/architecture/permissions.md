@@ -1,6 +1,6 @@
 # Permissions and autonomy
 
-**Decided:** autonomy-first Trusted Workspace default, enforced boundaries, exceptional approvals, narrowing delegation, separate computer permission and human approval authority. The preset mapping, folders, sandbox and Charms are decided in [ADR 014](../decisions/014-tool-policy-and-enforcement.md).
+**Decided:** autonomy-first Trusted Workspace default, enforced boundaries, exceptional approvals, narrowing delegation, separate computer permission and human approval authority. The preset mapping, folders, sandbox and Charms are decided in [ADR 014](../decisions/014-tool-policy-and-enforcement.md). Approval lifetimes and standing grants are decided in [ADR 015](../decisions/015-approval-lifetimes-and-grants.md).
 
 Autonomy is how often an agent proceeds without interruption. Authority is which resources/actions it may use. High autonomy inside a narrow workspace is the default objective. Repeated confirmation for routine authorized edits/tests would violate the product direction.
 
@@ -44,7 +44,17 @@ Automatically allow authorized repository reads/searches/edits, tests/builds, lo
 
 Show the requesting agent, operation, target system/resource, concrete arguments/constraints, expected changes and impact. Bind a decision to identity, executor, action digest, resource scope, policy version, expiration and revocation. Retain durable request/decision/execution evidence.
 
-The approval lifetimes are **just this once**, **for this Quest** and **always for this site** (a bounded standing permission, removable from Inbox history). High-risk actions offer once only and need a confirmation check box. Deny takes an optional reason that goes back to the hob. Expired or stale requests cannot be approved late; the hob asks again with fresh facts. These replace the six proposed choices (Allow once/for task/for thread, Always allow, Deny, Always deny). Matching and expiry for Approve once and Deny are decided in [ADR 014](../decisions/014-tool-policy-and-enforcement.md#asking-the-user); the Quest and site lifetimes are not designed yet. An approval for a test command is not approval for arbitrary shell commands or a changed target. Revalidate immediately before execution, and deduplicate decision/application operations.
+The approval lifetimes are **just this once**, **for this Quest** and **always for this site** (a standing permission bounded in scope, removable from Inbox history). High-risk actions offer once only and need a confirmation check box. Deny takes an optional reason that goes back to the hob. Expired or stale requests cannot be approved late; the hob asks again with fresh facts. These replace the six proposed choices (Allow once/for task/for thread, Always allow, Deny, Always deny). Matching and expiry for Approve once and Deny are decided in [ADR 014](../decisions/014-tool-policy-and-enforcement.md#asking-the-user). An approval for a test command is not approval for arbitrary shell commands or a changed target. Revalidate immediately before execution, and deduplicate decision/application operations.
+
+[ADR 015](../decisions/015-approval-lifetimes-and-grants.md) decides the Quest and site lifetimes:
+
+- **A grant** is saved by This Quest or Always. It belongs to one hob and names one operation and one site: a folder for file operations (the files directly in it), an exact command in a folder for Run commands and Local Git, an exact host for Use the web, an action and its target for a Charm (Push to a remote and branch). Delegation never passes a grant on.
+- **The rule is shown before it is saved** and can be narrowed. It is never broader than the request: approving `pnpm test` in a folder matches only `pnpm test` in that folder. Only literal commands can be granted: a command with a glob, variable, `~` or substitution in any word, or with `sh -c`, `cd` or a redirection, offers once only.
+- **Precedence:** always-denied targets first (changes to the protected Git paths, not reads), then Never from any layer, then high risk (which asks even where the layers allow), then safety Asks, then Allow. A grant answers only the preset's Ask. An Ask from the hob's override or a thread, Quest or task restriction still asks.
+- **High risk** (a force push, a push to the default branch, a Charm action its Charm marks high risk) is once only with the check box and never granted.
+- **A pending request** stays open for at most 24 hours, and expires sooner when its turn ends.
+- **Revocation:** removing a rule asks first and makes the next matching call ask. Removing or hiding a folder, narrowing an operation to Ask or Never, ungranting a Charm or retiring the hob revokes the grants that relied on it; giving the authority back does not restore them. Grants are checked on every call; revoking a host grant also stops the hob's running turns.
+- **This Quest** is stored now and offered once Quests exist; until then the Inbox groups requests by hob and thread. Standing rules are listed in Inbox History and Settings › Permissions.
 
 Agents may request authority but cannot manufacture human approval, access user credentials, or call administrative grant routes. Agent MCP credentials are distinct from user sessions and limited to authorized orchestration operations. Approval denial is enforced even if the runtime continues requesting the action.
 
