@@ -15,6 +15,7 @@ import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "e
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { ApprovalAction, ApprovalOutcome, PendingApproval, ToolAccess, TurnApprovals } from "./runtime.ts";
+import { makeRedactor, SecretRedaction } from "./secrets.ts";
 
 /** Where approval requests are stored. Each write journals its event. */
 export class ApprovalRepository extends Context.Service<
@@ -135,6 +136,7 @@ export class ApprovalService extends Context.Service<
       const hobActive = (agentId: AgentId) =>
         Effect.map(hobs.findAgent(agentId), (agent) => Option.isSome(agent) && agent.value.status !== "retired");
       const bus = yield* EventPublisher;
+      const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
       // Decisions, expiries and new requests take turns, so each sees the others' outcome.
       const lock = yield* Semaphore.make(1);
       // The turns waiting in this process, by request. A pending request with no waiter has no turn.
@@ -210,16 +212,18 @@ export class ApprovalService extends Context.Service<
                     const now = yield* nowIso;
                     // A retired hob's turn that is still finishing cannot be approved anything new.
                     const asking = open && (yield* hobActive(owner.agentId));
+                    // The user sees the call with its secrets redacted; the digest still names the call
+                    // exactly as it would run, so an approval matches only that call.
                     const approval = new ApprovalRequest({
                       id: ApprovalId.make(crypto.randomUUID()),
                       ...owner,
                       stepId: action.stepId,
                       tool: action.tool,
                       operation: action.operation,
-                      targets: action.targets,
-                      arguments: action.arguments,
-                      label: action.label,
-                      reason: action.reason,
+                      targets: redactor.value(action.targets),
+                      arguments: redactor.value(action.arguments),
+                      label: redactor.text(action.label),
+                      reason: redactor.text(action.reason),
                       actionDigest: yield* actionDigest(action),
                       policyVersion: action.policyVersion,
                       onceOnly: action.onceOnly,

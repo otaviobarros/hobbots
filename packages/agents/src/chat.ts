@@ -22,6 +22,7 @@ import { ApprovalService } from "./approvals.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { RuntimeAdapter, type RuntimeEvent, type ToolAccess } from "./runtime.ts";
+import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
 import { nextSteps } from "./steps.ts";
 import { HobTools, narrows } from "./tools.ts";
 
@@ -107,6 +108,8 @@ export class ChatService extends Context.Service<
       const hobTools = yield* HobTools;
       // Without approvals, a call the policy answers Ask for is refused, as in hubs and tests that ask nothing.
       const approvals = yield* Effect.serviceOption(ApprovalService);
+      // Without the hub's redactor, secret shapes are still redacted.
+      const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
       const turns = yield* FiberMap.make<ThreadId>();
       const scope = yield* Effect.scope;
       // The reply each running turn is writing, so a stop request can reach it.
@@ -273,7 +276,10 @@ export class ChatService extends Context.Service<
           yield* checkpoint.pipe(Effect.delay("1 second"), Effect.forever, Effect.forkScoped);
           const update = (f: (message: Message) => Message | unknown) => transition(reply, f, saveMessage);
 
-          const handle = (event: RuntimeEvent) => {
+          // Secrets are redacted before a tool call's step is saved, journaled or announced, so a client
+          // that reads the reply later never receives them either.
+          const handle = (raw: RuntimeEvent) => {
+            const event = redactEvent(raw, redactor);
             switch (event._tag) {
               case "SessionStarted":
                 return Effect.gen(function* () {
@@ -334,11 +340,13 @@ export class ChatService extends Context.Service<
               effort: config.effort,
               tools: yield* grant(thread.id, agent),
               approvals: turnApprovals?.approvals ?? null,
+              redaction: redactor,
             })
             .pipe(
               Stream.runForEach(handle),
               Effect.catchTags({
-                RuntimeError: (error) => update((m) => MessageTransitions.cutOff(m, error.message)),
+                // The runtime's error can quote what a tool printed.
+                RuntimeError: (error) => update((m) => MessageTransitions.cutOff(m, redactor.text(error.message))),
                 RuntimeLimitReached: (error) => update((m) => MessageTransitions.limit(m, error.resetsAt)),
               }),
             );
