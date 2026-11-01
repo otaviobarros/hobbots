@@ -55,7 +55,7 @@ const send = async (page: Page, text: string) => {
 };
 
 // covers RT-001, CH-001
-test("[TC-CH-132] the picker switches the thread's brain, the chat shows it, and a limited reply continues on Codex", async ({
+test("[TC-CH-184] the picker switches the thread's brain, the chat shows it, and a limited reply continues on Codex", async ({
   page,
 }) => {
   const { current, pip } = await hubWithPip();
