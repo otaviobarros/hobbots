@@ -63,7 +63,7 @@ Inactivity is never acknowledgement. Only the adapter's own evidence moves an it
 
 Every item has a dedupe key. The backpack stores at most one item per recipient and key, and a second insert with the same pair changes nothing.
 
-- **From a hob tool call.** The key is the tool call's own idempotency key from #271, scoped to the calling hob and the tool, plus the item's role in that call. For example `complete_task` by Quill makes `tool:<quill>:complete_task:<key>:result`. A retried call therefore makes no second item.
+- **From a hob tool call.** The key is the tool call's own idempotency key from #271, plus the item's role in that call. The hob tools store each call under the calling hob and its key (`task_tool_calls`), and refuse the same key with another tool, input or Task. So `complete_task` by Quill makes `tool:<quill>:<key>:result`. A retried call returns the first result and writes nothing, so it makes no second item either.
 - **From a hub change.** The key is the source record's id and the version that caused it: `task:<id>:v<version>`, `approval:<id>:decided`, `deadline:<wait id>`.
 - **From your command.** Answers and notes reuse the command's idempotency key from the client.
 
@@ -107,9 +107,11 @@ The responsibility ledger is a query, not a table. It reads the Task tree and th
 
 **A turn can pass its own gate.** The items a turn carries are still Processing while it runs, including the Task item that started the work. The gate leaves out the items that the calling turn holds a valid claim on, under the same three checks as any outcome. When `complete_task` succeeds, it resolves those items as `consumed` in the same transaction as the Task's completion. An item that arrived during the turn and was not delivered to it still blocks the gate, so the hob sees it before it finishes. A refused gate returns which items and children are open, so the hob can act on them in the same turn.
 
-### The delivery seam in the hob tools
+### Where items come from
 
-#271 keeps delivery behind one seam so it builds no wake of its own. The seam is a pure function: given the journal events a change produces, it returns the backpack items to record. The repository writes those items in the same transaction as the change and its events, exactly as it writes journal events. Until [#290](https://github.com/otaviobarros/hobbots/issues/290) adds the backpack records, the seam returns nothing.
+The hob tools from #271 deliver nothing and wake no one. `wait_for` only records the wait in `task_waits`. Every tool call already journals its change with its events, such as `TaskCreated`, `CheckpointRecorded`, `QuestionAsked`, `HandedOff` and `TaskCompleted` ([ADR 018](018-tasks-and-quests.md#records)), in the same transaction as the call's stored result.
+
+The backpack hooks in there, so the tools need no change. [#290](https://github.com/otaviobarros/hobbots/issues/290) adds one pure function: given the journal events a change produces, it returns the backpack items to record. The repository writes those items in the same transaction as the change and its events, exactly as it writes journal events. Approval decisions, deadlines and your answers and notes go through the same function.
 
 ### Events
 

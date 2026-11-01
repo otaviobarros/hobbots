@@ -47,6 +47,6 @@ Illegal/stale transition; two workers claiming the same task; cancel racing comp
 
 **Decided** ([ADR 019](../decisions/019-hob-backpack-and-continuations.md#idempotency-keys)). Commands carry stable idempotency keys for task creation, message sending and applying a human approval. Persist the accepted command and result together so reconnect or retry cannot create duplicate records or repeat an already-applied operation. Delivery deduplication alone does not satisfy this command-level requirement.
 
-- A hob tool call's key is scoped to the calling hob and the tool. The backpack items it makes reuse that key, so a retried call makes no second Task, Question, hand-off or item.
+- A hob tool call's key is scoped to the calling hob, and the same key with another tool, input or Task is refused. The backpack items it makes reuse that key, so a retried call makes no second Task, Question, hand-off or item.
 - A hub change keys its items by the source record's id and version. Your answers and notes reuse the client command's key.
 - Keys stay while the top Task is open and for 30 days after it ends, configurable. A duplicate after that is checked against the ended source record and recorded as late.
