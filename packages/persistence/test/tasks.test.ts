@@ -446,8 +446,8 @@ describe("Task records", () => {
         const wrong = yield* tasks
           .answerQuestion(asked.value.id, { _tag: "Lead", agentId: ALDRIC }, "EU", now)
           .pipe(Effect.flip);
-        const up = yield* tasks.escalateQuestion(asked.value.id, ADA, now);
-        const top = yield* tasks.escalateQuestion(asked.value.id, ALDRIC, now);
+        const up = yield* tasks.escalateQuestion(asked.value.id, ADA);
+        const top = yield* tasks.escalateQuestion(asked.value.id, ALDRIC);
         const byLead = yield* tasks
           .answerQuestion(asked.value.id, { _tag: "Lead", agentId: ALDRIC }, "EU", now)
           .pipe(Effect.flip);
@@ -547,5 +547,140 @@ describe("Task records", () => {
     expect(result.outside).toMatchObject({ _tag: "TaskRefused", reason: "artifact-outside-tree" });
     expect(result.tree.handOffs).toEqual([result.handed.value]);
     expect(result.tree.milestones[0]?.reachedAt).toBe(later);
+  });
+
+  // covers EX-001, EX-002, OR-002, OR-006
+  it("[TC-OR-008] keeps a Task's result, retries, ends and dependencies consistent with the rest of its tree", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const latest = (id: string) =>
+          tasks.readTree(TaskId.make(id)).pipe(
+            Effect.map((tree) => {
+              const task = Option.getOrThrow(tree).tasks[0];
+              if (task === undefined) throw new Error("no Task");
+              return task;
+            }),
+          );
+        const reason = <A, E extends { readonly _tag: string }>(effect: Effect.Effect<A, E>) =>
+          effect.pipe(
+            Effect.flip,
+            Effect.map((error) => ("reason" in error ? error.reason : error._tag)),
+          );
+        const copy = TaskId.make("copy");
+        const campaignId = TaskId.make("campaign");
+
+        // Two changes decided on the same revision: one wins, the other is stale.
+        const created = yield* latest("copy");
+        const raced = yield* Effect.all(
+          [
+            Effect.result(tasks.startAttempt(copy, created.revision, attempt("a1"))),
+            Effect.result(tasks.startAttempt(copy, created.revision, attempt("a-race"))),
+          ],
+          { concurrency: "unbounded" },
+        );
+        yield* tasks.updateAttempt(AttemptId.make("a1"), { state: "failed", outcome: "Lost", at: now });
+        const failed = yield* tasks.moveTask(copy, (yield* latest("copy")).revision, "failed", now);
+        const retry = yield* tasks.startAttempt(copy, failed.value.revision, attempt("a2"));
+        const staleResult = yield* reason(
+          tasks.completeTask(copy, retry.value.task.revision, {
+            summary: "Old",
+            attemptId: AttemptId.make("a1"),
+            artifacts: [],
+            at: now,
+          }),
+        );
+        // The parent cannot end while its members still work.
+        const root = yield* latest("campaign");
+        yield* tasks.startAttempt(campaignId, root.revision, attempt("a-root"));
+        yield* tasks.updateAttempt(AttemptId.make("a-root"), { state: "completed", at: now });
+        const failOpen = yield* reason(tasks.moveTask(campaignId, (yield* latest("campaign")).revision, "failed", now));
+        // Ada's Task waits on Quill's copy before it can complete.
+        const build = yield* latest("build");
+        const buildStarted = yield* tasks.startAttempt(build.id, build.revision, attempt("a-build"));
+        const waiting = yield* reason(
+          tasks.completeTask(build.id, buildStarted.value.task.revision, {
+            summary: "Built",
+            attemptId: AttemptId.make("a-build"),
+            artifacts: [],
+            at: now,
+          }),
+        );
+        const notSibling = yield* reason(
+          tasks.createTask({ task: newTask("ada-step", ADA, "build", ["campaign"]), delegation: null, milestones: [] }),
+        );
+        const noThread = yield* reason(
+          tasks.createTask({
+            task: { ...newTask("lost", PIP, null), threadId: ThreadId.make("nowhere") },
+            delegation: null,
+            milestones: [],
+          }),
+        );
+        // A Quest on the lead's own step keeps its lead's depth; steps never add depth.
+        yield* tasks.createTask({ task: newTask("aldric-step", ALDRIC, "campaign"), delegation: null, milestones: [] });
+        const stepQuest = yield* tasks.startQuest({
+          id: QuestId.make("q-step"),
+          taskId: TaskId.make("aldric-step"),
+          goal: "A side quest",
+          acceptance: [],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        return { raced, staleResult, failOpen, waiting, notSibling, noThread, stepQuest };
+      }),
+    );
+
+    expect(result.raced.map((each) => (each._tag === "Success" ? "won" : each.failure._tag)).sort()).toEqual([
+      "StaleTask",
+      "won",
+    ]);
+    expect(result.staleResult).toBe("attempt-mismatch");
+    expect(result.failOpen).toBe("children-open");
+    expect(result.waiting).toBe("dependencies-open");
+    expect(result.notSibling).toBe("dependency-outside-tree");
+    expect(result.noThread).toBe("thread-missing");
+    expect(result.stepQuest.value).toMatchObject({ parentQuestId: "q1", depth: 1 });
+  });
+
+  // covers EX-001, OR-006
+  it("[TC-OR-009] refuses a retry under an ended Task, and reopens a failed Quest with its retried Task", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const tasks = yield* TaskRepository;
+        yield* tasks.createTask({ task: newTask("top", ALDRIC, null), delegation: null, milestones: [] });
+        yield* tasks.startQuest({
+          id: QuestId.make("q-top"),
+          taskId: TaskId.make("top"),
+          goal: "Goal",
+          acceptance: [],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        const member = yield* tasks.createTask({
+          task: newTask("member", QUILL, "top"),
+          delegation: brief("d-m"),
+          milestones: [],
+        });
+        const memberFailed = yield* tasks.moveTask(member.value.id, member.value.revision, "failed", now);
+        const topTree = Option.getOrThrow(yield* tasks.readTree(TaskId.make("top")));
+        const top = topTree.tasks[0];
+        if (top === undefined) throw new Error("no Task");
+        const topFailed = yield* tasks.moveTask(top.id, top.revision, "failed", now);
+        const retryUnder = yield* tasks
+          .startAttempt(member.value.id, memberFailed.value.revision, attempt("a-m"))
+          .pipe(Effect.flip);
+        const retryTop = yield* tasks.startAttempt(top.id, topFailed.value.revision, attempt("a-top"));
+        return { topFailed, retryUnder, retryTop };
+      }),
+    );
+
+    expect(result.topFailed.entries[0]?.payload).toMatchObject({ quest: { id: "q-top", state: "failed" } });
+    expect(result.retryUnder).toMatchObject({ _tag: "TaskRefused", reason: "parent-ended" });
+    expect(result.retryTop.entries[0]?.payload).toMatchObject({
+      task: { id: "top", state: "active" },
+      quest: { id: "q-top", state: "active", endedAt: null },
+    });
   });
 });

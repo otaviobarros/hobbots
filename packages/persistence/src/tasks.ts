@@ -150,41 +150,53 @@ export const TaskRepositoryLive = Layer.effect(
         return ended;
       });
 
-    /** Checks a new Task's lineage, and returns where it sits: its root, thread, and a member's Quest and lead. */
-    const lineage = (
-      input: NewTask,
-      hasDelegation: boolean,
-    ): Effect.Effect<
-      {
-        readonly rootId: TaskId;
-        readonly threadId: ThreadId | null;
-        readonly quest: Quest | null;
-        readonly lead: AgentId;
-      },
-      TaskRefused | SqlError.SqlError
-    > =>
+    interface Placement {
+      readonly rootId: TaskId;
+      readonly threadId: ThreadId | null;
+      readonly quest: Quest | null;
+      readonly lead: AgentId;
+    }
+    type Placed = Effect.Effect<Placement, TaskRefused | SqlError.SqlError>;
+
+    /** The Task you asked for: it starts its own tree, in a thread that exists, with no lead and no siblings. */
+    const placeTop = (input: NewTask, hasDelegation: boolean): Placed =>
       Effect.gen(function* () {
-        const [owner] = yield* sql`SELECT id FROM agents WHERE id = ${input.ownerId}`;
-        if (owner === undefined) return yield* refuse("owner-missing", `No hob ${input.ownerId}`);
-        if (input.parentId === null) {
-          if (hasDelegation) return yield* refuse("delegation-mismatch", "The Task you asked for has no lead");
-          if (input.dependsOn.length > 0) return yield* refuse("dependency-outside-tree", "A top Task has no siblings");
-          return { rootId: input.id, threadId: input.threadId, quest: null, lead: input.ownerId };
-        }
-        const [parent] = yield* read.task(input.parentId);
-        if (parent === undefined) return yield* refuse("parent-missing", `No parent Task ${input.parentId}`);
+        if (hasDelegation) return yield* refuse("delegation-mismatch", "The Task you asked for has no lead");
+        if (input.dependsOn.length > 0) return yield* refuse("dependency-outside-tree", "A top Task has no siblings");
+        const [thread] =
+          input.threadId === null ? [true] : yield* sql`SELECT id FROM threads WHERE id = ${input.threadId}`;
+        if (thread === undefined) return yield* refuse("thread-missing", `No thread ${input.threadId}`);
+        return { rootId: input.id, threadId: input.threadId, quest: null, lead: input.ownerId };
+      });
+
+    /** A child: a step under its own owner's Task, or a member's Task delegated from a Quest on its parent. */
+    const placeChild = (input: NewTask, parentId: TaskId, hasDelegation: boolean): Placed =>
+      Effect.gen(function* () {
+        const [parent] = yield* read.task(parentId);
+        if (parent === undefined) return yield* refuse("parent-missing", `No parent Task ${parentId}`);
         if (isTerminalTask(parent.state)) return yield* refuse("parent-ended", `Task ${parent.id} is ${parent.state}`);
         const step = parent.ownerId === input.ownerId;
         if (step && hasDelegation) return yield* refuse("delegation-mismatch", "A step is not delegated");
         if (!step && !hasDelegation) return yield* refuse("step-owner", "A step has its parent's owner");
         const [quest] = step ? [] : yield* read.questsOn([parent.id]);
         if (!step && quest === undefined) return yield* refuse("quest-missing", `Task ${parent.id} has no Quest`);
-        const tree = yield* read.treeOf(parent.rootId);
-        const inTree = new Set(tree.map((each) => each.id));
-        if (input.dependsOn.some((id) => id === input.id || !inTree.has(id))) {
-          return yield* refuse("dependency-outside-tree", "A Task depends only on Tasks in its own tree");
+        const siblings = new Set(
+          (yield* read.treeOf(parent.rootId)).filter((each) => each.parentId === parent.id).map((each) => each.id),
+        );
+        if (input.dependsOn.some((id) => !siblings.has(id))) {
+          return yield* refuse("dependency-outside-tree", "A Task depends only on its siblings");
         }
         return { rootId: parent.rootId, threadId: parent.threadId, quest: quest ?? null, lead: parent.ownerId };
+      });
+
+    /** Checks a new Task's lineage, and returns where it sits: its root, thread, and a member's Quest and lead. */
+    const lineage = (input: NewTask, hasDelegation: boolean): Placed =>
+      Effect.gen(function* () {
+        const [owner] = yield* sql`SELECT id FROM agents WHERE id = ${input.ownerId}`;
+        if (owner === undefined) return yield* refuse("owner-missing", `No hob ${input.ownerId}`);
+        return yield* input.parentId === null
+          ? placeTop(input, hasDelegation)
+          : placeChild(input, input.parentId, hasDelegation);
       });
 
     const createTask: TaskRepository["Service"]["createTask"] = (input) =>
@@ -268,7 +280,8 @@ export const TaskRepositoryLive = Layer.effect(
             leadId: task.ownerId,
             parentQuestId: outer?.id ?? null,
             threadId: task.threadId,
-            depth: (outer?.depth ?? 0) + 1,
+            // Steps never add depth: a Quest on its lead's own step sits at that Quest's depth.
+            depth: outer === undefined ? 1 : outer.leadId === task.ownerId ? outer.depth : outer.depth + 1,
             state: "active",
             endedAt: null,
             revision,
@@ -299,11 +312,39 @@ export const TaskRepositoryLive = Layer.effect(
         return attempt !== undefined && isLiveAttempt(attempt.state);
       });
 
+    /** A Task ends only once its own Attempt and every Task under it have ended. */
+    const endable = (task: Task) =>
+      Effect.gen(function* () {
+        if (yield* liveAttempt(task))
+          return yield* refuse("attempt-live", `Task ${task.id} has a live Attempt; end it first`);
+        const under = descendantsOf(task, yield* read.treeOf(task.rootId));
+        if (under.some((each) => !isTerminalTask(each.state))) {
+          return yield* refuse("children-open", `Task ${task.id} has work still open under it`);
+        }
+      });
+
+    /** A retry reopens a Task only under ancestors that are still open, and reopens its Quest with it. */
+    const reopen = (task: Task, revision: number) =>
+      Effect.gen(function* () {
+        if (task.state !== "failed") return null;
+        const tree = yield* read.treeOf(task.rootId);
+        const byId = new Map(tree.map((each) => [each.id, each]));
+        for (let at = task.parentId === null ? undefined : byId.get(task.parentId); at; ) {
+          if (isTerminalTask(at.state)) return yield* refuse("parent-ended", `Task ${at.id} is ${at.state}`);
+          at = at.parentId === null ? undefined : byId.get(at.parentId);
+        }
+        const [quest] = yield* read.questsOn([task.id]);
+        if (quest === undefined) return null;
+        yield* sql`UPDATE quests SET state = 'active', ended_at = NULL, revision = ${revision} WHERE id = ${quest.id}`;
+        return new Quest({ ...quest, state: "active", endedAt: null, revision });
+      });
+
     const startAttempt: TaskRepository["Service"]["startAttempt"] = (taskId, expected, input) =>
       change((revision) =>
         Effect.gen(function* () {
           const before = yield* current(taskId, expected);
           if (yield* liveAttempt(before)) return yield* refuse("attempt-live", `Task ${taskId} has a live Attempt`);
+          const quest = yield* reopen(before, revision);
           const task = new Task({
             ...(yield* orFail(TaskTransitions.start(before, input.id, input.startedAt))),
             revision,
@@ -337,7 +378,7 @@ export const TaskRepositoryLive = Layer.effect(
           return {
             value: { task, attempt },
             events: [
-              { _tag: "TaskStateChanged", task, attempt, quest: null } as const,
+              { _tag: "TaskStateChanged", task, attempt, quest } as const,
               ...(yield* automatic(task, input.startedAt, revision + 1)),
             ],
           };
@@ -376,9 +417,7 @@ export const TaskRepositoryLive = Layer.effect(
       change((revision) =>
         Effect.gen(function* () {
           const before = yield* current(taskId, expected);
-          if ((to === "failed" || to === "cancelled") && (yield* liveAttempt(before))) {
-            return yield* refuse("attempt-live", `Task ${taskId} has a live Attempt; end it first`);
-          }
+          if (to === "failed" || to === "cancelled") yield* endable(before);
           const task = new Task({ ...(yield* orFail(TaskTransitions.moveTo(before, to, at))), revision });
           yield* saveTask(task);
           const quest = yield* endQuest(task, at, revision);
@@ -395,13 +434,17 @@ export const TaskRepositoryLive = Layer.effect(
     /** The completion gate's record checks: the result's Attempt, a finished subtree and no open questions. */
     const gate = (task: Task, attemptId: string) =>
       Effect.gen(function* () {
-        const [attempt] = yield* read.attempt(attemptId);
-        if (attempt?.taskId !== task.id) {
-          return yield* refuse("attempt-mismatch", `A result names an Attempt of its own Task`);
+        if (attemptId !== task.currentAttemptId) {
+          return yield* refuse("attempt-mismatch", "A result names its Task's current Attempt");
         }
-        const under = descendantsOf(task, yield* read.treeOf(task.rootId));
+        const tree = yield* read.treeOf(task.rootId);
+        const under = descendantsOf(task, tree);
         if (under.some((each) => !isTerminalTask(each.state))) {
           return yield* refuse("children-open", `Task ${task.id} has work still open under it`);
+        }
+        const done = new Set(tree.filter((each) => each.state === "completed").map((each) => each.id));
+        if (task.dependsOn.some((id) => !done.has(id))) {
+          return yield* refuse("dependencies-open", `Task ${task.id} waits on Tasks that have not completed`);
         }
         const ids = [task.id, ...under.map((each) => each.id)];
         const open = yield* sql`SELECT id FROM questions WHERE state = 'open' AND ${sql.in("task_id", ids)}`;

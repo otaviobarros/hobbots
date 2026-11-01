@@ -135,27 +135,39 @@ export class TaskRepository extends Context.Service<
     }) => Changed<Task>;
     /** Adds a Quest to a Task; its owner becomes the lead. */
     readonly startQuest: (input: NewQuest) => Changed<Quest>;
-    /** Starts the Task's next Attempt: its first, a resume or a retry. Never a new Task (EX-001). */
+    /**
+     * Starts the Task's next Attempt: its first, a resume or a retry. Never a new Task (EX-001). A
+     * retry needs every Task above to be open, and reopens the Task's Quest.
+     */
     readonly startAttempt: (
       taskId: TaskId,
       revision: number,
       attempt: NewAttempt,
     ) => Changed<{ readonly task: Task; readonly attempt: Attempt }, TaskChange>;
-    /** Records that a live Attempt is running or has ended. The Task's own state is decided separately. */
+    /**
+     * Records that a live Attempt is running or has ended. The Task's own state is decided
+     * separately, so an Attempt still ends after its Task completed or failed.
+     */
     readonly updateAttempt: (
       attemptId: AttemptId,
       change: AttemptChange,
     ) => Changed<{ readonly task: Task; readonly attempt: Attempt }>;
-    /** Moves a Task to another state; failing or cancelling a Task with a Quest ends the Quest too. */
+    /**
+     * Moves a Task to another state. It fails or is cancelled only once its Attempt and every Task
+     * under it have ended, and ends its Quest with it.
+     */
     readonly moveTask: (taskId: TaskId, revision: number, to: TaskTarget, at: string) => Changed<Task, TaskChange>;
-    /** Completes a Task once its subtree is done and its questions answered; completes its Quest with it. */
+    /**
+     * Completes a Task with a result from its current Attempt, once its subtree has ended, its
+     * dependencies completed and its questions are answered; completes its Quest with it.
+     */
     readonly completeTask: (taskId: TaskId, revision: number, completion: TaskCompletion) => Changed<Task, TaskChange>;
     readonly recordCheckpoint: (input: NewCheckpoint) => Changed<Checkpoint>;
     /** Asks the nearest lead above the Task, or the user when there is none. */
     readonly askQuestion: (input: NewQuestion) => Changed<Question>;
     readonly answerQuestion: (questionId: QuestionId, by: Answerer, answer: string, at: string) => Changed<Question>;
     /** Passes a question from its current lead to the next lead up, or to the user from the top lead. */
-    readonly escalateQuestion: (questionId: QuestionId, by: AgentId, at: string) => Changed<Question>;
+    readonly escalateQuestion: (questionId: QuestionId, by: AgentId) => Changed<Question>;
     /** Gives an artifact to another Task in its tree. Handing it to the same Task again changes nothing. */
     readonly handOff: (artifactId: ArtifactId, toTaskId: TaskId, at: string) => Changed<HandOff>;
     /** The Task and everything under it. */
