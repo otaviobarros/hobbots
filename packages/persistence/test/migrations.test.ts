@@ -405,7 +405,7 @@ describe("0014_hob_tone", () => {
   });
 
   // covers DP-003
-  it("[TC-DP-032] still reads a hob event journaled before tone existed, with the default tone", async () => {
+  it("[TC-DP-051] still reads a hob event journaled before tone existed, with the default tone", async () => {
     // The AgentUpserted payload as the hub journaled it before 0014, with no voice or length.
     const before = {
       _tag: "AgentUpserted",

@@ -153,7 +153,7 @@ test("[TC-CH-130] a reply's headings, lists, tables and code show formatted whil
 });
 
 // covers CH-004
-test("[TC-CH-131] HTML in a reply shows as text and never runs", async ({ page }) => {
+test("[TC-CH-181] HTML in a reply shows as text and never runs", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(
@@ -173,7 +173,7 @@ test("[TC-CH-131] HTML in a reply shows as text and never runs", async ({ page }
 });
 
 // covers CH-004
-test("[TC-CH-132] a reply's links show where they go and its images load only when asked", async ({ page }) => {
+test("[TC-CH-182] a reply's links show where they go and its images load only when asked", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);
   await send(

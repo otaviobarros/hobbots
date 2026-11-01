@@ -145,10 +145,12 @@ test("[TC-CH-120] a hub killed mid-reply comes back with the reply interrupted, 
   await composer.fill(LONG_PROMPT);
   await composer.press("Enter");
   await expect(streamingReply(page, 30)).toBeVisible();
-  const streamed = (await streamingReply(page, 30).textContent()) ?? "";
 
   await current.kill();
   await expect(reconnecting(page)).toBeVisible();
+  // Read once the hub is gone: the hub saves the reply every second while it streams, so text read
+  // earlier can be shorter than what it saved before the kill.
+  const streamed = (await streamingReply(page, 30).textContent()) ?? "";
   hub = await startHub(dataDir);
 
   // The reply keeps the text the hub had saved, and says it was cut off by the restart.
@@ -158,7 +160,8 @@ test("[TC-CH-120] a hub killed mid-reply comes back with the reply interrupted, 
   expect(prompt?.content).toBe(LONG_PROMPT);
   expect(reply?.status).toBe("interrupted");
   expect(reply?.content.startsWith("Echo: word0")).toBe(true);
-  expect(streamed.startsWith(reply?.content ?? "")).toBe(true);
+  // What the hub saved is the start of the reply the hob was writing, never other text.
+  expect(`Echo: ${LONG_PROMPT}`.startsWith(reply?.content ?? "")).toBe(true);
   test.info().annotations.push({
     type: "text lost in the crash",
     description: `${streamed.length - (reply?.content.length ?? 0)} of ${streamed.length} characters streamed`,

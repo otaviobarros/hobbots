@@ -51,8 +51,10 @@ const LONG = `Please ${Array.from({ length: 300 }, (_, i) => `word${i}`).join(" 
 const composer = (page: Page) => page.getByRole("textbox", { name: /^Message Pip/ });
 const type = async (page: Page, content: string) => {
   await composer(page).fill(content);
+  // The composer ignores Enter while the message before is still on its way to the hub, so the
+  // test waits for Send to be ready, as a person would see it, before pressing it.
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer(page).press("Enter");
-  // The draft clears once the hub has the message.
   await expect(composer(page)).toHaveValue("");
 };
 const queued = (page: Page, content: string) =>
@@ -90,6 +92,8 @@ test("[TC-CH-012] a queued message can be removed, and Send now stops the reply 
   await page.goto(`${current.url}/#/hobs/${pipId}/new`);
 
   await type(page, LONG);
+  // The first message opens its thread; text typed before the thread is open stays on the fresh page.
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await type(page, "later");
   await type(page, "urgent");
   await type(page, "three");

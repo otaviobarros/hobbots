@@ -118,7 +118,7 @@ const leaks = (value: unknown) => {
 
 describe("secrets in tool calls", () => {
   // covers CH-004, PE-003
-  it("[TC-PE-079] redacts known and recognized secrets from tool steps and approvals before they are stored, journaled or sent", async () => {
+  it("[TC-PE-103] redacts known and recognized secrets from tool steps and approvals before they are stored, journaled or sent", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -171,7 +171,7 @@ describe("secrets in tool calls", () => {
     expect(result.journaled.some((entry) => entry.type === "ApprovalRequested")).toBe(true);
   });
   // covers PE-003
-  it("[TC-PE-080] runs the call when the user approves the redacted request they were shown", async () => {
+  it("[TC-PE-104] runs the call when the user approves the redacted request they were shown", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
