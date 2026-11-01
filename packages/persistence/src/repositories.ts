@@ -131,9 +131,15 @@ export const HobbotsRepositoryLive = Layer.effect(
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT * FROM threads WHERE agent_id = ${agentId} ORDER BY updated_at DESC, ${byId}`.pipe(
-          Effect.map(threadRows),
-        ),
+        sql`SELECT * FROM threads WHERE agent_id = ${agentId} AND archived_at IS NULL
+          ORDER BY updated_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
+    });
+    const listArchivedThreads = SqlSchema.findAll({
+      Request: Schema.String,
+      Result: Thread,
+      execute: (agentId) =>
+        sql`SELECT * FROM threads WHERE agent_id = ${agentId} AND archived_at IS NOT NULL
+          ORDER BY archived_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
     });
     const findThread = SqlSchema.findOneOption({
       Request: Schema.String,
@@ -244,6 +250,7 @@ export const HobbotsRepositoryLive = Layer.effect(
             title: thread.title,
             sessions: JSON.stringify(thread.sessions),
             brain: thread.brain === null ? null : JSON.stringify(thread.brain),
+            archived_at: thread.archivedAt,
             created_at: thread.createdAt,
             updated_at: thread.updatedAt,
             revision,
@@ -251,6 +258,7 @@ export const HobbotsRepositoryLive = Layer.effect(
             title = excluded.title,
             sessions = excluded.sessions,
             brain = excluded.brain,
+            archived_at = excluded.archived_at,
             updated_at = excluded.updated_at,
             revision = excluded.revision`;
           return { value: thread, events: [{ _tag: "ThreadUpserted", thread }] };
@@ -337,6 +345,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       updateAgentConfig: (agent) =>
         DateTime.now.pipe(Effect.flatMap((now) => updateAgentConfig(agent, DateTime.formatIso(now)))),
       listThreads: (agentId) => listThreads(agentId).pipe(Effect.orDie),
+      listArchivedThreads: (agentId) => listArchivedThreads(agentId).pipe(Effect.orDie),
       findThread: (id) => findThread(id).pipe(Effect.orDie),
       upsertThread: (thread) => always(upsertThread(thread)),
       listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),

@@ -120,3 +120,31 @@ describe("the search API", () => {
     expect((await search("x".repeat(201))).status).toBe(400);
   });
 });
+
+describe("the archive API", () => {
+  // covers CH-009
+  it("[TC-CH-147] archives and restores over HTTP: archived threads listed apart, sends refused", async () => {
+    const agent = (await request("POST", "/api/agents", hob)).body;
+    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+
+    const archived = await request("POST", `/api/threads/${thread.id}/archive`);
+    expect(archived.status).toBe(200);
+    expect(archived.body.archivedAt).toEqual(expect.any(String));
+    expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toEqual([]);
+    const listed = (await request("GET", `/api/agents/${agent.id}/threads?archived=true`)).body;
+    expect(listed.map((t: { id: string }) => t.id)).toEqual([thread.id]);
+
+    const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content: "More" });
+    expect(sent.status).toBe(409);
+    expect(sent.body).toMatchObject({ _tag: "ThreadArchived", threadId: thread.id });
+
+    const restored = await request("POST", `/api/threads/${thread.id}/restore`);
+    expect(restored.body.archivedAt).toBeNull();
+    expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toHaveLength(1);
+
+    await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "finish" });
+    const refused = await request("POST", `/api/threads/${thread.id}/archive`);
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ _tag: "ThreadArchiveRefused", reason: "hob-retired" });
+  });
+});

@@ -12,6 +12,7 @@ import hobTone from "../src/migrations/0014_hob_tone.ts";
 import hobPolicy from "../src/migrations/0015_hob_policy.ts";
 import threadBrains from "../src/migrations/0020_thread_brains.ts";
 import hobSignCommits from "../src/migrations/0021_hob_sign_commits.ts";
+import threadArchivedAt from "../src/migrations/0025_thread_archived_at.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -688,5 +689,65 @@ describe("0021_hob_sign_commits", () => {
 
     expect(result.agents.map((row) => Number(row.signCommits))).toEqual([0]);
     expect(result.versions.map((row) => Number(row.signCommits))).toEqual([0]);
+  });
+});
+
+describe("0025_thread_archived_at", () => {
+  // covers CH-009, DP-003
+  it("[TC-DP-040] keeps every existing thread live, and still reads thread events journaled before archiving", async () => {
+    const before = {
+      _tag: "ThreadUpserted",
+      thread: {
+        id: "t1",
+        agentId: "pip",
+        title: "Hello",
+        sessions: [],
+        brain: null,
+        createdAt: "2026-10-28T00:00:00.000Z",
+        updatedAt: "2026-10-28T00:00:00.000Z",
+        revision: 1,
+      },
+    };
+    const database = TestDatabaseAt(migrationsBefore("0025"));
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO threads ${sql.insert({
+        id: "t1",
+        agentId: "pip",
+        title: "Hello",
+        createdAt: "2026-10-28T00:00:00.000Z",
+        updatedAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* sql`UPDATE event_journal_head SET sequence = 1 WHERE id = 1`;
+      yield* sql`INSERT INTO event_journal ${sql.insert({
+        sequence: 1,
+        id: "5d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6",
+        type: "ThreadUpserted",
+        schemaVersion: 2,
+        occurredAt: "2026-10-28T00:00:00.000Z",
+        threadId: "t1",
+        payload: JSON.stringify(before),
+      })}`;
+      yield* threadArchivedAt;
+      return {
+        threads: yield* sql`SELECT archived_at FROM threads`,
+        entries: yield* (yield* EventJournal).readAfter(0),
+      };
+    }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
+
+    expect(result.threads).toEqual([{ archivedAt: null }]);
+    expect(result.entries.map((e) => e.payload)).toMatchObject([
+      { _tag: "ThreadUpserted", thread: { id: "t1", archivedAt: null } },
+    ]);
   });
 });

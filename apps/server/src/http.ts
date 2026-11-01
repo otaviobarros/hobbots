@@ -8,7 +8,7 @@ import {
   missingRuntimeModels,
   runtimeAdapters,
 } from "@hobbots/agents";
-import { HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
+import { HobbotsApi, type SetBrainPayload, ThreadArchived, ThreadNotFound } from "@hobbots/api";
 import { RuntimeKind, type ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -33,10 +33,12 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
       pause: ({ params }) => lifecycle.pause(params.agentId),
       wake: ({ params }) => lifecycle.wake(params.agentId),
       retire: ({ params, payload }) => lifecycle.retire(params.agentId, payload.activeWork),
-      threads: ({ params }) =>
+      threads: ({ params, query }) =>
         repo.findAgent(params.agentId).pipe(
           Effect.flatMap(foundAgent(params.agentId)),
-          Effect.flatMap(() => repo.listThreads(params.agentId)),
+          Effect.flatMap(() =>
+            query.archived === "true" ? repo.listArchivedThreads(params.agentId) : repo.listThreads(params.agentId),
+          ),
         ),
       createThread: ({ params }) => chat.createThread(params.agentId),
     });
@@ -60,6 +62,10 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
               Option.match({ onNone: () => Effect.fail(new ThreadNotFound({ threadId })), onSome: Effect.succeed }),
             ),
           );
+        // An archived thread changes nothing, not even its hob's default.
+        if (thread.archivedAt !== null) {
+          return yield* new ThreadArchived({ threadId, archivedAt: thread.archivedAt });
+        }
         yield* hobs.update(thread.agentId, brain);
         return yield* chat.setBrain(threadId, null);
       });
@@ -79,6 +85,8 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
       interrupt: ({ params }) => chat.stop(params.threadId),
       continueReply: ({ params }) => chat.continueReply(params.threadId, params.messageId),
       setBrain: ({ params, payload }) => setBrain(params.threadId, payload),
+      archive: ({ params }) => chat.archive(params.threadId),
+      restore: ({ params }) => chat.restore(params.threadId),
     });
   }),
 );

@@ -21,6 +21,7 @@ import approvalRequests from "./0018_approval_requests.ts";
 import approvalOnceOnly from "./0019_approval_once_only.ts";
 import threadBrains from "./0020_thread_brains.ts";
 import hobSignCommits from "./0021_hob_sign_commits.ts";
+import threadArchivedAt from "./0025_thread_archived_at.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -49,4 +50,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0019_approval_once_only": approvalOnceOnly,
   "0020_thread_brains": threadBrains,
   "0021_hob_sign_commits": hobSignCommits,
+  "0025_thread_archived_at": threadArchivedAt,
 };

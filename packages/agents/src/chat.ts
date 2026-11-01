@@ -4,6 +4,9 @@ import {
   type InvalidHob,
   MessageNotQueued,
   ReplyNotResumable,
+  ThreadArchived,
+  type ThreadArchiveRefusal,
+  ThreadArchiveRefused,
   ThreadNotFound,
 } from "@hobbots/api";
 import {
@@ -90,7 +93,10 @@ export class ChatService extends Context.Service<
     readonly sendPrompt: (
       threadId: ThreadId,
       content: string,
-    ) => Effect.Effect<{ userMessage: Message; assistantMessage: Message | null }, ThreadNotFound | HobUnavailable>;
+    ) => Effect.Effect<
+      { userMessage: Message; assistantMessage: Message | null },
+      ThreadNotFound | HobUnavailable | ThreadArchived
+    >;
     readonly removeQueued: (
       threadId: ThreadId,
       messageId: MessageId,
@@ -113,7 +119,7 @@ export class ChatService extends Context.Service<
     readonly continueReply: (
       threadId: ThreadId,
       messageId: MessageId,
-    ) => Effect.Effect<Message, ThreadNotFound | HobUnavailable | ReplyNotResumable>;
+    ) => Effect.Effect<Message, ThreadNotFound | HobUnavailable | ReplyNotResumable | ThreadArchived>;
     /** Stops every turn the hob has in progress and waits until each has ended (stopped if the user had asked, otherwise interrupted). */
     readonly interruptAgent: (agentId: AgentId) => Effect.Effect<void>;
     /**
@@ -130,7 +136,15 @@ export class ChatService extends Context.Service<
     readonly setBrain: (
       threadId: ThreadId,
       brain: Brain | null,
-    ) => Effect.Effect<Thread, ThreadNotFound | HobUnavailable | InvalidHob>;
+    ) => Effect.Effect<Thread, ThreadNotFound | HobUnavailable | InvalidHob | ThreadArchived>;
+    /**
+     * Archives the thread, which then takes no new messages until it is restored. Refused while a
+     * reply runs or waits in its queue, while an approval waits, or when its hob is retired.
+     * Archiving an archived thread returns it unchanged.
+     */
+    readonly archive: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
+    /** Restores an archived thread, unless its hob is retired. Restoring a live thread returns it unchanged. */
+    readonly restore: (threadId: ThreadId) => Effect.Effect<Thread, ThreadNotFound | ThreadArchiveRefused>;
     /** Starts the hob's queued messages in threads with no turn running, as when it wakes. */
     readonly drainAgent: (agentId: AgentId) => Effect.Effect<void>;
     /** Threads with a turn in progress in this process. */
@@ -176,6 +190,12 @@ export class ChatService extends Context.Service<
         agent.status === "active"
           ? Effect.void
           : Effect.fail(new HobUnavailable({ agentId: agent.id, status: agent.status }));
+
+      // An archived thread is read-only until it is restored.
+      const requireLive = (thread: Thread) =>
+        thread.archivedAt === null
+          ? Effect.void
+          : Effect.fail(new ThreadArchived({ threadId: thread.id, archivedAt: thread.archivedAt }));
 
       // Writes journal their events in the same transaction (ADR 013); the bus announces them once
       // committed. Each returns what it stored, with its revision.
@@ -626,6 +646,7 @@ export class ChatService extends Context.Service<
           Effect.gen(function* () {
             // A retired hob takes nothing; a paused one keeps messages queued until it wakes.
             if (agent.status === "retired") yield* requireActive(agent);
+            yield* requireLive(thread);
             // A message waits while its hob is paused, while a reply runs, and behind any message
             // already waiting, so the thread's messages start in the order they were sent (CH-008).
             const waits =
@@ -699,6 +720,7 @@ export class ChatService extends Context.Service<
         return yield* withThreadHob(threadId, (thread, agent) =>
           Effect.gen(function* () {
             yield* requireActive(agent);
+            yield* requireLive(thread);
             const transcript = (yield* repo.listMessages(threadId)).filter((m) => m.status !== "queued");
             const message = transcript.at(-1);
             if (busy.has(threadId) || message?.id !== messageId || !isResumable(message.status)) {
@@ -750,6 +772,7 @@ export class ChatService extends Context.Service<
         return yield* withThreadHob(threadId, (thread, agent) =>
           Effect.gen(function* () {
             if (agent.status === "retired") yield* requireActive(agent);
+            yield* requireLive(thread);
             if (brain !== null) {
               const invalid = yield* checkRuntimeBrain(adapters, brain);
               if (invalid !== undefined) return yield* invalid;
@@ -761,6 +784,51 @@ export class ChatService extends Context.Service<
               sameOwnBrain(latest.brain, own) ? null : new Thread({ ...latest, brain: own, updatedAt }),
             );
             return Option.getOrElse(changed, () => thread);
+          }),
+        );
+      });
+
+      // Why the thread cannot be archived now, if anything stops it. Runs under the hob's lock, so no
+      // turn starts and no message is sent while the thread is being archived.
+      const archiveRefusal = (thread: Thread, agent: Agent) =>
+        Effect.gen(function* () {
+          if (agent.status === "retired") return "hob-retired" as const;
+          if (Option.isSome(approvals)) {
+            const requests = yield* approvals.value.listForThread(thread.id);
+            if (requests.some((request) => request.state === "pending")) return "approval-pending" as const;
+          }
+          // A turn whose reply has ended no longer stops it, even before its thread is freed.
+          const messages = yield* repo.listMessages(thread.id);
+          return messages.some((m) => m.status === "queued" || isInProgress(m.status))
+            ? ("reply-running" as const)
+            : null;
+        });
+      const refuse = (threadId: ThreadId, reason: ThreadArchiveRefusal) =>
+        Effect.fail(new ThreadArchiveRefused({ threadId, reason }));
+
+      // Neither changes `updatedAt`, so a restored thread goes back to its place in the list.
+      const setArchivedAt = (thread: Thread, archivedAt: string | null) =>
+        changeThread(thread.id, (latest) =>
+          (latest.archivedAt === null) === (archivedAt === null) ? null : new Thread({ ...latest, archivedAt }),
+        ).pipe(Effect.map(Option.getOrElse(() => thread)));
+
+      const archive = Effect.fn("ChatService.archive")(function* (threadId: ThreadId) {
+        return yield* withThreadHob(threadId, (thread, agent) =>
+          Effect.gen(function* () {
+            if (thread.archivedAt !== null) return thread;
+            const reason = yield* archiveRefusal(thread, agent);
+            if (reason !== null) return yield* refuse(threadId, reason);
+            return yield* setArchivedAt(thread, yield* nowIso);
+          }),
+        );
+      });
+
+      const restore = Effect.fn("ChatService.restore")(function* (threadId: ThreadId) {
+        return yield* withThreadHob(threadId, (thread, agent) =>
+          Effect.gen(function* () {
+            if (thread.archivedAt === null) return thread;
+            if (agent.status === "retired") return yield* refuse(threadId, "hob-retired");
+            return yield* setArchivedAt(thread, null);
           }),
         );
       });
@@ -786,6 +854,8 @@ export class ChatService extends Context.Service<
         interruptAgent,
         reviewAuthority,
         setBrain,
+        archive,
+        restore,
         drainAgent,
         activeThreads,
         streamingReplies,
