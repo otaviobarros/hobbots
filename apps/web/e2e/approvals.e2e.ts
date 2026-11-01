@@ -254,3 +254,55 @@ test("[TC-PE-102] Always narrowed to the action's files saves only those files, 
   await sendNext(page, write("other.md"));
   await expect(page.getByRole("region", { name: "Pip asks permission" })).toHaveCount(2);
 });
+
+// covers PE-007
+test("[TC-PE-121] an Always rule shows in Inbox History and Settings, and removing it there makes the next call ask again", async ({
+  page,
+}) => {
+  const { current, card } = await pipAsks(page, remove("old.txt"));
+  await card.getByRole("button", { name: "Always for this site" }).click();
+  await card.getByRole("button", { name: "Save the rule and allow" }).click();
+  await expect(card.getByRole("status")).toHaveText("✓ Allowed, and the rule is saved. Pip carries on.");
+  const chat = page.url();
+  const rule = `Always let Pip delete ${shared}/old.txt`;
+
+  // Settings › Permissions lists it with when it was saved and the request that saved it.
+  await page.goto(`${current.url}/#/settings`);
+  const settings = page.getByRole("region", { name: "Standing rules" });
+  await expect(settings.getByRole("listitem")).toHaveCount(1);
+  await expect(settings.getByRole("listitem")).toContainText(rule);
+  await expect(settings.getByRole("listitem")).toContainText(/Saved .+ · last used .+/);
+
+  // Inbox History lists the same rule; its link opens the request that saved it.
+  await page.goto(`${current.url}/#/inbox?tab=history`);
+  const history = page.getByRole("region", { name: "Standing rules" });
+  await expect(history.getByRole("listitem")).toContainText(rule);
+  await history.getByRole("link", { name: `See the request that saved: ${rule}` }).click();
+  await expect(page).toHaveURL(/tab=all&request=/);
+  await expect(page.getByRole("article", { name: /^Request from Pip/ })).toBeVisible();
+  await page.goBack();
+
+  // Remove rule asks first: Escape keeps the rule, with focus back on Remove rule.
+  const removeRule = history.getByRole("button", { name: `Remove rule: ${rule}` });
+  await removeRule.click();
+  const question = history.getByRole("group", { name: `Remove rule: ${rule}` });
+  await expect(question).toContainText("Remove this rule? Next time Pip does this, Pip asks you first.");
+  await expect(question.getByRole("button", { name: "Keep it" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(question).toBeHidden();
+  await expect(removeRule).toBeFocused();
+  await removeRule.click();
+  await question.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(history.getByText("No standing rules")).toBeVisible();
+
+  // The hub kept it as removed by the user, and the same delete asks again.
+  const grants = await api<ReadonlyArray<Grant & { readonly revokeReason: string }>>(
+    current,
+    "GET",
+    "/api/grants?include=all",
+  );
+  expect(grants.map((grant) => grant.revokeReason)).toEqual(["removed"]);
+  await page.goto(chat);
+  await sendNext(page, remove("old.txt"));
+  await expect(page.getByRole("region", { name: "Pip asks permission" })).toHaveCount(2);
+});

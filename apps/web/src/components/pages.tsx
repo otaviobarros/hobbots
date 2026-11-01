@@ -9,6 +9,7 @@ import { ArchivedHobs } from "./archived-hobs.tsx";
 import { GeneralSettings } from "./general-settings.tsx";
 import { RuntimeCard } from "./runtime.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
+import { StandingRuleSettings } from "./standing-rules/standing-rules.tsx";
 
 function Page({
   icon,
@@ -80,7 +81,7 @@ const LATER_PROVIDERS = [
   { name: "Any OpenAI-compatible key", mark: "+", color: "#b79be8" },
 ];
 
-/** Settings › Permissions: the safety preset and the folders hobs may work in, as chosen during setup. */
+/** Settings › Permissions: the safety preset and the folders hobs may work in, as chosen during setup, and the standing rules. */
 function PermissionSettings() {
   const setup = useQuery(setupQuery);
   if (setup.isError) {
@@ -97,6 +98,7 @@ function PermissionSettings() {
       <span className="lbl pt-2 text-label">Folders hobs may open</span>
       {setup.data.approvedFolders.length === 0 && <p className="m-0 text-sm text-secondary-text">No folders yet.</p>}
       <FolderPicker folders={setup.data.approvedFolders} />
+      <StandingRuleSettings />
     </>
   );
 }
