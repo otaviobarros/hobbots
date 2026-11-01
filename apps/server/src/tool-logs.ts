@@ -13,8 +13,8 @@ const logFile = (folder: string, key: ToolLogKey) =>
   join(folder, `${createHash("sha256").update(`${key.threadId}\0${key.messageId}\0${key.stepId}`).digest("hex")}.log`);
 
 /**
- * Whether an open file is one this hub wrote: a regular file with one name, owned by the hub's
- * user. A link, a device or a file another user planted is never read.
+ * Whether an open file can be the hub's own log: a regular file with one name, owned by the hub's
+ * user. A link, a device or a file another user planted is never read or written.
  */
 const ownFile = (stats: { isFile(): boolean; nlink: number; uid: number }) =>
   stats.isFile() && stats.nlink === 1 && (process.getuid === undefined || stats.uid === process.getuid());
@@ -29,13 +29,12 @@ const write = async (folder: string, key: ToolLogKey, text: string) => {
   await mkdir(folder, { recursive: true, mode: 0o700 });
   if (!(await realFolder(folder))) throw new Error(`${folder} is not a folder`);
   // O_NOFOLLOW: a link planted at the file's name fails the open instead of being written through.
-  const handle = await open(
-    logFile(folder, key),
-    constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW,
-    0o600,
-  );
+  // No O_TRUNC: the file is emptied only once it is known to be the hub's own, so a hard link
+  // planted at its name never empties the file it points to.
+  const handle = await open(logFile(folder, key), constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
   try {
     if (!ownFile(await handle.stat())) throw new Error("the log's name is taken by another file");
+    await handle.truncate(0);
     await handle.writeFile(text, "utf8");
   } finally {
     await handle.close();

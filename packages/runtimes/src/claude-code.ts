@@ -42,7 +42,7 @@ import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect"
 import { type CallDecision, decideCall, refusal, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox } from "./sandbox.ts";
 import { offeredTools, toolLabel } from "./tool-calls.ts";
-import { toolOutputText } from "./tool-output.ts";
+import { fullToolOutput } from "./tool-output.ts";
 
 export interface ClaudeCodeConfig {
   /** Empty working folder the runtime is confined to. */
@@ -706,8 +706,11 @@ export const policyHooks = (
         (input.hook_event_name === "PostToolUse" || input.hook_event_name === "PostToolUseFailure") &&
         started.delete(input.tool_use_id)
       ) {
+        // Claude Code keeps an output too large to return inline in its configuration folder.
         const output =
-          input.hook_event_name === "PostToolUse" ? toolOutputText(input.tool_name, input.tool_response) : input.error;
+          input.hook_event_name === "PostToolUse"
+            ? await fullToolOutput(input.tool_name, input.tool_response, [turn.runtimeFolder, userConfigFolder()])
+            : input.error;
         report({ _tag: "ToolFinished", id: input.tool_use_id, failed, ...(output === undefined ? {} : { output }) });
       }
       return {};
