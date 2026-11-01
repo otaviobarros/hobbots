@@ -17,7 +17,10 @@ export interface HubEventsOptions {
   /** The stream connected: anything may have changed since the last connection. */
   readonly onConnected: () => void;
   readonly onChange: (change: HubChange) => void;
-  /** A connected stream ended: the hub stopped, stopped answering, or dropped this connection. */
+  /**
+   * A connection ended or could not be made: the hub stopped, stopped answering, or dropped it.
+   * Called after every failed try, so the hub's health is checked again while it stays out of reach.
+   */
   readonly onLost: () => void;
   readonly fetch?: typeof globalThis.fetch;
   /** The wait before connecting again, doubling after each failed try up to `maxRetryMs`. */
@@ -57,7 +60,6 @@ const sseEvents = <E, R>(text: Stream.Stream<string, E, R>) =>
 /** Follows the stream until interrupted, connecting again after each loss on a doubling, capped schedule. */
 const follow = (options: HubEventsOptions) => {
   const { url, headers = {}, onConnected, onChange, onLost } = options;
-  let connected = false;
   // Any bytes, keep-alives included, show the hub still answers; silence past the limit ends it.
   const bytes = HttpClientResponse.stream(
     HttpClient.get(url, { headers: { accept: "text/event-stream", ...headers } }).pipe(
@@ -72,20 +74,13 @@ const follow = (options: HubEventsOptions) => {
     Stream.decodeText,
     sseEvents,
     Stream.concat(Stream.fail(new StreamEnded())),
-    Stream.tapError(() =>
-      Effect.sync(() => {
-        if (!connected) return;
-        connected = false;
-        onLost();
-      }),
-    ),
+    Stream.tapError(() => Effect.sync(onLost)),
     // The schedule starts over once a connection delivers its first frame.
     Stream.retry(retry),
     Stream.runForEach((frame) =>
       Effect.sync(() => {
         const change = frameChange(frame);
         if (change === "connected") {
-          connected = true;
           onConnected();
         } else if (change !== null) {
           onChange(change);

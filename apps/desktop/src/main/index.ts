@@ -150,7 +150,7 @@ const requestNoticesOn = (open: (requestId: string) => void) =>
  * polling: they read the hub again only when the stream connects, is lost, or reports a change.
  */
 const followHubFor = (
-  menuBar: Pick<ReturnType<typeof startMenuBar>, "checkServer" | "readWorking">,
+  menuBar: Pick<ReturnType<typeof startMenuBar>, "checkServer" | "activityChanged">,
   notices: ReturnType<typeof requestNotices>,
 ) => {
   const hub = followHub({
@@ -161,7 +161,8 @@ const followHubFor = (
       void menuBar.checkServer();
       void notices.check();
     },
-    onChange: (change) => void (change === "approvals" ? notices.check() : menuBar.readWorking()),
+    onChange: (change) =>
+      void (change._tag === "Approvals" ? notices.check() : menuBar.activityChanged(change.threadId, change.working)),
     onLost: () => void menuBar.checkServer(),
   });
   // Followed only while the server may answer; a server started again is followed at once.

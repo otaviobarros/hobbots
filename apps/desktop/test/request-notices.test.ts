@@ -14,14 +14,20 @@ const approval = (id: string, state: string, command = "git push origin feature"
 
 /** A hub whose Inbox answers what `inbox` holds, and a system that records its notifications. */
 const setup = () => {
-  const hub = { inbox: [] as Array<unknown> | null, focused: false, reads: 0 };
+  // `answers` are given to the next Inbox reads, one each, before `inbox`.
+  const hub = {
+    inbox: [] as Array<unknown> | null,
+    answers: [] as Array<Array<unknown> | null>,
+    focused: false,
+    reads: 0,
+  };
   const notices: Array<{ title: string; body: string; closed: boolean; click: () => void }> = [];
   const opened: Array<string> = [];
   const { check } = requestNotices({
     read: async (path) => {
       if (path === "/api/agents") return [{ id: "pip", name: "Pip" }];
       hub.reads += 1;
-      return hub.inbox;
+      return hub.answers.length > 0 ? hub.answers.shift() : hub.inbox;
     },
     isFocused: () => hub.focused,
     notify: ({ title, body }, onClick) => {
@@ -34,6 +40,7 @@ const setup = () => {
       };
     },
     open: (id) => void opened.push(id),
+    retry: { firstRetryMs: 1, retries: 3 },
   });
   return { hub, notices, opened, check };
 };
@@ -88,7 +95,7 @@ describe("request notifications", () => {
       url: "http://127.0.0.1:4317/api/events",
       canConnect: () => true,
       onConnected: () => void check(),
-      onChange: (change) => void (change === "approvals" && check()),
+      onChange: (change) => void (change._tag === "Approvals" && check()),
       onLost: () => {},
       fetch: stream.fetch,
     });
@@ -102,6 +109,19 @@ describe("request notifications", () => {
     } finally {
       await following.stop();
     }
+  });
+
+  // covers UX-001
+  it("[TC-IN-019] reads the Inbox again when a read did not answer, since no later event may come", async () => {
+    const { hub, notices, check } = setup();
+    hub.inbox = [];
+    await check();
+    // The request event arrives, and the hub answers the read that follows only on its third try.
+    hub.answers = [null, null];
+    hub.inbox = [approval("a", "pending")];
+    await check();
+    expect(hub.reads).toBe(4);
+    expect(notices.map((notice) => notice.body)).toEqual(["git push origin feature"]);
   });
 
   it("checks again after a check asked for while one was under way", async () => {

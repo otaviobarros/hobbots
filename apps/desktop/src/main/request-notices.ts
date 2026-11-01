@@ -1,4 +1,5 @@
 import { coalesce } from "./coalesce.ts";
+import { type ReadUntilOptions, readUntil } from "./read-until.ts";
 import { type NoticeState, noticeChanges, noticeText, pendingRequests } from "./request-notices-model.ts";
 
 /** A notification the system shows; `close` takes it away. */
@@ -15,6 +16,8 @@ export interface RequestNoticesOptions {
   readonly notify: (notice: { title: string; body: string }, onClick: () => void) => ShownNotice;
   /** Opens or reveals the window and shows the request in the Inbox. */
   readonly open: (requestId: string) => void;
+  /** How an Inbox read that did not answer is made again. */
+  readonly retry?: ReadUntilOptions;
 }
 
 /**
@@ -22,7 +25,7 @@ export interface RequestNoticesOptions {
  * menu bar after the last window closed, or after opening at login. `check` it whenever the hub's
  * event stream connects and whenever a request arrives or is decided.
  */
-export const requestNotices = ({ read, isFocused, notify, open }: RequestNoticesOptions) => {
+export const requestNotices = ({ read, isFocused, notify, open, retry }: RequestNoticesOptions) => {
   let state: NoticeState = { known: undefined, shown: new Set() };
   const shown = new Map<string, ShownNotice>();
 
@@ -37,8 +40,9 @@ export const requestNotices = ({ read, isFocused, notify, open }: RequestNotices
   };
 
   const reconcile = async () => {
-    const pending = pendingRequests(await read("/api/approvals"));
-    // An unanswered read changes nothing: what is shown stays until the hub says otherwise.
+    // A read that did not answer is made again, a few times, since no later event may come.
+    const pending = await readUntil(async () => pendingRequests(await read("/api/approvals")), undefined, retry);
+    // Still unanswered, it changes nothing: what is shown stays until the hub says otherwise.
     if (pending === null) return;
     const changes = noticeChanges(state, pending, isFocused());
     for (const id of changes.close) {
