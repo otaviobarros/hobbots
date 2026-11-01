@@ -138,7 +138,7 @@ const refspecBranch = (refspec: string) => {
   const [source, destination] = refspec.replace(/^\+/, "").split(":");
   const branch = (destination ?? source ?? "").replace(/^refs\/heads\//, "");
   // `:branch` deletes the branch on the remote.
-  return { branch, forced: forced || source === "" };
+  return { branch, forced: forced || (source === "" && branch !== "") };
 };
 
 /**
@@ -166,7 +166,12 @@ const pushRequests = (args: ReadonlyArray<string>, cwd: string, literal: boolean
   if (refspecs.length === 0) return [push("(current branch)", false, true, false)];
   return refspecs.map((refspec) => {
     const { branch, forced } = refspecBranch(refspec);
-    return push(branch, forced, branch === "" || DEFAULT_BRANCHES.has(branch), exact);
+    // A pattern (`refs/heads/*`), `:` or `+:` (every matching branch) and `HEAD` or `@` (the current
+    // branch) do not name the branches they update, so they may reach the default branch.
+    if (branch === "" || branch.includes("*") || branch === "HEAD" || branch === "@") {
+      return push(`(${refspec})`, forced, true, false);
+    }
+    return push(branch, forced, DEFAULT_BRANCHES.has(branch), exact);
   });
 };
 

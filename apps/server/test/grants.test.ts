@@ -394,7 +394,11 @@ describe("Standing grants", () => {
         if (sibling.pending) yield* dismiss(sibling.pending, sibling.thread.id);
         const moved = yield* runCommand("cd sub && rm build");
         if (moved.pending) yield* dismiss(moved.pending, moved.thread.id);
-        return { again, both, sibling, moved };
+        const wrapped = yield* runCommand("command cd sub && rm build");
+        if (wrapped.pending) yield* dismiss(wrapped.pending, wrapped.thread.id);
+        const pattern = yield* runCommand("git push origin 'refs/heads/*:refs/heads/*'");
+        if (pattern.pending) yield* dismiss(pattern.pending, pattern.thread.id);
+        return { again, both, sibling, moved, wrapped, pattern };
       }),
     );
 
@@ -403,6 +407,9 @@ describe("Standing grants", () => {
     expect(result.both.pending).toMatchObject({ onceOnly: true, grantable: false });
     expect(result.sibling.pending).toMatchObject({ grantable: false });
     expect(result.moved.pending).toMatchObject({ operation: "delete-files", grantable: false, rules: [] });
+    expect(result.wrapped.pending).toMatchObject({ operation: "delete-files", grantable: false, rules: [] });
+    // A pattern refspec may reach the default branch: once only, with the check box.
+    expect(result.pattern.pending).toMatchObject({ operation: "push", onceOnly: true, grantable: false });
   });
 
   // covers PE-007, PE-008

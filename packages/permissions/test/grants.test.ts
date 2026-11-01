@@ -73,17 +73,43 @@ describe("the command reader", () => {
   });
 
   it("offers no rule for assignments, folder changes, shells and wrappers", () => {
-    for (const line of ["FOO=1 pnpm test", "eval ls", "sh -c ls", "bash -c ls", "xargs rm"]) {
+    for (const line of ["FOO=1 pnpm test", "=ls"]) {
       expect({ line, read: readCommandLine(line) }).toEqual({ line, read: [null] });
     }
-    for (const line of ["env ls", "sudo ls", "exec ls", "watch ls", "/usr/bin/env ls", "=ls"]) {
-      expect({ line, read: readCommandLine(line) }).toEqual({ line, read: [null] });
+    // A wrapper may run anything, anywhere: no command in its line is granted.
+    for (const line of [
+      "eval ls",
+      "sh -c ls",
+      "bash -c ls",
+      "xargs rm",
+      "env ls",
+      "sudo ls",
+      "exec ls",
+      "watch ls",
+      "/usr/bin/env ls",
+      "ls && env -C sub rm build",
+    ]) {
+      expect({ line, read: readCommandLine(line) }).toEqual({ line, read: null });
     }
+    expect(readCommandLine("git add . && pnpm run watch")).toEqual([
+      ["git", "add", "."],
+      ["pnpm", "run", "watch"],
+    ]);
     expect(readCommandLine("FOO=1 ls && pnpm test")).toEqual([null, ["pnpm", "test"]]);
   });
 
   it("reads nothing from a line that changes folder, so no command in it is granted against the wrong one", () => {
-    for (const line of ["cd src", "cd src && rm build", "pnpm build; pushd dist", "popd && ls", "/usr/bin/cd x; ls"]) {
+    for (const line of [
+      "cd src",
+      "cd src && rm build",
+      "pnpm build; pushd dist",
+      "popd && ls",
+      "/usr/bin/cd x; ls",
+      "command cd sub && rm build",
+      "builtin cd sub && rm build",
+      "CDPATH=/tmp cd sub && rm build",
+      "nice cd sub; rm build",
+    ]) {
       expect({ line, read: readCommandLine(line) }).toEqual({ line, read: null });
     }
   });
