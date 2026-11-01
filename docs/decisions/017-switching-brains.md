@@ -39,7 +39,7 @@ The summary is stored as a **checkpoint**: the thread's summary text and the las
 - The picker in the chat sets any of the three, runtime, model and effort, and changes the thread only. A model switch keeps the thread's effort when the new model takes it. **Make it the hob's default** instead saves the brain as the hob's next configuration version (AG-002), clears the thread's own choice, and so also applies to the hob's other threads that follow the hob.
 - The runtime is now part of a hob's versioned configuration, so a turn keeps the runtime it started with even if the hob is edited meanwhile.
 - A brain is accepted only when the hub has an adapter for its runtime and the model is one that runtime offers. Runtimes without an adapter are listed as unavailable with the reason, never hidden.
-- A limited or cut-off reply offers Continue on another brain next to Continue: the thread switches first, then the reply continues in place with a briefing.
+- A limited or cut-off reply offers Continue on another brain next to Continue: the thread switches first, then the reply continues in place with a briefing that includes the reply as its first brain left it, with its text and tool steps, so the new brain does not redo that work.
 
 ### Attribution
 
@@ -63,7 +63,7 @@ The scenarios that would show this decision holds. Each names the test case or e
 - A thread started on one runtime continues on another, and the new session's first turn carries a briefing with facts from earlier in the thread: `[TC-CH-126]`, with the fake runtime for both. On real Claude Code and Codex: not proven yet, [#12](https://github.com/otaviobarros/hobbots/issues/12).
 - Switching back resumes the first runtime's own session and sends only what happened since it left: `[TC-CH-127]`.
 - The picker changes only that thread; making it the hob's default adds a configuration version and the hob's other threads follow it: `[TC-CH-128]`.
-- A switch away from a runtime that is limited or unavailable still works, and the old runtime is never asked: `[TC-CH-129]`.
+- A switch away from a runtime that is limited or unavailable still works, the old runtime is never asked, and a reply continued on another brain is told the tool steps it already ran: `[TC-CH-129]`.
 - A brain with no adapter or a model the runtime does not offer is refused: `[TC-CH-130]`.
 - The briefing keeps the latest messages within the verbatim budget, cuts long messages, summarizes tool steps and reuses the stored checkpoint: `[TC-CH-131]`.
 - The summary drops its oldest lines to fit, a reply with many tool calls cannot crowd it out, and text that looks like the briefing's headings or speakers stays quoted: `[TC-CH-134]`.

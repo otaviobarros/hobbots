@@ -12,6 +12,7 @@ import {
   RuntimeAdapter,
   type RuntimeAdapterShape,
   RuntimeError,
+  type RuntimeEvent,
 } from "@hobbots/agents";
 import { type Agent, isInProgress, type Message, type RuntimeKind, roleFields, type Thread } from "@hobbots/domain";
 import { ApprovalRepositoryLive, HobbotsRepositoryLive, SearchIndex, SetupRepository } from "@hobbots/persistence";
@@ -41,6 +42,8 @@ const codex = { runtime: "codex", model: "fake-coder", effort: null } as const;
 let asked: Record<RuntimeKind, Array<PromptRequest>>;
 // While set, Claude Code refuses every turn, as when it is signed out or down.
 let claudeDown: boolean;
+// While set, each Claude Code turn runs a command before it writes, as a reply that does work would.
+let claudeWorks: boolean;
 let handler: (request: Request) => Promise<Response>;
 let dispose: (() => Promise<void>) | undefined;
 
@@ -48,9 +51,31 @@ const recorded = (runtime: RuntimeKind, fake: RuntimeAdapterShape): RuntimeAdapt
   ...fake,
   sendPrompt: (request) => {
     asked[runtime].push(request);
-    return runtime === "claude-code" && claudeDown
-      ? Stream.fail(new RuntimeError({ message: "Claude Code is signed out" }))
-      : fake.sendPrompt(request);
+    if (runtime === "claude-code" && claudeDown) {
+      return Stream.fail(new RuntimeError({ message: "Claude Code is signed out" }));
+    }
+    const reply = fake.sendPrompt(request);
+    if (runtime !== "claude-code" || !claudeWorks) return reply;
+    return reply.pipe(
+      Stream.flatMap((event) =>
+        Stream.fromIterable<RuntimeEvent>(
+          event._tag === "SessionStarted"
+            ? [
+                event,
+                {
+                  _tag: "ToolStarted",
+                  id: "tool-1",
+                  tool: "Bash",
+                  operation: "run-commands",
+                  targets: ["/work"],
+                  label: "Running pnpm publish",
+                },
+                { _tag: "ToolFinished", id: "tool-1", failed: false },
+              ]
+            : [event],
+        ),
+      ),
+    );
   },
 });
 
@@ -58,6 +83,7 @@ const recorded = (runtime: RuntimeKind, fake: RuntimeAdapterShape): RuntimeAdapt
 const start = (options: { readonly codex?: boolean } = {}) => {
   asked = { "claude-code": [], codex: [] };
   claudeDown = false;
+  claudeWorks = false;
   const runtimes = Layer.mergeAll(
     Layer.succeed(RuntimeAdapter, recorded("claude-code", makeFakeRuntime())),
     options.codex === false
@@ -229,7 +255,9 @@ describe("switching a thread's brain", () => {
     start();
     const agent = await summon();
     const { id } = await newThread(agent);
+    claudeWorks = true;
     const limited = await say(id, `${FAKE_DIRECTIVES.limit} write a poem about Miso`);
+    claudeWorks = false;
     expect(limited.status).toBe("limited");
     const claudeTurns = asked["claude-code"].length;
 
@@ -240,7 +268,13 @@ describe("switching a thread's brain", () => {
     );
     const done = (await settled(id)).at(-1) as Message;
     expect(done).toMatchObject({ id: limited.id, status: "complete", runtime: "codex" });
-    expect(asked.codex[0]?.briefing).toContain("write a poem about Miso");
+    // Codex is told what the limited reply already did, so it does not do it again.
+    const handoff = asked.codex[0]?.briefing ?? "";
+    expect(handoff).toContain("write a poem about Miso");
+    expect(handoff).toContain(
+      "**You, thinking with Claude Code · fake-thinker:** [ended by the provider's usage limit]",
+    );
+    expect(handoff).toContain("Tools: Running pnpm publish (done)");
     expect(asked["claude-code"]).toHaveLength(claudeTurns);
 
     // Down altogether, Claude Code is not asked either once the thread has moved on.

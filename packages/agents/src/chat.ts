@@ -497,7 +497,7 @@ export class ChatService extends Context.Service<
 
       // Runs a turn for a reply that is already saved as streaming, on the thread's brain, with what
       // its session missed told first. `promptId` is the turn's own prompt, when it is a message;
-      // `continuedFrom` the brain that wrote a reply Continue resumes.
+      // `continued` the reply Continue resumes, as it was before this turn.
       // Runs under the hob's lock.
       const launch = (
         agent: Agent,
@@ -506,7 +506,7 @@ export class ChatService extends Context.Service<
         prompt: string,
         saved: Message,
         promptId: MessageId | null,
-        continuedFrom: RuntimeKind | null = null,
+        continued: Message | null = null,
       ) =>
         Effect.gen(function* () {
           const brain = brainFor(thread, config);
@@ -520,8 +520,10 @@ export class ChatService extends Context.Service<
               ),
             )
             .filter((m) => m.id !== promptId);
-          const switched = continuedFrom !== null && continuedFrom !== brain.runtime;
-          const briefing = yield* brief(thread, brain.runtime, before, switched);
+          // A reply continued on another brain is told too, with the text and tool steps its first
+          // brain left, so the new one does not redo or contradict that work.
+          const switched = continued !== null && continued.runtime !== brain.runtime;
+          const briefing = yield* brief(thread, brain.runtime, switched ? [...before, continued] : before, switched);
           const changed = yield* instructionsChanged(
             thread,
             brain.runtime,
@@ -712,7 +714,7 @@ export class ChatService extends Context.Service<
             const saved = yield* saveMessage(
               new Message({ ...resumed, configVersion: config.version, runtime: brain.runtime, model: brain.model }),
             );
-            yield* launch(agent, config, thread, continuePrompt(message.content), saved, null, message.runtime);
+            yield* launch(agent, config, thread, continuePrompt(message.content), saved, null, message);
             return saved;
           }),
         );
