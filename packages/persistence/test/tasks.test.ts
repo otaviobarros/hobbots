@@ -6,6 +6,7 @@ import {
   AttemptId,
   CheckpointId,
   type Committed,
+  carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   type EventEnvelope,
@@ -29,6 +30,13 @@ const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, TaskRepositoryLive, Task
 const run = <A, E>(
   effect: Effect.Effect<A, E, HobbotsRepository | TaskRepository | TaskToolCalls | EventJournal | SqlClient.SqlClient>,
 ) => effect.pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+/** What the Task's ledger holds in its owner's backpack, as a turn that was shown all of it carries it. */
+const carryAll = (id: string) =>
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    return carriedFrom(Option.getOrThrow(yield* tasks.readLedger(TaskId.make(id))), () => true);
+  });
 
 const now = "2026-11-01T00:00:00.000Z";
 const later = "2026-11-01T01:00:00.000Z";
@@ -338,11 +346,24 @@ describe("Task records", () => {
             const task = Option.getOrThrow(yield* tasks.readTree(TaskId.make(id))).tasks[0];
             if (task === undefined) throw new Error("no Task");
             const started = yield* tasks.startAttempt(task.id, task.revision, attempt(attemptId));
+            // A promised milestone is reached before the Task can complete.
+            for (const milestone of Option.getOrThrow(yield* tasks.readTree(task.id)).milestones) {
+              yield* tasks.recordCheckpoint({
+                id: CheckpointId.make(`reached-${milestone.id}`),
+                taskId: task.id,
+                source: "planned",
+                kind: "milestone",
+                milestoneId: milestone.id,
+                summary: milestone.title,
+                createdAt: at,
+              });
+            }
             return yield* tasks.completeTask(task.id, started.value.task.revision, {
               summary: `${id} done`,
               attemptId: AttemptId.make(attemptId),
               artifacts: [{ id: ArtifactId.make(`art-${id}`), kind: "text", label: id, value: `${id} text` }],
               at,
+              carried: yield* carryAll(id),
             });
           });
         const root = Option.getOrThrow(yield* tasks.readTree(campaignId)).tasks[0];
@@ -380,12 +401,18 @@ describe("Task records", () => {
           .completeTask(campaignId, current.revision, completion("a-root"))
           .pipe(Effect.flip);
         yield* tasks.answerQuestion(QuestionId.make("q-root"), { _tag: "User" }, "Yes", now);
-        const done = yield* tasks.completeTask(campaignId, current.revision, completion("a-root"));
+        // The members' results are still unread in Aldric's backpack until his turn carries them.
+        const unread = yield* tasks.completeTask(campaignId, current.revision, completion("a-root")).pipe(Effect.flip);
+        const done = yield* tasks.completeTask(campaignId, current.revision, {
+          ...completion("a-root"),
+          carried: yield* carryAll("campaign"),
+        });
         return {
           otherAttempt,
           childrenOpen,
           ask,
           questionsOpen,
+          unread,
           done,
           tree: Option.getOrThrow(yield* tasks.readTree(campaignId)),
         };
@@ -400,7 +427,21 @@ describe("Task records", () => {
       answer: "Playful",
       answeredBy: { _tag: "Lead", agentId: ALDRIC },
     });
-    expect(tags(result.done.entries)).toEqual(["TaskCompleted", "CheckpointRecorded", "QuestCompleted"]);
+    expect(result.unread).toMatchObject({ _tag: "TaskRefused", reason: "items-open" });
+    // The completion consumes what it carried, in its own transaction.
+    expect(tags(result.done.entries).slice(0, 3)).toEqual(["TaskCompleted", "CheckpointRecorded", "QuestCompleted"]);
+    expect(
+      result.done.entries
+        .slice(3)
+        .map(({ payload }) =>
+          payload._tag === "BackpackItemChanged" ? [payload.item.kind, payload.item.taskId, payload.item.state] : null,
+        ),
+    ).toEqual([
+      ["answer", "campaign", "resolved"],
+      ["checkpoint", "copy", "resolved"],
+      ["result", "copy", "resolved"],
+      ["result", "build", "resolved"],
+    ]);
     expect(result.done.value).toMatchObject({
       state: "completed",
       result: { summary: "Campaign ready", attemptId: "a-root" },
@@ -520,6 +561,7 @@ describe("Task records", () => {
           attemptId: AttemptId.make("a1"),
           artifacts: [{ id: ArtifactId.make("copy-doc"), kind: "file", label: "Copy", value: "/work/copy.md" }],
           at: later,
+          carried: yield* carryAll("copy"),
         });
         yield* tasks.createTask({ task: newTask("elsewhere", PIP, null), delegation: null, milestones: [] });
         const handed = yield* tasks.handOff(ArtifactId.make("copy-doc"), TaskId.make("build"), later);

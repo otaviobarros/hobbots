@@ -6,6 +6,7 @@ import type {
   Attempt,
   AttemptId,
   AttemptState,
+  CarriedItem,
   Checkpoint,
   CheckpointId,
   CheckpointKind,
@@ -22,6 +23,7 @@ import type {
   Question,
   QuestionId,
   QuestLimits,
+  ResponsibilityLedger,
   RuntimeKind,
   StaleTask,
   Task,
@@ -102,6 +104,11 @@ export interface TaskCompletion {
   readonly attemptId: AttemptId;
   readonly artifacts: ReadonlyArray<NewArtifact>;
   readonly at: string;
+  /**
+   * The backpack items the completing turn carries (ADR 019). The gate leaves them out, and the
+   * completion resolves them as consumed; any other open item still blocks it. None by default.
+   */
+  readonly carried?: ReadonlyArray<CarriedItem>;
 }
 
 /** A checkpoint its owner reports; automatic ones are recorded by the repository with the state they follow. */
@@ -172,8 +179,9 @@ export class TaskRepository extends Context.Service<
      */
     readonly moveTask: (taskId: TaskId, revision: number, to: TaskTarget, at: string) => Changed<Task, TaskChange>;
     /**
-     * Completes a Task with a result from its current Attempt, once its subtree has ended, its
-     * dependencies completed and its questions are answered; completes its Quest with it.
+     * Completes a Task with a result from its current Attempt once its responsibility ledger is
+     * settled, less what the completing turn carries; completes its Quest with it. Refused with
+     * every open entry named otherwise (IN-006).
      */
     readonly completeTask: (taskId: TaskId, revision: number, completion: TaskCompletion) => Changed<Task, TaskChange>;
     readonly recordCheckpoint: (input: NewCheckpoint) => Changed<Checkpoint>;
@@ -193,6 +201,8 @@ export class TaskRepository extends Context.Service<
       revision: number,
       wait: NewWait,
     ) => Changed<{ readonly task: Task; readonly wait: TaskWait }, TaskChange>;
+    /** What still keeps the Task open, as its completion gate reads it (ADR 019). */
+    readonly readLedger: (taskId: TaskId) => Effect.Effect<Option.Option<ResponsibilityLedger>>;
     /** The Task and everything under it. */
     readonly readTree: (taskId: TaskId) => Effect.Effect<Option.Option<TaskTree>>;
     /** The tree of each Task a request in the thread started, oldest first. */

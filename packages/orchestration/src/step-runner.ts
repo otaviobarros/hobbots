@@ -20,8 +20,10 @@ import {
   type AgentId,
   type AttemptId,
   AttemptId as AttemptIdSchema,
+  type CarriedItem,
   CheckpointId,
   type Committed,
+  carriedFrom,
   descendantsOf,
   isLiveAttempt,
   isTerminalTask,
@@ -144,6 +146,16 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           return Option.isSome(recorded);
         });
 
+      /** A step's session starts from its brief, so it carries the step's own Task item (ADR 019). */
+      const carriedBy = (step: Task) =>
+        Effect.map(
+          tasks.readLedger(step.id),
+          Option.match({
+            onNone: () => [],
+            onSome: (ledger) => carriedFrom(ledger, (item) => item.kind === "task" && item.taskId === step.id),
+          }),
+        );
+
       /** The session's final reply, or why it ended without one. */
       const runSession = (
         agent: Agent,
@@ -152,6 +164,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
         tree: TaskTree,
         access: ToolAccess | null,
         attemptId: AttemptId,
+        carried: ReadonlyArray<CarriedItem>,
       ) =>
         Effect.gen(function* () {
           const adapter = adapters(config.runtime);
@@ -177,7 +190,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
               approvals: null,
               redaction: redactor,
               recordToolStart: recordToolStart(step),
-              hubTools: tools.forTurn({ agentId: agent.id, taskId: step.id }, STEP_TOOLS),
+              hubTools: tools.forTurn({ agentId: agent.id, taskId: step.id, carried }, STEP_TOOLS),
             })
             .pipe(
               Stream.runForEach((event) =>
@@ -214,7 +227,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
        * Records how the step's session ended: the Attempt first, then the step completes with the
        * session's final reply unless it returned a result itself, or fails with the reason.
        */
-      const settle = (stepId: TaskId, attemptId: AttemptId, ending: Ending) =>
+      const settle = (stepId: TaskId, attemptId: AttemptId, ending: Ending, carried: ReadonlyArray<CarriedItem>) =>
         Effect.gen(function* () {
           const at = yield* nowIso;
           const failed = ending._tag === "Failed";
@@ -240,6 +253,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
                 attemptId,
                 artifacts: [],
                 at,
+                carried,
               }),
               "complete a step",
             );
@@ -327,13 +341,14 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
                 );
                 if (Option.isNone(started)) return;
                 const step = started.value.task;
+                const carried = yield* carriedBy(step);
                 const run: Running = { agentId: step.ownerId, rootId: step.rootId, access, stop: null };
                 running.set(step.id, run);
                 yield* FiberMap.run(
                   fibers,
                   step.id,
-                  runSession(agent.value, config.value, step, tree, access, attemptId).pipe(
-                    Effect.flatMap((ending) => settle(step.id, attemptId, ending)),
+                  runSession(agent.value, config.value, step, tree, access, attemptId, carried).pipe(
+                    Effect.flatMap((ending) => settle(step.id, attemptId, ending, carried)),
                     Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
                     Effect.ensuring(
                       Effect.sync(() => running.delete(step.id)).pipe(

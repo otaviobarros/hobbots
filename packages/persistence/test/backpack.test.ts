@@ -1,14 +1,22 @@
-import { HobbotsRepository, type NewTask, TaskRepository, TaskToolCalls } from "@hobbots/agents";
+import { ApprovalRepository, HobbotsRepository, type NewTask, TaskRepository, TaskToolCalls } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  ApprovalId,
+  ApprovalRequest,
   AttemptId,
   type BackpackItem,
+  type CarriedItem,
   CheckpointId,
   type Committed,
+  carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   type EventEnvelope,
+  ledgerRefusal,
+  Message,
+  MessageId,
+  MilestoneId,
   QuestId,
   QuestionId,
   TaskId,
@@ -16,10 +24,11 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import {
+  ApprovalRepositoryLive,
   BackpackLive,
   EventJournal,
   HobbotsRepositoryLive,
@@ -30,6 +39,7 @@ import { TestDatabase } from "../src/testing.ts";
 
 const TestLayer = Layer.mergeAll(
   HobbotsRepositoryLive,
+  ApprovalRepositoryLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
   BackpackLive,
@@ -39,7 +49,13 @@ const run = <A, E>(
   effect: Effect.Effect<
     A,
     E,
-    HobbotsRepository | TaskRepository | TaskToolCalls | Backpack | EventJournal | SqlClient.SqlClient
+    | HobbotsRepository
+    | ApprovalRepository
+    | TaskRepository
+    | TaskToolCalls
+    | Backpack
+    | EventJournal
+    | SqlClient.SqlClient
   >,
 ) => effect.pipe(Effect.provide(TestLayer), Effect.runPromise);
 
@@ -261,11 +277,14 @@ describe("A hob's backpack", () => {
           createdAt: now,
         });
         const answered = yield* tasks.answerQuestion(asked.value.id, { _tag: "Lead", agentId: ALDRIC }, "EU", now);
+        // Quill's turn read its Task item and Aldric's answer, so finishing the Task consumes both.
+        const ledger = Option.getOrThrow(yield* tasks.readLedger(copy.value.id));
         const done = yield* tasks.completeTask(copy.value.id, started.value.task.revision, {
           summary: "Copy drafted",
           attemptId: AttemptId.make("a1"),
           artifacts: [],
           at: now,
+          carried: carriedFrom(ledger, () => true),
         });
         return { started, asked, answered, done };
       }),
@@ -287,7 +306,13 @@ describe("A hob's backpack", () => {
       payload: { _tag: "result", task: { id: "copy", state: "completed" } },
     });
     // The hub's own "done" checkpoint is not a second item: the result says it.
-    expect(tags(result.done.entries)).toEqual(["TaskCompleted", "CheckpointRecorded", "BackpackItemRecorded"]);
+    expect(tags(result.done.entries)).toEqual([
+      "TaskCompleted",
+      "CheckpointRecorded",
+      "BackpackItemChanged",
+      "BackpackItemChanged",
+      "BackpackItemRecorded",
+    ]);
   });
 
   // covers IN-002
@@ -482,5 +507,259 @@ describe("A hob's backpack", () => {
 
     expect(result.effect.value.value.id).toBe("c-fenced");
     expect(result.renewal.value).toMatchObject({ state: "acknowledged", claim: { owner: "hub-1:turn-1" } });
+  });
+});
+
+/** Starts the Task's next Attempt, as the turn that works on it would. */
+const startOn = (id: string, attemptId: string) =>
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const task = Option.getOrThrow(yield* tasks.readTree(TaskId.make(id))).tasks[0];
+    if (task === undefined) throw new Error(`no Task ${id}`);
+    return yield* tasks.startAttempt(task.id, task.revision, {
+      id: AttemptId.make(attemptId),
+      runtime: "claude-code",
+      sessionId: null,
+      configVersion: 1,
+      policyVersion: null,
+      startedAt: now,
+    });
+  });
+
+const finish = (id: string, attemptId: string, carried: ReadonlyArray<CarriedItem>) =>
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const task = Option.getOrThrow(yield* tasks.readTree(TaskId.make(id))).tasks[0];
+    if (task === undefined) throw new Error(`no Task ${id}`);
+    return yield* tasks.completeTask(task.id, task.revision, {
+      summary: `${id} done`,
+      attemptId: AttemptId.make(attemptId),
+      artifacts: [],
+      at: now,
+      carried,
+    });
+  });
+
+const ledgerOf = (id: string) =>
+  Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readLedger(TaskId.make(id))).pipe(
+    Effect.map(Option.getOrThrow),
+  );
+
+const pendingApproval = Effect.gen(function* () {
+  const repo = yield* HobbotsRepository;
+  const messageId = MessageId.make("m-turn");
+  yield* repo.upsertMessage(
+    new Message({
+      id: messageId,
+      threadId,
+      role: "assistant",
+      content: "",
+      status: "streaming",
+      error: null,
+      configVersion: 1,
+      createdAt: now,
+    }),
+  );
+  return yield* (yield* ApprovalRepository).insert(
+    new ApprovalRequest({
+      id: ApprovalId.make("ap-push"),
+      agentId: ALDRIC,
+      threadId,
+      messageId,
+      stepId: "tool-1",
+      tool: "Bash",
+      operation: "push",
+      targets: ["origin main"],
+      arguments: { command: "git push origin main" },
+      label: "Running git push origin main",
+      reason: "Pushing asks first.",
+      actionDigest: "d".repeat(64),
+      policyVersion: "r1-0123456789abcdef",
+      state: "pending",
+      denyReason: null,
+      createdAt: now,
+      decidedAt: null,
+    }),
+  );
+});
+
+describe("The responsibility ledger", () => {
+  // covers IN-006
+  it("[TC-IN-040] lists open work, waits, dependencies, questions, milestones, approvals and backpack items without asking the hob", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { copy, build } = yield* campaign;
+        const tasks = yield* TaskRepository;
+        yield* startOn("campaign", "a-root");
+        // Aldric plans a review step that comes after Quill's copy and promises a milestone.
+        yield* tasks.createTask({
+          task: { ...newTask("review", ALDRIC, "campaign"), dependsOn: [copy.value.id] },
+          delegation: null,
+          milestones: [{ id: MilestoneId.make("m-review"), title: "Review notes" }],
+        });
+        const root = Option.getOrThrow(yield* tasks.readTree(TaskId.make("campaign"))).tasks[0];
+        if (root === undefined) throw new Error("no root");
+        yield* tasks.waitFor(root.id, root.revision, { on: [copy.value.id, build.value.id], mode: "all", at: now });
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-ada"),
+          taskId: build.value.id,
+          askerId: ADA,
+          text: "Which market?",
+          createdAt: now,
+        });
+        yield* pendingApproval;
+        const early = yield* ledgerOf("campaign");
+        const review = yield* ledgerOf("review");
+        // Quill finishes from the turn that took up her Task item; her result reaches Aldric.
+        yield* startOn("copy", "a-copy");
+        yield* finish(
+          "copy",
+          "a-copy",
+          carriedFrom(yield* ledgerOf("copy"), () => true),
+        );
+        return { early, review, later: yield* ledgerOf("campaign") };
+      }),
+    );
+
+    const summary = (ledger: typeof result.early) =>
+      ledger.open.map((entry) => {
+        switch (entry._tag) {
+          case "Child":
+          case "Dependency":
+            return [entry._tag, entry.task.id];
+          case "Wait":
+            return [entry._tag, entry.wait.on.join(",")];
+          case "Question":
+            return [entry._tag, entry.question.id];
+          case "Milestone":
+            return [entry._tag, entry.milestone.id];
+          case "Approval":
+            return [entry._tag, entry.approval.id];
+          default:
+            return [entry._tag, `${entry.item.kind}:${entry.item.taskId}`];
+        }
+      });
+    // Ada's question shows once, as its Question record, not again as Aldric's backpack item.
+    expect(summary(result.early)).toEqual([
+      ["Child", "copy"],
+      ["Child", "build"],
+      ["Child", "review"],
+      ["Wait", "copy,build"],
+      ["Question", "q-ada"],
+      ["Approval", "ap-push"],
+      ["Item", "task:review"],
+    ]);
+    expect(summary(result.review)).toEqual([
+      ["Dependency", "copy"],
+      ["Milestone", "m-review"],
+      ["Item", "task:review"],
+    ]);
+    expect(summary(result.later)).toContainEqual(["Item", "result:copy"]);
+    expect(summary(result.later)).not.toContainEqual(["Child", "copy"]);
+    expect(ledgerRefusal(result.review)).toEqual({
+      reason: "dependencies-open",
+      message:
+        "Task review cannot complete yet: it comes after Task copy (Brief for copy), which is queued; " +
+        'milestone "Review notes" is not reached; report it with report_checkpoint; ' +
+        "Task review (Brief for review) has not been taken up.",
+    });
+  });
+
+  // covers IN-006, EX-006
+  it("[TC-IN-041] a hob completes its Task from the turn its Task item started, and an item that arrived meanwhile still blocks", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { copy } = yield* campaign;
+        const tasks = yield* TaskRepository;
+        const backpack = yield* Backpack;
+        // The turn takes up Quill's Task item under a claim, as the dispatcher delivers it.
+        const id = recorded(copy).id;
+        const claimed = yield* backpack.claim(id, "hub-1:turn-1", "1 minute");
+        const held = { owner: "hub-1:turn-1", token: claimed.value.fencingToken };
+        yield* backpack.deliver(id, held, { target: "attempt:a-copy", turnId: "a-copy" });
+        yield* backpack.acknowledge(id, held, "session-1");
+        yield* backpack.process(id, held);
+        yield* startOn("copy", "a-copy");
+        // Quill asks, and Aldric's answer arrives while the turn runs, undelivered to it.
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-quill"),
+          taskId: copy.value.id,
+          askerId: QUILL,
+          text: "Which tone?",
+          createdAt: now,
+        });
+        const answer = yield* tasks.answerQuestion(
+          QuestionId.make("q-quill"),
+          { _tag: "Lead", agentId: ALDRIC },
+          "Playful",
+          now,
+        );
+        const carried = [{ itemId: id, claim: held }];
+        const blocked = yield* finish("copy", "a-copy", carried).pipe(Effect.flip);
+        const stillProcessing = yield* backpack.find(id);
+        // The next turn carries the answer as well, and the Task completes.
+        const done = yield* finish("copy", "a-copy", [...carried, { itemId: recorded(answer).id, claim: null }]);
+        return {
+          blocked,
+          stillProcessing,
+          done,
+          taskItem: yield* backpack.find(id),
+          answerItem: yield* backpack.find(recorded(answer).id),
+        };
+      }),
+    );
+
+    expect(result.blocked).toMatchObject({ _tag: "TaskRefused", reason: "items-open" });
+    expect(result.blocked.message).toContain("the answer to question q-quill is not yet read");
+    expect(result.blocked.message).not.toContain("has not been taken up");
+    expect(result.stillProcessing).toMatchObject({ state: "processing", disposition: null });
+    expect(result.taskItem).toMatchObject({
+      state: "resolved",
+      claim: null,
+      disposition: { _tag: "consumed", by: "attempt:a-copy" },
+    });
+    expect(result.answerItem).toMatchObject({ state: "resolved", disposition: { _tag: "consumed" } });
+    // Consumed in the transaction that completed the Task, announced with it.
+    const changed = result.done.entries.filter((entry) => entry.payload._tag === "BackpackItemChanged");
+    expect(changed.map((entry) => entry.payload._tag === "BackpackItemChanged" && entry.payload.item.id)).toEqual([
+      result.answerItem.id,
+      result.taskItem.id,
+    ]);
+    expect(result.taskItem.revision).toBe(changed[1]?.sequence);
+  });
+
+  // covers IN-006, IN-003
+  it("[TC-IN-042] a carried item counts only while the turn's claim holds or it is still pending and unclaimed", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { copy } = yield* campaign;
+        const backpack = yield* Backpack;
+        const id = recorded(copy).id;
+        yield* startOn("copy", "a-copy");
+        // A lease that has already run out by the database's clock.
+        const lapsed = yield* backpack.claim(id, "hub-1:turn-1", "0 millis");
+        const lapsedHeld = { owner: "hub-1:turn-1", token: lapsed.value.fencingToken };
+        const lapsedRefused = yield* finish("copy", "a-copy", [{ itemId: id, claim: lapsedHeld }]).pipe(Effect.flip);
+        yield* backpack.expireClaims();
+        // A worker claimed the item after the turn was briefed with it unclaimed.
+        const live = yield* backpack.claim(id, "hub-2:turn-1", "1 minute");
+        const takenRefused = yield* finish("copy", "a-copy", [{ itemId: id, claim: null }]).pipe(Effect.flip);
+        const olderToken = yield* finish("copy", "a-copy", [
+          { itemId: id, claim: { owner: "hub-2:turn-1", token: lapsed.value.fencingToken } },
+        ]).pipe(Effect.flip);
+        const item = yield* backpack.find(id);
+        const done = yield* finish("copy", "a-copy", [
+          { itemId: id, claim: { owner: "hub-2:turn-1", token: live.value.fencingToken } },
+        ]);
+        return { lapsedRefused, takenRefused, olderToken, item, done };
+      }),
+    );
+
+    expect(result.lapsedRefused).toMatchObject({ reason: "items-open" });
+    expect(result.takenRefused).toMatchObject({ reason: "items-open" });
+    expect(result.olderToken).toMatchObject({ reason: "items-open" });
+    // A refused completion changes nothing: the live claim still holds the item.
+    expect(result.item).toMatchObject({ state: "pending", claim: { owner: "hub-2:turn-1" } });
+    expect(result.done.value.state).toBe("completed");
   });
 });
