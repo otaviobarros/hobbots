@@ -1,5 +1,5 @@
-import { TaskRepository } from "@hobbots/agents";
-import { HobbotsApi, QuestNotFound, TaskNotFound } from "@hobbots/api";
+import { HobbotsRepository, TaskRepository } from "@hobbots/agents";
+import { AgentNotFound, HobbotsApi, QuestNotFound, TaskNotFound, ThreadNotFound } from "@hobbots/api";
 import { partyOf } from "@hobbots/domain";
 import { EventJournal } from "@hobbots/persistence";
 import { Effect, Option } from "effect";
@@ -11,6 +11,7 @@ import { formatCursor } from "./event-stream.ts";
 export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers) =>
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
+    const repo = yield* HobbotsRepository;
     const journal = yield* EventJournal;
     const cursor = journal.head.pipe(Effect.map((head) => formatCursor(head.epoch, head.sequence)));
     return handlers.handleAll({
@@ -33,6 +34,20 @@ export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers
             party: partyOf(quest.value, tree.value.delegations),
             tree: tree.value,
           };
+        }),
+      threadTasks: ({ params }) =>
+        Effect.gen(function* () {
+          const at = yield* cursor;
+          const thread = yield* repo.findThread(params.threadId);
+          if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId: params.threadId });
+          return { cursor: at, trees: yield* tasks.readThreadTrees(params.threadId) };
+        }),
+      questWork: ({ params }) =>
+        Effect.gen(function* () {
+          const at = yield* cursor;
+          const hob = yield* repo.findAgent(params.agentId);
+          if (Option.isNone(hob)) return yield* new AgentNotFound({ agentId: params.agentId });
+          return { cursor: at, work: yield* tasks.listMemberWork(params.agentId) };
         }),
     });
   }),

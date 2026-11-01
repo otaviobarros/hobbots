@@ -1,16 +1,19 @@
 import {
+  AgentId,
   ArtifactRef,
   Attempt,
   Checkpoint,
   Delegation,
   descendantsOf,
   HandOff,
+  MemberWork,
   Milestone,
   Quest,
   Question,
   Task,
   type TaskId,
   TaskTree,
+  type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import type { SqlClient } from "effect/sql";
@@ -171,5 +174,54 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
       });
     });
 
-  return { task, treeOf, questsOn, quest, attempt, question, artifact, readTree };
+  /** The trees of the Tasks a thread's requests started, oldest first. */
+  const threadTrees = (threadId: ThreadId) =>
+    Effect.gen(function* () {
+      const tops = yield* sql<Row>`SELECT * FROM tasks WHERE thread_id = ${threadId} AND parent_id IS NULL
+        ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("task")));
+      const trees: Array<TaskTree> = [];
+      for (const top of tops) {
+        const tree = yield* readTree(top.id);
+        if (tree !== null) trees.push(tree);
+      }
+      return trees;
+    });
+
+  /** A member's Tasks on active Quests, each with its Delegation and Quest, oldest first. */
+  const memberWork = (agentId: string) =>
+    Effect.gen(function* () {
+      const delegations = yield* sql<Row>`SELECT * FROM delegations WHERE member_id = ${agentId}`.pipe(
+        Effect.flatMap(decodeRows("delegation")),
+      );
+      if (delegations.length === 0) return [];
+      const quests = yield* sql<Row>`SELECT * FROM quests WHERE state = 'active'
+        AND ${sql.in("id", [...new Set(delegations.map((each) => each.questId))])}`.pipe(
+        Effect.flatMap(decodeRows("quest")),
+      );
+      const active = new Map(quests.map((each) => [each.id, each]));
+      const open = delegations.filter((each) => active.has(each.questId));
+      if (open.length === 0) return [];
+      const tasks = yield* sql<Row>`SELECT * FROM tasks WHERE ${sql.in(
+        "id",
+        open.map((each) => each.childTaskId),
+      )} ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("task")));
+      const byTask = new Map(open.map((each) => [each.childTaskId, each]));
+      // A nested Quest's lead is a member, but its thread belongs to the hob the request was made to.
+      const threadIds = [...new Set(quests.flatMap((each) => (each.threadId === null ? [] : [each.threadId])))];
+      const owners =
+        threadIds.length === 0
+          ? []
+          : yield* sql<{ readonly id: string; readonly agentId: string }>`SELECT id, agent_id FROM threads
+              WHERE ${sql.in("id", threadIds)}`;
+      const ownerOf = new Map(owners.map((each) => [each.id, AgentId.make(each.agentId)]));
+      return tasks.flatMap((task) => {
+        const delegation = byTask.get(task.id);
+        const quest = delegation && active.get(delegation.questId);
+        if (!delegation || !quest) return [];
+        const threadAgentId = quest.threadId === null ? null : (ownerOf.get(quest.threadId) ?? null);
+        return [new MemberWork({ task, delegation, quest, threadAgentId })];
+      });
+    });
+
+  return { task, treeOf, questsOn, quest, attempt, question, artifact, readTree, threadTrees, memberWork };
 };

@@ -7,6 +7,7 @@ import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { type ActivityMap, useActivity } from "../api/activity.ts";
 import { agentsQuery, runtimesQuery, threadsQuery } from "../api/queries.ts";
+import { useQuestWork } from "../api/quest-work.ts";
 import { potion, potionPalette } from "../art/icons.ts";
 import {
   type CrewGroup,
@@ -19,12 +20,15 @@ import {
   splitScene,
 } from "../lib/crew.ts";
 import { sceneOrder, withRequests } from "../lib/hob-state.ts";
+import { questsInProgress } from "../lib/quest-work.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
 import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
 import { messages as inboxCopy } from "./inbox/messages.ts";
 import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
 import { WaitingRequests } from "./inbox/waiting-requests.tsx";
 import { messages } from "./messages.ts";
+import { messages as questCopy } from "./quest-work/messages.ts";
+import { QuestsInProgress } from "./quest-work/quest-work.tsx";
 import { Stars } from "./scene.tsx";
 
 /** Home, the landing page: what your hobs are doing, what needs you, and what is left of each AI plan. */
@@ -175,6 +179,7 @@ export function Home() {
           <div className="flex min-w-0 flex-col gap-3.5">
             <NeedsYou />
             <HappeningNowCard live={live} activity={activity} />
+            <HomeQuests hobs={hobs} />
             <AiPlans />
           </div>
         </div>
@@ -203,15 +208,21 @@ export function Home() {
 
           <div className="flex min-w-0 flex-col gap-[18px]">
             <AiPlans />
-            <Card label="Quests in progress" className="flex-1">
-              <p className="m-0 text-sm leading-normal text-secondary-text">
-                No quests yet. When hobs share work, each Quest shows here with who is on it and how far it got.
-              </p>
-            </Card>
+            <HomeQuests hobs={hobs} className="flex-1" />
           </div>
         </div>
       )}
     </main>
+  );
+}
+
+/** Quests in progress: every Quest a hob is on as a party member, read from each hob's Quest work. */
+function HomeQuests({ hobs, className = "" }: { hobs: ReadonlyArray<Agent>; className?: string }) {
+  const work = useQuestWork(hobs.map((hob) => hob.id));
+  return (
+    <Card label={questCopy.home.title} className={className}>
+      <QuestsInProgress quests={questsInProgress(work)} />
+    </Card>
   );
 }
 

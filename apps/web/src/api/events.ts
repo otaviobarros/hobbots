@@ -20,6 +20,7 @@ import type { ConnectionState } from "./live.ts";
 import { setConnection } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
+import { applyQuestWork } from "./quest-work.ts";
 import {
   newer,
   recordAgent,
@@ -29,6 +30,7 @@ import {
   startGeneration,
   syncState,
 } from "./sync.ts";
+import { applyTaskEvent } from "./tasks.ts";
 
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
 const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady));
@@ -90,6 +92,7 @@ const applyAgent = (queryClient: QueryClient, hob: Agent) => {
  * Lists are only patched once loaded; creating a partial list here would hide the rest of it.
  */
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
+  applyQuestWork(queryClient, event);
   switch (event._tag) {
     case "AgentUpserted":
       applyAgent(queryClient, event.agent);
@@ -131,6 +134,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "GrantCreated":
     case "GrantRevoked":
       void grantsChanged(queryClient);
+      return;
+    // The rest change Tasks and Quests (ADR 018).
+    default:
+      applyTaskEvent(queryClient, event);
       return;
   }
 };
