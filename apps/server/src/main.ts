@@ -35,6 +35,7 @@ import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { IPv6Loopback } from "./loopback.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
+import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
 
@@ -101,6 +102,8 @@ const ServerLive = Layer.unwrap(
             identity,
             // The hub's credentials, provider keys included, are redacted by value from what tools report.
             SecretRedaction.layer(secretsFromEnv(process.env)),
+            // The whole output of long tool calls, which their steps show cut.
+            ToolLogsLive(join(dataDir, "tool-logs")),
           ),
         ),
       );

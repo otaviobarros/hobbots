@@ -115,7 +115,8 @@ describe("Claude Code tool calls under the policy hook", () => {
     ]);
     const tests = await call("Bash", { command: "pnpm test" }, "failure");
     expect(tests.decision).toBe("allow");
-    expect(tests.events.at(-1)).toEqual({ _tag: "ToolFinished", id: "t1", failed: true });
+    // A failed call's error is its output.
+    expect(tests.events.at(-1)).toEqual({ _tag: "ToolFinished", id: "t1", failed: true, output: "x" });
   });
 
   // covers EX-004

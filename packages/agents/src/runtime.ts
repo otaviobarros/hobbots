@@ -60,8 +60,11 @@ export type RuntimeEvent =
       readonly targets: ReadonlyArray<string>;
       readonly label: string;
     }
-  /** A started tool call ended; `failed` when the tool reported an error, a sandbox refusal included. */
-  | { readonly _tag: "ToolFinished"; readonly id: string; readonly failed: boolean }
+  /**
+   * A started tool call ended; `failed` when the tool reported an error, a sandbox refusal included.
+   * `output` is what the call printed, or its error, whole: Hobbots redacts and cuts it, never the adapter.
+   */
+  | { readonly _tag: "ToolFinished"; readonly id: string; readonly failed: boolean; readonly output?: string }
   /** A tool call never ran: the policy refused it, the user denied it, or its approval expired. */
   | {
       readonly _tag: "ToolDenied";

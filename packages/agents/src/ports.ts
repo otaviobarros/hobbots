@@ -1,6 +1,6 @@
 import type { InvalidFolder } from "@hobbots/api";
-import type { EventEnvelope, InstallationSetup, TransientEvent } from "@hobbots/domain";
-import { Context, type Effect } from "effect";
+import type { EventEnvelope, InstallationSetup, MessageId, ThreadId, TransientEvent } from "@hobbots/domain";
+import { Context, type Effect, type Option, Schema } from "effect";
 
 /** Announces what the use cases did to every client: journal entries once committed, and transient reply events. */
 export class EventPublisher extends Context.Service<
@@ -30,3 +30,27 @@ export interface FolderChecksShape {
 
 /** Checks folders on the hub, where hobs work (ADR 010). */
 export class FolderChecks extends Context.Service<FolderChecks, FolderChecksShape>()("@hobbots/agents/FolderChecks") {}
+
+/** The tool step a full log belongs to. */
+export interface ToolLogKey {
+  readonly threadId: ThreadId;
+  readonly messageId: MessageId;
+  readonly stepId: string;
+}
+
+export interface ToolLogsShape {
+  /** Keeps `text`, already redacted, as the step's full log. Fails when it cannot be kept. */
+  readonly write: (key: ToolLogKey, text: string) => Effect.Effect<void, ToolLogUnavailable>;
+  /** The step's full log, or none when there is no log Hobbots kept for it. */
+  readonly read: (key: ToolLogKey) => Effect.Effect<Option.Option<string>>;
+}
+
+export class ToolLogUnavailable extends Schema.TaggedError<ToolLogUnavailable>()("ToolLogUnavailable", {
+  message: Schema.String,
+}) {}
+
+/**
+ * Where the hub keeps the whole output of tool calls whose steps show only its start and end, so
+ * the user can open it from the step.
+ */
+export class ToolLogs extends Context.Service<ToolLogs, ToolLogsShape>()("@hobbots/agents/ToolLogs") {}

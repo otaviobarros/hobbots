@@ -34,6 +34,13 @@ export class ThreadNotFound extends Schema.TaggedError<ThreadNotFound>()(
   { httpApiStatus: 404 },
 ) {}
 
+/** A tool step with no full log: the step, its reply or its thread is not there, or its output was shown whole. */
+export class ToolLogNotFound extends Schema.TaggedError<ToolLogNotFound>()(
+  "ToolLogNotFound",
+  { messageId: MessageId, stepId: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
 /**
  * Why a thread cannot be archived or restored now. `reply-running`: a reply is running or a
  * message waits in its queue. `approval-pending`: a tool call waits for the user's decision, which
