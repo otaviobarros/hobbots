@@ -9,6 +9,7 @@ import { ServerSupervisor, StartTimedOut } from "./server.ts";
 import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server-identity.ts";
 import { fileSettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
+import { handleShowWindowIpc } from "./show-window.ts";
 import { claimSingleInstance, onSecondLaunch } from "./single-instance.ts";
 import { initialWindowBounds } from "./window-size.ts";
 
@@ -141,6 +142,7 @@ app.whenReady().then(async () => {
     showOpenDialog: (window, options) =>
       window ? dialog.showOpenDialog(window, options) : dialog.showOpenDialog(options),
   });
+  handleShowWindowIpc({ ipcMain, isTrusted, windowOf: (event) => BrowserWindow.fromWebContents(event.sender) });
   const menuBar = startMenuBar({ supervisor, settings, apiUrl, port, createWindow });
   try {
     await supervisor.start();

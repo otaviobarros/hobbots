@@ -28,6 +28,8 @@ declare global {
       };
       /** Opens the system folder picker; resolves with the chosen folder, or null when cancelled. */
       readonly chooseFolder?: () => Promise<string | null>;
+      /** Brings this window forward, showing it if it is hidden or minimized. */
+      readonly showWindow?: () => Promise<void>;
     };
   }
 }
