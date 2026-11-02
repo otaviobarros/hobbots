@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { type BigIntStats, constants, type Dirent } from "node:fs";
 import { type FileHandle, lstat, open, opendir, readlink, realpath } from "node:fs/promises";
-import { dirname, join, sep } from "node:path";
+import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { FolderScanner, type ScannedFolder } from "@hobbots/agents";
 import type { ActivityLimits, ScannedFile, ScanStop } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
@@ -266,8 +266,10 @@ export const makeFolderScanner = () => {
   const read = async (folder: string, path: string, maxBytes: number): Promise<Uint8Array | null> => {
     const parts = path.split("/");
     if (parts.some((part) => part === "" || part === "." || part === "..")) return null;
-    const root = await realpath(folder);
-    const handle = await openInside(root, join(root, ...parts));
+    // The folder as the hob was given it, canonical, never resolved again: a folder swapped for a
+    // link since is refused by the open, which allows no link on the path, not followed.
+    if (!isAbsolute(folder) || normalize(folder) !== folder) return null;
+    const handle = await openInside(folder, join(folder, ...parts));
     if (handle === null) return null;
     try {
       const buffer = new Uint8Array(maxBytes);

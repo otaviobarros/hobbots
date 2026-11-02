@@ -1,5 +1,4 @@
-import { closeSync, constants, lstatSync, mkdirSync, openSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import {
   AdditionalRuntimes,
   type PromptRequest,
@@ -22,6 +21,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { Clock, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
 import { decideCall, startCall } from "./approval.ts";
 import { toolTurn } from "./claude-code.ts";
+import { applyScriptedWrites } from "./fake-writes.ts";
 import { commandOf, toolLabel, toolRequests } from "./tool-calls.ts";
 
 /**
@@ -208,63 +208,13 @@ const scriptedCall = (line: string, cwd: string): ScriptedCall | undefined => {
   return write === undefined ? undefined : scriptedWrite(write, cwd);
 };
 
-/**
- * The folder a scripted write goes in, made one level at a time inside `folder`, or undefined when
- * any level is a link or a file: nothing is made or written through a link.
- */
-const realParent = (folder: string, parts: ReadonlyArray<string>): string | undefined => {
-  let at = folder;
-  for (const part of parts) {
-    at = join(at, part);
-    const stats = lstatSync(at, { throwIfNoEntry: false });
-    if (stats === undefined) mkdirSync(at);
-    else if (!stats.isDirectory()) return undefined;
-  }
-  return at;
-};
-
-/**
- * Makes a scripted call's writes inside the hob's first folder. A path that leaves the folder, or
- * passes through a link, is not written, and a link at the file's own name is replaced, never
- * written through: the fake never reaches past what the hob was given.
- */
-const applyWrites = (writes: Readonly<Record<string, string | null>>, folder: string) => {
-  if (realpathSync(folder) !== folder) return;
-  for (const [path, content] of Object.entries(writes)) {
-    const target = resolve(folder, path);
-    if (!target.startsWith(`${folder}${sep}`)) continue;
-    const parent = realParent(folder, relative(folder, dirname(target)).split(sep).filter(Boolean));
-    if (parent === undefined) continue;
-    const file = join(parent, basename(target));
-    if (content === null) {
-      rmSync(file, { force: true });
-      continue;
-    }
-    let descriptor: number;
-    try {
-      descriptor = openSync(
-        file,
-        constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW,
-        0o644,
-      );
-    } catch {
-      continue;
-    }
-    try {
-      writeFileSync(descriptor, content);
-    } finally {
-      closeSync(descriptor);
-    }
-  }
-};
-
 /** The events a scripted call that ran ends with: its output as it comes, then its end. */
 const finishScripted = (
   call: ScriptedCall & { readonly id: string },
   folders: ReadonlyArray<string>,
 ): ReadonlyArray<RuntimeEvent> => {
   const folder = folders[0];
-  if (call.effect?.writes !== undefined && folder !== undefined) applyWrites(call.effect.writes, folder);
+  if (call.effect?.writes !== undefined && folder !== undefined) applyScriptedWrites(call.effect.writes, folder);
   const output = call.effect?.output ?? scriptedOutput(call.tool, call.input);
   const exitCode = call.effect?.exitCode;
   const live =

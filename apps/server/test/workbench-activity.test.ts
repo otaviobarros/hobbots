@@ -66,6 +66,8 @@ const HOLD = "fake:hold";
 /** A token as a command could print it. */
 const TOKEN = "ghp_0123456789abcdefghijklmnopqrstuvwxyzAB";
 const HUB_SECRET = "hub-credential-0123456789";
+/** A short known secret, whose redaction marker is longer than the secret itself. */
+const SHORT_SECRET = "pw-9x8y7z";
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
 const ProjectTools = Layer.effect(
@@ -156,7 +158,10 @@ const makeApp = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>, 
         NodeFolderChecks,
         ProjectTools,
         HobAdmission.layer,
-        SecretRedaction.layer([{ value: HUB_SECRET, kind: "HUB_TOKEN" }]),
+        SecretRedaction.layer([
+          { value: HUB_SECRET, kind: "HUB_TOKEN" },
+          { value: SHORT_SECRET, kind: "SHORT_PASSWORD" },
+        ]),
         held(gate, requests),
       ),
     ),
@@ -533,6 +538,28 @@ describe("a Task's activity", () => {
     const after = await inHub(EventJournal.use((journal) => journal.readAfter(before.at(-1)?.sequence ?? 0, 10_000)));
     expect(after.filter((entry) => entry.type === "CommandRecorded").map((entry) => entry.payload)).toMatchObject([
       { _tag: "CommandRecorded", command: { id: "left-running", state: "uncertain" } },
+    ]);
+  }, 30_000);
+  // covers PE-005
+  it("[TC-PE-286] counts a text's redacted size against the Attempt's budget, so redaction never takes it past", async () => {
+    // 1,000 bytes as written, and longer once each secret in it reads as its marker.
+    const secrets = `${SHORT_SECRET}\n`.repeat(100);
+    const { run: inHub } = setUp({}, { limits: { ...limits, contentsPerAttempt: 1_000 } });
+    await inHub(
+      say(
+        [
+          "Write the files",
+          run({ command: "write secrets", writes: { "secrets.txt": secrets } }),
+          hub("start_quest", { key: "quest", goal: "Write" }),
+        ].join("\n"),
+      ),
+    );
+    const tree = await inHub(treeWhen((each) => each.attempts.length > 0));
+    const attempt = tree.attempts[0];
+    if (attempt === undefined) throw new Error("no Attempt");
+    const activity = await inHub(endedActivity(attempt.id));
+    expect(activity.changes.map(({ path, after }) => ({ path, after: after?.notKept }))).toEqual([
+      { path: "secrets.txt", after: "attempt-limit" },
     ]);
   }, 30_000);
 });

@@ -601,6 +601,30 @@ describe("scripted tool calls in the fake runtime", () => {
     expect(readdirSync(away)).toEqual(["keep.txt"]);
   });
 
+  // covers PE-002
+  it("[TC-PE-285] never writes outside while another process swaps a folder on the way for a link and back", async () => {
+    const away = join(root, "away-race");
+    mkdirSync(away, { recursive: true });
+    writeFileSync(join(away, "f.txt"), "untouched\n");
+    mkdirSync(join(project, "racing"), { recursive: true });
+    const swapper = spawn(process.execPath, [
+      "-e",
+      `const fs = require("node:fs");
+       const dir = ${JSON.stringify(join(project, "racing"))}, kept = dir + "-real", out = ${JSON.stringify(away)};
+       const end = Date.now() + 3000;
+       while (Date.now() < end) {
+         try { fs.renameSync(dir, kept); fs.symlinkSync(out, dir); fs.unlinkSync(dir); fs.renameSync(kept, dir); } catch {}
+       }`,
+    ]);
+    const done = new Promise((resolve) => swapper.on("exit", resolve));
+    const writes = { "racing/f.txt": "overwritten\n", "racing/made/new.txt": "made\n", "racing/gone.txt": null };
+    const line = `fake:run ${JSON.stringify({ command: "true", writes })}`;
+    for (let i = 0; i < 150; i++) await turn(line, access());
+    await done;
+    expect(readFileSync(join(away, "f.txt"), "utf8")).toBe("untouched\n");
+    expect(readdirSync(away)).toEqual(["f.txt"]);
+  }, 30_000);
+
   it("makes no tool calls in a chat-only turn", async () => {
     expect(await turn(`fake:tool Edit ${join(project, "a.ts")}`, null)).toEqual([]);
   });

@@ -204,15 +204,24 @@ const makeRecorder = (limits: ActivityLimits) =>
           keep(id);
         };
 
-        /** Reads a file's contents and stores them, redacted when they are text. */
-        const readAndStore = (folder: string, path: string, plan: KeepPlan, reserved: number) =>
+        /**
+         * Reads a file's contents and stores them, redacted when they are text. `reserved` holds the
+         * bytes reserved for it: redaction can make text longer, so what it adds is reserved before
+         * anything is stored, or the content is not kept.
+         */
+        const readAndStore = (folder: string, path: string, plan: KeepPlan, reserved: { bytes: number }) =>
           Effect.gen(function* () {
-            const bytes = yield* scanner.read(folder, path, Math.min(plan.readUpTo ?? 0, reserved));
+            const bytes = yield* scanner.read(folder, path, Math.min(plan.readUpTo ?? 0, reserved.bytes));
             if (Option.isNone(bytes)) return { _tag: "NotKept", kind: plan.kind, why: "unreadable" } as const;
             const text = plan.kind === "image" ? null : textOf(bytes.value);
             if (plan.kind !== "image" && text === null)
               return { _tag: "NotKept", kind: "other", why: "not-shown" } as const;
             const content = text === null ? bytes.value : encoder.encode(turn.redactor.text(text));
+            const more = content.byteLength - reserved.bytes;
+            if (more > 0) {
+              if (!reserve(more)) return { _tag: "NotKept", kind: plan.kind, why: "attempt-limit" } as const;
+              reserved.bytes += more;
+            }
             const stored = yield* store.put(content).pipe(Effect.option);
             if (Option.isNone(stored)) return { _tag: "NotKept", kind: plan.kind, why: "unreadable" } as const;
             return { _tag: "Kept", id: stored.value.id, size: content.byteLength } as const;
@@ -233,19 +242,20 @@ const makeRecorder = (limits: ActivityLimits) =>
             // The file's size as scanned is reserved before it is read, so no read passes the budget.
             if (!reserve(file.size)) return withoutContents(file, plan.kind, "attempt-limit");
             // A read cut short, as by the turn's end, gives its reservation back.
-            const stored = yield* readAndStore(folder, path, plan, file.size).pipe(
+            const reserved = { bytes: file.size };
+            const stored = yield* readAndStore(folder, path, plan, reserved).pipe(
               Effect.onError(() =>
                 Effect.sync(() => {
-                  heldBytes -= file.size;
+                  heldBytes -= reserved.bytes;
                 }),
               ),
             );
             if (stored._tag === "NotKept") {
-              heldBytes -= file.size;
+              heldBytes -= reserved.bytes;
               return withoutContents(file, stored.kind, stored.why);
             }
             const id = stored.id;
-            settle(file.size, id, stored.size);
+            settle(reserved.bytes, id, stored.size);
             kept.set(file.hash, { id, kind: plan.kind, size: stored.size });
             return { ...withoutContents(file, plan.kind, null), contentId: id };
           });

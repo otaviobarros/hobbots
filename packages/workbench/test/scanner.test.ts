@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -113,6 +114,20 @@ describe("the folder scan", () => {
     await done;
     expect(seen.some((each) => each.includes("SECRET") || each === secret)).toBe(false);
   }, 20_000);
+
+  // covers PE-002, PE-005
+  it("[TC-PE-284] never reads the folder's new target when the folder itself is swapped for a link", async () => {
+    const outside = folder("beyond", { "notes.md": "SECRET beyond\n" });
+    const root = folder("given", { "notes.md": "inside\n" });
+    const scanner = makeFolderScanner();
+    expect(Option.isSome(await Effect.runPromise(scanner.read(root, "notes.md", 1024)))).toBe(true);
+    // Another turn moves the hob's folder away and leaves a link to somewhere else in its place.
+    renameSync(root, `${root}-moved`);
+    symlinkSync(outside, root);
+
+    expect(Option.isNone(await Effect.runPromise(scanner.read(root, "notes.md", 1024)))).toBe(true);
+    expect(await Effect.runPromise(scanner.scan(root, limits))).toMatchObject({ stopped: "unreadable" });
+  });
 
   // covers UX-002
   it("[TC-GEN-079] skips what .gitignore files ignore in a Git folder only, and .git and node_modules in any", async () => {
