@@ -96,6 +96,7 @@ const activity = (fields: Partial<ConstructorParameters<typeof AttemptActivity>[
     changes: [],
     scans: [scan(null, "start"), scan(null)],
     artifacts: [],
+    sharedWithHobs: [],
     detailsClearedAt: null,
     ...fields,
   });

@@ -1,5 +1,5 @@
 import { cn } from "@hobbots/ui/lib/utils";
-import Markdown, { type Components } from "react-markdown";
+import Markdown, { type Components, type Options } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 import { CodeBlock } from "./code-block.tsx";
@@ -80,18 +80,21 @@ export function ReplyMarkdown({
   content,
   streaming,
   caret,
+  remarkPlugins = [],
 }: {
   content: string;
   /** The reply is still in progress, so unfinished syntax is held back or closed. */
   streaming: boolean;
   /** The reply is being written now, so the caret follows its last line. */
   caret: boolean;
+  /** Plugins that change the parsed Markdown before its HTML is shown as text, such as marking changes. */
+  remarkPlugins?: Options["remarkPlugins"];
 }) {
   return (
     <div className={cn("hb-markdown flex min-w-0 flex-col gap-2.5 leading-normal break-words", caret && "hb-caret")}>
       <Markdown
         components={components}
-        remarkPlugins={[remarkGfm, remarkHtmlAsText]}
+        remarkPlugins={[remarkGfm, ...(remarkPlugins ?? []), remarkHtmlAsText]}
         rehypePlugins={[[rehypeHighlight, { detect: false }]]}
         urlTransform={safeUrl}
       >

@@ -64,19 +64,9 @@ pnpm check         # Biome, typecheck and tests
 pnpm package:mac   # unsigned .dmg installers for Apple silicon and Intel in apps/desktop/release
 ```
 
-Every client is an approved device. The desktop app's window needs no approval, so `pnpm dev:desktop` works as it is. A browser asks once, and you allow it on the hub. In `pnpm dev`, the web dev server forwards `/api` to the server, so the browser calls its own origin. Until the waiting screen is built ([#339](https://github.com/otaviobarros/hobbots/issues/339)), pair a browser from its devtools console:
+Every client is an approved device. The desktop app's window needs no approval, so `pnpm dev:desktop` works as it is. A browser asks once, and you allow it on the hub. In `pnpm dev`, the web dev server forwards `/api` to the server, so the browser calls its own origin. If the hub's window is not open, `pnpm --filter @hobbots/server allow` lists the devices waiting and `pnpm --filter @hobbots/server allow <code>` allows one.
 
-```js
-await (
-  await fetch("/api/pairing", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: "Dev browser", platform: "dev", kind: "browser" }),
-  })
-).json();
-```
-
-Then `pnpm --filter @hobbots/server allow` lists the devices waiting and `pnpm --filter @hobbots/server allow <code>` allows one. Back in the console, `await fetch("/api/pairing")` gives the browser its device cookie; reload the page.
+The web dev server listens on loopback only. Other devices, such as a phone on your tailnet, get the built client from the server's own port. `pnpm dev` and `pnpm dev:desktop` build it before they start, so restart them, or run `pnpm --filter @hobbots/web build`, for those devices to see later web changes.
 
 Set `HOBBOTS_RUNTIME=fake` to run the server with a deterministic fake runtime instead of Claude Code.
 

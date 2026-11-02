@@ -61,6 +61,7 @@ const activity = (changes: ReadonlyArray<FileChange>) =>
     changes,
     scans: [],
     artifacts: [],
+    sharedWithHobs: [],
     detailsClearedAt: null,
   });
 
