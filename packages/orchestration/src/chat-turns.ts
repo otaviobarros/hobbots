@@ -2,7 +2,6 @@ import type { ChatTurn, TaskRepository } from "@hobbots/agents";
 import {
   type AgentId,
   AttemptId,
-  type BackpackItem,
   type CarriedItem,
   carriedFrom,
   type EventEnvelope,
@@ -14,7 +13,7 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
-import { answeredFor, BRIEF_LIMIT, cut, ownerBriefing } from "./briefs.ts";
+import { BRIEF_LIMIT, briefingShows, cut, ownerBriefing } from "./briefs.ts";
 import { fromRecords, journalOf, newId, refuse, type TaskToolCaller } from "./call-scope.ts";
 
 /** Calls that start work, so a chat turn with no open Task starts one for its request. */
@@ -55,20 +54,17 @@ export const makeChatResolver = (
   return {
     /**
      * What the turn's session is told of the open Task, read as the turn starts. The briefing shows
-     * each Task under it with its state and result, and the answers to the questions its hob asked
-     * about it, so the turn carries those results, failures and answers in its hob's backpack:
-     * they settle when the turn completes the Task.
+     * each Task under it, and under its own steps, with its state and result, and the answers to the
+     * questions its hob asked about it, so the turn carries those results, failures and answers in
+     * its hob's backpack: they settle when the turn completes the Task. The ledger is read after the
+     * tree, so only items the briefing shows at their recorded version are carried; one that
+     * arrived in between stays open for a later turn.
      */
     briefing: Effect.gen(function* () {
       const open = openTaskOf(yield* tasks.readThreadTrees(turn.threadId), turn);
       if (open === undefined) return null;
-      const children = new Set(open.tree.tasks.filter((each) => each.parentId === open.top.id).map((each) => each.id));
-      const answers = new Set(answeredFor(open.top, open.tree).map((question) => question.id));
       const ledger = yield* tasks.readLedger(open.top.id);
-      const shown = ({ payload }: BackpackItem) =>
-        payload._tag === "answer"
-          ? answers.has(payload.question.id)
-          : (payload._tag === "result" || payload._tag === "failure") && children.has(payload.task.id);
+      const shown = briefingShows(open.top, open.tree);
       briefed = {
         taskId: open.top.id,
         carried: Option.match(ledger, { onNone: () => [], onSome: (read) => carriedFrom(read, shown) }),

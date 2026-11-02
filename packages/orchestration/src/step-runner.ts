@@ -35,7 +35,7 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { DateTime, Effect, FiberMap, Layer, Option, Semaphore, Stream } from "effect";
-import { cut, isStep, RESULT_LIMIT, stepPrompt } from "./briefs.ts";
+import { cut, isStep, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { TaskSignal } from "./signal.ts";
 import { TaskTools } from "./task-tools.ts";
@@ -147,21 +147,21 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
         });
 
       /**
-       * A step's session starts from its prompt, which shows its brief and what was handed to it,
-       * so it carries the step's own Task item and its hand-offs (ADR 019).
+       * What a step's session starts from: the tree its prompt is made from, read after the step's
+       * ledger, and the items it carries, which are those of its own Task item and hand-offs that
+       * prompt shows (ADR 019). A hand-off made after the ledger was read is shown but not carried,
+       * so it stays open rather than settling unread.
        */
-      const carriedBy = (step: Task) =>
-        Effect.map(
-          tasks.readLedger(step.id),
-          Option.match({
+      const startingPoint = (step: Task, before: TaskTree) =>
+        Effect.gen(function* () {
+          const ledger = yield* tasks.readLedger(step.id);
+          const tree = Option.getOrElse(yield* tasks.readTree(step.rootId), () => before);
+          const carried = Option.match(ledger, {
             onNone: () => [],
-            onSome: (ledger) =>
-              carriedFrom(
-                ledger,
-                (item) => (item.kind === "task" || item.kind === "hand-off") && item.taskId === step.id,
-              ),
-          }),
-        );
+            onSome: (read) => carriedFrom(read, stepPromptShows(step, tree)),
+          });
+          return { tree, carried };
+        });
 
       /** The session's final reply, or why it ended without one. */
       const runSession = (
@@ -369,13 +369,13 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
                 );
                 if (Option.isNone(started)) return;
                 const step = started.value.task;
-                const carried = yield* carriedBy(step);
+                const { tree: shown, carried } = yield* startingPoint(step, tree);
                 const run: Running = { agentId: step.ownerId, rootId: step.rootId, access, stop: null };
                 running.set(step.id, run);
                 yield* FiberMap.run(
                   fibers,
                   step.id,
-                  runSession(agent.value, config.value, step, tree, access, attemptId, carried).pipe(
+                  runSession(agent.value, config.value, step, shown, access, attemptId, carried).pipe(
                     Effect.flatMap((ending) => settle(step.id, attemptId, ending, carried)),
                     Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
                     Effect.ensuring(

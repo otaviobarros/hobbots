@@ -191,7 +191,8 @@ export const describeLedgerEntry = (entry: LedgerEntry): string => {
 const NAMED = 8;
 
 /**
- * Why a Task cannot complete yet, naming each open entry, or null when its ledger is settled. A
+ * Why a Task cannot complete yet, naming the first eight open entries and counting the rest, so a
+ * long ledger cannot fill the hob's turn, or null when its ledger is settled. A
  * final sentence alone never closes work: the gate reads the records, not the reply.
  */
 export const ledgerRefusal = (

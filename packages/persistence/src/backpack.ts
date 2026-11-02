@@ -10,7 +10,7 @@ import {
   StaleBackpackClaim,
 } from "@hobbots/domain";
 import { Backpack, type BackpackScope, type HeldClaim } from "@hobbots/inbox";
-import { DateTime, Duration, Effect, Layer } from "effect";
+import { DateTime, Effect, Layer } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
 import { dispositionColumn, makeDatabaseClock, makeItemReads } from "./backpack-rows.ts";
 import { lockJournal, makeJournaledChange } from "./journal.ts";

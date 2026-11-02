@@ -180,8 +180,8 @@ export class TaskRepository extends Context.Service<
     readonly moveTask: (taskId: TaskId, revision: number, to: TaskTarget, at: string) => Changed<Task, TaskChange>;
     /**
      * Completes a Task with a result from its current Attempt once its responsibility ledger is
-     * settled, less what the completing turn carries; completes its Quest with it. Refused with
-     * every open entry named otherwise (IN-006).
+     * settled, less what the completing turn carries; completes its Quest with it. Refused otherwise,
+     * naming the first eight open entries and counting the rest (IN-006).
      */
     readonly completeTask: (taskId: TaskId, revision: number, completion: TaskCompletion) => Changed<Task, TaskChange>;
     readonly recordCheckpoint: (input: NewCheckpoint) => Changed<Checkpoint>;

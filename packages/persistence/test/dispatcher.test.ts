@@ -6,6 +6,7 @@ import {
   type BackpackItem,
   CheckpointId,
   type Committed,
+  carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   QuestId,
@@ -469,12 +470,15 @@ describe("The dispatcher", () => {
           policyVersion: null,
           startedAt: now,
         });
-        // Quill's result is recorded, and Aldric's whole request is cancelled before Aldric gets to it.
+        // Quill's result is recorded from the turn its Task item started, and Aldric's whole request
+        // is cancelled before Aldric gets to it.
+        const ledger = Option.getOrThrow(yield* tasks.readLedger(copy.id));
         const done = yield* tasks.completeTask(copy.id, started.value.task.revision, {
           summary: "Copy drafted",
           attemptId: AttemptId.make("a1"),
           artifacts: [],
           at: now,
+          carried: carriedFrom(ledger, () => true),
         });
         const cancelled = yield* tasks.moveTask(root.id, root.revision, "cancelled", now);
         let runs = 0;

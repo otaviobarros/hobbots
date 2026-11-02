@@ -109,6 +109,28 @@ const WorkFolders = Layer.succeed(
   }),
 );
 
+/**
+ * A change the next ledger read of a Task runs first, once, as if it landed between the tree a
+ * prompt was made from and the ledger its turn carries items from.
+ */
+let beforeLedger:
+  | { readonly taskId: TaskId; readonly run: (tasks: TaskRepository["Service"]) => Effect.Effect<void> }
+  | undefined;
+
+const LedgerRace = Layer.effect(
+  TaskRepository,
+  Effect.map(TaskRepository, (tasks): TaskRepository["Service"] => ({
+    ...tasks,
+    readLedger: (taskId) =>
+      Effect.suspend(() => {
+        const hook = beforeLedger;
+        if (hook?.taskId !== taskId) return tasks.readLedger(taskId);
+        beforeLedger = undefined;
+        return Effect.andThen(hook.run(tasks), tasks.readLedger(taskId));
+      }),
+  })),
+).pipe(Layer.provide(TaskRepositoryLive));
+
 /** What the hub's records hold before it starts, as after a restart. */
 type Before = Layer.Layer<never, never, HobbotsRepository | TaskRepository>;
 
@@ -133,7 +155,7 @@ const makeApp = (options: Options, gates: Map<string, Deferred.Deferred<void>>, 
     Layer.provideMerge(
       Layer.mergeAll(
         HobbotsRepositoryLive,
-        TaskRepositoryLive,
+        LedgerRace,
         TaskToolCallsLive,
         EventJournal.layer,
         EventBus.layer,
@@ -152,6 +174,7 @@ let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<App>, Layer.Error<App>>
 afterEach(async () => {
   folders = [];
   held = undefined;
+  beforeLedger = undefined;
   await runtime?.dispose();
   runtime = undefined;
 });
@@ -622,6 +645,93 @@ describe("a Task's steps in fresh sessions", () => {
     await run(send(thread.id, hub("complete_task", { key: "done", summary: "The post is out" })));
     const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
     expect(finished.tasks[0]?.result?.summary).toBe("The post is out");
+  });
+
+  // covers IN-006
+  it("[TC-OR-054] a result that lands after the turn's briefing was read is not settled by that turn", async () => {
+    const { run, control } = setUp();
+    const thread = await run(seed);
+    const steps = [{ brief: `Outline\n${hub("complete_task", { key: "o", summary: "Outlined" })}` }];
+    await run(send(thread.id, `Plan the launch\n${hub("plan_steps", { key: "plan", steps })}`));
+    const planned = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const top = planned.tasks[0] as Task;
+    // The step completes after the briefing read the tree and before the ledger is read.
+    beforeLedger = {
+      taskId: top.id,
+      run: (tasks) =>
+        Effect.andThen(
+          control.open("Outline"),
+          retry(
+            Effect.flatMap(tasks.readTree(top.id), (tree) =>
+              Option.getOrThrow(tree).tasks[1]?.state === "completed" ? Effect.void : Effect.fail("not yet" as const),
+            ),
+          ).pipe(Effect.orDie),
+        ),
+    };
+    const refused = await run(send(thread.id, hub("complete_task", { key: "done", summary: "Launched" })));
+    expect(control.requests.at(-1)?.briefing).toContain(", active: Outline.");
+    expect(refused.content).toContain("Refused (items-open)");
+    expect(refused.content).toContain("is in your backpack, not yet read");
+    const open = await run(TaskRepository.use((tasks) => tasks.readLedger(top.id)));
+    expect(Option.getOrThrow(open).open.map((entry) => entry._tag)).toEqual(["Item"]);
+
+    // The next turn is briefed with the result, so it carries it and completes.
+    await run(send(thread.id, hub("complete_task", { key: "again", summary: "Launched" })));
+    expect(control.requests.at(-1)?.briefing).toContain("Result: Outlined");
+    const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
+    expect(finished.tasks[0]?.result?.summary).toBe("Launched");
+  });
+
+  // covers IN-006, OR-005
+  it("[TC-OR-055] a hand-off made after a step's tree was read reaches its prompt before the step settles it", async () => {
+    const { run, control } = setUp();
+    const thread = await run(seed);
+    const steps = [
+      {
+        brief: `Draft\n${hub("complete_task", { key: "d", summary: "Drafted", artifacts: [{ kind: "text", label: "Doc", value: "The draft" }] })}`,
+      },
+      { brief: `Publish\n${hub("complete_task", { key: "p", summary: "Published" })}`, after: [1] },
+    ];
+    await run(send(thread.id, `Write the post\n${hub("plan_steps", { key: "plan", steps })}`));
+    const planned = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const publish = stepsOf(planned)[1] as Task;
+    // The draft is handed to the last step after the runner read the tree it starts from.
+    beforeLedger = {
+      taskId: publish.id,
+      run: (tasks) =>
+        Effect.gen(function* () {
+          const tree = Option.getOrThrow(yield* tasks.readTree(publish.rootId));
+          const artifact = tree.artifacts[0];
+          if (artifact === undefined) return yield* Effect.die(new Error("no artifact"));
+          yield* tasks.handOff(artifact.id, publish.id, now).pipe(Effect.orDie);
+        }),
+    };
+    await run(control.open("Draft"));
+    await run(control.open("Publish"));
+    const ended = await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+    expect(ended.handOffs).toHaveLength(1);
+    const prompt = control.requests.find((request) => request.prompt.startsWith("Publish"))?.prompt ?? "";
+    expect(prompt).toContain("Handed to this step:\n  - Doc (text): The draft");
+  });
+
+  // covers IN-006, OR-003
+  it("[TC-OR-056] the owner's briefing shows the steps of its steps, so a cancelled nested step does not keep its request open", async () => {
+    const { run, control } = setUp();
+    const thread = await run(seed);
+    await run(send(thread.id, `Research\n${hub("plan_steps", { key: "plan", steps: [{ brief: "Survey" }] })}`));
+    const planned = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const survey = stepsOf(planned)[0] as Task;
+    await run(send(thread.id, hub("plan_steps", { key: "deeper", task_id: survey.id, steps: [{ brief: "Dig" }] })));
+    await run(treeWhen(thread.id, (tree) => states(tree).join() === "active,active"));
+    await run(send(thread.id, hub("cancel_task", { key: "stop", task_id: survey.id })));
+    await run(treeWhen(thread.id, (tree) => states(tree).join() === "cancelled,cancelled"));
+
+    await run(send(thread.id, hub("complete_task", { key: "done", summary: "Dropped the research" })));
+    const briefing = control.requests.at(-1)?.briefing ?? "";
+    expect(briefing).toContain(`1. Step ${survey.id}, cancelled: Survey.`);
+    expect(briefing).toMatch(/\n {2}1\.1\. Step \S+, cancelled: Dig\./);
+    const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
+    expect(finished.tasks[0]?.result?.summary).toBe("Dropped the research");
   });
 
   // covers IN-006, EX-006
