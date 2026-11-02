@@ -458,4 +458,42 @@ describe("a party member's authority", () => {
     expect(ran(outside)).toBe(false);
     expect(await run(ApprovalRepository.use((approvals) => approvals.listPending))).toEqual([]);
   }, 20_000);
+
+  it("[TC-PE-163] a step a member plans works under the member's delegation too: its folders and its decisions", async () => {
+    const { run } = setUp();
+    const given = join(project, "steps");
+    mkdirSync(given, { recursive: true });
+    const step = [
+      `fake:tool Read ${join(given, "outline.md")}`,
+      `fake:tool Read ${join(project, "budget.md")}`,
+      `fake:tool Write ${join(given, "notes.md")}`,
+    ].join("\n");
+    const prompt = [
+      "Plan the campaign",
+      hub("delegate_task", {
+        key: "copy",
+        hob: "Quill",
+        brief: ["Write the copy in steps", hub("plan_steps", { key: "plan", steps: [{ brief: step }] })].join("\n"),
+        authority: { folders: [given], decisions: { "edit-files": "deny" } },
+      }),
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+
+    const tree = await run(
+      treeWhen((each) => {
+        const quill = ownedBy(each, QUILL);
+        const steps = each.tasks.filter((task) => task.parentId === quill?.id);
+        return steps.length === 1 && steps.every((task) => task.state === "completed");
+      }),
+    );
+    const quill = ownedBy(tree, QUILL);
+    const stepTask = tree.tasks.find((task) => task.parentId === quill?.id);
+    const ran = (file: string) =>
+      tree.checkpoints.some((each) => each.taskId === stepTask?.id && each.summary.includes(file));
+    // Balanced lets Quill read and edit the whole project; his delegation keeps his step to its
+    // folder and takes editing away, as it does for Quill himself.
+    expect(ran("outline.md")).toBe(true);
+    expect(ran("budget.md")).toBe(false);
+    expect(ran("notes.md")).toBe(false);
+  }, 20_000);
 });

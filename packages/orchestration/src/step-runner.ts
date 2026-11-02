@@ -37,7 +37,7 @@ import { DateTime, Effect, FiberMap, Layer, Option, Semaphore } from "effect";
 import type { PathSeparator } from "./authority.ts";
 import { cut, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
-import { makeMemberRunner } from "./members.ts";
+import { delegatedAccess, makeMemberRunner } from "./members.ts";
 import { type Ending, type Running, runSessionTurn, STOPPED, type StopReason } from "./session.ts";
 import { TaskSignal } from "./signal.ts";
 import { TaskTools } from "./task-tools.ts";
@@ -341,7 +341,10 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             yield* Semaphore.withPermit(
               authority,
               Effect.gen(function* () {
-                const access = yield* hobTools.access(agent.value);
+                // A step of a party member's Task works under every Delegation above it, as the
+                // member does (ADR 018).
+                const narrowed = (own: ToolAccess | null) => delegatedAccess(own, queued, tree, separator);
+                const access = narrowed(yield* hobTools.access(agent.value));
                 const started = yield* attempt(
                   tasks.startAttempt(queued.id, queued.revision, {
                     id: attemptId,
@@ -356,7 +359,13 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                 if (Option.isNone(started)) return;
                 const step = started.value.task;
                 const { tree: shown, carried } = yield* startingPoint(step, tree);
-                const run: Running = { agentId: step.ownerId, rootId: step.rootId, access, stop: null };
+                const run: Running = {
+                  agentId: step.ownerId,
+                  rootId: step.rootId,
+                  access,
+                  accessNow: Effect.map(accessNow(repo, hobTools, step.ownerId), narrowed),
+                  stop: null,
+                };
                 running.set(step.id, run);
                 yield* FiberMap.run(
                   fibers,
