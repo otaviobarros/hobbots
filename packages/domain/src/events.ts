@@ -181,6 +181,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // A request's `grantable`, `rules`, `lifetime` and `expiresAt` were added with defaults, compatibly.
   ApprovalRequested: 1,
   ApprovalResolved: 1,
+  // A grant's `taskId` replaced its unused `questId`, read as null when absent, compatibly.
   GrantCreated: 1,
   GrantRevoked: 1,
   TaskCreated: 1,

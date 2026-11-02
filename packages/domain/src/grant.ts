@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { ApprovalId } from "./approval.ts";
 import { GrantLifetime, GrantRule } from "./grant-rule.ts";
 import { AgentId } from "./ids.ts";
@@ -35,9 +35,10 @@ export class Grant extends Schema.Class<Grant>("Grant")({
   lifetime: GrantLifetime,
   /**
    * The top Task a `task` grant is bound to (ADR 018): it applies only to work in that Task's tree,
-   * whether or not a party joined it, and ends with it. Null for `always`.
+   * whether or not a party joined it, and ends with it. Null for `always`. Grants journaled before
+   * it existed carried an unused `questId` instead, and read as `always` grants with no Task.
    */
-  taskId: Schema.NullOr(TaskId),
+  taskId: Schema.NullOr(TaskId).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
   /** The approval request it was saved from. */
   approvalId: Schema.NullOr(ApprovalId),
   grantedBy: GrantActor,

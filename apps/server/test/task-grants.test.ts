@@ -24,6 +24,7 @@ import {
   type ApprovalRequest,
   EMPTY_HOB_POLICY,
   type Message,
+  type PolicyOverrides,
   type TaskTree,
   Thread,
   ThreadId,
@@ -84,6 +85,9 @@ const hob = (id: AgentId, name: string) =>
     createdAt: now,
   });
 
+/** Each hob's own overrides, which a case may change between turns. */
+const overrides = new Map<AgentId, PolicyOverrides>();
+
 const ProjectTools = Layer.succeed(
   HobTools,
   HobTools.of({
@@ -92,7 +96,7 @@ const ProjectTools = Layer.succeed(
         policy: {
           preset: "balanced",
           sharedFolders: [project],
-          hob: EMPTY_HOB_POLICY,
+          hob: { ...EMPTY_HOB_POLICY, overrides: overrides.get(agent.id) ?? {} },
           dataFolder: join(temp, "data"),
           restrictions: [],
         },
@@ -177,6 +181,7 @@ let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<App>, Layer.Error<App>>
 afterEach(async () => {
   await runtime?.dispose();
   runtime = undefined;
+  overrides.clear();
 });
 
 const setUp = () => {
@@ -331,7 +336,7 @@ describe("an approval for This Task", () => {
   }, 30_000);
 
   // covers PE-004, PE-007
-  it("[TC-PE-251] a member's call the delegation narrows to Ask offers no This Task or Always: only the lead's own ceiling is left out", async () => {
+  it("[TC-PE-257] a member's call the delegation narrows to Ask offers no This Task or Always", async () => {
     const { run } = setUp();
     const file = join(project, "copy.md");
     await run(
@@ -355,8 +360,41 @@ describe("an approval for This Task", () => {
     expect(refused._tag).toBe("ApprovalNotGrantable");
   }, 30_000);
 
+  // covers PE-004, PE-007
+  it("[TC-PE-258] an Ask the lead set on purpose stays one no grant answers, even where the member's preset asks too", async () => {
+    const { run } = setUp();
+    const delegatePush = (key: string) =>
+      say(
+        ["Get help", hub("delegate_task", { key, hob: "Quill", brief: ["Push the copy", push].join("\n") })].join("\n"),
+      );
+
+    // With no override of Aldric's, Quill's push asks only because of the preset: you allow it Always.
+    await run(delegatePush("first"));
+    const first = await run(pendingFrom(QUILL));
+    expect(first).toMatchObject({ grantable: true, onceOnly: false });
+    await run(approve(first, "always"));
+    await run(treeWhen((tree) => tree.tasks.some((task) => task.parentId !== null && task.state === "completed")));
+
+    // Aldric's own override now asks before every push, the same answer as Balanced. Quill's grant
+    // must not answer it: the push asks you again, once only.
+    overrides.set(ALDRIC, { push: "ask" });
+    await run(delegatePush("second"));
+    const second = await run(
+      retry(
+        Effect.flatMap(asked(), (all) => {
+          const found = all.find((each) => each.agentId === QUILL && each.id !== first.id);
+          return found === undefined ? Effect.fail("not yet" as const) : Effect.succeed(found);
+        }),
+      ),
+    );
+    expect(second).toMatchObject({ operation: "push", state: "pending", grantable: false, rules: [] });
+    const [tree] = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    // Only the answers given on purpose are passed on: none at first, then Aldric's push Ask.
+    expect(tree?.delegations.map((each) => each.authority.overrides)).toEqual([{}, { push: "ask" }]);
+  }, 30_000);
+
   // covers PE-007, PE-008
-  it("[TC-PE-250] ends with the top Task: its grants are revoked as it ends, and the next request asks again", async () => {
+  it("[TC-PE-256] ends with the top Task: its grants are revoked as it ends, and the next request asks again", async () => {
     const { run } = setUp();
     const { request, top } = await run(taskWithPush(["Wait for the go-ahead"]));
     await run(approve(request, "task"));
