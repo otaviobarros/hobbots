@@ -1,5 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+import type { Page } from "@playwright/test";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 // The archive slice's done-when journey as the user sees it, with the fake runtime: archive from the
 // thread's menu, find it in the Archived list and in search, read it with no composer, restore it.
@@ -21,7 +21,7 @@ test.afterEach(async () => {
 const api = async <A>(current: Hub, method: string, path: string, body?: unknown): Promise<A> => {
   const response = await fetch(`${current.url}/api${path}`, {
     method,
-    headers: { origin: current.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    headers: { ...current.headers, ...(body !== undefined && { "content-type": "application/json" }) },
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);

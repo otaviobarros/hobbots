@@ -66,8 +66,20 @@ export class Task extends Schema.Class<Task>("Task")({
   revision: Revision,
 }) {}
 
-/** An Attempt is live while `starting` or `running`; the other states are its outcome. */
-export const AttemptState = Schema.Literals(["starting", "running", "completed", "failed", "interrupted", "cancelled"]);
+/**
+ * An Attempt is live while `starting` or `running`; the other states are its outcome. `unresolved`
+ * is a cancel Hobbots asked for and could not confirm in time: whether its session stopped is not
+ * known (OR-006).
+ */
+export const AttemptState = Schema.Literals([
+  "starting",
+  "running",
+  "completed",
+  "failed",
+  "interrupted",
+  "cancelled",
+  "unresolved",
+]);
 export type AttemptState = typeof AttemptState.Type;
 
 export const isLiveAttempt = (state: AttemptState): boolean => state === "starting" || state === "running";
@@ -134,6 +146,22 @@ export const TaskTransitions = {
       ? new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "active" })
       : new Task({ ...task, state: "active", currentAttemptId: attemptId, updatedAt: at }),
 
+  /** A retry puts a failed Task back in the queue, for a new Attempt of the same Task (EX-001). */
+  retry: (task: Task, at: string): Task | IllegalTaskTransition =>
+    task.state === "failed"
+      ? new Task({ ...task, state: "queued", updatedAt: at })
+      : new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "queued" }),
+
+  /**
+   * A reassignment gives a Task that failed, or that is open with nothing running, to another hob,
+   * queued for its first Attempt there. The Task keeps its id and its history; no Attempt is its
+   * current one until the new owner starts, so nothing of the earlier owner's carries over.
+   */
+  reassign: (task: Task, ownerId: AgentId, at: string): Task | IllegalTaskTransition =>
+    task.state === "completed" || task.state === "cancelled" || task.state === "cancelling"
+      ? new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "queued" })
+      : new Task({ ...task, ownerId, state: "queued", currentAttemptId: null, updatedAt: at }),
+
   complete: (task: Task, result: TaskResult, at: string): Task | IllegalTaskTransition =>
     task.state === "active" || task.state === "waiting"
       ? new Task({ ...task, state: "completed", result, updatedAt: at })
@@ -173,3 +201,11 @@ export const ancestorsOf = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArra
 export const leadsAbove = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<AgentId> => [
   ...new Set(ancestorsOf(task, tree).flatMap((each) => (each.ownerId === task.ownerId ? [] : [each.ownerId]))),
 ];
+
+/**
+ * The hob a note you leave on a Task goes to (ADR 018): the nearest lead whose own Task is still
+ * open, so a lead that finished never holds it unread, or the Task's owner when nobody leads it.
+ */
+export const noteRecipientOf = (task: Task, tree: ReadonlyArray<Task>): AgentId =>
+  ancestorsOf(task, tree).find((each) => each.ownerId !== task.ownerId && !isTerminalTask(each.state))?.ownerId ??
+  task.ownerId;

@@ -1,11 +1,14 @@
 import { EventPublisher } from "@hobbots/agents";
-import type { EventEnvelope, TransientEvent } from "@hobbots/domain";
+import type { EventEnvelope, RemoteAccessChanged, TransientEvent } from "@hobbots/domain";
 import { Context, Effect, Layer, PubSub, type Scope, Stream } from "effect";
+
+/** A transient event of the use cases, or one only the hub itself sends, such as a change to remote access. */
+export type HubTransientEvent = TransientEvent | RemoteAccessChanged;
 
 /** What the bus carries: a committed journal entry, or a transient reply chunk (ADR 013). */
 export type BusEvent =
   | { readonly _tag: "Journaled"; readonly entry: EventEnvelope }
-  | { readonly _tag: "Transient"; readonly event: TransientEvent };
+  | { readonly _tag: "Transient"; readonly event: HubTransientEvent };
 
 /**
  * In-process fan-out of journal entries that are already committed, plus transient reply events.
@@ -16,7 +19,7 @@ export class EventBus extends Context.Service<
   {
     /** Announces entries a write committed, in sequence order. */
     readonly publish: (entries: ReadonlyArray<EventEnvelope>) => Effect.Effect<void>;
-    readonly publishTransient: (event: TransientEvent) => Effect.Effect<void>;
+    readonly publishTransient: (event: HubTransientEvent) => Effect.Effect<void>;
     /** Every event from now on; it ends once the bus closes. */
     readonly stream: Stream.Stream<BusEvent>;
     /** Subscribes now, so nothing published from here on is missed by a reader that starts later. */

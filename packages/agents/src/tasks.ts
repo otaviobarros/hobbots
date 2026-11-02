@@ -18,6 +18,7 @@ import type {
   IllegalTaskTransition,
   MemberWork,
   MilestoneId,
+  NoteId,
   Quest,
   QuestId,
   Question,
@@ -28,6 +29,7 @@ import type {
   StaleTask,
   Task,
   TaskId,
+  TaskNote,
   TaskRefused,
   TaskTarget,
   TaskToolDone,
@@ -130,6 +132,20 @@ export interface NewQuestion {
   readonly createdAt: string;
 }
 
+/** A note you leave on a Task; its id is the command's idempotency key. */
+export interface NewNote {
+  readonly id: NoteId;
+  readonly taskId: TaskId;
+  readonly text: string;
+  readonly createdAt: string;
+}
+
+/** A question that climbed every lead and waits for you, with the Task it asks about. */
+export interface WaitingQuestion {
+  readonly question: Question;
+  readonly task: Task;
+}
+
 /** What a Task's owner waits for. */
 export interface NewWait {
   readonly on: ReadonlyArray<TaskId>;
@@ -184,12 +200,39 @@ export class TaskRepository extends Context.Service<
      * naming the first eight open entries and counting the rest (IN-006).
      */
     readonly completeTask: (taskId: TaskId, revision: number, completion: TaskCompletion) => Changed<Task, TaskChange>;
+    /**
+     * Queues a failed Task again for its owner, as a new Attempt of the same Task (EX-001). Only a
+     * Task under another one is retried, under ancestors still open and not being cancelled; its
+     * Quest reopens with it.
+     */
+    readonly retryTask: (taskId: TaskId, revision: number, at: string) => Changed<Task, TaskChange>;
+    /**
+     * Gives a party member's Task to another hob, queued for its first Attempt there, keeping its
+     * id, Attempts, checkpoints and results (ADR 018). Refused while its Attempt is live or work is
+     * open under it, when it holds a Quest of its own, and for a hob that already owns a Task on its
+     * way up, the lead included.
+     */
+    readonly reassignTask: (
+      taskId: TaskId,
+      revision: number,
+      ownerId: AgentId,
+      at: string,
+    ) => Changed<Task, TaskChange>;
     readonly recordCheckpoint: (input: NewCheckpoint) => Changed<Checkpoint>;
     /** Asks the nearest lead above the Task, or the user when there is none. */
     readonly askQuestion: (input: NewQuestion) => Changed<Question>;
     readonly answerQuestion: (questionId: QuestionId, by: Answerer, answer: string, at: string) => Changed<Question>;
     /** Passes a question from its current lead to the next lead up, or to the user from the top lead. */
     readonly escalateQuestion: (questionId: QuestionId, by: AgentId) => Changed<Question>;
+    /**
+     * Records your note on a Task for its nearest lead, or for its owner when nobody leads it
+     * (ADR 018). A Task that ended takes one while the work it is part of goes on; once its top Task
+     * has ended, nobody is left to read it, and it is refused. Leaving a note with the same id again
+     * returns the first and changes nothing; the same id with another Task or text is refused.
+     */
+    readonly leaveNote: (input: NewNote) => Changed<TaskNote>;
+    /** The questions no lead could answer that wait for you, oldest first. */
+    readonly listWaitingQuestions: Effect.Effect<ReadonlyArray<WaitingQuestion>>;
     /** Gives an artifact to another Task in its tree. Handing it to the same Task again changes nothing. */
     readonly handOff: (artifactId: ArtifactId, toTaskId: TaskId, at: string) => Changed<HandOff>;
     /**
@@ -226,6 +269,8 @@ export class TaskRepository extends Context.Service<
      * will end them on their own.
      */
     readonly listStrandedSteps: Effect.Effect<ReadonlyArray<Task>>;
+    /** Tasks whose cancel was asked for and is not confirmed yet, oldest first. */
+    readonly listCancellingTasks: Effect.Effect<ReadonlyArray<Task>>;
     /** Every Attempt still starting or running, oldest first: after a restart, none of them runs. */
     readonly listLiveAttempts: Effect.Effect<ReadonlyArray<Attempt>>;
   }

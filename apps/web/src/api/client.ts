@@ -15,7 +15,6 @@ declare global {
   interface Window {
     /** Set by the Electron preload script. */
     readonly hobbots?: {
-      readonly apiUrl: string;
       readonly loginItem?: {
         readonly get: () => Promise<LoginItemState>;
         readonly set: (openAtLogin: boolean) => Promise<LoginItemState>;
@@ -37,17 +36,14 @@ declare global {
   }
 }
 
-// A build served by the Hobbots server calls the API on its own origin; the Vite dev server runs
-// apart from the API.
-export const API_URL: string =
-  globalThis.window?.hobbots?.apiUrl ??
-  import.meta.env.VITE_HOBBOTS_API_URL ??
-  (import.meta.env.DEV ? "http://127.0.0.1:4317" : globalThis.location.origin);
+// Every client calls the API on its own origin (ADR 021): the hub serves the built client, and in
+// development the Vite dev server forwards `/api` to the hub. The device cookie and the origin
+// rules are then the same everywhere. Outside a page, as in unit tests, URLs stay relative.
+export const API_URL: string = globalThis.location?.origin ?? "";
 
 type Client = HttpApiClient.ForApi<typeof HobbotsApi>;
 
-// The web client exports no traces, so requests go without trace headers. Those headers are not
-// CORS-safelisted, and with them the browser would preflight every read from the Vite dev server.
+// The web client exports no traces, so requests go without trace headers.
 const clientPromise: Promise<Client> = Effect.runPromise(
   HttpApiClient.make(HobbotsApi, {
     baseUrl: API_URL,

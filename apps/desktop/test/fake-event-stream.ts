@@ -5,13 +5,15 @@
 export const fakeEventStream = (opening?: string) => {
   const encoder = new TextEncoder();
   const connections: Array<{
+    /** The URL the connection was opened to. */
+    url: string;
     write: (text: string) => void;
     close: () => void;
     aborted: boolean;
     /** The cursor the connection resumes after, from its `Last-Event-ID` header. */
     lastEventId: string | null;
   }> = [];
-  const fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+  const fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
     const body = new ReadableStream<Uint8Array>({
       start: (c) => {
@@ -20,6 +22,7 @@ export const fakeEventStream = (opening?: string) => {
       },
     });
     const connection = {
+      url: url instanceof Request ? url.url : String(url),
       aborted: false,
       lastEventId: new Headers(init?.headers).get("last-event-id"),
       write: (text: string) => controller?.enqueue(encoder.encode(text)),

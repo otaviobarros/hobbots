@@ -22,6 +22,7 @@ import {
   type Message,
   type ReplyStep,
   type ThreadId,
+  WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { ApprovalRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
@@ -87,7 +88,12 @@ const TestLayer = HobLifecycle.layer.pipe(
       Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)),
       EventBus.layer,
       // The decisions these cases make are the user's, as the hub's user-session middleware provides.
-      Layer.succeed(UserSession, { origin: "http://localhost:4317" }),
+      Layer.succeed(UserSession, {
+        deviceId: WINDOW_DEVICE_ID,
+        name: "This computer's Hobbots window",
+        kind: "window",
+        whileApproved: (write) => write,
+      }),
       HobAdmission.layer,
       FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
     ),

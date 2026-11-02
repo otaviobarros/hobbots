@@ -9,7 +9,8 @@ const defaultDataDir = () =>
   platform() === "darwin" ? join(homedir(), "Library", "Application Support", "Hobbots") : join(homedir(), ".hobbots");
 
 export const ServerConfig = Config.all({
-  port: Config.Port("HOBBOTS_PORT").pipe(Config.withDefault(4317)),
+  // Overrides the port the user chose in Settings (network.json in the data folder), and 4317 without one.
+  port: Config.Port("HOBBOTS_PORT").pipe(Config.option),
   dataDir: Config.String("HOBBOTS_DATA_DIR").pipe(Config.withDefault(defaultDataDir())),
   // Reported by the health endpoint. The desktop app passes its own version; a checkout has none.
   version: Config.String("HOBBOTS_VERSION").pipe(Config.withDefault("development")),
@@ -50,12 +51,17 @@ export const ServerConfig = Config.all({
     ),
   }),
   // How many steps run at once (ADR 018): per hob, and per request's tree; the rest wait their turn.
+  // A cancel's sessions get a time limit to stop with them.
   stepLimits: Config.all({
     maxRunningStepsPerHob: Config.Int("HOBBOTS_MAX_RUNNING_STEPS_PER_HOB").pipe(
       Config.withDefault(DEFAULT_STEP_LIMITS.maxRunningStepsPerHob),
     ),
     maxRunningStepsPerTree: Config.Int("HOBBOTS_MAX_RUNNING_STEPS_PER_TREE").pipe(
       Config.withDefault(DEFAULT_STEP_LIMITS.maxRunningStepsPerTree),
+    ),
+    // How long a session asked to stop for a cancel has to end before the cancel is left unresolved.
+    cancelTimeoutMs: Config.Int("HOBBOTS_CANCEL_TIMEOUT_MS").pipe(
+      Config.withDefault(DEFAULT_STEP_LIMITS.cancelTimeoutMs),
     ),
   }),
   // How many times a backpack item is put into a turn before it fails as a blocker (ADR 019); at least once.
@@ -74,18 +80,8 @@ export const ServerConfig = Config.all({
   githubToken: Config.Redacted("HOBBOTS_GITHUB_TOKEN").pipe(Config.option),
   // A stand-in for GitHub's sign-in and an in-memory keychain, to try connecting without either.
   fakeGitHub: Config.Literals(["off", "on"], "HOBBOTS_FAKE_GITHUB").pipe(Config.withDefault("off" as const)),
+  // A stand-in for Tailscale on 127.0.0.2, controlled by fake-tailscale.json in the data folder (ADR 021).
+  fakeTailscale: Config.Literals(["off", "on"], "HOBBOTS_FAKE_TAILSCALE").pipe(Config.withDefault("off" as const)),
   // A scripted Quest the fake runtime plays on the hub's records: asking for a Black Friday campaign starts it.
   fakeQuest: Config.Literals(["off", "black-friday"], "HOBBOTS_FAKE_QUEST").pipe(Config.withDefault("off" as const)),
-  // Set when the allow list was given, such as by the desktop app's development build.
-  allowedOriginsSet: Config.String("HOBBOTS_ALLOWED_ORIGINS").pipe(Config.option, Config.map(Option.isSome)),
-  // Only the Vite dev server needs CORS; the served web client calls the API on its own origin.
-  allowedOrigins: Config.String("HOBBOTS_ALLOWED_ORIGINS").pipe(
-    Config.withDefault("http://localhost:5173,http://127.0.0.1:5173"),
-    Config.map((value) =>
-      value
-        .split(",")
-        .map((origin) => origin.trim())
-        .filter(Boolean),
-    ),
-  ),
 });

@@ -1,15 +1,16 @@
 import { ChatService } from "@hobbots/agents";
-import { EventEnvelope, STREAM_FRAME, type StreamReady, type TransientEvent } from "@hobbots/domain";
+import { EventEnvelope, STREAM_FRAME, type StreamReady } from "@hobbots/domain";
 import { EventJournal, type JournalHead } from "@hobbots/persistence";
-import { type Cause, Context, Effect, Exit, Fiber, Layer, PubSub, Queue, Schema, Scope, Stream } from "effect";
+import { type Cause, Context, Effect, Exit, Fiber, Layer, PubSub, Queue, Result, Schema, Scope, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { type BusEvent, EventBus } from "./event-bus.ts";
+import { DeviceGate } from "./devices.ts";
+import { type BusEvent, EventBus, type HubTransientEvent } from "./event-bus.ts";
 
 /** What a connection sends, in order: `Ready`, journal entries by sequence, transient reply and turn events, keep-alives (ADR 013). */
 export type StreamFrame =
   | ({ readonly _tag: "Ready" } & StreamReady)
   | { readonly _tag: "Entry"; readonly cursor: string; readonly entry: EventEnvelope }
-  | { readonly _tag: "Transient"; readonly event: TransientEvent }
+  | { readonly _tag: "Transient"; readonly event: HubTransientEvent }
   | KeepAlive;
 
 type KeepAlive = { readonly _tag: "KeepAlive" };
@@ -43,6 +44,17 @@ export const resumePoint = (cursor: string | undefined, head: JournalHead, oldes
 
 const encodeEnvelope = Schema.encodeSync(EventEnvelope);
 
+const transientFrame = (event: HubTransientEvent) => {
+  switch (event._tag) {
+    case "MessageDelta":
+      return STREAM_FRAME.delta;
+    case "RemoteAccessChanged":
+      return STREAM_FRAME.remoteAccess;
+    default:
+      return STREAM_FRAME.turn;
+  }
+};
+
 /** Writes one frame in the SSE wire format. Only journal entries and `Ready` carry an `id`. */
 export const encodeFrame = (frame: StreamFrame): string => {
   switch (frame._tag) {
@@ -51,7 +63,7 @@ export const encodeFrame = (frame: StreamFrame): string => {
     case "Entry":
       return `id: ${frame.cursor}\ndata: ${JSON.stringify(encodeEnvelope(frame.entry))}\n\n`;
     case "Transient":
-      return `event: ${frame.event._tag === "MessageDelta" ? STREAM_FRAME.delta : STREAM_FRAME.turn}\ndata: ${JSON.stringify(frame.event)}\n\n`;
+      return `event: ${transientFrame(frame.event)}\ndata: ${JSON.stringify(frame.event)}\n\n`;
     case "KeepAlive":
       return ": keep-alive\n\n";
   }
@@ -174,13 +186,23 @@ export class EventStream extends Context.Service<
 
 /**
  * `GET /api/events`: the event stream over SSE. The browser's `EventSource` sends `Last-Event-ID`
- * when it reconnects; a first connection may pass `?after=<cursor>`, and the header wins.
+ * when it reconnects; a first connection may pass `?after=<cursor>`, and the header wins. Only an
+ * approved device connects: the stream carries what approvals ask, so it is a confidentiality boundary.
  */
 export const EventStreamRoute = HttpRouter.add(
   "GET",
   "/api/events",
   Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
+    // The same device check as every API route, before anything is read (ADR 021).
+    const admitted = yield* Effect.result((yield* DeviceGate).admit(request));
+    if (Result.isFailure(admitted)) {
+      const error = admitted.failure;
+      return HttpServerResponse.jsonUnsafe(
+        { _tag: error._tag, message: error.message },
+        { status: error._tag === "ForeignOrigin" ? 403 : 401 },
+      );
+    }
     const events = yield* EventStream;
     const cursor =
       request.headers["last-event-id"] ??

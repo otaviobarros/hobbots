@@ -87,6 +87,13 @@ describe("lateness", () => {
     });
   });
 
+  // covers OR-006
+  it("[TC-IN-140] finds an item late once a cancel was asked for the Task it is checked against", () => {
+    const tree = [task("campaign", ALDRIC, null, "cancelling", 9), task("copy", QUILL, "campaign", "cancelled", 8)];
+    expect(lateness(item(ALDRIC, "copy"), tree)).toEqual({ taskRevision: 9 });
+    expect(lateness(item(QUILL, "copy", "message"), tree)).toEqual({ taskRevision: 8 });
+  });
+
   it("never finds an item outside any Task late", () => {
     expect(lateness(item(QUILL, null, "message"), [])).toBeNull();
   });

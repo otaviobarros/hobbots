@@ -1,7 +1,19 @@
+import { Context, Effect } from "effect";
+
 /**
  * Network hosts as the sandbox proxy reports them (ADR 014). Loopback (the hub's own API
- * included), link-local and cloud metadata addresses are never reachable from the sandbox.
+ * included), link-local and cloud metadata addresses are never reachable from the sandbox, and
+ * neither are the hub's own tailnet addresses and MagicDNS name (ADR 021).
  */
+
+/**
+ * The hub's own names on its tailnet while it listens there: its tailnet addresses and its MagicDNS
+ * name, which change while the hub runs. Without remote access there are none.
+ */
+export const HubHosts = Context.Reference<{ readonly current: Effect.Effect<ReadonlyArray<string>> }>(
+  "@hobbots/permissions/HubHosts",
+  { defaultValue: () => ({ current: Effect.succeed([]) }) },
+);
 
 /**
  * The host in the form a URL parser gives it: lowercase, without port or trailing dot, numeric
@@ -62,6 +74,18 @@ const parseIpv6 = (address: string): ReadonlyArray<number> | null => {
   if (halves.length === 1) return head.length === 8 ? head : null;
   const fill = 8 - head.length - tail.length;
   return fill < 1 ? null : [...head, ...Array<number>(fill).fill(0), ...tail];
+};
+
+/**
+ * The IPv4 address an IPv4-mapped IPv6 host such as `[::ffff:6465:6667]` reaches, in dotted form, so
+ * it compares equal to the address it maps; any other host as it is. Takes a normalized host.
+ */
+export const unmappedHost = (host: string): string => {
+  if (!host.startsWith("[")) return host;
+  const groups = parseIpv6(host.slice(1, -1));
+  if (groups === null || groups.slice(0, 5).some((group) => group !== 0) || groups[5] !== 0xffff) return host;
+  const [high = 0, low = 0] = groups.slice(6);
+  return [high >> 8, high & 255, low >> 8, low & 255].join(".");
 };
 
 // complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.

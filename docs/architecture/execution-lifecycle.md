@@ -5,7 +5,7 @@
 ## Independent dimensions
 
 - Task responsibility: queued, active, waiting on dependency/approval/input, blocked, completed, failed or cancelled.
-- Execution attempt: queued, starting, running, completed, failed, interrupted or cancelled.
+- Execution attempt: queued, starting, running, completed, failed, interrupted, cancelled or unresolved, when a cancel asked it to stop and its stop could not be confirmed in time.
 - Communication: the backpack item states (pending, delivered, acknowledged, processing, resolved, failed) defined by the [backpack contract](inbox.md) and [ADR 019](../decisions/019-hob-backpack-and-continuations.md).
 - Observation certainty: verified or unverified/reconciling after lost contact.
 

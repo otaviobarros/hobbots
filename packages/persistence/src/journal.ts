@@ -52,18 +52,25 @@ type TaskEvent = Extract<
       | "QuestionAsked"
       | "QuestionAnswered"
       | "QuestionEscalated"
+      | "NoteLeft"
       | "HandedOff";
   }
 >;
 
 const isTaskEvent = (event: JournaledEventType): event is TaskEvent =>
-  "task" in event || "quest" in event || "checkpoint" in event || "question" in event || "handOff" in event;
+  "task" in event ||
+  "quest" in event ||
+  "checkpoint" in event ||
+  "question" in event ||
+  "note" in event ||
+  "handOff" in event;
 
 const taskCorrelationOf = (event: TaskEvent): RowCorrelation => {
   if ("task" in event) return byTask(event.task);
   if ("quest" in event)
     return { ...NONE, agentId: event.quest.leadId, threadId: event.quest.threadId, taskId: event.quest.taskId };
   if ("question" in event) return { ...NONE, agentId: event.question.askerId, taskId: event.question.taskId };
+  if ("note" in event) return { ...NONE, agentId: event.note.recipientId, taskId: event.note.taskId };
   return { ...NONE, taskId: "checkpoint" in event ? event.checkpoint.taskId : event.handOff.toTaskId };
 };
 

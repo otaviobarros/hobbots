@@ -3,23 +3,33 @@ import {
   ArtifactId,
   ArtifactRef,
   AttemptId,
+  type BackpackItem,
   Checkpoint,
   CheckpointId,
   type CheckpointKind,
   DEFAULT_QUEST_LIMITS,
   HandOff,
   type JournaledEvent,
+  NoteId,
   Quest,
   QuestId,
   Question,
   QuestionId,
   Task,
   TaskId,
+  TaskNote,
   type TaskState,
   ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { backpackItemsFor, tasksTouched } from "../src/index.ts";
+import {
+  arrivalsText,
+  backpackItemsFor,
+  carryingThread,
+  continuationTask,
+  lateness,
+  tasksTouched,
+} from "../src/index.ts";
 
 const at = "2026-11-01T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
@@ -138,6 +148,34 @@ describe("backpackItemsFor", () => {
     expect(items(attempt)).toEqual([]);
   });
 
+  // covers OR-006, EX-001
+  it("[TC-IN-141] gives a Task you retried or reassigned to its owner again, as the work it now has", () => {
+    const ADA = AgentId.make("ada");
+    const retried = task("copy", QUILL, "campaign", "queued", 7);
+    expect(
+      items({
+        _tag: "TaskStateChanged",
+        task: retried,
+        attempt: null,
+        quest: null,
+        wait: null,
+        control: { _tag: "Retried", delegation: null },
+      }),
+    ).toEqual([{ to: QUILL, kind: "task", task: "copy", quest: "q1", key: "task:copy:v7:task" }]);
+    const reassigned = task("copy", ADA, "campaign", "queued", 8);
+    const delegation = {} as never;
+    expect(
+      items({
+        _tag: "TaskStateChanged",
+        task: reassigned,
+        attempt: null,
+        quest: null,
+        wait: null,
+        control: { _tag: "Reassigned", from: QUILL, delegation },
+      }),
+    ).toEqual([{ to: ADA, kind: "task", task: "copy", quest: "q1", key: "task:copy:v8:task" }]);
+  });
+
   it("sends a member's report to its nearest lead: routine progress as progress, a finding as a checkpoint", () => {
     expect(items({ _tag: "CheckpointRecorded", checkpoint: checkpoint("finding"), milestone: null })).toEqual([
       { to: ALDRIC, kind: "checkpoint", task: "outline", quest: "q1", key: "checkpoint:c-finding:checkpoint" },
@@ -168,6 +206,52 @@ describe("backpackItemsFor", () => {
     expect(items({ _tag: "HandedOff", handOff, artifact })).toEqual([
       { to: QUILL, kind: "hand-off", task: "outline", quest: "q1", key: "hand-off:copy-doc:outline:hand-off" },
     ]);
+  });
+
+  // covers IN-004
+  it("[TC-IN-130] gives your note on a member's Task to the hob it was left for, keyed by the note", () => {
+    const note = new TaskNote({
+      id: NoteId.make("n1"),
+      taskId: copy.id,
+      recipientId: ALDRIC,
+      text: "Keep it short",
+      createdAt: at,
+      revision: 4,
+    });
+    expect(items({ _tag: "NoteLeft", note })).toEqual([
+      { to: ALDRIC, kind: "message", task: "copy", quest: "q1", key: "note:n1:message" },
+    ]);
+    expect(tasksTouched([{ _tag: "NoteLeft", note }])).toEqual(["copy"]);
+  });
+
+  // covers IN-004, OR-004
+  it("[TC-IN-135] holds your note on a lead's own step under the Task it coordinates, so its chat hears it", () => {
+    const active = task("brief-step", ALDRIC, "campaign");
+    const done = task("plan-step", ALDRIC, "campaign", "completed");
+    const nested = task("plan-detail", ALDRIC, "plan-step", "completed");
+    const tasks = [campaign, copy, outline, active, done, nested];
+    for (const step of [active, done, nested]) {
+      const note = new TaskNote({
+        id: NoteId.make(`n-${step.id}`),
+        taskId: step.id,
+        recipientId: ALDRIC,
+        text: "Shorter",
+        createdAt: at,
+        revision: 4,
+      });
+      const [item] = backpackItemsFor([{ _tag: "NoteLeft", note }], { ...context, tasks });
+      expect(item).toMatchObject({
+        recipientId: ALDRIC,
+        taskId: "campaign",
+        payload: { _tag: "message", aboutTaskId: step.id, text: "Shorter" },
+      });
+      const held = { ...item, kind: "message", actionable: true } as unknown as BackpackItem;
+      // The step's session may be gone: the note continues the chat where Aldric runs the Quest.
+      expect(carryingThread(held, tasks)).toBe(threadId);
+      expect(continuationTask(held, tasks)).toBeUndefined();
+      expect(lateness(held, tasks)).toBeNull();
+      expect(arrivalsText([held], "prompt")).toContain(`The user left a note about Task ${step.id}: Shorter`);
+    }
   });
 
   it("keys an item from a tool call by the call's key and the item's role in it", () => {

@@ -4,6 +4,7 @@ import {
   ApprovalNotConfirmed,
   ApprovalNotFound,
   ApprovalNotGrantable,
+  type DeviceRevoked,
   GrantRuleRefused,
   UserSession,
 } from "@hobbots/api";
@@ -27,6 +28,7 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Duration, Effect, Layer, Option, Semaphore } from "effect";
+import { unguarded, type WriteGuard } from "./devices.ts";
 import { GrantService, ruleHolds, ruleOffered } from "./grants.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -197,7 +199,11 @@ export class ApprovalService extends Context.Service<
     readonly decide: (
       id: ApprovalId,
       input: ApprovalDecisionInput,
-    ) => Effect.Effect<ApprovalRequest, ApprovalNotFound | ApprovalClosed | RefusedDecision, UserSession>;
+    ) => Effect.Effect<
+      ApprovalRequest,
+      ApprovalNotFound | ApprovalClosed | RefusedDecision | DeviceRevoked,
+      UserSession
+    >;
     /** Expires the hob's pending requests, as when it retires: a retired hob is never approved anything. */
     readonly expireForAgent: (agentId: AgentId) => Effect.Effect<void>;
     readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
@@ -227,8 +233,13 @@ export class ApprovalService extends Context.Service<
       const announce = <A>(committed: Committed<A>) => Effect.as(bus.publish(committed.entries), committed.value);
 
       // Moves a pending request to `next`'s state, saving its grants; none when it had already left pending.
-      const settle = (next: ApprovalRequest, saving: ReadonlyArray<Grant> = []) =>
-        repo.resolve(next, "pending", saving).pipe(
+      // A decision's write is `guarded` by the deciding device still being approved (ADR 021).
+      const settle = <X = never>(
+        next: ApprovalRequest,
+        saving: ReadonlyArray<Grant> = [],
+        guarded: WriteGuard<X> = unguarded,
+      ) =>
+        guarded(repo.resolve(next, "pending", saving)).pipe(
           Effect.flatMap(
             Option.match({
               onNone: () => Effect.succeed(Option.none()),
@@ -379,20 +390,30 @@ export class ApprovalService extends Context.Service<
 
       // Saves the decision with its grants only while the hob's access now still holds each rule, so
       // a narrowing since the request was asked, or one racing this decision, leaves no grant behind.
-      const saveGrants = (approval: ApprovalRequest, next: ApprovalRequest, saving: ReadonlyArray<Grant>) =>
+      const saveGrants = (
+        approval: ApprovalRequest,
+        next: ApprovalRequest,
+        saving: ReadonlyArray<Grant>,
+        guarded: WriteGuard,
+      ) =>
         Effect.gen(function* () {
           const access = yield* waiters.get(approval.id)?.currentAccess ?? Effect.succeed(null);
           if (!saving.every((grant) => ruleHolds(access, grant.rule))) return "narrowed" as const;
-          return yield* settle(next, saving);
+          return yield* settle(next, saving, guarded);
         });
 
-      const store = (approval: ApprovalRequest, next: ApprovalRequest, saving: ReadonlyArray<Grant>) =>
+      const store = (
+        approval: ApprovalRequest,
+        next: ApprovalRequest,
+        saving: ReadonlyArray<Grant>,
+        guarded: WriteGuard,
+      ) =>
         saving.length === 0 || Option.isNone(grants)
-          ? settle(next)
-          : grants.value.exclusive(saveGrants(approval, next, saving));
+          ? settle(next, [], guarded)
+          : grants.value.exclusive(saveGrants(approval, next, saving, guarded));
 
       const decide = Effect.fn("ApprovalService.decide")(function* (id: ApprovalId, input: ApprovalDecisionInput) {
-        yield* UserSession;
+        const session = yield* UserSession;
         return yield* Semaphore.withPermit(
           lock,
           Effect.gen(function* () {
@@ -415,7 +436,7 @@ export class ApprovalService extends Context.Service<
             }
             const denyReason = input.decision === "deny" ? input.reason?.trim() || null : null;
             const next = new ApprovalRequest({ ...approval, state, lifetime, denyReason, decidedAt: now });
-            const saved = yield* store(approval, next, grantsFor(approval, input, now));
+            const saved = yield* store(approval, next, grantsFor(approval, input, now), session.whileApproved);
             if (saved === "narrowed") {
               return yield* new ApprovalNotGrantable({ approvalId: id, lifetime: lifetime ?? "once" });
             }

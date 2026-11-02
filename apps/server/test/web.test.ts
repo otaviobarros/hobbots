@@ -4,11 +4,12 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Ref } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { IPv6Loopback } from "../src/loopback.ts";
-import { isLoopbackHost, LoopbackHostOnly, WebClientRoutes } from "../src/web.ts";
+import { HubListenersLive } from "../src/listeners.ts";
+import { DEFAULT_FAKE_TAILNET, TailscaleFake } from "../src/tailscale.ts";
+import { isLoopbackHost, isOwnHost, OwnHostsOnly, WebClientRoutes } from "../src/web.ts";
 
 let webDir: string;
 let handler: (request: Request) => Promise<Response>;
@@ -27,7 +28,7 @@ beforeAll(() => {
     Layer.mergeAll(
       HttpRouter.add("GET", "/api/health", HttpServerResponse.text("api")),
       WebClientRoutes(webDir),
-      LoopbackHostOnly,
+      OwnHostsOnly,
     ).pipe(Layer.provide(NodeHttpServer.layerHttpServices)),
     { disableLogger: true },
   );
@@ -95,7 +96,20 @@ describe("isLoopbackHost", () => {
   });
 });
 
-describe("IPv6Loopback", () => {
+describe("isOwnHost", () => {
+  it("accepts loopback and the hub's tailnet names, with or without a port, and nothing else", () => {
+    const tailnet = ["100.101.102.103", "fd7a:115c:a1e0::1", "hub.example.ts.net"];
+    for (const host of ["localhost:4317", "100.101.102.103:4317", "[fd7a:115c:a1e0::1]:4317", "HUB.example.ts.net"]) {
+      expect(isOwnHost(host, tailnet)).toBe(true);
+    }
+    for (const host of [undefined, "", "100.101.102.104:4317", "hub.example.ts.net.attacker.example", "[::2]"]) {
+      expect(isOwnHost(host, tailnet)).toBe(false);
+    }
+    expect(isOwnHost("hub.example.ts.net:4317", [])).toBe(false);
+  });
+});
+
+describe("HubListeners", () => {
   // covers DP-004
   it("[TC-DP-008] answers on 127.0.0.1 and ::1 and on no other address", async () => {
     const server: Server = createServer((_, response) => response.end("hub"));
@@ -106,7 +120,13 @@ describe("IPv6Loopback", () => {
         const ipv4 = yield* Effect.promise(() => fetch(`http://127.0.0.1:${port}/`).then((r) => r.text()));
         const ipv6 = yield* Effect.promise(() => fetch(`http://[::1]:${port}/`).then((r) => r.text()));
         return [ipv4, ipv6];
-      }).pipe(Effect.provide(IPv6Loopback(server, port)), Effect.scoped, Effect.runPromise);
+      }).pipe(
+        Effect.provide(
+          HubListenersLive(server, port).pipe(Layer.provide(TailscaleFake(Ref.makeUnsafe(DEFAULT_FAKE_TAILNET)))),
+        ),
+        Effect.scoped,
+        Effect.runPromise,
+      );
       expect(body).toEqual(["hub", "hub"]);
       expect(address).toBe("127.0.0.1");
     } finally {

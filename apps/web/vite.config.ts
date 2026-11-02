@@ -8,5 +8,13 @@ export default defineConfig({
   // the server (ADR 012).
   base: "/",
   plugins: [react(), tailwindcss()],
-  server: { port: 5173, strictPort: true },
+  // The dev server forwards the API, the event stream included, to the hub on loopback without
+  // changing the Host, so the client calls its own origin as the served build does (ADR 021).
+  server: {
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      "/api": { target: `http://127.0.0.1:${process.env.HOBBOTS_PORT ?? 4317}`, changeOrigin: false },
+    },
+  },
 });

@@ -43,6 +43,7 @@ import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
 import { ToolLogsLive } from "../src/tool-logs.ts";
 import { HobToolsLive } from "../src/tools.ts";
+import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 // Slice 7's done-when checks, at hub level and over the HTTP API, with the hub's own composition:
 // the setup's preset and folders read at every turn, one policy engine, and the fake runtime making
@@ -99,7 +100,7 @@ beforeEach(() => {
       ),
     );
   const web = HttpRouter.toWebHandler(
-    ApiRoutes.pipe(Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
+    ApiRoutes.pipe(Layer.provide(TestDevices), Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
     { disableLogger: true },
   );
   handler = (request) => web.handler(request);
@@ -112,7 +113,7 @@ const request = async <A>(method: string, path: string, body?: unknown): Promise
     new Request(`http://localhost:4364${path}`, {
       method,
       // As the web client sends it, so approvals and grants answer the user (PE-006).
-      headers: { "content-type": "application/json", host: "localhost:4364", origin: "http://localhost:4364" },
+      headers: { "content-type": "application/json", host: "localhost:4364", ...AS_WINDOW },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
@@ -274,6 +275,7 @@ describe("long tool output", () => {
     const response = await handler(
       new Request(
         `http://localhost:4364/api/threads/${thread.id}/messages/${reply.id}/steps/${encodeURIComponent(step.id)}/log`,
+        { headers: AS_WINDOW },
       ),
     );
     return { status: response.status, text: await response.text() };

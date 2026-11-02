@@ -6,6 +6,7 @@ import {
   isInProgress,
   type Message,
   MessageDelta,
+  RemoteAccessChanged,
   STREAM_FRAME,
   StreamReady,
 } from "@hobbots/domain";
@@ -22,6 +23,8 @@ import { setConnection } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { applyQuestWork } from "./quest-work.ts";
+import { questionChanged, workEnded } from "./questions.ts";
+import { applyRemoteAccess } from "./remote-access.ts";
 import {
   newer,
   recordAgent,
@@ -37,6 +40,10 @@ import { applyTaskEvent } from "./tasks.ts";
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
 const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady));
 const decodeDelta = Schema.decodeUnknownSync(Schema.fromJsonString(MessageDelta));
+const decodeRemoteAccess = Schema.decodeUnknownSync(Schema.fromJsonString(RemoteAccessChanged));
+
+/** How long a stream the hub closed waits before it opens again. */
+const REOPEN_AFTER_MS = 2000;
 
 /** Replaces an entity in a list unless the list already holds a newer version of it. */
 const upsertNewer = <T extends { readonly id: string; readonly revision: number }>(
@@ -171,6 +178,18 @@ const applyWorkEvent = (
     case "BackpackItemChanged":
       storeBackpackItem(queryClient, event.item);
       return;
+    // A question that reaches you, or leaves you, also changes what waits in your Inbox.
+    case "QuestionAsked":
+    case "QuestionEscalated":
+    case "QuestionAnswered":
+      applyTaskEvent(queryClient, event);
+      void questionChanged(queryClient, event.question);
+      return;
+    case "TaskStateChanged":
+    case "TaskCompleted":
+      applyTaskEvent(queryClient, event);
+      void workEnded(queryClient, event.task);
+      return;
     // The rest change Tasks and Quests (ADR 018).
     default:
       applyTaskEvent(queryClient, event);
@@ -237,9 +256,26 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         console.warn("Ignoring malformed event", error);
       }
     });
-    // "Reconnecting" lasts until the next Ready.
-    source.onerror = () => report("reconnecting");
-    return () => source.close();
+    source.addEventListener(STREAM_FRAME.remoteAccess, (frame) => {
+      try {
+        applyRemoteAccess(queryClient, decodeRemoteAccess(frame.data).status);
+      } catch (error) {
+        console.warn("Ignoring malformed event", error);
+      }
+    });
+    // "Reconnecting" lasts until the next Ready. A refusal, as when the hub started again with a new
+    // key, closes the stream for good, so it opens again a moment later with the cookie set anew.
+    let reopen: ReturnType<typeof setTimeout> | undefined;
+    source.onerror = () => {
+      report("reconnecting");
+      if (source.readyState === EventSource.CLOSED && reopen === undefined) {
+        reopen = setTimeout(() => setAttempt((n) => n + 1), REOPEN_AFTER_MS);
+      }
+    };
+    return () => {
+      clearTimeout(reopen);
+      source.close();
+    };
   }, [queryClient, attempt]);
 
   return { state, retry: () => setAttempt((n) => n + 1) };

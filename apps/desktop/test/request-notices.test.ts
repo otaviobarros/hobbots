@@ -96,7 +96,7 @@ describe("request notifications", () => {
     const stream = fakeEventStream();
     hub.inbox = [approval("a", "pending")];
     const following = followHub({
-      url: "http://127.0.0.1:4317/api/events",
+      url: () => "http://127.0.0.1:4317/api/events",
       canConnect: () => true,
       onConnected: () => void check(),
       onChange: (change) => void (change._tag === "Approvals" && check()),
