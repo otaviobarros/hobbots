@@ -84,6 +84,19 @@ export const TaskRepositoryLive = Layer.effect(
         ),
       );
 
+    /**
+     * A Task that has not ended and whose cancel was not asked for: what its owner reports or asks
+     * about it from then on is not news to anyone (OR-006).
+     */
+    const workingTask = (id: string) =>
+      openTask(id).pipe(
+        Effect.flatMap((task) =>
+          task.state === "cancelling"
+            ? refuse("task-cancelling", `Task ${task.id} is being cancelled`)
+            : Effect.succeed(task),
+        ),
+      );
+
     /** The Task at the revision the change was decided on. */
     const current = (id: string, revision: number) =>
       loadTask(id).pipe(
@@ -312,6 +325,15 @@ export const TaskRepositoryLive = Layer.effect(
         }
       });
 
+    /** Nothing starts under a Task whose cancel was asked for (OR-006). */
+    const notUnderCancel = (task: Task) =>
+      Effect.gen(function* () {
+        const cancelling = ancestorsOf(task, yield* read.treeOf(task.rootId)).find((at) => at.state === "cancelling");
+        if (cancelling !== undefined) {
+          return yield* refuse("parent-cancelling", `Task ${cancelling.id} is cancelling`);
+        }
+      });
+
     /**
      * A retry reopens a Task only under ancestors that are still open and not being cancelled, and
      * reopens its Quest with it.
@@ -322,10 +344,7 @@ export const TaskRepositoryLive = Layer.effect(
         const above = ancestorsOf(task, yield* read.treeOf(task.rootId));
         const ended = above.find((at) => isTerminalTask(at.state));
         if (ended !== undefined) return yield* refuse("parent-ended", `Task ${ended.id} is ${ended.state}`);
-        const cancelling = above.find((at) => at.state === "cancelling");
-        if (cancelling !== undefined) {
-          return yield* refuse("parent-cancelling", `Task ${cancelling.id} is cancelling`);
-        }
+        yield* notUnderCancel(task);
         const [quest] = yield* read.questsOn([task.id]);
         if (quest === undefined) return null;
         yield* sql`UPDATE quests SET state = 'active', ended_at = NULL, revision = ${revision} WHERE id = ${quest.id}`;
@@ -337,6 +356,7 @@ export const TaskRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const before = yield* current(taskId, expected);
           if (yield* liveAttempt(before)) return yield* refuse("attempt-live", `Task ${taskId} has a live Attempt`);
+          yield* notUnderCancel(before);
           const quest = yield* reopen(before, revision);
           const task = new Task({
             ...(yield* orFail(TaskTransitions.start(before, input.id, input.startedAt))),
@@ -588,7 +608,7 @@ export const TaskRepositoryLive = Layer.effect(
     const recordCheckpoint: TaskRepository["Service"]["recordCheckpoint"] = (input) =>
       change((revision) =>
         Effect.gen(function* () {
-          const task = yield* openTask(input.taskId);
+          const task = yield* workingTask(input.taskId);
           if (!CHECKPOINT_KINDS[input.source].includes(input.kind)) {
             return yield* refuse("checkpoint-kind", `A ${input.source} checkpoint is not a ${input.kind}`);
           }
@@ -602,7 +622,7 @@ export const TaskRepositoryLive = Layer.effect(
     const askQuestion: TaskRepository["Service"]["askQuestion"] = (input) =>
       change((revision) =>
         Effect.gen(function* () {
-          const task = yield* openTask(input.taskId);
+          const task = yield* workingTask(input.taskId);
           if (task.ownerId !== input.askerId) return yield* refuse("not-asker", "Only a Task's owner asks about it");
           const [lead] = leadsAbove(task, yield* read.treeOf(task.rootId));
           const question = new Question({

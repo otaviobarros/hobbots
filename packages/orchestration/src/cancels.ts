@@ -1,6 +1,7 @@
 import type { TaskRepository } from "@hobbots/agents";
 import {
   type Committed,
+  cancelMoves,
   descendantsOf,
   isLiveAttempt,
   isTerminalTask,
@@ -57,6 +58,24 @@ export const makeCancelSettler = ({ tasks, attempt, timeoutMs, wake, scope }: Se
       return Option.isNone(marked);
     });
 
+  /**
+   * Cancels what was made under a Task being cancelled after its cancel's moves were decided, as a
+   * step its session planned meanwhile, so nothing under it is left to keep it open. Whether it moved any.
+   */
+  const followDown = (task: Task, tree: TaskTree) =>
+    Effect.gen(function* () {
+      const at = DateTime.formatIso(yield* DateTime.now);
+      let moved = false;
+      for (const move of cancelMoves(task, tree)) {
+        const done = yield* attempt(
+          tasks.moveTask(move.task.id, move.task.revision, move.to, at),
+          "cancel work under a cancel",
+        );
+        moved = moved || Option.isSome(done);
+      }
+      return moved;
+    });
+
   /** Confirms the Task's cancel if nothing runs in it or under it. Whether it did. */
   const confirm = (task: Task) =>
     Effect.gen(function* () {
@@ -66,14 +85,15 @@ export const makeCancelSettler = ({ tasks, attempt, timeoutMs, wake, scope }: Se
       const now = tree.tasks.find((each) => each.id === task.id);
       if (now === undefined || now.state !== "cancelling") return false;
       if (yield* stillRunning(now, tree)) return false;
-      if (descendantsOf(now, tree.tasks).some((each) => !isTerminalTask(each.state))) return false;
+      if (descendantsOf(now, tree.tasks).some((each) => !isTerminalTask(each.state)))
+        return yield* followDown(now, tree);
       const at = DateTime.formatIso(yield* DateTime.now);
       const ended = yield* attempt(tasks.moveTask(now.id, now.revision, "cancelled", at), "confirm a cancel");
       if (Option.isSome(ended)) since.delete(now.id);
       return Option.isSome(ended);
     });
 
-  /** Passes over every cancel not yet confirmed until one confirms nothing, so a Task follows what was under it. */
+  /** Passes over every cancel not yet confirmed until one changes nothing, so a Task follows what was under it. */
   return Effect.gen(function* () {
     for (let confirming = true; confirming; ) {
       confirming = false;

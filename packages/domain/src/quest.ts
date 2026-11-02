@@ -227,6 +227,7 @@ export const TaskRefusal = Schema.Literals([
   "artifact-outside-tree",
   "wait-outside-subtree",
   "parent-cancelling",
+  "task-cancelling",
   "top-task",
   "not-delegated",
   "same-owner",

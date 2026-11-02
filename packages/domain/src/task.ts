@@ -119,9 +119,6 @@ export class StaleTask extends Schema.TaggedError<StaleTask>()("StaleTask", {
   actual: Schema.Int,
 }) {}
 
-/** Whether a cancel was asked for or has ended the Task: nothing may start under it again. */
-export const isCancelled = (state: TaskState): boolean => state === "cancelling" || state === "cancelled";
-
 /** The states a Task can be moved to directly; starting an Attempt and completing have their own rules. */
 export const TaskTarget = Schema.Literals(["waiting", "blocked", "active", "failed", "cancelling", "cancelled"]);
 export type TaskTarget = typeof TaskTarget.Type;

@@ -941,7 +941,7 @@ describe("waits and Task tool calls", () => {
   });
 
   // covers OR-006
-  it("[TC-OR-141] nothing new starts under a Task being cancelled, and a retry under one is refused", async () => {
+  it("[TC-OR-141] nothing new starts under a Task being cancelled, and it reports and asks nothing more", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -955,12 +955,40 @@ describe("waits and Task tool calls", () => {
           .createTask({ task: newTask("late", PIP, "campaign"), delegation: brief("d-late"), milestones: [] })
           .pipe(Effect.flip);
         const retry = yield* tasks.retryTask(copy, (yield* latest("copy")).revision, now).pipe(Effect.flip);
-        return { child, retry, cancelling: yield* tasks.listCancellingTasks };
+        const build = TaskId.make("build");
+        const start = yield* tasks
+          .startAttempt(build, (yield* latest("build")).revision, attempt("a-b"))
+          .pipe(Effect.flip);
+        const report = yield* tasks
+          .recordCheckpoint({
+            id: CheckpointId.make("c-late"),
+            taskId: top.id,
+            source: "unplanned",
+            kind: "finding",
+            milestoneId: null,
+            summary: "Found something",
+            createdAt: now,
+          })
+          .pipe(Effect.flip);
+        const ask = yield* tasks
+          .askQuestion({
+            id: QuestionId.make("q-late"),
+            taskId: top.id,
+            askerId: ALDRIC,
+            text: "Go on?",
+            createdAt: now,
+          })
+          .pipe(Effect.flip);
+        return { child, retry, start, report, ask, cancelling: yield* tasks.listCancellingTasks };
       }),
     );
 
     expect(result.child).toMatchObject({ _tag: "TaskRefused", reason: "parent-cancelling" });
     expect(result.retry).toMatchObject({ _tag: "TaskRefused", reason: "parent-cancelling" });
+    expect(result.start).toMatchObject({ _tag: "TaskRefused", reason: "parent-cancelling" });
+    // What a Task being cancelled reports or asks would only wake its lead about work that is ending.
+    expect(result.report).toMatchObject({ _tag: "TaskRefused", reason: "task-cancelling" });
+    expect(result.ask).toMatchObject({ _tag: "TaskRefused", reason: "task-cancelling" });
     expect(result.cancelling.map((each) => each.id)).toEqual(["campaign"]);
   });
 
