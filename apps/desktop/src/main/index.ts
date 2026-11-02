@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
-import { app, BrowserWindow, dialog, ipcMain, Notification, screen, shell, utilityProcess } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, screen, session, shell, utilityProcess } from "electron";
 import { handleFolderDialogIpc } from "./folder-dialog.ts";
 import { followHub } from "./hub-events.ts";
 import { handleKeepRunningIpc } from "./keep-running.ts";
@@ -13,6 +13,7 @@ import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server
 import { fileSettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
 import { claimSingleInstance, onSecondLaunch } from "./single-instance.ts";
+import { fetchAsWindow, makeWindowKey, WINDOW_COOKIE } from "./window-key.ts";
 import { initialWindowBounds } from "./window-size.ts";
 
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
@@ -71,8 +72,6 @@ const supervisor = new ServerSupervisor({
         HOBBOTS_DATA_DIR: app.getPath("userData"),
         HOBBOTS_VERSION: app.getVersion(),
         HOBBOTS_WEB_DIR: webDir,
-        // A development build's window loads the Vite dev server, which then acts for the user.
-        ...(!app.isPackaged && { HOBBOTS_ALLOWED_ORIGINS: devWebUrl }),
       },
     });
     server.on("exit", (code) => console.log(`Hobbots server exited with code ${code}`));
@@ -96,7 +95,6 @@ const createWindow = async () => {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
-      additionalArguments: [`--hobbots-api=${apiUrl}`],
     },
   });
 
@@ -118,18 +116,54 @@ const createWindow = async () => {
 };
 
 /**
+ * The hub's window is the one client trusted without asking (ADR 021): the hub writes a fresh window
+ * key to the data folder on every start, and this app reads it. Its pages carry it as an `HttpOnly`
+ * session cookie in the window's own session, for the hub's page and the Vite dev server's, so the
+ * browser engine never persists it and the page never reads it. The main process sends it as a
+ * bearer token.
+ */
+const windowKey = makeWindowKey(app.getPath("userData"));
+
+const setWindowCookie = async () => {
+  const value = windowKey.current();
+  if (value === undefined) return;
+  // The packaged app never loads the dev server, so only a dev build gives it the key.
+  for (const url of app.isPackaged ? [apiUrl] : [apiUrl, devWebUrl]) {
+    await session.defaultSession.cookies.set({
+      url,
+      name: WINDOW_COOKIE,
+      value,
+      httpOnly: true,
+      sameSite: "strict",
+      path: "/",
+    });
+  }
+};
+
+/** Reads the key again and sets the cookie again, as after the server restarts or answers 401. */
+const renewWindowKey = () => {
+  windowKey.reload();
+  void setWindowCookie();
+};
+
+const fetchHub = fetchAsWindow(windowKey, () => void setWindowCookie());
+
+/** A 401 to the window's own requests means the hub started again with a new key. */
+const renewOnRefusal = () =>
+  session.defaultSession.webRequest.onCompleted({ urls: [`${apiUrl}/api/*`, `${devWebUrl}/api/*`] }, (details) => {
+    if (details.statusCode === 401) renewWindowKey();
+  });
+
+/**
  * Sends a system notification for each new request while no Hobbots window is focused, from the
- * main process so it works with every window closed. The main process reads the Inbox as the app
- * itself, on the hub's own origin, as its window does (PE-006).
+ * main process so it works with every window closed. The main process reads the Inbox as the hub's
+ * window, with the window key (PE-006).
  */
 const requestNoticesOn = (open: (requestId: string) => void) =>
   requestNotices({
     read: async (path) => {
       try {
-        const response = await fetch(`${apiUrl}${path}`, {
-          headers: { origin: apiUrl },
-          signal: AbortSignal.timeout(2000),
-        });
+        const response = await fetchHub(`${apiUrl}${path}`, { signal: AbortSignal.timeout(2000) });
         return response.ok ? await response.json() : null;
       } catch {
         return null;
@@ -155,7 +189,7 @@ const followHubFor = (
 ) => {
   const hub = followHub({
     url: `${apiUrl}/api/events`,
-    headers: { origin: apiUrl },
+    headers: windowKey.headers,
     canConnect: () => supervisor.mayAnswer,
     onConnected: () => {
       void menuBar.recheck();
@@ -164,8 +198,12 @@ const followHubFor = (
     onChange: (change) => void (change._tag === "Approvals" ? notices.check() : menuBar.activityChanged()),
     onLost: () => void menuBar.recheck(),
   });
-  // Followed only while the server may answer; a server started again is followed at once.
-  supervisor.onChange(() => hub.sync());
+  // Followed only while the server may answer; a server started again is followed at once, with
+  // the key it wrote.
+  supervisor.onChange(() => {
+    renewWindowKey();
+    hub.sync();
+  });
   app.on("will-quit", () => void hub.stop());
 };
 
@@ -196,7 +234,7 @@ app.whenReady().then(async () => {
     showOpenDialog: (window, options) =>
       window ? dialog.showOpenDialog(window, options) : dialog.showOpenDialog(options),
   });
-  const menuBar = startMenuBar({ supervisor, settings, apiUrl, port, createWindow });
+  const menuBar = startMenuBar({ supervisor, settings, apiUrl, fetchHub, port, createWindow });
   try {
     await supervisor.start();
   } catch (error) {
@@ -218,6 +256,10 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+  // The server answers now, so its window key is in the data folder.
+  windowKey.reload();
+  await setWindowCookie();
+  renewOnRefusal();
   onSecondLaunch(() => void menuBar.showWindow());
   const notices = requestNoticesOn(async (requestId) => {
     const window = await menuBar.showWindow();

@@ -33,6 +33,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 // Folders are checked on the hub, so the tests make real ones. Canonical, since the hub stores
 // folders with symlinks resolved (on macOS the temp folder is one).
@@ -125,7 +126,7 @@ const start = (legacyFolders?: ReadonlyArray<string>, sandbox: "on" | "unavailab
       ),
     );
   const web = HttpRouter.toWebHandler(
-    ApiRoutes.pipe(Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
+    ApiRoutes.pipe(Layer.provide(TestDevices), Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
     { disableLogger: true },
   );
   handler = (request) => web.handler(request);
@@ -139,7 +140,7 @@ const request = async (method: string, path: string, body?: unknown) => {
     new Request(`http://localhost:4364${path}`, {
       method,
       // As the web client sends it: only a user session changes what a hob may do (PE-006).
-      headers: { "content-type": "application/json", host: "localhost:4364", origin: "http://localhost:4364" },
+      headers: { "content-type": "application/json", host: "localhost:4364", ...AS_WINDOW },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );

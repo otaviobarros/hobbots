@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -15,11 +14,11 @@ test.afterEach(async () => {
 const aldricHub = async () => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir, { HOBBOTS_BACKPACK_MAX_DELIVERIES: "1" });
-  const url = hub.url;
+  const { url, headers } = hub;
   const api = async (method: string, path: string, body: unknown) => {
     const response = await fetch(`${url}/api${path}`, {
       method,
-      headers: { "content-type": "application/json", origin: url },
+      headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);

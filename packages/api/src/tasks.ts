@@ -20,7 +20,7 @@ import {
   TaskNotFound,
   ThreadNotFound,
 } from "./errors.ts";
-import { UserSessionOnly } from "./user-session.ts";
+import { DeviceSession } from "./user-session.ts";
 
 /**
  * A read of a Task tree, with the event stream cursor taken just before it (ADR 013). Opening the
@@ -87,6 +87,7 @@ export class TasksGroup extends HttpApiGroup.make("tasks")
       error: AgentNotFound,
     }),
   )
+  .middleware(DeviceSession)
   .prefix("/api") {}
 
 export const AnswerQuestionPayload = Schema.Struct({
@@ -107,5 +108,5 @@ export class QuestionsGroup extends HttpApiGroup.make("questions")
       error: [QuestionNotFound, QuestionClosed],
     }),
   )
-  .middleware(UserSessionOnly)
+  .middleware(DeviceSession)
   .prefix("/api") {}

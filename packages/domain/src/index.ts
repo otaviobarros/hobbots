@@ -3,6 +3,7 @@ export * from "./approval.ts";
 export * from "./backpack.ts";
 export * from "./brain.ts";
 export * from "./charm-call.ts";
+export * from "./device.ts";
 export * from "./events.ts";
 export * from "./github.ts";
 export * from "./github-account.ts";

@@ -13,7 +13,6 @@ import { Effect, Layer, Option, Stream } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { EventBus } from "./event-bus.ts";
 import { formatCursor } from "./event-stream.ts";
-import { UserSessionOnlyLive } from "./user-session.ts";
 
 /** What blockers read and announce through: the hob's status, the hub's event bus and the chat. */
 export const BlockersHostLive = Layer.effect(
@@ -55,7 +54,7 @@ export const BlockersHandlers = HttpApiBuilder.group(HobbotsApi, "blockers", (ha
         ),
     });
   }),
-).pipe(Layer.provide(BlockersHostLive), Layer.provide(UserSessionOnlyLive));
+).pipe(Layer.provide(BlockersHostLive));
 
 /**
  * Fails a retired hob's work as blockers as it happens: when the hob retires, when an item reaches

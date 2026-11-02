@@ -44,6 +44,7 @@ import { parseCursor } from "../src/event-stream.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 const App = HobLifecycle.layer.pipe(
   Layer.provideMerge(
@@ -84,6 +85,7 @@ beforeEach(async () => {
   runtime = ManagedRuntime.make(App);
   const web = HttpRouter.toWebHandler(
     ApiRoutes.pipe(
+      Layer.provide(TestDevices),
       Layer.provide(Layer.succeedContext(await runtime.context())),
       Layer.provide(NodeHttpServer.layerHttpServices),
     ),
@@ -99,18 +101,18 @@ beforeEach(async () => {
 afterEach(() => dispose());
 
 const get = async (path: string): Promise<{ readonly status: number; readonly body: unknown }> => {
-  const response = await handler(new Request(`http://localhost:4390${path}`));
+  const response = await handler(new Request(`http://localhost:4390${path}`, { headers: AS_WINDOW }));
   return { status: response.status, body: await response.json() };
 };
 
-const post = async (path: string, body: unknown, origin?: string) => {
+const post = async (path: string, body: unknown, device = true) => {
   const response = await handler(
     new Request(`http://localhost:4390${path}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
         host: "localhost:4390",
-        ...(origin === undefined ? {} : { origin }),
+        ...(device ? AS_WINDOW : {}),
       },
       body: JSON.stringify(body),
     }),
@@ -272,19 +274,17 @@ describe("Task and Quest reads", () => {
         });
       }),
     );
-    const app = "http://localhost:4390";
-
-    expect((await post("/api/questions/q-ship/answer", { answer: "Yes" })).status).toBe(403);
-    const answered = await post("/api/questions/q-ship/answer", { answer: "Yes" }, app);
+    expect((await post("/api/questions/q-ship/answer", { answer: "Yes" }, false)).status).toBe(401);
+    const answered = await post("/api/questions/q-ship/answer", { answer: "Yes" });
     expect(answered).toMatchObject({
       status: 200,
       body: { id: "q-ship", state: "answered", answer: "Yes", answeredBy: { _tag: "User" } },
     });
-    expect(await post("/api/questions/q-ship/answer", { answer: "No" }, app)).toEqual({
+    expect(await post("/api/questions/q-ship/answer", { answer: "No" })).toEqual({
       status: 409,
       body: { _tag: "QuestionClosed", questionId: "q-ship" },
     });
-    expect(await post("/api/questions/nope/answer", { answer: "No" }, app)).toEqual({
+    expect(await post("/api/questions/nope/answer", { answer: "No" })).toEqual({
       status: 404,
       body: { _tag: "QuestionNotFound", questionId: "nope" },
     });

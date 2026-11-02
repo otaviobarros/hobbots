@@ -3,7 +3,6 @@ import { CharmCallNotFound, HobbotsApi } from "@hobbots/api";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { forExistingThread } from "./thread-exists.ts";
-import { UserSessionOnlyLive } from "./user-session.ts";
 
 // Charm calls by the reply steps they showed as, and settling an uncertain one (ADR 020), for user
 // sessions only (PE-006).
@@ -25,4 +24,4 @@ export const CharmCallsHandlers = HttpApiBuilder.group(HobbotsApi, "charmCalls",
           : Effect.fail(new CharmCallNotFound({ stepId: params.stepId })),
     });
   }),
-).pipe(Layer.provide(UserSessionOnlyLive));
+);

@@ -6,6 +6,7 @@ import {
   ApprovalService,
   CharmCallService,
   ChatService,
+  DeviceService,
   GrantService,
   HobAdmission,
   HobLifecycle,
@@ -35,6 +36,7 @@ import {
   ApprovalRepositoryLive,
   BackpackLive,
   CharmCallsLive,
+  DeviceRepositoryLive,
   EventJournal,
   GitHubAccountRepository,
   GrantRepositoryLive,
@@ -58,6 +60,7 @@ import { DispatcherHostLive } from "./backpack.ts";
 import { BlockOnRetirement } from "./blockers.ts";
 import { ServerConfig } from "./config.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "./continuations.ts";
+import { DeviceGate, DeviceSecretsLive, WindowKeyLive } from "./devices.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
@@ -70,7 +73,6 @@ import { QuietRoutineReads } from "./request-log.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
-import { ClientOrigins, userSessionOrigins } from "./user-session.ts";
 import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
 
 const ServerLive = Layer.unwrap(
@@ -99,6 +101,7 @@ const ServerLive = Layer.unwrap(
       TaskToolCallsLive,
       CharmCallsLive,
       BackpackLive,
+      DeviceRepositoryLive,
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
@@ -207,6 +210,16 @@ const ServerLive = Layer.unwrap(
       // Before approvals, so a decision can save grants and every call reads the hob's live ones.
       .pipe(Layer.provideMerge(GrantService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
+      // Every client is an approved device; the hub's window gets its key on each start (ADR 021).
+      .pipe(
+        Layer.provideMerge(
+          DeviceGate.layer.pipe(
+            Layer.provideMerge(DeviceService.layer),
+            Layer.provideMerge(WindowKeyLive(dataDir)),
+            Layer.provideMerge(DeviceSecretsLive),
+          ),
+        ),
+      )
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(Layer.provideMerge(Layer.merge(Charms, CharmCallService.layer)))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
@@ -245,13 +258,11 @@ const ServerLive = Layer.unwrap(
       Layer.provideMerge(
         HttpRouter.serve(
           Layer.mergeAll(
-            ApiRoutes.pipe(Layer.provide(Layer.succeed(ClientOrigins, userSessionOrigins(config)))),
+            ApiRoutes,
             EventStreamRoute,
             WebClientRoutes(config.webDir),
             LoopbackHostOnly,
             QuietRoutineReads,
-            // Browsers cache a preflight for this long, in seconds (Chromium's upper limit), rather than 5.
-            HttpRouter.cors({ allowedOrigins: config.allowedOrigins, maxAge: 7200 }),
           ),
         ),
       ),

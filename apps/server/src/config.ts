@@ -76,16 +76,4 @@ export const ServerConfig = Config.all({
   fakeGitHub: Config.Literals(["off", "on"], "HOBBOTS_FAKE_GITHUB").pipe(Config.withDefault("off" as const)),
   // A scripted Quest the fake runtime plays on the hub's records: asking for a Black Friday campaign starts it.
   fakeQuest: Config.Literals(["off", "black-friday"], "HOBBOTS_FAKE_QUEST").pipe(Config.withDefault("off" as const)),
-  // Set when the allow list was given, such as by the desktop app's development build.
-  allowedOriginsSet: Config.String("HOBBOTS_ALLOWED_ORIGINS").pipe(Config.option, Config.map(Option.isSome)),
-  // Only the Vite dev server needs CORS; the served web client calls the API on its own origin.
-  allowedOrigins: Config.String("HOBBOTS_ALLOWED_ORIGINS").pipe(
-    Config.withDefault("http://localhost:5173,http://127.0.0.1:5173"),
-    Config.map((value) =>
-      value
-        .split(",")
-        .map((origin) => origin.trim())
-        .filter(Boolean),
-    ),
-  ),
 });

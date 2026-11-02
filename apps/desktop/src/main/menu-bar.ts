@@ -21,6 +21,8 @@ export interface MenuBarOptions {
   readonly supervisor: ServerSupervisor;
   readonly settings: SettingsStore;
   readonly apiUrl: string;
+  /** Fetches from the hub as the hub's window, with the window key (ADR 021). */
+  readonly fetchHub: (url: string, init?: RequestInit) => Promise<Response>;
   readonly port: number;
   readonly createWindow: () => Promise<BrowserWindow>;
 }
@@ -39,7 +41,7 @@ const trayImage = (state: ServerState) => {
   return image;
 };
 
-export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow }: MenuBarOptions) => {
+export const startMenuBar = ({ supervisor, settings, apiUrl, fetchHub, port, createWindow }: MenuBarOptions) => {
   const windows = new Set<BrowserWindow>();
   let working: ReadonlyArray<string> = [];
   let starting: Promise<void> = Promise.resolve();
@@ -53,7 +55,7 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
   const fetchWorking = async (): Promise<ReadonlyArray<WorkingHob> | null> => {
     if (!isRunning()) return supervisor.ownsProcess ? null : [];
     try {
-      const response = await fetch(`${apiUrl}/api/activity`, { signal: AbortSignal.timeout(1000) });
+      const response = await fetchHub(`${apiUrl}/api/activity`, { signal: AbortSignal.timeout(1000) });
       if (!response.ok) return null;
       const body = (await response.json()) as { working?: unknown };
       if (!Array.isArray(body.working)) return null;

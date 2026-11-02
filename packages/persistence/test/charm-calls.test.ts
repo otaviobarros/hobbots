@@ -1,6 +1,6 @@
 import { CharmCallService, CharmCalls, HobbotsRepository } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
-import { Agent, AgentId, CharmCall, MessageId, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, CharmCall, MessageId, ThreadId, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { CharmCallsLive, EventJournal, HobbotsRepositoryLive } from "../src/index.ts";
@@ -158,7 +158,12 @@ describe("Charm call records", () => {
 
   // covers EX-003, PE-006
   it("[TC-IN-054] lets the user settle an uncertain call from its step, once, and nothing else", async () => {
-    const user = Layer.succeed(UserSession, { origin: "http://localhost:4317" });
+    const user = Layer.succeed(UserSession, {
+      deviceId: WINDOW_DEVICE_ID,
+      name: "This computer's Hobbots window",
+      kind: "window",
+      whileApproved: (write) => write,
+    });
     const result = await run(
       Effect.gen(function* () {
         yield* seed;

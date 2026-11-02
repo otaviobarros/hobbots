@@ -11,7 +11,8 @@ import { frameChange, type HubChange } from "./hub-events-model.ts";
 export interface HubEventsOptions {
   /** The hub's `/api/events` URL. */
   readonly url: string;
-  readonly headers?: Readonly<Record<string, string>>;
+  /** Headers for each connection, read again every time, as the window key changes when the hub restarts. */
+  readonly headers?: () => Readonly<Record<string, string>>;
   /** Whether the hub may answer now; the stream is followed only while it may. */
   readonly canConnect: () => boolean;
   /**
@@ -62,7 +63,7 @@ const sseEvents = <E, R>(text: Stream.Stream<string, E, R>) =>
 
 /** Follows the stream until interrupted, connecting again after each loss on a doubling, capped schedule. */
 const follow = (options: HubEventsOptions) => {
-  const { url, headers = {}, onConnected, onChange, onLost } = options;
+  const { url, headers = () => ({}), onConnected, onChange, onLost } = options;
   // The cursor of the last entry received. Each connection resumes after it, so the hub replays
   // what was missed while the stream was down (ADR 013).
   let cursor: string | undefined;
@@ -70,7 +71,11 @@ const follow = (options: HubEventsOptions) => {
   const bytes = HttpClientResponse.stream(
     Effect.suspend(() =>
       HttpClient.get(url, {
-        headers: { accept: "text/event-stream", ...headers, ...(cursor !== undefined && { "last-event-id": cursor }) },
+        headers: {
+          accept: "text/event-stream",
+          ...headers(),
+          ...(cursor !== undefined && { "last-event-id": cursor }),
+        },
       }),
     ).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk)),
   ).pipe(Stream.timeout(Duration.millis(options.silenceMs ?? SILENCE_MS)));

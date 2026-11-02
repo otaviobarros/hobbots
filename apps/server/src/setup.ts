@@ -4,7 +4,6 @@ import { SetupRepository } from "@hobbots/persistence";
 import { Effect, Layer } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { checkFolder } from "./folders.ts";
-import { UserSessionOnlyLive } from "./user-session.ts";
 
 export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers) =>
   Effect.gen(function* () {
@@ -34,4 +33,4 @@ export const SetupHandlers = HttpApiBuilder.group(HobbotsApi, "setup", (handlers
         }),
     });
   }),
-).pipe(Layer.provide(UserSessionOnlyLive));
+);

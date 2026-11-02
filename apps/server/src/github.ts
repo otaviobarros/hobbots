@@ -2,7 +2,6 @@ import { GitHubConnectFailed, type GitHubStatus, GitHubUnreachable, HobbotsApi }
 import { GitHubConnection } from "@hobbots/charms";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { UserSessionOnlyLive } from "./user-session.ts";
 
 /** What a hub without the GitHub Charm, as in tests, answers: no app to connect through. */
 const NO_APP: GitHubStatus = { _tag: "Disconnected", problem: null, cannotConnect: "no-app" };
@@ -46,4 +45,4 @@ export const GitHubHandlers = HttpApiBuilder.group(HobbotsApi, "github", (handle
         ),
     });
   }),
-).pipe(Layer.provide(UserSessionOnlyLive));
+);

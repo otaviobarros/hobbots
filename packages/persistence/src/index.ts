@@ -1,6 +1,7 @@
 export * from "./approvals.ts";
 export * from "./backpack.ts";
 export * from "./charm-calls.ts";
+export * from "./devices.ts";
 export * from "./github-account.ts";
 export * from "./grants.ts";
 export * from "./journal.ts";

@@ -1,7 +1,8 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
+import { type BrowserContext, test as base } from "@playwright/test";
 
 const web = resolve(import.meta.dirname, "..");
 const server = resolve(web, "../server");
@@ -17,6 +18,8 @@ export interface Hub {
   /** The served web client, as the desktop app loads it. */
   readonly url: string;
   readonly dataDir: string;
+  /** Headers that make an API request the hub's window's, with the key this start of the hub wrote. */
+  readonly headers: Readonly<Record<string, string>>;
   /** Stops the server and waits for it to exit; the data folder stays. */
   readonly stop: () => Promise<void>;
   /** Kills the server at once, as a crash or a force quit would, and waits for it to exit. */
@@ -77,8 +80,75 @@ export const startHub = async (dataDir: string, env: Record<string, string> = {}
     if (Date.now() > deadline) return fail(`The hub did not answer on ${url} within 30s:`);
     await new Promise((done) => setTimeout(done, 200));
   }
-  return { url, dataDir, stop: () => stopProcess(child), kill: () => stopProcess(child, "SIGKILL") };
+  const key = readFileSync(join(dataDir, "window-key"), "utf8").trim();
+  const hub: Hub = {
+    url,
+    dataDir,
+    headers: { authorization: `Bearer ${key}` },
+    stop: () => stopProcess(child),
+    kill: () => stopProcess(child, "SIGKILL"),
+  };
+  if (activeContext !== undefined) await admit(activeContext, hub);
+  return hub;
 };
+
+/** The `name=value` pairs a response set as cookies. */
+const setCookies = (response: Response) =>
+  new Map(
+    response.headers.getSetCookie().map((line) => {
+      const pair = line.split(";")[0] ?? "";
+      const equals = pair.indexOf("=");
+      return [pair.slice(0, equals), pair.slice(equals + 1)] as const;
+    }),
+  );
+
+const DEVICE_COOKIE = "hobbots_device";
+
+/**
+ * Gives a browser context a device on the hub without the prompt (ADR 021): it asks to pair as a
+ * browser, the hub's window allows it, and the device cookie goes into the context. A context that
+ * already has one, as after the hub restarts on the same data folder, keeps it.
+ */
+export const admit = async (context: BrowserContext, hub: Hub) => {
+  if ((await context.cookies(hub.url)).some((cookie) => cookie.name === DEVICE_COOKIE)) return;
+  const fail = async (step: string, response: Response) => {
+    throw new Error(`Pairing the test browser failed at ${step}: ${response.status} ${await response.text()}`);
+  };
+  const opened = await fetch(`${hub.url}/api/pairing`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Playwright", platform: "test", kind: "browser" }),
+  });
+  if (!opened.ok) return fail("asking", opened);
+  const { status } = (await opened.json()) as { readonly status: { readonly id: string } };
+  const pairing = setCookies(opened).get("hobbots_pairing");
+  const allowed = await fetch(`${hub.url}/api/pairing/requests/${status.id}/allow`, {
+    method: "POST",
+    headers: hub.headers,
+  });
+  if (!allowed.ok) return fail("allowing", allowed);
+  const claimed = await fetch(`${hub.url}/api/pairing`, { headers: { cookie: `hobbots_pairing=${pairing}` } });
+  const token = setCookies(claimed).get(DEVICE_COOKIE);
+  if (!claimed.ok || token === undefined) return fail("claiming", claimed);
+  await context.addCookies([{ name: DEVICE_COOKIE, value: token, url: hub.url, httpOnly: true, sameSite: "Strict" }]);
+};
+
+// The context of the test running on this worker; a hub started during the test admits it.
+let activeContext: BrowserContext | undefined;
+
+/** Playwright's `test`, whose browser context gets a device on each hub the test starts. */
+export const test = base.extend<{ readonly hubDevice: undefined }>({
+  hubDevice: [
+    async ({ context }, use) => {
+      activeContext = context;
+      await use(undefined);
+      activeContext = undefined;
+    },
+    { auto: true },
+  ],
+});
+
+export { expect } from "@playwright/test";
 
 const stopProcess = (child: ChildProcess, signal: NodeJS.Signals = "SIGTERM") =>
   new Promise<void>((done) => {

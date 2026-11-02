@@ -71,6 +71,8 @@ const SHAPES: ReadonlyArray<SecretShape> = [
   { kind: "AWS access key", pattern: /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g },
   { kind: "Google API key", pattern: /\bAIza[\w-]{35}/g },
   { kind: "Stripe key", pattern: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}/g },
+  // The hub's own secrets (ADR 021): device tokens, pairing secrets and the window key.
+  { kind: "Hobbots device secret", pattern: /\bhb[dpw]_[A-Za-z0-9_-]{32,}/g },
   { kind: "npm token", pattern: /\bnpm_[A-Za-z0-9]{36}\b/g },
   { kind: "JSON web token", pattern: /\beyJ[\w-]{8,}\.eyJ[\w-]{8,}\.[\w-]{8,}/g },
   { kind: "bearer token", pattern: /(?<prefix>\bBearer[ \t]+)(?<secret>[A-Za-z0-9\-._~+/]{8,}=*)/g },

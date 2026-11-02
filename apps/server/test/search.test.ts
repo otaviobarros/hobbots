@@ -29,6 +29,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 let handler: (request: Request) => Promise<Response>;
 let admission: typeof HobAdmission.Service;
@@ -73,7 +74,7 @@ beforeEach(() => {
       ),
     );
   const web = HttpRouter.toWebHandler(
-    ApiRoutes.pipe(Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
+    ApiRoutes.pipe(Layer.provide(TestDevices), Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
     { disableLogger: true },
   );
   handler = (request) => web.handler(request);
@@ -86,8 +87,8 @@ const request = async (method: string, path: string, body?: unknown) => {
     new Request(
       `http://localhost:4317${path}`,
       body === undefined
-        ? { method }
-        : { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) },
+        ? { method, headers: AS_WINDOW }
+        : { method, headers: { "content-type": "application/json", ...AS_WINDOW }, body: JSON.stringify(body) },
     ),
   );
   const text = await response.text();

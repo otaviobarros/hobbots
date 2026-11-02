@@ -22,10 +22,12 @@ import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { Installation } from "./installation.ts";
+import { PairingHandlers, PairingRequestsHandlers } from "./pairing.ts";
 import { PermissionsHandlers } from "./permissions.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
 import { QuestionsHandlers, TasksHandlers } from "./tasks.ts";
+import { DeviceSessionLive } from "./user-session.ts";
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
 const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
@@ -104,7 +106,6 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
 const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
   Effect.gen(function* () {
     const adapters = yield* runtimeAdapters;
-    const installation = yield* Installation;
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
 
@@ -131,7 +132,6 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     );
 
     return handlers.handleAll({
-      health: () => Effect.succeed(installation),
       activity: () => activity,
       // Every runtime, Claude Code first; one the hub has no adapter for is listed as unavailable.
       runtimes: () =>
@@ -146,6 +146,14 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
   }),
 );
 
+// Answers without a device, so a client can tell this hub from another program first (ADR 012).
+const HealthHandlers = HttpApiBuilder.group(HobbotsApi, "health", (handlers) =>
+  Effect.gen(function* () {
+    const installation = yield* Installation;
+    return handlers.handleAll({ health: () => Effect.succeed(installation) });
+  }),
+);
+
 // A runtime the hub has no adapter for offers no models.
 const RuntimesHandlers = HttpApiBuilder.group(HobbotsApi, "runtimes", (handlers) =>
   Effect.gen(function* () {
@@ -156,8 +164,15 @@ const RuntimesHandlers = HttpApiBuilder.group(HobbotsApi, "runtimes", (handlers)
   }),
 );
 
+/**
+ * Every API route. All but health and pairing sit behind the device middleware (ADR 021), which
+ * needs `DeviceGate` and the device store.
+ */
 export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
   Layer.provide([
+    HealthHandlers,
+    PairingHandlers,
+    PairingRequestsHandlers,
     AgentsHandlers,
     ThreadsHandlers,
     SystemHandlers,
@@ -174,4 +189,5 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     BlockersHandlers,
     GitHubHandlers,
   ]),
+  Layer.provide(DeviceSessionLive),
 );

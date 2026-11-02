@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -19,7 +18,7 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   hub = current;
   const setup = await fetch(`${current.url}/api/setup`, {
     method: "PATCH",
-    headers: { "content-type": "application/json", origin: current.url },
+    headers: { "content-type": "application/json", ...current.headers },
     body: JSON.stringify({ completed: true, connectedProviders: ["claude-code"] }),
   });
   expect(setup.ok).toBe(true);
@@ -85,7 +84,9 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/#\/hobs\/[^/]+\/new/);
 
-  const hobs = (await (await fetch(`${current.url}/api/agents`)).json()) as ReadonlyArray<Record<string, unknown>>;
+  const hobs = (await (await fetch(`${current.url}/api/agents`, { headers: current.headers })).json()) as ReadonlyArray<
+    Record<string, unknown>
+  >;
   const fern = hobs.find((h) => h.name === "Fern");
   expect(fern).toMatchObject({
     role: null,
@@ -121,7 +122,9 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect
     .poll(async () => {
-      const after = (await (await fetch(`${current.url}/api/agents`)).json()) as ReadonlyArray<Record<string, unknown>>;
+      const after = (await (
+        await fetch(`${current.url}/api/agents`, { headers: current.headers })
+      ).json()) as ReadonlyArray<Record<string, unknown>>;
       return after.find((h) => h.name === "Fern");
     })
     .toMatchObject({
