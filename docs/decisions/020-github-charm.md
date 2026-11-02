@@ -135,7 +135,7 @@ Every write action is a Charm call with a key, recorded before anything is sent.
 An applied call returns its result as success. Not finding the effect proves nothing: GitHub may still be working on a request after the hub stopped waiting for it. So a call whose effect is not found stays **uncertain**, never "not sent":
 
 - The step shows it as uncertain, and the hob is told not to repeat it.
-- The hub refuses a new call of the same action on the same site (the same branch, or the same issue or pull request) while one is uncertain, so two writes never overlap.
+- The hub refuses a new call of the same action on the same site (the same remote branch for Push, the same head and base for a pull request, the same issue or pull request for a comment) while one is uncertain, so two writes never overlap.
 - The hub reads GitHub back again a few times over the next minutes. Finding the effect settles the call as applied.
 - Otherwise you settle it from the step: you look on GitHub and mark it applied or not sent. Only then may the hob call again, which is decided again.
 
