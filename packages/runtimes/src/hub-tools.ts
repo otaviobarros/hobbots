@@ -46,9 +46,15 @@ const hubServer = (hub: HubTools) =>
   });
 
 /**
- * Claude Code's options for a turn that offers hub tools: the server, its tools allowed without a
- * prompt (the hub decides each call, not the policy hook), and hooks that show each call as a
- * step. Built-in tools stay as the rest of the options set them.
+ * Claude Code's options for a turn that offers hub tools: the server, and hooks that approve each
+ * call to its tools (the hub decides each call, not the policy hook) and show it as a step.
+ * Built-in tools stay as the rest of the options set them.
+ *
+ * The hook approves the calls rather than bare `allowedTools` entries, which would shadow the
+ * permission callback and make the Agent SDK warn on every tool turn (#329). Hook approval holds
+ * in `default` and `dontAsk` mode. A call that lost it is refused either way: on a tool turn
+ * (`default`) it reaches the callback, which refuses a tool it does not know, and on a chat-only
+ * turn (`dontAsk`) Claude Code denies it without asking.
  */
 const hubOptions = (hub: HubTools, report: (event: RuntimeEvent) => void): Partial<Options> => {
   const labels = new Map(hub.tools.map((tool) => [tool.name, tool.label]));
@@ -56,10 +62,17 @@ const hubOptions = (hub: HubTools, report: (event: RuntimeEvent) => void): Parti
   const start: HookCallback = async (input) => {
     if (input.hook_event_name !== "PreToolUse") return {};
     const name = hubToolOf(input.tool_name);
-    if (name === null) return {};
+    const label = name === null ? undefined : labels.get(name);
+    if (label === undefined) return {};
     started.add(input.tool_use_id);
-    report({ _tag: "StepStarted", id: input.tool_use_id, kind: "tool", label: labels.get(name) ?? name });
-    return {};
+    report({ _tag: "StepStarted", id: input.tool_use_id, kind: "tool", label });
+    return {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        permissionDecisionReason: "Hobbots decides its own tools' calls.",
+      },
+    };
   };
   const end: HookCallback = async (input) => {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") return {};
@@ -69,7 +82,6 @@ const hubOptions = (hub: HubTools, report: (event: RuntimeEvent) => void): Parti
   const matcher = `${PREFIX}.*`;
   return {
     mcpServers: { [HUB_SERVER]: hubServer(hub) },
-    allowedTools: hub.tools.map((tool) => `${PREFIX}${tool.name}`),
     strictMcpConfig: true,
     hooks: {
       PreToolUse: [{ matcher, hooks: [start] }],
@@ -97,7 +109,7 @@ const MCP_RESOURCE_TOOLS = ["ListMcpResourcesTool", "ReadMcpResourceTool", "Read
 /**
  * A turn's options with its hub tools added. A chat-only turn closes every tool with `*`, which
  * would close the hub's too, so it closes the MCP resource tools by name instead: it offers no
- * built-in tool and allows only the hub's.
+ * built-in tool and the hook approves only the hub's.
  */
 export const withHubTools = (
   options: Options,
@@ -109,7 +121,6 @@ export const withHubTools = (
   return {
     ...options,
     ...added,
-    allowedTools: [...(options.allowedTools ?? []), ...(added.allowedTools ?? [])],
     disallowedTools: [...(options.disallowedTools ?? []).filter((rule) => rule !== "*"), ...MCP_RESOURCE_TOOLS],
     hooks: mergeHooks(options.hooks, added.hooks),
   };

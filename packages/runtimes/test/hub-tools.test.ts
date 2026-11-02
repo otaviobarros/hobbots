@@ -8,7 +8,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { policyHooks, toolTurn } from "../src/claude-code.ts";
+import { policyHooks, toolOptions, toolTurn } from "../src/claude-code.ts";
 import { HUB_SERVER, hubToolOf, inputShape, withHubTools } from "../src/hub-tools.ts";
 
 const calls: Array<{ readonly name: string; readonly input: unknown }> = [];
@@ -43,7 +43,8 @@ describe("hub tools on Claude Code's control channel", () => {
     expect(hubToolOf("Bash")).toBeNull();
   });
 
-  it("serves the tools, allows them by name and shows each call as a step", async () => {
+  // covers PE-006: the hub's own tools run only through the hub, which decides each call.
+  it("[TC-PE-135] serves the tools, approves their calls in the hook and shows each call as a step", async () => {
     const chatOnly: Options = { tools: [], disallowedTools: ["*"], permissionMode: "dontAsk" };
     expect(withHubTools(chatOnly, null, () => {})).toBe(chatOnly);
     const events: Array<RuntimeEvent> = [];
@@ -52,14 +53,25 @@ describe("hub tools on Claude Code's control channel", () => {
     expect(options.disallowedTools).toEqual(["ListMcpResourcesTool", "ReadMcpResourceTool", "ReadMcpResourceDirTool"]);
     expect(options.permissionMode).toBe("dontAsk");
     expect(options.strictMcpConfig).toBe(true);
-    expect(options.allowedTools).toEqual(TASK_TOOLS.map((tool) => `mcp__${HUB_SERVER}__${tool.name}`));
+    // Bare allowedTools entries would shadow a turn's permission callback (#329).
+    expect(options.allowedTools).toBeUndefined();
     expect(Object.keys(options.mcpServers ?? {})).toEqual([HUB_SERVER]);
 
     const name = `mcp__${HUB_SERVER}__delegate_task`;
     const [pre] = options.hooks?.PreToolUse ?? [];
     const [post] = options.hooks?.PostToolUse ?? [];
     expect(new RegExp(pre?.matcher ?? "").test(name)).toBe(true);
-    await pre?.hooks[0]?.({ ...base, tool_name: name, hook_event_name: "PreToolUse" } as HookInput, "t1", { signal });
+    expect(
+      await pre?.hooks[0]?.({ ...base, tool_name: name, hook_event_name: "PreToolUse" } as HookInput, "t1", { signal }),
+    ).toMatchObject({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" } });
+    // A name the hub does not serve gets no approval, so the turn's own permissions decide it.
+    expect(
+      await pre?.hooks[0]?.(
+        { ...base, tool_name: `mcp__${HUB_SERVER}__unknown`, hook_event_name: "PreToolUse" } as HookInput,
+        "t9",
+        { signal },
+      ),
+    ).toEqual({});
     await post?.hooks[0]?.(
       { ...base, tool_name: name, hook_event_name: "PostToolUse", tool_response: "" } as HookInput,
       "t1",
@@ -69,6 +81,42 @@ describe("hub tools on Claude Code's control channel", () => {
       { _tag: "StepStarted", id: "t1", kind: "tool", label: "Delegating a Task" },
       { _tag: "StepEnded", id: "t1" },
     ]);
+  });
+
+  // covers PE-005, PE-006: no tool is approved before the policy's permission callback is consulted.
+  it("[TC-PE-136] leaves a tool turn's permission callback unshadowed", async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hub-")));
+    const project = join(root, "project");
+    mkdirSync(project);
+    const engine = await Effect.runPromise(Effect.service(PolicyEngine).pipe(Effect.provide(PolicyEngine.node)));
+    const turn = toolTurn(
+      {
+        policy: {
+          preset: "balanced",
+          sharedFolders: [project],
+          hob: EMPTY_HOB_POLICY,
+          dataFolder: join(root, "data"),
+          restrictions: [],
+        },
+        folders: [project],
+        runtimeFolder: join(root, "runtimes"),
+      },
+      "on",
+    );
+    if (turn === null) throw new Error("expected a tool turn");
+    const options = withHubTools(
+      toolOptions(
+        turn,
+        policyHooks(engine, turn, () => {}),
+        {},
+      ) as Options,
+      hub,
+      () => {},
+    );
+    expect(options.canUseTool).toBeDefined();
+    // The Agent SDK's warning fires for any allowedTools entry without a specifier.
+    expect((options.allowedTools ?? []).filter((rule) => !rule.includes("("))).toEqual([]);
+    expect(options.permissionMode).toBe("default");
   });
 
   it("answers a call with the hub's text, as an error when the hub refused it", async () => {
