@@ -21,6 +21,7 @@ import { grantsChanged } from "./grants.ts";
 import type { ConnectionState } from "./live.ts";
 import { setConnection } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
+import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
@@ -139,6 +140,11 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     // Chat shows what a reply is doing from the reply itself, so the window does not follow `turn` frames.
     case "TurnStarted":
     case "TurnEnded":
+      return;
+    // A device asked to pair, or its request was decided (ADR 021).
+    case "PairingRequested":
+    case "PairingChanged":
+      void pairingChanged(queryClient);
       return;
     default:
       applyWorkEvent(queryClient, event);

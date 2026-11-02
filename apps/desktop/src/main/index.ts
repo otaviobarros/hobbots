@@ -9,7 +9,7 @@ import { handleKeepRunningIpc } from "./keep-running.ts";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
 import { startMenuBar } from "./menu-bar.ts";
 import { openRequestIn } from "./open-request.ts";
-import { requestNotices } from "./request-notices.ts";
+import { deviceNotices, type RequestNoticesOptions, requestNotices } from "./request-notices.ts";
 import { ServerSupervisor, StartTimedOut } from "./server.ts";
 import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server-identity.ts";
 import { fileSettingsStore } from "./settings.ts";
@@ -174,12 +174,12 @@ const renewOnRefusal = () =>
   });
 
 /**
- * Sends a system notification for each new request while no Hobbots window is focused, from the
- * main process so it works with every window closed. The main process reads the Inbox as the hub's
- * window, with the window key (PE-006).
+ * Sends a system notification for each new request, and each device asking to pair (ADR 021), while
+ * no Hobbots window is focused, from the main process so it works with every window closed. The
+ * main process reads the Inbox as the hub's window, with the window key (PE-006).
  */
-const requestNoticesOn = (open: (requestId: string) => void) =>
-  requestNotices({
+const noticesOn = (open: (requestId: string) => void) => {
+  const options: RequestNoticesOptions = {
     read: async (path) => {
       try {
         const response = await fetchHub(`${hub.apiUrl}${path}`, { signal: AbortSignal.timeout(2000) });
@@ -196,7 +196,12 @@ const requestNoticesOn = (open: (requestId: string) => void) =>
       return notice;
     },
     open,
-  });
+  };
+  const requests = requestNotices(options);
+  // A device's prompt shows over the window, so its notification only needs to bring the window forward.
+  const devices = deviceNotices({ ...options, open: () => open("") });
+  return { requests, devices };
+};
 
 /**
  * Follows the hub's event stream for the menu-bar icon and the request notifications, instead of
@@ -204,7 +209,7 @@ const requestNoticesOn = (open: (requestId: string) => void) =>
  */
 const followHubFor = (
   menuBar: Pick<ReturnType<typeof startMenuBar>, "recheck" | "activityChanged">,
-  notices: ReturnType<typeof requestNotices>,
+  notices: ReturnType<typeof noticesOn>,
 ) => {
   const events = followHub({
     url: () => `${hub.apiUrl}/api/events`,
@@ -212,11 +217,13 @@ const followHubFor = (
     canConnect: () => supervisor.mayAnswer,
     onConnected: () => {
       void menuBar.recheck();
-      void notices.check();
+      void notices.requests.check();
+      void notices.devices.check();
     },
     onChange: (change) => {
       if (change._tag === "Port") moveHub(change.port);
-      else if (change._tag === "Approvals") void notices.check();
+      else if (change._tag === "Approvals") void notices.requests.check();
+      else if (change._tag === "Pairing") void notices.devices.check();
       else void menuBar.activityChanged();
     },
     onLost: () => {
@@ -298,9 +305,9 @@ app.whenReady().then(async () => {
   await setWindowCookie();
   renewOnRefusal();
   onSecondLaunch(() => void menuBar.showWindow());
-  const notices = requestNoticesOn(async (requestId) => {
+  const notices = noticesOn(async (requestId) => {
     const window = await menuBar.showWindow();
-    if (window) openRequestIn(window, requestId);
+    if (window && requestId !== "") openRequestIn(window, requestId);
   });
   followHubFor(menuBar, notices);
   // The Dock icon or opening the app from Finder; macOS already fronts a visible window.

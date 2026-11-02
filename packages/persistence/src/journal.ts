@@ -98,6 +98,10 @@ const correlationOf = (event: JournaledEventType): RowCorrelation => {
     case "MessageUpserted":
     case "MessageQueued":
       return { ...NONE, threadId: event.message.threadId, messageId: event.message.id };
+    // Pairing belongs to no hob or thread (ADR 021).
+    case "PairingRequested":
+    case "PairingChanged":
+      return NONE;
     default:
       return isTaskEvent(event)
         ? taskCorrelationOf(event)

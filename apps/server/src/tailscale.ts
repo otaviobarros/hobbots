@@ -16,6 +16,8 @@ import type { TailnetOwner, TailnetPeer } from "./devices.ts";
 export interface TailnetSnapshot {
   readonly status: TailscaleStatus;
   readonly peers: ReadonlySet<string>;
+  /** The hub's own node, for who may pair and which requests come from the hub itself (ADR 021). */
+  readonly self: TailnetPeer | null;
 }
 
 export class Tailscale extends Context.Service<
@@ -34,6 +36,7 @@ const stripDot = (name: string) => (name.endsWith(".") ? name.slice(0, -1) : nam
 const notListed = (state: TailscaleState): TailnetSnapshot => ({
   status: { state, dnsName: null, addresses: [] },
   peers: new Set(),
+  self: null,
 });
 
 // The fields of `tailscale status --json` the hub reads (ipnstate.Status in Tailscale's source).
@@ -42,11 +45,15 @@ const StatusJson = Schema.Struct({
   Self: Schema.optional(
     Schema.NullOr(
       Schema.Struct({
+        ID: Schema.optional(Schema.String),
         DNSName: Schema.optional(Schema.String),
         TailscaleIPs: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
+        UserID: Schema.optional(Schema.Number),
+        Tags: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
       }),
     ),
   ),
+  User: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Struct({ LoginName: Schema.String })))),
   Peer: Schema.optional(
     Schema.NullOr(
       Schema.Record(
@@ -65,6 +72,23 @@ const stateOf = (backend: string): TailscaleState => {
   return "notRunning";
 };
 
+type RawStatus = typeof StatusJson.Type;
+
+/** A tagged node belongs to its tags, not to a person; any other node to its owner's login. */
+const ownerOf = (tags: ReadonlyArray<string>, login: string | undefined): TailnetOwner | null => {
+  if (tags.length > 0) return { _tag: "Tagged", tags };
+  return login === undefined ? null : { _tag: "User", login };
+};
+
+/** The hub's own node as `tailscale status` names it: its stable ID, name and owner. */
+const selfOf = (raw: RawStatus, dnsName: string | null): TailnetPeer | null => {
+  const self = raw.Self;
+  if (!self?.ID) return null;
+  const login = self.UserID === undefined ? undefined : raw.User?.[String(self.UserID)]?.LoginName;
+  const owner = ownerOf(self.Tags ?? [], login);
+  return owner === null ? null : { nodeId: self.ID, nodeName: dnsName ?? "", owner };
+};
+
 /** The hub's node and its peers' addresses from `tailscale status --json`; not running when it cannot be read. */
 export const readStatus = (json: string): TailnetSnapshot =>
   Option.match(decodeStatus(json), {
@@ -75,7 +99,8 @@ export const readStatus = (json: string): TailnetSnapshot =>
       const addresses = [...(raw.Self?.TailscaleIPs ?? [])].sort((a, b) => Number(isIPv6(a)) - Number(isIPv6(b)));
       const dnsName = raw.Self?.DNSName ? stripDot(raw.Self.DNSName) : null;
       const peers = new Set(Object.values(raw.Peer ?? {}).flatMap((peer) => peer.TailscaleIPs ?? []));
-      return { status: { state, dnsName: dnsName === "" ? null : dnsName, addresses }, peers };
+      const name = dnsName === "" ? null : dnsName;
+      return { status: { state, dnsName: name, addresses }, peers, self: selfOf(raw, name) };
     },
   });
 
@@ -97,13 +122,7 @@ const decodeWhoIs = Schema.decodeUnknownOption(Schema.fromJsonString(WhoIsJson))
 export const readWhoIs = (json: string): Option.Option<TailnetPeer> =>
   decodeWhoIs(json).pipe(
     Option.flatMap((raw): Option.Option<TailnetPeer> => {
-      const tags = raw.Node.Tags ?? [];
-      const owner: TailnetOwner | null =
-        tags.length > 0
-          ? { _tag: "Tagged", tags }
-          : raw.UserProfile
-            ? { _tag: "User", login: raw.UserProfile.LoginName }
-            : null;
+      const owner = ownerOf(raw.Node.Tags ?? [], raw.UserProfile?.LoginName);
       if (owner === null || raw.Node.StableID === "") return Option.none();
       return Option.some({ nodeId: raw.Node.StableID, nodeName: stripDot(raw.Node.Name), owner });
     }),
@@ -172,21 +191,22 @@ export const TailscaleLive = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv)
  * such as `127.0.0.2`, and the whois table. `ranges` are the addresses its tailnet connections come
  * from, in place of Tailscale's own.
  */
+const FakeNode = Schema.Struct({
+  nodeId: Schema.String,
+  nodeName: Schema.String,
+  owner: Schema.Union([
+    Schema.TaggedStruct("User", { login: Schema.String }),
+    Schema.TaggedStruct("Tagged", { tags: Schema.Array(Schema.String) }),
+  ]),
+});
+
 export const FakeTailnet = Schema.Struct({
   state: Schema.Literals(["notInstalled", "notRunning", "signedOut", "running"]),
   dnsName: Schema.NullOr(Schema.String),
   addresses: Schema.Array(Schema.String),
-  peers: Schema.Record(
-    Schema.String,
-    Schema.Struct({
-      nodeId: Schema.String,
-      nodeName: Schema.String,
-      owner: Schema.Union([
-        Schema.TaggedStruct("User", { login: Schema.String }),
-        Schema.TaggedStruct("Tagged", { tags: Schema.Array(Schema.String) }),
-      ]),
-    }),
-  ),
+  /** The hub's own node; without it, the hub's node is the peer at 127.0.0.1, as by default. */
+  self: Schema.optionalKey(FakeNode),
+  peers: Schema.Record(Schema.String, FakeNode),
   ranges: Schema.Array(Schema.String),
 });
 export type FakeTailnet = typeof FakeTailnet.Type;
@@ -213,6 +233,7 @@ const fakeFrom = (read: Effect.Effect<FakeTailnet>, ranges: ReadonlyArray<string
         ? {
             status: { state: fake.state, dnsName: fake.dnsName, addresses: fake.addresses },
             peers: new Set(Object.keys(fake.peers)),
+            self: fake.self ?? fake.peers["127.0.0.1"] ?? null,
           }
         : notListed(fake.state),
     ),

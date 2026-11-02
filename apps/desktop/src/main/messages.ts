@@ -4,4 +4,8 @@ export const messages = {
     title: ({ name }: { name: string }) => `${name} asks permission`,
     unknownHob: "A hob",
   },
+  deviceNotice: {
+    title: ({ name }: { name: string }) => `${name} wants to use Hobbots`,
+    body: ({ code }: { code: string }) => `Check that it shows ${code}, then Allow or Deny.`,
+  },
 } as const;

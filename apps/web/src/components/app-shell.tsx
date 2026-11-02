@@ -3,6 +3,7 @@ import { Outlet } from "@tanstack/react-router";
 import { useHobbotsEvents } from "../api/events.ts";
 import { HobJump } from "./hob-jump.tsx";
 import { useOpenRequests } from "./inbox/use-open-requests.ts";
+import { DevicePrompt } from "./pairing/device-prompt.tsx";
 import { Rail } from "./rail.tsx";
 
 /** The window: its title bar and whichever page fills it, with or without the rail. */
@@ -51,6 +52,7 @@ export function AppShell() {
         <Outlet />
       </div>
       <HobJump />
+      <DevicePrompt />
     </>
   );
 }

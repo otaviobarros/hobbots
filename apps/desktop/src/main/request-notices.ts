@@ -1,9 +1,16 @@
 import { coalesce } from "./coalesce.ts";
 import { type ReadUntilOptions, readUntil } from "./read-until.ts";
-import { type NoticeState, noticeChanges, noticeText, pendingRequests } from "./request-notices-model.ts";
+import {
+  deviceNoticeText,
+  devicePairings,
+  type NoticeState,
+  noticeChanges,
+  noticeText,
+  pendingRequests,
+} from "./request-notices-model.ts";
 
 /** A notification the system shows; `close` takes it away. */
-export interface ShownNotice {
+interface ShownNotice {
   readonly close: () => void;
 }
 
@@ -20,17 +27,69 @@ export interface RequestNoticesOptions {
   readonly retry?: ReadUntilOptions;
 }
 
+/** Where one kind of waiting item is read, and how its notification reads. */
+interface NoticeSource<P extends { readonly id: string }> {
+  readonly path: string;
+  /** The waiting items in the hub's answer, or null when it is not one. */
+  readonly pending: (body: unknown) => ReadonlyArray<P> | null;
+  /** The notifications for new items, in their order. */
+  readonly texts: (items: ReadonlyArray<P>) => Promise<ReadonlyArray<{ title: string; body: string }>>;
+}
+
+/**
+ * Notifies the user of new items of one kind from the main process, comparing each read with what
+ * is shown: a new item is announced while no window is focused, and an item that no longer waits,
+ * wherever it was decided, closes its notification.
+ */
+const makeNotices = <P extends { readonly id: string }>(
+  { read, isFocused, notify, open, retry }: RequestNoticesOptions,
+  source: NoticeSource<P>,
+) => {
+  let state: NoticeState = { known: undefined, shown: new Set() };
+  const shown = new Map<string, ShownNotice>();
+
+  const reconcile = async () => {
+    // A read that did not answer is made again until one does, since no later event may come. Until
+    // then what is shown stays.
+    const pending = await readUntil(async () => source.pending(await read(source.path)), retry);
+    const changes = noticeChanges(state, pending, isFocused());
+    for (const id of changes.close) {
+      shown.get(id)?.close();
+      shown.delete(id);
+    }
+    if (changes.show.length > 0) {
+      const texts = await source.texts(changes.show);
+      changes.show.forEach((item, index) => {
+        const text = texts[index];
+        if (text === undefined) return;
+        const notice = notify(text, () => {
+          shown.delete(item.id);
+          open(item.id);
+        });
+        shown.set(item.id, notice);
+      });
+    }
+    state = { known: changes.known, shown: new Set(shown.keys()) };
+  };
+
+  /**
+   * Compares the hub's list with what is shown. The first check learns what already waits. A check
+   * asked for while one is under way runs once more after it, so a slow hub never announces an item
+   * twice and a change that arrived meanwhile is never missed.
+   */
+  const check = coalesce(reconcile);
+
+  return { check };
+};
+
 /**
  * Notifies the user of new requests from the main process, so it works with no window open: in the
  * menu bar after the last window closed, or after opening at login. `check` it whenever the hub's
  * event stream connects and whenever a request arrives or is decided.
  */
-export const requestNotices = ({ read, isFocused, notify, open, retry }: RequestNoticesOptions) => {
-  let state: NoticeState = { known: undefined, shown: new Set() };
-  const shown = new Map<string, ShownNotice>();
-
+export const requestNotices = (options: RequestNoticesOptions) => {
   const hobNames = async (): Promise<ReadonlyMap<string, string>> => {
-    const hobs = await read("/api/agents");
+    const hobs = await options.read("/api/agents");
     if (!Array.isArray(hobs)) return new Map();
     return new Map(
       hobs.flatMap((hob: { id?: unknown; name?: unknown }) =>
@@ -38,35 +97,23 @@ export const requestNotices = ({ read, isFocused, notify, open, retry }: Request
       ),
     );
   };
-
-  const reconcile = async () => {
-    // A read that did not answer is made again until one does, since no later event may come. Until
-    // then what is shown stays.
-    const pending = await readUntil(async () => pendingRequests(await read("/api/approvals")), retry);
-    const changes = noticeChanges(state, pending, isFocused());
-    for (const id of changes.close) {
-      shown.get(id)?.close();
-      shown.delete(id);
-    }
-    if (changes.show.length > 0) {
+  return makeNotices(options, {
+    path: "/api/approvals",
+    pending: pendingRequests,
+    texts: async (requests) => {
       const names = await hobNames();
-      for (const request of changes.show) {
-        const notice = notify(noticeText(request, names.get(request.agentId)), () => {
-          shown.delete(request.id);
-          open(request.id);
-        });
-        shown.set(request.id, notice);
-      }
-    }
-    state = { known: changes.known, shown: new Set(shown.keys()) };
-  };
-
-  /**
-   * Compares the Inbox with what is shown. The first check learns what already waits. A check asked
-   * for while one is under way runs once more after it, so a slow hub never announces a request
-   * twice and a change that arrived meanwhile is never missed.
-   */
-  const check = coalesce(reconcile);
-
-  return { check };
+      return requests.map((request) => noticeText(request, names.get(request.agentId)));
+    },
+  });
 };
+
+/**
+ * Notifies the user of each new device asking to pair (ADR 021), as `requestNotices` does for
+ * requests. `check` it whenever the event stream connects and whenever a pairing request changes.
+ */
+export const deviceNotices = (options: RequestNoticesOptions) =>
+  makeNotices(options, {
+    path: "/api/pairing/requests",
+    pending: devicePairings,
+    texts: async (devices) => devices.map(deviceNoticeText),
+  });

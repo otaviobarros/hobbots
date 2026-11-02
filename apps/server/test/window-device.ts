@@ -7,6 +7,7 @@ import {
   InProcessRequests,
   knownWindowKey,
   LocalPeers,
+  PairingLimiterLive,
   type TailnetPeers,
 } from "../src/devices.ts";
 
@@ -25,6 +26,7 @@ export const testDevicesWith = (peers: Layer.Layer<TailnetPeers>) =>
     Layer.provideMerge(DeviceService.layer),
     Layer.provideMerge(knownWindowKey(TEST_WINDOW_KEY)),
     Layer.provideMerge(DeviceSecretsLive),
+    Layer.provideMerge(PairingLimiterLive),
     Layer.provideMerge(DeviceRepositoryLive),
     Layer.provideMerge(peers),
     Layer.provideMerge(Layer.succeed(InProcessRequests, true)),

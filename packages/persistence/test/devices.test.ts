@@ -83,9 +83,13 @@ describe("DeviceRepository", () => {
       }),
     );
     expect(result.open.map((request) => request.id)).toEqual(["p1"]);
-    expect(Option.getOrThrow(result.allowed)).toMatchObject({ state: "allowed", decidedAt: LATER, deviceId: "d1" });
+    expect(Option.getOrThrow(result.allowed).value).toMatchObject({
+      state: "allowed",
+      decidedAt: LATER,
+      deviceId: "d1",
+    });
     expect(Option.isNone(result.again)).toBe(true);
-    expect(Option.getOrThrow(result.claimed)).toMatchObject({ state: "claimed", deviceId: "d1" });
+    expect(Option.getOrThrow(result.claimed).value).toMatchObject({ state: "claimed", deviceId: "d1" });
     expect(Option.isNone(result.reclaimed)).toBe(true);
     expect(Option.getOrThrow(result.bySecret)).not.toHaveProperty("secretHash");
     expect(Option.getOrThrow(result.byToken)).toMatchObject({
@@ -126,7 +130,7 @@ describe("DeviceRepository", () => {
     );
     expect(Option.isNone(result.lateAllow)).toBe(true);
     expect(Option.isNone(result.lateDeny)).toBe(true);
-    expect(Option.getOrThrow(result.denied)).toMatchObject({ state: "denied", deviceId: null });
+    expect(Option.getOrThrow(result.denied).value).toMatchObject({ state: "denied", deviceId: null });
     expect(Option.isNone(result.allowAfterDeny)).toBe(true);
     expect(Option.isNone(result.lateClaim)).toBe(true);
     expect(Option.getOrThrow(result.unclaimed)).toMatchObject({ state: "allowed" });
@@ -171,5 +175,40 @@ describe("DeviceRepository", () => {
     expect(JSON.stringify(result.after)).toContain("DeviceRevoked");
     expect(JSON.stringify(result.unknown)).toContain("DeviceRevoked");
     expect(result.marks).toEqual(["while-approved"]);
+  });
+
+  // covers DP-004
+  it("[TC-DP-090] journals every pairing change with the request's code and details, never its secret", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* DeviceRepository;
+        const sql = yield* SqlClient.SqlClient;
+        const opened = yield* repo.openPairing(asking("p1"), "secret-hash");
+        const deferred = yield* repo.deferPairing("p1", "2026-11-03T10:00:00.000Z", LATER);
+        // Deciding later again, or to an earlier time, changes nothing.
+        const sooner = yield* repo.deferPairing("p1", "2026-11-02T12:00:00.000Z", LATER);
+        const allowed = yield* repo.allowPairing("p1", deviceFor(asking("p1"), "d1"), EXPIRED);
+        const claimed = yield* repo.claimPairing("p1", "token-hash", EXPIRED);
+        const journal = yield* sql<{ type: string; payload: string }>`SELECT type, payload FROM event_journal
+          ORDER BY sequence`;
+        return { opened, deferred, sooner, allowed, claimed, journal };
+      }),
+    );
+    expect(result.opened.entries.map((entry) => entry.type)).toEqual(["PairingRequested"]);
+    expect(Option.getOrThrow(result.deferred).value).toMatchObject({ expiresAt: "2026-11-03T10:00:00.000Z" });
+    expect(Option.isNone(result.sooner)).toBe(true);
+    // A deferred request can still be allowed after its first ten minutes.
+    expect(Option.getOrThrow(result.allowed).value).toMatchObject({ state: "allowed" });
+    expect(Option.getOrThrow(result.claimed).value).toMatchObject({ state: "claimed" });
+    expect(result.journal.map((row) => row.type)).toEqual([
+      "PairingRequested",
+      "PairingChanged",
+      "PairingChanged",
+      "PairingChanged",
+    ]);
+    const payloads = result.journal.map((row) => row.payload).join("\n");
+    expect(payloads).toContain('"code":"482913"');
+    expect(payloads).not.toContain("secret-hash");
+    expect(payloads).not.toContain("token-hash");
   });
 });

@@ -71,6 +71,7 @@ const node = (nodeId: string): TailnetPeer => ({
   owner: { _tag: "User", login: "you@example.com" },
 });
 const TestPeers = Layer.succeed(TailnetPeers, {
+  hub: Effect.succeed(Option.some(node("nHUB"))),
   peerOf: (request) =>
     Effect.succeed(Option.map(Option.fromNullishOr(request.headers[NODE_HEADER]), (nodeId) => node(nodeId))),
 });
@@ -289,7 +290,7 @@ describe("only approved devices reach the hub", () => {
     expect(local.body).toHaveProperty("dataDir");
     const tailnet = await request({ ...SCRIPT, [NODE_HEADER]: "nPHONE" }, "GET", "/api/health");
     expect(tailnet).toMatchObject({ status: 200, body: { app: "hobbots", version: local.body.version } });
-    expect(Object.keys(tailnet.body as object).sort()).toEqual(["app", "version"]);
+    expect(Object.keys(tailnet.body as object).sort()).toEqual(["app", "name", "version"]);
     // The hub's window passes, on the routes and the stream.
     expect((await request(APP, "GET", "/api/agents")).status).toBe(200);
     const stream = await send(APP, "GET", "/api/events");
@@ -324,8 +325,10 @@ describe("only approved devices reach the hub", () => {
     });
 
     // The hub's window sees it waiting, with its cleaned name, and allows it.
-    const waiting = await request<ReadonlyArray<PairingRequest>>(APP, "GET", "/api/pairing/requests");
-    expect(waiting.body).toMatchObject([{ id: opened.body.status.id, name: "Safari on iPhone", kind: "browser" }]);
+    const waiting = await request<ReadonlyArray<{ request: PairingRequest }>>(APP, "GET", "/api/pairing/requests");
+    expect(waiting.body).toMatchObject([
+      { request: { id: opened.body.status.id, name: "Safari on iPhone", kind: "browser" }, fromHub: true },
+    ]);
     // A script cannot list or decide them.
     expect((await request(SCRIPT, "POST", `/api/pairing/requests/${opened.body.status.id}/allow`)).status).toBe(401);
     expect((await request(APP, "POST", `/api/pairing/requests/${opened.body.status.id}/allow`)).body).toMatchObject({
@@ -356,6 +359,39 @@ describe("only approved devices reach the hub", () => {
       ["window", "This computer's Hobbots window"],
       ["browser", "Safari on iPhone"],
     ]);
+  });
+
+  // covers DP-004
+  it("[TC-DP-095] Deny turns a browser away with Retry-After on its next ask, and Decide later keeps it waiting", async () => {
+    const ask = (caller: Caller) =>
+      send({ origin: OWN_ORIGIN, ...caller }, "POST", "/api/pairing", {
+        name: "Firefox",
+        platform: "Linux",
+        kind: "browser",
+      });
+    const first = await ask({});
+    const firstBody = (await first.json()) as { status: { id: string } };
+    const pairing = cookieFrom(first.headers.getSetCookie(), "hobbots_pairing") as string;
+    expect((await request(APP, "POST", `/api/pairing/requests/${firstBody.status.id}/deny`)).body).toMatchObject({
+      state: "denied",
+    });
+    expect((await request(browser(pairing), "GET", "/api/pairing")).body).toMatchObject({ state: "denied" });
+    const tooSoon = await ask({});
+    expect(tooSoon.status).toBe(429);
+    expect(Number(tooSoon.headers.get("retry-after"))).toBeGreaterThan(50);
+    expect(await tooSoon.json()).toMatchObject({ _tag: "PairingThrottled" });
+
+    // Another node asks, and the user decides later: it leaves no prompt but still waits, for a day.
+    const phone = await ask({ [NODE_HEADER]: "nPHONE" });
+    const phoneBody = (await phone.json()) as { status: { id: string } };
+    const later = await request<PairingRequest>(APP, "POST", `/api/pairing/requests/${phoneBody.status.id}/later`);
+    expect(Date.parse(later.body.expiresAt) - Date.parse(later.body.createdAt)).toBe(24 * 60 * 60 * 1000);
+    const waiting = await request<ReadonlyArray<{ request: PairingRequest; fromHub: boolean }>>(
+      APP,
+      "GET",
+      "/api/pairing/requests",
+    );
+    expect(waiting.body).toMatchObject([{ request: { id: phoneBody.status.id, state: "pending" }, fromHub: false }]);
   });
 
   // covers DP-004

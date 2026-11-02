@@ -12,7 +12,7 @@ import { TestDatabase } from "@hobbots/persistence/testing";
 import { Effect, Layer, ManagedRuntime, Option, PubSub, Ref, Result, Scope } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { DeviceGate, DeviceSecretsLive, knownWindowKey, TailnetPeers } from "../src/devices.ts";
+import { DeviceGate, DeviceSecretsLive, knownWindowKey, PairingLimiterLive, TailnetPeers } from "../src/devices.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { HubListenersLive } from "../src/listeners.ts";
 import { readNetworkSettings } from "../src/network-settings.ts";
@@ -174,6 +174,7 @@ const startHub = async (
         Layer.provideMerge(DeviceService.layer),
         Layer.provideMerge(knownWindowKey(TEST_WINDOW_KEY)),
         Layer.provideMerge(DeviceSecretsLive),
+        Layer.provideMerge(PairingLimiterLive),
         Layer.provideMerge(DeviceRepositoryLive),
         Layer.provideMerge(TestDatabase),
       ),
