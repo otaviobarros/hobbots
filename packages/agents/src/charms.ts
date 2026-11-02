@@ -1,5 +1,5 @@
 import type { AgentId } from "@hobbots/domain";
-import { Context, type Effect } from "effect";
+import { Context, type Effect, Schema, type Scope } from "effect";
 import type { HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
 
@@ -42,3 +42,33 @@ export const combineHubTools = (...sets: ReadonlyArray<HubTools | null>): HubToo
     call: (name, input, step) => (owner.get(name) ?? (given[0] as HubTools)).call(name, input, step),
   };
 };
+
+/**
+ * A program that runs inside a hob's sandbox: a shell command line, and the variables its process
+ * needs on top of the caller's own. Arguments a caller appends to the line are not passed on.
+ */
+export interface SandboxedProgram {
+  readonly commandLine: string;
+  readonly env: Readonly<Record<string, string>>;
+}
+
+/** Why a program cannot run in the sandbox, in words for the hob and the person. */
+export class SandboxUnavailable extends Schema.TaggedError<SandboxUnavailable>()("SandboxUnavailable", {
+  message: Schema.String,
+}) {}
+
+/**
+ * Runs a Charm's reads of a hob's folders in the same OS sandbox as the hob's turns (ADR 020): able
+ * to read only those folders, write nothing of the hob's and reach no network. Whatever a folder's
+ * files point at, the program reads nothing outside them. The sandbox lasts as long as the scope.
+ */
+export class FolderSandbox extends Context.Service<
+  FolderSandbox,
+  {
+    readonly readOnly: (
+      folders: ReadonlyArray<string>,
+      program: string,
+      args: ReadonlyArray<string>,
+    ) => Effect.Effect<SandboxedProgram, SandboxUnavailable, Scope.Scope>;
+  }
+>()("@hobbots/agents/FolderSandbox") {}

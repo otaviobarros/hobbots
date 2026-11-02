@@ -108,6 +108,7 @@ const callWith = (
       agentId: AgentId.make("hob"),
       currentAccess: Effect.succeed(current),
       redactor: makeRedactor(),
+      approvals: null,
     });
     return { names: tools.tools.map((tool) => tool.name), answer: yield* tools.call(name, input) };
   }).pipe(

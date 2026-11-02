@@ -2,6 +2,7 @@ export * from "./admission.ts";
 export * from "./approvals.ts";
 export * from "./asking.ts";
 export { clip } from "./briefing.ts";
+export * from "./charm-calls.ts";
 export * from "./charms.ts";
 export * from "./chat.ts";
 export * from "./grants.ts";
