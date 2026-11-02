@@ -135,6 +135,11 @@ interface Script {
   readonly fixed: Set<string>;
   /** The token each broken Task's brief carried, by the Task's id. */
   readonly broken: Map<string, string>;
+  /**
+   * The hub has stopped, as a process killed mid-turn: its backpack never answers again, so its
+   * turns renew, claim and settle nothing more, and the next start over the database works alone.
+   */
+  stopped: boolean;
 }
 
 /** The request with its hub calls' answers kept in `answers`. */
@@ -167,6 +172,26 @@ const scriptedPrompt = (prompt: string, script: Script) => {
   if (breaks === undefined || script.fixed.has(breaks)) return reacted;
   return ["fake:cut-off", ...lines.filter((line) => !line.startsWith("fake:hub "))].join("\n");
 };
+
+/** The backpack, frozen once the hub has stopped: every call it is asked from then on waits forever. */
+const stoppable = (script: Script) =>
+  Layer.effect(
+    Backpack,
+    Effect.gen(function* () {
+      // Each of its calls is an Effect, so each is wrapped alike.
+      const live = (yield* Backpack) as unknown as Record<
+        string,
+        (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown, unknown>
+      >;
+      const frozen = Object.fromEntries(
+        Object.entries(live).map(([name, method]) => [
+          name,
+          (...args: ReadonlyArray<unknown>) => Effect.suspend(() => (script.stopped ? Effect.never : method(...args))),
+        ]),
+      );
+      return Backpack.of(frozen as unknown as Backpack["Service"]);
+    }),
+  ).pipe(Layer.provide(BackpackLive));
 
 const scripted = (script: Script) =>
   Layer.effect(
@@ -228,7 +253,7 @@ const makeHub = (database: Database, script: Script) =>
         TaskToolCallsLive,
         ApprovalRepositoryLive,
         GrantRepositoryLive,
-        BackpackLive,
+        stoppable(script),
         EventJournal.layer,
         EventBus.layer,
         NodeFolderChecks,
@@ -250,10 +275,14 @@ type Hub = ReturnType<typeof makeHub>;
 type HubServices = Layer.Success<Hub>;
 
 const open: Array<ManagedRuntime.ManagedRuntime<HubServices, Layer.Error<Hub>>> = [];
+const scripts: Array<Script> = [];
 let databaseScope: Scope.Closeable | undefined;
 
 afterEach(async () => {
-  // A hub that stopped mid-Quest never ended its turns, as after a crash; it goes last, with the database.
+  // A hub that stopped mid-Quest never ended its turns, as after a crash; it goes last, with the database,
+  // its backpack answering again so the turns it left can end.
+  for (const script of scripts) script.stopped = false;
+  scripts.length = 0;
   for (const each of open.reverse()) await each.dispose();
   open.length = 0;
   if (databaseScope !== undefined) await Effect.runPromise(Scope.close(databaseScope, Exit.void));
@@ -278,12 +307,21 @@ const start = async (database: Database, reactions: ReadonlyArray<Reaction> = []
     reactions: [...reactions],
     fixed: new Set(),
     broken: new Map(),
+    stopped: false,
   };
   const runtime = ManagedRuntime.make(makeHub(database, script));
   open.push(runtime);
+  scripts.push(script);
   await runtime.runPromise(Effect.void);
   const run = <A, E>(effect: Effect.Effect<A, E, HubServices>) => runtime.runPromise(effect);
-  return { run, script, release: () => run(Deferred.succeed(script.gate, undefined)) };
+  return {
+    run,
+    script,
+    release: () => run(Deferred.succeed(script.gate, undefined)),
+    stop: () => {
+      script.stopped = true;
+    },
+  };
 };
 
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -373,6 +411,21 @@ const settledFor = (agentId: AgentId) =>
   Effect.andThen(
     nothingFor(agentId),
     treeWhen((tree) => !tree.attempts.some((each) => each.agentId === agentId && isLive(each.state))),
+  );
+
+/**
+ * Once no turn but `agentId`'s holds anything in a backpack: every other turn has ended and settled
+ * what it carried, so a hub stopped now is stopped in that hob's turn alone.
+ */
+const onlyAtWork = (agentId: AgentId) =>
+  retry(
+    Effect.flatMap(
+      Backpack.use((backpack) => backpack.listOpen({ _tag: "Workspace" })),
+      (open) =>
+        open.some((item) => item.claim !== null && item.recipientId !== agentId)
+          ? Effect.fail("not yet" as const)
+          : Effect.void,
+    ),
   );
 
 const pendingFrom = (agentId: AgentId) =>
@@ -731,9 +784,14 @@ describe("a hub that stops mid-Quest", () => {
           !tree.attempts.some((each) => each.agentId !== QUILL && isLive(each.state)),
       ),
     );
+    // Aldric's turn has settled what it carried, so only Quill's is cut off when Hobbots stops.
+    await first.run(settledFor(ALDRIC));
+    await first.run(onlyAtWork(QUILL));
     const beforeMessages = await first.run(messagesWhen(() => true));
     const copy = taskOf(before, QUILL);
     const build = taskOf(before, ADA);
+
+    first.stop();
 
     // The next start, over the same database. Quill goes on in a new turn of his session and returns
     // the copy once let go; Ada finishes once it reaches her through Aldric.
