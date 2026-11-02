@@ -48,7 +48,12 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await quest.getByRole("button", { name: /Draft the landing copy/ }).click();
   await expect(note).toHaveValue("Keep the headlines short.");
   await note.press("Enter");
-  await expect(page.getByText("About “Draft the landing copy”: Keep the headlines short.")).toBeVisible();
+  const copyTask = page.getByRole("complementary", { name: "Draft the landing copy, Task details" });
+  await expect(copyTask).toContainText("Sent to Aldric.");
+  await expect(copyTask).toContainText("Your notes");
+  await expect(copyTask).toContainText("Keep the headlines short.");
+  await expect(copyTask).toContainText("To Aldric");
+  await expect(note).toHaveValue("");
   await page.getByRole("button", { name: "Close" }).click();
 
   // Your answer goes back; the Quest finishes and Aldric wraps up in the chat.
@@ -62,4 +67,39 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   // Once it ends, the card still opens the Task with its output.
   await card.getByRole("button", { name: "Show all" }).click();
   await expect(quest).toContainText("Black Friday campaign ready");
+});
+
+// covers OR-004, IN-002
+test("[TC-IN-132] a question no lead could answer waits in the Inbox's Needs you, and your answer there reaches the chat", async ({
+  page,
+}) => {
+  const { url, aldric } = await questHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill("Plan a Black Friday campaign for the shop");
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  const asksInChat = page.getByRole("region", { name: "Ada asks you" });
+  await expect(asksInChat).toBeVisible();
+  const chat = page.url();
+
+  await page.goto(`${url}/#/inbox?tab=needs`);
+  const questions = page.getByRole("region", { name: "Questions for you" });
+  await expect(questions).toContainText("1 question for you");
+  const asks = questions.getByRole("region", { name: "Question from Ada" });
+  await expect(asks).toContainText("Should international orders get an earlier cutoff");
+  await expect(asks).toContainText("For Build the campaign");
+  await expect(asks).toContainText("Passed up to you by Aldric.");
+  await expect(page.getByText("1 waiting on you")).toBeVisible();
+
+  const answer = asks.getByRole("textbox", { name: "Your answer to Ada" });
+  await answer.fill("Yes, Dec 12 for international orders.");
+  await expect(asks.getByRole("button", { name: "Send answer" })).toBeEnabled();
+  await answer.press("Enter");
+  await expect(questions).toBeHidden();
+  await expect(page.getByText("Nothing needs you")).toBeVisible();
+
+  // The chat shows the answer you gave from the Inbox.
+  await page.goto(chat);
+  await expect(asksInChat).toContainText("You answered: Yes, Dec 12 for international orders.");
 });

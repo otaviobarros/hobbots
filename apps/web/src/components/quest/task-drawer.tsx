@@ -1,23 +1,32 @@
-import type { AgentId, Task, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
+import {
+  type AgentId,
+  isTerminalTask,
+  NoteId,
+  type Task,
+  type TaskId,
+  type TaskTree,
+  type ThreadId,
+} from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { useSendPrompt } from "../../api/queries.ts";
+import { ApiError } from "../../api/client.ts";
+import { useLeaveNote } from "../../api/questions.ts";
 import { formatTime } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { enterSends } from "./enter-sends.ts";
 import { messages } from "./messages.ts";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
-import { findTask, taskDetail, taskTitle } from "./work-model.ts";
+import { findTask, noteRecipient, taskDetail, taskTitle } from "./work-model.ts";
 
 const copy = messages.drawer;
 
 /**
  * The drawer beside the chat that opens a Task or step (ADR 018): its brief, checkpoints, questions
- * and output, the Tasks under it, and a note that goes to the lead. The Task is in the address, so
- * a link opens it; Escape or Close shuts it. A Task of a Quest pinned from another thread opens here
- * too, and its note still goes to that Quest's lead.
+ * and output, the Tasks under it, and a note that goes to its nearest lead. The Task is in the
+ * address, so a link opens it; Escape or Close shuts it. A Task of a Quest pinned from another
+ * thread opens here too, and its note still goes to that Quest's lead.
  */
 export function TaskDrawer({
   hobId,
@@ -76,13 +85,13 @@ export function TaskDrawer({
         </span>
       </header>
       {found !== null && <Detail tree={found.tree} task={found.task} hobs={hobs} onOpen={open} />}
-      {found !== null && (
+      {/* Once the work has ended nobody is left to read a note: talk to the lead in the chat. */}
+      {found !== null && !isTerminalTask(found.tree.tasks[0]?.state ?? found.task.state) && (
         <NoteBox
           key={found.task.id}
           tree={found.tree}
           task={found.task}
           hobs={hobs}
-          fallback={threadId}
           note={drafts.get(found.task.id) ?? ""}
           setNote={(note) => setDrafts((all) => new Map(all).set(found.task.id, note))}
         />
@@ -188,6 +197,20 @@ function Detail({
           </ul>
         </Section>
       )}
+      {detail.notes.length > 0 && (
+        <Section title={copy.notes}>
+          <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-detail">
+            {detail.notes.map((note) => (
+              <li key={note.id} className="flex flex-col gap-0.5 border-s-2 border-lantern ps-2">
+                <span className="whitespace-pre-wrap">{note.text}</span>
+                <span className="text-xs text-label">
+                  {copy.noteTo({ name: hobs(note.recipientId).name, time: formatTime(note.createdAt) })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
       <Section title={copy.output}>
         {detail.output.length === 0 && task.result === null ? (
           <p className="m-0 text-detail text-label">{copy.noOutput}</p>
@@ -237,29 +260,39 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** A note on a Task goes to the lead as a message about that Task, in the lead's chat (ADR 018). */
+/**
+ * A note on a Task goes to its nearest lead as a message about that Task (ADR 018), which the lead
+ * reads in its next turn; it shows under Notes once the hub has it. Each note keeps one key while it
+ * is retried, so a lost reply never leaves it twice.
+ */
 function NoteBox({
   tree,
   task,
   hobs,
-  fallback,
   note,
   setNote,
 }: {
   tree: TaskTree;
   task: Task;
   hobs: HobLookup;
-  fallback: ThreadId;
   note: string;
   setNote: (note: string) => void;
 }) {
-  const top = tree.tasks[0] ?? task;
-  const lead = hobs(top.ownerId);
-  const send = useSendPrompt(top.threadId ?? fallback);
+  const lead = hobs(noteRecipient(tree, task));
+  const send = useLeaveNote(task.id);
+  const [key, setKey] = useState(newKey);
   const text = note.trim();
   const submit = () => {
     if (text === "" || send.isPending) return;
-    send.mutate(copy.note({ title: taskTitle(task), note: text }), { onSuccess: () => setNote("") });
+    send.mutate(
+      { key, text },
+      {
+        onSuccess: () => {
+          setNote("");
+          setKey(newKey());
+        },
+      },
+    );
   };
   return (
     <form
@@ -274,7 +307,11 @@ function NoteBox({
           aria-label={copy.noteLabel({ name: lead.name })}
           placeholder={copy.noteLabel({ name: lead.name })}
           value={note}
-          onChange={(event) => setNote(event.target.value)}
+          onChange={(event) => {
+            // A changed note is a new one, under a key of its own.
+            if (send.isError) setKey(newKey());
+            setNote(event.target.value);
+          }}
           onKeyDown={enterSends(submit)}
           className="min-h-9 flex-1 rounded-none border-2 border-control bg-deep text-sm text-text"
         />
@@ -284,7 +321,9 @@ function NoteBox({
       </span>
       <span role="status" className="text-xs text-label">
         {send.isError
-          ? copy.noteFailed
+          ? send.error instanceof ApiError && send.error.tag === "NoteRefused"
+            ? copy.noteRefused({ name: lead.name })
+            : copy.noteFailed
           : send.isSuccess && note === ""
             ? copy.sent({ name: lead.name })
             : copy.noteHint({ name: lead.name })}
@@ -292,3 +331,5 @@ function NoteBox({
     </form>
   );
 }
+
+const newKey = () => NoteId.make(crypto.randomUUID());

@@ -24,6 +24,7 @@ import {
   Thread,
   ThreadId,
 } from "@hobbots/domain";
+import { Backpack } from "@hobbots/inbox";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -98,8 +99,11 @@ beforeEach(async () => {
 
 afterEach(() => dispose());
 
-const get = async (path: string): Promise<{ readonly status: number; readonly body: unknown }> => {
-  const response = await handler(new Request(`http://localhost:4390${path}`));
+const get = async (
+  path: string,
+  headers: Record<string, string> = {},
+): Promise<{ readonly status: number; readonly body: unknown }> => {
+  const response = await handler(new Request(`http://localhost:4390${path}`, { headers }));
   return { status: response.status, body: await response.json() };
 };
 
@@ -295,6 +299,83 @@ describe("Task and Quest reads", () => {
       }),
     );
     expect(events.filter((entry) => entry.type === "QuestionAnswered")).toHaveLength(1);
+  });
+
+  // covers OR-004, IN-002
+  it("[TC-OR-134] lists the questions no lead could answer, with their Task, until you answer them", async () => {
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        yield* quest;
+        const tasks = yield* TaskRepository;
+        // Quill asks Aldric, who passes it up: no lead is above Aldric, so it waits for you.
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-date"),
+          taskId: TaskId.make("copy"),
+          askerId: QUILL,
+          text: "Dec 12 for international?",
+          createdAt: now,
+        });
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-tone"),
+          taskId: TaskId.make("copy"),
+          askerId: QUILL,
+          text: "Playful?",
+          createdAt: now,
+        });
+        yield* tasks.escalateQuestion(QuestionId.make("q-date"), ALDRIC);
+      }),
+    );
+    const app = "http://localhost:4390";
+    // Only the app reads what waits for you (PE-006).
+    expect((await get("/api/questions")).status).toBe(403);
+    const fromApp = { origin: app, host: "localhost:4390" };
+    const listed = await get("/api/questions", fromApp);
+    expect(listed.status).toBe(200);
+    expect(listed.body).toMatchObject({
+      cursor: expect.any(String),
+      questions: [{ question: { id: "q-date", recipientId: null, chain: [ALDRIC] }, task: { id: "copy" } }],
+    });
+    await post("/api/questions/q-date/answer", { answer: "Yes" }, app);
+    expect((await get("/api/questions", fromApp)).body).toMatchObject({ questions: [] });
+  });
+
+  // covers OR-004, PE-006
+  it("[TC-PE-220] leaves your note on a member's Task for its lead, once per key, from the app only", async () => {
+    await runtime.runPromise(quest);
+    const app = "http://localhost:4390";
+    const note = { key: "n-1", text: "Keep it short" };
+
+    expect((await post("/api/tasks/copy/notes", note)).status).toBe(403);
+    const left = await post("/api/tasks/copy/notes", note, app);
+    expect(left).toMatchObject({ status: 200, body: { id: "n-1", taskId: "copy", recipientId: ALDRIC } });
+    expect(await post("/api/tasks/copy/notes", note, app)).toEqual(left);
+    expect(await post("/api/tasks/copy/notes", { ...note, text: "Make it long" }, app)).toEqual({
+      status: 409,
+      body: { _tag: "NoteRefused", taskId: "copy", reason: "key-reused" },
+    });
+    expect(await post("/api/tasks/nope/notes", { key: "n-2", text: "Hi" }, app)).toEqual({
+      status: 404,
+      body: { _tag: "TaskNotFound", taskId: "nope" },
+    });
+    // A note on the Task you asked for goes to its own owner: nobody leads above Aldric.
+    expect(await post("/api/tasks/campaign/notes", { key: "n-3", text: "Ship Friday" }, app)).toMatchObject({
+      body: { recipientId: ALDRIC },
+    });
+    const { events, items } = await runtime.runPromise(
+      Effect.gen(function* () {
+        const journal = yield* EventJournal;
+        const backpack = yield* Backpack;
+        return {
+          events: yield* journal.readAfter(-1),
+          items: yield* backpack.listOpen({ _tag: "Hob", agentId: ALDRIC }),
+        };
+      }),
+    );
+    expect(events.filter((entry) => entry.type === "NoteLeft")).toHaveLength(2);
+    expect(items.flatMap((item) => (item.payload._tag === "message" ? [item.payload.text] : []))).toEqual([
+      "Keep it short",
+      "Ship Friday",
+    ]);
   });
 
   // covers OR-007

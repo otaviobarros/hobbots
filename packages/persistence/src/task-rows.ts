@@ -12,6 +12,7 @@ import {
   Question,
   Task,
   type TaskId,
+  TaskNote,
   TaskTree,
   TaskWait,
   type ThreadId,
@@ -53,6 +54,7 @@ const fromRow = {
   }),
   artifact: (row: Row) => row,
   handOff: (row: Row) => row,
+  note: (row: Row) => ({ ...row, revision: int(row.revision) }),
   wait: (row: Row) => ({ taskId: row.taskId, on: json(row.waitsOn), mode: row.mode, createdAt: row.createdAt }),
 };
 
@@ -66,6 +68,7 @@ const decoders = {
   question: Schema.decodeUnknownEffect(Schema.Array(Question)),
   artifact: Schema.decodeUnknownEffect(Schema.Array(ArtifactRef)),
   handOff: Schema.decodeUnknownEffect(Schema.Array(HandOff)),
+  note: Schema.decodeUnknownEffect(Schema.Array(TaskNote)),
   wait: Schema.decodeUnknownEffect(Schema.Array(TaskWait)),
 };
 
@@ -79,6 +82,7 @@ interface Records {
   readonly question: Question;
   readonly artifact: ArtifactRef;
   readonly handOff: HandOff;
+  readonly note: TaskNote;
   readonly wait: TaskWait;
 }
 
@@ -132,6 +136,23 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     sql<Row>`SELECT * FROM attempts WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("attempt")));
   const question = (id: string) =>
     sql<Row>`SELECT * FROM questions WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("question")));
+  const note = (id: string) =>
+    sql<Row>`SELECT * FROM task_notes WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("note")));
+  /** The questions that climbed every lead and wait for you, oldest first, each with the Task it asks about. */
+  const waitingQuestions = Effect.gen(function* () {
+    const questions = yield* sql<Row>`SELECT * FROM questions WHERE recipient_id IS NULL AND state = 'open'
+      ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("question")));
+    if (questions.length === 0) return [];
+    const tasks = yield* sql<Row>`SELECT * FROM tasks WHERE ${sql.in(
+      "id",
+      questions.map((each) => each.taskId),
+    )}`.pipe(Effect.flatMap(decodeRows("task")));
+    const byId = new Map(tasks.map((each) => [each.id, each]));
+    return questions.flatMap((question) => {
+      const task = byId.get(question.taskId);
+      return task === undefined ? [] : [{ question, task }];
+    });
+  });
   const artifact = (id: string) =>
     sql<Row>`SELECT * FROM artifact_refs WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("artifact")));
 
@@ -174,6 +195,9 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
         handOffs: yield* sql<Row>`SELECT * FROM hand_offs WHERE ${inTree("to_task_id")}
           ORDER BY ${orderBy(sql, ["created_at", "artifact_id", "to_task_id"])}`.pipe(
           Effect.flatMap(decodeRows("handOff")),
+        ),
+        notes: yield* sql<Row>`SELECT * FROM task_notes WHERE ${inTree("task_id")} ORDER BY revision`.pipe(
+          Effect.flatMap(decodeRows("note")),
         ),
         waits: yield* sql<Row>`SELECT * FROM task_waits WHERE ${inTree("task_id")}
           ORDER BY ${orderBy(sql, ["created_at", "task_id"])}`.pipe(Effect.flatMap(decodeRows("wait"))),
@@ -250,6 +274,8 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     quest,
     attempt,
     question,
+    note,
+    waitingQuestions,
     artifact,
     readTree,
     threadTrees,

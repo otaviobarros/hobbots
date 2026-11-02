@@ -15,7 +15,7 @@ import {
   task,
   tree,
 } from "../../test/quests.ts";
-import { BEFORE_ALL, liveTrees, placeMoments, taskDetail, workCard, workCounts } from "./work-model.ts";
+import { BEFORE_ALL, liveTrees, noteRecipient, placeMoments, taskDetail, workCard, workCounts } from "./work-model.ts";
 
 const message = (id: string, role: "user" | "assistant", createdAt: string) =>
   ({ id: MessageId.make(id), threadId: THREAD, role, createdAt }) as unknown as Message;
@@ -110,6 +110,19 @@ describe("placeMoments", () => {
     expect(placed.get(MessageId.make("m1"))?.map((moment) => moment.kind)).toEqual(["card"]);
     expect(placed.get(MessageId.make("m3"))?.map((moment) => moment.kind)).toEqual(["answered"]);
     expect(placed.has(BEFORE_ALL)).toBe(false);
+  });
+});
+
+describe("noteRecipient", () => {
+  it("sends a note on a member's Task to its lead, and one on the Task you asked for to its owner", () => {
+    const quest = blackFriday();
+    const [campaign, copy] = quest.tasks;
+    if (campaign === undefined || copy === undefined) throw new Error("no Tasks");
+    expect(noteRecipient(quest, copy)).toBe(ALDRIC);
+    expect(noteRecipient(quest, campaign)).toBe(ALDRIC);
+    // Quill's own step still goes to Aldric, the nearest hob above that is not Quill.
+    const step = task(TaskId.make("outline"), { ownerId: QUILL, parentId: COPY });
+    expect(noteRecipient({ ...quest, tasks: [...quest.tasks, step] } as typeof quest, step)).toBe(ALDRIC);
   });
 });
 

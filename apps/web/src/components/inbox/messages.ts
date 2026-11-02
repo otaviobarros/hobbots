@@ -1,5 +1,5 @@
 import { INBOX_HISTORY } from "@hobbots/domain";
-import { formatCount, formatIn } from "../../lib/format.ts";
+import { formatCount, formatIn, formatList, plural } from "../../lib/format.ts";
 
 /** User-facing copy for the Inbox page and the Needs you counts (STD-I18N-001). */
 export const messages = {
@@ -59,6 +59,23 @@ export const messages = {
     verdict: { once: "Once", always: "Always", quest: "Quest", denied: "Denied", expired: "Expired" },
     meta: ({ when, thread }: { when: string; thread: string }) => `${when} · ${thread}`,
     action: ({ name, action }: { name: string; action: string }) => `${name}: ${action}`,
+  },
+  /** A question no lead could answer, in Needs you. */
+  question: {
+    section: "Questions for you",
+    count: ({ count }: { count: number }) =>
+      plural(count, {
+        one: `${formatCount(count)} question for you`,
+        other: `${formatCount(count)} questions for you`,
+      }),
+    label: ({ name }: { name: string }) => `Question from ${name}`,
+    title: ({ name }: { name: string }) => `${name} asks you`,
+    about: ({ title, when }: { title: string; when: string }) => `For ${title} · ${when}`,
+    badge: "Question",
+    passedBy: ({ names }: { names: ReadonlyArray<string> }) => `Passed up to you by ${formatList(names)}.`,
+    openChat: ({ name }: { name: string }) => `Open ${name}'s chat`,
+    loading: "Reading the questions for you…",
+    loadFailed: "Hobbots could not read the questions for you.",
   },
   home: {
     more: ({ count }: { count: number }) => `${formatCount(count)} more in the Inbox`,

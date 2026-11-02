@@ -164,6 +164,22 @@ const questionAnswered: Rule<"QuestionAnswered"> = ({ question }, trees) => {
   ];
 };
 
+/** Your note on a Task goes to the hob it was left for, its nearest lead, as a message about that Task. */
+const noteLeft: Rule<"NoteLeft"> = ({ note }, trees) => {
+  const task = trees.byId.get(note.taskId);
+  if (task === undefined) return [];
+  return [
+    {
+      recipientId: note.recipientId,
+      task,
+      attemptId: null,
+      payload: { _tag: "message", senderId: null, text: note.text },
+      record: `note:${note.id}`,
+      version: null,
+    },
+  ];
+};
+
 /** A hand-off goes to the owner of the Task that receives it. */
 const handedOff: Rule<"HandedOff"> = ({ handOff, artifact }, trees) => {
   const task = trees.byId.get(handOff.toTaskId);
@@ -188,6 +204,7 @@ const RULES: { readonly [Tag in JournaledEvent["_tag"]]?: Rule<Tag> } = {
   QuestionAsked: questionTo,
   QuestionEscalated: questionTo,
   QuestionAnswered: questionAnswered,
+  NoteLeft: noteLeft,
   HandedOff: handedOff,
 };
 
@@ -287,6 +304,8 @@ export const tasksTouched = (events: ReadonlyArray<JournaledEvent>): ReadonlyArr
         case "QuestionEscalated":
         case "QuestionAnswered":
           return [event.question.taskId];
+        case "NoteLeft":
+          return [event.note.taskId];
         case "HandedOff":
           return [event.handOff.toTaskId];
         default:

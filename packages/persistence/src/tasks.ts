@@ -26,6 +26,7 @@ import {
   StaleTask,
   Task,
   type TaskId,
+  TaskNote,
   type TaskRefusal,
   TaskRefused,
   type TaskState,
@@ -600,6 +601,36 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
+    const leaveNote: TaskRepository["Service"]["leaveNote"] = (input) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const [left] = yield* read.note(input.id);
+          if (left !== undefined) {
+            if (left.taskId !== input.taskId || left.text !== input.text) {
+              return yield* refuse("note-key-reused", `Note ${input.id} was left with another Task or text`);
+            }
+            return { value: left, events: [] };
+          }
+          // A member's Task that ended can still be talked about while the work it is part of goes on.
+          const task = yield* loadTask(input.taskId);
+          const top = task.rootId === task.id ? task : yield* loadTask(task.rootId);
+          if (isTerminalTask(top.state))
+            return yield* refuse("task-ended", `The work Task ${task.id} is part of has ended`);
+          // You talk only to the lead: the note goes to the nearest one, or to the owner of a Task nobody leads.
+          const [lead] = leadsAbove(task, yield* read.treeOf(task.rootId));
+          const note = new TaskNote({ ...input, recipientId: lead ?? task.ownerId, revision });
+          yield* sql`INSERT INTO task_notes ${sql.insert({
+            id: note.id,
+            task_id: note.taskId,
+            recipient_id: note.recipientId,
+            text: note.text,
+            created_at: note.createdAt,
+            revision,
+          })}`;
+          return { value: note, events: [{ _tag: "NoteLeft", note } as const] };
+        }),
+      );
+
     const handOff: TaskRepository["Service"]["handOff"] = (artifactId, toTaskId, at) =>
       change(() =>
         Effect.gen(function* () {
@@ -658,6 +689,8 @@ export const TaskRepositoryLive = Layer.effect(
       askQuestion,
       answerQuestion,
       escalateQuestion,
+      leaveNote,
+      listWaitingQuestions: read.waitingQuestions.pipe(Effect.orDie),
       handOff,
       waitFor,
       readLedger: (taskId) =>
