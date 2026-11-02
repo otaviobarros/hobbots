@@ -52,8 +52,9 @@ const hubServer = (hub: HubTools) =>
  *
  * The hook approves the calls rather than bare `allowedTools` entries, which would shadow the
  * permission callback and make the Agent SDK warn on every tool turn (#329). Hook approval holds
- * in `default` and `dontAsk` mode; a call that lost it reaches the callback, which refuses a tool
- * it does not know.
+ * in `default` and `dontAsk` mode. A call that lost it is refused either way: on a tool turn
+ * (`default`) it reaches the callback, which refuses a tool it does not know, and on a chat-only
+ * turn (`dontAsk`) Claude Code denies it without asking.
  */
 const hubOptions = (hub: HubTools, report: (event: RuntimeEvent) => void): Partial<Options> => {
   const labels = new Map(hub.tools.map((tool) => [tool.name, tool.label]));

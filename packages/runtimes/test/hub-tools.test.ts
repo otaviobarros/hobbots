@@ -43,7 +43,8 @@ describe("hub tools on Claude Code's control channel", () => {
     expect(hubToolOf("Bash")).toBeNull();
   });
 
-  it("serves the tools, approves their calls in the hook and shows each call as a step", async () => {
+  // covers PE-006: the hub's own tools run only through the hub, which decides each call.
+  it("[TC-PE-135] serves the tools, approves their calls in the hook and shows each call as a step", async () => {
     const chatOnly: Options = { tools: [], disallowedTools: ["*"], permissionMode: "dontAsk" };
     expect(withHubTools(chatOnly, null, () => {})).toBe(chatOnly);
     const events: Array<RuntimeEvent> = [];
@@ -82,7 +83,8 @@ describe("hub tools on Claude Code's control channel", () => {
     ]);
   });
 
-  it("leaves a tool turn's permission callback unshadowed", async () => {
+  // covers PE-005, PE-006: no tool is approved before the policy's permission callback is consulted.
+  it("[TC-PE-136] leaves a tool turn's permission callback unshadowed", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hub-")));
     const project = join(root, "project");
     mkdirSync(project);
