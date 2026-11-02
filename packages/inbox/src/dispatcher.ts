@@ -3,7 +3,10 @@ import {
   type BackpackItem,
   type BackpackItemId,
   BackpackItemMissing,
+  BackpackTurnEnd,
+  type BackpackTurnEnding,
   type Committed,
+  deliveriesSinceRetry,
   type EventEnvelope,
   IllegalBackpackTransition,
   isTerminalTask,
@@ -20,6 +23,7 @@ import { Backpack, type HeldClaim } from "./backpack.ts";
  */
 export interface DispatchLimits {
   readonly lease: Duration.Input;
+  /** Deliveries per item before it fails as a blocker; a retry of the blocker gives it as many again. */
   readonly maxDeliveries: number;
   readonly firstRetry: Duration.Input;
   readonly maxRetry: Duration.Input;
@@ -32,9 +36,13 @@ export const DEFAULT_DISPATCH_LIMITS: DispatchLimits = {
   maxRetry: "30 seconds",
 };
 
-/** A turn that ended before it handled its items: a transport failure, an interruption or a runtime failure. */
+/**
+ * A turn that ended before it handled its items: a transport failure, an interruption or a runtime
+ * failure. `end` says how, as a code; `diagnostic` is what the runtime said, raw, or null.
+ */
 export class BackpackTurnFailed extends Schema.TaggedError<BackpackTurnFailed>()("BackpackTurnFailed", {
-  reason: Schema.String,
+  end: BackpackTurnEnd,
+  diagnostic: Schema.NullOr(Schema.String),
 }) {}
 
 /** What a turn is handed with the item it carries. */
@@ -136,6 +144,9 @@ export const lateness = (item: BackpackItem, tree: ReadonlyArray<Task>): { reado
   return isTerminalTask(held.state) ? { taskRevision: held.revision } : null;
 };
 
+/** A turn that ran to its end without the runtime ever accepting it: nothing was said. */
+const NOT_ACCEPTED: BackpackTurnEnding = { end: "not-accepted", diagnostic: null };
+
 /** What the dispatcher needs from the hub around it. */
 export class DispatcherHost extends Context.Service<
   DispatcherHost,
@@ -202,8 +213,8 @@ export class Dispatcher extends Context.Service<
         /** Takes one step under the claim and announces it; a lost claim is refused as stale. */
         const step = <E>(write: Effect.Effect<Committed<BackpackItem>, E>) => write.pipe(Effect.flatMap(announce));
 
-        const fail = (held: HeldClaim, item: BackpackItem, error: string) =>
-          step(backpack.fail(item.id, held, error)).pipe(
+        const fail = (held: HeldClaim, item: BackpackItem, ending: BackpackTurnEnding | null) =>
+          step(backpack.fail(item.id, held, ending)).pipe(
             Effect.map((failed): Dispatched => ({ _tag: "Failed", item: failed })),
           );
 
@@ -244,33 +255,27 @@ export class Dispatcher extends Context.Service<
          * Checks a claimed item before it goes into the turn: late against its Task, or failed once
          * it was delivered as often as the limit allows. Null when it goes in.
          */
-        const check = ({ item, held }: Claimed, last: { reason: string | null }) =>
+        const check = ({ item, held }: Claimed, last: { ending: BackpackTurnEnding | null }) =>
           Effect.gen(function* () {
             const late = item.taskId === null ? null : lateness(item, yield* host.treeOf(item.taskId));
             if (late !== null) {
               const resolved = yield* step(backpack.resolve(item.id, held, { _tag: "late", ...late }));
               return { _tag: "Late", item: resolved } as Dispatched;
             }
-            if (item.deliveries.length >= limits.maxDeliveries) {
-              const why = last.reason === null ? "" : ` The last: ${last.reason}`;
-              return yield* fail(
-                held,
-                item,
-                `Delivered ${item.deliveries.length} times, and every turn ended early.${why}`,
-              );
+            if (deliveriesSinceRetry(item) >= limits.maxDeliveries) {
+              return yield* fail(held, item, last.ending);
             }
             return null;
           });
 
-        /** The turn ended early for this item: it fails on its last delivery, or goes back to pending (null). */
-        const endedEarly = ({ item, held }: Claimed, reason: string) =>
+        /**
+         * The turn ended early for this item: it fails on its last delivery, or goes back to pending
+         * (null), keeping how its turn ended.
+         */
+        const endedEarly = ({ item, held }: Claimed, ending: BackpackTurnEnding) =>
           Effect.gen(function* () {
-            if (item.deliveries.length >= limits.maxDeliveries) {
-              return yield* fail(
-                held,
-                item,
-                `Delivered ${item.deliveries.length} times, and every turn ended early. The last: ${reason}`,
-              );
+            if (deliveriesSinceRetry(item) >= limits.maxDeliveries) {
+              return yield* fail(held, item, ending);
             }
             yield* step(backpack.requeue(item.id, held));
             return null;
@@ -289,7 +294,7 @@ export class Dispatcher extends Context.Service<
             const current = yield* backpack.find(item.id).pipe(Effect.orDie);
             if (settledUnder(current, held)) return { _tag: "Consumed", item: current } as Dispatched;
             if (current.state === "delivered" && current.claim?.token === held.token) {
-              return yield* endedEarly({ item: current, held }, "The runtime never accepted the turn.");
+              return yield* endedEarly({ item: current, held }, NOT_ACCEPTED);
             }
             const resolved = yield* step(backpack.resolve(item.id, held, { _tag: "consumed", by: turnId }));
             return { _tag: "Consumed", item: resolved } as Dispatched;
@@ -341,7 +346,7 @@ export class Dispatcher extends Context.Service<
           waiting: ReadonlyArray<BackpackItem>,
           owner: string,
           outcomes: Map<BackpackItemId, Dispatched>,
-          last: { reason: string | null },
+          last: { ending: BackpackTurnEnding | null },
         ) =>
           Effect.gen(function* () {
             const live: Array<Claimed> = [];
@@ -378,7 +383,9 @@ export class Dispatcher extends Context.Service<
                 : Effect.void,
             ),
             Effect.as(null),
-            Effect.catchTag("BackpackTurnFailed", (failed) => Effect.succeed(failed.reason)),
+            Effect.catchTag("BackpackTurnFailed", ({ end, diagnostic }) =>
+              Effect.succeed<BackpackTurnEnding | null>({ end, diagnostic }),
+            ),
           );
 
         /**
@@ -391,7 +398,7 @@ export class Dispatcher extends Context.Service<
           itemIds: ReadonlyArray<BackpackItemId>,
           plan: (items: ReadonlyArray<BackpackItem>) => Effect.Effect<BatchTurn | null>,
           outcomes: Map<BackpackItemId, Dispatched>,
-          last: { reason: string | null },
+          last: { ending: BackpackTurnEnding | null },
         ) =>
           Effect.gen(function* () {
             const waiting = yield* findWaiting(itemIds, outcomes);
@@ -409,17 +416,16 @@ export class Dispatcher extends Context.Service<
                 Effect.map((next): Claimed => ({ item: next, held })),
               ),
             );
-            const reason = yield* runTurn(turn, delivered);
+            const ending = yield* runTurn(turn, delivered);
             let requeued = false;
             for (const each of delivered) {
-              const settled = reason === null ? yield* afterTurn(each, turn.turnId) : yield* endedEarly(each, reason);
+              const settled = ending === null ? yield* afterTurn(each, turn.turnId) : yield* endedEarly(each, ending);
               if (settled === null) requeued = true;
               else outcomes.set(each.item.id, settled);
             }
             if (requeued) {
-              const why = reason ?? "The runtime never accepted the turn.";
-              last.reason = why;
-              return yield* new BackpackTurnFailed({ reason: why });
+              last.ending = ending ?? NOT_ACCEPTED;
+              return yield* new BackpackTurnFailed(last.ending);
             }
           });
 
@@ -431,7 +437,7 @@ export class Dispatcher extends Context.Service<
         const dispatchAll: Dispatcher["Service"]["dispatchAll"] = (itemIds, plan) =>
           Effect.suspend(() => {
             const outcomes = new Map<BackpackItemId, Dispatched>();
-            const last = { reason: null as string | null };
+            const last = { ending: null as BackpackTurnEnding | null };
             return once(itemIds, plan, outcomes, last).pipe(
               Effect.retry({ schedule: backoff, while: (error) => error._tag === "BackpackTurnFailed" }),
               Effect.catchTags({

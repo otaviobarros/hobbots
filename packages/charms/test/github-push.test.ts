@@ -101,6 +101,10 @@ const fakeApi = Layer.succeed(
     item: () => Effect.die("not used"),
     branchHead: (_agentId, repository, branch) => Effect.sync(() => headOf(remoteOf(repository), branch)),
     viewer: () => Effect.succeed("otaviobarros"),
+    pullRequests: () => Effect.die("not used"),
+    commentsSince: () => Effect.die("not used"),
+    openPullRequest: () => Effect.die("not used"),
+    comment: () => Effect.die("not used"),
   }),
 );
 

@@ -1,10 +1,12 @@
 import {
+  ApprovalService,
   accessNow,
   type ChatTurn,
   EventPublisher,
   HobAdmission,
   HobbotsRepository,
   HobTools,
+  MemberContinuations,
   makeRedactor,
   narrows,
   runtimeAdapters,
@@ -17,7 +19,6 @@ import {
 import {
   type Agent,
   type AgentConfiguration,
-  type AgentId,
   type AttemptId,
   AttemptId as AttemptIdSchema,
   type CarriedItem,
@@ -27,16 +28,17 @@ import {
   descendantsOf,
   isLiveAttempt,
   isTerminalTask,
-  RUNTIME_NAMES,
-  systemInstructions,
   type Task,
   type TaskId,
   type TaskToolName,
   type TaskTree,
 } from "@hobbots/domain";
-import { DateTime, Effect, FiberMap, Layer, Option, Semaphore, Stream } from "effect";
+import { DateTime, Effect, FiberMap, Layer, Option, Semaphore } from "effect";
+import type { PathSeparator } from "./authority.ts";
 import { cut, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
+import { delegatedAccess, makeMemberRunner } from "./members.ts";
+import { type Ending, type Running, runSessionTurn, STOPPED, type StopReason } from "./session.ts";
 import { TaskSignal } from "./signal.ts";
 import { TaskTools } from "./task-tools.ts";
 
@@ -54,27 +56,6 @@ export const DEFAULT_STEP_LIMITS: StepLimits = { maxRunningStepsPerHob: 2, maxRu
 /** What a step's session may call: it reports and returns its result. It never plans, delegates or asks. */
 const STEP_TOOLS: ReadonlyArray<TaskToolName> = ["report_checkpoint", "complete_task"];
 
-/** Why a running step was stopped, which decides what its Task becomes. */
-type StopReason = "cancel" | "authority" | "hob";
-
-const STOPPED: Record<StopReason, string> = {
-  cancel: "Cancelled.",
-  authority: "Stopped because its hob's permissions were narrowed.",
-  hob: "Stopped by Hobbots before it finished, with its hob's other work.",
-};
-
-interface Running {
-  readonly agentId: AgentId;
-  readonly rootId: TaskId;
-  readonly access: ToolAccess | null;
-  stop: StopReason | null;
-}
-
-/** How a step's session ended: with a final reply, or failed with a reason. */
-type Ending =
-  | { readonly _tag: "Replied"; readonly text: string }
-  | { readonly _tag: "Failed"; readonly reason: string };
-
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
 /** How a step that ends without a result ends: cancelled when its cancel was asked for, failed otherwise. */
@@ -90,7 +71,7 @@ const ready = (step: Task, tree: TaskTree) =>
  * creation once the steps they come after have completed, within the step limits, while their hob
  * keeps answering in chat. Also serves chat turns the Task tools (`TaskTurns`).
  */
-export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
+export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separator: PathSeparator = "/") =>
   Layer.effect(
     TaskTurns,
     Effect.gen(function* () {
@@ -176,61 +157,23 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
         attemptId: AttemptId,
         carried: ReadonlyArray<CarriedItem>,
       ) =>
-        Effect.gen(function* () {
-          const adapter = adapters(config.runtime);
-          if (adapter === undefined) {
-            return {
-              _tag: "Failed",
-              reason: `Hobbots cannot run ${RUNTIME_NAMES[config.runtime]} on this hub.`,
-            } as Ending;
-          }
-          let ending: Ending = { _tag: "Failed", reason: "The runtime ended without a result." };
-          yield* adapter
-            .sendPrompt({
-              prompt: stepPrompt(step, tree),
-              briefing: null,
-              // A fresh session: nothing of the hob's chat or of other steps.
-              sessionId: null,
-              instructions: systemInstructions(agent.name, config),
-              instructionsChanged: false,
-              model: config.model,
-              effort: config.effort,
-              tools: access,
-              // A call the policy answers Ask for is refused: a step has no conversation to ask in.
-              approvals: null,
-              redaction: redactor,
-              recordToolStart: recordToolStart(step),
-              hubTools: tools.forTurn({ agentId: agent.id, taskId: step.id, carried }, STEP_TOOLS),
-            })
-            .pipe(
-              Stream.runForEach((event) =>
-                Effect.gen(function* () {
-                  if (event._tag === "SessionStarted") {
-                    const at = yield* nowIso;
-                    yield* attempt(
-                      tasks.updateAttempt(attemptId, { state: "running", sessionId: event.sessionId, at }),
-                      "record a step's session",
-                    );
-                  } else if (event._tag === "Completed") {
-                    ending = { _tag: "Replied", text: event.text };
-                  }
-                }),
+        runSessionTurn(adapters, redactor, {
+          agent,
+          config,
+          prompt: stepPrompt(step, tree),
+          // A fresh session: nothing of the hob's chat or of other steps.
+          sessionId: null,
+          access,
+          // A call the policy answers Ask for is refused: a step has no conversation to ask in.
+          approvals: null,
+          recordToolStart: recordToolStart(step),
+          hubTools: tools.forTurn({ agentId: agent.id, taskId: step.id, carried }, STEP_TOOLS),
+          started: (sessionId) =>
+            Effect.asVoid(
+              Effect.flatMap(nowIso, (at) =>
+                attempt(tasks.updateAttempt(attemptId, { state: "running", sessionId, at }), "record a step's session"),
               ),
-              Effect.catchTags({
-                RuntimeError: (error) =>
-                  Effect.sync(() => {
-                    ending = { _tag: "Failed", reason: redactor.text(error.message) };
-                  }),
-                RuntimeLimitReached: (error) =>
-                  Effect.sync(() => {
-                    ending = {
-                      _tag: "Failed",
-                      reason: `The usage limit was reached; it resets at ${error.resetsAt}.`,
-                    };
-                  }),
-              }),
-            );
-          return ending;
+            ),
         });
 
       /** Records why a step could not complete as a blocker on it, so its failure says what was left open. */
@@ -398,7 +341,10 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
             yield* Semaphore.withPermit(
               authority,
               Effect.gen(function* () {
-                const access = yield* hobTools.access(agent.value);
+                // A step of a party member's Task works under every Delegation above it, as the
+                // member does (ADR 018).
+                const narrowed = (own: ToolAccess | null) => delegatedAccess(own, queued, tree, separator);
+                const access = narrowed(yield* hobTools.access(agent.value));
                 const started = yield* attempt(
                   tasks.startAttempt(queued.id, queued.revision, {
                     id: attemptId,
@@ -413,7 +359,13 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
                 if (Option.isNone(started)) return;
                 const step = started.value.task;
                 const { tree: shown, carried } = yield* startingPoint(step, tree);
-                const run: Running = { agentId: step.ownerId, rootId: step.rootId, access, stop: null };
+                const run: Running = {
+                  agentId: step.ownerId,
+                  rootId: step.rootId,
+                  access,
+                  accessNow: Effect.map(accessNow(repo, hobTools, step.ownerId), narrowed),
+                  stop: null,
+                };
                 running.set(step.id, run);
                 yield* FiberMap.run(
                   fibers,
@@ -437,9 +389,37 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
       const count = (pick: (run: Running) => string, value: string) =>
         Array.from(running.values()).filter((run) => pick(run) === value).length;
 
+      // Party members' Tasks run beside the steps, in sessions this runner holds the same way.
+      const memberContinuations = yield* Effect.serviceOption(MemberContinuations);
+      const members = Option.isNone(memberContinuations)
+        ? null
+        : makeMemberRunner({
+            tasks,
+            repo,
+            tools,
+            hobTools,
+            admission,
+            adapters,
+            redactor,
+            approvals: yield* Effect.serviceOption(ApprovalService),
+            continuations: memberContinuations.value,
+            separator,
+            running,
+            fibers,
+            authority,
+            maxRunningPerHob: limits.maxRunningStepsPerHob,
+            announce,
+            attempt,
+            recordToolStart,
+            explain,
+            confirmCancelsAbove,
+            notify: signal.notify,
+          });
+
       /**
-       * Stops running steps whose cancel was asked for, then starts the steps that are ready. A step
-       * that returned its result keeps running until its session ends.
+       * Stops running steps and members' turns whose cancel was asked for, then starts the steps
+       * that are ready and a turn on each member's Task where work waits. A step that returned its
+       * result keeps running until its session ends.
        */
       const round = Effect.gen(function* () {
         for (const [id, run] of running) {
@@ -459,9 +439,10 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           trees.set(step.rootId, tree);
           if (ready(step, tree)) yield* start(step, tree);
         }
+        if (members !== null) yield* members.round;
       }).pipe(
         Semaphore.withPermit(rounds),
-        Effect.catchCause((cause) => Effect.logError("Could not start or stop steps", cause)),
+        Effect.catchCause((cause) => Effect.logError("Could not start or stop steps and members' turns", cause)),
       );
 
       // After a restart nothing runs (EX-004): every Attempt left live ends as interrupted, and
@@ -501,7 +482,9 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           stopWhere("authority", (run) =>
             agentId !== undefined && run.agentId !== agentId
               ? Effect.succeed(false)
-              : Effect.map(accessNow(repo, hobTools, run.agentId), (access) => narrows(run.access, access)),
+              : Effect.map(run.accessNow ?? accessNow(repo, hobTools, run.agentId), (access) =>
+                  narrows(run.access, access),
+                ),
           ),
       });
     }),

@@ -63,18 +63,18 @@ const json = (value: unknown) => (value == null ? null : JSON.parse(String(value
 export const dispositionColumn = (disposition: BackpackDisposition) => encodeDisposition(disposition);
 
 /**
- * Reads items with their deliveries (migration 0026). A row that does not decode is a defect: the
+ * Reads items with their deliveries and blockers (migrations 0026, 0028). A row that does not decode is a defect: the
  * hub wrote it. PostgreSQL reads BIGINT as a bigint; every token and revision fits a number.
  */
 export const makeItemReads = (sql: SqlClient.SqlClient) => {
   const toItems = (rows: ReadonlyArray<Row>) =>
     Effect.gen(function* () {
       if (rows.length === 0) return [];
+      const ids = rows.map((row) => String(row.id));
       const deliveries = yield* sql<Row>`SELECT * FROM backpack_deliveries
-        WHERE ${sql.in(
-          "item_id",
-          rows.map((row) => String(row.id)),
-        )} ORDER BY number`;
+        WHERE ${sql.in("item_id", ids)} ORDER BY number`;
+      const blockers = yield* sql<Row>`SELECT * FROM backpack_blockers
+        WHERE ${sql.in("item_id", ids)} ORDER BY number`;
       return yield* Effect.forEach(rows, (row) =>
         decodeItem({
           ...row,
@@ -90,6 +90,13 @@ export const makeItemReads = (sql: SqlClient.SqlClient) => {
           deliveries: deliveries
             .filter((delivery) => delivery.itemId === row.id)
             .map((delivery) => ({ ...delivery, number: Number(delivery.number) })),
+          blockers: blockers
+            .filter((blocker) => blocker.itemId === row.id)
+            .map((blocker) => ({
+              ...blocker,
+              number: Number(blocker.number),
+              afterDeliveries: Number(blocker.afterDeliveries),
+            })),
           revision: Number(row.revision),
         }).pipe(Effect.orDie),
       );
@@ -164,6 +171,7 @@ export const recordBackpackItems = (
           claim: null,
           fencingToken: 0,
           deliveries: [],
+          blockers: [],
           disposition: null,
           error: null,
           createdAt: at,

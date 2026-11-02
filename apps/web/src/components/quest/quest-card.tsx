@@ -1,6 +1,9 @@
-import type { TaskId, TaskTree } from "@hobbots/domain";
+import type { BackpackItem, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
+import { useBlockers } from "../../api/blockers.ts";
+import { BlockerCard } from "../blockers/blocker-card.tsx";
+import { blockersOn } from "../blockers/blocker-model.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
@@ -9,14 +12,16 @@ import { taskTitle, type WorkCard, type WorkRow, workCard } from "./work-model.t
 
 const copy = messages.card;
 
-const ring = (card: WorkCard) =>
-  card.status === "needs-you"
-    ? "border-lantern"
-    : card.top.state === "completed"
-      ? "border-mint-deep"
-      : card.top.state === "failed"
-        ? "border-rose"
-        : "border-control";
+const ring = (card: WorkCard, stuck: boolean) =>
+  stuck
+    ? "border-rose"
+    : card.status === "needs-you"
+      ? "border-lantern"
+      : card.top.state === "completed"
+        ? "border-mint-deep"
+        : card.top.state === "failed"
+          ? "border-rose"
+          : "border-control";
 
 const heading = (card: WorkCard, name: string) => {
   switch (card.top.state) {
@@ -45,6 +50,7 @@ export function QuestCard({
   onOpen: (taskId: TaskId) => void;
 }) {
   const card = workCard(tree);
+  const stuck = useStuck(tree);
   if (card === null) return null;
   const lead = hobs(card.leadId);
   const title = taskTitle(card.top);
@@ -55,7 +61,7 @@ export function QuestCard({
       aria-label={copy.label({ name: lead.name, title })}
       className={cn(
         "cut ms-9 flex max-w-work-max animate-hb-in flex-col gap-2.5 border-2 bg-card px-3.5 py-3",
-        ring(card),
+        ring(card, stuck.length > 0),
       )}
     >
       <div className="flex items-center gap-2">
@@ -77,6 +83,9 @@ export function QuestCard({
           <span>{copy.party({ lead: lead.name, members: messages.names(members) })}</span>
         </p>
       )}
+      {stuck.map((item) => (
+        <BlockerCard key={item.id} item={item} hobs={hobs} inChat />
+      ))}
       {card.rows.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {card.rows.map((row) => (
@@ -97,6 +106,10 @@ export function QuestCard({
     </section>
   );
 }
+
+/** The work about this tree's Tasks that failed as a blocker and waits for you (IN-007). */
+const useStuck = (tree: TaskTree): ReadonlyArray<BackpackItem> =>
+  blockersOn(useBlockers(), new Set(tree.tasks.map((task) => task.id)));
 
 function Progress({ done, total }: { done: number; total: number }) {
   return (

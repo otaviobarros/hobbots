@@ -1,4 +1,4 @@
-import type { AgentId, CarriedItem, MessageId, ThreadId } from "@hobbots/domain";
+import type { AgentId, AttemptId, BackpackTurnEnding, CarriedItem, MessageId, TaskId, ThreadId } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 
 /** What arrived for a hob in a thread, put into one turn there under the claims the turn holds (ADR 019). */
@@ -11,15 +11,21 @@ export interface CarriedWork {
   readonly accepted: (sessionId: string) => Effect.Effect<void>;
 }
 
-/** How a turn that carried work ended: it ran to its end, or ended early, and why. */
-export type CarriedEnd = { readonly _tag: "Handled" } | { readonly _tag: "EndedEarly"; readonly reason: string };
+/**
+ * How a turn that carried work ended: it ran to its end, or ended early, how as a code, and what the
+ * runtime said about it, raw, when it said anything.
+ */
+export type CarriedEnd = { readonly _tag: "Handled" } | ({ readonly _tag: "EndedEarly" } & BackpackTurnEnding);
 
-/** The turn a thread's chat runs for the work that waits there. */
-export interface CarryingTurn {
-  /** The reply the next turn will write, or null when no turn can start now: the work stays pending. */
-  readonly plan: Effect.Effect<MessageId | null>;
+/**
+ * The turn a session runs for the work that waits there: a thread's chat, whose turns are its
+ * replies, or a member's Task, whose turns are Attempts.
+ */
+export interface CarryingTurn<Id extends string = MessageId> {
+  /** The id the next turn will have, or null when no turn can start now: the work stays pending. */
+  readonly plan: Effect.Effect<Id | null>;
   /** Runs that turn with the work put into it, and returns once it has ended. */
-  readonly run: (replyId: MessageId, work: CarriedWork) => Effect.Effect<CarriedEnd>;
+  readonly run: (turnId: Id, work: CarriedWork) => Effect.Effect<CarriedEnd>;
 }
 
 /**
@@ -40,3 +46,28 @@ export class Continuations extends Context.Service<
     readonly deliver: (threadId: ThreadId, agentId: AgentId, turn: CarryingTurn) => Effect.Effect<boolean>;
   }
 >()("@hobbots/agents/Continuations") {}
+
+/** A member's Task with work waiting for its owner, in the session that works it. */
+export interface MemberWorkWaiting {
+  readonly taskId: TaskId;
+  readonly agentId: AgentId;
+}
+
+/**
+ * The one wake path of ADR 019, as a party member's Task sees it: the backpack items its owner
+ * holds under the Task, such as the Task itself, a hand-off or an answer, delivered into one turn
+ * of the session that works it. Each turn is an Attempt of the Task. Absent, as in hubs and tests
+ * without a backpack, no member's Task runs.
+ */
+export class MemberContinuations extends Context.Service<
+  MemberContinuations,
+  {
+    /** The members' Tasks where work waits for their owner now. */
+    readonly waiting: Effect.Effect<ReadonlyArray<MemberWorkWaiting>>;
+    /**
+     * Puts every item waiting for the hob under the Task into one turn, and runs it with `turn`, as
+     * `Continuations.deliver` does for a thread. Returns whether any turn ran.
+     */
+    readonly deliver: (taskId: TaskId, agentId: AgentId, turn: CarryingTurn<AttemptId>) => Effect.Effect<boolean>;
+  }
+>()("@hobbots/agents/MemberContinuations") {}

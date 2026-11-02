@@ -1,11 +1,4 @@
-import {
-  type AskableVerdict,
-  approvalNote,
-  askUntilDecided,
-  type CharmTurn,
-  type HubCallStep,
-  type ToolAccess,
-} from "@hobbots/agents";
+import { approvalNote, askUntilDecided, type CharmTurn, type HubCallStep, type ToolAccess } from "@hobbots/agents";
 import {
   type AgentId,
   type GitHubPushPlan,
@@ -14,12 +7,13 @@ import {
   githubPushSummary,
   repositorySlug,
 } from "@hobbots/domain";
-import { type PolicyContext, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
+import { PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
 import { Context, Data, Effect, Option, type Redacted } from "effect";
 import type { CharmCallRunner, ReadBack, WriteOutcome } from "./charm-calls.ts";
 import { GitPush, type PushResult, type PushTransport } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { GitHubApi, type GitHubError } from "./github-api.ts";
+import { branchNameCheck, decideCharmWrite } from "./github-writes.ts";
 
 /**
  * The GitHub Charm's Push (ADR 020, #323). The hub fixes the commit the hob's branch points to and
@@ -72,13 +66,7 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
     const githubError = (error: GitHubError) => new Refused({ message: error.message });
 
     const checkBranch = (name: string) =>
-      git
-        .isBranchName(name)
-        .pipe(
-          Effect.flatMap((ok) =>
-            ok ? Effect.void : Effect.fail(new Refused({ message: `${name} is not a branch name Git takes.` })),
-          ),
-        );
+      branchNameCheck(git, name).pipe(Effect.mapError((message) => new Refused({ message })));
 
     /**
      * One push attempt, then once more when nothing reached GitHub, or with a refreshed token when
@@ -137,21 +125,6 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
             return { _tag: "Uncertain", text: result.message };
         }
       });
-
-    const decide = (
-      turn: CharmTurn,
-      base: ToolAccess,
-      request: PolicyRequest,
-    ): ((access: ToolAccess | null) => Effect.Effect<AskableVerdict>) => {
-      return (fresh) =>
-        Effect.gen(function* () {
-          const access = fresh ?? base;
-          const grants = turn.approvals ? yield* turn.approvals.grants : [];
-          // The engine decides a push on the folder and the hob's answers: the hub pushes outside the sandbox.
-          const context: PolicyContext = { ...access.policy, sandbox: "on", modelHosts: [], grants };
-          return yield* engine.decide(context, request);
-        });
-    };
 
     /** Pushes a hob's branch: `folder` and `repository` are the hob's, resolved by the caller. */
     const push = (
@@ -228,7 +201,7 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
               label,
             },
             approvals: step === undefined ? null : turn.approvals,
-            decide: decide(turn, access, request),
+            decide: decideCharmWrite(engine, turn, access, request),
             report: step?.report ?? (() => {}),
             unknown: "Hobbots cannot decide this push.",
           });

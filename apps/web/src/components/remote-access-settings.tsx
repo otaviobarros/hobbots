@@ -31,6 +31,36 @@ export const remoteAddress = (status: RemoteAccessStatus): string | null => {
   return `http://${host.includes(":") ? `[${host}]` : host}:${status.port}`;
 };
 
+/** Where the hub is on the tailnet, or why it is not there, once remote access is on. */
+function RemoteAccessState({ status }: { readonly status: RemoteAccessStatus }) {
+  const why = remoteAccessWhy(status);
+  if (why !== null) {
+    return (
+      <p role="status" className="m-0 flex items-start gap-2 text-sm">
+        <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
+        <span>{why}</span>
+      </p>
+    );
+  }
+  const address = remoteAddress(status);
+  if (address === null) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <p role="status" className="m-0 flex items-center gap-2 text-sm">
+        <span aria-hidden className="size-2 flex-none bg-mint" />
+        <span>
+          {copy.connected} <b>{status.tailscale?.dnsName?.split(".")[0] ?? status.listening[0]}</b>
+        </span>
+      </p>
+      <span className="lbl pt-1 text-xs text-label">{copy.address}</span>
+      <span className="cut border-2 border-control bg-ground px-3 py-2 font-mono text-base font-bold text-moonlight">
+        {address}
+      </span>
+      <span className="text-[13px] text-label">{copy.addressNote}</span>
+    </div>
+  );
+}
+
 /** Settings › Devices: remote access over Tailscale, and why the hub is not on the tailnet when it is not (ADR 021). */
 export function RemoteAccessSettings() {
   const labelId = useId();
@@ -38,8 +68,6 @@ export function RemoteAccessSettings() {
   const change = useUpdateRemoteAccess();
   const status = access.data;
   const on = change.isPending ? (change.variables.enabled ?? false) : (status?.enabled ?? false);
-  const why = status?.enabled ? remoteAccessWhy(status) : null;
-  const address = status ? remoteAddress(status) : null;
 
   return (
     <>
@@ -58,27 +86,7 @@ export function RemoteAccessSettings() {
           onCheckedChange={(enabled) => change.mutate({ enabled })}
         />
       </div>
-      {status?.enabled && why !== null && (
-        <p role="status" className="m-0 flex items-start gap-2 text-sm">
-          <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
-          <span>{why}</span>
-        </p>
-      )}
-      {status?.enabled && why === null && address !== null && (
-        <div className="flex flex-col gap-2">
-          <p role="status" className="m-0 flex items-center gap-2 text-sm">
-            <span aria-hidden className="size-2 flex-none bg-mint" />
-            <span>
-              {copy.connected} <b>{status.tailscale?.dnsName?.split(".")[0] ?? status.listening[0]}</b>
-            </span>
-          </p>
-          <span className="lbl pt-1 text-xs text-label">{copy.address}</span>
-          <span className="cut border-2 border-control bg-ground px-3 py-2 font-mono text-base font-bold text-moonlight">
-            {address}
-          </span>
-          <span className="text-[13px] text-label">{copy.addressNote}</span>
-        </div>
-      )}
+      {status?.enabled && <RemoteAccessState status={status} />}
       {(access.isError || change.isError) && (
         <p role="alert" className="m-0 text-sm text-rose">
           {copy.failed}

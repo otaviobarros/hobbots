@@ -71,6 +71,10 @@ const FakeGitHub = Layer.succeed(
     item: () => Effect.die("not read in these tests"),
     branchHead: () => Effect.die("not read in these tests"),
     viewer: () => Effect.die("not read in these tests"),
+    pullRequests: () => Effect.die("not read in these tests"),
+    commentsSince: () => Effect.die("not read in these tests"),
+    openPullRequest: () => Effect.die("not written in these tests"),
+    comment: () => Effect.die("not written in these tests"),
   }),
 );
 

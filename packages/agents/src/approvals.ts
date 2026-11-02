@@ -23,6 +23,7 @@ import {
   type MessageId,
   ruleOperation,
   stableJson,
+  type TaskId,
   type ThreadId,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Duration, Effect, Layer, Option, Semaphore } from "effect";
@@ -76,12 +77,13 @@ export const actionDigest = (action: Pick<ApprovalAction, "tool" | "operation" |
     ),
   ).pipe(Effect.map((hash) => Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("")));
 
-/** The turn a request pauses: its hob, thread and reply. */
-export interface ApprovalOwner {
-  readonly agentId: AgentId;
-  readonly threadId: ThreadId;
-  readonly messageId: MessageId;
-}
+/**
+ * The turn a request pauses: its hob and thread, and its reply, or for a party member's turn, which
+ * runs outside the chat, the member's Task instead (ADR 018).
+ */
+export type ApprovalOwner =
+  | { readonly agentId: AgentId; readonly threadId: ThreadId; readonly messageId: MessageId }
+  | { readonly agentId: AgentId; readonly threadId: ThreadId; readonly messageId: null; readonly taskId: TaskId };
 
 /** What the user sends to decide a request. `actionDigest` is the one they were shown. */
 export interface ApprovalDecisionInput {

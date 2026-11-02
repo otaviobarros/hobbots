@@ -83,10 +83,10 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   page,
 }) => {
   await pipAsksToPush(page);
-  await expect(inboxLink(page)).toHaveAccessibleName("Inbox, 1 request needs you");
+  await expect(inboxLink(page)).toHaveAccessibleName("Inbox, 1 waiting on you");
 
   // The chief raises its lantern as soon as the request arrives, and leads to the Inbox.
-  await expect(chief(page)).toHaveAccessibleName("Hobbots inbox, a request needs you");
+  await expect(chief(page)).toHaveAccessibleName("Hobbots inbox, something needs you");
   await chief(page).click();
   await expect(page.getByRole("list", { name: "Requests" })).toContainText("Push your work");
 

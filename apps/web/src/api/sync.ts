@@ -1,4 +1,13 @@
-import type { Agent, AgentId, ApprovalRequest, Message, Thread, ThreadId } from "@hobbots/domain";
+import {
+  type Agent,
+  type AgentId,
+  type ApprovalRequest,
+  type BackpackItem,
+  type Message,
+  openBlocker,
+  type Thread,
+  type ThreadId,
+} from "@hobbots/domain";
 import type { QueryClient, QueryFunctionContext } from "@tanstack/react-query";
 import { inboxWindow } from "./inbox-window.ts";
 
@@ -21,6 +30,7 @@ type OverlayEntry =
   | { readonly kind: "thread"; readonly revision: number; readonly value: Thread }
   | { readonly kind: "message"; readonly revision: number; readonly value: Message }
   | { readonly kind: "approval"; readonly revision: number; readonly value: ApprovalRequest }
+  | { readonly kind: "backpack"; readonly revision: number; readonly value: BackpackItem }
   | { readonly kind: "removed"; readonly revision: number };
 
 type Kind = Exclude<OverlayEntry["kind"], "removed">;
@@ -55,6 +65,8 @@ export const recordMessage = (client: QueryClient, message: Message) =>
   record(client, `message:${message.id}`, { kind: "message", revision: message.revision, value: message });
 export const recordApproval = (client: QueryClient, approval: ApprovalRequest) =>
   record(client, `approval:${approval.id}`, { kind: "approval", revision: approval.revision, value: approval });
+export const recordBackpackItem = (client: QueryClient, item: BackpackItem) =>
+  record(client, `backpack:${item.id}`, { kind: "backpack", revision: item.revision, value: item });
 /** A removed message never returns (IDs are not reused), so its tombstone outranks every version. */
 export const recordRemovedMessage = (client: QueryClient, messageId: string) =>
   record(client, `message:${messageId}`, { kind: "removed", revision: Number.POSITIVE_INFINITY });
@@ -193,3 +205,7 @@ export const syncedApproval =
 /** The Inbox's requests from every thread, kept to the hub's window and order. */
 export const syncedInbox = (fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
   synced(fetch, "approval", () => true, inboxWindow);
+
+/** The items whose blocker waits for the user (IN-007): one leaves once its blocker is decided. */
+export const syncedBlockers = (fetch: () => Promise<ReadonlyArray<BackpackItem>>) =>
+  synced(fetch, "backpack", (item) => openBlocker(item) !== undefined);

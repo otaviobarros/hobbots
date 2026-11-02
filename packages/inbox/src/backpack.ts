@@ -4,7 +4,9 @@ import type {
   BackpackItem,
   BackpackItemId,
   BackpackItemMissing,
+  BackpackItemNotBlocked,
   BackpackItemUnclaimable,
+  BackpackTurnEnding,
   Committed,
   IllegalBackpackTransition,
   QuestId,
@@ -58,7 +60,24 @@ export class Backpack extends Context.Service<
     /** The turn ended early: the item goes back to pending, unclaimed, for a new attempt. */
     readonly requeue: (itemId: BackpackItemId, held: HeldClaim) => Guarded;
     readonly resolve: (itemId: BackpackItemId, held: HeldClaim, disposition: BackpackDisposition) => Guarded;
-    readonly fail: (itemId: BackpackItemId, held: HeldClaim, error: string) => Guarded;
+    /** Its deliveries ran out: the item fails as a blocker whose next action is to retry it (IN-007). */
+    readonly fail: (itemId: BackpackItemId, held: HeldClaim, ending: BackpackTurnEnding | null) => Guarded;
+    /**
+     * Its hob retired: an actionable pending item no claim holds fails as a blocker, since nobody
+     * can take it. Its value is null otherwise: a claimed item comes back to pending once its turn
+     * ends and is abandoned then, and routine progress never needs your choice.
+     */
+    readonly abandon: (itemId: BackpackItemId) => Effect.Effect<Committed<BackpackItem | null>, BackpackItemMissing>;
+    /**
+     * Records what you chose for the item's blocker numbered `blocker`, while it is the item's open
+     * one: `retry` puts the item back to pending with a fresh set of deliveries, `dismiss` resolves
+     * it as dismissed by you. The blocker keeps the choice. Any other blocker is NotBlocked.
+     */
+    readonly decide: (
+      itemId: BackpackItemId,
+      blocker: number,
+      action: "retry" | "dismiss",
+    ) => Effect.Effect<Committed<BackpackItem>, BackpackItemMissing | BackpackItemNotBlocked>;
     /**
      * Runs `effect` in one transaction that first checks the claim still holds, by owner, token and
      * lease, and that the runtime accepted the item's turn. When the check fails, nothing of the
@@ -86,5 +105,7 @@ export class Backpack extends Context.Service<
     readonly find: (itemId: BackpackItemId) => Effect.Effect<BackpackItem, BackpackItemMissing>;
     /** Items not yet resolved or failed, highest priority first, then oldest first. */
     readonly listOpen: (scope: BackpackScope) => Effect.Effect<ReadonlyArray<BackpackItem>>;
+    /** Failed items whose blocker waits for your choice, oldest blocker first. */
+    readonly listBlocked: (scope: BackpackScope) => Effect.Effect<ReadonlyArray<BackpackItem>>;
   }
 >()("@hobbots/inbox/Backpack") {}

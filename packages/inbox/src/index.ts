@@ -1,5 +1,12 @@
 export { Backpack, type BackpackScope, type HeldClaim } from "./backpack.ts";
-export { arrivalsText, continuationThread } from "./continuations.ts";
+export {
+  BlockersHost,
+  blockIfRecipientRetired,
+  blockRetiredHob,
+  blockRetiredWork,
+  decideBlocker,
+} from "./blockers.ts";
+export { arrivalsText, continuationTask, continuationThread } from "./continuations.ts";
 export {
   BackpackTurnFailed,
   type BatchTurn,

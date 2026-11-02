@@ -153,7 +153,9 @@ describe("SearchIndex", () => {
       ["garden", 1, 1],
     ]);
     expect(result[0]?.matches.map((m) => m.messageId)).toEqual(["b319", "b318", "b317"]);
-  });
+    // Writing 320 messages one by one takes about 4 seconds on PostgreSQL in CI, too close to the
+    // default 5 second limit.
+  }, 20_000);
 
   // covers CH-006
   it("[TC-CH-068] the exact accented word finds an accented message", async () => {

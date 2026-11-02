@@ -28,8 +28,8 @@ export const messages = {
     working: "Hobbots home, hobs are working",
     needsYou: ({ count }: { count: number }) =>
       pluralForm(count, {
-        one: "Hobbots inbox, a request needs you",
-        other: `Hobbots inbox, ${formatCount(count)} requests need you`,
+        one: "Hobbots inbox, something needs you",
+        other: `Hobbots inbox, ${formatCount(count)} things need you`,
       }),
   },
   home: {
@@ -244,6 +244,10 @@ export const messages = {
       host: ({ name, host }: { name: string; host: string }) => `Always let ${name} use ${host}`,
       push: ({ name, branch, remote, folder }: { name: string; branch: string; remote: string; folder: string }) =>
         `Always let ${name} push ${folder} to ${branch} on ${remote}`,
+      pullRequest: ({ name, repository, base }: { name: string; repository: string; base: string }) =>
+        `Always let ${name} open pull requests into ${base} in ${repository}`,
+      comment: ({ name, repository }: { name: string; repository: string }) =>
+        `Always let ${name} comment on issues and pull requests in ${repository}`,
       runner: ({ name, command, file }: { name: string; command: string; file: string }) =>
         `${command} runs what this folder's ${file} says. If ${name} changes that file, the rule runs the new version.`,
     },
@@ -275,6 +279,8 @@ export const messages = {
       push: "Sends commits to a remote, where others can see them.",
       "use-web": "Reaches a site outside this hub.",
       "read-github": "Reads only. Nothing changes.",
+      "open-pull-request": "Opens a pull request others can see at once. You can close or edit it.",
+      "comment-github": "Posts a comment others can see at once. You can edit or delete it.",
       "outside-folders": "Acts outside the folders this hob may use.",
     },
   },
@@ -282,12 +288,11 @@ export const messages = {
     github: {
       name: "GitHub",
       reads: ({ name }: { name: string }) =>
-        `Reads the repository of ${name}'s folders: its details, issues and pull requests. The hub reaches GitHub with the account you connected in Settings, so no key reaches ${name}.`,
-      pushLater: ({ name, push }: { name: string; push: string }) =>
-        `Pushing ${name}'s commits comes later. Push is ${push} for ${name}.`,
+        `Reads, pushes to, opens pull requests in and comments on the repository of ${name}'s folders, as you. The hub reaches GitHub with the account you connected in Settings, so no key reaches ${name}.`,
       read: "Read",
       push: "Push",
-      later: "Later",
+      pullRequests: "Pull requests",
+      comment: "Comment",
       grant: ({ name }: { name: string }) => `Let ${name} use GitHub`,
       off: ({ name }: { name: string }) => `${name} is offered no GitHub action until you turn this on.`,
       notConnected: "GitHub is not connected on this hub yet, so no hob can use it.",

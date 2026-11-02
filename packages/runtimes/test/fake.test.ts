@@ -69,3 +69,34 @@ describe("fake runtime", () => {
     expect(await ask(session ?? null, "Be thorough.")).toEqual([session, "Be thorough."]);
   });
 });
+
+describe("fake runtime's scripted hub calls", () => {
+  it("lets a later call, in any session, refer to what an earlier call gave back by its key", async () => {
+    const calls: Array<{ readonly name: string; readonly input: unknown }> = [];
+    const hubTools = {
+      tools: [],
+      call: (name: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push({ name, input });
+          return {
+            text: `Done.\n${JSON.stringify({ task_id: `t${calls.length}`, artifacts: ["a1"] })}`,
+            refused: false,
+          };
+        }),
+    };
+    const fake = makeFakeRuntime();
+    const first = [
+      `fake:hub delegate_task {"key":"copy","hob":"Quill"}`,
+      `fake:hub delegate_task {"key":"build","depends_on":["$copy.task_id"]}`,
+    ].join("\n");
+    await fake.sendPrompt({ ...request(first), hubTools }).pipe(Stream.runDrain, Effect.runPromise);
+    // Another session refers to both, and to a reference that names nothing, which stays as written.
+    const second = `fake:hub hand_off {"key":"hand","artifact_id":"$copy.artifacts.0","to_task_id":"$build.task_id","x":"$none.id"}`;
+    await fake.sendPrompt({ ...request(second), hubTools }).pipe(Stream.runDrain, Effect.runPromise);
+    expect(calls.map((call) => call.input)).toEqual([
+      { key: "copy", hob: "Quill" },
+      { key: "build", depends_on: ["t1"] },
+      { key: "hand", artifact_id: "a1", to_task_id: "t2", x: "$none.id" },
+    ]);
+  });
+});

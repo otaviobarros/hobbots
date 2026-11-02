@@ -25,12 +25,18 @@ const spareLoopback = () =>
     probe.listen({ host: "127.0.0.2", port: 0 }, () => probe.close(() => done(true)));
   });
 
-/** Whether the hub answers on its fake tailnet address, as another device on the tailnet would reach it. */
+/**
+ * What the hub answers on its fake tailnet address, as another device on the tailnet would reach
+ * it, or the error code of a connection it refuses.
+ */
 const onTailnet = (port: number) =>
   fetch(`http://127.0.0.2:${port}/api/health`, { signal: AbortSignal.timeout(1000) }).then(
-    (response) => response.ok,
-    () => false,
+    async (response) => ({ status: response.status, body: await response.text() }),
+    (error: Error & { cause?: { code?: string } }) => error.cause?.code ?? error.name,
   );
+
+/** Until devices can pair, the hub answers every tailnet request so. */
+const notPaired = { status: 403, body: "This device is not paired with Hobbots yet." };
 
 // covers DP-004
 test("[TC-DP-072] turns remote access on in Settings, and says why once Tailscale turns off", async ({ page }) => {
@@ -50,13 +56,13 @@ test("[TC-DP-072] turns remote access on in Settings, and says why once Tailscal
   const remote = devices.getByRole("switch", { name: "Use Hobbots from my other devices" });
   await expect(remote).not.toBeChecked();
   await expect(devices.getByText("Only this computer can reach Hobbots right now.")).toBeVisible();
-  expect(await onTailnet(port)).toBe(false);
+  expect(await onTailnet(port)).toBe("ECONNREFUSED");
 
   await remote.click();
   await expect(remote).toBeChecked();
   await expect(devices.getByRole("status")).toHaveText("Tailscale connected · this computer is hub");
   await expect(devices.getByText(`http://hub.example.ts.net:${port}`)).toBeVisible();
-  expect(await onTailnet(port)).toBe(true);
+  expect(await onTailnet(port)).toEqual(notPaired);
 
   // Tailscale turns off on the hub: within its next check the hub leaves the tailnet and says why.
   writeFileSync(
@@ -67,6 +73,6 @@ test("[TC-DP-072] turns remote access on in Settings, and says why once Tailscal
     "Tailscale is off on this computer, so Hobbots stopped listening on your tailnet. Turn Tailscale on and Hobbots listens again within seconds.",
     { timeout: 15_000 },
   );
-  expect(await onTailnet(port)).toBe(false);
+  expect(await onTailnet(port)).toBe("ECONNREFUSED");
   await expect(remote).toBeChecked();
 });

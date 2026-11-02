@@ -270,3 +270,63 @@ describe("standing grants", () => {
     expect((await decide({ ...quest, questId: "q1" }, command("pnpm test", home.project))).decision).toBe("allow");
   });
 });
+
+describe("the GitHub Charm's writes", () => {
+  const repository = "otaviobarros/hobbots";
+  const pullRequest = (folder: string, base = "main") =>
+    ({ _tag: "PullRequest", folder, repository, base }) satisfies PolicyRequest;
+  const comment = (folder: string, number = 324) =>
+    ({ _tag: "GitHubComment", folder, repository, number }) satisfies PolicyRequest;
+
+  // covers PE-001, PE-003, PE-007
+  it("[TC-PE-200] asks before opening a pull request or commenting, and a rule names only the repository and base", async () => {
+    const balanced = contextFor(home, "balanced");
+    expect(await decide(balanced, pullRequest(home.project))).toMatchObject({
+      decision: "ask",
+      operation: "open-pull-request",
+      targets: ["github.com/otaviobarros/hobbots into main"],
+      onceOnly: false,
+      grantable: true,
+      rules: [{ _tag: "PullRequest", cwd: home.project, repository, base: "main" }],
+    });
+    expect(await decide(balanced, comment(home.project))).toMatchObject({
+      decision: "ask",
+      operation: "comment-github",
+      targets: ["github.com/otaviobarros/hobbots #324"],
+      grantable: true,
+      rules: [{ _tag: "GitHubComment", cwd: home.project, repository }],
+    });
+    expect((await decide(contextFor(home, "trusting"), pullRequest(home.project))).decision).toBe("allow");
+    expect((await decide(contextFor(home, "trusting"), comment(home.project))).decision).toBe("allow");
+
+    // A pull request rule is for its base branch; a comment rule is for every item of the repository.
+    const opened = await approveAlways(balanced, pullRequest(home.project));
+    expect(await decide(opened, pullRequest(home.project))).toMatchObject({
+      decision: "allow",
+      reason: { code: "grant" },
+    });
+    expect((await decide(opened, pullRequest(home.project, "release"))).decision).toBe("ask");
+    const commented = await approveAlways(balanced, comment(home.project));
+    expect((await decide(commented, comment(home.project, 7))).decision).toBe("allow");
+    expect((await decide(commented, pullRequest(home.project))).decision).toBe("ask");
+  });
+
+  // covers PE-001, PE-004
+  it("[TC-PE-201] refuses a GitHub write from outside the hob's folders, and under Never, whatever was granted", async () => {
+    for (const request of [pullRequest(home.root), comment("relative/folder")]) {
+      expect(await decide(contextFor(home, "trusting"), request)).toMatchObject({
+        decision: "deny",
+        operation: "outside-folders",
+      });
+    }
+    const granted = await approveAlways(contextFor(home, "balanced"), comment(home.project));
+    for (const answer of ["ask", "deny"] as const) {
+      const narrowed = {
+        ...granted,
+        hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { "comment-github": answer } },
+      };
+      // The hob's own Ask or Never is never answered by a rule saved under the preset's Ask.
+      expect(await decide(narrowed, comment(home.project))).toMatchObject({ decision: answer, grantable: false });
+    }
+  });
+});

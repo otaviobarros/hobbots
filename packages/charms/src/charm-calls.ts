@@ -38,8 +38,11 @@ const STATE: Record<WriteOutcome["_tag"], CharmCallState> = {
   Uncertain: "uncertain",
 };
 
-/** A tool's way to read GitHub back for one of its calls: true when its effect is there. */
-export type ReadBack = (call: CharmCall) => Effect.Effect<boolean, unknown>;
+/**
+ * A tool's way to read GitHub back for one of its calls: true when its effect is there, or what the
+ * hob is told about it when reading back learned more than the plan knew, such as a pull request's link.
+ */
+export type ReadBack = (call: CharmCall) => Effect.Effect<boolean | string, unknown>;
 
 /** When an uncertain call is read back again: a few times over the next minutes, then the user decides. */
 export const READ_BACK_AFTER: ReadonlyArray<Duration.Input> = ["20 seconds", "1 minute", "3 minutes", "10 minutes"];
@@ -84,16 +87,18 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
     // Read-backs run in the Charm's scope, so they stop with the hub.
     const scope = yield* Effect.scope;
 
-    /** Settles the call as applied when its effect is on GitHub; true when it did. */
+    /** Settles the call as applied when its effect is on GitHub; what the hob is told when it did. */
     const readBack = (call: CharmCall) =>
       Effect.gen(function* () {
         const check = readBacks[call.tool];
-        if (check === undefined) return false;
+        if (check === undefined) return Option.none<string>();
         const found = yield* check(call).pipe(Effect.orElseSucceed(() => false));
-        if (!found) return false;
+        if (found === false) return Option.none<string>();
+        const text = found === true ? appliedText(call) : found;
         const at = yield* nowIso;
         // Settles only this sending: the user may have settled it, and the key been sent again, meanwhile.
-        return Option.isSome(yield* calls.settle(call, "applied", appliedText(call), at));
+        const settled = yield* calls.settle(call, "applied", text, at);
+        return Option.map(settled, () => text);
       });
 
     /** Reads an uncertain call back a few more times, in the background, until it settles. */
@@ -103,7 +108,7 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
           yield* Effect.sleep(delay);
           const now = yield* calls.find(call.agentId, call.key);
           if (Option.isNone(now) || now.value.attempt !== call.attempt || now.value.state !== "uncertain") return;
-          if (yield* readBack(now.value)) return;
+          if (Option.isSome(yield* readBack(now.value))) return;
         }
       }).pipe(Effect.forkIn(scope), Effect.asVoid);
 
@@ -115,7 +120,7 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
           call.state === "sending"
             ? yield* calls.settle(call, "uncertain", "The hub stopped while this call was being sent.", at)
             : Option.some(call);
-        if (Option.isSome(uncertain) && !(yield* readBack(uncertain.value))) yield* watch(uncertain.value);
+        if (Option.isSome(uncertain) && Option.isNone(yield* readBack(uncertain.value))) yield* watch(uncertain.value);
       }
     });
     yield* startup.pipe(Effect.ignore, Effect.forkIn(scope));
@@ -132,10 +137,9 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
         const sameInput = call.input === stableJson(input);
         if (call.state === "not-sent" && sameInput) return Option.none<string>();
         // An uncertain call may have settled on GitHub since: look before answering.
-        if (call.state === "uncertain" && sameInput && (yield* readBack(call))) {
-          return Option.some(
-            `You made this call before, so it was not sent again. Its result then: ${appliedText(call)}`,
-          );
+        const found = call.state === "uncertain" && sameInput ? yield* readBack(call) : Option.none<string>();
+        if (Option.isSome(found)) {
+          return Option.some(`You made this call before, so it was not sent again. Its result then: ${found.value}`);
         }
         return Option.some(earlierAnswer(call, stableJson(input)));
       });
@@ -177,10 +181,8 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
           } as const;
         }
         const sent = yield* send;
-        const outcome: WriteOutcome =
-          sent._tag === "Uncertain" && (yield* readBack(record))
-            ? { _tag: "Applied", text: appliedText(record) }
-            : sent;
+        const found = sent._tag === "Uncertain" ? yield* readBack(record) : Option.none<string>();
+        const outcome: WriteOutcome = Option.isSome(found) ? { _tag: "Applied", text: found.value } : sent;
         if (outcome._tag !== "Applied" || sent._tag !== "Uncertain") {
           yield* calls.settle(record, STATE[outcome._tag], outcome.text, yield* nowIso);
         }

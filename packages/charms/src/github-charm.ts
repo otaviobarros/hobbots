@@ -10,6 +10,7 @@ import {
   GitHubToolInputs,
   type GitHubToolName,
   GitHubWriteInputs,
+  type GitHubWriteToolName,
   githubItemText,
   githubRepositoryText,
   githubSearchQuery,
@@ -28,10 +29,11 @@ import { GitHubCredential } from "./github-account.ts";
 import { GitHubApi } from "./github-api.ts";
 import type { GitHubError } from "./github-error.ts";
 import { makeGitHubPush, pushReadBack } from "./github-push.ts";
+import { commentReadBack, makeGitHubWrites, pullRequestReadBack } from "./github-writes.ts";
 import { GitRemotes } from "./remotes.ts";
 
 /**
- * The GitHub Charm's actions as hub tools (#317, #323, ADR 014): its reads, and its push. A turn offers them only to a hob
+ * The GitHub Charm's actions as hub tools (#317, #323, #324, ADR 014): its reads, and its writes. A turn offers them only to a hob
  * the user gave the Charm, while GitHub is connected on the hub (#322). Each call is decided by the
  * policy engine on the repository the hub found from the hob's own folder, then read on the hub with
  * the connected account. Nothing a hob writes names the repository, and no credential reaches it.
@@ -73,8 +75,13 @@ export const GitHubCharmTools = Layer.effect(
     const credential = yield* GitHubCredential;
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
-    const runner = yield* makeCharmCallRunner({ github_push: pushReadBack(api) });
+    const runner = yield* makeCharmCallRunner({
+      github_push: pushReadBack(api),
+      github_open_pull_request: pullRequestReadBack(api),
+      github_comment: commentReadBack(api),
+    });
     const github = yield* makeGitHubPush(runner);
+    const writes = yield* makeGitHubWrites(runner);
     const tools = [
       ...GITHUB_TOOLS.map((tool) => ({ ...tool, inputSchema: githubToolJsonSchema(tool.name) })),
       ...GITHUB_WRITE_TOOLS.map((tool) => ({ ...tool, inputSchema: githubWriteToolJsonSchema(tool.name) })),
@@ -157,11 +164,25 @@ export const GitHubCharmTools = Layer.effect(
         return { access, ...(yield* repositoryFor(access, named)) };
       });
 
-    const write = (turn: CharmTurn, name: "github_push", raw: unknown, step: HubCallStep | undefined) =>
+    const write = (turn: CharmTurn, name: GitHubWriteToolName, raw: unknown, step: HubCallStep | undefined) =>
       Effect.gen(function* () {
-        const input = yield* decoded(GitHubWriteInputs[name], raw);
-        const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be pushed");
-        return yield* github.push(turn, access, folder, repository, input, step);
+        switch (name) {
+          case "github_push": {
+            const input = yield* decoded(GitHubWriteInputs[name], raw);
+            const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be pushed");
+            return yield* github.push(turn, access, folder, repository, input, step);
+          }
+          case "github_open_pull_request": {
+            const input = yield* decoded(GitHubWriteInputs[name], raw);
+            const { access, folder, repository } = yield* resolved(turn, input.folder, "no pull request can be opened");
+            return yield* writes.openPullRequest(turn, access, folder, repository, input, step);
+          }
+          case "github_comment": {
+            const input = yield* decoded(GitHubWriteInputs[name], raw);
+            const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be commented");
+            return yield* writes.comment(turn, access, folder, repository, input, step);
+          }
+        }
       });
 
     const call = (turn: CharmTurn, name: string, raw: unknown, step: HubCallStep | undefined) =>
