@@ -90,16 +90,50 @@ export const tabStates = (attempt: Attempt | null, read: ActivityRead): TabState
 export const attemptsOf = (tree: TaskTree, task: Task): ReadonlyArray<Attempt> =>
   tree.attempts.filter((each) => each.taskId === task.id).sort((a, b) => a.number - b.number);
 
-/** The Attempt the Workbench shows: the one chosen, else the Task's current one, else its latest. */
+/** What the Workbench has read of an Attempt's records so far: `unread` before any read. */
+export type ProbedRead = AttemptActivity | "unread" | "failed";
+
+/** Whether the Task's own records name the Attempt: a report its owner made, a reference or the result. */
+const recordedInTree = (tree: TaskTree, task: Task, attempt: Attempt): boolean =>
+  task.result?.attemptId === attempt.id ||
+  tree.artifacts.some((each) => each.taskId === task.id && each.attemptId === attempt.id) ||
+  tree.checkpoints.some(
+    (each) => each.taskId === task.id && each.source !== "automatic" && each.attemptId === attempt.id,
+  );
+
+const recordedIn = (activity: AttemptActivity): boolean =>
+  activity.commands.length > 0 || activity.changes.length > 0 || activity.artifacts.length > 0;
+
+/**
+ * The Attempt the Workbench opens on when none is chosen: the latest that recorded work, so a
+ * retry that ended before doing anything does not hide the one that did (#386). A running Attempt,
+ * or one whose stop was never confirmed, is shown whatever it recorded. An Attempt whose records
+ * are not read yet is the one to read next and is shown meanwhile; one whose read failed is shown,
+ * so it reads Unavailable rather than being passed over. With none that recorded anything, the
+ * Task's current Attempt, else its latest.
+ */
+export const openingAttempt = (
+  tree: TaskTree,
+  task: Task,
+  attempts: ReadonlyArray<Attempt>,
+  readOf: (attempt: Attempt) => ProbedRead,
+): Attempt | null => {
+  for (const attempt of attempts.toReversed()) {
+    if (isLiveAttempt(attempt.state) || attempt.state === "unresolved" || recordedInTree(tree, task, attempt)) {
+      return attempt;
+    }
+    const read = readOf(attempt);
+    if (typeof read !== "object" || recordedIn(read)) return attempt;
+  }
+  return attempts.find((each) => each.id === task.currentAttemptId) ?? attempts.at(-1) ?? null;
+};
+
+/** The Attempt the Workbench shows: the one chosen, else the one it opens on. */
 export const chosenAttempt = (
   attempts: ReadonlyArray<Attempt>,
-  task: Task,
   chosen: AttemptId | undefined,
-): Attempt | null =>
-  attempts.find((each) => each.id === chosen) ??
-  attempts.find((each) => each.id === task.currentAttemptId) ??
-  attempts.at(-1) ??
-  null;
+  opening: () => Attempt | null,
+): Attempt | null => attempts.find((each) => each.id === chosen) ?? opening();
 
 /**
  * Who asked for the Task, as a chain from you: "You" for the Task you asked for, then each owner
