@@ -312,14 +312,18 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
           if ((yield* accounts.get) !== null) yield* forgetIf(started, null);
           return yield* disconnected;
         }
-        const current = yield* committing.withPermits(1)(
+        const kept = yield* committing.withPermits(1)(
           Effect.gen(function* () {
-            if ((yield* Ref.get(generation)) !== started) return false;
+            if ((yield* Ref.get(generation)) !== started) return Option.none<UserTokens>();
+            // Another read, or a refresh, may have filled the cache meanwhile: that pair is newer
+            // than this snapshot, whose refresh token may already be retired.
+            const meanwhile = yield* Ref.get(cache);
+            if (Option.isSome(meanwhile)) return meanwhile;
             yield* Ref.set(cache, Option.some(tokens));
-            return true;
+            return Option.some(tokens);
           }),
         );
-        return current ? tokens : yield* stored;
+        return Option.isSome(kept) ? kept.value : yield* stored;
       });
 
       /**

@@ -756,4 +756,63 @@ describe("Edge cases of the hub's sign-in", () => {
     expect(result.switched).toMatchObject({ _tag: "Failure", failure: { reason: "signed-out" } });
     expect(result.now).toMatchObject({ _tag: "Failure", failure: { reason: "not-found" } });
   });
+  it("[TC-GEN-037] keeps a refreshed pair when a slower cold read of the old one finishes after it", async () => {
+    const script: Script = { polls: [], refreshes: [tokens("ghu_b", 20 * HOUR)], asked: [] };
+    // After a restart the keychain holds pair A, close to expiry. The first read is slow, so it
+    // finishes after the second call has read A and refreshed it into B.
+    const items = new Map([
+      [
+        "item",
+        Redacted.make(
+          Buffer.from(
+            JSON.stringify({
+              accessToken: "ghu_a",
+              refreshToken: "ghr_ghu_a",
+              expiresAt: 60_000,
+              refreshExpiresAt: null,
+            }),
+          ).toString("base64url"),
+        ),
+      ],
+    ]);
+    const delays = [5, 1];
+    const keychain = Layer.succeed(
+      Keychain,
+      Keychain.of({
+        read: Effect.gen(function* () {
+          const found = Option.fromNullishOr(items.get("item"));
+          yield* Effect.sleep(`${delays.shift() ?? 0} seconds`);
+          return found;
+        }),
+        write: (secret) => Effect.sync(() => void items.set("item", secret)),
+        remove: Effect.sync(() => void items.delete("item")),
+      }),
+    );
+    const result = await run(
+      Effect.gen(function* () {
+        const { row, layer } = yield* setup(script, { keychain });
+        yield* Ref.set(row, { source: "app" as const, login: "otaviobarros", connectedAt: "2026-11-01T00:00:00.000Z" });
+        return yield* Effect.gen(function* () {
+          const credential = yield* GitHubCredential;
+          // Both start cold: the first read takes 5 seconds, the second 1.
+          const slow = yield* Effect.forkChild(credential.tokenFor(HOB));
+          yield* Effect.yieldNow;
+          const fast = yield* Effect.forkChild(credential.tokenFor(HOB));
+          yield* Effect.yieldNow;
+          yield* wait(6);
+          const quick = Redacted.value(yield* Fiber.join(fast));
+          const late = Redacted.value(yield* Fiber.join(slow));
+          return {
+            quick,
+            late,
+            next: Redacted.value(yield* credential.tokenFor(HOB)),
+            connected: yield* credential.connected,
+          };
+        }).pipe(Effect.provide(layer), Effect.scoped);
+      }),
+    );
+    expect(result).toEqual({ quick: "ghu_b", late: "ghu_b", next: "ghu_b", connected: true });
+    // A's refresh token was used once; the slow read never brought it back.
+    expect(script.asked.filter((asked) => asked.startsWith("refresh"))).toEqual(["refresh ghr_ghu_a"]);
+  });
 });
