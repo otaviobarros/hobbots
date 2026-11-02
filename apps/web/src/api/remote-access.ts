@@ -44,6 +44,19 @@ export const securePage = (page: URL, apiUrl: string, status: RemoteAccessStatus
 };
 
 /**
+ * Where a page on the HTTPS address goes once Tailscale no longer serves the hub there, as after
+ * turning HTTPS off from that page: the same path on the tailnet's HTTP address, which keeps
+ * working with the browser's plain device cookie (ADR 021). Null for any other page, and while the
+ * hub is not on the tailnet at all, since there is nowhere to go.
+ */
+export const plainPage = (page: URL, apiUrl: string, status: RemoteAccessStatus): string | null => {
+  const name = status.tailscale?.dnsName;
+  if (httpsAddress(status) !== null || apiUrl !== page.origin || page.protocol !== "https:") return null;
+  if (!name || page.hostname !== name || status.listening.length === 0) return null;
+  return `http://${name}:${status.port}${page.pathname}${page.search}${page.hash}`;
+};
+
+/**
  * Where a page the hub serves itself reloads after the hub moved to `port`, or null when it stays:
  * the port did not change; the page has no port of its own, as over HTTPS through `tailscale serve`,
  * whose port stays; or the page calls the hub elsewhere, as the Vite dev server's and the desktop
@@ -56,11 +69,15 @@ export const movedPage = (page: URL, apiUrl: string, port: number): string | nul
   return next.href;
 };
 
-/** Takes a change the hub announced, and follows the hub to a new port or to its HTTPS address. */
+/**
+ * Takes a change the hub announced, or answered to this page's own change, and follows the hub: to
+ * its HTTPS address, back to its HTTP address when HTTPS ends, or to a new port.
+ */
 export const applyRemoteAccess = (queryClient: QueryClient, status: RemoteAccessStatus) => {
   queryClient.setQueryData(remoteAccessKey, status);
   if (globalThis.window?.hobbots !== undefined) return;
   const page = new URL(globalThis.location.href);
-  const moved = securePage(page, API_URL, status) ?? movedPage(page, API_URL, status.port);
+  const moved =
+    securePage(page, API_URL, status) ?? plainPage(page, API_URL, status) ?? movedPage(page, API_URL, status.port);
   if (moved !== null) globalThis.location.replace(moved);
 };

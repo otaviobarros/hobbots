@@ -1,4 +1,4 @@
-import { isIP } from "node:net";
+import { isIP, type Socket } from "node:net";
 import { HobbotsApi, PortUnavailable, ServeFailed, type UpdateRemoteAccessPayload } from "@hobbots/api";
 import {
   type HttpsStatus,
@@ -11,7 +11,7 @@ import {
 } from "@hobbots/domain";
 import { HubHosts } from "@hobbots/permissions";
 import { Cache, Context, Effect, Exit, Layer, Option, Ref, Schedule, Semaphore } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpEffect, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { arrivedOnTailnet, arrivedThroughServe, socketOf } from "./arrival.ts";
 import { type TailnetPeer, TailnetPeers } from "./devices.ts";
@@ -116,7 +116,14 @@ export class RemoteAccess extends Context.Service<
   {
     /** Remote access now. While it is off, it asks Tailscale once, so Settings can say what turning it on would find. */
     readonly status: Effect.Effect<RemoteAccessStatus>;
-    readonly update: (change: UpdateRemoteAccessPayload) => Effect.Effect<RemoteAccessStatus, PortUnavailable>;
+    /**
+     * `from` is the connection the change came in on, when it came through `tailscale serve`: a
+     * change that closes the serve listener keeps it for its answer (see `HubListeners.serveOn`).
+     */
+    readonly update: (
+      change: UpdateRemoteAccessPayload,
+      from?: Socket,
+    ) => Effect.Effect<RemoteAccessStatus, PortUnavailable>;
     /** Asks Tailscale now and listens where it says, as the 10 second check does. */
     readonly check: Effect.Effect<RemoteAccessStatus>;
     /**
@@ -203,44 +210,46 @@ export const RemoteAccessLive = (dataDir: string) =>
         );
 
       // The serve listener is open only while HTTPS and remote access are on and not paused.
-      const reconcileHttps = (current: RemoteAccessStatus, watching: boolean) =>
+      const reconcileHttps = (current: RemoteAccessStatus, watching: boolean, spare: Socket | undefined) =>
         Effect.gen(function* () {
           const open = current.enabled && !current.paused && current.https.enabled;
-          const serve = yield* listeners.serveOn(open ? current.https.port : null);
+          const serve = yield* listeners.serveOn(open ? current.https.port : null, spare);
           // While remote access is off the hub stops watching Tailscale, and keeps the last answer.
           const forwards = watching ? yield* forwarding(current.https.port) : current.https.forwarding;
           return { ...current.https, listening: serve.listening, detail: serve.detail, forwarding: forwards };
         });
 
-      const reconcile = Effect.gen(function* () {
-        const current = yield* Ref.get(state);
-        const port = yield* listeners.port;
-        if (!current.enabled) {
-          yield* listeners.listenOnTailnet([]);
-          const https = yield* reconcileHttps(current, false);
-          yield* Cache.invalidateAll(whois);
-          yield* Ref.set(hub, Option.none());
-          return yield* settle(remoteAccessStatus({ ...current, port, listening: [], failed: [], https }));
-        }
-        const snapshot = yield* tailscale.snapshot;
-        yield* forget(snapshot.peers);
-        yield* Ref.set(hub, Option.fromNullishOr(snapshot.self));
-        // Paused, the hub still watches Tailscale, so Settings can say what Resume would find.
-        const wanted = snapshot.status.state === "running" && !current.paused ? snapshot.status.addresses : [];
-        const { listening, failed } = yield* listeners.listenOnTailnet(wanted);
-        const https = yield* reconcileHttps(current, true);
-        return yield* settle(
-          remoteAccessStatus({
-            enabled: true,
-            paused: current.paused,
-            port,
-            tailscale: snapshot.status,
-            listening,
-            failed,
-            https,
-          }),
-        );
-      }).pipe(oneAtATime.withPermits(1));
+      const reconcileFor = (spare?: Socket) =>
+        Effect.gen(function* () {
+          const current = yield* Ref.get(state);
+          const port = yield* listeners.port;
+          if (!current.enabled) {
+            yield* listeners.listenOnTailnet([]);
+            const https = yield* reconcileHttps(current, false, spare);
+            yield* Cache.invalidateAll(whois);
+            yield* Ref.set(hub, Option.none());
+            return yield* settle(remoteAccessStatus({ ...current, port, listening: [], failed: [], https }));
+          }
+          const snapshot = yield* tailscale.snapshot;
+          yield* forget(snapshot.peers);
+          yield* Ref.set(hub, Option.fromNullishOr(snapshot.self));
+          // Paused, the hub still watches Tailscale, so Settings can say what Resume would find.
+          const wanted = snapshot.status.state === "running" && !current.paused ? snapshot.status.addresses : [];
+          const { listening, failed } = yield* listeners.listenOnTailnet(wanted);
+          const https = yield* reconcileHttps(current, true, spare);
+          return yield* settle(
+            remoteAccessStatus({
+              enabled: true,
+              paused: current.paused,
+              port,
+              tailscale: snapshot.status,
+              listening,
+              failed,
+              https,
+            }),
+          );
+        }).pipe(oneAtATime.withPermits(1));
+      const reconcile = reconcileFor();
 
       // A new port moves every listener but the serve listener, whose port it may not take.
       const movePort = (port: number) =>
@@ -287,10 +296,10 @@ export const RemoteAccessLive = (dataDir: string) =>
         }).pipe(oneAtATime.withPermits(1));
 
       // The listeners and the status follow whatever the change did, also when saving it failed.
-      const update = (payload: UpdateRemoteAccessPayload) =>
+      const update = (payload: UpdateRemoteAccessPayload, from?: Socket) =>
         Effect.gen(function* () {
           const changed = yield* Effect.exit(change(payload));
-          const status = yield* reconcile;
+          const status = yield* reconcileFor(from);
           if (Exit.isFailure(changed)) return yield* Effect.failCause(changed.cause);
           return status;
         });
@@ -457,6 +466,22 @@ const WITHOUT_REMOTE_ACCESS: RemoteAccessStatus = {
   https: { enabled: false, port: 0, listening: false, forwarding: null, detail: null },
 };
 
+/**
+ * Applies a change from the request under way. One that came through `tailscale serve` keeps its
+ * connection for its answer and closes it after, so turning HTTPS off from the HTTPS address still
+ * tells the page the new status, and the page moves to the HTTP address (ADR 021).
+ */
+export const updateFromRequest = (access: RemoteAccess["Service"], payload: UpdateRemoteAccessPayload) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const socket = socketOf(request);
+    if (!arrivedThroughServe(socket)) return yield* access.update(payload);
+    yield* HttpEffect.appendPreResponseHandler((_request, response) =>
+      Effect.succeed(HttpServerResponse.setHeader(response, "connection", "close")),
+    );
+    return yield* access.update(payload, socket);
+  });
+
 export const RemoteAccessHandlers = HttpApiBuilder.group(HobbotsApi, "remoteAccess", (handlers) =>
   Effect.gen(function* () {
     const access = yield* Effect.serviceOption(RemoteAccess);
@@ -467,7 +492,7 @@ export const RemoteAccessHandlers = HttpApiBuilder.group(HobbotsApi, "remoteAcce
     return handlers.handleAll({
       get: () => status,
       update: ({ payload }) =>
-        Option.match(access, { onNone: () => status, onSome: (access) => access.update(payload) }),
+        Option.match(access, { onNone: () => status, onSome: (access) => updateFromRequest(access, payload) }),
       serve: ({ payload }) =>
         Option.match(access, {
           onNone: () => Effect.fail(new ServeFailed({ detail: "This hub has no remote access." })),

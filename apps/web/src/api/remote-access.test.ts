@@ -2,7 +2,7 @@ import type { RemoteAccessStatus } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { serveAsk } from "../components/devices/https-settings.tsx";
 import { remoteAccessWhy, remoteAddress } from "../components/remote-access-settings.tsx";
-import { movedPage, securePage } from "./remote-access.ts";
+import { movedPage, plainPage, securePage } from "./remote-access.ts";
 
 const status = (change: Partial<RemoteAccessStatus>): RemoteAccessStatus => ({
   enabled: true,
@@ -76,7 +76,7 @@ describe("HTTPS through tailscale serve in Settings", () => {
   const serving = { enabled: true, port: 4318, listening: true, forwarding: true, detail: null } as const;
 
   // covers DP-004
-  it("[TC-DP-137] gives the HTTPS address only while Tailscale serves the hub there, and moves the page there", () => {
+  it("[TC-DP-137] gives the HTTPS address only while Tailscale serves the hub there", () => {
     expect(remoteAddress(status({ https: serving }))).toBe("https://studio-desk.example.ts.net");
     // On but not forwarded yet, or forwarded with HTTPS off: the HTTP address stays.
     expect(remoteAddress(status({ https: { ...serving, forwarding: false } }))).toBe(
@@ -90,7 +90,7 @@ describe("HTTPS through tailscale serve in Settings", () => {
   });
 
   // covers DP-004
-  it("[TC-DP-138] asks to run tailscale serve while it does not match the switch, and to remove what is left over", () => {
+  it("[TC-DP-138] asks to run or remove tailscale serve, and moves the page to the HTTPS address and back", () => {
     const off = { enabled: false, port: 4318, listening: false, forwarding: false, detail: null } as const;
     expect(serveAsk(status({ https: off }))).toBeNull();
     expect(serveAsk(status({ https: { ...serving, forwarding: false } }))).toBe("forward");
@@ -113,5 +113,15 @@ describe("HTTPS through tailscale serve in Settings", () => {
     expect(securePage(local, local.origin, status({ https: serving }))).toBeNull();
     const secure = new URL("https://studio-desk.example.ts.net/#/settings");
     expect(securePage(secure, secure.origin, status({ https: serving }))).toBeNull();
+
+    // And back to the HTTP address once HTTPS ends there, as after turning it off from that page.
+    const httpsOff = { enabled: false, port: 4318, listening: false, forwarding: true, detail: null } as const;
+    expect(plainPage(secure, secure.origin, status({ https: httpsOff }))).toBe(
+      "http://studio-desk.example.ts.net:4317/#/settings",
+    );
+    // Still served there, a page on this computer, or nowhere to go on the tailnet: it stays.
+    expect(plainPage(secure, secure.origin, status({ https: serving }))).toBeNull();
+    expect(plainPage(local, local.origin, status({ https: httpsOff }))).toBeNull();
+    expect(plainPage(secure, secure.origin, status({ https: httpsOff, listening: [] }))).toBeNull();
   });
 });

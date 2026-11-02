@@ -31,6 +31,7 @@ import {
   RemoteAccess,
   RemoteAccessLive,
   RemoteAccessStateLive,
+  updateFromRequest,
 } from "../src/remote-access.ts";
 import { DEFAULT_FAKE_TAILNET, type FakeTailnet, TailscaleFake } from "../src/tailscale.ts";
 import { OwnHostsOnly } from "../src/web.ts";
@@ -61,6 +62,7 @@ interface Answer {
   readonly body: string;
   readonly location?: string;
   readonly cookies?: ReadonlyArray<string>;
+  readonly connection?: string;
 }
 
 /** A request to `host` from the loopback address `from`, so a test can play a tailnet peer. */
@@ -71,6 +73,7 @@ const ask = (
     readonly from?: string;
     readonly hostHeader?: string;
     readonly path?: string;
+    readonly method?: string;
     readonly headers?: Readonly<Record<string, string>>;
   } = {},
 ) =>
@@ -79,6 +82,7 @@ const ask = (
       {
         host,
         port,
+        method: options.method ?? "GET",
         path: options.path ?? "/peer",
         agent: false,
         ...(options.from ? { localAddress: options.from } : {}),
@@ -94,6 +98,10 @@ const ask = (
             body,
             ...(response.headers.location === undefined ? {} : { location: response.headers.location }),
             ...(response.headers["set-cookie"] === undefined ? {} : { cookies: response.headers["set-cookie"] }),
+            // Only a request that asked to keep its connection learns whether the hub closes it.
+            ...(options.headers?.connection === "keep-alive" && response.headers.connection !== undefined
+              ? { connection: response.headers.connection }
+              : {}),
           }),
         );
       },
@@ -216,11 +224,20 @@ const startHub = async (
   );
   // A page the hub serves, as the web client's files are.
   const PageRoute = HttpRouter.add("GET", "/page", Effect.succeed(HttpServerResponse.text("page")));
+  // Turns HTTPS off as Settings' change does, from the request under way.
+  const HttpsOffRoute = HttpRouter.add(
+    "POST",
+    "/https-off",
+    Effect.flatMap(RemoteAccess, (access) => updateFromRequest(access, { https: false })).pipe(
+      Effect.map((status) => HttpServerResponse.text(JSON.stringify(status.https))),
+    ),
+  );
   const Routes = Layer.mergeAll(
     PeerRoute,
     HoldRoute,
     DeviceRoute,
     PageRoute,
+    HttpsOffRoute,
     OwnHostsOnly,
     KnownTailnetPeersOnly,
     NoFunnelRequests,
@@ -602,11 +619,17 @@ const WITH_PHONE: FakeTailnet = {
 /** A request through `tailscale serve`: to the serve listener, for the MagicDNS name, from the peer `from`. */
 const viaServe = (
   hub: Hub,
-  options: { readonly from?: string; readonly path?: string; readonly headers?: Readonly<Record<string, string>> } = {},
+  options: {
+    readonly from?: string;
+    readonly path?: string;
+    readonly method?: string;
+    readonly headers?: Readonly<Record<string, string>>;
+  } = {},
 ) =>
   ask("127.0.0.1", hub.servePort, {
     hostHeader: "hub.example.ts.net",
     path: options.path ?? "/peer",
+    ...(options.method === undefined ? {} : { method: options.method }),
     headers: {
       ...(options.from === undefined ? {} : { "x-forwarded-for": options.from }),
       ...options.headers,
@@ -790,5 +813,38 @@ describe("HTTPS through tailscale serve", () => {
     await Effect.runPromise(Ref.set(hub.tailnet, { ...WITH_PHONE, serve: `http://127.0.0.1:${hub.servePort}` }));
     await hub.update({ enabled: false });
     expect((await hub.status()).https).toMatchObject({ listening: false, forwarding: true });
+  });
+
+  // covers DP-004
+  it("[TC-DP-143] turning HTTPS off through tailscale serve answers that request, then closes the serve listener", async ({
+    skip,
+  }) => {
+    if (!spareLoopback) skip();
+    const hub = await startHub({ tailnet: WITH_PHONE, https: true });
+    // Another request through serve still under way, as the page's event stream is.
+    held = latch();
+    holding = 0;
+    const underWay = viaServe(hub, { from: "127.0.0.5", path: "/hold" }).then(
+      () => "answered",
+      (error: NodeJS.ErrnoException) => error.code ?? "error",
+    );
+    await vi.waitFor(() => expect(holding).toBe(1));
+
+    // The change itself is answered with the new status, on a connection that then closes.
+    const off = await viaServe(hub, {
+      from: "127.0.0.5",
+      path: "/https-off",
+      method: "POST",
+      headers: { connection: "keep-alive" },
+    });
+    expect(off.status).toBe(200);
+    expect(off.connection).toBe("close");
+    expect(JSON.parse(off.body)).toMatchObject({ enabled: false, listening: false });
+    // Everything else on the serve listener closed, and it takes no new connection.
+    expect(await underWay).toBe("ECONNRESET");
+    held.resolve();
+    expect(await refusal("127.0.0.1", hub.servePort)).toBe("ECONNREFUSED");
+    // The tailnet's HTTP address, where the page goes next, keeps working.
+    expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.5" })).toEqual({ status: 200, body: "nPHONE" });
   });
 });

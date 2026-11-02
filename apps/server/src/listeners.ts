@@ -12,6 +12,9 @@ import { Tailscale } from "./tailscale.ts";
  * or any other interface.
  */
 
+/** How long the connection that closed the serve listener may stay for its answer. */
+const SPARE_FOR_MS = 5000;
+
 /** A tailnet address the hub could not listen on, in the system's words. */
 export interface ListenFailure {
   readonly address: string;
@@ -41,10 +44,15 @@ export class HubListeners extends Context.Service<
     }>;
     /**
      * Opens the serve listener on `127.0.0.1` at `port`, which `tailscale serve` forwards HTTPS to,
-     * or closes it with every connection it accepted when `port` is null. Answers whether it
+     * or closes it with every connection it accepted when `port` is null. `spare` is the connection
+     * of the request that closes it, such as turning HTTPS off from the HTTPS address: it stays for
+     * that request's answer, which closes it, so the page hears where to go. Answers whether it
      * listens, and why it could not open.
      */
-    readonly serveOn: (port: number | null) => Effect.Effect<{
+    readonly serveOn: (
+      port: number | null,
+      spare?: Socket,
+    ) => Effect.Effect<{
       readonly listening: boolean;
       readonly detail: string | null;
     }>;
@@ -142,13 +150,21 @@ export const HubListenersLive = (server: Server, initialPort: number) =>
       // The serve listener, its port, and the connections `tailscale serve` opened on it.
       let serve: { readonly relay: NetServer; readonly port: number } | undefined;
       const served = new Set<Socket>();
-      const closeServe = Effect.suspend(() => {
-        const open = serve;
-        serve = undefined;
-        for (const socket of served) socket.destroy();
-        served.clear();
-        return open === undefined ? Effect.void : stopListening(open.relay);
-      });
+      const closeServe = (spare?: Socket) =>
+        Effect.suspend(() => {
+          const open = serve;
+          serve = undefined;
+          for (const socket of served) {
+            if (socket === spare) {
+              // Its answer closes it; should none come, it closes anyway.
+              setTimeout(() => socket.destroy(), SPARE_FOR_MS).unref();
+            } else {
+              socket.destroy();
+            }
+          }
+          served.clear();
+          return open === undefined ? Effect.void : stopListening(open.relay);
+        });
       const openServe = (at: number) =>
         listen("127.0.0.1", at, (socket) => {
           markServed(socket);
@@ -160,7 +176,7 @@ export const HubListenersLive = (server: Server, initialPort: number) =>
       yield* Effect.addFinalizer(() =>
         Effect.andThen(
           Effect.suspend(() => Effect.forEach(tailnetAddresses(), dropTailnet, { discard: true })),
-          Effect.andThen(closeServe, loopback6 === undefined ? Effect.void : stopListening(loopback6)),
+          Effect.andThen(closeServe(), loopback6 === undefined ? Effect.void : stopListening(loopback6)),
         ),
       );
 
@@ -229,10 +245,10 @@ export const HubListenersLive = (server: Server, initialPort: number) =>
             }
             return { listening: [...relays.keys()], failed };
           }),
-        serveOn: (at) =>
+        serveOn: (at, spare) =>
           Effect.gen(function* () {
             if (at !== null && serve?.port === at) return { listening: true, detail: null };
-            yield* closeServe;
+            yield* closeServe(spare);
             if (at === null) return { listening: false, detail: null };
             const opened = yield* openServe(at).pipe(Effect.result);
             if (opened._tag === "Failure")
