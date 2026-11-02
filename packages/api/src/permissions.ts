@@ -40,8 +40,8 @@ export type HobPermissions = typeof HobPermissions.Type;
 /**
  * A change to a hob's policy; fields left out keep their value, and the ones given replace it. Own
  * folders are paths on the hub, absolute or starting with `~`, stored canonical. A hidden folder
- * must be one of the shared folders. An override may only narrow the preset. Signing is the user's
- * own grant, so it may widen. Each change that
+ * must be one of the shared folders. An override may only narrow the preset. Signing and the GitHub
+ * Charm are the user's own grants, so they may widen. Each change that
  * changes something becomes the hob's next configuration version.
  */
 export const UpdateHobPermissionsPayload = Schema.Struct({
@@ -50,6 +50,8 @@ export const UpdateHobPermissionsPayload = Schema.Struct({
   overrides: Schema.optionalKey(PolicyOverrides),
   /** Whether the hob signs commits with the user's 1Password SSH key, which also opens SSH logins. */
   signCommits: Schema.optionalKey(Schema.Boolean),
+  /** Whether the hob has the GitHub Charm (ADR 020): the user's own grant, so it may widen. */
+  githubCharm: Schema.optionalKey(Schema.Boolean),
 });
 export type UpdateHobPermissionsPayload = typeof UpdateHobPermissionsPayload.Type;
 

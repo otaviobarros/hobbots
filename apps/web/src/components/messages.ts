@@ -270,12 +270,76 @@ export const messages = {
     github: {
       name: "GitHub",
       reads: ({ name }: { name: string }) =>
-        `Reads the repository of ${name}'s folders: its details, issues and pull requests. The hub signs in with your GitHub account, so no key reaches ${name}.`,
+        `Reads the repository of ${name}'s folders: its details, issues and pull requests. The hub reaches GitHub with the account you connected in Settings, so no key reaches ${name}.`,
       pushLater: ({ name, push }: { name: string; push: string }) =>
         `Pushing ${name}'s commits comes later. Push is ${push} for ${name}.`,
       read: "Read",
       push: "Push",
       later: "Later",
+      grant: ({ name }: { name: string }) => `Let ${name} use GitHub`,
+      off: ({ name }: { name: string }) => `${name} is offered no GitHub action until you turn this on.`,
+      notConnected: "GitHub is not connected on this hub yet, so no hob can use it.",
+      connectInSettings: "Connect GitHub in Settings",
+      saveFailed: "Hobbots could not save this. Try again.",
+    },
+  },
+  github: {
+    heading: "Charms",
+    intro:
+      "Charms connect hobs to other apps. Connect one here once, then choose which hobs use it from each hob's Charms tab.",
+    name: "GitHub",
+    failed: "Hobbots could not read your GitHub connection. Try again in a moment.",
+    retry: "Try again",
+    environment: "Connected with the HOBBOTS_GITHUB_TOKEN this hub was started with.",
+    connectedAs: ({ login, since }: { login: string; since: string }) => `Connected as @${login} since ${since}.`,
+    through: {
+      app: "Through the Hobbots GitHub App, on the repositories you install it on.",
+      gh: "Through your GitHub CLI sign-in, read again for each call.",
+      git: "Through the credential Git keeps for github.com, read again for each call.",
+    },
+    everyRepository: ({ login }: { login: string }) =>
+      `Reaches every repository @${login} can see. Hobs still reach only the repository of their own folders.`,
+    repositoriesLabel: "Repositories it reaches",
+    noRepositories: "None yet. Install the app on the repositories hobs should reach.",
+    repositoriesFailed: "Hobbots could not ask GitHub which repositories it reaches.",
+    chooseRepositories: "Choose repositories on GitHub",
+    permissionsLabel: "What the app may do there",
+    permission: ({ name, access }: { name: string; access: "read" | "write" }) =>
+      access === "read" ? `${name}: read` : `${name}: read and write`,
+    private: "private",
+    disconnect: "Disconnect",
+    disconnected: "Disconnected. GitHub still lists Hobbots among your authorized apps until you revoke it there.",
+    authorizedApps: "Open authorized apps on GitHub",
+    connect: "Connect with Hobbots",
+    recommended: "Recommended: hobs reach only the repositories you install the app on.",
+    enterCode: "Enter this code on GitHub to connect:",
+    openGitHub: "Open GitHub",
+    waiting: "Waiting for you to enter the code…",
+    cancel: "Cancel",
+    found: "Or use a sign-in already on this computer",
+    foundSource: {
+      gh: ({ login }: { login: string }) => `Your GitHub CLI sign-in, as @${login}`,
+      git: ({ login }: { login: string }) => `The credential Git keeps for github.com, as @${login}`,
+    },
+    foundNote: "Reaches every repository the sign-in can see.",
+    use: "Use",
+    cannotConnect: {
+      "no-app":
+        "This build of Hobbots names no GitHub App. Start the hub with HOBBOTS_GITHUB_CLIENT_ID to connect one.",
+      "no-keychain": "This hub has no keychain Hobbots can use, so it does not keep a GitHub sign-in.",
+    },
+    problem: {
+      expired: "The code lapsed, or the sign-in expired. Connect again.",
+      denied: "GitHub says the sign-in was cancelled.",
+      refused: "GitHub no longer accepts the hub's sign-in. Connect again.",
+      failed: "Hobbots could not finish connecting to GitHub. Try again.",
+    },
+    connectFailed: {
+      environment: "This hub reaches GitHub with the HOBBOTS_GITHUB_TOKEN it was started with.",
+      "no-app": "This build of Hobbots names no GitHub App.",
+      "no-keychain": "This hub has no keychain Hobbots can use, so it does not keep a GitHub sign-in.",
+      "not-found": "That sign-in cannot be read now. Sign in again, then try once more.",
+      failed: "GitHub did not answer as expected. Try again.",
     },
   },
   signing: {

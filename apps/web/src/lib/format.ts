@@ -1,5 +1,5 @@
 /**
- * Shared locale formatters for counts and plurals (STD-I18N-002, STD-I18N-003). `locale` is the
+ * Shared locale formatters for counts, plurals and dates (STD-I18N-002, STD-I18N-003). `locale` is the
  * reader's, or the browser's when absent.
  */
 
@@ -13,3 +13,7 @@ export const plural = <T>(count: number, forms: { readonly one: T; readonly othe
 /** A time ahead, relative to now, in the reader's locale: "in 23 hours", "in 5 minutes". */
 export const formatIn = (value: number, unit: "minute" | "hour", locale?: string): string =>
   new Intl.RelativeTimeFormat(locale, { numeric: "always" }).format(value, unit);
+
+/** A day in the reader's locale: "Nov 2, 2026". */
+export const formatDay = (iso: string, locale?: string): string =>
+  new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(iso));

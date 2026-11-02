@@ -16,6 +16,7 @@ import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ApprovalsHandlers } from "./approvals.ts";
 import { BackpackHandlers } from "./backpack.ts";
+import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { Installation } from "./installation.ts";
@@ -167,5 +168,6 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     TasksHandlers,
     QuestionsHandlers,
     BackpackHandlers,
+    GitHubHandlers,
   ]),
 );

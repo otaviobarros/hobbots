@@ -14,8 +14,8 @@ import {
   GitHubApi,
   GitHubApiLive,
   GitHubCharmTools,
+  GitHubCredential,
   GitHubError,
-  GitHubToken,
   GitRemotes,
 } from "../src/index.ts";
 
@@ -39,7 +39,7 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
   Layer.succeed(
     GitHubApi,
     GitHubApi.of({
-      repository: (repository) => {
+      repository: (_agentId, repository) => {
         asked.push(`repository ${repository.owner}/${repository.name}`);
         return failWith
           ? Effect.fail(failWith)
@@ -52,7 +52,7 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
               openIssuesAndPullRequests: 42,
             });
       },
-      search: (query, limit) => {
+      search: (_agentId, query, limit) => {
         asked.push(`search ${query} (${limit})`);
         return Effect.succeed({
           query,
@@ -62,7 +62,7 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
           ],
         });
       },
-      item: (repository, number, comments) => {
+      item: (_agentId, repository, number, comments) => {
         asked.push(`item ${repository.owner}/${repository.name}#${number} (${comments})`);
         return Effect.succeed({
           number,
@@ -84,11 +84,15 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
 const fakeRemotes = (repositories: Record<string, GitHubRepository>) =>
   Layer.succeed(GitRemotes, GitRemotes.of({ repositoryOf: (folder) => Effect.succeed(repositories[folder] ?? null) }));
 
-const access = (folders: ReadonlyArray<string>, readGitHub?: PolicyDecision): ToolAccess => ({
+const access = (folders: ReadonlyArray<string>, readGitHub?: PolicyDecision, githubCharm = true): ToolAccess => ({
   policy: {
     preset: "balanced",
     sharedFolders: [project],
-    hob: { ...EMPTY_HOB_POLICY, overrides: readGitHub === undefined ? {} : { "read-github": readGitHub } },
+    hob: {
+      ...EMPTY_HOB_POLICY,
+      overrides: readGitHub === undefined ? {} : { "read-github": readGitHub },
+      ...(githubCharm ? {} : { githubCharm: false }),
+    },
     dataFolder: path.join(root, "data"),
     restrictions: [],
   },
@@ -96,34 +100,71 @@ const access = (folders: ReadonlyArray<string>, readGitHub?: PolicyDecision): To
   runtimeFolder: path.join(root, "runtimes", "hob"),
 });
 
+const reaches = (repository: GitHubRepository) =>
+  repository.owner === "otaviobarros"
+    ? Effect.void
+    : Effect.fail(new GitHubError({ reason: "not-found", message: "The Hobbots app is not installed there." }));
+
+/** GitHub connected on the hub, or not; the Charm never reads the token itself. */
+const fakeCredential = (connected: boolean) =>
+  Layer.succeed(
+    GitHubCredential,
+    GitHubCredential.of({
+      connected: Effect.succeed(connected),
+      tokenFor: () => Effect.succeed(Redacted.make("token")),
+      refused: () => Effect.succeed(Redacted.make("token")),
+      revoked: () => Effect.void,
+      reaches: (_agentId, repository) => reaches(repository),
+      onRepository: (_agentId, repository, use) => reaches(repository).pipe(Effect.andThen(use)),
+    }),
+  );
+
+const charmLayer = (layers: {
+  readonly remote?: GitHubRepository;
+  readonly asked: Array<string>;
+  readonly failWith?: GitHubError;
+  readonly connected?: boolean;
+}) =>
+  GitHubCharmTools.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        fakeApi(layers.asked, layers.failWith),
+        fakeRemotes({ [project]: layers.remote ?? HOBBOTS, [other]: { owner: "someone", name: "secret" } }),
+        PolicyEngine.node,
+        fakeCredential(layers.connected ?? true),
+      ),
+    ),
+  );
+
+/** The tools a turn starts with when the hob's access is `atStart`, or null when it is offered none. */
+const offered = (layers: { readonly asked: Array<string>; readonly connected?: boolean }, atStart: ToolAccess | null) =>
+  Effect.gen(function* () {
+    return yield* (yield* CharmTools).forTurn({
+      agentId: AgentId.make("hob"),
+      currentAccess: Effect.succeed(atStart),
+      redactor: makeRedactor(),
+    });
+  }).pipe(Effect.provide(charmLayer(layers)), Effect.runPromise);
+
+/** A call on a turn that started with the Charm, made with the hob's access as it is by then. */
 const callWith = (
-  layers: { readonly asked: Array<string>; readonly failWith?: GitHubError },
+  layers: { readonly asked: Array<string>; readonly failWith?: GitHubError; readonly remote?: GitHubRepository },
   current: ToolAccess | null,
   name: string,
   input: unknown,
 ) =>
   Effect.gen(function* () {
     const charms = yield* CharmTools;
-    const tools = charms.forTurn({
+    let now: ToolAccess | null = access([project]);
+    const tools = yield* charms.forTurn({
       agentId: AgentId.make("hob"),
-      currentAccess: Effect.succeed(current),
+      currentAccess: Effect.sync(() => now),
       redactor: makeRedactor(),
     });
+    if (tools === null) throw new Error("The turn was offered no GitHub tools");
+    now = current;
     return { names: tools.tools.map((tool) => tool.name), answer: yield* tools.call(name, input) };
-  }).pipe(
-    Effect.provide(
-      GitHubCharmTools.pipe(
-        Layer.provide(
-          Layer.mergeAll(
-            fakeApi(layers.asked, layers.failWith),
-            fakeRemotes({ [project]: HOBBOTS, [other]: { owner: "someone", name: "secret" } }),
-            PolicyEngine.node,
-          ),
-        ),
-      ),
-    ),
-    Effect.runPromise,
-  );
+  }).pipe(Effect.provide(charmLayer(layers)), Effect.runPromise);
 
 describe("GitHub Charm", () => {
   it("[TC-PE-131] reads the repository of the hob's own folder, on the hub", async () => {
@@ -182,6 +223,34 @@ describe("GitHub Charm", () => {
     expect(asked).toEqual([]);
   });
 
+  it("[TC-PE-140] offers its actions only to a hob with the Charm while GitHub is connected", async () => {
+    const asked: Array<string> = [];
+    const on = await offered({ asked }, access([project]));
+    expect(on?.tools.map((tool) => tool.name)).toEqual(["github_repository", "github_search", "github_item"]);
+    expect(await offered({ asked }, access([project], undefined, false))).toBeNull();
+    expect(await offered({ asked, connected: false }, access([project]))).toBeNull();
+    expect(await offered({ asked }, null)).toBeNull();
+    // Taken away during the turn, the Charm refuses the next call.
+    const off = await callWith({ asked }, access([project], undefined, false), "github_repository", {});
+    expect(off.answer).toEqual({
+      refused: true,
+      text: "The GitHub Charm is off for you now, so GitHub cannot be read.",
+    });
+    expect(asked).toEqual([]);
+  });
+
+  it("[TC-GEN-034] asks the credential whether it reaches the repository before reading it", async () => {
+    const asked: Array<string> = [];
+    const elsewhere = await callWith(
+      { asked, remote: { owner: "someone", name: "public" } },
+      access([project]),
+      "github_repository",
+      {},
+    );
+    expect(elsewhere.answer).toEqual({ refused: true, text: "The Hobbots app is not installed there." });
+    expect(asked).toEqual([]);
+  });
+
   it("says why GitHub could not be read", async () => {
     const failWith = new GitHubError({ reason: "signed-out", message: "The hub is not signed in to GitHub." });
     const { answer } = await callWith({ asked: [], failWith }, access([project]), "github_repository", {});
@@ -206,6 +275,7 @@ describe("GitHub API", () => {
         );
       }),
     );
+  const hob = AgentId.make("hob");
   const run = <A>(
     status: number,
     body: unknown,
@@ -213,22 +283,37 @@ describe("GitHub API", () => {
     headers: Record<string, string> = {},
   ) => {
     const seen: Array<{ url: string; auth: string | undefined }> = [];
+    const credential: Array<string> = [];
     return Effect.gen(function* () {
       return yield* use(yield* GitHubApi);
     }).pipe(
       Effect.provide(
         GitHubApiLive.pipe(
           Layer.provide(respond(status, body, seen, headers)),
-          Layer.provide(Layer.succeed(GitHubToken, GitHubToken.of({ get: Effect.succeed(Redacted.make(token)) }))),
+          Layer.provide(
+            Layer.succeed(
+              GitHubCredential,
+              GitHubCredential.of({
+                connected: Effect.succeed(true),
+                tokenFor: (agentId) =>
+                  Effect.sync(() => credential.push(`token for ${agentId}`)).pipe(Effect.as(Redacted.make(token))),
+                refused: () =>
+                  Effect.sync(() => credential.push("refused")).pipe(Effect.as(Redacted.make(`${token}2`))),
+                revoked: () => Effect.sync(() => void credential.push("revoked")),
+                reaches: () => Effect.void,
+                onRepository: (_agentId, _repository, use) => use,
+              }),
+            ),
+          ),
         ),
       ),
       Effect.result,
       Effect.runPromise,
-      (result) => result.then((r) => ({ result: r, seen })),
+      (result) => result.then((r) => ({ result: r, seen, credential })),
     );
   };
 
-  it("signs in with the hub's token and counts by GitHub's search", async () => {
+  it("signs in with the hob's credential and counts by GitHub's search", async () => {
     const { result, seen } = await run(
       200,
       {
@@ -238,7 +323,7 @@ describe("GitHub API", () => {
           { number: 2, title: "B", state: "open", user: { login: "o" }, updated_at: "t" },
         ],
       },
-      (api) => api.search("repo:o/r is:pr", 0),
+      (api) => api.search(hob, "repo:o/r is:pr", 0),
     );
     expect(result).toMatchObject({ _tag: "Success", success: { total: 2, items: [] } });
     expect(seen[0]?.auth).toBe(`Bearer ${token}`);
@@ -253,7 +338,7 @@ describe("GitHub API", () => {
           { number: 1, title: "A", state: "closed", user: null, updated_at: "t", pull_request: { merged_at: "m" } },
         ],
       },
-      (api) => api.search("q", 5),
+      (api) => api.search(hob, "q", 5),
     );
     expect(listed.result).toMatchObject({ success: { items: [{ number: 1, state: "merged", author: null }] } });
   });
@@ -273,14 +358,24 @@ describe("GitHub API", () => {
       const { result } = await run(
         status,
         { message: "nope" },
-        (api) => api.repository({ owner: "o", name: "r" }),
+        (api) => api.repository(hob, { owner: "o", name: "r" }),
         headers,
       );
       expect(result).toMatchObject({ _tag: "Failure", failure: { reason } });
       expect(JSON.stringify(result)).not.toContain(token);
     }
-    const { result } = await run(200, { unexpected: true }, (api) => api.repository({ owner: "o", name: "r" }));
+    const { result } = await run(200, { unexpected: true }, (api) => api.repository(hob, { owner: "o", name: "r" }));
     expect(result).toMatchObject({ _tag: "Failure", failure: { reason: "failed" } });
+  });
+
+  it("[TC-PE-141] tries a refused token once more after a refresh, then disconnects", async () => {
+    const { result, seen, credential } = await run(401, { message: "Bad credentials" }, (api) =>
+      api.repository(hob, { owner: "o", name: "r" }),
+    );
+    expect(credential).toEqual(["token for hob", "refused", "revoked"]);
+    expect(seen.map((request) => request.auth)).toEqual([`Bearer ${token}`, `Bearer ${token}2`]);
+    expect(result).toMatchObject({ _tag: "Failure", failure: { reason: "signed-out" } });
+    expect(JSON.stringify(result)).toContain("GitHub is disconnected");
   });
 });
 
