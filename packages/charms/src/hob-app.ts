@@ -55,6 +55,11 @@ export const HOB_APP_CALLBACK_PATH = "/github/hob-app/callback";
 export const HOB_APP_NEW_PATH = "/github/hob-app/new";
 
 /** The hob's app as Settings and the Charms tab show it. */
+export interface HobAppReconnect {
+  readonly reason: "key" | "installation";
+  readonly message: string;
+}
+
 export type HobAppStatus =
   | {
       readonly _tag: "None";
@@ -70,6 +75,7 @@ export type HobAppStatus =
       readonly installUrl: string;
       /** Where the user deletes the app on GitHub, the only place it can be deleted. */
       readonly deleteUrl: string;
+      readonly needsReconnect: HobAppReconnect | null;
     }
   | {
       /**
@@ -262,6 +268,7 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
             bot: hobAppBot(app),
             installUrl: installUrl(app),
             deleteUrl: deleteUrl(app.slug),
+            needsReconnect: null,
           };
         });
 
