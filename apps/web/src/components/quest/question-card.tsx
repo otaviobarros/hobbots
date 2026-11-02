@@ -4,7 +4,7 @@ import { Textarea } from "@hobbots/ui/components/textarea";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
-import { useAnswerQuestion } from "../../api/tasks.ts";
+import { useAnswerQuestion } from "../../api/questions.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { enterSends } from "./enter-sends.ts";
 import { messages } from "./messages.ts";
@@ -60,7 +60,7 @@ export function QuestionCard({
   );
 }
 
-function AnswerForm({ question, askerName }: { question: Question; askerName: string }) {
+export function AnswerForm({ question, askerName }: { question: Question; askerName: string }) {
   const [answer, setAnswer] = useState("");
   const send = useAnswerQuestion();
   const text = answer.trim();

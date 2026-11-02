@@ -10,6 +10,7 @@ import {
   HobLifecycle,
   HobTools,
   type PromptRequest,
+  QuestionService,
   RuntimeAdapter,
   TaskRepository,
 } from "@hobbots/agents";
@@ -20,6 +21,7 @@ import {
   type ApprovalRequest,
   EMPTY_HOB_POLICY,
   type Message,
+  NoteId,
   type Task,
   type TaskTree,
   Thread,
@@ -137,7 +139,7 @@ const makeApp = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) 
       ),
     ),
     Layer.provideMerge(Dispatcher.layer().pipe(Layer.provideMerge(DispatcherHostLive))),
-    Layer.provideMerge(ApprovalService.layer),
+    Layer.provideMerge(Layer.mergeAll(ApprovalService.layer, QuestionService.layer)),
     Layer.provideMerge(Party),
     Layer.provideMerge(
       Layer.mergeAll(
@@ -507,5 +509,186 @@ describe("a party member's authority", () => {
     expect(ran("outline.md")).toBe(true);
     expect(ran("budget.md")).toBe(false);
     expect(ran("notes.md")).toBe(false);
+  }, 20_000);
+});
+
+// Issue #274: a member's question climbs to its nearest lead, who answers it or passes it up; one
+// no lead can answer reaches you, and every answer goes back down to the hob that asked.
+
+/** The questions in the request's tree once `ready` holds for them. */
+const questionsWhen = (ready: (tree: TaskTree) => boolean) =>
+  treeWhen(ready).pipe(Effect.map((tree) => tree.questions));
+
+describe("questions in a party", () => {
+  // covers OR-002, IN-004
+  it("[TC-OR-130] Quill's question reaches Aldric, who answers it himself; it never reaches you and Quill goes on with the answer", async () => {
+    const { run, requests } = setUp();
+    const prompt = [
+      "Plan the campaign",
+      hub("delegate_task", {
+        key: "copy",
+        hob: "Quill",
+        brief: [
+          "Draft the copy",
+          hub("ask", { key: "tone", question: "Playful or formal?" }),
+          `fake:then ${hub("complete_task", { key: "copy-done", summary: "Playful copy drafted" })}`,
+        ].join("\n"),
+      }),
+      hub("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
+      // Aldric's next turn is the one Quill's question starts; the one after it, Quill's result.
+      `fake:then ${hub("answer", { key: "reply", question_id: "$tone.question_id", answer: "Playful" })}`,
+      `fake:then fake:then ${hub("complete_task", { key: "wrap", summary: "Campaign planned" })}`,
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    const quill = ownedBy(done, QUILL);
+    expect(quill?.result?.summary).toBe("Playful copy drafted");
+    const [question] = done.questions;
+    expect(question?.askerId).toBe(QUILL);
+    expect(question?.chain).toEqual([]);
+    expect(question?.answeredBy).toEqual({ _tag: "Lead", agentId: ALDRIC });
+    expect(question?.answer).toBe("Playful");
+
+    // Aldric heard the question in a continuation of his chat and was told how to answer it.
+    const all = await run(messagesWhen((each) => continuations(each).length === 2));
+    const [asked] = continuations(all);
+    expect(asked?.content).toContain(`question ${question?.id} about Task ${quill?.id}`);
+    expect(asked?.content).toContain("Playful or formal?");
+    expect(asked?.content).toContain("pass it up with escalate");
+    expect(asked?.content).toContain("answer: Answered");
+    // Quill's next turn went on in his own session with Aldric's answer.
+    const quillPrompts = promptsTo(requests, quill);
+    expect(quillPrompts).toHaveLength(2);
+    expect(quillPrompts[1]?.prompt).toContain('was answered by hob aldric: "Playful"');
+    expect(quillPrompts[1]?.sessionId).not.toBeNull();
+  }, 20_000);
+
+  // covers OR-002, IN-002, IN-004
+  it("[TC-OR-131] Ada's question that Aldric passes up reaches you, and your answer goes back down to her", async () => {
+    const { run, requests } = setUp();
+    const prompt = [
+      "Plan the campaign",
+      hub("delegate_task", {
+        key: "build",
+        hob: "Ada",
+        brief: [
+          "Build the campaign",
+          hub("ask", { key: "date", question: "Dec 12 for international?" }),
+          `fake:then ${hub("complete_task", { key: "build-done", summary: "Built for Dec 12" })}`,
+        ].join("\n"),
+      }),
+      hub("wait_for", { key: "wait", tasks: ["$build.task_id"] }),
+      `fake:then ${hub("escalate", { key: "up", question_id: "$date.question_id" })}`,
+      `fake:then fake:then ${hub("complete_task", { key: "wrap", summary: "Campaign built" })}`,
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+
+    // Aldric passed it up: no lead is left, so it waits for you.
+    const [waiting] = await run(questionsWhen((tree) => tree.questions[0]?.recipientId === null));
+    expect(waiting?.chain).toEqual([ALDRIC]);
+    expect(waiting?.state).toBe("open");
+    // Once Aldric's turn that passed it up ends, nothing in any hob's backpack waits on it: it is yours.
+    await run(
+      retry(
+        Effect.flatMap(
+          Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId: ALDRIC })),
+          (items) =>
+            items.some((item) => item.payload._tag === "question") ? Effect.fail("not yet" as const) : Effect.void,
+        ),
+      ),
+    );
+
+    if (waiting === undefined) throw new Error("no question");
+    await run(QuestionService.use((questions) => questions.answer(waiting.id, "Yes, Dec 12")));
+
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    const ada = ownedBy(done, ADA);
+    expect(ada?.result?.summary).toBe("Built for Dec 12");
+    expect(done.questions[0]?.answeredBy).toEqual({ _tag: "User" });
+    const adaPrompts = promptsTo(requests, ada);
+    expect(adaPrompts).toHaveLength(2);
+    expect(adaPrompts[1]?.prompt).toContain('was answered by the user: "Yes, Dec 12"');
+  }, 20_000);
+});
+
+describe("what reaches a lead", () => {
+  // covers OR-002, IN-004
+  it("[TC-OR-132] your note on Quill's Task reaches Aldric as a message about that Task, once, however often it is sent", async () => {
+    const { run, release } = setUp();
+    const prompt = [
+      "Plan the campaign",
+      hub("delegate_task", { key: "copy", hob: "Quill", brief: ["Draft the copy", HOLD].join("\n") }),
+      hub("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    const started = await run(treeWhen((tree) => ownedBy(tree, QUILL) !== undefined));
+    const quill = ownedBy(started, QUILL);
+    if (quill === undefined) throw new Error("no Task for Quill");
+
+    const key = NoteId.make("note-1");
+    const leave = () => run(QuestionService.use((notes) => notes.leaveNote(quill.id, key, "Keep it short")));
+    const note = await leave();
+    expect(note.recipientId).toBe(ALDRIC);
+    // Sent again, as a client retrying would, it is the same note and goes nowhere twice.
+    expect(await leave()).toEqual(note);
+    const reused = await run(
+      QuestionService.use((notes) => notes.leaveNote(quill.id, key, "Make it long")).pipe(Effect.flip),
+    );
+    expect(reused._tag).toBe("NoteRefused");
+
+    const all = await run(
+      messagesWhen((each) => continuations(each).some((reply) => reply.content.includes("The user left a note"))),
+    );
+    const noted = continuations(all).filter((reply) => reply.content.includes("The user left a note"));
+    expect(noted).toHaveLength(1);
+    expect(noted[0]?.content).toContain(`The user left a note about Task ${quill.id}: Keep it short`);
+    const tree = await run(treeWhen((each) => each.notes.length > 0));
+    expect(tree.notes.map((each) => each.text)).toEqual(["Keep it short"]);
+    // Quill never hears it from you: his session holds nothing of it.
+    const quillItems = await run(Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId: QUILL })));
+    expect(quillItems.filter((item) => item.payload._tag === "message")).toEqual([]);
+    await release();
+  }, 20_000);
+
+  // covers OR-003, IN-005
+  it("[TC-OR-133] Quill's finding wakes Aldric with his routine progress folded in; the progress alone never does", async () => {
+    const { run } = setUp();
+    const progress = (n: number) => hub("report_checkpoint", { key: `p${n}`, kind: "progress", summary: `Draft ${n}` });
+    const prompt = [
+      "Plan the campaign",
+      hub("delegate_task", {
+        key: "copy",
+        hob: "Quill",
+        brief: [
+          "Draft the copy",
+          progress(1),
+          progress(2),
+          progress(3),
+          hub("report_checkpoint", { key: "found", kind: "finding", summary: "The brand voice changed last week" }),
+          hub("complete_task", { key: "copy-done", summary: "Copy drafted" }),
+        ].join("\n"),
+      }),
+      hub("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
+      // The finding and the result may arrive in one continuation or two: Aldric wraps up in whichever has both.
+      `fake:then ${hub("complete_task", { key: "wrap", summary: "Campaign planned" })}`,
+      `fake:then fake:then ${hub("complete_task", { key: "wrap-later", summary: "Campaign planned" })}`,
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+
+    await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    const all = await run(messagesWhen((each) => continuations(each).length >= 1));
+    const woken = continuations(all);
+    // The finding and the result woke Aldric, at most once each; three updates woke him no more.
+    expect(woken.length).toBeGreaterThanOrEqual(1);
+    expect(woken.length).toBeLessThanOrEqual(2);
+    const finding = woken.find((reply) => reply.content.includes("A finding was reported on Task"));
+    expect(finding?.content).toContain("The brand voice changed last week");
+    expect(
+      woken.every((reply) => !reply.content.includes("Work arrived for you while you were not running:\n\nRoutine")),
+    ).toBe(true);
+    // Quill's three updates and the hub's own "started" read as one line of the digest.
+    const told = woken.map((reply) => reply.content).join("\n");
+    expect(told).toContain("sent 4 updates. The latest: Draft 3");
   }, 20_000);
 });

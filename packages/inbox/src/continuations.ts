@@ -1,4 +1,4 @@
-import type { BackpackItem, Task, ThreadId } from "@hobbots/domain";
+import type { BackpackItem, Question, Task, ThreadId } from "@hobbots/domain";
 import { heldUnder } from "./dispatcher.ts";
 
 /**
@@ -51,6 +51,27 @@ const describeApproval = (approval: { readonly label: string; readonly state: st
     approval.state === "approved" ? "" : " That tool call never ran."
   }`;
 
+/**
+ * A question for a lead, with what it can do about it: answer it, or pass it up when only a lead
+ * above it, or the user, can decide (ADR 018).
+ */
+const describeQuestion = (question: Question) =>
+  `Hob ${question.askerId} asks, as question ${question.id} about Task ${question.taskId}: "${question.text}" Answer it with answer if you can; if only someone above you can decide, pass it up with escalate.`;
+
+/** A message: your note on a Task, or a hob's, with the Task it is about. */
+const describeMessage = (item: BackpackItem, message: { readonly senderId: string | null; readonly text: string }) => {
+  const from = message.senderId === null ? "The user left a note" : `Hob ${message.senderId} sent you a message`;
+  return `${from}${item.taskId === null ? "" : ` about Task ${item.taskId}`}: ${message.text}`;
+};
+
+/** Who answered a question, as the hob that asked hears it. */
+const answeredBy = (question: Question) =>
+  question.answeredBy?._tag === "User"
+    ? " by the user"
+    : question.answeredBy?._tag === "Lead"
+      ? ` by hob ${question.answeredBy.agentId}`
+      : "";
+
 /** One item, as the continuation's prompt lists it: what arrived, and from where. */
 const describeArrival = (item: BackpackItem): string => {
   const payload = item.payload;
@@ -62,13 +83,13 @@ const describeArrival = (item: BackpackItem): string => {
     case "checkpoint":
       return `A ${payload.checkpoint.kind} was reported on Task ${payload.checkpoint.taskId}: ${payload.checkpoint.summary}`;
     case "question":
-      return `Question ${payload.question.id} about Task ${payload.question.taskId} waits for your answer: "${payload.question.text}"`;
+      return describeQuestion(payload.question);
     case "answer":
-      return `Your question ${payload.question.id} was answered: "${payload.question.answer ?? ""}"`;
+      return `Your question ${payload.question.id} was answered${answeredBy(payload.question)}: "${payload.question.answer ?? ""}"`;
     case "hand-off":
       return `"${payload.artifact.label}" was handed to Task ${payload.handOff.toTaskId}: ${payload.artifact.value}`;
     case "message":
-      return `${payload.senderId === null ? "The user left a note" : `Hob ${payload.senderId} sent you a message`}: ${payload.text}`;
+      return describeMessage(item, payload);
     case "approval-outcome":
       return describeApproval(payload.approval);
     case "deadline":

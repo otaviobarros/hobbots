@@ -17,3 +17,7 @@ export const formatIn = (value: number, unit: "minute" | "hour", locale?: string
 /** A day in the reader's locale: "Nov 2, 2026". */
 export const formatDay = (iso: string, locale?: string): string =>
   new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(iso));
+
+/** Names joined as a list in the reader's locale: "Quill, Ada and Pip". */
+export const formatList = (items: ReadonlyArray<string>, locale?: string): string =>
+  new Intl.ListFormat(locale, { type: "conjunction" }).format(items);

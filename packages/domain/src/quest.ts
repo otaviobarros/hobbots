@@ -21,6 +21,8 @@ export const QuestionId = Schema.String.pipe(Schema.brand("QuestionId"));
 export type QuestionId = typeof QuestionId.Type;
 export const ArtifactId = Schema.String.pipe(Schema.brand("ArtifactId"));
 export type ArtifactId = typeof ArtifactId.Type;
+export const NoteId = Schema.String.pipe(Schema.brand("NoteId"));
+export type NoteId = typeof NoteId.Type;
 
 /** A Quest ends with the Task it sits on. */
 export const QuestState = Schema.Literals(["active", "completed", "failed", "cancelled"]);
@@ -170,6 +172,21 @@ export class Question extends Schema.Class<Question>("Question")({
   revision: Revision,
 }) {}
 
+/**
+ * A note you left on a Task (ADR 018). You talk only to the lead, so it goes to the Task's nearest
+ * lead as a message about that Task, or to the Task's own owner when nobody leads it. Its id is the
+ * idempotency key of the command that left it, so leaving it again changes nothing.
+ */
+export class TaskNote extends Schema.Class<TaskNote>("TaskNote")({
+  id: NoteId,
+  taskId: TaskId,
+  /** The hob the note goes to. */
+  recipientId: AgentId,
+  text: Schema.String,
+  createdAt: Schema.String,
+  revision: Revision,
+}) {}
+
 export const ArtifactKind = Schema.Literals(["file", "link", "text"]);
 export type ArtifactKind = typeof ArtifactKind.Type;
 
@@ -226,6 +243,7 @@ export const TaskRefusal = Schema.Literals([
   "question-answered",
   "artifact-outside-tree",
   "wait-outside-subtree",
+  "note-key-reused",
 ]);
 export type TaskRefusal = typeof TaskRefusal.Type;
 
@@ -260,6 +278,8 @@ export class TaskTree extends Schema.Class<TaskTree>("TaskTree")({
   questions: Schema.Array(Question),
   artifacts: Schema.Array(ArtifactRef),
   handOffs: Schema.Array(HandOff),
+  /** The notes you left on its Tasks, oldest first. */
+  notes: Schema.Array(TaskNote),
   /** The latest wait of each Task in the tree that has one. */
   waits: Schema.Array(TaskWait),
 }) {}

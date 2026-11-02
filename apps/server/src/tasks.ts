@@ -61,12 +61,20 @@ export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers
   }),
 );
 
-// Your answers to questions that reached you (ADR 018), for user sessions only (PE-006).
+// What you say about a Quest's work (ADR 018), for user sessions only (PE-006): the questions that
+// reached you and your answers, and your notes for a Task's lead.
 export const QuestionsHandlers = HttpApiBuilder.group(HobbotsApi, "questions", (handlers) =>
   Effect.gen(function* () {
     const questions = yield* QuestionService;
+    const journal = yield* EventJournal;
     return handlers.handleAll({
+      list: () =>
+        Effect.gen(function* () {
+          const head = yield* journal.head;
+          return { cursor: formatCursor(head.epoch, head.sequence), questions: yield* questions.listWaiting };
+        }),
       answer: ({ params, payload }) => questions.answer(params.questionId, payload.answer),
+      leaveNote: ({ params, payload }) => questions.leaveNote(params.taskId, payload.key, payload.text),
     });
   }),
 ).pipe(Layer.provide([UserSessionOnlyLive, QuestionService.layer]));

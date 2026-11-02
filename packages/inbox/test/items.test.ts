@@ -9,12 +9,14 @@ import {
   DEFAULT_QUEST_LIMITS,
   HandOff,
   type JournaledEvent,
+  NoteId,
   Quest,
   QuestId,
   Question,
   QuestionId,
   Task,
   TaskId,
+  TaskNote,
   type TaskState,
   ThreadId,
 } from "@hobbots/domain";
@@ -168,6 +170,22 @@ describe("backpackItemsFor", () => {
     expect(items({ _tag: "HandedOff", handOff, artifact })).toEqual([
       { to: QUILL, kind: "hand-off", task: "outline", quest: "q1", key: "hand-off:copy-doc:outline:hand-off" },
     ]);
+  });
+
+  // covers IN-004
+  it("[TC-IN-130] gives your note on a member's Task to the hob it was left for, keyed by the note", () => {
+    const note = new TaskNote({
+      id: NoteId.make("n1"),
+      taskId: copy.id,
+      recipientId: ALDRIC,
+      text: "Keep it short",
+      createdAt: at,
+      revision: 4,
+    });
+    expect(items({ _tag: "NoteLeft", note })).toEqual([
+      { to: ALDRIC, kind: "message", task: "copy", quest: "q1", key: "note:n1:message" },
+    ]);
+    expect(tasksTouched([{ _tag: "NoteLeft", note }])).toEqual(["copy"]);
   });
 
   it("keys an item from a tool call by the call's key and the item's role in it", () => {

@@ -3,6 +3,7 @@ import {
   isTerminalTask,
   type Message,
   type MessageId,
+  noteRecipientOf,
   partyOf,
   type Quest,
   type Question,
@@ -249,11 +250,15 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
     milestones: tree.milestones.filter((each) => each.taskId === task.id).sort((a, b) => a.position - b.position),
     checkpoints: tree.checkpoints.filter((each) => each.taskId === task.id),
     questions: tree.questions.filter((each) => each.taskId === task.id),
+    notes: tree.notes.filter((each) => each.taskId === task.id),
     output: tree.artifacts.filter((each) => each.taskId === task.id),
     given: tree.artifacts.filter((each) => received.has(each.id)),
     rows: workRowsAll(tree, task),
   };
 };
+
+/** The hob a note on the Task goes to, as the hub decides it (ADR 018). */
+export const noteRecipient = (tree: TaskTree, task: Task): AgentId => noteRecipientOf(task, tree.tasks);
 
 /** Every Task right under one, done ones included, for Show all. */
 const workRowsAll = (tree: TaskTree, task: Task): ReadonlyArray<WorkRow> =>

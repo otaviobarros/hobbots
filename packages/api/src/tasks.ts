@@ -1,12 +1,15 @@
 import {
   AgentId,
   MemberWork,
+  NoteId,
   Quest,
   QuestId,
   Question,
   QuestionId,
   ResponsibilityLedger,
+  Task,
   TaskId,
+  TaskNote,
   TaskTree,
   ThreadId,
 } from "@hobbots/domain";
@@ -14,6 +17,7 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import {
   AgentNotFound,
+  NoteRefused,
   QuestionClosed,
   QuestionNotFound,
   QuestNotFound,
@@ -89,22 +93,46 @@ export class TasksGroup extends HttpApiGroup.make("tasks")
   )
   .prefix("/api") {}
 
+/** A question no lead could answer that waits for you, with the Task it asks about. */
+export const WaitingQuestion = Schema.Struct({ question: Question, task: Task });
+export type WaitingQuestion = typeof WaitingQuestion.Type;
+
+/** The questions waiting for you, oldest first, with the cursor as above. */
+export const WaitingQuestionsRead = Schema.Struct({ cursor: Schema.String, questions: Schema.Array(WaitingQuestion) });
+export type WaitingQuestionsRead = typeof WaitingQuestionsRead.Type;
+
 export const AnswerQuestionPayload = Schema.Struct({
   answer: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(4000)),
 });
 export type AnswerQuestionPayload = typeof AnswerQuestionPayload.Type;
 
+export const LeaveNotePayload = Schema.Struct({
+  /** The command's idempotency key, which becomes the note's id: sending it again changes nothing. */
+  key: NoteId.check(Schema.isNonEmpty(), Schema.isMaxLength(100)),
+  text: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(4000)),
+});
+export type LeaveNotePayload = typeof LeaveNotePayload.Type;
+
 /**
- * Your answer to a question that climbed every lead and reached you (ADR 018). It goes back down
- * the same chain to the hob that asked. User sessions only: a hob never answers for you (PE-006).
+ * What you say about a Quest's work (ADR 018). You talk only to the lead: a question that climbed
+ * every lead and reached you is answered here and goes back down the same chain to the hob that
+ * asked, and a note on a member's Task goes to its lead as a message about that Task. User sessions
+ * only: a hob never answers or leaves notes for you (PE-006).
  */
 export class QuestionsGroup extends HttpApiGroup.make("questions")
   .add(
+    HttpApiEndpoint.get("list", "/questions", { success: WaitingQuestionsRead }),
     HttpApiEndpoint.post("answer", "/questions/:questionId/answer", {
       params: { questionId: QuestionId },
       payload: AnswerQuestionPayload,
       success: Question,
       error: [QuestionNotFound, QuestionClosed],
+    }),
+    HttpApiEndpoint.post("leaveNote", "/tasks/:taskId/notes", {
+      params: { taskId: TaskId },
+      payload: LeaveNotePayload,
+      success: TaskNote,
+      error: [TaskNotFound, NoteRefused],
     }),
   )
   .middleware(UserSessionOnly)

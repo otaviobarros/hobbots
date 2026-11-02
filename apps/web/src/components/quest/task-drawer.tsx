@@ -1,12 +1,10 @@
-import type { AgentId, Task, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
+import { type AgentId, isTerminalTask, type Task, type TaskId, type TaskTree, type ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { Textarea } from "@hobbots/ui/components/textarea";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { useSendPrompt } from "../../api/queries.ts";
 import { formatTime } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
-import { enterSends } from "./enter-sends.ts";
 import { messages } from "./messages.ts";
+import { emptyNote, NoteBox, type NoteDraft } from "./note-box.tsx";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
 import { findTask, taskDetail, taskTitle } from "./work-model.ts";
@@ -15,9 +13,9 @@ const copy = messages.drawer;
 
 /**
  * The drawer beside the chat that opens a Task or step (ADR 018): its brief, checkpoints, questions
- * and output, the Tasks under it, and a note that goes to the lead. The Task is in the address, so
- * a link opens it; Escape or Close shuts it. A Task of a Quest pinned from another thread opens here
- * too, and its note still goes to that Quest's lead.
+ * and output, the Tasks under it, and a note that goes to its nearest lead. The Task is in the
+ * address, so a link opens it; Escape or Close shuts it. A Task of a Quest pinned from another
+ * thread opens here too, and its note still goes to that Quest's lead.
  */
 export function TaskDrawer({
   hobId,
@@ -37,7 +35,7 @@ export function TaskDrawer({
   const open = useOpenTask(hobId, threadId);
   const heading = useRef<HTMLHeadingElement>(null);
   // Each Task keeps its own unsent note, so moving between Tasks never sends one about another.
-  const [drafts, setDrafts] = useState<ReadonlyMap<TaskId, string>>(new Map());
+  const [drafts, setDrafts] = useState<ReadonlyMap<TaskId, NoteDraft>>(new Map());
   // Opening another Task moves focus to its title, so a keyboard user lands in the drawer.
   // biome-ignore lint/correctness/useExhaustiveDependencies: each Task opened moves focus again.
   useEffect(() => {
@@ -76,15 +74,15 @@ export function TaskDrawer({
         </span>
       </header>
       {found !== null && <Detail tree={found.tree} task={found.task} hobs={hobs} onOpen={open} />}
-      {found !== null && (
+      {/* Once the work has ended nobody is left to read a note: talk to the lead in the chat. */}
+      {found !== null && !isTerminalTask(found.tree.tasks[0]?.state ?? found.task.state) && (
         <NoteBox
           key={found.task.id}
           tree={found.tree}
           task={found.task}
           hobs={hobs}
-          fallback={threadId}
-          note={drafts.get(found.task.id) ?? ""}
-          setNote={(note) => setDrafts((all) => new Map(all).set(found.task.id, note))}
+          draft={drafts.get(found.task.id) ?? emptyNote()}
+          setDraft={(draft) => setDrafts((all) => new Map(all).set(found.task.id, draft))}
         />
       )}
     </aside>
@@ -188,6 +186,20 @@ function Detail({
           </ul>
         </Section>
       )}
+      {detail.notes.length > 0 && (
+        <Section title={copy.notes}>
+          <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-detail">
+            {detail.notes.map((note) => (
+              <li key={note.id} className="flex flex-col gap-0.5 border-s-2 border-lantern ps-2">
+                <span className="whitespace-pre-wrap">{note.text}</span>
+                <span className="text-xs text-label">
+                  {copy.noteTo({ name: hobs(note.recipientId).name, time: formatTime(note.createdAt) })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
       <Section title={copy.output}>
         {detail.output.length === 0 && task.result === null ? (
           <p className="m-0 text-detail text-label">{copy.noOutput}</p>
@@ -237,58 +249,8 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** A note on a Task goes to the lead as a message about that Task, in the lead's chat (ADR 018). */
-function NoteBox({
-  tree,
-  task,
-  hobs,
-  fallback,
-  note,
-  setNote,
-}: {
-  tree: TaskTree;
-  task: Task;
-  hobs: HobLookup;
-  fallback: ThreadId;
-  note: string;
-  setNote: (note: string) => void;
-}) {
-  const top = tree.tasks[0] ?? task;
-  const lead = hobs(top.ownerId);
-  const send = useSendPrompt(top.threadId ?? fallback);
-  const text = note.trim();
-  const submit = () => {
-    if (text === "" || send.isPending) return;
-    send.mutate(copy.note({ title: taskTitle(task), note: text }), { onSuccess: () => setNote("") });
-  };
-  return (
-    <form
-      className="flex flex-col gap-1.5 border-t-2 border-line px-3.5 pt-2.5 pb-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-    >
-      <span className="flex gap-2">
-        <Textarea
-          aria-label={copy.noteLabel({ name: lead.name })}
-          placeholder={copy.noteLabel({ name: lead.name })}
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          onKeyDown={enterSends(submit)}
-          className="min-h-9 flex-1 rounded-none border-2 border-control bg-deep text-sm text-text"
-        />
-        <Button type="submit" size="sm" disabled={text === "" || send.isPending}>
-          {copy.send}
-        </Button>
-      </span>
-      <span role="status" className="text-xs text-label">
-        {send.isError
-          ? copy.noteFailed
-          : send.isSuccess && note === ""
-            ? copy.sent({ name: lead.name })
-            : copy.noteHint({ name: lead.name })}
-      </span>
-    </form>
-  );
-}
+/**
+ * A note on a Task goes to its nearest lead as a message about that Task (ADR 018), which the lead
+ * reads in its next turn; it shows under Notes once the hub has it. Each note keeps one key while it
+ * is retried, so a lost reply never leaves it twice.
+ */

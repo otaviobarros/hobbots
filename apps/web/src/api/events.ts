@@ -23,6 +23,7 @@ import { setConnection } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { applyQuestWork } from "./quest-work.ts";
+import { questionChanged, workEnded } from "./questions.ts";
 import { applyRemoteAccess } from "./remote-access.ts";
 import {
   newer,
@@ -173,6 +174,18 @@ const applyWorkEvent = (
     case "BackpackItemRecorded":
     case "BackpackItemChanged":
       storeBlocker(queryClient, event.item);
+      return;
+    // A question that reaches you, or leaves you, also changes what waits in your Inbox.
+    case "QuestionAsked":
+    case "QuestionEscalated":
+    case "QuestionAnswered":
+      applyTaskEvent(queryClient, event);
+      questionChanged(queryClient, event.question);
+      return;
+    case "TaskStateChanged":
+    case "TaskCompleted":
+      applyTaskEvent(queryClient, event);
+      workEnded(queryClient, event.task);
       return;
     // The rest change Tasks and Quests (ADR 018).
     default:
