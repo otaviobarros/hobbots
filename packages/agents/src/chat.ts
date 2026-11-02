@@ -240,6 +240,10 @@ export class ChatService extends Context.Service<
       // there, or for the hob to wake, instead of starting again on its own. In memory: a restart
       // delivers it again.
       const holdBack = new Set<ThreadId>();
+      // Busy threads woken meanwhile, as when work arrives for their hob: once the thread is freed,
+      // what waits there is looked at again, so work that arrived after the dispatcher looked waits
+      // no longer than that.
+      const rewake = new Set<ThreadId>();
 
       const findThread = (threadId: ThreadId) =>
         repo.findThread(threadId).pipe(
@@ -781,11 +785,14 @@ export class ChatService extends Context.Service<
             return;
           }
           busy.add(threadId);
+          // The dispatch reads the backpack after this, so it sees whatever a wake until now announced.
+          rewake.delete(threadId);
           yield* Effect.forkIn(carryWork(continuations.value, threadId, found.agent.id), scope);
         });
 
       // Delivers the work waiting in the thread, then frees the thread and starts what waits next.
-      // When no turn ran for it, only a queued message can be waiting, so the wake ends there.
+      // When no turn ran for it and nothing woke the thread meanwhile, only a queued message can be
+      // waiting, so the wake ends there.
       const carryWork = (service: Continuations["Service"], threadId: ThreadId, agentId: AgentId) =>
         Effect.gen(function* () {
           const ran = yield* service
@@ -807,7 +814,8 @@ export class ChatService extends Context.Service<
             agentId,
             Effect.suspend(() => {
               busy.delete(threadId);
-              return ran ? startNext(threadId) : Effect.asVoid(startQueued(threadId));
+              const woken = rewake.delete(threadId);
+              return ran || woken ? startNext(threadId) : Effect.asVoid(startQueued(threadId));
             }),
           );
         });
@@ -870,7 +878,9 @@ export class ChatService extends Context.Service<
                 onSome: (thread) =>
                   admission.withHob(
                     thread.agentId,
-                    Effect.suspend(() => (busy.has(threadId) ? Effect.void : startNext(threadId))),
+                    Effect.suspend(() =>
+                      busy.has(threadId) ? Effect.sync(() => rewake.add(threadId)) : startNext(threadId),
+                    ),
                   ),
               }),
             ),
@@ -894,6 +904,12 @@ export class ChatService extends Context.Service<
           );
         });
 
+      // Whether work you stopped in the thread still waits there, so your next message carries it.
+      const stoppedWorkWaits = (threadId: ThreadId, agentId: AgentId) =>
+        holdBack.has(threadId) && Option.isSome(continuations)
+          ? Effect.map(continuations.value.waiting(agentId), (threadIds) => threadIds.includes(threadId))
+          : Effect.succeed(false);
+
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (threadId: ThreadId, content: string) {
         // The status check and the turn's registration happen under the hob's lock, so a turn is
         // either admitted before a retirement (which then sees and stops it) or refused after it.
@@ -906,12 +922,14 @@ export class ChatService extends Context.Service<
             // already waiting, so the thread's messages start in the order they were sent (CH-008).
             const waits =
               agent.status === "paused" || busy.has(threadId) || Option.isSome(yield* repo.nextQueuedMessage(threadId));
+            // Work you stopped here rides along: the message starts through the dispatcher, under its claims.
+            const carries = !waits && (yield* stoppedWorkWaits(threadId, agent.id));
             const userMessage = new Message({
               id: MessageId.make(crypto.randomUUID()),
               threadId,
               role: "user",
               content,
-              status: waits ? "queued" : "complete",
+              status: waits || carries ? "queued" : "complete",
               error: null,
               configVersion: null,
               createdAt: yield* nowIso,
@@ -919,7 +937,8 @@ export class ChatService extends Context.Service<
             const saved = yield* saveMessage(userMessage);
             // Work you stopped in this thread may start again once this message is answered.
             holdBack.delete(threadId);
-            if (waits) return { userMessage: saved, assistantMessage: null };
+            if (carries) yield* startNext(threadId);
+            if (waits || carries) return { userMessage: saved, assistantMessage: null };
             const begun = yield* beginTurn(thread, agent, saved);
             return { userMessage: saved, assistantMessage: begun?.saved ?? null };
           }),

@@ -2,6 +2,7 @@ import {
   ApprovalRepository,
   ApprovalService,
   ChatService,
+  Continuations,
   HobAdmission,
   HobbotsRepository,
   HobLifecycle,
@@ -74,6 +75,32 @@ const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
     }),
   ).pipe(Layer.provide(FakeRuntimeLayer()));
 
+/** Holds the next dispatch that finds no work before the chat frees its thread, until `proceed`. */
+let emptyDispatch: { readonly reached: Deferred.Deferred<void>; readonly proceed: Deferred.Deferred<void> } | null =
+  null;
+/** Dispatches that have returned so far. */
+let dispatches = 0;
+
+const observed = Layer.effect(
+  Continuations,
+  Effect.gen(function* () {
+    const live = yield* Continuations;
+    return Continuations.of({
+      ...live,
+      deliver: (threadId, agentId, turn) =>
+        live.deliver(threadId, agentId, turn).pipe(
+          Effect.tap((ran) => {
+            dispatches += 1;
+            const gate = emptyDispatch;
+            if (ran || gate === null) return Effect.void;
+            emptyDispatch = null;
+            return Deferred.succeed(gate.reached, undefined).pipe(Effect.andThen(Deferred.await(gate.proceed)));
+          }),
+        ),
+    });
+  }),
+).pipe(Layer.provide(ContinuationsLive));
+
 const NoTools = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succeed(null) }));
 
 /** What the hub's records hold before it starts, as after a restart. */
@@ -82,9 +109,7 @@ type Before = Layer.Layer<never, never, HobbotsRepository | TaskRepository | App
 const makeApp = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>, before: Before) =>
   Layer.mergeAll(WakeOnArrival, HobLifecycle.layer).pipe(
     Layer.provideMerge(ChatService.layer),
-    Layer.provideMerge(
-      ContinuationsLive.pipe(Layer.provideMerge(Dispatcher.layer()), Layer.provideMerge(DispatcherHostLive)),
-    ),
+    Layer.provideMerge(observed.pipe(Layer.provideMerge(Dispatcher.layer()), Layer.provideMerge(DispatcherHostLive))),
     Layer.provideMerge(
       StepRunnerLive().pipe(Layer.provideMerge(TaskTools.layer("/")), Layer.provideMerge(TaskSignal.layer)),
     ),
@@ -113,6 +138,8 @@ let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<App>, Layer.Error<App>>
 
 afterEach(async () => {
   holdContinuations = false;
+  emptyDispatch = null;
+  dispatches = 0;
   await runtime?.dispose();
   runtime = undefined;
 });
@@ -180,6 +207,25 @@ const settledItems = (ids: ReadonlyArray<BackpackItem["id"]>) =>
         : Effect.fail("not yet" as const),
     ),
   );
+
+/** Frodo's Task with one step, which fails: returns the Failure that arrives for Frodo. */
+const failedStep = Effect.gen(function* () {
+  const tasks = yield* TaskRepository;
+  const task = (id: string, parentId: string | null) => ({
+    id: TaskId.make(id),
+    ownerId: FRODO,
+    parentId: parentId === null ? null : TaskId.make(parentId),
+    threadId,
+    brief: `Brief for ${id}`,
+    dependsOn: [],
+    createdAt: now,
+  });
+  yield* tasks.createTask({ task: task("quest", null), delegation: null, milestones: [] });
+  const step = yield* tasks.createTask({ task: task("pass", "quest"), delegation: null, milestones: [] });
+  const failed = yield* tasks.moveTask(step.value.id, step.value.revision, "failed", now);
+  const entry = failed.entries.find((each) => each.payload._tag === "BackpackItemRecorded");
+  return entry?.payload._tag === "BackpackItemRecorded" ? entry.payload.item : undefined;
+});
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
@@ -266,25 +312,7 @@ describe("continuing a hob when work arrives", () => {
     const { run } = setUp();
     await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
     // A step of Frodo's Task fails while he is paused: its Failure is his to read.
-    const failure = await run(
-      Effect.gen(function* () {
-        const tasks = yield* TaskRepository;
-        const task = (id: string, parentId: string | null) => ({
-          id: TaskId.make(id),
-          ownerId: FRODO,
-          parentId: parentId === null ? null : TaskId.make(parentId),
-          threadId,
-          brief: `Brief for ${id}`,
-          dependsOn: [],
-          createdAt: now,
-        });
-        yield* tasks.createTask({ task: task("quest", null), delegation: null, milestones: [] });
-        const step = yield* tasks.createTask({ task: task("pass", "quest"), delegation: null, milestones: [] });
-        const failed = yield* tasks.moveTask(step.value.id, step.value.revision, "failed", now);
-        const entry = failed.entries.find((each) => each.payload._tag === "BackpackItemRecorded");
-        return entry?.payload._tag === "BackpackItemRecorded" ? entry.payload.item : undefined;
-      }),
-    );
+    const failure = await run(failedStep);
     if (failure === undefined) throw new Error("no Failure recorded");
     expect(failure.kind).toBe("failure");
     const id = failure.id;
@@ -379,7 +407,9 @@ describe("continuing a hob when work arrives", () => {
     await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
     await release();
 
-    // Nothing starts again: the work waits, pending, for you.
+    // Nothing starts again: the work waits, pending, for you, and the thread is idle once the
+    // dispatch that the stop ended has returned.
+    await run(retry(Effect.suspend(() => (dispatches > 0 ? Effect.void : Effect.fail("not yet" as const)))));
     await run(Effect.sleep("300 millis"));
     const after = await run(messages());
     expect(after.map((m) => m.status)).toEqual(["complete", "complete", "stopped"]);
@@ -392,7 +422,9 @@ describe("continuing a hob when work arrives", () => {
     expect(waiting?.state).toBe("pending");
 
     // Your next message takes it along, and its turn consumes it: no second continuation starts.
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, "Go on")));
+    const sent = await run(ChatService.use((chat) => chat.sendPrompt(threadId, "Go on")));
+    // It starts through the dispatcher, which puts the work into its turn.
+    expect(sent.assistantMessage).toBeNull();
     const all = await run(messagesWhen((each) => each.length === 5));
     expect(all.map((m) => m.role)).toEqual(["user", "assistant", "assistant", "user", "assistant"]);
     expect(all[4]?.content).toContain("Hobbots adds this, not the user.");
@@ -400,4 +432,26 @@ describe("continuing a hob when work arrives", () => {
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[4]?.id });
     expect(requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"))).toHaveLength(1);
   }, 10_000);
+  // covers IN-004
+  it("[TC-OR-085] work that arrives while a wake finds nothing still starts once the thread is free", async () => {
+    const reached = Deferred.makeUnsafe<void>();
+    const proceed = Deferred.makeUnsafe<void>();
+    emptyDispatch = { reached, proceed };
+    const { run } = setUp();
+    // A wake finds nothing waiting, and the thread is not yet free again.
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(Deferred.await(reached));
+
+    // A step of Frodo's Task fails now: its Failure arrives, and its wake finds the thread busy.
+    const failure = await run(failedStep);
+    if (failure === undefined) throw new Error("no Failure recorded");
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(Deferred.succeed(proceed, undefined));
+
+    // Freed, the thread looks again: the Failure starts its continuation.
+    const all = await run(messagesWhen((each) => each.length === 1));
+    expect(all[0]?.content).toContain("ended as failed.");
+    const [settled] = await run(settledItems([failure.id]));
+    expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
+  });
 });
