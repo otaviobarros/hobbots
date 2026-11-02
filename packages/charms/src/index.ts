@@ -8,6 +8,8 @@ export * from "./github-push.ts";
 export * from "./github-sign-in.ts";
 export * from "./github-writes.ts";
 export * from "./hob-app.ts";
+export * from "./hob-app-tokens.ts";
+export * from "./hob-credential.ts";
 export * from "./keychain.ts";
 export * from "./local-sign-ins.ts";
 export * from "./remotes.ts";

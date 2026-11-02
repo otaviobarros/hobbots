@@ -108,6 +108,18 @@ export interface FakeApp {
 export interface FakeAppInstallation {
   readonly id: number;
   readonly selection: "all" | "selected";
+  /** The repositories a `selected` installation reaches, as `owner/name`. */
+  readonly repositories: Array<string>;
+}
+
+/** An installation token the fake handed out: one app's, for some repositories, with some permissions. */
+export interface FakeInstallationToken {
+  readonly token: string;
+  readonly appId: number;
+  readonly installationId: number;
+  readonly repositories: ReadonlyArray<string>;
+  readonly permissions: Readonly<Record<string, string>>;
+  readonly expiresAt: number;
 }
 
 export interface FakeGitHub {
@@ -138,8 +150,17 @@ export interface FakeGitHub {
   readonly expireAccessTokens: () => void;
   /** The apps made from a manifest, oldest first. */
   readonly apps: ReadonlyArray<FakeApp>;
-  /** Installs an app made from a manifest on the account, as the user would on its installation page. */
-  readonly installApp: (slug: string, selection?: "all" | "selected") => number;
+  /**
+   * Installs an app made from a manifest on the account, as the user would on its installation page:
+   * on every repository of the account, or on the `repositories` given.
+   */
+  readonly installApp: (slug: string, selection?: "all" | "selected", repositories?: ReadonlyArray<string>) => number;
+  /** Every installation token handed out so far, oldest first. */
+  readonly installationTokens: ReadonlyArray<FakeInstallationToken>;
+  /** Stops taking every installation token handed out so far, as when their hour is up. */
+  readonly expireInstallationTokens: () => void;
+  /** How long the installation tokens it hands out from now on last: an hour, as on GitHub, unless a test shortens it. */
+  installationTokenMs: number;
   readonly close: () => Promise<void>;
 }
 
@@ -215,6 +236,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
   const codes = new Map<string, { readonly manifest: Record<string, unknown>; readonly expiresAt: number }>();
   let nextAppId = 1_000;
   let nextInstallationId = 50_000;
+  const installationTokens: Array<FakeInstallationToken> = [];
 
   const git = (cwd: string, ...args: Array<string>) =>
     execFileSync("git", args, {
@@ -351,7 +373,40 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     return json(200, pair());
   };
 
-  const repositoryApi = (request: FakeGitHubRequest, repository: Repository, rest: string) => {
+  /** The live installation token that signed a request, with its app; null for one no longer live. */
+  const installationTokenOf = (authorization: string | undefined, password?: string) => {
+    const [kind, value] = (authorization ?? "").split(" ");
+    const token = password ?? (kind === "Bearer" || kind === "token" ? value : undefined);
+    const found = installationTokens.find((each) => each.token === token);
+    if (found === undefined) return undefined;
+    const app = apps.find((each) => each.id === found.appId);
+    const live =
+      found.expiresAt > Date.now() &&
+      app !== undefined &&
+      app.installations.some((installation) => installation.id === found.installationId);
+    return live ? { token: found, app } : null;
+  };
+
+  /** Whether an installation token's permission is at least `level`. */
+  const permits = (token: FakeInstallationToken, name: string, level: "read" | "write") => {
+    const granted = token.permissions[name];
+    return granted === "write" || (level === "read" && granted === "read");
+  };
+
+  /** The permission GitHub asks for each route the fake serves inside a repository. */
+  const permissionFor = (request: FakeGitHubRequest, rest: string, item: FakeItem | undefined) => {
+    const level = request.method === "GET" ? "read" : "write";
+    if (rest === "") return ["metadata", "read"] as const;
+    if (rest.startsWith("/git/")) return ["contents", level] as const;
+    if (rest.startsWith("/pulls")) return ["pull_requests", level] as const;
+    // Comments on a pull request take either permission, as on GitHub.
+    if (item?.pullRequest != null && rest.endsWith("/comments")) return ["issues|pull_requests", level] as const;
+    return ["issues", level] as const;
+  };
+
+  const forbidden = json(403, { message: "Resource not accessible by integration" });
+
+  const repositoryApi = (request: FakeGitHubRequest, repository: Repository, rest: string, actor: string) => {
     const slug = `${repository.owner}/${repository.name}`;
     if (rest === "" && request.method === "GET") {
       return json(200, {
@@ -370,15 +425,15 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       const sha = headOf(slug, branch);
       return sha === null ? notFound : json(200, { ref: `refs/heads/${branch}`, object: { sha, type: "commit" } });
     }
-    if (rest === "/pulls") return pulls(request, repository);
+    if (rest === "/pulls") return pulls(request, repository, actor);
     const issue = /^\/issues\/(\d+)(\/comments)?$/.exec(rest);
     const item = repository.items.find((each) => each.number === Number(issue?.[1]));
     if (issue === null || item === undefined) return notFound;
     if (issue[2] === undefined) return request.method === "GET" ? json(200, itemJson(repository, item)) : notFound;
-    return comments(request, repository, item);
+    return comments(request, repository, item, actor);
   };
 
-  const pulls = (request: FakeGitHubRequest, repository: Repository) => {
+  const pulls = (request: FakeGitHubRequest, repository: Repository, actor: string) => {
     const slug = `${repository.owner}/${repository.name}`;
     if (request.method === "POST") {
       const body = parseBody(request);
@@ -393,6 +448,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       const added = addItem(repository, {
         title: String(body.title ?? ""),
         body: String(body.body ?? ""),
+        author: actor,
         pullRequest: { head, base },
       });
       Object.assign(added.pullRequest ?? {}, { draft: body.draft === true });
@@ -413,11 +469,11 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     );
   };
 
-  const comments = (request: FakeGitHubRequest, repository: Repository, item: FakeItem) => {
+  const comments = (request: FakeGitHubRequest, repository: Repository, item: FakeItem, actor: string) => {
     if (request.method === "POST") {
       const comment: FakeComment = {
         id: 1000 * item.number + item.comments.length + 1,
-        author: login,
+        author: actor,
         body: String(parseBody(request).body ?? ""),
         createdAt: now(),
       };
@@ -585,6 +641,8 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
         page(request, app.installations).map((installation) => installationJson(app, installation)),
       );
     }
+    const minting = /^\/app\/installations\/(\d+)\/access_tokens$/.exec(request.path);
+    if (minting !== null && request.method === "POST") return accessToken(request, app, Number(minting[1]));
     const one = /^\/app\/installations\/(\d+)$/.exec(request.path);
     if (one !== null && request.method === "DELETE") {
       const at = app.installations.findIndex((installation) => installation.id === Number(one[1]));
@@ -593,6 +651,84 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       return { status: 204 } as const;
     }
     return notFound;
+  };
+
+  /** Whether an installation reaches the repository `slug` of the account. */
+  const covers = (installation: FakeAppInstallation, slug: string) =>
+    repositories.has(slug) &&
+    slug.startsWith(`${login}/`) &&
+    (installation.selection === "all" || installation.repositories.includes(slug));
+
+  /**
+   * An installation token for some of the installation's repositories, with permissions no wider than
+   * the app's: `POST /app/installations/{installation_id}/access_tokens`, valid for one hour.
+   */
+  const accessToken = (request: FakeGitHubRequest, app: FakeApp, installationId: number): FakeGitHubAnswer => {
+    const installation = app.installations.find((each) => each.id === installationId);
+    if (installation === undefined) return notFound;
+    const body = parseBody(request);
+    const names = Array.isArray(body.repositories) ? body.repositories.map(String) : [];
+    const slugs = names.map((name) => `${login}/${name}`);
+    if (slugs.some((slug) => !covers(installation, slug))) {
+      return invalid(
+        "There is at least one repository that does not exist or is not accessible to the parent installation.",
+      );
+    }
+    const asked = (body.permissions ?? {}) as Record<string, string>;
+    const allowed = (app.manifest.default_permissions ?? {}) as Record<string, string>;
+    for (const [name, level] of Object.entries(asked)) {
+      const has = allowed[name];
+      if (has === undefined || (level === "write" && has !== "write")) {
+        return invalid(`The permissions requested are not granted to this installation: ${name}`);
+      }
+    }
+    const token: FakeInstallationToken = {
+      token: newToken("ghs"),
+      appId: app.id,
+      installationId,
+      repositories: slugs,
+      permissions: asked,
+      expiresAt: Date.now() + fake.installationTokenMs,
+    };
+    installationTokens.push(token);
+    issued.push(token.token);
+    return json(201, {
+      token: token.token,
+      expires_at: new Date(token.expiresAt).toISOString().replace(/\.\d{3}Z$/, "Z"),
+      permissions: asked,
+      repository_selection: "selected",
+      repositories: slugs.map((slug) => ({ full_name: slug })),
+    });
+  };
+
+  /** The app's installation for one repository: `GET /repos/{owner}/{repo}/installation`. */
+  const repositoryInstallation = (request: FakeGitHubRequest, slug: string): FakeGitHubAnswer => {
+    const app = appOf(request);
+    if (app === null) return json(401, { message: "A JSON web token could not be decoded" });
+    const installation = app.installations.find((each) => covers(each, slug));
+    return installation === undefined ? notFound : json(200, installationJson(app, installation));
+  };
+
+  /** What an installation token may reach: its repositories, with its permissions, as its app's bot. */
+  const asInstallation = (request: FakeGitHubRequest, token: FakeInstallationToken, app: FakeApp): FakeGitHubAnswer => {
+    const actor = `${app.slug}[bot]`;
+    if (request.path === "/search/issues") {
+      const slug = qualifiers(request.query.get("q") ?? "").find(([name]) => name === "repo")?.[1];
+      if (slug === undefined || !token.repositories.includes(slug))
+        return invalid("The listed repositories cannot be searched.");
+      return permits(token, "issues", "read") || permits(token, "pull_requests", "read") ? search(request) : forbidden;
+    }
+    const repo = /^\/repos\/([^/]+)\/([^/]+)(.*)$/.exec(request.path);
+    if (repo === null) return forbidden;
+    const slug = `${repo[1]}/${repo[2]}`;
+    const repository = repositories.get(slug);
+    if (repository === undefined || !token.repositories.includes(slug)) return notFound;
+    const rest = repo[3] ?? "";
+    const number = /^\/issues\/(\d+)/.exec(rest)?.[1];
+    const item = repository.items.find((each) => each.number === Number(number));
+    const [name, level] = permissionFor(request, rest, item);
+    const allowed = name.split("|").some((each) => each === "metadata" || permits(token, each, level));
+    return allowed ? repositoryApi(request, repository, rest, actor) : forbidden;
   };
 
   /** A bot's public account, which anyone may read. */
@@ -609,6 +745,10 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     if (request.path.startsWith("/app/")) return appApi(request);
     const userPath = /^\/users\/([^/]+)$/.exec(request.path);
     if (userPath !== null && request.method === "GET") return user(userPath[1] ?? "");
+    const installedOn = /^\/repos\/([^/]+)\/([^/]+)\/installation$/.exec(request.path);
+    if (installedOn !== null && request.method === "GET") {
+      return repositoryInstallation(request, `${installedOn[1]}/${installedOn[2]}`);
+    }
     return undefined;
   };
 
@@ -616,6 +756,9 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
   const api = (request: FakeGitHubRequest): FakeGitHubAnswer => {
     const forApp = appRoutes(request);
     if (forApp !== undefined) return forApp;
+    const installation = installationTokenOf(request.authorization);
+    if (installation === null) return json(401, { message: "Bad credentials" });
+    if (installation !== undefined) return asInstallation(request, installation.token, installation.app);
     if (!signedIn(request)) return json(401, { message: "Bad credentials" });
     if (request.path === "/user") return json(200, { login, id: 1, type: "User" });
     if (request.path === "/user/installations") {
@@ -633,10 +776,19 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     const repo = /^\/repos\/([^/]+)\/([^/]+)(.*)$/.exec(request.path);
     const repository = repo === null ? undefined : repositories.get(`${repo[1]}/${repo[2]}`);
     if (repo === null || repository === undefined) return notFound;
-    return repositoryApi(request, repository, repo[3] ?? "");
+    return repositoryApi(request, repository, repo[3] ?? "", login);
   };
 
-  /** Git over HTTP: Basic auth with a live access token as the password, as GitHub takes one. */
+  /** Whether an installation token lets Git read, or push to, the repository the request is for. */
+  const gitAllows = (record: FakeGitHubRequest, password: string) => {
+    const scoped = installationTokenOf(undefined, password);
+    const git = GIT_PATH.exec(record.path);
+    if (scoped == null || git === null || !scoped.token.repositories.includes(`${git[1]}/${git[2]}`)) return false;
+    const pushing = record.path.endsWith("/git-receive-pack") || record.query.get("service") === "git-receive-pack";
+    return permits(scoped.token, "contents", pushing ? "write" : "read");
+  };
+
+  /** Git over HTTP: Basic auth with a live access or installation token as the password, as GitHub takes one. */
   const serveGit = (request: IncomingMessage, response: ServerResponse, body: Buffer, record: FakeGitHubRequest) => {
     const [kind, encoded] = (record.authorization ?? "").split(" ");
     const password =
@@ -647,7 +799,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
             .slice(1)
             .join(":")
         : "";
-    if (!access.has(password)) {
+    if (!access.has(password) && !gitAllows(record, password)) {
       response.writeHead(401, { "WWW-Authenticate": 'Basic realm="GitHub"' }).end();
       return;
     }
@@ -774,12 +926,17 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     secrets: () => [...issued],
     expireAccessTokens: () => access.clear(),
     apps,
-    installApp: (slug, selection = "selected") => {
+    installApp: (slug, selection = "selected", reached = []) => {
       const app = apps.find((each) => each.slug === slug);
       if (app === undefined) throw new Error(`The fake GitHub has no app ${slug}`);
       const id = nextInstallationId++;
-      app.installations.push({ id, selection });
+      app.installations.push({ id, selection, repositories: [...reached] });
       return id;
+    },
+    installationTokens,
+    installationTokenMs: 3_600_000,
+    expireInstallationTokens: () => {
+      for (const [at, token] of installationTokens.entries()) installationTokens[at] = { ...token, expiresAt: 0 };
     },
     close: async () => {},
   };

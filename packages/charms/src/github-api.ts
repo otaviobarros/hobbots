@@ -9,9 +9,9 @@ import {
   repositorySlug,
   stripCommentMarkers,
 } from "@hobbots/domain";
-import { Context, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Context, Effect, Layer, Redacted, Result, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { GitHubCredential } from "./github-account.ts";
+import { type GitHubAction, GitHubCredential, type GitHubTokenScope, refusedTwice } from "./github-account.ts";
 import { GitHubError } from "./github-error.ts";
 import { GITHUB_HOSTS } from "./github-sign-in.ts";
 
@@ -30,8 +30,13 @@ export class GitHubApi extends Context.Service<
       agentId: AgentId,
       repository: GitHubRepository,
     ) => Effect.Effect<GitHubRepositoryInfo, GitHubError>;
-    /** Searches issues and pull requests with a query the hub built (`githubSearchQuery`). */
-    readonly search: (agentId: AgentId, query: string, limit: number) => Effect.Effect<GitHubSearchResult, GitHubError>;
+    /** Searches issues and pull requests in `repository` with a query the hub built (`githubSearchQuery`). */
+    readonly search: (
+      agentId: AgentId,
+      repository: GitHubRepository,
+      query: string,
+      limit: number,
+    ) => Effect.Effect<GitHubSearchResult, GitHubError>;
     readonly item: (
       agentId: AgentId,
       repository: GitHubRepository,
@@ -44,7 +49,7 @@ export class GitHubApi extends Context.Service<
       repository: GitHubRepository,
       branch: string,
     ) => Effect.Effect<string | null, GitHubError>;
-    /** The login the hob's sign-in acts as, which a push card shows. */
+    /** The login the hob's sign-in acts as, which a push card shows: its bot when it has its own app. */
     readonly viewer: (agentId: AgentId) => Effect.Effect<string, GitHubError>;
     /** Pull requests in any state from `head` into `base` of the same repository, newest first (#324). */
     readonly pullRequests: (
@@ -295,26 +300,21 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
 
       const read = <S extends Schema.Constraint>(
         agentId: AgentId,
+        repository: GitHubRepository | null,
         path: string,
         schema: S,
         what: string,
         params: Record<string, string> = {},
       ): Effect.Effect<S["Type"], GitHubError, S["DecodingServices"]> =>
         Effect.gen(function* () {
-          const token = yield* credential.tokenFor(agentId);
+          const scope = scopeOf(repository, "read");
+          const token = yield* credential.tokenFor(agentId, scope);
           let response = yield* send(token, path, params, what);
           // A refused token is refreshed once and the read tried again; refused again, GitHub is disconnected.
           if (response.status === 401) {
             const fresh = yield* credential.refused(agentId, token);
             response = yield* send(fresh, path, params, what);
-            if (response.status === 401) {
-              yield* credential.revoked(fresh);
-              return yield* new GitHubError({
-                reason: "signed-out",
-                message:
-                  "GitHub is disconnected: it no longer accepts the hub's sign-in. Connect GitHub again in Settings › Charms.",
-              });
-            }
+            if (response.status === 401) return yield* Effect.flip(refusedTwice(credential, agentId, scope, fresh));
           }
           if (response.status === 404) {
             return yield* new GitHubError({
@@ -352,6 +352,9 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
             ),
           );
         });
+
+      const scopeOf = (repository: GitHubRepository | null, action: GitHubAction): GitHubTokenScope | undefined =>
+        repository === null ? undefined : { repository, action };
 
       // Each part of a branch name is encoded on its own, so `feat/x` stays a path GitHub reads.
       const refPath = (branch: string) => branch.split("/").map(encodeURIComponent).join("/");
@@ -417,32 +420,35 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
       /** A write with the hob's token, sent once more with a refreshed token when GitHub refused the sign-in. */
       const signedWrite = <S extends Schema.Constraint>(
         agentId: AgentId,
+        scope: GitHubTokenScope,
         path: string,
         body: Record<string, unknown>,
         schema: S,
       ): Effect.Effect<GitHubWrite<S["Type"]>, never, S["DecodingServices"]> =>
         Effect.gen(function* () {
-          const disconnected = {
-            _tag: "NotSent",
-            message:
-              "GitHub is disconnected: it no longer accepts the hub's sign-in. Connect GitHub again in Settings › Charms.",
-          } as const;
-          const token = yield* credential.tokenFor(agentId).pipe(Effect.option);
-          if (Option.isNone(token)) return disconnected;
-          const first = yield* write(token.value, path, body, schema);
+          // Why there is no token, such as a hob's app that needs a reconnect, is what the hob is told.
+          const notSent = (error: GitHubError) => ({ _tag: "NotSent", message: error.message }) as const;
+          const token = yield* credential.tokenFor(agentId, scope).pipe(Effect.result);
+          if (Result.isFailure(token)) return notSent(token.failure);
+          const first = yield* write(token.success, path, body, schema);
           if (first._tag !== "SignedOut") return first;
           // A 401 means GitHub did nothing, so sending once more with a refreshed token cannot send it twice.
-          const fresh = yield* credential.refused(agentId, token.value).pipe(Effect.option);
-          if (Option.isNone(fresh)) return disconnected;
-          const again = yield* write(fresh.value, path, body, schema);
+          const fresh = yield* credential.refused(agentId, token.success).pipe(Effect.result);
+          if (Result.isFailure(fresh)) return notSent(fresh.failure);
+          const again = yield* write(fresh.success, path, body, schema);
           if (again._tag !== "SignedOut") return again;
-          yield* credential.revoked(fresh.value);
-          return disconnected;
+          return notSent(yield* refusedTwice(credential, agentId, scope, fresh.success));
         });
 
       return GitHubApi.of({
         openPullRequest: (agentId, repository, pullRequest) =>
-          signedWrite(agentId, `/repos/${repositorySlug(repository)}/pulls`, { ...pullRequest }, PullRequestJson).pipe(
+          signedWrite(
+            agentId,
+            { repository, action: "open-pull-request" },
+            `/repos/${repositorySlug(repository)}/pulls`,
+            { ...pullRequest },
+            PullRequestJson,
+          ).pipe(
             Effect.map((result) =>
               result._tag === "Done" ? { ...result, value: pullRequestOf(result.value) } : result,
             ),
@@ -450,6 +456,7 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
         comment: (agentId, repository, number, body) =>
           signedWrite(
             agentId,
+            { repository, action: "comment" },
             `/repos/${repositorySlug(repository)}/issues/${number}/comments`,
             { body },
             PostedCommentJson,
@@ -461,6 +468,7 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
         pullRequests: (agentId, repository, head, base) =>
           read(
             agentId,
+            repository,
             `/repos/${repositorySlug(repository)}/pulls`,
             Schema.Array(PullRequestJson),
             `pull requests from ${head} into ${base}`,
@@ -480,6 +488,7 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
             for (let page = 1; page <= COMMENT_PAGES; page++) {
               const list = yield* read(
                 agentId,
+                repository,
                 `/repos/${repositorySlug(repository)}/issues/${number}/comments`,
                 Schema.Array(PostedCommentJson),
                 `the comments on #${number}`,
@@ -493,6 +502,7 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
         branchHead: (agentId, repository, branch) =>
           read(
             agentId,
+            repository,
             `/repos/${repositorySlug(repository)}/git/ref/heads/${refPath(branch)}`,
             RefJson,
             `branch ${branch} in ${repositorySlug(repository)}`,
@@ -504,10 +514,17 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
             ),
           ),
         viewer: (agentId) =>
-          read(agentId, "/user", ViewerJson, "the account the hub signs in as").pipe(Effect.map((json) => json.login)),
+          Effect.gen(function* () {
+            // An app's installation token cannot read `/user`; the hob acts as the app's bot.
+            const bot = yield* credential.bot(agentId);
+            if (bot !== null) return bot;
+            const json = yield* read(agentId, null, "/user", ViewerJson, "the account the hub signs in as");
+            return json.login;
+          }),
         repository: (agentId, repository) =>
           read(
             agentId,
+            repository,
             `/repos/${repositorySlug(repository)}`,
             RepositoryJson,
             `repository ${repositorySlug(repository)}`,
@@ -523,8 +540,8 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
               }),
             ),
           ),
-        search: (agentId, query, limit) =>
-          read(agentId, "/search/issues", SearchJson, "this search", {
+        search: (agentId, repository, query, limit) =>
+          read(agentId, repository, "/search/issues", SearchJson, "this search", {
             q: query,
             sort: "updated",
             order: "desc",
@@ -541,12 +558,13 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
           Effect.gen(function* () {
             const slug = repositorySlug(repository);
             const what = `issue or pull request #${number} in ${slug}`;
-            const json = yield* read(agentId, `/repos/${slug}/issues/${number}`, FullItemJson, what);
+            const json = yield* read(agentId, repository, `/repos/${slug}/issues/${number}`, FullItemJson, what);
             const thread =
               comments === 0 || json.comments === 0
                 ? []
                 : yield* read(
                     agentId,
+                    repository,
                     `/repos/${slug}/issues/${number}/comments`,
                     CommentsJson,
                     `the comments on #${number}`,
