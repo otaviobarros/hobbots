@@ -1,57 +1,7 @@
-import { randomUUID } from "node:crypto";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { expect, test } from "./hub.ts";
+import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
-let hub: Hub | undefined;
-let dataDir = "";
-let folder = "";
-
-test.afterEach(async () => {
-  await hub?.stop();
-  hub = undefined;
-  removeDataDir(dataDir);
-  rmSync(folder, { recursive: true, force: true });
-});
-
-/** A hub past setup with Aldric, who works in a folder of his own beside the hub's data. */
-const aldricHub = async () => {
-  dataDir = emptyDataDir();
-  folder = realpathSync(mkdtempSync(`${dataDir}-aldric-`));
-  writeFileSync(join(folder, "notes.md"), "# Notes\n");
-  hub = await startHub(dataDir);
-  const { url, headers } = hub;
-  const api = async (method: string, path: string, body: unknown) => {
-    const response = await fetch(`${url}/api${path}`, {
-      method,
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
-    return response.json() as Promise<{ readonly id: string }>;
-  };
-  await api("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
-  const aldric = await api("POST", "/agents", {
-    id: randomUUID(),
-    name: "Aldric",
-    role: "assistant",
-    roleTitle: "Assistant",
-    sigil: "assistant",
-    hat: null,
-    tool: null,
-    lookSeed: 4000,
-    lookColor: "amber",
-    runtime: "claude-code",
-    model: null,
-    effort: null,
-    instructions: "",
-  });
-  await api("PATCH", `/agents/${aldric.id}/permissions`, { ownFolders: [folder] });
-  return { url, aldric: aldric.id };
-};
-
-/** A prompt line that makes the fake call a Task tool. */
-const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
+test.afterEach(stopAldricHub);
 
 // covers UX-002, UX-006
 test("[TC-UX-021] a finished Task's Workbench opens on Summary, greys out the Terminal it did not use and goes back to the same chat", async ({
