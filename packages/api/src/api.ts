@@ -42,7 +42,7 @@ import { PermissionsGroup } from "./permissions.ts";
 import { RemoteAccessGroup } from "./remote-access.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
-import { QuestionsGroup, TasksGroup } from "./tasks.ts";
+import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
 import { DeviceSession } from "./user-session.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
@@ -322,6 +322,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(GrantsGroup)
   .add(CharmCallsGroup)
   .add(TasksGroup)
+  .add(TaskControlsGroup)
   .add(QuestionsGroup)
   .add(BackpackGroup)
   .add(BlockersGroup)

@@ -45,6 +45,11 @@ export class TaskTurns extends Context.Service<
     readonly forChat: (turn: ChatTurn) => Effect.Effect<ChatTaskTurn>;
     /** Starts the hob's steps that are ready, as when it wakes. */
     readonly drainAgent: (agentId: AgentId) => Effect.Effect<void>;
+    /**
+     * Looks at the Tasks again: stops the sessions whose cancel was asked for, confirms the cancels
+     * nothing runs in any more, and starts what is ready.
+     */
+    readonly reviewTasks: Effect.Effect<void>;
     /** Stops every step the hob runs and waits until each has ended. */
     readonly interruptAgent: (agentId: AgentId) => Effect.Effect<void>;
     /**

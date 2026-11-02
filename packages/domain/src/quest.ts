@@ -244,6 +244,11 @@ export const TaskRefusal = Schema.Literals([
   "artifact-outside-tree",
   "wait-outside-subtree",
   "note-key-reused",
+  "parent-cancelling",
+  "top-task",
+  "not-delegated",
+  "same-owner",
+  "lineage-owner",
 ]);
 export type TaskRefusal = typeof TaskRefusal.Type;
 
