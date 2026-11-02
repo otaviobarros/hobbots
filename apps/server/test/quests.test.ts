@@ -407,6 +407,9 @@ describe("a retired party member", () => {
 
 /** Quill's Task under a Quest Aldric leads, with an Attempt started from outside a session, as the fake Quest starts its party. */
 const heldMemberTask = Effect.gen(function* () {
+  const lifecycle = yield* HobLifecycle;
+  // Quill sleeps while it is set up, so its runner cannot reach the Task before the Attempt holds it.
+  yield* lifecycle.pause(QUILL);
   const tasks = yield* TaskRepository;
   const bus = yield* EventBus;
   const at = () => new Date().toISOString();
@@ -469,7 +472,9 @@ const heldMemberTask = Effect.gen(function* () {
       milestones: [],
     })
     .pipe(Effect.flatMap(announce));
-  return (yield* attemptOn(task, "held-a-copy")).task;
+  const held = (yield* attemptOn(task, "held-a-copy")).task;
+  yield* lifecycle.wake(QUILL);
+  return held;
 });
 
 const QUILL_SCOPE = { _tag: "Hob", agentId: QUILL } as const;
