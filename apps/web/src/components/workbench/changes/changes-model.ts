@@ -138,18 +138,36 @@ const lineRows = (before: string, after: string): ReadonlyArray<DiffRow & { kind
 };
 
 /**
+ * For each line, whether a change is within `context` lines of it: one pass from each end, each
+ * keeping the distance to the nearest change on its side, so a large file folds in linear time.
+ */
+const nearChanges = (lines: ReadonlyArray<{ readonly kind: DiffRow["kind"] }>, context: number): Array<boolean> => {
+  const near = new Array<boolean>(lines.length).fill(false);
+  let since = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < lines.length; index++) {
+    since = lines[index]?.kind === "same" ? since + 1 : 0;
+    near[index] = since <= context;
+  }
+  let until = Number.POSITIVE_INFINITY;
+  for (let index = lines.length - 1; index >= 0; index--) {
+    until = lines[index]?.kind === "same" ? until + 1 : 0;
+    if (until <= context) near[index] = true;
+  }
+  return near;
+};
+
+/**
  * A line diff of two versions of a text file, with unchanged runs folded to `context` lines around
  * each change. A missing side is empty: an added file is all added lines, a deleted one all
  * removed. A diff that takes too long shows the whole of each side instead.
  */
 export const codeDiff = (before: string | null, after: string | null, context: number = 3): CodeDiff => {
   const lines = lineRows(before ?? "", after ?? "");
-  const changed = lines.flatMap((row, index) => (row.kind === "same" ? [] : [index]));
-  const near = (index: number) => changed.some((at) => Math.abs(at - index) <= context);
+  const near = nearChanges(lines, context);
   const rows: Array<DiffRow> = [];
   let folded = 0;
   for (const [index, row] of lines.entries()) {
-    if (row.kind === "same" && !near(index)) {
+    if (row.kind === "same" && !near[index]) {
       folded += 1;
       continue;
     }
@@ -165,54 +183,61 @@ export const codeDiff = (before: string | null, after: string | null, context: n
   };
 };
 
-/** One top-level block of a Markdown document, marked when the change added or removed it. */
-export interface DocumentBlock {
-  /** Its place among the version's blocks, which names it: two equal paragraphs are two blocks. */
-  readonly key: number;
+/** How a top-level block of a document changed. */
+export type BlockMark = "added" | "removed";
+
+/**
+ * One version of a document with the top-level blocks the change touched, by where each starts in
+ * its text. The whole document is rendered at once, so links, images and footnotes that refer to a
+ * definition elsewhere in it still resolve.
+ */
+export interface MarkedDocument {
   readonly text: string;
-  readonly mark: "same" | "added" | "removed";
+  readonly marks: ReadonlyMap<number, BlockMark>;
 }
 
 const markdown = unified().use(remarkParse).use(remarkGfm);
 
-/** A Markdown document's top-level blocks (headings, paragraphs, lists, tables, code), as their source. */
-export const documentBlocks = (text: string): ReadonlyArray<string> =>
-  markdown
-    .parse(text)
-    .children.flatMap((node) =>
-      node.position?.start.offset === undefined || node.position.end.offset === undefined
-        ? []
-        : [text.slice(node.position.start.offset, node.position.end.offset)],
-    );
+/** A Markdown document's top-level blocks (headings, paragraphs, lists, tables, code), with where each starts. */
+export const documentBlocks = (text: string): ReadonlyArray<{ readonly start: number; readonly text: string }> =>
+  markdown.parse(text).children.flatMap((node) =>
+    node.position?.start.offset === undefined || node.position.end.offset === undefined
+      ? []
+      : [
+          {
+            start: node.position.start.offset,
+            text: text.slice(node.position.start.offset, node.position.end.offset),
+          },
+        ],
+  );
 
 /**
  * Two versions of a document, block by block: the earlier one with the blocks the change removed
- * marked, the later one with those it added. An edited block is one removed and one added.
+ * marked, the later one with those it added. An edited block is one removed and one added. A
+ * version shown alone, as for an added or deleted file, has nothing to be marked against.
  */
 export const documentDiff = (
   before: string | null,
   after: string | null,
-): { readonly before: ReadonlyArray<DocumentBlock>; readonly after: ReadonlyArray<DocumentBlock> } => {
-  const was = before === null ? [] : documentBlocks(before);
-  const now = after === null ? [] : documentBlocks(after);
+): { readonly before: MarkedDocument | null; readonly after: MarkedDocument | null } => {
+  if (before === null || after === null) {
+    const alone = (text: string | null) => (text === null ? null : { text, marks: new Map<number, BlockMark>() });
+    return { before: alone(before), after: alone(after) };
+  }
+  const was = documentBlocks(before);
+  const now = documentBlocks(after);
   const parts = diffArrays([...was], [...now], {
-    comparator: (a, b) => a.trim() === b.trim(),
+    comparator: (a, b) => a.text.trim() === b.text.trim(),
     timeout: DIFF_TIMEOUT_MS,
   }) ?? [
     { value: [...was], added: false, removed: true, count: was.length },
     { value: [...now], added: true, removed: false, count: now.length },
   ];
-  const beforeBlocks: Array<DocumentBlock> = [];
-  const afterBlocks: Array<DocumentBlock> = [];
+  const removed = new Map<number, BlockMark>();
+  const added = new Map<number, BlockMark>();
   for (const part of parts) {
-    for (const text of part.value) {
-      if (part.added) afterBlocks.push({ key: afterBlocks.length, text, mark: "added" });
-      else if (part.removed) beforeBlocks.push({ key: beforeBlocks.length, text, mark: "removed" });
-      else {
-        beforeBlocks.push({ key: beforeBlocks.length, text, mark: "same" });
-        afterBlocks.push({ key: afterBlocks.length, text, mark: "same" });
-      }
-    }
+    if (part.added) for (const block of part.value) added.set(block.start, "added");
+    else if (part.removed) for (const block of part.value) removed.set(block.start, "removed");
   }
-  return { before: beforeBlocks, after: afterBlocks };
+  return { before: { text: before, marks: removed }, after: { text: after, marks: added } };
 };

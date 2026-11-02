@@ -1,4 +1,7 @@
 import { AgentId, AttemptActivity, AttemptId, FileChange, FileChangeId, type FileVersion } from "@hobbots/domain";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
 import { describe, expect, it } from "vitest";
 import { attempt, CAMPAIGN } from "../../../test/quests.ts";
 import {
@@ -14,6 +17,7 @@ import {
   sharedHobs,
   splitPath,
 } from "./changes-model.ts";
+import { remarkMarkChanges } from "./mark-changes.ts";
 
 const AT = "2026-11-01T10:00:00.000Z";
 const done = attempt(CAMPAIGN, "completed");
@@ -148,31 +152,68 @@ describe("a code diff", () => {
     ]);
     expect(codeDiff(before, after, Number.POSITIVE_INFINITY).rows.some((row) => row.kind === "folded")).toBe(false);
   });
+
+  it("folds a large file with many changes in one pass", () => {
+    // 100,000 unchanged lines then 100,000 added ones: a fold that compared every unchanged line
+    // with every change would make ten billion comparisons.
+    const kept = "x\n".repeat(100_000);
+    const diff = codeDiff(kept, `${kept}${"y\n".repeat(100_000)}`);
+    expect(diff).toMatchObject({ added: 100_000, removed: 0 });
+    expect(diff.rows[0]).toEqual({ kind: "folded", lines: 99_997 });
+  });
 });
 
 describe("a document's change", () => {
-  it("splits a document into its top-level blocks as written", () => {
+  it("splits a document into its top-level blocks as written, with where each starts", () => {
     expect(documentBlocks("# Notes\n\nFirst para\nstill first.\n\n- a\n- b\n")).toEqual([
-      "# Notes",
-      "First para\nstill first.",
-      "- a\n- b",
+      { start: 0, text: "# Notes" },
+      { start: 9, text: "First para\nstill first." },
+      { start: 34, text: "- a\n- b" },
     ]);
   });
 
   it("marks the blocks the change removed in the earlier version and those it added in the later one", () => {
-    const diff = documentDiff("# Notes\n\nOld line.\n\nKept.\n", "# Notes\n\nNew line.\n\nKept.\n\nMore.\n");
-    expect(diff.before.map(({ mark, text }) => [mark, text])).toEqual([
-      ["same", "# Notes"],
-      ["removed", "Old line."],
-      ["same", "Kept."],
-    ]);
-    expect(diff.after.map(({ mark, text }) => [mark, text])).toEqual([
-      ["same", "# Notes"],
+    const before = "# Notes\n\nOld line.\n\nKept.\n";
+    const after = "# Notes\n\nNew line.\n\nKept.\n\nMore.\n";
+    const diff = documentDiff(before, after);
+    const marked = (doc: typeof diff.before) =>
+      [...(doc?.marks ?? [])].map(([start, mark]) => [mark, doc?.text.slice(start).split("\n")[0]]);
+    expect(diff.before?.text).toBe(before);
+    expect(marked(diff.before)).toEqual([["removed", "Old line."]]);
+    expect(marked(diff.after)).toEqual([
       ["added", "New line."],
-      ["same", "Kept."],
       ["added", "More."],
     ]);
-    // Two equal blocks are still two, each named by its place.
-    expect(documentDiff(null, "Same.\n\nSame.\n").after.map((block) => block.key)).toEqual([0, 1]);
+  });
+
+  it("marks nothing in a version shown alone", () => {
+    expect(documentDiff(null, "Same.\n\nSame.\n")).toEqual({
+      before: null,
+      after: { text: "Same.\n\nSame.\n", marks: new Map() },
+    });
+  });
+});
+
+describe("marking a document's changed blocks", () => {
+  const parse = (text: string) => unified().use(remarkParse).use(remarkGfm).parse(text);
+  const labels = { added: "Added:", removed: "Removed:" } as const;
+
+  it("wraps each changed block in place, and leaves definitions, which show nothing, unmarked", () => {
+    const text = "See the [guide][g].\n\n[g]: https://example.com\n";
+    const tree = parse(text);
+    remarkMarkChanges(
+      new Map([
+        [0, "added"],
+        [text.indexOf("[g]:"), "added"],
+      ]),
+      labels,
+    )()(tree);
+    expect(tree.children.map((node) => node.type)).toEqual(["changedBlock", "definition"]);
+    const [wrapper] = tree.children as unknown as ReadonlyArray<{
+      data: object;
+      children: ReadonlyArray<{ type: string }>;
+    }>;
+    expect(wrapper?.data).toMatchObject({ hName: "ins" });
+    expect(wrapper?.children.map((node) => node.type)).toEqual(["changeLabel", "paragraph"]);
   });
 });

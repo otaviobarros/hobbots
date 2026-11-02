@@ -40,7 +40,7 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
   page,
 }) => {
   const { url, aldric } = await aldricHub({
-    "notes.md": "# Notes\n\nMessy line.\n\nKept as is.\n",
+    "notes.md": "# Notes\n\nMessy line.\n\nKept as is.\n\n[guide]: https://example.com/guide\n",
     "src/app.ts": 'export const greet = () => "hi";\nexport const count = 1;\n',
     "old.txt": "Nobody reads this.\n",
   });
@@ -49,7 +49,7 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
   // file and deletes another, as a formatter or a script would.
   await playTurn(page, [
     "Tidy the project",
-    'fake:write notes.md "# Notes\\n\\nTidy line.\\n\\nKept as is.\\n"',
+    'fake:write notes.md "# Notes\\n\\nTidy line, as the [guide] says.\\n\\nKept as is.\\n\\n[guide]: https://example.com/guide\\n"',
     run("npm run tidy", {
       "src/app.ts": 'export const greet = () => "hello";\nexport const count = 1;\n',
       "src/new.ts": "export const fresh = true;\n",
@@ -78,11 +78,15 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
   const after = notes.getByRole("region", { name: "After" });
   await expect(before.getByRole("heading", { name: "Notes" })).toBeVisible();
   await expect(before.getByRole("deletion")).toHaveText("Removed:Messy line.");
-  await expect(after.getByRole("insertion")).toHaveText("Added:Tidy line.");
+  await expect(after.getByRole("insertion")).toContainText("Added:Tidy line, as the guide");
+  // Each version renders whole, so a link still finds its definition elsewhere in the document.
+  await expect(after.getByRole("insertion").getByRole("link", { name: /guide/ })).toBeVisible();
   await expect(after).toContainText("Kept as is.");
   // Its source is one click away, as a diff.
   await notes.getByRole("button", { name: "Source" }).click();
-  await expect(notes.getByRole("region", { name: "Changes to notes.md" })).toContainText("Tidy line.");
+  await expect(notes.getByRole("region", { name: "Changes to notes.md" })).toContainText(
+    "Tidy line, as the [guide] says.",
+  );
   await expect(notes).toContainText("1 line added, 1 removed");
 
   // Code is a line diff, numbered on each side.
