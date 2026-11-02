@@ -2,12 +2,12 @@ import { AgentId, type ArtifactRef, isLiveAttempt, type TaskId, ThreadId } from 
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { approvalsQuery } from "../../../api/approvals.ts";
 import { useBackpack } from "../../../api/backpack.ts";
-import { useBlockers } from "../../../api/blockers.ts";
-import { waitingView } from "../../backpack/backpack-model.ts";
+import { useBlockersQuery } from "../../../api/blockers.ts";
+import { bothRead, waitingView } from "../../backpack/backpack-model.ts";
 import { WaitingList } from "../../backpack/waiting-list.tsx";
 import { useNow } from "../../inbox/use-now.ts";
 import { StatusTag } from "../../quest/status-dot.tsx";
@@ -32,6 +32,7 @@ const TONE: Readonly<Record<Mark, RowStatus>> = {
   running: "running",
   next: "waiting",
   cancelled: "waiting",
+  unresolved: "blocked",
 };
 
 /**
@@ -43,14 +44,11 @@ export function SummaryTab({ tree, task, attempt, activity, hobs, onTab }: Workb
   const route = useParams({ strict: false });
   const hobId = AgentId.make(route.hobId ?? "");
   const threadId = ThreadId.make(route.threadId ?? "");
-  const moves = useWorkbenchMoves(hobId, threadId);
   const openWorkbench = useOpenWorkbench(hobId, threadId);
   const openTask = useOpenTask(hobId, threadId);
-  const approvals = useQuery({
-    ...approvalsQuery(task.threadId ?? ("" as ThreadId)),
-    enabled: task.threadId !== null,
-  }).data;
-  const summary = summaryOf(tree, task, attempt, activity, approvals ?? []);
+  const toChat = useTaskChat(tree, hobId, threadId);
+  const reads = useOpenReads(task.threadId);
+  const summary = summaryOf(tree, task, attempt, activity, reads.approvals);
   const owner = hobs(task.ownerId).name;
   const running = attempt !== null && isLiveAttempt(attempt.state);
   return (
@@ -86,7 +84,15 @@ export function SummaryTab({ tree, task, attempt, activity, hobs, onTab }: Workb
         />
       </Section>
       <Section title={copy.open}>
-        <StillOpen summary={summary} tree={tree} task={task} hobs={hobs} onChat={moves.back} onTask={openTask} />
+        <StillOpen
+          summary={summary}
+          tree={tree}
+          task={task}
+          hobs={hobs}
+          reads={reads}
+          onChat={toChat}
+          onTask={openTask}
+        />
       </Section>
       <Section title={copy.result}>
         <Result tree={tree} result={summary.result} attempt={attempt} />
@@ -165,7 +171,9 @@ function Happened({ line, hobs, onOpen }: { line: HappenedLine; hobs: HobLookup;
             ? copy.milestone({ title: line.milestone.title })
             : line.mark === "failed"
               ? copy.endedFailed
-              : copy.endedStopped}
+              : line.mark === "unresolved"
+                ? copy.endedUnresolved
+                : copy.endedStopped}
         {line.kind === "ended" && line.attempt.outcome !== null && (
           <span className="block text-secondary-text">{copy.endedWhy({ why: line.attempt.outcome })}</span>
         )}
@@ -269,11 +277,60 @@ function Artifact({ artifact, onTab }: { artifact: ArtifactRef; onTab: (tab: Wor
  * What is still open: questions and approvals, which you act on in the chat, and what the hobs on
  * this Task are waiting on, with Retry and Dismiss on a stuck item as on its blocker card.
  */
+/** What Still open reads besides the Task's tree: the thread's approvals and every hob's backpack. */
+const useOpenReads = (threadId: ThreadId | null) => {
+  const approvals = useQuery({ ...approvalsQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== null });
+  const backpack = useBackpack();
+  const blockers = useBlockersQuery();
+  // A Task outside any thread has no approvals to read.
+  const approvalStatus = threadId === null ? "success" : approvals.status;
+  return {
+    approvals: approvals.data ?? [],
+    items: backpack.items,
+    blockers: blockers.data ?? [],
+    // Nothing is said to be open, or not, until every read it rests on has answered (STD-UI-008).
+    status: bothRead(bothRead(approvalStatus, backpack.status), blockers.status),
+    retry: () => {
+      if (approvals.isError) void approvals.refetch();
+      if (backpack.status === "error") backpack.retry();
+      if (blockers.isError) void blockers.refetch();
+    },
+  };
+};
+
+/**
+ * Where you act on a question or an approval: the chat of the thread the Task's request came from,
+ * which may not be the one the Workbench opened over when its Quest is pinned from another thread.
+ * Going back to the same thread keeps its place and unsent message; an approval scrolls to its reply.
+ */
+const useTaskChat = (tree: WorkbenchTabProps["tree"], hobId: AgentId, threadId: ThreadId) => {
+  const moves = useWorkbenchMoves(hobId, threadId);
+  const navigate = useNavigate();
+  const top = tree.tasks[0];
+  return (messageId?: string | null) => {
+    if (top === undefined || top.threadId === null || (top.threadId === threadId && top.ownerId === hobId)) {
+      moves.back();
+      return;
+    }
+    void navigate({
+      to: "/hobs/$hobId/threads/$threadId",
+      params: { hobId: top.ownerId, threadId: top.threadId },
+      search: messageId == null ? {} : { message: messageId },
+    });
+  };
+};
+
+/**
+ * What is still open: questions and approvals, which you act on in the chat, and what the hobs on
+ * this Task are waiting on, with Retry and Dismiss on a stuck item as on its blocker card. It says
+ * nothing is open only once every read has answered, and says when one failed.
+ */
 function StillOpen({
   summary,
   tree,
   task,
   hobs,
+  reads,
   onChat,
   onTask,
 }: {
@@ -281,14 +338,15 @@ function StillOpen({
   tree: WorkbenchTabProps["tree"];
   task: WorkbenchTabProps["task"];
   hobs: HobLookup;
-  onChat: () => void;
+  reads: ReturnType<typeof useOpenReads>;
+  onChat: (messageId?: string | null) => void;
   onTask: (taskId: TaskId) => void;
 }) {
   const now = useNow();
-  const waiting = waitingView(useBackpack().items, useBlockers(), subtreeScope(tree, task), now);
+  const waiting = waitingView(reads.items, reads.blockers, subtreeScope(tree, task), now);
   const { questions, approvals } = summary.open;
-  if (questions.length === 0 && approvals.length === 0 && waiting.open.length === 0)
-    return <Empty>{copy.nothingOpen}</Empty>;
+  const none = questions.length === 0 && approvals.length === 0 && waiting.open.length === 0;
+  if (none && reads.status === "success") return <Empty>{copy.nothingOpen}</Empty>;
   return (
     <div className="flex flex-col gap-1.5">
       {(questions.length > 0 || approvals.length > 0) && (
@@ -303,13 +361,18 @@ function StillOpen({
                 }
                 text={question.text}
                 action={question.recipientId === null ? copy.answerInChat : null}
-                onAction={onChat}
+                onAction={() => onChat()}
               />
             </li>
           ))}
           {approvals.map((approval) => (
             <li key={approval.id}>
-              <OpenRow label={copy.approval} text={approval.label} action={copy.decideInChat} onAction={onChat} />
+              <OpenRow
+                label={copy.approval}
+                text={approval.label}
+                action={copy.decideInChat}
+                onAction={() => onChat(approval.messageId)}
+              />
             </li>
           ))}
         </ul>
@@ -323,6 +386,15 @@ function StillOpen({
           onOpen={(item) => item.taskId !== null && onTask(item.taskId)}
           label={copy.waitingList}
         />
+      )}
+      {reads.status === "pending" && <Empty>{copy.readingOpen}</Empty>}
+      {reads.status === "error" && (
+        <p role="alert" className="m-0 flex items-center gap-2 text-detail text-rose">
+          <span className="flex-1">{copy.openUnread}</span>
+          <Button variant="chip" size="xs" onClick={reads.retry}>
+            {copy.tryAgain}
+          </Button>
+        </p>
       )}
     </div>
   );

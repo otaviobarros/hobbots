@@ -22,7 +22,7 @@ import {
  */
 
 /** Where a line of What happened stands. */
-export type Mark = "done" | "failed" | "waiting" | "running" | "next" | "cancelled";
+export type Mark = "done" | "failed" | "waiting" | "running" | "next" | "cancelled" | "unresolved";
 
 export type HappenedLine =
   /** One of the Task's own steps, as "Step 2 of 4", with how many tries it took. */
@@ -108,6 +108,13 @@ const CHECKPOINT_MARK: Readonly<Record<Checkpoint["kind"], Mark>> = {
 
 const ENDED_EARLY: ReadonlySet<Attempt["state"]> = new Set(["failed", "interrupted", "cancelled", "unresolved"]);
 
+/**
+ * How an Attempt that ended early is marked. `unresolved` is a stop Hobbots asked for and could not
+ * confirm (OR-006): whether its session stopped is not known, so it is never shown as stopped.
+ */
+const endedMark = (state: Attempt["state"]): Mark =>
+  state === "failed" ? "failed" : state === "unresolved" ? "unresolved" : "cancelled";
+
 /** A line and the time it goes at; a line with no time yet goes last, in its own order. */
 interface Timed {
   readonly at: string;
@@ -177,7 +184,7 @@ const happenedOf = (tree: TaskTree, task: Task, attempt: Attempt | null): Readon
     if (milestone.reachedAt === null) lines.push({ kind: "milestone", milestone, mark: "next" });
   }
   if (attempt !== null && ENDED_EARLY.has(attempt.state)) {
-    lines.push({ kind: "ended", attempt, mark: attempt.state === "failed" ? "failed" : "cancelled" });
+    lines.push({ kind: "ended", attempt, mark: endedMark(attempt.state) });
   }
   return lines;
 };

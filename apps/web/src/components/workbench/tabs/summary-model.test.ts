@@ -202,6 +202,15 @@ describe("summaryOf", () => {
     expect(lines).toEqual([{ kind: "ended", attempt: failed, mark: "failed" }]);
   });
 
+  it("never calls a stop it could not confirm stopped", () => {
+    const unresolved = attempt(CAMPAIGN, "unresolved");
+    const cancelled = attempt(CAMPAIGN, "cancelled");
+    const ended = (each: Attempt) =>
+      summaryOf(tree({ attempts: [each] }), task(CAMPAIGN), each, null, []).happened.map((line) => line.mark);
+    expect(ended(unresolved)).toEqual(["unresolved"]);
+    expect(ended(cancelled)).toEqual(["cancelled"]);
+  });
+
   it("keeps open questions under the Task and approvals pending in its work", () => {
     const records = blackFriday();
     const campaign = records.tasks[0] ?? task(CAMPAIGN);

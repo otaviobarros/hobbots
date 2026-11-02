@@ -70,6 +70,7 @@ export const messages = {
       running: "Working",
       next: "Next",
       cancelled: "Stopped",
+      unresolved: "Stop not confirmed",
     } satisfies Record<Mark, string>,
     step: ({ index, total, title }: { index: number; total: number; title: string }) =>
       `Step ${formatCount(index)} of ${formatCount(total)}: ${title}`,
@@ -80,6 +81,8 @@ export const messages = {
     milestone: ({ title }: { title: string }) => `Milestone: ${title}`,
     endedFailed: "This attempt failed.",
     endedStopped: "This attempt stopped before it finished.",
+    endedUnresolved:
+      "Hobbots asked this attempt to stop but could not confirm that it did, so its session may still be running.",
     endedWhy: ({ why }: { why: string }) => `Why: ${why}`,
     made: "What it made",
     nothingMade: ({ name }: { name: string }) => `${name} did not make or change anything in this attempt.`,
@@ -102,6 +105,9 @@ export const messages = {
       }),
     open: "Still open",
     nothingOpen: "Nothing is waiting on you or anyone else.",
+    readingOpen: "Reading what is still open…",
+    openUnread: "Hobbots could not read what is still open, so something may still be waiting.",
+    tryAgain: "Try again",
     questionForYou: "A question for you",
     questionFor: ({ name }: { name: string }) => `A question for ${name}`,
     approval: "Waiting for your approval",
