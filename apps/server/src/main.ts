@@ -18,6 +18,7 @@ import {
   GitHubAccountLive,
   GitHubApiNode,
   GitHubCharmTools,
+  GitHubCredentialPerHob,
   GitHubPushSettings,
   GitHubSignInFake,
   GitHubSignInNode,
@@ -172,6 +173,12 @@ const ServerLive = Layer.unwrap(
         ),
       ),
     );
+    // Each hob acts on GitHub as its own app when it has one, as the user's account otherwise (#224).
+    const GitHub = GitHubCredentialPerHob.pipe(
+      Layer.provide(Account),
+      Layer.provideMerge(HobApp),
+      Layer.provide(HobGitHubAppRepository.pipe(Layer.provide(Sqlite))),
+    );
     const charmFolder = join(dataDir, "charms", "github");
     const Charms = GitHubCharmTools.pipe(
       Layer.provide(
@@ -192,7 +199,7 @@ const ServerLive = Layer.unwrap(
           }),
         ),
       ),
-      Layer.provideMerge(Layer.merge(Account, HobApp)),
+      Layer.provideMerge(GitHub),
       Layer.provide(NodeServices.layer),
     );
     // The hub's own path separator, which alone divides the folders a hob may be given (STD-SEC-003).
@@ -241,11 +248,12 @@ const ServerLive = Layer.unwrap(
       )
       // Before the chat service, so turns can ask, and after a restart the requests left pending expire.
       .pipe(Layer.provideMerge(ApprovalService.layer))
-      // Before approvals, so a decision can save grants and every call reads the hob's live ones.
-      .pipe(Layer.provideMerge(GrantService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(Layer.provideMerge(Layer.merge(Charms, CharmCallService.layer)))
+      // Before approvals, so a decision can save grants and every call reads the hob's live ones; before
+      // the hob's own GitHub app, which revokes GitHub grants whenever the hob's identity changes (ADR 022).
+      .pipe(Layer.provideMerge(GrantService.layer))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
       .pipe(Layer.provideMerge(CanonicalSharedFolders))
       .pipe(

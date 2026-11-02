@@ -381,6 +381,57 @@ describe("Standing grants", () => {
     expect(result.live).toEqual([]);
   });
 
+  // covers ADR 022, PE-007
+  it("[TC-GEN-067] saves no grant from a request asked under the hob's other GitHub identity, and the next call asks again", async () => {
+    restrictions = [];
+    const result = await run(
+      Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const grants = yield* GrantService;
+        // A push is asked while the hob acts as its own app; the app is disconnected before you decide,
+        // which revokes the hob's GitHub grants as the hob goes back to your account.
+        const asked = yield* runCommand("git push origin feature");
+        const request = asked.pending as ApprovalRequest;
+        yield* grants.switchGitHub(SCOUT, Effect.void);
+        const always = yield* Effect.flip(
+          approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest, lifetime: "always" }),
+        );
+        const closed = yield* approvals.get(request.id);
+        const done = yield* settled(asked.thread.id);
+        const saved = yield* grants.list({ agentId: SCOUT, all: true });
+        // Approving Once is refused the same way: the call it was asked for never runs as you.
+        const second = yield* runCommand("git push origin feature");
+        const secondRequest = second.pending as ApprovalRequest;
+        yield* grants.switchGitHub(SCOUT, Effect.void);
+        const once = yield* Effect.flip(
+          approvals.decide(secondRequest.id, { decision: "approve", actionDigest: secondRequest.actionDigest }),
+        );
+        yield* settled(second.thread.id);
+        // A request asked after the switch is decided as usual, and its grant is saved.
+        const third = yield* runCommand("git push origin feature");
+        const thirdRequest = third.pending as ApprovalRequest;
+        const approved = yield* approvals.decide(thirdRequest.id, {
+          decision: "approve",
+          actionDigest: thirdRequest.actionDigest,
+          lifetime: "always",
+        });
+        yield* settled(third.thread.id);
+        return { request, always, closed, done, saved, second, once, approved, live: yield* grants.live(SCOUT) };
+      }),
+    );
+
+    expect(result.request.rules).toEqual([{ _tag: "Push", cwd: folder, remote: "origin", branch: "feature" }]);
+    expect(result.always).toMatchObject({ _tag: "ApprovalClosed", state: "expired" });
+    expect(result.closed).toMatchObject({ state: "expired" });
+    expect(result.done.steps.at(-1)).not.toMatchObject({ state: "done" });
+    expect(result.saved).toEqual([]);
+    // The next push as your account asks again.
+    expect(result.second.pending).toBeDefined();
+    expect(result.once).toMatchObject({ _tag: "ApprovalClosed", state: "expired" });
+    expect(result.approved).toMatchObject({ state: "approved", lifetime: "always" });
+    expect(result.live).toHaveLength(1);
+  });
+
   // covers PE-007
   it("[TC-PE-095] revokes every grant of a hob that retires", async () => {
     restrictions = [];

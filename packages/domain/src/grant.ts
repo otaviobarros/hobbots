@@ -18,9 +18,17 @@ export type GrantId = typeof GrantId.Type;
 /**
  * Why a grant stopped applying (ADR 015): the user removed it, a folder it relied on left the hob's
  * folders, its operation was narrowed to Ask or Never, its hob retired, or the top Task it was bound
- * to ended.
+ * to ended, or its hob's GitHub identity changed.
  */
-export const GrantRevokeReason = Schema.Literals(["removed", "folder-removed", "narrowed", "retired", "task-ended"]);
+export const GrantRevokeReason = Schema.Literals([
+  "removed",
+  "folder-removed",
+  "narrowed",
+  "retired",
+  "task-ended",
+  // The hob's GitHub identity changed, to its own app or back to the user's account (ADR 022).
+  "github-identity",
+]);
 export type GrantRevokeReason = typeof GrantRevokeReason.Type;
 
 /** Who made or ended a grant: the user, or the hub on a change that took the authority away. */

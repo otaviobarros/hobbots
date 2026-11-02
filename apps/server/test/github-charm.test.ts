@@ -67,7 +67,7 @@ const FakeGitHub = Layer.succeed(
         url: "https://github.com/octohob/workshop",
         openIssuesAndPullRequests: 3,
       }),
-    search: (_agentId, query) => Effect.succeed({ query, total: 0, items: [] }),
+    search: (_agentId, _repository, query) => Effect.succeed({ query, total: 0, items: [] }),
     item: () => Effect.die("not read in these tests"),
     branchHead: () => Effect.die("not read in these tests"),
     viewer: () => Effect.die("not read in these tests"),

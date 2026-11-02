@@ -22,6 +22,13 @@ export const HobGitHubAppStatus = Schema.Union([
     installUrl: Schema.String,
     /** Where the user deletes the app on GitHub. */
     deleteUrl: Schema.String,
+    /**
+     * Why the app cannot act until the user fixes it, or null. `key`: GitHub refused its key, so the
+     * hob needs a new app. `installation`: GitHub refused its tokens, so it needs reinstalling.
+     */
+    needsReconnect: Schema.NullOr(
+      Schema.Struct({ reason: Schema.Literals(["key", "installation"]), message: Schema.String }),
+    ),
   }),
   // Disconnected or retired but not fully removed: it no longer acts, and disconnecting again dismisses it.
   Schema.TaggedStruct("LeftOver", {
