@@ -1,5 +1,5 @@
 import type { AgentId } from "@hobbots/domain";
-import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 
 /**
@@ -23,15 +23,24 @@ export const hobGitHubAppQuery = (agentId: AgentId, watching = false) =>
     refetchIntervalInBackground: watching,
   });
 
-export const hobGitHubAppInstallationsQuery = (agentId: AgentId, appId: number, watching = false) =>
-  queryOptions({
+/**
+ * Where the hob's app is installed. Reading it can change whether the app needs reconnecting: a key
+ * GitHub refuses, or an app no longer installed anywhere, is marked as the list is read. So each read
+ * reads the app's status again (only the status, or the two would read each other forever).
+ */
+export const useHobGitHubAppInstallations = (agentId: AgentId, appId: number, watching = false) => {
+  const queryClient = useQueryClient();
+  const refreshStatus = () => queryClient.invalidateQueries({ queryKey: hobGitHubAppKey(agentId), exact: true });
+  return useQuery({
     queryKey: [...hobGitHubAppKey(agentId), "installations", appId],
-    queryFn: () => call((c) => c.hobGitHubApp.installations({ params: { agentId } })),
+    queryFn: () =>
+      call((c) => c.hobGitHubApp.installations({ params: { agentId } })).finally(() => void refreshStatus()),
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchInterval: watching ? HOB_APP_WATCH.everyMs : false,
     refetchIntervalInBackground: watching,
   });
+};
 
 /** Opens the hub page that takes the user to GitHub to make the hob's app. */
 export const useStartHobGitHubApp = (agentId: AgentId) =>
