@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from "node:child_process";
 import { generateKeyPairSync, type KeyObject, randomBytes, verify } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -122,6 +122,20 @@ export interface FakeInstallationToken {
   readonly expiresAt: number;
 }
 
+/** A commit the fake made through its Git database API, as GitHub records who made it and its signature. */
+export interface FakeMadeCommit {
+  readonly sha: string;
+  /** The account the request signed in as: the user's login, or an app's bot. */
+  readonly madeBy: string;
+  readonly author: { readonly name: string; readonly email: string };
+  readonly committer: { readonly name: string; readonly email: string };
+  /**
+   * Whether GitHub would sign it and show it Verified: made with no author, committer or signature
+   * of the caller's, so GitHub writes and signs it as the account itself.
+   */
+  readonly verified: boolean;
+}
+
 export interface FakeGitHub {
   /** Where GitHub's web, API and Git are all served. */
   readonly base: string;
@@ -161,6 +175,10 @@ export interface FakeGitHub {
   readonly expireInstallationTokens: () => void;
   /** How long the installation tokens it hands out from now on last: an hour, as on GitHub, unless a test shortens it. */
   installationTokenMs: number;
+  /** What `GET /rate_limit` says is left of the hour's core requests. */
+  rateRemaining: number;
+  /** The commits made through the Git database API, oldest first. */
+  readonly madeCommits: ReadonlyArray<FakeMadeCommit>;
   readonly close: () => Promise<void>;
 }
 
@@ -237,6 +255,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
   let nextAppId = 1_000;
   let nextInstallationId = 50_000;
   const installationTokens: Array<FakeInstallationToken> = [];
+  const madeCommits: Array<FakeMadeCommit> = [];
 
   const git = (cwd: string, ...args: Array<string>) =>
     execFileSync("git", args, {
@@ -244,6 +263,25 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       encoding: "utf8",
       env: { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
     }).trim();
+
+  /** Git with `input` on its standard input and more variables, for writing objects. */
+  const gitWith = (cwd: string, input: Buffer | string, env: Record<string, string>, ...args: Array<string>) =>
+    execFileSync("git", args, {
+      cwd,
+      input,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", ...env },
+    }).trim();
+
+  /** Whether the repository has the object, of the type given. */
+  const hasObject = (path: string, sha: unknown, type: string) => {
+    if (typeof sha !== "string" || !/^[0-9a-f]{40}$/.test(sha)) return false;
+    try {
+      return git(path, "cat-file", "-t", sha) === type;
+    } catch {
+      return false;
+    }
+  };
 
   const headOf = (slug: string, branch: string) => {
     const repository = repositories.get(slug);
@@ -406,7 +444,19 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
 
   const forbidden = json(403, { message: "Resource not accessible by integration" });
 
-  const repositoryApi = (request: FakeGitHubRequest, repository: Repository, rest: string, actor: string) => {
+  /** A repository's endpoints, as `actor`: the Git database API's writes, and the rest. */
+  const repositoryApi = (
+    request: FakeGitHubRequest,
+    repository: Repository,
+    rest: string,
+    actor: string,
+    actorId: number = 1,
+  ) =>
+    request.method === "POST" && rest.startsWith("/git/")
+      ? gitDatabase(request, repository, rest, { login: actor, id: actorId })
+      : repositoryRest(request, repository, rest, actor);
+
+  const repositoryRest = (request: FakeGitHubRequest, repository: Repository, rest: string, actor: string) => {
     const slug = `${repository.owner}/${repository.name}`;
     if (rest === "" && request.method === "GET") {
       return json(200, {
@@ -431,6 +481,107 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     if (issue === null || item === undefined) return notFound;
     if (issue[2] === undefined) return request.method === "GET" ? json(200, itemJson(repository, item)) : notFound;
     return comments(request, repository, item, actor);
+  };
+
+  /**
+   * GitHub's Git database API: blobs, trees from a base tree with nested paths, and commits. A commit
+   * made without an author, committer or signature is written as the signed-in account, at its noreply
+   * address, and counts as signed by GitHub.
+   */
+  const gitDatabase = (
+    request: FakeGitHubRequest,
+    repository: Repository,
+    rest: string,
+    actor: { readonly login: string; readonly id: number },
+  ): FakeGitHubAnswer => {
+    const body = parseBody(request);
+    const path = repository.path;
+    const url = (kind: string, sha: string) =>
+      `https://api.github.com/repos/${repository.owner}/${repository.name}/git/${kind}/${sha}`;
+    if (rest === "/git/blobs") {
+      if (typeof body.content !== "string") return invalid("content is missing");
+      const bytes = Buffer.from(body.content, body.encoding === "base64" ? "base64" : "utf8");
+      const sha = gitWith(path, bytes, {}, "hash-object", "-w", "--stdin");
+      return json(201, { sha, url: url("blobs", sha) });
+    }
+    if (rest === "/git/trees") return tree(body, repository, url);
+    if (rest === "/git/commits") {
+      const parents = Array.isArray(body.parents) ? body.parents : [];
+      if (!hasObject(path, body.tree, "tree")) return invalid("tree is not a valid tree");
+      if (parents.some((parent) => !hasObject(path, parent, "commit"))) return invalid("parents are not all commits");
+      const own = { name: actor.login, email: `${actor.id}+${actor.login}@users.noreply.github.com` };
+      const named = (value: unknown) =>
+        value !== null && typeof value === "object" ? (value as { name: string; email: string }) : null;
+      const author = named(body.author) ?? own;
+      const committer = named(body.committer) ?? author;
+      const sha = gitWith(
+        path,
+        String(body.message ?? ""),
+        {
+          GIT_AUTHOR_NAME: author.name,
+          GIT_AUTHOR_EMAIL: author.email,
+          GIT_COMMITTER_NAME: committer.name,
+          GIT_COMMITTER_EMAIL: committer.email,
+        },
+        "commit-tree",
+        String(body.tree),
+        ...parents.flatMap((parent) => ["-p", String(parent)]),
+      );
+      const verified = body.author === undefined && body.committer === undefined && body.signature === undefined;
+      madeCommits.push({ sha, madeBy: actor.login, author, committer, verified });
+      return json(201, {
+        sha,
+        url: url("commits", sha),
+        tree: { sha: String(body.tree) },
+        parents: parents.map((parent) => ({ sha: String(parent) })),
+        verification: { verified, reason: verified ? "valid" : "unsigned", signature: null, payload: null },
+      });
+    }
+    return notFound;
+  };
+
+  /** A tree from `base_tree` and the entries given, written through a temporary index. */
+  const tree = (
+    body: Record<string, unknown>,
+    repository: Repository,
+    url: (kind: string, sha: string) => string,
+  ): FakeGitHubAnswer => {
+    const path = repository.path;
+    const entries = Array.isArray(body.tree) ? (body.tree as Array<Record<string, unknown>>) : [];
+    if (body.base_tree !== undefined && !hasObject(path, body.base_tree, "tree")) {
+      return invalid("base_tree is not a valid tree");
+    }
+    const env = { GIT_INDEX_FILE: join(options.folder, `index-${randomBytes(8).toString("hex")}`) };
+    try {
+      gitWith(path, "", env, "read-tree", ...(body.base_tree === undefined ? ["--empty"] : [String(body.base_tree)]));
+      const lines: Array<string> = [];
+      for (const entry of entries) {
+        const mode = String(entry.mode ?? "");
+        const name = String(entry.path ?? "");
+        if (entry.type === "tree") return invalid("The fake takes no tree entries.");
+        if (entry.sha === null) {
+          lines.push(`0 ${"0".repeat(40)}\t${name}`);
+          continue;
+        }
+        const sha =
+          typeof entry.content === "string"
+            ? gitWith(path, entry.content, {}, "hash-object", "-w", "--stdin")
+            : String(entry.sha ?? "");
+        if (entry.type === "blob" && !hasObject(path, sha, "blob")) return invalid(`tree.sha ${sha} is not a blob`);
+        lines.push(`${mode} ${sha}\t${name}`);
+      }
+      gitWith(path, lines.map((line) => `${line}\n`).join(""), env, "update-index", "--index-info");
+      const sha = gitWith(path, "", env, "write-tree");
+      return json(201, { sha, url: url("trees", sha), truncated: false });
+    } finally {
+      rmSync(env.GIT_INDEX_FILE, { force: true });
+    }
+  };
+
+  const rateLimit = () => {
+    const reset = Math.floor(Date.now() / 1000) + 3600;
+    const core = { limit: 5000, used: 5000 - fake.rateRemaining, remaining: fake.rateRemaining, reset };
+    return json(200, { resources: { core }, rate: core });
   };
 
   const pulls = (request: FakeGitHubRequest, repository: Repository, actor: string) => {
@@ -717,6 +868,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       const reached = token.repositories.map((slug) => ({ full_name: slug }));
       return json(200, { total_count: reached.length, repositories: page(request, reached) });
     }
+    if (request.path === "/rate_limit") return rateLimit();
     if (request.path === "/search/issues") {
       const slug = qualifiers(request.query.get("q") ?? "").find(([name]) => name === "repo")?.[1];
       if (slug === undefined || !token.repositories.includes(slug))
@@ -741,7 +893,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     const item = repository.items.find((each) => each.number === Number(number));
     const [name, level] = permissionFor(request, rest, item);
     const allowed = name.split("|").some((each) => each === "metadata" || permits(token, each, level));
-    return allowed ? repositoryApi(request, repository, rest, actor) : forbidden;
+    return allowed ? repositoryApi(request, repository, rest, actor, app.botId) : forbidden;
   };
 
   /** A bot's public account, which anyone may read. */
@@ -774,6 +926,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     if (installation !== undefined) return asInstallation(request, installation.token, installation.app);
     if (!signedIn(request)) return json(401, { message: "Bad credentials" });
     if (request.path === "/user") return json(200, { login, id: 1, type: "User" });
+    if (request.path === "/rate_limit") return rateLimit();
     if (request.path === "/user/installations") {
       const installations = installed.size === 0 ? [] : [{ id: 1, account: { login } }];
       return json(200, { total_count: installations.length, installations: page(request, installations) });
@@ -816,7 +969,11 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       response.writeHead(401, { "WWW-Authenticate": 'Basic realm="GitHub"' }).end();
       return;
     }
-    const dropping = fake.drop !== null && requests.length > fake.drop.after && record.method === "POST";
+    const dropping =
+      fake.drop !== null &&
+      requests.length > fake.drop.after &&
+      record.method === "POST" &&
+      record.path.endsWith("/git-receive-pack");
     if (dropping && fake.drop?.when === "before") {
       request.socket.destroy();
       return;
@@ -916,6 +1073,8 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
         git(options.folder, "init", "--quiet", "--bare", `--initial-branch=${defaultBranch}`, path);
       else git(options.folder, "clone", "--quiet", "--bare", repository.from, path);
       git(path, "config", "http.receivepack", "true");
+      // GitHub lets Git fetch a commit by its ID, as the hub does for the commits it made through the API.
+      git(path, "config", "uploadpack.allowAnySHA1InWant", "true");
       repositories.set(slug, {
         owner: repository.owner,
         name: repository.name,
@@ -948,6 +1107,8 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     },
     installationTokens,
     installationTokenMs: 3_600_000,
+    rateRemaining: 5000,
+    madeCommits,
     expireInstallationTokens: () => {
       for (const [at, token] of installationTokens.entries()) installationTokens[at] = { ...token, expiresAt: 0 };
     },

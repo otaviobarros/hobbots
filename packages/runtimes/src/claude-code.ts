@@ -33,6 +33,7 @@ import {
   UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
+  type CommitIdentity,
   policySandbox,
   type RuntimeEnforcement,
   RuntimeHealth,
@@ -45,7 +46,7 @@ import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/p
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
 import { type CallDecision, decideCall, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
-import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox } from "./sandbox.ts";
+import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox, withCommitIdentity } from "./sandbox.ts";
 import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
 import { fullToolOutput } from "./tool-output.ts";
 
@@ -614,7 +615,22 @@ export interface ToolTurn {
   readonly runtimeFolder: string;
   /** The hub tool a `git push` command in a folder is pointed to, when the turn offers one (ADR 020). */
   readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
+  /** The hob's bot, when it has its own GitHub App: its commands commit as it (ADR 022). */
+  readonly commitAs?: CommitIdentity;
 }
+
+/**
+ * The user's signing agent a sandboxed turn's commands may reach, or undefined. The hob signs commits
+ * with the user's 1Password key only when the user turned that on, and never as its own app's bot:
+ * the user's key never vouches for a bot's commits, and GitHub signs them when it pushes (ADR 022).
+ */
+export const turnSigningAgent = (
+  sandboxedTools: ToolTurn | null,
+  agentSocket: () => string | undefined = onePasswordAgentSocket,
+): string | undefined =>
+  sandboxedTools !== null && sandboxedTools.commitAs === undefined && sandboxedTools.context.hob.signCommits === true
+    ? agentSocket()
+    : undefined;
 
 /**
  * The turn's tools, or null for a chat-only turn: no access, no folder that exists, reading the
@@ -648,6 +664,7 @@ export const toolTurn = (
     tools,
     runtimeFolder: access.runtimeFolder,
     ...(hubTools?.steersPush ? { steersPush: hubTools.steersPush } : {}),
+    ...(access.commitAs ? { commitAs: access.commitAs } : {}),
   };
 };
 
@@ -957,9 +974,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               : [userConfigFolder(), request.tools.runtimeFolder];
             yield* Effect.promise(() => adoptSession(target, [source], sessionId));
           }
-          // The hob signs commits with the user's 1Password key only when the user turned that on.
-          const signingAgent =
-            sandboxed && tools.context.hob.signCommits === true ? onePasswordAgentSocket() : undefined;
+          const commitAs = tools?.commitAs;
+          const signingAgent = turnSigningAgent(sandboxed ? tools : null);
           const prepared = sandboxed
             ? yield* Effect.acquireRelease(
                 sandbox.prepare({
@@ -973,6 +989,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   binary: absoluteBinary,
                   runtimeFolder: tools.runtimeFolder,
                   ...(signingAgent ? { signingAgent } : {}),
+                  ...(commitAs ? { commitAs } : {}),
                   allowedHosts: CLAUDE_CODE_MODEL_HOSTS,
                   // The hob's own grants as they are now can answer the preset's Ask for a host (ADR 015).
                   decideHost: (host) =>
@@ -1001,7 +1018,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const spawnClaudeCodeProcess = (options: SpawnOptions) => {
             const { command, args, env } = prepared
               ? prepared.spawnArgs(options.command, options.args, { ...options.env, ...login })
-              : options;
+              : { ...options, env: withCommitIdentity(options.env, commitAs) };
             const spawned = spawn(command, args, {
               cwd: options.cwd,
               env,
