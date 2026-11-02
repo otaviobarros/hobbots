@@ -419,7 +419,7 @@ describe("the GitHub Charm's Push", () => {
         GitPush.of({
           ...real,
           // GitHub has the commit already, so the push only moves the branch.
-          toSend: (staged) => Effect.succeed({ commits: [], tip: staged.commit }),
+          toSend: (staged) => Effect.succeed({ commits: [], tip: staged.commit, workflows: false }),
           push: (staged, target, transport) =>
             Effect.suspend(() => {
               transports.push(transport._tag);

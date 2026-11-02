@@ -1,6 +1,6 @@
 import type { AgentId, GitHubRepository } from "@hobbots/domain";
 import { Data, Effect, Result } from "effect";
-import type { CommitToSend, GitPush, StagedBranch } from "./git-push.ts";
+import type { CommitToSend, GitPush, SendPlan, StagedBranch } from "./git-push.ts";
 import type { GitHubTokenScope } from "./github-account.ts";
 import type { GitHubApi, GitHubWrite } from "./github-api.ts";
 
@@ -13,9 +13,6 @@ import type { GitHubApi, GitHubWrite } from "./github-api.ts";
 
 /** GitHub refuses a file over 100 MB (GitHub's documentation on large files). */
 const GITHUB_FILE_LIMIT = 100 * 1024 * 1024;
-
-/** Where GitHub Actions workflows live; pushing a change there needs the Workflows permission. */
-const WORKFLOWS = ".github/workflows/";
 
 /** What recreating the hob's commits on GitHub came to. */
 export type Recreated =
@@ -31,12 +28,13 @@ export type Recreated =
   /** Stopped midway or before: no branch moved, but objects already made may stay on GitHub. */
   | { readonly _tag: "Unpublished"; readonly message: string };
 
-/** The action a push's token is asked for: with Workflows only when a commit changes a workflow. */
-const pushScope = (repository: GitHubRepository, commits: ReadonlyArray<CommitToSend>): GitHubTokenScope => ({
+/**
+ * The action a push's token is asked for: with Workflows when the branch update changes a workflow,
+ * including on a retry whose commits GitHub already made.
+ */
+const pushScope = (repository: GitHubRepository, plan: SendPlan): GitHubTokenScope => ({
   repository,
-  action: commits.some((commit) => commit.changes.some((change) => change.path.startsWith(WORKFLOWS)))
-    ? "push-workflows"
-    : "push",
+  action: plan.workflows ? "push-workflows" : "push",
 });
 
 /** The requests a push makes: one per file, and a tree and a commit per commit at most. */
@@ -75,7 +73,7 @@ export const recreateOnGitHub = (
     const plan = yield* git
       .toSend(staged, repository, known)
       .pipe(Effect.mapError((error) => unpublished(error.message)));
-    const scope = pushScope(repository, plan.commits);
+    const scope = pushScope(repository, plan);
     if (plan.tip !== null) return { _tag: "Made", tip: plan.tip, sent: [], scope } as const;
 
     const tooBig = plan.commits.flatMap((commit) => commit.changes).find((change) => change.size > GITHUB_FILE_LIMIT);

@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -43,6 +44,7 @@ import {
   GitHubConnection,
   GitHubCredential,
   GitHubCredentialPerHob,
+  GitPush,
   GitPushLive,
   GitRemotes,
   HOB_APP_PERMISSIONS,
@@ -959,7 +961,13 @@ const commitIn = (
 };
 
 /** The GitHub Charm as a hob with its own app sees it, pushing from the hub's staging repository. */
-const pushLayer = (w: World, calls: Array<string>, folder: string, repository: GitHubRepository) =>
+const pushLayer = (
+  w: World,
+  calls: Array<string>,
+  folder: string,
+  repository: GitHubRepository,
+  wrap: (git: GitPush["Service"]) => GitPush["Service"] = (git) => git,
+) =>
   GitHubCharmTools.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -969,8 +977,12 @@ const pushLayer = (w: World, calls: Array<string>, folder: string, repository: G
         ),
         PolicyEngine.node,
         memoryCharmCalls(),
-        GitPushLive({ folder: join(temp, "data", "charms", "github"), httpsBase: github.base }).pipe(
-          Layer.provide(Layer.mergeAll(directSandbox, NodeServices.layer)),
+        Layer.effect(GitPush, Effect.map(GitPush, wrap)).pipe(
+          Layer.provide(
+            GitPushLive({ folder: join(temp, "data", "charms", "github"), httpsBase: github.base }).pipe(
+              Layer.provide(Layer.mergeAll(directSandbox, NodeServices.layer)),
+            ),
+          ),
         ),
       ),
     ),
@@ -1046,7 +1058,32 @@ const runPush = <A, E>(
   folder: string,
   repository: GitHubRepository,
   effect: Effect.Effect<A, E, CharmServices | CharmTools>,
-) => Effect.runPromise(Effect.provide(effect, pushLayer(w, calls, folder, repository)));
+  wrap?: (git: GitPush["Service"]) => GitPush["Service"],
+) => Effect.runPromise(Effect.provide(effect, pushLayer(w, calls, folder, repository, wrap)));
+
+/** The permissions of the installation token each Git push to GitHub since `from` signed in with. */
+const pushTokensSince = (from: number) =>
+  github.requests
+    .slice(from)
+    .filter((request) => request.method === "POST" && request.path.endsWith("/git-receive-pack"))
+    .map((request) => {
+      const password = Buffer.from((request.authorization ?? "").split(" ")[1] ?? "", "base64")
+        .toString("utf8")
+        .split(":")
+        .slice(1)
+        .join(":");
+      return github.installationTokens.find((token) => token.token === password)?.permissions;
+    });
+
+/** The hub's staging repository for a hob's folder, and the refs of its map for `slug` (ADR 022). */
+const stagingFor = (folder: string, slug: string) => {
+  const hash = (text: string) => createHash("sha256").update(text).digest("hex").slice(0, 24);
+  return {
+    staging: join(temp, "data", "charms", "github", "staging", `${hash(folder)}.git`),
+    github: `refs/hobbots/github/${hash(slug)}`,
+    sent: `refs/hobbots/sent/${hash(slug)}`,
+  };
+};
 
 // Each case makes an app, with its RSA key, and runs Git and the hub's staging repository for real.
 const PUSH_TIMEOUT = 30_000;
@@ -1291,6 +1328,93 @@ describe("Push as a hob's own GitHub App", () => {
       expect(outcome.lost).toMatchObject({ refused: false, text: expect.stringContaining("Pushed") });
       expect(outcome.lost.text).toContain(`is ${head?.slice(0, 12)} on GitHub`);
       expect(outcome.again).toMatchObject({ refused: false, text: expect.stringContaining("not sent again") });
+    },
+    PUSH_TIMEOUT,
+  );
+});
+
+describe("Push as a hob's own GitHub App, when a step after GitHub made the commits fails", () => {
+  // covers ADR 022
+  it(
+    "[TC-GEN-097] keeps Workflows when the branch did not move after GitHub made a commit that changes one",
+    async () => {
+      const w = world();
+      const { folder, repository, slug } = pushSetUp("pony-workflow-retry");
+      commitIn(folder, "Add a lint check", { ".github/workflows/lint.yml": "on: push\n" });
+      const asked: Array<ApprovalAction> = [];
+      const fromRequest = github.requests.length;
+      const fromMade = github.madeCommits.length;
+      let pushes = 0;
+      const outcome = await runPush(
+        w,
+        [],
+        folder,
+        repository,
+        Effect.gen(function* () {
+          const app = yield* withApp(FRODO, [slug]);
+          const answer = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
+          return { app, answer };
+        }),
+        // The commit map is saved, then Git cannot reach GitHub once: the branch has not moved.
+        (git) => ({
+          ...git,
+          push: (staged, target, transport) =>
+            ++pushes === 1
+              ? Effect.succeed({ _tag: "NotSent", message: "The hub could not reach GitHub, so nothing was sent." })
+              : git.push(staged, target, transport),
+        }),
+      );
+      expect(outcome.answer.refused).toBe(false);
+      expect(pushes).toBe(2);
+      // GitHub made the commit once; the retry found it in the map and asked for Workflows again.
+      const made = madeSince(fromMade).filter((commit) => commit.madeBy === `${outcome.app.slug}[bot]`);
+      expect(made).toHaveLength(1);
+      expect(github.headOf(slug, "feat/x")).toBe(made[0]?.sha);
+      expect(pushTokensSince(fromRequest)).toEqual([ACTION_PERMISSIONS["push-workflows"]]);
+    },
+    PUSH_TIMEOUT,
+  );
+
+  // covers ADR 022
+  it(
+    "[TC-GEN-098] moves no branch when the hub cannot save which commits GitHub made, and pushes once it can",
+    async () => {
+      const w = world();
+      const { folder, repository, slug } = pushSetUp("pony-map");
+      const local = commitIn(folder, "Add a blanket", { "blanket.txt": "blanket\n" });
+      const map = stagingFor(folder, slug);
+      // A lock left on the map's ref, as a crashed Git would leave it: the hub cannot write the map.
+      gitIn(temp, "init", "--bare", "--quiet", map.staging);
+      const lock = join(map.staging, `${map.github}/${local}.lock`);
+      mkdirSync(dirname(lock), { recursive: true });
+      writeFileSync(lock, "");
+      const asked: Array<ApprovalAction> = [];
+      const outcome = await runPush(
+        w,
+        [],
+        folder,
+        repository,
+        Effect.gen(function* () {
+          yield* withApp(FRODO, [slug]);
+          const failed = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
+          const headAfterFailure = github.headOf(slug, "feat/x");
+          const refsAfterFailure = gitIn(map.staging, "for-each-ref", "--format=%(refname)", "refs/hobbots/");
+          rmSync(lock);
+          const again = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-2" });
+          return { failed, headAfterFailure, refsAfterFailure, again };
+        }),
+      );
+      expect(outcome.failed).toMatchObject({
+        refused: true,
+        text: expect.stringContaining("could not save which commits GitHub made, so no branch was moved"),
+      });
+      expect(outcome.headAfterFailure).toBeNull();
+      // Saving the map is one transaction: neither half of it was written.
+      expect(outcome.refsAfterFailure).toBe("");
+      expect(outcome.again.refused).toBe(false);
+      const head = github.headOf(slug, "feat/x");
+      expect(gitIn(map.staging, "rev-parse", `${map.github}/${local}`)).toBe(head);
+      expect(gitIn(map.staging, "rev-parse", `${map.sent}/${local}`)).toBe(local);
     },
     PUSH_TIMEOUT,
   );

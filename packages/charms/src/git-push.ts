@@ -94,6 +94,11 @@ export interface SendPlan {
   readonly commits: ReadonlyArray<CommitToSend>;
   /** GitHub's commit for the pushed one when nothing is left to make, or null. */
   readonly tip: string | null;
+  /**
+   * Whether the branch update changes a GitHub Actions workflow, counting commits already made on GitHub
+   * by an earlier try, so a retry asks for the same permission as the first one.
+   */
+  readonly workflows: boolean;
 }
 
 /** How fetching GitHub's new commits into the staging repository ended. */
@@ -190,6 +195,9 @@ const REFUSED_LAYOUT: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /** What a hex commit id looks like, so nothing else is passed where Git expects one. */
+/** Where GitHub Actions workflows live; pushing a change there needs the Workflows permission. */
+const WORKFLOWS = ".github/workflows";
+
 const isCommitId = (text: string) => /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/.test(text);
 
 const exists = (path: string) =>
@@ -657,12 +665,31 @@ export const GitPushLive = (config: GitPushConfig) =>
           return listed.map((change) => ({ ...change, size: change.sha === null ? 0 : (sizes.get(change.sha) ?? 0) }));
         });
 
+      /**
+       * Whether any commit between what GitHub has and the pushed one changes a workflow. Commits already
+       * made on GitHub count too: the branch has not moved to them yet, so this push still publishes them.
+       */
+      const changesWorkflows = (staged: StagedBranch, present: ReadonlyArray<string>) =>
+        git([
+          "-C",
+          staged.staging,
+          "rev-list",
+          "--max-count=1",
+          "--full-history",
+          staged.commit,
+          "--not",
+          ...present,
+          "--",
+          WORKFLOWS,
+        ]).pipe(Effect.map((listed) => listed !== ""));
+
       const toSend = (staged: StagedBranch, repository: GitHubRepository, known: ReadonlyArray<string | null>) =>
         Effect.gen(function* () {
           const map = yield* sentMap(staged.staging, repository);
-          const mapped = map.get(staged.commit);
-          if (mapped !== undefined) return { commits: [], tip: mapped };
           const present = yield* presentIn(staged.staging, known);
+          const workflows = yield* changesWorkflows(staged, present);
+          const mapped = map.get(staged.commit);
+          if (mapped !== undefined) return { commits: [], tip: mapped, workflows };
           // Every word is a commit id checked above or a glob of the hub's, so none reads as an option.
           const listed = yield* git([
             "-C",
@@ -677,7 +704,7 @@ export const GitPushLive = (config: GitPushConfig) =>
           ]);
           const order = listed === "" ? [] : listed.split("\n");
           // The pushed commit is one GitHub already has, such as one on its default branch.
-          if (order.length === 0) return { commits: [], tip: staged.commit };
+          if (order.length === 0) return { commits: [], tip: staged.commit, workflows };
           const made = new Set(order);
           const commits: Array<CommitToSend> = [];
           for (const sha of order) {
@@ -699,7 +726,7 @@ export const GitPushLive = (config: GitPushConfig) =>
               changes: yield* changesOf(staged.staging, sha, first),
             });
           }
-          return { commits, tip: null };
+          return { commits, tip: null, workflows };
         }).pipe(
           Effect.mapError((error) =>
             error._tag === "PushRefused"
@@ -766,7 +793,16 @@ export const GitPushLive = (config: GitPushConfig) =>
               `update ${refs.sent}/${local} ${local}\n`,
             ])
             .join("");
-          yield* run(["-C", staged.staging, "update-ref", "--stdin"], { stdin: new TextEncoder().encode(updates) });
+          // One transaction: every ref is written or none is, and the branch moves only once the map is saved.
+          const saved = yield* run(["-C", staged.staging, "update-ref", "--stdin"], {
+            stdin: new TextEncoder().encode(updates),
+          });
+          if (saved.exit !== 0) {
+            return {
+              _tag: "NotSent",
+              message: "The hub could not save which commits GitHub made, so no branch was moved.",
+            } as const;
+          }
           return { _tag: "Fetched" } as const;
         }).pipe(
           Effect.orElseSucceed((): FetchResult => ({ _tag: "NotSent", message: "Git could not run on the hub." })),
