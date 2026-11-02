@@ -169,6 +169,10 @@ export interface FakeGitHub {
    * on every repository of the account, or on the `repositories` given.
    */
   readonly installApp: (slug: string, selection?: "all" | "selected", repositories?: ReadonlyArray<string>) => number;
+  /** Removes every installation of an app made from a manifest, as the user would on GitHub. */
+  readonly uninstallApp: (slug: string) => void;
+  /** Moves GitHub's clock ahead, for what lapses with time: tokens, JWTs and manifest codes. */
+  readonly advance: (ms: number) => void;
   /** Every installation token handed out so far, oldest first. */
   readonly installationTokens: ReadonlyArray<FakeInstallationToken>;
   /** Stops taking every installation token handed out so far, as when their hour is up. */
@@ -256,6 +260,9 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
   let nextInstallationId = 50_000;
   const installationTokens: Array<FakeInstallationToken> = [];
   const madeCommits: Array<FakeMadeCommit> = [];
+  // GitHub's own time, which a test moves ahead to stand in for time passing.
+  let ahead = 0;
+  const clock = () => Date.now() + ahead;
 
   const git = (cwd: string, ...args: Array<string>) =>
     execFileSync("git", args, {
@@ -309,7 +316,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     };
   };
 
-  const now = () => new Date().toISOString();
+  const now = () => new Date(clock()).toISOString();
 
   const itemJson = (repository: Repository, item: FakeItem) => ({
     number: item.number,
@@ -419,7 +426,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     if (found === undefined) return undefined;
     const app = apps.find((each) => each.id === found.appId);
     const live =
-      found.expiresAt > Date.now() &&
+      found.expiresAt > clock() &&
       app !== undefined &&
       app.installations.some((installation) => installation.id === found.installationId);
     return live ? { token: found, app } : null;
@@ -579,7 +586,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
   };
 
   const rateLimit = () => {
-    const reset = Math.floor(Date.now() / 1000) + 3600;
+    const reset = Math.floor(clock() / 1000) + 3600;
     const core = { limit: 5000, used: 5000 - fake.rateRemaining, remaining: fake.rateRemaining, reset };
     return json(200, { resources: { core }, rate: core });
   };
@@ -676,7 +683,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       return invalid("A manifest needs a url and a redirect_url.");
     }
     const code = randomBytes(20).toString("hex");
-    codes.set(code, { manifest, expiresAt: Date.now() + 3_600_000 });
+    codes.set(code, { manifest, expiresAt: clock() + 3_600_000 });
     const redirect = new URL(manifest.redirect_url);
     redirect.searchParams.set("code", code);
     const state = request.query.get("state");
@@ -688,7 +695,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
   const conversion = (code: string) => {
     const pending = codes.get(code);
     codes.delete(code);
-    if (pending === undefined || pending.expiresAt <= Date.now()) return notFound;
+    if (pending === undefined || pending.expiresAt <= clock()) return notFound;
     const name = String(pending.manifest.name ?? "app");
     // App names are unique on GitHub: a taken one is renamed, as the user would on the page.
     const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -752,7 +759,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
 
   /** Not expired, not issued in the future, and lasting at most ten minutes, with a minute's drift. */
   const inTime = (iat: number | undefined, exp: number | undefined) => {
-    const seconds = Date.now() / 1000;
+    const seconds = clock() / 1000;
     return iat !== undefined && exp !== undefined && exp > seconds && iat <= seconds + 60 && exp - iat <= 660;
   };
 
@@ -841,7 +848,7 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       installationId,
       repositories: slugs,
       permissions: asked,
-      expiresAt: Date.now() + fake.installationTokenMs,
+      expiresAt: clock() + fake.installationTokenMs,
     };
     installationTokens.push(token);
     issued.push(token.token);
@@ -1104,6 +1111,14 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       const id = nextInstallationId++;
       app.installations.push({ id, selection, repositories: [...reached] });
       return id;
+    },
+    uninstallApp: (slug) => {
+      const app = apps.find((each) => each.slug === slug);
+      if (app === undefined) throw new Error(`The fake GitHub has no app ${slug}`);
+      app.installations.splice(0);
+    },
+    advance: (ms) => {
+      ahead += ms;
     },
     installationTokens,
     installationTokenMs: 3_600_000,
