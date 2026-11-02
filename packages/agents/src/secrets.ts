@@ -44,8 +44,18 @@ export const redactEvent = (event: RuntimeEvent, redactor: Redactor): RuntimeEve
     case "StepStarted":
       return { ...event, label: redactor.text(event.label) };
     case "ToolStarted":
+      return {
+        ...event,
+        label: redactor.text(event.label),
+        targets: redactor.value(event.targets),
+        ...(event.command === undefined
+          ? {}
+          : { command: { ...event.command, line: redactor.text(event.command.line) } }),
+      };
     case "ToolAwaitingApproval":
       return { ...event, label: redactor.text(event.label), targets: redactor.value(event.targets) };
+    case "ToolOutput":
+      return { ...event, text: redactor.text(event.text) };
     case "ToolDenied":
       return {
         ...event,

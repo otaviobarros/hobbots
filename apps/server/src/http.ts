@@ -35,6 +35,7 @@ import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
 import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
 import { DeviceSessionLive } from "./user-session.ts";
+import { WorkbenchHandlers } from "./workbench.ts";
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
 const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
@@ -213,6 +214,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     BlockersHandlers,
     GitHubHandlers,
     HobGitHubAppHandlers,
+    WorkbenchHandlers,
     RemoteAccessHandlers,
   ]),
   Layer.provide(DeviceSessionLive),

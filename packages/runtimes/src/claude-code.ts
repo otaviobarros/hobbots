@@ -47,7 +47,7 @@ import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect"
 import { type CallDecision, decideCall, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox, withCommitIdentity } from "./sandbox.ts";
-import { offeredTools, toolLabel } from "./tool-calls.ts";
+import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
 import { fullToolOutput } from "./tool-output.ts";
 
 export interface ClaudeCodeConfig {
@@ -691,6 +691,13 @@ export const policyHooks = (
   const seen = new Map<string, ToolCall>();
   // Answers whether the call may run: it is recorded first when the turn records calls (EX-004).
   const begin = async (id: string, tool: string, input: Record<string, unknown>, verdict: PolicyVerdict) => {
+    // A command's folder is the one its call was decided on.
+    const command = commandOf(
+      tool,
+      input,
+      verdict.targets[0] ?? (turn.folders[0] as string),
+      turn.context.sandbox === "on",
+    );
     const event = {
       _tag: "ToolStarted",
       id,
@@ -698,6 +705,7 @@ export const policyHooks = (
       operation: verdict.operation,
       targets: verdict.targets,
       label: label(tool, input),
+      ...(command === undefined ? {} : { command }),
     } as const;
     const recorded = await Effect.runPromise(startCall(record, report, event));
     if (recorded) started.add(id);

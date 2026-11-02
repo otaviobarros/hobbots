@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open } from "node:fs/promises";
+import { mkdir, open } from "node:fs/promises";
 import { join } from "node:path";
 import { type ToolLogKey, ToolLogs, ToolLogUnavailable } from "@hobbots/agents";
+import { ownFile, realFolder } from "@hobbots/workbench";
 import { Effect, Layer, Option } from "effect";
 
 /**
@@ -11,19 +12,6 @@ import { Effect, Layer, Option } from "effect";
  */
 const logFile = (folder: string, key: ToolLogKey) =>
   join(folder, `${createHash("sha256").update(`${key.threadId}\0${key.messageId}\0${key.stepId}`).digest("hex")}.log`);
-
-/**
- * Whether an open file can be the hub's own log: a regular file with one name, owned by the hub's
- * user. A link, a device or a file another user planted is never read or written.
- */
-const ownFile = (stats: { isFile(): boolean; nlink: number; uid: number }) =>
-  stats.isFile() && stats.nlink === 1 && (process.getuid === undefined || stats.uid === process.getuid());
-
-/** The folder itself, never a link to somewhere else. */
-const realFolder = async (folder: string) => {
-  const stats = await lstat(folder);
-  return stats.isDirectory() && !stats.isSymbolicLink();
-};
 
 const write = async (folder: string, key: ToolLogKey, text: string) => {
   await mkdir(folder, { recursive: true, mode: 0o700 });

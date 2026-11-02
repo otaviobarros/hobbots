@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { join, sep } from "node:path";
 import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
+  ActivityRecorder,
   ApprovalService,
   CharmCallService,
   ChatService,
@@ -37,6 +38,7 @@ import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
+  ActivityRepositoryLive,
   ApprovalRepositoryLive,
   BackpackLive,
   CharmCallsLive,
@@ -59,6 +61,7 @@ import {
   FolderSandboxLive,
   ProcessSandbox,
 } from "@hobbots/runtimes";
+import { ActivityStoreLive, FolderScannerLive } from "@hobbots/workbench";
 import { Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
@@ -89,6 +92,7 @@ import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
+import { ActivityRetention } from "./workbench.ts";
 
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -138,6 +142,7 @@ const ServerLive = Layer.unwrap(
       TaskRepositoryLive,
       TaskToolCallsLive,
       CharmCallsLive,
+      ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
       EventJournal.layer,
@@ -226,6 +231,8 @@ const ServerLive = Layer.unwrap(
             HobService.layer,
             PermissionSummary.layer,
             JournalCompaction,
+            // The Workbench's heavy details are cleared past their retention window (ADR 023).
+            ActivityRetention,
             // Work that arrives for a hob wakes its thread (ADR 019).
             WakeOnArrival,
             // A retired hob's work fails as blockers that wait for you (IN-007).
@@ -237,6 +244,15 @@ const ServerLive = Layer.unwrap(
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))
+      // Before the chat service and the step runner: every turn records what it ran and changed for
+      // the Workbench (ADR 023), its details kept in the data folder, out of every hob's reach.
+      .pipe(
+        Layer.provideMerge(
+          ActivityRecorder.layer().pipe(
+            Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity")))),
+          ),
+        ),
+      )
       // Before the chat service: every turn you did not start with Send starts from the backpack, and
       // at start the dispatcher expires the claims an earlier process held (ADR 019).
       .pipe(Layer.provideMerge(ContinuationsLive))

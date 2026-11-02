@@ -42,6 +42,7 @@ import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { adoptSession, parseKeychainLogin, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { makeFakeRuntime } from "../src/fake.ts";
+import { applyScriptedWrites } from "../src/fake-writes.ts";
 import { decideForLiveTurns, ProcessSandbox, sandboxEnv, sandboxFilesystem } from "../src/sandbox.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hooks-")));
@@ -584,6 +585,80 @@ describe("scripted tool calls in the fake runtime", () => {
     const events = await turn("fake:tool WebFetch https://example.com", access());
     expect(events).toEqual([expect.objectContaining({ _tag: "ToolDenied", tool: "WebFetch", decidedBy: "policy" })]);
   });
+
+  // covers PE-002
+  it("[TC-PE-281] never writes through a link in a scripted run, at the file's name or on the way to it", async () => {
+    const away = join(root, "away");
+    mkdirSync(away, { recursive: true });
+    writeFileSync(join(away, "keep.txt"), "untouched\n");
+    symlinkSync(away, join(project, "linked"));
+    symlinkSync(join(away, "keep.txt"), join(project, "keep-link.txt"));
+    const writes = { "keep-link.txt": "overwritten\n", "linked/new.txt": "made\n", "linked/sub/deep.txt": "made\n" };
+
+    const events = await turn(`fake:run ${JSON.stringify({ command: "true", writes })}`, access());
+
+    expect(events.map((e) => e._tag)).toEqual(["ToolStarted", "ToolFinished"]);
+    expect(readFileSync(join(away, "keep.txt"), "utf8")).toBe("untouched\n");
+    expect(readdirSync(away)).toEqual(["keep.txt"]);
+  });
+
+  // covers PE-002
+  it("[TC-PE-285] never writes outside while another process swaps a folder on the way for a link and back", async () => {
+    const away = join(root, "away-race");
+    mkdirSync(away, { recursive: true });
+    writeFileSync(join(away, "f.txt"), "untouched\n");
+    // A file a delete aimed through the swapped folder would remove.
+    writeFileSync(join(away, "gone.txt"), "still here\n");
+    mkdirSync(join(project, "racing"), { recursive: true });
+    const swapper = spawn(process.execPath, [
+      "-e",
+      `const fs = require("node:fs");
+       const dir = ${JSON.stringify(join(project, "racing"))}, kept = dir + "-real", out = ${JSON.stringify(away)};
+       const end = Date.now() + 3000;
+       while (Date.now() < end) {
+         try { fs.renameSync(dir, kept); fs.symlinkSync(out, dir); fs.unlinkSync(dir); fs.renameSync(kept, dir); } catch {}
+       }`,
+    ]);
+    const done = new Promise((resolve) => swapper.on("exit", resolve));
+    const writes = { "racing/f.txt": "overwritten\n", "racing/made/new.txt": "made\n", "racing/gone.txt": null };
+    const line = `fake:run ${JSON.stringify({ command: "true", writes })}`;
+    for (let i = 0; i < 150; i++) await turn(line, access());
+    await done;
+    expect(readFileSync(join(away, "f.txt"), "utf8")).toBe("untouched\n");
+    expect(readdirSync(away).sort()).toEqual(["f.txt", "gone.txt"]);
+  }, 30_000);
+
+  // covers PE-002
+  it("[TC-PE-287] makes writes from inside the folder, as on macOS, never outside while folders on the way or the folder itself are swapped", async () => {
+    const away = join(root, "away-inside");
+    mkdirSync(away, { recursive: true });
+    writeFileSync(join(away, "f.txt"), "untouched\n");
+    writeFileSync(join(away, "gone.txt"), "still here\n");
+    const base = join(root, "inside-project");
+    mkdirSync(join(base, "racing"), { recursive: true });
+    const swapper = spawn(process.execPath, [
+      "-e",
+      `const fs = require("node:fs");
+       const swap = (dir) => { try { fs.renameSync(dir, dir + "-real"); fs.symlinkSync(${JSON.stringify(away)}, dir); fs.unlinkSync(dir); fs.renameSync(dir + "-real", dir); } catch {} };
+       const end = Date.now() + 3000;
+       while (Date.now() < end) { swap(${JSON.stringify(join(base, "racing"))}); swap(${JSON.stringify(base)}); }`,
+    ]);
+    const done = new Promise((resolve) => swapper.on("exit", resolve));
+    const writes = {
+      "f.txt": "overwritten\n",
+      "gone.txt": null,
+      "racing/f.txt": "overwritten\n",
+      "racing/gone.txt": null,
+      "racing/made/new.txt": "made\n",
+    };
+    for (let i = 0; i < 40; i++) applyScriptedWrites(writes, base, "inside");
+    await done;
+    expect(readFileSync(join(away, "f.txt"), "utf8")).toBe("untouched\n");
+    expect(readdirSync(away).sort()).toEqual(["f.txt", "gone.txt"]);
+    // With nothing swapped, the same writes land in the folder.
+    applyScriptedWrites({ "racing/made/new.txt": "made\n", "racing/f.txt": null }, base, "inside");
+    expect(readFileSync(join(base, "racing", "made", "new.txt"), "utf8")).toBe("made\n");
+  }, 30_000);
 
   it("makes no tool calls in a chat-only turn", async () => {
     expect(await turn(`fake:tool Edit ${join(project, "a.ts")}`, null)).toEqual([]);

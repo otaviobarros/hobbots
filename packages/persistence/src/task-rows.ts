@@ -20,14 +20,14 @@ import {
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import type { SqlClient } from "effect/sql";
-import { oldestFirst } from "./order.ts";
+import { byteOrder, oldestFirst } from "./order.ts";
 
 // The stored shape of each record (migrations 0024 and 0025): JSON text columns, numbers that PostgreSQL
 // reads as bigints, and a Task's result split into two columns.
-type Row = Record<string, unknown>;
+export type Row = Record<string, unknown>;
 
-const json = (value: unknown) => (value == null ? null : JSON.parse(String(value)));
-const int = (value: unknown) => (value == null ? null : Number(value));
+export const json = (value: unknown) => (value == null ? null : JSON.parse(String(value)));
+export const int = (value: unknown) => (value == null ? null : Number(value));
 
 const fromRow = {
   task: (row: Row) => ({
@@ -96,11 +96,7 @@ const decodeRows =
     );
 
 // Text sorts byte by byte on both dialects, as `oldestFirst` does; numbers follow.
-const orderBy = (sql: SqlClient.SqlClient, text: ReadonlyArray<string>, numbers: ReadonlyArray<string> = []) =>
-  sql.onDialectOrElse({
-    pg: () => sql.literal([...text.map((column) => `${column} COLLATE "C"`), ...numbers].join(", ")),
-    orElse: () => sql.literal([...text, ...numbers].join(", ")),
-  });
+const orderBy = byteOrder;
 
 /** The columns a Task is stored with. */
 export const taskColumns = (task: Task) => ({
