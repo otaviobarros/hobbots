@@ -16,6 +16,7 @@
 | `[TC-OR-182]` | Dispatcher: the same, with the turn interrupted instead. The item resolves as late, with no claim left. | ✅ SQLite, PostgreSQL |
 | `[TC-OR-183]` | Dispatcher: an item whose Task was cancelled resolves as late although no turn can start, and no turn is planned for it. | ✅ SQLite, PostgreSQL |
 | `[TC-OR-184]` | Hub level: Rook's step reports progress and finishes, and Rook's continuation reads its result, held, while Aldric waits on Rook with the progress pending for him. Cancel Quest leaves nothing open in any backpack, Rook's Task item and Aldric's progress included. Nothing starts after. On `main` Rook's Task item stays pending. | ✅ SQLite, PostgreSQL (10 of 10) |
+| `[TC-OR-185]` | Unit: cancelling Quill's Task takes only the late work about it, and leaves the work Rook holds under his failed, retryable sibling Task; once the Quest itself is being cancelled, Rook's work is taken too. | ✅ |
 
 The server and persistence suites passed on each database, except `[TC-DP-008]`, which needs IPv6 and fails the same way on `main` in this container. Retrying a failed step, `[TC-OR-147]`, still passes on PostgreSQL: a member's failed Task can be retried, so the work about it is not resolved when it fails.
 

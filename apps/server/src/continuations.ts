@@ -20,6 +20,7 @@ import {
   type Delivery,
   Dispatcher,
   DispatcherHost,
+  lateWorkOf,
 } from "@hobbots/inbox";
 import { TaskSignal } from "@hobbots/orchestration";
 import { DateTime, Deferred, Effect, Layer, Option, Stream } from "effect";
@@ -219,10 +220,10 @@ export const WakeOnArrival = Layer.effectDiscard(
     const freed = (attempt: Attempt | null) =>
       attempt === null || isLiveAttempt(attempt.state) || Option.isNone(signal) ? Effect.void : signal.value.notify;
     // A Task that is over for good leaves the work about it with nothing to do: what waits in any
-    // backpack about its tree and is late by now resolves as late, routine progress too, instead
-    // of waiting for a turn that may never come (ADR 019). That is a Task cancelled or being
-    // cancelled, or the one you asked for once it ended. A member's failed Task can be retried, so
-    // the work about it waits for that.
+    // backpack about it or a Task under it and is late by now resolves as late, routine progress
+    // too, instead of waiting for a turn that may never come (ADR 019). That is a Task cancelled or
+    // being cancelled, or the one you asked for once it ended. A member's failed Task can be
+    // retried, so it starts no sweep, and the work held under it stays for that retry.
     const over = (task: Task) =>
       task.state === "cancelled" ||
       task.state === "cancelling" ||
@@ -230,9 +231,8 @@ export const WakeOnArrival = Layer.effectDiscard(
     const settleEnded = (task: Task) =>
       over(task)
         ? Effect.gen(function* () {
-            const tree = new Set((yield* host.treeOf(task.id)).map((each) => each.id));
-            const open = yield* backpack.listOpen({ _tag: "Workspace" });
-            const about = open.filter((item) => item.taskId !== null && tree.has(item.taskId));
+            const tree = yield* host.treeOf(task.id);
+            const about = lateWorkOf(task, tree, yield* backpack.listOpen({ _tag: "Workspace" }));
             if (about.length > 0) yield* dispatcher.settleLate(about.map((item) => item.id));
           })
         : Effect.void;

@@ -7,6 +7,7 @@ import {
   type BackpackTurnEnding,
   type Committed,
   deliveriesSinceRetry,
+  descendantsOf,
   type EventEnvelope,
   IllegalBackpackTransition,
   isTerminalTask,
@@ -144,6 +145,31 @@ export const lateness = (item: BackpackItem, tree: ReadonlyArray<Task>): { reado
   if (held === undefined) return { taskRevision: task.revision };
   return isTerminalTask(held.state) || held.state === "cancelling" ? { taskRevision: held.revision } : null;
 };
+
+/**
+ * The work to resolve as late once `task` is over for good, cancelled or its tree's top ended
+ * (ADR 019): the items about it or a Task under it that are late by now. Work its recipient holds
+ * under a member's failed Task that can still be retried stays, since the retry takes it up again,
+ * and so does everything about the rest of the tree, siblings included.
+ */
+export const lateWorkOf = (
+  task: Task,
+  tree: ReadonlyArray<Task>,
+  items: ReadonlyArray<BackpackItem>,
+): ReadonlyArray<BackpackItem> => {
+  const subtree = new Set([task, ...descendantsOf(task, tree)].map((each) => each.id));
+  return items.filter((item) => {
+    if (item.taskId === null || !subtree.has(item.taskId) || lateness(item, tree) === null) return false;
+    const held = heldUnder(item, tree);
+    return held === undefined || !retryable(held, tree);
+  });
+};
+
+/** A member's failed Task that can still be retried: nothing above it has ended or is being cancelled. */
+const retryable = (task: Task, tree: ReadonlyArray<Task>) =>
+  task.state === "failed" &&
+  task.parentId !== null &&
+  ancestorsOf(task, tree).every((above) => !isTerminalTask(above.state) && above.state !== "cancelling");
 
 /** A turn that ran to its end without the runtime ever accepting it: nothing was said. */
 const NOT_ACCEPTED: BackpackTurnEnding = { end: "not-accepted", diagnostic: null };
