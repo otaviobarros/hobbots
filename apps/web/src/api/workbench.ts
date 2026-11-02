@@ -1,5 +1,5 @@
 import type { AttemptActivityRead } from "@hobbots/api";
-import type { AttemptId, CommandId, CommandOutput, HobbotsEvent, TaskFileId } from "@hobbots/domain";
+import type { AttemptId, CommandId, CommandOutput, ContentId, HobbotsEvent, TaskFileId } from "@hobbots/domain";
 import { keepPreviousData, type QueryClient, queryOptions } from "@tanstack/react-query";
 import { API_URL, call } from "./client.ts";
 import { syncState } from "./sync.ts";
@@ -12,6 +12,7 @@ import { syncState } from "./sync.ts";
 const workbenchKeys = {
   all: ["workbench"] as const,
   activity: (attemptId: AttemptId) => ["workbench", "activity", attemptId] as const,
+  content: (attemptId: AttemptId, contentId: ContentId) => ["workbench", "content", attemptId, contentId] as const,
   output: (attemptId: AttemptId) => ["workbench", "output", attemptId] as const,
 };
 
@@ -98,6 +99,23 @@ export const taskFileTextQuery = (attemptId: AttemptId, fileId: TaskFileId, vers
       return response.text();
     },
   });
+
+/**
+ * Kept contents a file change of an Attempt names: text redacted, images as they were. Contents are
+ * kept once per hash, so what an id names never changes and is never read again; a read that fails
+ * because the contents were cleared says so through its error.
+ */
+export const attemptContentQuery = (attemptId: AttemptId, contentId: ContentId) =>
+  queryOptions({
+    queryKey: workbenchKeys.content(attemptId, contentId),
+    queryFn: () => call((c) => c.workbench.content({ params: { attemptId, contentId } })),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+
+/** Where the hub serves kept contents, for an image to load them itself. */
+export const attemptContentUrl = (attemptId: AttemptId, contentId: ContentId): string =>
+  `${API_URL}/api/attempts/${encodeURIComponent(attemptId)}/contents/${encodeURIComponent(contentId)}`;
 
 /** Nothing on the hub to read a running command's output again from, so a resync leaves it. */
 const LOCAL = { local: true } as const;

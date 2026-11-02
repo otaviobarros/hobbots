@@ -357,10 +357,17 @@ export const isSignedOut = (account: AccountInfo): boolean =>
   account.subscriptionType === undefined &&
   (account.tokenSource ?? "none") === "none";
 
+/**
+ * Settings every turn gets in place of the user's own, which are not loaded: no Claude attribution
+ * on a hob's commits or pull requests. A hob's commits are its own or the user's, and Claude Code's
+ * default `Co-Authored-By` trailer would name Claude on every one.
+ */
+export const RUNTIME_SETTINGS = { attribution: false } as const;
+
 // Chat-only unless the turn has tools (see `toolOptions`): no built-in tools, nothing auto-approved,
 // no user/project settings or MCP servers loaded from disk.
 // ANTHROPIC_API_KEY is removed so Claude Code always uses the claude.ai login (the subscription).
-const baseOptions = (config: ClaudeCodeConfig, executable: string): Options => ({
+export const baseOptions = (config: ClaudeCodeConfig, executable: string): Options => ({
   cwd: config.workspaceDir,
   pathToClaudeCodeExecutable: executable,
   env: {
@@ -372,6 +379,7 @@ const baseOptions = (config: ClaudeCodeConfig, executable: string): Options => (
   disallowedTools: ["*"],
   permissionMode: "dontAsk",
   settingSources: [],
+  settings: RUNTIME_SETTINGS,
 });
 
 const shutdownGrace = "10 seconds";

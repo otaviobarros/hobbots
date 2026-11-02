@@ -1,5 +1,6 @@
 import { ActivityRepository, type CommandDraft, type FileChangeDraft, type FolderScanDraft } from "@hobbots/agents";
 import {
+  type AgentId,
   ArtifactRef,
   AttemptActivity,
   type AttemptId,
@@ -236,12 +237,26 @@ export const ActivityRepositoryLive = Layer.effect(
         );
         const artifacts = yield* sql<Row>`SELECT * FROM artifact_refs WHERE attempt_id = ${attemptId}
           ORDER BY ${oldestFirst(sql)}`.pipe(Effect.flatMap(decoded(decodeArtifacts)));
+        const sharing = [...new Set(changes.flatMap((each) => each.sharedWith))];
+        const sharedWithHobs =
+          sharing.length === 0
+            ? []
+            : yield* sql<{ readonly attemptId: AttemptId; readonly agentId: AgentId }>`SELECT id AS attempt_id,
+                agent_id FROM attempts WHERE ${sql.in("id", sharing)} ORDER BY ${byteOrder(sql, ["id"])}`;
         const [cleared] = yield* sql<{ readonly at: string | null }>`SELECT MAX(at) AS at FROM (
             SELECT details_cleared_at AS at FROM attempt_commands WHERE attempt_id = ${attemptId}
             UNION ALL SELECT details_cleared_at AS at FROM attempt_file_changes WHERE attempt_id = ${attemptId}
           ) cleared`;
         return Option.some(
-          new AttemptActivity({ attempt, commands, changes, scans, artifacts, detailsClearedAt: cleared?.at ?? null }),
+          new AttemptActivity({
+            attempt,
+            commands,
+            changes,
+            scans,
+            artifacts,
+            sharedWithHobs: sharedWithHobs.map(({ attemptId, agentId }) => ({ attemptId, agentId })),
+            detailsClearedAt: cleared?.at ?? null,
+          }),
         );
       });
 

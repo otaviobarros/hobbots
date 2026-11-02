@@ -1001,6 +1001,10 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
         GIT_PROTOCOL: String(request.headers["git-protocol"] ?? ""),
       },
     });
+    // `git http-backend` may answer and exit before it reads the whole request body, as when it
+    // refuses a push early. Writing the rest then fails with EPIPE; its answer and exit carry the
+    // outcome, so the failed write is no error of the fake's.
+    backend.stdin.on("error", () => undefined);
     backend.stdin.end(body);
     const chunks: Array<Buffer> = [];
     backend.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));

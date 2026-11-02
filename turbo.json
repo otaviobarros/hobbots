@@ -26,6 +26,18 @@
       "cache": false,
       "persistent": true,
       "passThroughEnv": ["HOBBOTS_*"]
+    },
+    "@hobbots/server#dev": {
+      "dependsOn": ["@hobbots/web#build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["HOBBOTS_*"]
+    },
+    "@hobbots/desktop#dev": {
+      "dependsOn": ["@hobbots/web#build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["HOBBOTS_*"]
     }
   }
 }

@@ -123,6 +123,7 @@ const activity = new AttemptActivity({
     artifact("made-outside", "Elsewhere", join(outside, "secret.txt")),
     artifact("made-link", "A link", "https://hobbots.ai", "link"),
   ],
+  sharedWithHobs: [],
   detailsClearedAt: null,
 });
 
