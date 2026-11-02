@@ -1,14 +1,16 @@
-import { CharmCalls, HobbotsRepository } from "@hobbots/agents";
+import { CharmCallService, CharmCalls, HobbotsRepository } from "@hobbots/agents";
+import { UserSession } from "@hobbots/api";
 import { Agent, AgentId, CharmCall, MessageId, ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { CharmCallsLive, EventJournal, HobbotsRepositoryLive } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
-const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, CharmCallsLive, EventJournal.layer).pipe(
+const TestLayer = CharmCallService.layer.pipe(
+  Layer.provideMerge(Layer.mergeAll(HobbotsRepositoryLive, CharmCallsLive, EventJournal.layer)),
   Layer.provideMerge(TestDatabase),
 );
-const run = <A, E>(effect: Effect.Effect<A, E, HobbotsRepository | CharmCalls>) =>
+const run = <A, E>(effect: Effect.Effect<A, E, HobbotsRepository | CharmCalls | CharmCallService>) =>
   effect.pipe(Effect.provide(TestLayer), Effect.runPromise);
 
 const now = "2026-11-02T00:00:00.000Z";
@@ -118,5 +120,33 @@ describe("Charm call records", () => {
     expect(result.other._tag === "Existing" && result.other.call.state).toBe("not-sent");
     expect(result.same._tag).toBe("Started");
     expect(Option.getOrThrow(result.stored).state).toBe("sending");
+  });
+
+  // covers EX-003, PE-006
+  it("[TC-IN-054] lets the user settle an uncertain call from its step, once, and nothing else", async () => {
+    const user = Layer.succeed(UserSession, { origin: "http://localhost:4317" });
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const calls = yield* CharmCalls;
+        const service = yield* CharmCallService;
+        const step = (stepId: string) => [ThreadId.make("t1"), MessageId.make("m1"), stepId] as const;
+        yield* calls.begin(call("k1"));
+        const sending = yield* service.settle(...step("toolu_1"), "applied").pipe(Effect.flip, Effect.provide(user));
+        yield* calls.settle(agentId, "k1", "uncertain", "Unclear.", later);
+        const settled = yield* service.settle(...step("toolu_1"), "not-sent").pipe(Effect.provide(user));
+        const again = yield* service.settle(...step("toolu_1"), "applied").pipe(Effect.flip, Effect.provide(user));
+        const missing = yield* service.settle(...step("toolu_9"), "applied").pipe(Effect.flip, Effect.provide(user));
+        // Not sent frees the key: the same call may be made again.
+        const retried = yield* calls.begin(call("k1"));
+        return { sending, settled, again, missing, retried, listed: yield* service.listForThread(ThreadId.make("t1")) };
+      }),
+    );
+    expect(result.sending).toMatchObject({ _tag: "CharmCallSettled", state: "sending" });
+    expect(result.settled).toMatchObject({ state: "not-sent", result: expect.stringContaining("not sent") });
+    expect(result.again).toMatchObject({ _tag: "CharmCallSettled", state: "not-sent" });
+    expect(result.missing._tag).toBe("CharmCallNotFound");
+    expect(result.retried._tag).toBe("Started");
+    expect(result.listed.map((c) => c.key)).toEqual(["k1"]);
   });
 });

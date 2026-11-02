@@ -38,6 +38,7 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
             ),
           ),
         ),
+      listForThread: (threadId) => Effect.sync(() => [...rows.values()].filter((row) => row.threadId === threadId)),
       unsettled: Effect.sync(() => [...rows.values()].filter((row) => !isCharmCallSettled(row.state))),
     }),
   );

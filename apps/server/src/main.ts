@@ -4,6 +4,7 @@ import { join, sep } from "node:path";
 import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
   ApprovalService,
+  CharmCallService,
   ChatService,
   GrantService,
   HobAdmission,
@@ -164,7 +165,7 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(GrantService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
-      .pipe(Layer.provideMerge(Charms))
+      .pipe(Layer.provideMerge(Layer.merge(Charms, CharmCallService.layer)))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
       .pipe(Layer.provideMerge(CanonicalSharedFolders))
       .pipe(

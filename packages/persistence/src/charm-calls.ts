@@ -112,6 +112,12 @@ export const CharmCallsLive = Layer.effect(
             WHERE thread_id = ${threadId} AND message_id = ${messageId} AND step_id = ${stepId}
             ORDER BY created_at DESC LIMIT 1`.pipe(Effect.flatMap(one)),
         ),
+      listForThread: (threadId) =>
+        orDie(
+          sql<Row>`SELECT * FROM charm_calls WHERE thread_id = ${threadId} ORDER BY created_at`.pipe(
+            Effect.flatMap((rows) => Effect.forEach(rows, fromRow)),
+          ),
+        ),
       unsettled: orDie(
         sql<Row>`SELECT * FROM charm_calls WHERE state IN ('sending', 'uncertain') ORDER BY created_at`.pipe(
           Effect.flatMap((rows) => Effect.forEach(rows, fromRow)),

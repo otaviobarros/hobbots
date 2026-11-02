@@ -4,6 +4,7 @@ import {
   ApprovalId,
   ApprovalLifetime,
   ApprovalState,
+  CharmCallState,
   GrantId,
   MessageId,
   PolicyOperation,
@@ -187,5 +188,19 @@ export class QuestionNotFound extends Schema.TaggedError<QuestionNotFound>()(
 export class QuestionClosed extends Schema.TaggedError<QuestionClosed>()(
   "QuestionClosed",
   { questionId: QuestionId },
+  { httpApiStatus: 409 },
+) {}
+
+/** No Charm call shows as this reply step. */
+export class CharmCallNotFound extends Schema.TaggedError<CharmCallNotFound>()(
+  "CharmCallNotFound",
+  { stepId: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
+/** The Charm call is no longer uncertain, so there is nothing to settle (ADR 020). */
+export class CharmCallSettled extends Schema.TaggedError<CharmCallSettled>()(
+  "CharmCallSettled",
+  { stepId: Schema.String, state: CharmCallState },
   { httpApiStatus: 409 },
 ) {}
