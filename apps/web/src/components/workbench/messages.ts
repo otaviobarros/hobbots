@@ -1,4 +1,6 @@
-import { formatCount, formatList } from "../../lib/format.ts";
+import type { FileChange } from "@hobbots/domain";
+import { formatCount, formatList, plural } from "../../lib/format.ts";
+import type { Mark } from "./tabs/summary-model.ts";
 import type { UnavailableReason, WorkbenchTab } from "./workbench-model.ts";
 
 /** Copy for the Workbench: one Task's full view (ADR 023, STD-I18N-001). */
@@ -54,4 +56,69 @@ export const messages = {
   },
   comingSoon: "Watching a hob use a browser comes in a later update.",
   names: (names: ReadonlyArray<string>) => formatList(names),
+  summary: {
+    asked: "What you asked",
+    askedBy: ({ name }: { name: string }) => `What ${name} asked`,
+    expected: ({ text }: { text: string }) => `Expected back: ${text}`,
+    happened: "What happened",
+    nothingYet: ({ name }: { name: string }) => `${name} has not reported anything yet.`,
+    nothingHappened: ({ name }: { name: string }) => `${name} did not report any progress in this attempt.`,
+    mark: {
+      done: "Done",
+      failed: "Failed",
+      waiting: "Waiting",
+      running: "Working",
+      next: "Next",
+      cancelled: "Stopped",
+    } satisfies Record<Mark, string>,
+    step: ({ index, total, title }: { index: number; total: number; title: string }) =>
+      `Step ${formatCount(index)} of ${formatCount(total)}: ${title}`,
+    member: ({ name, title }: { name: string; title: string }) => `${name}: ${title}`,
+    tries: ({ count }: { count: number }) =>
+      plural(count, { one: `${formatCount(count)} try`, other: `${formatCount(count)} tries` }),
+    openStep: ({ title }: { title: string }) => `Open ${title} in Workbench`,
+    milestone: ({ title }: { title: string }) => `Milestone: ${title}`,
+    endedFailed: "This attempt failed.",
+    endedStopped: "This attempt stopped before it finished.",
+    endedWhy: ({ why }: { why: string }) => `Why: ${why}`,
+    made: "What it made",
+    nothingMade: ({ name }: { name: string }) => `${name} did not make or change anything in this attempt.`,
+    madeSoFar: ({ name }: { name: string }) => `Nothing yet. What ${name} makes shows here as it happens.`,
+    readingChanges: "Reading the changed files…",
+    change: {
+      added: "Added",
+      edited: "Edited",
+      deleted: "Deleted",
+      moved: "Moved",
+      link: "Link",
+    } satisfies Record<FileChange["kind"], string>,
+    seeChange: ({ path }: { path: string }) => `See the change to ${path} in Changes`,
+    seeFile: ({ label }: { label: string }) => `See ${label} in Files`,
+    movedFrom: ({ path }: { path: string }) => `from ${path}`,
+    moreChanges: ({ count }: { count: number }) =>
+      plural(count, {
+        one: `See ${formatCount(count)} more changed file`,
+        other: `See ${formatCount(count)} more changed files`,
+      }),
+    open: "Still open",
+    nothingOpen: "Nothing is waiting on you or anyone else.",
+    questionForYou: "A question for you",
+    questionFor: ({ name }: { name: string }) => `A question for ${name}`,
+    approval: "Waiting for your approval",
+    answerInChat: "Answer in the chat",
+    decideInChat: "Decide in the chat",
+    waitingList: "What the hobs on this task are waiting on",
+    result: "The result",
+    noResult: "No result yet.",
+    resultFrom: ({ number }: { number: number }) => `From attempt ${formatCount(number)}.`,
+    tabs: "Open the other views",
+    seeChanges: ({ count }: { count: number }) =>
+      plural(count, {
+        one: `See the ${formatCount(count)} changed file`,
+        other: `See the ${formatCount(count)} changed files`,
+      }),
+    seeFiles: ({ count }: { count: number }) =>
+      plural(count, { one: `See the ${formatCount(count)} file`, other: `See the ${formatCount(count)} files` }),
+    seeTerminal: "See what ran in Terminal",
+  },
 };
