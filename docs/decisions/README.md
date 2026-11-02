@@ -23,3 +23,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [019 — A hob's backpack and continuations](019-hob-backpack-and-continuations.md)
 - [020 — The GitHub Charm](020-github-charm.md)
 - [021 — Devices and remote access](021-devices-and-remote-access.md)
+- [022 — A hob's own GitHub App](022-hob-github-app.md)
