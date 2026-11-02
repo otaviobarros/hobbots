@@ -10,7 +10,7 @@
 - A Task becomes a Quest when its owner first delegates to another hob or starts a Quest explicitly. The Quest record is added to the same Task, which keeps its id, card and history.
 - You talk only to the lead. Cancel, Retry and Reassign act on a Task directly. A member's approvals come straight to you; a lead never approves for you (PE-006).
 - A member's question goes to its nearest lead, who answers or escalates it. Only a question no lead can answer reaches you, on the card in the lead's chat and in the Inbox's Needs you, and your answer goes back down the same chain.
-- A note you leave on a Task goes to its nearest lead as a message about that Task, which the lead reads in its next turn; the drawer lists the notes you left. A note on the Task you asked for goes to its owner.
+- A note you leave on a Task goes to its nearest lead still at work as a message about that Task, which the lead reads in its next turn; the drawer lists the notes you left. A note on the Task you asked for goes to its owner.
 - Members never talk to each other. Results move between them only as hand-offs through the lead.
 - A member can lead its own subtree under the same rules. Depth counts Quests, not steps, and is 2 by default.
 

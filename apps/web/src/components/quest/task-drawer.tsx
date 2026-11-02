@@ -1,24 +1,13 @@
-import {
-  type AgentId,
-  isTerminalTask,
-  NoteId,
-  type Task,
-  type TaskId,
-  type TaskTree,
-  type ThreadId,
-} from "@hobbots/domain";
+import { type AgentId, isTerminalTask, type Task, type TaskId, type TaskTree, type ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { Textarea } from "@hobbots/ui/components/textarea";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ApiError } from "../../api/client.ts";
-import { useLeaveNote } from "../../api/questions.ts";
 import { formatTime } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
-import { enterSends } from "./enter-sends.ts";
 import { messages } from "./messages.ts";
+import { emptyNote, NoteBox, type NoteDraft } from "./note-box.tsx";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
-import { findTask, noteRecipient, taskDetail, taskTitle } from "./work-model.ts";
+import { findTask, taskDetail, taskTitle } from "./work-model.ts";
 
 const copy = messages.drawer;
 
@@ -46,7 +35,7 @@ export function TaskDrawer({
   const open = useOpenTask(hobId, threadId);
   const heading = useRef<HTMLHeadingElement>(null);
   // Each Task keeps its own unsent note, so moving between Tasks never sends one about another.
-  const [drafts, setDrafts] = useState<ReadonlyMap<TaskId, string>>(new Map());
+  const [drafts, setDrafts] = useState<ReadonlyMap<TaskId, NoteDraft>>(new Map());
   // Opening another Task moves focus to its title, so a keyboard user lands in the drawer.
   // biome-ignore lint/correctness/useExhaustiveDependencies: each Task opened moves focus again.
   useEffect(() => {
@@ -92,8 +81,8 @@ export function TaskDrawer({
           tree={found.tree}
           task={found.task}
           hobs={hobs}
-          note={drafts.get(found.task.id) ?? ""}
-          setNote={(note) => setDrafts((all) => new Map(all).set(found.task.id, note))}
+          draft={drafts.get(found.task.id) ?? emptyNote()}
+          setDraft={(draft) => setDrafts((all) => new Map(all).set(found.task.id, draft))}
         />
       )}
     </aside>
@@ -265,71 +254,3 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
  * reads in its next turn; it shows under Notes once the hub has it. Each note keeps one key while it
  * is retried, so a lost reply never leaves it twice.
  */
-function NoteBox({
-  tree,
-  task,
-  hobs,
-  note,
-  setNote,
-}: {
-  tree: TaskTree;
-  task: Task;
-  hobs: HobLookup;
-  note: string;
-  setNote: (note: string) => void;
-}) {
-  const lead = hobs(noteRecipient(tree, task));
-  const send = useLeaveNote(task.id);
-  const [key, setKey] = useState(newKey);
-  const text = note.trim();
-  const submit = () => {
-    if (text === "" || send.isPending) return;
-    send.mutate(
-      { key, text },
-      {
-        onSuccess: () => {
-          setNote("");
-          setKey(newKey());
-        },
-      },
-    );
-  };
-  return (
-    <form
-      className="flex flex-col gap-1.5 border-t-2 border-line px-3.5 pt-2.5 pb-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        submit();
-      }}
-    >
-      <span className="flex gap-2">
-        <Textarea
-          aria-label={copy.noteLabel({ name: lead.name })}
-          placeholder={copy.noteLabel({ name: lead.name })}
-          value={note}
-          onChange={(event) => {
-            // A changed note is a new one, under a key of its own.
-            if (send.isError) setKey(newKey());
-            setNote(event.target.value);
-          }}
-          onKeyDown={enterSends(submit)}
-          className="min-h-9 flex-1 rounded-none border-2 border-control bg-deep text-sm text-text"
-        />
-        <Button type="submit" size="sm" disabled={text === "" || send.isPending}>
-          {copy.send}
-        </Button>
-      </span>
-      <span role="status" className="text-xs text-label">
-        {send.isError
-          ? send.error instanceof ApiError && send.error.tag === "NoteRefused"
-            ? copy.noteRefused({ name: lead.name })
-            : copy.noteFailed
-          : send.isSuccess && note === ""
-            ? copy.sent({ name: lead.name })
-            : copy.noteHint({ name: lead.name })}
-      </span>
-    </form>
-  );
-}
-
-const newKey = () => NoteId.make(crypto.randomUUID());

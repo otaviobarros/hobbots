@@ -1,5 +1,5 @@
 import type { WaitingQuestion } from "@hobbots/api";
-import type { NoteId, Question, QuestionId, TaskId } from "@hobbots/domain";
+import { isTerminalTask, type NoteId, type Question, type QuestionId, type Task, type TaskId } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
@@ -18,17 +18,25 @@ const waitingQuestionsQuery = queryOptions({
 });
 
 /**
- * A question changed: it reached you, moved to a lead, or was answered. The list is read again,
- * since a question that reaches you comes without its Task, and a read on its way may predate the
- * change; one you answered here leaves the list at once.
+ * A question changed: it reached you, or was answered. The list is read again, since a question
+ * that reaches you comes without its Task, and a read on its way may predate the change; one
+ * answered leaves the list at once. A question moving from one lead to another never reaches you.
  */
 export const questionChanged = (queryClient: QueryClient, question: Question) => {
   if (question.state === "answered") {
     queryClient.setQueryData<ReadonlyArray<WaitingQuestion>>(waitingKey, (old) =>
       old?.filter((each) => each.question.id !== question.id),
     );
-  }
+  } else if (question.recipientId !== null) return;
   void queryClient.invalidateQueries({ queryKey: waitingKey, exact: true });
+};
+
+/** Work that ended takes its questions out of your Inbox: nobody is left to hear the answer. */
+export const workEnded = (queryClient: QueryClient, task: Task) => {
+  if (!isTerminalTask(task.state)) return;
+  queryClient.setQueryData<ReadonlyArray<WaitingQuestion>>(waitingKey, (old) =>
+    old?.filter((each) => each.task.id !== task.id && each.task.rootId !== task.id),
+  );
 };
 
 const NONE: ReadonlyArray<WaitingQuestion> = [];

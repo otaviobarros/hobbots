@@ -22,7 +22,7 @@ import { setConnection } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { applyQuestWork } from "./quest-work.ts";
-import { questionChanged } from "./questions.ts";
+import { questionChanged, workEnded } from "./questions.ts";
 import {
   newer,
   recordAgent,
@@ -178,6 +178,11 @@ const applyWorkEvent = (
     case "QuestionAnswered":
       applyTaskEvent(queryClient, event);
       questionChanged(queryClient, event.question);
+      return;
+    case "TaskStateChanged":
+    case "TaskCompleted":
+      applyTaskEvent(queryClient, event);
+      workEnded(queryClient, event.task);
       return;
     // The rest change Tasks and Quests (ADR 018).
     default:

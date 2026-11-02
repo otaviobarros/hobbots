@@ -6,6 +6,7 @@ import {
   Delegation,
   descendantsOf,
   HandOff,
+  isTerminalTask,
   MemberWork,
   Milestone,
   Quest,
@@ -147,10 +148,19 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
       "id",
       questions.map((each) => each.taskId),
     )}`.pipe(Effect.flatMap(decodeRows("task")));
-    const byId = new Map(tasks.map((each) => [each.id, each]));
+    const roots = yield* sql<Row>`SELECT * FROM tasks WHERE ${sql.in(
+      "id",
+      tasks.map((each) => each.rootId),
+    )}`.pipe(Effect.flatMap(decodeRows("task")));
+    const byId = new Map([...tasks, ...roots].map((each) => [each.id, each]));
+    // A question about work that ended waits for nobody: its asker is gone.
+    const open = (id: TaskId) => {
+      const each = byId.get(id);
+      return each !== undefined && !isTerminalTask(each.state);
+    };
     return questions.flatMap((question) => {
       const task = byId.get(question.taskId);
-      return task === undefined ? [] : [{ question, task }];
+      return task === undefined || !open(task.id) || !open(task.rootId) ? [] : [{ question, task }];
     });
   });
   const artifact = (id: string) =>

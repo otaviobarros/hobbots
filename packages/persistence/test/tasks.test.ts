@@ -530,7 +530,7 @@ describe("Task records", () => {
     expect(result.topAsk.value.recipientId).toBeNull();
   });
 
-  // covers OR-003, OR-004
+  // covers OR-002, OR-004
   it("[TC-OR-135] gives your note to the Task's nearest lead once, keeps it on the tree, and lists only the questions that wait for you", async () => {
     const result = await run(
       Effect.gen(function* () {
@@ -598,6 +598,7 @@ describe("Task records", () => {
     expect(result.waiting.map(({ question, task }) => [question.id, task.id])).toEqual([["q-yours", "keywords"]]);
   });
 
+  // covers OR-004
   it("[TC-OR-136] refuses a note once the work it is about has ended, and takes one on a member's ended Task while it goes on", async () => {
     const result = await run(
       Effect.gen(function* () {
@@ -623,6 +624,57 @@ describe("Task records", () => {
     expect(result.afterTop).toMatchObject({ _tag: "TaskRefused", reason: "task-ended" });
   });
 
+  // covers OR-002, OR-004
+  it("[TC-OR-137] passes a note over a lead whose Task ended, and drops a question about ended work from what waits for you", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        yield* tasks.startQuest({
+          id: QuestId.make("q2"),
+          taskId: TaskId.make("build"),
+          goal: "Keywords",
+          acceptance: [],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        yield* tasks.createTask({ task: newTask("keywords", PIP, "build"), delegation: brief("d-k"), milestones: [] });
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-late"),
+          taskId: TaskId.make("keywords"),
+          askerId: PIP,
+          text: "Which market?",
+          createdAt: now,
+        });
+        yield* tasks.escalateQuestion(QuestionId.make("q-late"), ADA);
+        yield* tasks.escalateQuestion(QuestionId.make("q-late"), ALDRIC);
+        const before = yield* tasks.listWaitingQuestions;
+        for (const id of ["keywords", "build"]) {
+          const task = Option.getOrThrow(yield* tasks.readTree(TaskId.make(id))).tasks[0];
+          if (task === undefined) throw new Error(`no ${id} Task`);
+          yield* tasks.moveTask(task.id, task.revision, "cancelled", now);
+        }
+        const note = yield* tasks.leaveNote({
+          id: NoteId.make("n-pip"),
+          taskId: TaskId.make("keywords"),
+          text: "Hi",
+          createdAt: now,
+        });
+        const after = yield* tasks.listWaitingQuestions;
+        const answer = yield* tasks
+          .answerQuestion(QuestionId.make("q-late"), { _tag: "User" }, "EU", later)
+          .pipe(Effect.flip);
+        return { before, note, after, answer };
+      }),
+    );
+    expect(result.before.map(({ question }) => question.id)).toEqual(["q-late"]);
+    // Ada's build ended, so she would never read it: the note goes up to Aldric, still at work.
+    expect(result.note.value.recipientId).toBe(ALDRIC);
+    expect(result.after).toEqual([]);
+    expect(result.answer).toMatchObject({ _tag: "TaskRefused", reason: "task-ended" });
+  });
+
+  // covers OR-003, OR-004
   it("[TC-OR-005] records milestones and reports by their source, and hands an artifact to a Task in the same tree once", async () => {
     const result = await run(
       Effect.gen(function* () {

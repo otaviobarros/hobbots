@@ -124,6 +124,15 @@ describe("noteRecipient", () => {
     const step = task(TaskId.make("outline"), { ownerId: QUILL, parentId: COPY });
     expect(noteRecipient({ ...quest, tasks: [...quest.tasks, step] } as typeof quest, step)).toBe(ALDRIC);
   });
+
+  it("passes over a lead whose own Task ended, since that lead would never read it", () => {
+    const quest = blackFriday();
+    const keywords = task(TaskId.make("keywords"), { ownerId: QUILL, parentId: BUILD });
+    const tasks = quest.tasks.map((each) => (each.id === BUILD ? { ...each, state: "completed" } : each));
+    const ended = { ...quest, tasks: [...tasks, keywords] } as typeof quest;
+    expect(noteRecipient({ ...quest, tasks: [...quest.tasks, keywords] } as typeof quest, keywords)).toBe(ADA);
+    expect(noteRecipient(ended, keywords)).toBe(ALDRIC);
+  });
 });
 
 describe("taskDetail", () => {

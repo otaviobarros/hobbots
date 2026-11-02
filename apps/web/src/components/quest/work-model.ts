@@ -1,9 +1,9 @@
 import {
   type AgentId,
   isTerminalTask,
-  leadsAbove,
   type Message,
   type MessageId,
+  noteRecipientOf,
   partyOf,
   type Quest,
   type Question,
@@ -257,11 +257,8 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
   };
 };
 
-/**
- * The hob a note on the Task goes to (ADR 018): its nearest lead, or its own owner when nobody
- * leads it, as the hub decides it.
- */
-export const noteRecipient = (tree: TaskTree, task: Task): AgentId => leadsAbove(task, tree.tasks)[0] ?? task.ownerId;
+/** The hob a note on the Task goes to, as the hub decides it (ADR 018). */
+export const noteRecipient = (tree: TaskTree, task: Task): AgentId => noteRecipientOf(task, tree.tasks);
 
 /** Every Task right under one, done ones included, for Show all. */
 const workRowsAll = (tree: TaskTree, task: Task): ReadonlyArray<WorkRow> =>
