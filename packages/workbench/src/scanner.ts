@@ -90,13 +90,20 @@ const openInside = async (root: string, full: string): Promise<FileHandle | null
 };
 
 /** The SHA-256 of a regular file's contents inside `root`, or null. */
-const hashFile = async (root: string, path: string): Promise<string | null> => {
+const hashFile = async (
+  root: string,
+  path: string,
+): Promise<{ readonly hash: string; readonly size: number } | null> => {
   const handle = await openInside(root, path);
   if (handle === null) return null;
   try {
     const hash = createHash("sha256");
-    for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk as Uint8Array);
-    return hash.digest("hex");
+    let size = 0;
+    for await (const chunk of handle.createReadStream({ autoClose: false })) {
+      hash.update(chunk as Uint8Array);
+      size += (chunk as Uint8Array).byteLength;
+    }
+    return { hash: hash.digest("hex"), size };
   } catch {
     return null;
   } finally {
@@ -180,9 +187,14 @@ const visit = async (walk: Walk, path: string, full: string) => {
   }
   if (!stats.isFile()) return;
   const before = walk.seen.get(path);
-  const hash = unchangedSince(before, stats) ? before.hash : await hashFile(walk.folder, full);
-  if (hash === null) return;
-  walk.listing.set(path, { kind: "file", size: Number(stats.size), hash });
+  // The size is that of the bytes hashed, not of the earlier stat: a write between the two would
+  // otherwise pair the new hash with the old size, and the kept version would be cut to it.
+  const hashed = unchangedSince(before, stats)
+    ? { hash: before.hash, size: Number(stats.size) }
+    : await hashFile(walk.folder, full);
+  if (hashed === null) return;
+  const { hash } = hashed;
+  walk.listing.set(path, { kind: "file", size: hashed.size, hash });
   walk.next.set(path, {
     ino: stats.ino,
     size: stats.size,
