@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-02
 - **Issue:** [#343](https://github.com/otaviobarros/hobbots/issues/343)
-- **Pull request:** not opened yet
+- **Pull request:** [#421](https://github.com/otaviobarros/hobbots/pull/421)
 - **Commit:** not yet on `main` (ran on the pull request branch, based on `0897651`)
 - **Setup:** Automated only. At hub level, the hub's own routes and event stream behind its device check, on its real loopback, tailnet and serve listeners, composed as `main.ts` composes them, over a fake Tailscale that serves the tailnet on `127.0.0.2` with the user's phone and laptop at `127.0.0.5` and `127.0.0.6`. The devices are plain HTTP clients that keep the hub's cookies as a browser does, and the clock is moved forward for expiry and the Deny wait. In the browser, a hub from source with `HOBBOTS_FAKE_TAILSCALE=on`, the hub's window in one Chromium context and a tailnet browser in another. The fake runtime throughout. Linux x86_64, Node 22.23.4, Chromium 1243 headless, on SQLite in memory and on PostgreSQL 16; CI runs the hub-level suite on SQLite and PostgreSQL 18 and the browser test on SQLite.
 - **Result:** Passed with gaps. An unapproved tailnet device is refused on every route and the event stream, pairing with a matching code, Allow, Deny, Decide later and expiry hold over the tailnet, Revoke and Pause end open streams at once while the hub's window keeps working, Tailscale turning off and a changed port reach every client, and HTTPS through `tailscale serve` keeps an HTTP-approved device working. A real tailnet and the packaged Mac app were not part of this run.
