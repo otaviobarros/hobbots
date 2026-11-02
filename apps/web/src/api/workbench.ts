@@ -69,6 +69,8 @@ const LOCAL = { local: true } as const;
  */
 export interface LiveOutput {
   readonly text: string;
+  /** Where `text` ends in what the command printed so far, in UTF-16 code units; past its length after a gap. */
+  readonly end: number;
   readonly missed: boolean;
 }
 
@@ -76,17 +78,20 @@ export interface LiveOutput {
 export type LiveOutputs = Readonly<Record<CommandId, LiveOutput>>;
 
 /**
- * Adds a piece of a running command's output by its offset, so a repeated piece changes nothing. A
- * piece past the end of what is known starts the text again from it and marks the gap.
+ * Adds a piece of a running command's output by its offset in all the command printed, so a repeated
+ * piece changes nothing. A piece past the end of what is known starts the text again from it and
+ * marks the gap; later pieces follow on from where it ended.
  */
 export const addOutput = (outputs: LiveOutputs, event: CommandOutput): LiveOutputs => {
-  const known = outputs[event.commandId] ?? { text: "", missed: false };
-  const end = known.text.length;
-  if (event.offset > end) {
-    return { ...outputs, [event.commandId]: { text: event.delta, missed: true } };
+  const known = outputs[event.commandId] ?? { text: "", end: 0, missed: false };
+  if (event.offset > known.end) {
+    const restarted = { text: event.delta, end: event.offset + event.delta.length, missed: true };
+    return { ...outputs, [event.commandId]: restarted };
   }
-  const fresh = event.delta.slice(end - event.offset);
-  return fresh.length === 0 ? outputs : { ...outputs, [event.commandId]: { ...known, text: known.text + fresh } };
+  const fresh = event.delta.slice(known.end - event.offset);
+  if (fresh.length === 0) return outputs;
+  const grown = { ...known, text: known.text + fresh, end: known.end + fresh.length };
+  return { ...outputs, [event.commandId]: grown };
 };
 
 /**

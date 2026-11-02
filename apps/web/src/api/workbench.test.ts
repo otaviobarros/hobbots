@@ -62,18 +62,26 @@ describe("a running command's output", () => {
     outputs = addOutput(outputs, piece(4, "two\n"));
     expect(addOutput(outputs, piece(4, "two\n"))).toBe(outputs);
     outputs = addOutput(outputs, piece(4, "two\nthree\n"));
-    expect(outputs[RUN]).toEqual({ text: "one\ntwo\nthree\n", missed: false });
+    expect(outputs[RUN]).toEqual({ text: "one\ntwo\nthree\n", end: 14, missed: false });
   });
 
-  it("marks the gap when a piece starts past what this client saw", () => {
-    const outputs = addOutput(addOutput({}, piece(0, "one\n")), piece(20, "later\n"));
-    expect(outputs[RUN]).toEqual({ text: "later\n", missed: true });
+  it("marks the gap when a piece starts past what this client saw, then follows on from where that piece ended", () => {
+    let outputs = addOutput(addOutput({}, piece(0, "one\n")), piece(20, "later\n"));
+    expect(outputs[RUN]).toEqual({ text: "later\n", end: 26, missed: true });
+    outputs = addOutput(outputs, piece(26, "next\n"));
+    // A piece repeated after the gap, whole or overlapping, adds nothing twice.
+    expect(addOutput(outputs, piece(26, "next\n"))).toBe(outputs);
+    expect(addOutput(outputs, piece(20, "later\n"))).toBe(outputs);
+    outputs = addOutput(outputs, piece(26, "next\nlast\n"));
+    expect(outputs[RUN]).toEqual({ text: "later\nnext\nlast\n", end: 36, missed: true });
   });
 
   it("keeps what it saw across a new sync generation, since the hub has nothing to read it again from", async () => {
     const queryClient = new QueryClient();
     applyCommandOutput(queryClient, piece(0, "one\n"));
     startGeneration(queryClient);
-    expect(await queryClient.fetchQuery(liveOutputQuery(done.id))).toEqual({ [RUN]: { text: "one\n", missed: false } });
+    expect(await queryClient.fetchQuery(liveOutputQuery(done.id))).toEqual({
+      [RUN]: { text: "one\n", end: 4, missed: false },
+    });
   });
 });
