@@ -85,3 +85,7 @@ export const call = async <A, E>(f: (client: Client) => Effect.Effect<A, E>): Pr
 /** Where the hub serves the whole output of a tool step that shows only its start and end. */
 export const toolLogUrl = (threadId: string, messageId: string, stepId: string): string =>
   `${API_URL}/api/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/steps/${encodeURIComponent(stepId)}/log`;
+
+/** Where the hub serves a command's whole output, which its record in the Terminal shows cut (ADR 023). */
+export const commandLogUrl = (attemptId: string, commandId: string): string =>
+  `${API_URL}/api/attempts/${encodeURIComponent(attemptId)}/commands/${encodeURIComponent(commandId)}/log`;

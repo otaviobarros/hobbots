@@ -113,11 +113,25 @@ export const APPROVAL_NOTE = [
 ].join(" ");
 
 /**
- * The text appended to Claude Code's system prompt: the hob's instructions, the approval note when
- * the turn can ask the user, and the sandbox note when sandboxed.
+ * What a hob with its own GitHub App is told about its commits (ADR 022): it commits as its bot,
+ * unsigned, and GitHub signs them when the hub pushes them. Without it, a hob that reads the user's
+ * signing setup asks Git for a signature that only the user's key could make.
  */
-export const turnInstructions = (instructions: string, sandboxed: boolean, asks = false) =>
-  [instructions, asks ? APPROVAL_NOTE : "", sandboxed ? SANDBOX_NOTE : ""].filter((part) => part !== "").join("\n\n");
+export const botCommitNote = (commitAs: CommitIdentity) =>
+  [
+    `Your commits are made as ${commitAs.name} <${commitAs.email}>, the bot of your own GitHub App, and are unsigned here: never pass -S or turn signing on.`,
+    "When your commits are pushed, GitHub recreates them as your bot and signs them, so they show as Verified on GitHub. A local commit shows no signature until then; that is expected.",
+  ].join(" ");
+
+/**
+ * The text appended to Claude Code's system prompt: the hob's instructions, the approval note when
+ * the turn can ask the user, the sandbox note when sandboxed, and the bot note when the hob commits
+ * as its own app.
+ */
+export const turnInstructions = (instructions: string, sandboxed: boolean, asks = false, commitAs?: CommitIdentity) =>
+  [instructions, asks ? APPROVAL_NOTE : "", sandboxed ? SANDBOX_NOTE : "", commitAs ? botCommitNote(commitAs) : ""]
+    .filter((part) => part !== "")
+    .join("\n\n");
 
 /** The user's own Claude Code configuration folder, which the sandbox keeps closed. */
 const userConfigFolder = () => process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
@@ -955,10 +969,12 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           // sandbox that starts still wraps the runtime.
           const tools = toolTurn(request.tools, policySandbox(declared), request.hubTools);
           const sandboxed = tools !== null && sandbox.state === "on";
+          const commitAs = tools?.commitAs;
           const instructions = turnInstructions(
             request.instructions,
             sandboxed,
             tools !== null && Boolean(request.approvals),
+            commitAs,
           );
           // The sandbox opens the binary's folder, so it must be a real path, never the hub's own folder.
           const absoluteBinary = sandboxed ? yield* resolveBinary(binary) : binary;
@@ -974,7 +990,6 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               : [userConfigFolder(), request.tools.runtimeFolder];
             yield* Effect.promise(() => adoptSession(target, [source], sessionId));
           }
-          const commitAs = tools?.commitAs;
           const signingAgent = turnSigningAgent(sandboxed ? tools : null);
           const prepared = sandboxed
             ? yield* Effect.acquireRelease(

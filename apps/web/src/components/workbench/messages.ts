@@ -1,4 +1,6 @@
-import { formatCount, formatList } from "../../lib/format.ts";
+import type { FileChange } from "@hobbots/domain";
+import { formatCount, formatList, plural } from "../../lib/format.ts";
+import type { Mark } from "./tabs/summary-model.ts";
 import type { UnavailableReason, WorkbenchTab } from "./workbench-model.ts";
 
 /** Copy for the Workbench: one Task's full view (ADR 023, STD-I18N-001). */
@@ -53,5 +55,127 @@ export const messages = {
     terminal: ({ name }: { name: string }) => `${name} did not use the terminal in this task.`,
   },
   comingSoon: "Watching a hob use a browser comes in a later update.",
+  terminal: {
+    commands: "Commands",
+    tally: ({ total, failed, running }: { total: number; failed: number; running: number }) =>
+      [
+        plural(total, { one: "1 command", other: `${formatCount(total)} commands` }),
+        ...(failed > 0 ? [`${formatCount(failed)} failed`] : []),
+        ...(running > 0 ? [`${formatCount(running)} running`] : []),
+      ].join(" · "),
+    readOnly: "A record of what ran. You cannot type here.",
+    none: "No commands yet. They show here as they run.",
+    state: {
+      running: ({ time }: { time: string }) => `Running · ${time}`,
+      succeeded: "Succeeded",
+      failed: "Failed",
+      uncertain: "Cut off",
+    },
+    exitCode: ({ code }: { code: number }) => `exit code ${formatCount(code)}`,
+    uncertain: "The turn ended while this ran, so whether it finished is not known.",
+    folder: "Ran in",
+    sandbox: "Sandbox",
+    started: "Started",
+    took: "Took",
+    inSandbox: "In the sandbox",
+    unsandboxed: "Unsandboxed",
+    liveOutput: "Output",
+    waiting: "Nothing printed yet.",
+    atEnd: "Its output shows when it ends.",
+    missed: "Earlier output was not seen live. All of it shows here when the command ends.",
+    openLog: ({ size }: { size: string }) => `Open the full log (${size})`,
+    logCut: ({ size }: { size: string }) => `The log keeps the start and the end; ${size} in the middle was left out.`,
+    noLog: {
+      cleared: "The full log was cleared after 30 days.",
+      "attempt-limit": "The full log was not kept: this task had kept all the logs it may.",
+      other: "The full log could not be kept.",
+    },
+  },
   names: (names: ReadonlyArray<string>) => formatList(names),
+  summary: {
+    asked: "What you asked",
+    askedBy: ({ name }: { name: string }) => `What ${name} asked`,
+    expected: ({ text }: { text: string }) => `Expected back: ${text}`,
+    happened: "What happened",
+    nothingYet: ({ name }: { name: string }) => `${name} has not reported anything yet.`,
+    nothingHappened: ({ name }: { name: string }) => `${name} did not report any progress in this attempt.`,
+    mark: {
+      done: "Done",
+      failed: "Failed",
+      waiting: "Waiting",
+      running: "Working",
+      next: "Next",
+      cancelled: "Stopped",
+      unresolved: "Stop not confirmed",
+    } satisfies Record<Mark, string>,
+    step: ({ index, total, title }: { index: number; total: number; title: string }) =>
+      `Step ${formatCount(index)} of ${formatCount(total)}: ${title}`,
+    member: ({ name, title }: { name: string; title: string }) => `${name}: ${title}`,
+    tries: ({ count }: { count: number }) =>
+      plural(count, { one: `${formatCount(count)} try`, other: `${formatCount(count)} tries` }),
+    openStep: ({ title }: { title: string }) => `Open ${title} in Workbench`,
+    milestone: ({ title }: { title: string }) => `Milestone: ${title}`,
+    endedFailed: "This attempt failed.",
+    endedStopped: "This attempt stopped before it finished.",
+    endedUnresolved:
+      "Hobbots asked this attempt to stop but could not confirm that it did, so its session may still be running.",
+    endedWhy: ({ why }: { why: string }) => `Why: ${why}`,
+    made: "What it made",
+    nothingMade: ({ name }: { name: string }) => `${name} did not make or change anything in this attempt.`,
+    madeSoFar: ({ name }: { name: string }) => `Nothing yet. What ${name} makes shows here as it happens.`,
+    readingChanges: "Reading the changed files…",
+    change: {
+      added: "Added",
+      edited: "Edited",
+      deleted: "Deleted",
+      moved: "Moved",
+      link: "Link",
+    } satisfies Record<FileChange["kind"], string>,
+    seeChange: ({ path }: { path: string }) => `See the change to ${path} in Changes`,
+    seeFile: ({ label }: { label: string }) => `See ${label} in Files`,
+    movedFrom: ({ path }: { path: string }) => `from ${path}`,
+    moreChanges: ({ count }: { count: number }) =>
+      plural(count, {
+        one: `See ${formatCount(count)} more changed file`,
+        other: `See ${formatCount(count)} more changed files`,
+      }),
+    open: "Still open",
+    nothingOpen: "Nothing is waiting on you or anyone else.",
+    readingOpen: "Reading what is still open…",
+    openUnread: "Hobbots could not read what is still open, so something may still be waiting.",
+    tryAgain: "Try again",
+    questionForYou: "A question for you",
+    questionFor: ({ name }: { name: string }) => `A question for ${name}`,
+    approval: "Waiting for your approval",
+    answerInChat: "Answer in the chat",
+    decideInChat: "Decide in the chat",
+    waitingList: "What the hobs on this task are waiting on",
+    result: "The result",
+    noResult: "No result yet.",
+    resultFrom: ({ number }: { number: number }) => `From attempt ${formatCount(number)}.`,
+    tabs: "Open the other views",
+    seeChanges: ({ count }: { count: number }) =>
+      plural(count, {
+        one: `See the ${formatCount(count)} changed file`,
+        other: `See the ${formatCount(count)} changed files`,
+      }),
+    seeFiles: ({ count }: { count: number }) =>
+      plural(count, { one: `See the ${formatCount(count)} file`, other: `See the ${formatCount(count)} files` }),
+    seeTerminal: "See what ran in Terminal",
+  },
+  chat: {
+    open: ({ name }: { name: string }) => `Talk to ${name}`,
+    hide: "Hide the chat",
+    label: ({ title }: { title: string }) => `Talk about ${title}`,
+    heading: ({ name }: { name: string }) => `Talk to ${name}`,
+    about: ({ title }: { title: string }) => `About “${title}”`,
+    close: "Close the chat",
+    notes: "Your notes on this task",
+    empty: ({ name }: { name: string }) => `Nothing sent about this task yet. ${name} reads what you send here.`,
+    hintOwner: ({ name }: { name: string }) => `Goes to ${name} as a note on this task.`,
+    hintLead: ({ lead, owner }: { lead: string; owner: string }) =>
+      `Goes to ${lead}, who leads this work and passes it on to ${owner}.`,
+    // Each nudge is a note sent with one tap. The set is copy, not a decision (ADR 023).
+    nudges: ["Looks good", "Explain what you did", "Keep going"],
+  },
 };

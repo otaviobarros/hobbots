@@ -4,13 +4,16 @@ import type { WorkbenchTab } from "./workbench-model.ts";
 
 /**
  * Where the Workbench is in the address (STD-REACT-002): `bench` is the Task it shows, `tab` the
- * tab other than Summary, and `attempt` an Attempt other than the latest. Opened from the drawer,
- * `task` keeps the drawer's Task, so going back reopens it.
+ * tab other than Summary, `attempt` an Attempt other than the latest, and `chat` while its chat
+ * drawer is open. Opened from the drawer, `task` keeps the drawer's Task, so going back reopens it.
  */
 export interface WorkbenchSearch {
   readonly bench?: string | undefined;
   readonly tab?: WorkbenchTab | undefined;
   readonly attempt?: string | undefined;
+  /** A file to show in the tab, by its absolute path, as Summary's links into Changes and Files ask. */
+  readonly file?: string | undefined;
+  readonly chat?: "open" | undefined;
 }
 
 /** Opens a Task's Workbench in the chat's place. It always opens on Summary, on the latest Attempt. */
@@ -32,16 +35,24 @@ export const useWorkbenchMoves = (hobId: AgentId, threadId: ThreadId) => {
   const params = { hobId, threadId };
   return {
     // Moving between tabs or Attempts replaces the address, so Back in the browser leaves the Workbench.
-    tab: (tab: WorkbenchTab) =>
+    tab: (tab: WorkbenchTab, file?: string) =>
       void navigate({
         from,
         to,
         params,
-        search: (prev) => ({ ...prev, tab: tab === "summary" ? undefined : tab }),
+        search: (prev) => ({ ...prev, tab: tab === "summary" ? undefined : tab, file }),
         replace: true,
       }),
     attempt: (attemptId: AttemptId) =>
       void navigate({ from, to, params, search: (prev) => ({ ...prev, attempt: attemptId }), replace: true }),
+    chat: (open: boolean) =>
+      void navigate({
+        from,
+        to,
+        params,
+        search: (prev) => ({ ...prev, chat: open ? "open" : undefined }),
+        replace: true,
+      }),
     back: () =>
       void navigate({
         from,
@@ -57,6 +68,10 @@ export interface WorkbenchView {
   readonly taskId: TaskId;
   readonly tab: WorkbenchTab;
   readonly attemptId: AttemptId | undefined;
+  /** A file the tab shows first, by its absolute path, or undefined. */
+  readonly file: string | undefined;
   /** Where it was opened from, which Back returns to. */
   readonly from: "chat" | "drawer";
+  /** Whether the Task's chat drawer is open beside the tabs. */
+  readonly chatOpen: boolean;
 }
