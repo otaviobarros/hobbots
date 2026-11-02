@@ -25,7 +25,7 @@ const api = async <A>(current: Hub, method: string, path: string, body?: unknown
 };
 
 // covers PE-002
-test("[TC-GEN-022] connects GitHub in Settings and grants it per hob on the Charms tab", async ({ page }) => {
+test("[TC-GEN-024] connects GitHub in Settings and grants it per hob on the Charms tab", async ({ page }) => {
   // Stand-ins for GitHub's sign-in and the keychain: the code is entered a second after Connect.
   hub = await startHub(dataDir, { HOBBOTS_FAKE_GITHUB: "on" });
   const current = hub;
