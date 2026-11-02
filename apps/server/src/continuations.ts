@@ -1,5 +1,13 @@
 import { type CarriedWork, type CarryingTurn, ChatService, Continuations, MemberContinuations } from "@hobbots/agents";
-import type { AgentId, BackpackItem, Task, TaskId, ThreadId } from "@hobbots/domain";
+import {
+  type AgentId,
+  type Attempt,
+  type BackpackItem,
+  isLiveAttempt,
+  type Task,
+  type TaskId,
+  type ThreadId,
+} from "@hobbots/domain";
 import {
   arrivalsText,
   Backpack,
@@ -189,13 +197,17 @@ export const WakeOnArrival = Layer.effectDiscard(
             item.threadId === null ? Effect.void : chat.wake(item.threadId),
             Option.isSome(signal) ? signal.value.notify : Effect.void,
           ]).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not wake a thread for its hob's work", cause)));
+    // An Attempt that ended frees its Task: a member's work that waited behind it can start now.
+    const freed = (attempt: Attempt | null) =>
+      attempt === null || isLiveAttempt(attempt.state) || Option.isNone(signal) ? Effect.void : signal.value.notify;
     yield* Stream.fromSubscription(subscription).pipe(
-      Stream.runForEach((event) =>
-        event._tag === "Journaled" &&
-        (event.entry.payload._tag === "BackpackItemRecorded" || event.entry.payload._tag === "BackpackItemChanged")
-          ? wake(event.entry.payload.item)
-          : Effect.void,
-      ),
+      Stream.runForEach((event) => {
+        if (event._tag !== "Journaled") return Effect.void;
+        const payload = event.entry.payload;
+        if (payload._tag === "BackpackItemRecorded" || payload._tag === "BackpackItemChanged")
+          return wake(payload.item);
+        return payload._tag === "TaskStateChanged" ? freed(payload.attempt) : Effect.void;
+      }),
       Effect.forkScoped,
     );
     // Subscribed now: work recorded since the chat first looked at start is woken here.
