@@ -1,5 +1,6 @@
 import type { AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { WorkspaceBackpack } from "../backpack/quest-backpack.tsx";
 import { messages } from "./messages.ts";
 import { QuestRoom } from "./quest-room.tsx";
 import { type Pins, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
@@ -47,6 +48,7 @@ export function QuestTab({
           <span className="font-pixel text-lg text-moonlight">{copy.emptyTitle}</span>
           <span>{copy.empty}</span>
         </div>
+        <WorkspaceBackpack hobs={hobs} />
       </>
     );
   }
@@ -65,6 +67,7 @@ export function QuestTab({
           onOpen={threadId === undefined ? undefined : open}
         />
       ))}
+      <WorkspaceBackpack hobs={hobs} />
     </div>
   );
 }
