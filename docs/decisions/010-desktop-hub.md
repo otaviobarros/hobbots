@@ -1,6 +1,6 @@
 # ADR 010 — The desktop hub
 
-Status: **Accepted.** Refines [ADR 006](006-server-and-clients.md) for the MVP. [ADR 012](012-macos-hub-service.md) refines how the background service runs on macOS.
+Status: **Accepted.** Refines [ADR 006](006-server-and-clients.md) for the MVP. [ADR 012](012-macos-hub-service.md) refines how the background service runs on macOS, and [ADR 021](021-devices-and-remote-access.md) decides device approval and the Tailscale route.
 
 ## Decision
 
@@ -29,5 +29,7 @@ The scenarios that would show this decision holds. Each names the test case or e
 
 - Closing the window keeps the server and a running reply alive, and Quit stops it: `[TC-EX-008]`, `[TC-EX-010]`.
 - A second launch starts no second server: `[TC-DP-010]` in `background-service.e2e.ts`.
-- Another device on the tailnet connects only after it is allowed once, and a revoked device is refused at once. Not proven yet: [#14](https://github.com/otaviobarros/hobbots/issues/14), [#15](https://github.com/otaviobarros/hobbots/issues/15).
+- Another device on the tailnet connects only after it is allowed once, a browser on the hub asks once too, and only the hub's window is trusted without asking ([ADR 021](021-devices-and-remote-access.md)). Not proven yet: [#338](https://github.com/otaviobarros/hobbots/issues/338), [#339](https://github.com/otaviobarros/hobbots/issues/339).
+- With remote access on, the server listens only on loopback and the hub's tailnet addresses, and closes the tailnet listener when Tailscale disconnects. Not proven yet: [#340](https://github.com/otaviobarros/hobbots/issues/340).
+- A revoked device is refused at once, its open streams close, and Pause stops tailnet traffic while loopback keeps working. Not proven yet: [#342](https://github.com/otaviobarros/hobbots/issues/342), [#343](https://github.com/otaviobarros/hobbots/issues/343).
 - Hobs act only on the hub's files, never the connected device's. Not proven yet: [#15](https://github.com/otaviobarros/hobbots/issues/15).
