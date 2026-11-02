@@ -30,6 +30,7 @@ import {
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Clock, type Duration, Effect, Layer, ManagedRuntime, Ref } from "effect";
+import { makeParser } from "effect/encoding/Sse";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeviceGate, DeviceSecretsLive, knownWindowKey, PairingLimiterLive } from "../src/devices.ts";
@@ -192,29 +193,27 @@ const openStream = (route: Route, headers: Readonly<Record<string, string>>) =>
       (response) => {
         let text = "";
         let ended = false;
+        // Each frame's name (`ready`, `remote-access`, …; a journal entry is `message`) and its data,
+        // as Effect's SSE parser reads them.
+        const frames: Array<{ readonly name: string; readonly data: Record<string, unknown> }> = [];
+        const parser = makeParser((event) => {
+          if (event._tag === "Event") frames.push({ name: event.event, data: JSON.parse(event.data) });
+        });
         response.setEncoding("utf8");
-        response.on("data", (chunk) => (text += chunk));
+        response.on("data", (chunk: string) => {
+          text += chunk;
+          parser.feed(chunk);
+        });
         response.on("close", () => {
           ended = true;
           openStreams.delete(sent);
         });
-        // Each frame's name (`ready`, `remote-access`, …; a journal entry has none) and its data.
-        const frames = () =>
-          text
-            .split("\n\n")
-            .map((frame) => frame.split("\n"))
-            .flatMap((lines) => {
-              const data = lines.find((line) => line.startsWith("data: "));
-              if (data === undefined) return [];
-              const name = lines.find((line) => line.startsWith("event: "))?.slice("event: ".length);
-              return [{ name, data: JSON.parse(data.slice("data: ".length)) as Record<string, unknown> }];
-            });
         done({
           status: response.statusCode ?? 0,
           tags: () =>
-            frames().map(({ name, data }) => (name === STREAM_FRAME.ready ? "Ready" : String(data._tag ?? data.type))),
+            frames.map(({ name, data }) => (name === STREAM_FRAME.ready ? "Ready" : String(data._tag ?? data.type))),
           remoteAccess: () =>
-            frames()
+            frames
               .filter(({ name }) => name === STREAM_FRAME.remoteAccess)
               .map(({ data }) => data.status as RemoteAccessStatus),
           text: () => text,
