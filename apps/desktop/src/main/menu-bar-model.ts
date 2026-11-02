@@ -2,7 +2,10 @@
  * What the menu-bar icon draws and says, and what closing the window does (design screen 14,
  * ADR 012). Pure, so the rules are testable without Electron; menu-bar.ts puts them on screen.
  */
+import { messages } from "./messages.ts";
 import type { ServerState, ServerStatus } from "./server.ts";
+
+const copy = messages.remoteAccess;
 
 /** The chief of the hobs in 10 × 10 cells, as the design draws it for the menu bar; "." and "k" (eyes) are clear. */
 const TRAY_CHIEF = [
@@ -134,8 +137,8 @@ export interface PauseItem {
 export const pauseItem = (state: ServerState, remote: RemoteAccessSwitch | null): PauseItem | null => {
   if (state !== "running" || remote === null || !remote.enabled) return null;
   return remote.paused
-    ? { label: "Resume remote access", sublabel: "Paused · only this computer can open Hobbots", pause: false }
-    : { label: "Pause remote access", sublabel: "Your other devices can open Hobbots", pause: true };
+    ? { label: copy.resume, sublabel: copy.resumeHint, pause: false }
+    : { label: copy.pause, sublabel: copy.pauseHint, pause: true };
 };
 
 export type CloseAction =

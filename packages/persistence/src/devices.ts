@@ -102,6 +102,16 @@ export const DeviceRepositoryLive = Layer.effect(
         orElse: () => sql`SELECT id FROM devices WHERE id = ${id} AND revoked_at IS NULL`,
       });
 
+    // Several rows at once, in byte order on both dialects, so two transactions never wait on each other.
+    const lockDevices = (ids: ReadonlyArray<DeviceId>) =>
+      sql.onDialectOrElse({
+        pg: () => sql<{ readonly id: string; readonly revokedAt: string | null }>`SELECT id, revoked_at FROM devices
+          WHERE ${sql.in("id", ids)} ORDER BY id COLLATE "C" FOR UPDATE`,
+        orElse: () =>
+          sql<{ readonly id: string; readonly revokedAt: string | null }>`SELECT id, revoked_at FROM devices
+            WHERE ${sql.in("id", ids)}`,
+      });
+
     const whileApproved =
       (id: DeviceId) =>
       <A, E, R>(write: Effect.Effect<A, E, R>) =>
@@ -178,16 +188,24 @@ export const DeviceRepositoryLive = Layer.effect(
       touch: (id, at) =>
         sql`UPDATE devices SET last_active_at = ${at} WHERE id = ${id}`.pipe(Effect.asVoid, Effect.orDie),
       // The hub's window is never revoked: its key changes on every start instead.
-      revoke: (id, at) =>
-        journaled(1, () =>
-          Effect.gen(function* () {
-            const updated = yield* sql`UPDATE devices SET revoked_at = ${at}
-              WHERE id = ${id} AND id <> ${WINDOW_DEVICE_ID} AND revoked_at IS NULL RETURNING id`;
-            if (updated.length === 0) return null;
-            const device = yield* find(id).pipe(Effect.flatMap(Effect.fromOption), Effect.orDie);
-            return { value: device, events: [{ _tag: "DeviceRevoked", device } as const] };
-          }),
-        ),
+      revoke: (id, by, at) =>
+        Effect.gen(function* () {
+          // Both rows before the journal head, in one order, as a guarded decision takes its own row
+          // before journaling: a decision the target already started finishes first, and none deadlocks.
+          const locked = yield* lockDevices([id, by]).pipe(Effect.orDie);
+          if (!locked.some((row) => row.id === by && row.revokedAt === null)) {
+            return yield* new DeviceRevoked({ message: "This device was removed from this hub." });
+          }
+          return yield* journaled(1, () =>
+            Effect.gen(function* () {
+              const updated = yield* sql`UPDATE devices SET revoked_at = ${at}
+                WHERE id = ${id} AND id <> ${WINDOW_DEVICE_ID} AND revoked_at IS NULL RETURNING id`;
+              if (updated.length === 0) return null;
+              const device = yield* find(id).pipe(Effect.flatMap(Effect.fromOption), Effect.orDie);
+              return { value: device, events: [{ _tag: "DeviceRevoked", device } as const] };
+            }),
+          );
+        }).pipe(sql.withTransaction, Effect.catchTag("SqlError", Effect.die)),
       whileApproved,
       openPairing: (request, secretHash) =>
         sql`INSERT INTO pairing_requests ${sql.insert({

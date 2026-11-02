@@ -19,14 +19,8 @@ export type HubChange =
   | ({ readonly _tag: "RemoteAccess" } & RemoteAccessView);
 
 /** The part of the hub's remote access the main process uses: its port, and whether it is on and paused. */
-export interface RemoteAccessView {
-  readonly port: number;
-  readonly enabled: boolean;
-  readonly paused: boolean;
-}
-
-/** The fields of a remote access status the main process reads. */
 export const RemoteAccessView = Schema.Struct({ port: Schema.Int, enabled: Schema.Boolean, paused: Schema.Boolean });
+export type RemoteAccessView = typeof RemoteAccessView.Type;
 
 /** The part of a journal entry the main process reads; the rest of the envelope is ignored. */
 const HubEntry = Schema.Struct({ type: Schema.String });

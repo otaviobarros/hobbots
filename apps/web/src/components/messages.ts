@@ -389,7 +389,7 @@ export const messages = {
     removedTitle: ({ hub }: { hub: string }) => `This device was removed from ${hub}`,
     removedTitleNoName: "This device was removed from the hub",
     removedBody:
-      "Someone revoked it in Settings › Devices on the hub, so it can no longer reach your hobs. Ask again, then allow it on the hub, to use Hobbots here.",
+      "Someone revoked it, so it can no longer reach your hobs. Ask again, then allow it on the hub, to use Hobbots here.",
     askAgain: "Ask again",
     reconnecting: "Reconnecting to Hobbots… Messages you send wait here and go out when it is back.",
     unreachable: ({ hub }: { hub: string }) =>

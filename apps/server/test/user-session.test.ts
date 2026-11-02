@@ -24,6 +24,7 @@ import {
   type ReplyStep,
   roleFields,
   type Thread,
+  WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -433,7 +434,9 @@ describe("only approved devices reach the hub", () => {
     const { cookie } = await pairedBrowser();
     const [, phone] = await devices();
     await runtime.runPromise(
-      Effect.flatMap(DeviceRepository, (repo) => repo.revoke(DeviceId.make(phone?.id ?? ""), new Date().toISOString())),
+      Effect.flatMap(DeviceRepository, (repo) =>
+        repo.revoke(DeviceId.make(phone?.id ?? ""), WINDOW_DEVICE_ID, new Date().toISOString()),
+      ),
     );
     const decide = `/api/approvals/${pending.id}/decision`;
     const decision = { decision: "approve", actionDigest: pending.actionDigest, lifetime: "always" };

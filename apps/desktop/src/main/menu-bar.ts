@@ -17,10 +17,13 @@ import {
   TRAY_SIZE,
   trayModel,
 } from "./menu-bar-model.ts";
+import { messages } from "./messages.ts";
 import { readUntil } from "./read-until.ts";
 import type { ServerState, ServerSupervisor } from "./server.ts";
 import type { SettingsStore } from "./settings.ts";
 import { reveal } from "./single-instance.ts";
+
+const copy = messages.remoteAccess;
 
 /** A hob with a turn in progress, and the thread it runs in. */
 interface WorkingHob {
@@ -122,9 +125,9 @@ export const startMenuBar = ({ supervisor, settings, hub, fetchHub, createWindow
       console.error(error);
       await dialog.showMessageBox({
         type: "warning",
-        message: paused ? "Hobbots could not pause remote access" : "Hobbots could not resume remote access",
-        detail: "Check that the server is running, then try again.",
-        buttons: ["OK"],
+        message: paused ? copy.couldNotPause : copy.couldNotResume,
+        detail: copy.checkServer,
+        buttons: [copy.ok],
       });
     }
   };

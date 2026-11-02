@@ -32,15 +32,7 @@ test("[TC-DP-099] a browser revoked while it is open sees it was removed, and it
   await page.goto(`${current.url}/#/settings`);
   await expect(page.getByRole("region", { name: "Devices" })).toBeVisible();
 
-  // The hub's window revokes the test browser, as Settings › Devices on another device would.
-  const listed = await fetch(`${current.url}/api/devices`, { headers: current.headers });
-  const devices = (await listed.json()) as ReadonlyArray<{ readonly id: string; readonly name: string }>;
-  const browser = devices.find((device) => device.name === "Playwright");
-  const revoked = await fetch(`${current.url}/api/devices/${browser?.id}/revoke`, {
-    method: "POST",
-    headers: current.headers,
-  });
-  expect(revoked.status).toBe(200);
+  expect((await revokeBrowser(current)).status).toBe(200);
 
   // Its stream closes at once, and the hub's answer to it shows the removed screen and drops the cookie.
   await expect(page.getByRole("heading", { name: "This device was removed from the hub" })).toBeVisible({
@@ -54,6 +46,33 @@ test("[TC-DP-099] a browser revoked while it is open sees it was removed, and it
   // Ask again loads the page afresh, without the old token, so the hub sees a device to pair.
   await page.getByRole("button", { name: "Ask again" }).click();
   await expect(page.getByRole("heading", { name: "This device was removed from the hub" })).toBeHidden();
+});
+
+/** Revokes the test browser from the hub's window, as any other approved device could. */
+const revokeBrowser = async (current: Hub) => {
+  const listed = await fetch(`${current.url}/api/devices`, { headers: current.headers });
+  const devices = (await listed.json()) as ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  const browser = devices.find((device) => device.name === "Playwright");
+  return fetch(`${current.url}/api/devices/${browser?.id}/revoke`, { method: "POST", headers: current.headers });
+};
+
+// covers DP-004
+test("[TC-DP-104] a browser revoked while closed sees it was removed on its first read, before any retry", async ({
+  page,
+}) => {
+  hub = await startHub(dataDir);
+  const current = hub;
+  await setupDone(current);
+  await page.goto(`${current.url}/#/settings`);
+  await expect(page.getByRole("region", { name: "Devices" })).toBeVisible();
+  await page.goto("about:blank");
+  expect((await revokeBrowser(current)).status).toBe(200);
+
+  // Only the first answer says revoked, since it drops the cookie; later ones say only "no device".
+  await page.goto(`${current.url}/#/settings`);
+  await expect(page.getByRole("heading", { name: "This device was removed from the hub" })).toBeVisible({
+    timeout: 3_000,
+  });
 });
 
 // The fake tailnet serves on 127.0.0.2, which Linux routes to loopback; macOS needs an alias first.

@@ -2,17 +2,22 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@ta
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { noteRefusal } from "./api/live.ts";
+import { noteRefusal, retryUnlessRefused } from "./api/live.ts";
 import { followWindowFocus } from "./lib/window-focus.ts";
 import { createAppRouter } from "./router.tsx";
 import "./styles.css";
 
-// A read or a change the hub refuses as revoked shows the removed screen (ADR 021).
+// A read or a change the hub refuses as revoked shows the removed screen (ADR 021); a read notes
+// the refusal on its first failure, before any retry could hide it.
 const queryClient: QueryClient = new QueryClient({
   queryCache: new QueryCache({ onError: (error) => noteRefusal(queryClient, error) }),
   mutationCache: new MutationCache({ onError: (error) => noteRefusal(queryClient, error) }),
   defaultOptions: {
-    queries: { staleTime: 30_000, refetchOnWindowFocus: false },
+    queries: {
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+      retry: (failures, error) => retryUnlessRefused(queryClient, failures, error),
+    },
   },
 });
 const router = createAppRouter(queryClient);

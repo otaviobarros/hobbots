@@ -55,10 +55,16 @@ export class DeviceRepository extends Context.Service<
     readonly ensureWindow: (at: string) => Effect.Effect<void>;
     readonly touch: (id: DeviceId, at: string) => Effect.Effect<void>;
     /**
-     * Marks a device revoked with its DeviceRevoked event; none when there is no such device, it was
-     * already revoked, or it is the hub's window, which is never revoked.
+     * Marks a device revoked with its DeviceRevoked event, in one transaction that first checks, and
+     * on PostgreSQL locks, the revoking device `by` and the target's rows, in one order, before the
+     * journal: a decision the target already started is saved first. None when there is no such
+     * device, it was already revoked, or it is the hub's window, which is never revoked.
      */
-    readonly revoke: (id: DeviceId, at: string) => Effect.Effect<Option.Option<Committed<Device>>>;
+    readonly revoke: (
+      id: DeviceId,
+      by: DeviceId,
+      at: string,
+    ) => Effect.Effect<Option.Option<Committed<Device>>, DeviceRevoked>;
     /**
      * Runs `write` in one transaction that first checks, and on PostgreSQL locks, the device's row,
      * so a Revoke either lands before and refuses it, or waits until it is saved.
@@ -285,7 +291,7 @@ export class DeviceService extends Context.Service<
           if (Option.isNone(found)) return yield* new DeviceNotFound();
           if (found.value.revokedAt !== null) return found.value;
           // Checked in the same transaction, so a device revoked meanwhile revokes nothing.
-          const saved = yield* session.whileApproved(repo.revoke(id, yield* nowIso));
+          const saved = yield* repo.revoke(id, session.deviceId, yield* nowIso);
           if (Option.isNone(saved)) return Option.getOrElse(yield* repo.find(id), () => found.value);
           yield* publisher.publish(saved.value.entries);
           return saved.value.value;
