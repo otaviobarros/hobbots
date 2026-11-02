@@ -199,6 +199,11 @@ export class ChatService extends Context.Service<
      */
     readonly wake: (threadId: ThreadId) => Effect.Effect<void>;
     /**
+     * Wakes the thread even when you stopped its work there, as when you retry that work's blocker:
+     * your choice starts it again without a message of yours.
+     */
+    readonly resume: (threadId: ThreadId) => Effect.Effect<void>;
+    /**
      * Threads with a turn in progress in this process, until its runtime has exited. Each change is
      * announced as the transient `TurnStarted` or `TurnEnded`, published once it has happened.
      */
@@ -1152,6 +1157,11 @@ export class ChatService extends Context.Service<
       });
 
       const wake = (threadId: ThreadId) => drainThreads([threadId]);
+      const resume = (threadId: ThreadId) =>
+        Effect.suspend(() => {
+          holdBack.delete(threadId);
+          return wake(threadId);
+        });
 
       // Messages queued and work left waiting before a restart start again, through the same path
       // as any other.
@@ -1173,6 +1183,7 @@ export class ChatService extends Context.Service<
         restore,
         drainAgent,
         wake,
+        resume,
         activeThreads,
         streamingReplies,
       });
