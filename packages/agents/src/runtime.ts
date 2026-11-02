@@ -196,11 +196,23 @@ export interface HubToolAnswer {
   readonly refused: boolean;
 }
 
+/**
+ * The reply step a hub tool call shows as: the runtime's id for the call, and how the hub reports
+ * on it, such as while the call waits for the user's approval (ADR 020).
+ */
+export interface HubCallStep {
+  readonly id: string;
+  readonly report: (event: RuntimeEvent) => void;
+}
+
 /** The Hobbots tools a turn offers, and how a call reaches the hub, which checks it. */
 export interface HubTools {
   readonly tools: ReadonlyArray<HubTool>;
-  /** Never fails: a refused call is an answer with the reason. */
-  readonly call: (name: string, input: unknown) => Effect.Effect<HubToolAnswer>;
+  /**
+   * Never fails: a refused call is an answer with the reason. `step` is the call's step, when the
+   * runtime knows it; without one, a call that needs the user's approval is refused.
+   */
+  readonly call: (name: string, input: unknown, step?: HubCallStep) => Effect.Effect<HubToolAnswer>;
 }
 
 export interface PromptRequest {

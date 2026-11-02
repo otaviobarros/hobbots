@@ -18,6 +18,7 @@ import {
   type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import {
+  approvalNote,
   operationDecision,
   type PromptRequest,
   type Redactor,
@@ -25,6 +26,7 @@ import {
   RuntimeError,
   type RuntimeEvent,
   RuntimeLimitReached,
+  refusal,
   type ToolAccess,
   type TurnApprovals,
   UNRECORDED_TOOL_CALL,
@@ -40,15 +42,7 @@ import {
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
-import {
-  approvalNote,
-  type CallDecision,
-  decideCall,
-  refusal,
-  startCall,
-  type ToolCall,
-  UNKNOWN_TOOL,
-} from "./approval.ts";
+import { type CallDecision, decideCall, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox } from "./sandbox.ts";
 import { offeredTools, toolLabel } from "./tool-calls.ts";

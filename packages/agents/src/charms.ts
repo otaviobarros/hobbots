@@ -1,6 +1,6 @@
 import type { AgentId } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
-import type { HubTools, ToolAccess } from "./runtime.ts";
+import type { HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
 
 /** A turn that may offer Charm tools: its hob, and how to read the hob's tool access now. */
@@ -10,6 +10,8 @@ export interface CharmTurn {
   readonly currentAccess: Effect.Effect<ToolAccess | null>;
   /** Redacts secrets from what a call returns, before the hob reads it. */
   readonly redactor: Redactor;
+  /** Asks the user about calls the policy answers Ask for; null, those calls are refused. */
+  readonly approvals: TurnApprovals | null;
 }
 
 /**
@@ -37,6 +39,6 @@ export const combineHubTools = (...sets: ReadonlyArray<HubTools | null>): HubToo
   return {
     tools,
     // A tool no set offers goes to the first, which refuses it in its own words.
-    call: (name, input) => (owner.get(name) ?? (given[0] as HubTools)).call(name, input),
+    call: (name, input, step) => (owner.get(name) ?? (given[0] as HubTools)).call(name, input, step),
   };
 };
