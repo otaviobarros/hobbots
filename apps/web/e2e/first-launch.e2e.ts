@@ -35,6 +35,8 @@ test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home
 
   await expect(page.getByRole("heading", { name: "Where should Hobbots run?" })).toBeVisible();
   await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
+  await expect(page.getByRole("heading", { name: "Use Hobbots from your other devices too?" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip for now" }).click();
 
   await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
   await page.getByRole("button", { name: "Connect Claude" }).click();
@@ -78,6 +80,8 @@ const openProviders = async (page: Page, current: Hub) => {
   await openApp(page, current);
   await page.getByRole("link", { name: "Get started" }).click();
   await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
+  await expect(page.getByRole("heading", { name: "Use Hobbots from your other devices too?" })).toBeVisible();
+  await page.getByRole("button", { name: "Skip for now" }).click();
   await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
 };
 

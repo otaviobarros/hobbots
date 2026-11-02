@@ -17,6 +17,7 @@ import { recordActivity, setActivity } from "./activity.ts";
 import { storeApproval } from "./approvals.ts";
 import { storeBackpackItem } from "./backpack.ts";
 import { API_URL } from "./client.ts";
+import { devicesChanged } from "./devices.ts";
 import { grantsChanged } from "./grants.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
@@ -184,12 +185,16 @@ const applyWorkEvent = (
       return;
     // A device asked to pair, or its request was decided (ADR 021).
     case "PairingRequested":
+      void pairingChanged(queryClient);
+      return;
+    // A decided request may have added a device to the list.
     case "PairingChanged":
       void pairingChanged(queryClient);
+      void devicesChanged(queryClient);
       return;
     // Any list of devices is read again. This device's own removal shows when the hub refuses it.
     case "DeviceRevoked":
-      void queryClient.invalidateQueries({ queryKey: ["devices"] });
+      void devicesChanged(queryClient);
       return;
     case "TaskStateChanged":
     case "TaskCompleted":

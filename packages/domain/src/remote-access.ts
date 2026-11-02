@@ -29,6 +29,9 @@ export type TailscaleStatus = typeof TailscaleStatus.Type;
 export const RemoteAccessProblem = Schema.Literals(["off", "paused", "tailscale", "noAddress", "cannotListen"]);
 export type RemoteAccessProblem = typeof RemoteAccessProblem.Type;
 
+/** The port the hub listens on unless the user chose another. */
+export const DEFAULT_HUB_PORT = 4317;
+
 /** A port the hub may listen on: never a privileged one. */
 export const HubPort = Schema.Int.check(Schema.isBetween({ minimum: 1024, maximum: 65535 }));
 

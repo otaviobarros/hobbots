@@ -6,6 +6,7 @@ import { Link } from "@tanstack/react-router";
 import { setupQuery } from "../api/setup.ts";
 import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
 import { ArchivedHobs } from "./archived-hobs.tsx";
+import { DeviceList } from "./devices/device-list.tsx";
 import { GeneralSettings } from "./general-settings.tsx";
 import { GitHubSettings } from "./github-settings.tsx";
 import { messages } from "./messages.ts";
@@ -133,6 +134,7 @@ export function SettingsPage() {
       <Panel label={messages.remoteAccess.heading} id="devices">
         <RemoteAccessSettings />
         <WaitingDevices />
+        <DeviceList />
       </Panel>
       <Panel label="Archived hobs">
         <ArchivedHobs />

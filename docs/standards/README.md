@@ -104,6 +104,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-REACT-009 | Logic lives outside JSX | Active |
 | STD-REACT-010 | Memoize only for a measured problem | Active |
 | STD-REACT-011 | Hooks follow the rules of hooks | Active |
+| STD-REACT-012 | A live event cancels a list's read before it reads it again | Active |
 | STD-UI-001 | Styles use theme tokens only | Active |
 | STD-UI-002 | Build on the shared primitives | Active |
 | STD-UI-003 | Every control works by keyboard and has a name | Active |

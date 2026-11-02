@@ -4,9 +4,14 @@ import { Switch } from "@hobbots/ui/components/switch";
 import { useQuery } from "@tanstack/react-query";
 import { useId } from "react";
 import { remoteAccessQuery, useUpdateRemoteAccess } from "../api/remote-access.ts";
+import { PortField } from "./devices/port-field.tsx";
+import { RemoteAddress } from "./devices/remote-address.tsx";
 import { messages } from "./messages.ts";
 
 const copy = messages.remoteAccess;
+
+/** Where Tailscale is downloaded, for every platform. */
+export const TAILSCALE_DOWNLOAD = "https://tailscale.com/download";
 
 /** Why the hub is not on the tailnet, in the words Settings uses; null while it listens everywhere. */
 export const remoteAccessWhy = (status: RemoteAccessStatus): string | null => {
@@ -33,6 +38,10 @@ export const remoteAddress = (status: RemoteAccessStatus): string | null => {
   if (host === undefined || status.listening.length === 0) return null;
   return `http://${host.includes(":") ? `[${host}]` : host}:${status.port}`;
 };
+
+/** The hub's short name on the tailnet: its MagicDNS name's first label, or else its first tailnet address. */
+export const tailnetName = (status: RemoteAccessStatus): string =>
+  status.tailscale?.dnsName?.split(".")[0] ?? status.tailscale?.addresses[0] ?? "";
 
 /** Where the hub is on the tailnet, or why it is not there, once remote access is on. */
 function RemoteAccessState({
@@ -63,29 +72,52 @@ function RemoteAccessState({
   const address = remoteAddress(status);
   if (address === null) return null;
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex animate-hb-in flex-col gap-2">
       <p role="status" className="m-0 flex items-center gap-2 text-sm">
         <span aria-hidden className="size-2 flex-none bg-mint" />
         <span>
-          {copy.connected} <b>{status.tailscale?.dnsName?.split(".")[0] ?? status.listening[0]}</b>
+          {copy.connected} <b>{tailnetName(status)}</b>
         </span>
       </p>
-      <span className="lbl pt-1 text-xs text-label">{copy.address}</span>
-      <span className="cut border-2 border-control bg-ground px-3 py-2 font-mono text-base font-bold text-moonlight">
-        {address}
-      </span>
-      <span className="text-[13px] text-label">{copy.addressNote}</span>
+      <RemoteAddress address={address} label={copy.address}>
+        <span className="text-[13px] text-label">{copy.addressNote}</span>
+        <PortField port={status.port} />
+      </RemoteAddress>
     </div>
   );
 }
 
-/** Settings › Devices: remote access over Tailscale, and why the hub is not on the tailnet when it is not (ADR 021). */
-export function RemoteAccessSettings() {
-  const labelId = useId();
-  const access = useQuery(remoteAccessQuery);
+/** How often a screen that waits for Tailscale asks the hub again, while Tailscale is not running. */
+const TAILSCALE_CHECK_MS = 5000;
+
+/**
+ * Remote access as a switch, shared by setup and Settings › Devices: the hub's status, and the value
+ * the switch shows while a change is on its way. While remote access is off the hub asks Tailscale
+ * only when asked, so `watchTailscale` asks again every few seconds until Tailscale runs.
+ */
+export const useRemoteAccessSwitch = ({ watchTailscale = false }: { readonly watchTailscale?: boolean } = {}) => {
+  const access = useQuery({
+    ...remoteAccessQuery,
+    refetchInterval: (query) =>
+      watchTailscale && query.state.data?.tailscale?.state !== "running" ? TAILSCALE_CHECK_MS : false,
+  });
   const change = useUpdateRemoteAccess();
   const status = access.data;
   const on = (change.isPending ? change.variables.enabled : undefined) ?? status?.enabled ?? false;
+  return { access, change, status, on } as const;
+};
+
+/** What Settings says while remote access is off and Tailscale is not ready to carry it; null when it is. */
+export const tailscaleNotReady = (status: RemoteAccessStatus): string | null => {
+  const state = status.tailscale?.state;
+  return state === undefined || state === "running" ? null : copy.notReady[state];
+};
+
+/** Settings › Devices: remote access over Tailscale, and why the hub is not on the tailnet when it is not (ADR 021). */
+export function RemoteAccessSettings() {
+  const labelId = useId();
+  const { access, change, status, on } = useRemoteAccessSwitch();
+  const notReady = status !== undefined && !status.enabled ? tailscaleNotReady(status) : null;
 
   return (
     <>
@@ -104,6 +136,19 @@ export function RemoteAccessSettings() {
           onCheckedChange={(enabled) => change.mutate({ enabled })}
         />
       </div>
+      {notReady !== null && (
+        <p className="m-0 flex items-start gap-2 text-sm">
+          <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
+          <span>
+            {notReady}{" "}
+            {status?.tailscale?.state === "notInstalled" && (
+              <a href={TAILSCALE_DOWNLOAD} target="_blank" rel="noreferrer" className="text-lantern">
+                {copy.getTailscale}
+              </a>
+            )}
+          </span>
+        </p>
+      )}
       {status?.enabled && (
         <RemoteAccessState
           status={status}

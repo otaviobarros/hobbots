@@ -15,7 +15,8 @@ export const useUpdateRemoteAccess = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: UpdateRemoteAccessPayload) => call((c) => c.remoteAccess.update({ payload })),
-    onSuccess: (status) => queryClient.setQueryData(remoteAccessKey, status),
+    // A new port moves this page at once when the hub serves it, before the event arrives.
+    onSuccess: (status) => applyRemoteAccess(queryClient, status),
   });
 };
 

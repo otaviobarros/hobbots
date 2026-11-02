@@ -75,3 +75,100 @@ test("[TC-DP-072] turns remote access on in Settings, and says why once Tailscal
   expect(await onTailnet(port)).toBe("ECONNREFUSED");
   await expect(remote).toBeChecked();
 });
+
+const finishSetup = (current: Hub) =>
+  fetch(`${current.url}/api/setup`, {
+    method: "PATCH",
+    headers: { ...current.headers, "content-type": "application/json" },
+    body: JSON.stringify({ completed: true, connectedProviders: ["claude-code"] }),
+  });
+
+// covers DP-002, DP-004
+test("[TC-DP-125] Settings shows the address with its QR code, and the port moves the hub and the page", async ({
+  page,
+}) => {
+  test.skip(!(await spareLoopback()), "needs 127.0.0.2 on loopback");
+  hub = await startHub(dataDir, { HOBBOTS_FAKE_TAILSCALE: "on" });
+  const current = hub;
+  const port = Number(new URL(current.url).port);
+  await finishSetup(current);
+
+  await page.goto(`${current.url}/#/settings`);
+  const devices = page.getByRole("region", { name: "Devices" });
+  await devices.getByRole("switch", { name: "Use Hobbots from my other devices" }).click();
+  const address = `http://hub.example.ts.net:${port}`;
+  await expect(devices.getByText(address, { exact: true })).toBeVisible();
+  await expect(devices.getByRole("img", { name: `QR code for ${address}` })).toBeVisible();
+
+  const field = devices.getByRole("textbox", { name: "Port" });
+  await expect(field).toHaveValue(String(port));
+  await field.fill("80");
+  await expect(devices.getByRole("alert")).toHaveText("Pick a port from 1024 to 65535.");
+  await expect(devices.getByRole("button", { name: "Change port" })).toHaveCount(0);
+
+  // A new port moves the hub's listeners, and this page, which the hub serves, follows it.
+  const moved = port + 200;
+  await field.fill(String(moved));
+  await devices.getByRole("button", { name: "Change port" }).click();
+  await expect(page).toHaveURL(`http://127.0.0.1:${moved}/#/settings`);
+  await expect(
+    page.getByRole("region", { name: "Devices" }).getByText(`http://hub.example.ts.net:${moved}`, { exact: true }),
+  ).toBeVisible();
+  expect(await onTailnet(moved)).toEqual(notPaired);
+  expect(await onTailnet(port)).toBe("ECONNREFUSED");
+});
+
+/** A second browser asks to pair and the hub's window allows it, as on another device. */
+const allowAnotherDevice = async (current: Hub, name: string) => {
+  const opened = await fetch(`${current.url}/api/pairing`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name, platform: "iOS", kind: "browser" }),
+  });
+  const { status } = (await opened.json()) as { readonly status: { readonly id: string } };
+  const allowed = await fetch(`${current.url}/api/pairing/requests/${status.id}/allow`, {
+    method: "POST",
+    headers: current.headers,
+  });
+  expect(allowed.ok).toBe(true);
+};
+
+// covers DP-004
+test("[TC-DP-126] Settings lists the allowed devices, and Revoke asks first and signs one out", async ({ page }) => {
+  hub = await startHub(dataDir);
+  const current = hub;
+  await finishSetup(current);
+  await allowAnotherDevice(current, "Safari on iPhone");
+
+  await page.goto(`${current.url}/#/settings`);
+  const allowed = page.getByRole("list", { name: "Allowed devices" });
+  await expect(allowed.getByRole("listitem")).toHaveCount(3);
+  const window = allowed.getByRole("listitem").filter({ hasText: "This computer's Hobbots window" });
+  await expect(window).toContainText("The hub · hobs work here");
+  await expect(window.getByRole("button")).toHaveCount(0);
+  const phone = allowed.getByRole("listitem").filter({ hasText: "Safari on iPhone" });
+  await expect(phone).toContainText("A browser · iOS · on this computer · allowed");
+
+  // Revoke… asks first; Keep takes the question back.
+  await phone.getByRole("button", { name: "Revoke Safari on iPhone" }).click();
+  await expect(phone.getByText("Sign Safari on iPhone out now?")).toBeVisible();
+  await phone.getByRole("button", { name: "Keep" }).click();
+  await expect(phone.getByRole("button", { name: "Revoke Safari on iPhone" })).toBeFocused();
+
+  await phone.getByRole("button", { name: "Revoke Safari on iPhone" }).click();
+  await phone.getByRole("button", { name: "Revoke", exact: true }).click();
+  await expect(allowed.getByRole("listitem")).toHaveCount(2);
+  await expect(allowed.getByText("Safari on iPhone")).toHaveCount(0);
+
+  const listed = (await (
+    await fetch(`${current.url}/api/devices`, { headers: current.headers })
+  ).json()) as ReadonlyArray<{
+    readonly name: string;
+    readonly revokedAt: string | null;
+  }>;
+  expect(listed.find((device) => device.name === "Safari on iPhone")?.revokedAt).not.toBeNull();
+
+  // A device allowed elsewhere shows up without a reload.
+  await allowAnotherDevice(current, "Firefox on Linux");
+  await expect(allowed.getByRole("listitem").filter({ hasText: "Firefox on Linux" })).toBeVisible();
+});

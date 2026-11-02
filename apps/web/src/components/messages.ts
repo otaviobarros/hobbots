@@ -369,7 +369,7 @@ export const messages = {
     failed: "Hobbots could not read or change remote access. Try again in a moment.",
     connected: "Tailscale connected · this computer is",
     address: "Address",
-    addressNote: "Type it in Hobbots on another computer, or open it in a browser on your tailnet.",
+    addressNote: "Open it in a browser on your tailnet, or scan the code from your phone.",
     why: {
       notInstalled:
         "Tailscale is not installed on this computer, so your other devices cannot reach Hobbots. Install Tailscale and sign in; Hobbots starts listening on your tailnet within seconds.",
@@ -384,6 +384,102 @@ export const messages = {
         "Remote access is paused from the menu-bar icon, so your other devices cannot reach Hobbots. They stay approved and work again once you resume.",
     },
     resume: "Resume remote access",
+    notReady: {
+      notInstalled:
+        "Tailscale is not installed on this computer. Install it and sign in so your other devices can reach Hobbots.",
+      notRunning: "Tailscale is off on this computer. Turn it on so your other devices can reach Hobbots.",
+      signedOut: "Tailscale is signed out on this computer. Sign in so your other devices can reach Hobbots.",
+    },
+    getTailscale: "Get Tailscale",
+    copy: "Copy",
+    copied: "Copied",
+    copyFailed: "Copy it by hand",
+    scan: "Scan from your phone",
+    qrLabel: ({ address }: { address: string }) => `QR code for ${address}`,
+    port: {
+      label: "Port",
+      note: ({ fallback }: { fallback: number }) =>
+        `Default ${fallback}. Devices on your tailnet need the new address after a change.`,
+      save: "Change port",
+      saving: "Changing…",
+      invalid: "Pick a port from 1024 to 65535.",
+      unavailable: ({ port, detail }: { port: number; detail: string }) =>
+        `Hobbots could not open port ${port}: ${detail}. It still uses the old one.`,
+    },
+    devices: {
+      heading: "Allowed devices",
+      window: "This computer's Hobbots window",
+      windowMeta: "The hub · hobs work here",
+      using: { desktop: "The Hobbots app", browser: "A browser" },
+      active: ({ when }: { when: string }) => `active ${when}`,
+      notUsed: ({ day }: { day: string }) => `allowed ${day}, not used yet`,
+      fromHub: "on this computer",
+      revoke: "Revoke…",
+      revokeLabel: ({ name }: { name: string }) => `Revoke ${name}`,
+      confirm: ({ name }: { name: string }) => `Sign ${name} out now?`,
+      keep: "Keep",
+      confirmRevoke: "Revoke",
+      revoking: "Revoking…",
+      failed: "Hobbots could not read your devices. Try again in a moment.",
+      revokeFailed: "Hobbots could not revoke it. Try again in a moment.",
+      footer:
+        "Each new device asks once, here and with a notification. A revoked device is signed out right away and has to ask again.",
+    },
+  },
+  where: {
+    stage: "Getting started",
+    elder: "Elder Hob",
+    speech:
+      "Hello again! First, where should your hobs live? They need one home computer. Your other devices can visit it.",
+    title: "Where should Hobbots run?",
+    intro:
+      "Your hobs live on one computer, the hub. It keeps working in the background, even with the window closed. Hobs always work on the hub, and your other devices can open it over Tailscale.",
+    here: {
+      title: "Run Hobbots on this computer",
+      body: "This computer becomes the hub. Hobs, chats and files live here, and hobs work with this computer's folders and apps.",
+      badge: "Most people start here",
+    },
+    connect: {
+      title: "Connect to Hobbots on another computer",
+      body: "Already have a hub? Use it from here with chat, Quests, approvals and the Workbench.",
+      soon: "Coming soon: the Hobbots app can't join another computer's hub yet. Open the hub's address in a browser instead.",
+    },
+  },
+  remoteSetup: {
+    stage: "This computer",
+    eyebrow: "Optional",
+    title: "Use Hobbots from your other devices too?",
+    intro:
+      "Open your hobs from your laptop or any browser on your own Tailscale network. Each new device asks you before it can join. Turn this on or off any time in Settings › Devices.",
+    connected: "Tailscale is connected",
+    thisComputer: ({ name }: { name: string }) => `This computer is ${name} on your tailnet`,
+    switchLabel: "Let my other devices connect",
+    switchNote: "Only this computer and your tailnet can reach Hobbots. Nothing is open to the internet.",
+    address: "Your Hobbots address",
+    addressNote: "Open it in any browser on your tailnet. Each new device asks you here before it can join.",
+    portNote: "You can change the port later in Settings › Devices.",
+    missing: {
+      notInstalled: "Tailscale isn't on this computer yet",
+      notRunning: "Tailscale is off on this computer",
+      signedOut: "Tailscale is signed out on this computer",
+    },
+    missingBody: "Tailscale links your own devices privately, with nothing exposed to the internet.",
+    steps: [
+      "Install Tailscale, or open it, and sign in.",
+      "Sign in with the same account on your other devices.",
+      "Come back here. Hobbots checks again by itself.",
+    ],
+    checkAgain: "Check again",
+    checking: "Checking…",
+    back: "Back",
+    skip: "Skip for now",
+    continue: "Continue",
+    hintOn: "Other devices can connect after you allow them",
+    hintOff: "You can turn this on later",
+    elder: {
+      ready: "Want your hobs on your laptop or phone too? Tailscale makes a private path between your own devices.",
+      missing: "Tailscale is not ready on this computer yet. You can skip this and turn it on later in Settings.",
+    },
   },
   deviceAccess: {
     removedTitle: ({ hub }: { hub: string }) => `This device was removed from ${hub}`,

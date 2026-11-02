@@ -287,7 +287,7 @@ export function OnboardingProviders() {
           ? GUIDE.found
           : GUIDE.fix;
 
-  const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/where" }));
+  const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/remote" }));
   const next = () => {
     if (!ready) return setNudged(true);
     void navigate({ to: "/setup/hob" });

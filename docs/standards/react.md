@@ -97,3 +97,11 @@ Call hooks only at the top level of a component or another hook, and list every 
 - **Why:** React relies on call order, and a missing dependency reads stale values.
 - **Enforced by:** Biome `useExhaustiveDependencies` and `useHookAtTopLevel`.
 - **Applies to:** `apps/web`, `packages/ui`.
+
+### STD-REACT-012 A live event cancels a list's read before it reads it again
+
+When a live event invalidates a list query, first `await queryClient.cancelQueries` for that key, then invalidate it, as `grantsChanged` and `devicesChanged` do. A plain invalidation is enough only for a query that always has data before an event can reach it.
+
+- **Why:** while a list has no data yet, TanStack Query hands back the read already in flight instead of starting another. That read may have been taken before the change, so the screen shows the old list until something reads it again.
+- **Enforced by:** review, and a unit test per list that answers the first read after the event.
+- **Applies to:** `apps/web`.
