@@ -18,5 +18,5 @@
 
 ## Gaps
 
-- Progress left pending when a lead's Task is cancelled or fails, instead of completing, is settled with the cancel path in [#396](https://github.com/otaviobarros/hobbots/issues/396).
+- Progress left pending when a lead's Task is cancelled, or the top Task ends without completing, is settled by the cancel path in [#396](https://github.com/otaviobarros/hobbots/issues/396), not here. A member's failed Task keeps its progress while it can be retried.
 - Real Claude Code leading a nested Quest was not run: serving the hob tools to a real Claude Code is not verified yet ([#271](https://github.com/otaviobarros/hobbots/issues/271)).
