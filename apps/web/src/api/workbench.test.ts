@@ -19,6 +19,7 @@ const read = (cleared: boolean): AttemptActivityRead => ({
     changes: [],
     scans: [],
     artifacts: [],
+    sharedWithHobs: [],
     detailsClearedAt: cleared ? "2026-11-02T10:00:00.000Z" : null,
   }),
 });

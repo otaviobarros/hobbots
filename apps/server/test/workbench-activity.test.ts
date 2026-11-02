@@ -403,6 +403,9 @@ describe("a Task's activity", () => {
     expect(pagesActivity.changes.find((each) => each.path === "pages.html")?.sharedWith).toContain(styles.id);
     expect(stylesActivity.changes.find((each) => each.path === "site.css")?.sharedWith).toContain(pages.id);
     expect(pagesActivity.changes.find((each) => each.path === "pages.html")?.sharedWith).not.toContain(pages.id);
+    // Each names the hob of the Attempt it worked beside.
+    expect(pagesActivity.sharedWithHobs).toContainEqual({ attemptId: styles.id, agentId: styles.agentId });
+    expect(stylesActivity.sharedWithHobs).toContainEqual({ attemptId: pages.id, agentId: pages.agentId });
     // The output is long: its record keeps its start and end, and its whole output is a log.
     const [command] = pagesActivity.commands;
     expect(command?.output).toMatchObject({ logged: true });
