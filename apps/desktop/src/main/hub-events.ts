@@ -9,9 +9,9 @@ import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { frameChange, type HubChange } from "./hub-events-model.ts";
 
 export interface HubEventsOptions {
-  /** The hub's `/api/events` URL. */
-  readonly url: string;
-  readonly headers?: Readonly<Record<string, string>>;
+  /** The hub's `/api/events` URL, read for each connection, since the hub's port can change. */
+  readonly url: () => string;
+  readonly headers?: () => Readonly<Record<string, string>>;
   /** Whether the hub may answer now; the stream is followed only while it may. */
   readonly canConnect: () => boolean;
   /**
@@ -62,15 +62,19 @@ const sseEvents = <E, R>(text: Stream.Stream<string, E, R>) =>
 
 /** Follows the stream until interrupted, connecting again after each loss on a doubling, capped schedule. */
 const follow = (options: HubEventsOptions) => {
-  const { url, headers = {}, onConnected, onChange, onLost } = options;
+  const { url, headers = () => ({}), onConnected, onChange, onLost } = options;
   // The cursor of the last entry received. Each connection resumes after it, so the hub replays
   // what was missed while the stream was down (ADR 013).
   let cursor: string | undefined;
   // Any bytes, keep-alives included, show the hub still answers; silence past the limit ends it.
   const bytes = HttpClientResponse.stream(
     Effect.suspend(() =>
-      HttpClient.get(url, {
-        headers: { accept: "text/event-stream", ...headers, ...(cursor !== undefined && { "last-event-id": cursor }) },
+      HttpClient.get(url(), {
+        headers: {
+          accept: "text/event-stream",
+          ...headers(),
+          ...(cursor !== undefined && { "last-event-id": cursor }),
+        },
       }),
     ).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk)),
   ).pipe(Stream.timeout(Duration.millis(options.silenceMs ?? SILENCE_MS)));
@@ -100,7 +104,8 @@ const follow = (options: HubEventsOptions) => {
 
 /**
  * Follows the stream while the hub may answer. Answers `sync`, to call whenever that may have
- * changed, which connects at once to a hub that just started, and `stop`.
+ * changed, which connects at once to a hub that just started, `reconnect`, to connect again now,
+ * as to a hub that moved to another port, and `stop`.
  */
 export const followHub = (options: HubEventsOptions) => {
   let following: Fiber.Fiber<unknown, unknown> | null = null;
@@ -114,5 +119,9 @@ export const followHub = (options: HubEventsOptions) => {
     else void halt();
   };
   sync();
-  return { sync, stop: halt };
+  const reconnect = async () => {
+    await halt();
+    sync();
+  };
+  return { sync, reconnect, stop: halt };
 };

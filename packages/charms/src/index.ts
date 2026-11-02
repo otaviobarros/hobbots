@@ -10,3 +10,4 @@ export * from "./github-sign-in.ts";
 export * from "./keychain.ts";
 export * from "./local-sign-ins.ts";
 export * from "./remotes.ts";
+export * from "./run-tool.ts";

@@ -28,6 +28,7 @@
   },
   "exports": {
     "./main": "./src/main.ts",
-    "./installation": "./src/installation.ts"
+    "./installation": "./src/installation.ts",
+    "./network-settings": "./src/network-settings.ts"
   }
 }

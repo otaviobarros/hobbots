@@ -354,6 +354,29 @@ export const messages = {
       failed: "GitHub did not answer as expected. Try again.",
     },
   },
+  remoteAccess: {
+    heading: "Devices",
+    intro:
+      "This computer is your Hobbots hub. Hobs live and work here. With remote access on, your other devices on Tailscale can reach it.",
+    switchLabel: "Use Hobbots from my other devices",
+    onNote: "Your devices on Tailscale can connect.",
+    offNote: "Only this computer can reach Hobbots right now.",
+    failed: "Hobbots could not read or change remote access. Try again in a moment.",
+    connected: "Tailscale connected · this computer is",
+    address: "Address",
+    addressNote: "Type it in Hobbots on another computer, or open it in a browser on your tailnet.",
+    why: {
+      notInstalled:
+        "Tailscale is not installed on this computer, so your other devices cannot reach Hobbots. Install Tailscale and sign in; Hobbots starts listening on your tailnet within seconds.",
+      notRunning:
+        "Tailscale is off on this computer, so Hobbots stopped listening on your tailnet. Turn Tailscale on and Hobbots listens again within seconds.",
+      signedOut:
+        "Tailscale is signed out on this computer, so Hobbots is not on your tailnet. Sign in to Tailscale and Hobbots listens again within seconds.",
+      noAddress:
+        "Tailscale is running but gave this computer no tailnet address yet, so Hobbots is not on your tailnet.",
+      cannotListen: ({ detail }: { detail: string }) => `Hobbots could not listen on your tailnet: ${detail}.`,
+    },
+  },
   signing: {
     label: "Sign commits with my 1Password key",
     off: ({ name }: { name: string }) =>

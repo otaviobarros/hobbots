@@ -16,7 +16,7 @@ import {
   stableJson,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
-import { isBlockedHost, normalizeHost } from "./hosts.ts";
+import { HubHosts, isBlockedHost, normalizeHost, unmappedHost } from "./hosts.ts";
 import { type CanonicalPath, isInside, PathResolver, type ScopeGitResources } from "./paths.ts";
 
 /**
@@ -40,6 +40,11 @@ export interface PolicyContext {
   readonly sandbox: SandboxState;
   /** Hosts of the runtime's model API, which the runtime always needs. */
   readonly modelHosts: ReadonlyArray<string>;
+  /**
+   * The hub's own tailnet addresses and MagicDNS name, never reachable from a hob (ADR 021). The
+   * engine adds the current ones from `HubHosts` to every decision.
+   */
+  readonly hubHosts?: ReadonlyArray<string>;
   /** Narrowing added by the thread, Quest, task or delegation. Each may only narrow. */
   readonly restrictions: ReadonlyArray<PolicyOverrides>;
   /**
@@ -189,9 +194,10 @@ export type ResolvedRequest =
 
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
- * Grants are left out: they are read again for every call and never pin a version (ADR 015).
+ * Grants are left out: they are read again for every call and never pin a version (ADR 015). The
+ * hub's tailnet hosts are left out too: they follow Tailscale, not the policy.
  */
-export const policyVersion = ({ grants, ...inputs }: PolicyContext): string =>
+export const policyVersion = ({ grants, hubHosts, ...inputs }: PolicyContext): string =>
   `r${RULES_VERSION}-${createHash("sha256").update(stableJson(inputs)).digest("hex").slice(0, 16)}`;
 
 interface Layered {
@@ -518,6 +524,13 @@ const evaluateWeb = (
     const message = `${host} is a loopback, link-local or cloud metadata address, never reachable from the sandbox.`;
     return { targets, answers: [deny("use-web", "blocked-host", message)] };
   }
+  // An IPv4-mapped IPv6 address reaches the IPv4 address it maps, so both compare unmapped.
+  const hub = new Set((context.hubHosts ?? []).flatMap((name) => normalizeHost(name) ?? []).map(unmappedHost));
+  const isHub = (name: string | null) => name !== null && hub.has(unmappedHost(name));
+  if (isHub(host) || addresses.some(isHub)) {
+    const message = `${host} is this hub's own address on the tailnet, never reachable from the sandbox.`;
+    return { targets, answers: [deny("use-web", "blocked-host", message)] };
+  }
   const sandbox = needsSandbox(context, "use-web");
   if (sandbox !== null) return { targets, answers: [sandbox] };
   if (context.modelHosts.map(normalizeHost).includes(host)) {
@@ -696,12 +709,15 @@ export class PolicyEngine extends Context.Service<
         }
       };
 
+      const hubHosts = yield* HubHosts;
       return {
         decide: (context, request) =>
-          scopeOf(context).pipe(
-            Effect.flatMap(({ scope, canonicalFolders }) =>
+          Effect.all([scopeOf(context), hubHosts.current]).pipe(
+            Effect.flatMap(([{ scope, canonicalFolders }, hub]) =>
               resolveRequest(request, canonicalFolders).pipe(
-                Effect.map((resolved) => evaluate(context, scope, resolved)),
+                Effect.map((resolved) =>
+                  evaluate({ ...context, hubHosts: [...(context.hubHosts ?? []), ...hub] }, scope, resolved),
+                ),
               ),
             ),
           ),

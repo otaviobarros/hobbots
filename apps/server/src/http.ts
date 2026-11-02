@@ -22,6 +22,7 @@ import { GrantsHandlers } from "./grants.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { Installation } from "./installation.ts";
 import { PermissionsHandlers } from "./permissions.ts";
+import { RemoteAccessHandlers } from "./remote-access.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
 import { QuestionsHandlers, TasksHandlers } from "./tasks.ts";
@@ -171,5 +172,6 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     QuestionsHandlers,
     BackpackHandlers,
     GitHubHandlers,
+    RemoteAccessHandlers,
   ]),
 );

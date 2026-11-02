@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { coalesce } from "../src/main/coalesce.ts";
+import { hubAddress } from "../src/main/hub-address.ts";
 import { followHub, type HubEventsOptions } from "../src/main/hub-events.ts";
 import { frameChange } from "../src/main/hub-events-model.ts";
 import { entryFrame, fakeEventStream, readyFrame, resumedFrame, turnFrame } from "./fake-event-stream.ts";
@@ -14,7 +15,7 @@ const follow = (options: Partial<HubEventsOptions> = {}, opening?: string) => {
   const hub = fakeEventStream(opening);
   const heard: Array<string> = [];
   const following = followHub({
-    url: "http://127.0.0.1:4317/api/events",
+    url: () => "http://127.0.0.1:4317/api/events",
     canConnect: () => true,
     onConnected: (resumed) => void heard.push(resumed ? "resumed" : "connected"),
     onChange: (change) => void heard.push(change._tag === "Approvals" ? "approvals" : "activity"),
@@ -65,6 +66,32 @@ describe("following the hub's event stream", () => {
     await expect.poll(() => heard).toEqual(["connected", "lost"]);
     expect(hub.connections).toHaveLength(1);
     expect(hub.connections[0]?.aborted).toBe(true);
+  });
+
+  // covers DP-004
+  it("[TC-DP-071] follows the hub to the port it moved to", async () => {
+    const address = hubAddress(4317);
+    const moves: Array<number> = [];
+    const following = follow({
+      url: () => `${address.apiUrl}/api/events`,
+      onChange: (change) => {
+        if (change._tag !== "Port" || !address.move(change.port)) return;
+        moves.push(change.port);
+        void following.reconnect();
+      },
+    });
+    const { hub } = following;
+    await expect.poll(() => hub.connections.length).toBe(1);
+    hub.last().write(readyFrame);
+    const status = { enabled: false, port: 4400, tailscale: null, listening: [], problem: "off", detail: null };
+    hub.last().write(`event: remote-access\ndata: ${JSON.stringify({ _tag: "RemoteAccessChanged", status })}\n\n`);
+    await expect.poll(() => hub.connections.length).toBe(2);
+    expect(moves).toEqual([4400]);
+    expect(hub.connections[0]?.aborted).toBe(true);
+    expect(hub.connections.map((connection) => connection.url)).toEqual([
+      "http://127.0.0.1:4317/api/events",
+      "http://127.0.0.1:4400/api/events",
+    ]);
   });
 
   it("follows only while the hub may answer, connects at once when it may again, and stops for good", async () => {
@@ -134,6 +161,26 @@ describe("the event stream model", () => {
     expect(frameChange({ event: "turn", data: "{}" })).toEqual({ _tag: "Activity" });
     expect(message(JSON.stringify({ type: "MessageUpserted", payload: reply("assistant") }))).toBeNull();
     expect(message("not json")).toBeNull();
+  });
+
+  it("reads the hub's new port from a remote access change", () => {
+    const status = { enabled: true, port: 4400, tailscale: null, listening: [], problem: null, detail: null };
+    expect(
+      frameChange({ event: "remote-access", data: JSON.stringify({ _tag: "RemoteAccessChanged", status }) }),
+    ).toEqual({ _tag: "Port", port: 4400 });
+    expect(frameChange({ event: "remote-access", data: "{}" })).toBeNull();
+  });
+});
+
+describe("hubAddress", () => {
+  it("points every reader at a new port, and ignores the same port or one out of range", () => {
+    const hub = hubAddress(4317);
+    expect(hub.apiUrl).toBe("http://127.0.0.1:4317");
+    expect(hub.move(4317)).toBe(false);
+    expect(hub.move(0)).toBe(false);
+    expect(hub.move(70000)).toBe(false);
+    expect(hub.move(4400)).toBe(true);
+    expect([hub.port, hub.apiUrl]).toEqual([4400, "http://127.0.0.1:4400"]);
   });
 });
 

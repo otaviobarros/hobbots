@@ -9,6 +9,7 @@ import { ArchivedHobs } from "./archived-hobs.tsx";
 import { GeneralSettings } from "./general-settings.tsx";
 import { GitHubSettings } from "./github-settings.tsx";
 import { messages } from "./messages.ts";
+import { RemoteAccessSettings } from "./remote-access-settings.tsx";
 import { RuntimeCard } from "./runtime.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
 import { StandingRuleSettings } from "./standing-rules/standing-rules.tsx";
@@ -127,6 +128,9 @@ export function SettingsPage() {
       <Panel label={messages.github.heading} id="charms">
         <p className="m-0 text-secondary-text">{messages.github.intro}</p>
         <GitHubSettings />
+      </Panel>
+      <Panel label={messages.remoteAccess.heading} id="devices">
+        <RemoteAccessSettings />
       </Panel>
       <Panel label="Archived hobs">
         <ArchivedHobs />

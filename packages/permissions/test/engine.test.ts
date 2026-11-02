@@ -1,8 +1,16 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { type PolicyDecision, PolicyOperation, PRESET_DECISIONS, SafetyPreset } from "@hobbots/domain";
+import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
-import { evaluate, type PolicyRequest, policyVersion, type ResolvedScope } from "../src/index.ts";
+import {
+  evaluate,
+  HubHosts,
+  PolicyEngine,
+  type PolicyRequest,
+  policyVersion,
+  type ResolvedScope,
+} from "../src/index.ts";
 import {
   contextFor,
   decide,
@@ -236,6 +244,48 @@ describe("policy engine", () => {
       decision: "deny",
       onceOnly: false,
     });
+  });
+
+  // covers DP-004, PE-001
+  it("[TC-PE-170] never reaches the hub's own tailnet addresses or MagicDNS name, by name or by address", async () => {
+    const hubOnTailnet = PolicyEngine.node.pipe(
+      Layer.provide(
+        Layer.succeed(HubHosts, {
+          current: Effect.succeed(["100.101.102.103", "fd7a:115c:a1e0::1", "hub.example.ts.net"]),
+        }),
+      ),
+    );
+    const web = (host: string, addresses: ReadonlyArray<string> = []): PolicyRequest => ({
+      _tag: "Web",
+      host,
+      addresses,
+    });
+    for (const preset of SafetyPreset.literals) {
+      const context = contextFor(home, preset);
+      for (const request of [
+        web("100.101.102.103"),
+        web("100.101.102.103:4317"),
+        web("[fd7a:115c:a1e0::1]:4317"),
+        web("HUB.example.ts.net."),
+        // Another name that resolves to the hub's tailnet address.
+        web("alias.example", ["100.101.102.103"]),
+        // The IPv4-mapped IPv6 spelling of its address reaches the same listener.
+        web("::ffff:100.101.102.103"),
+        web("[::ffff:6465:6667]:4317"),
+        web("alias.example", ["::ffff:6465:6667"]),
+      ]) {
+        expect(await decide(context, request, hubOnTailnet)).toMatchObject({
+          decision: "deny",
+          reason: { code: "blocked-host" },
+        });
+      }
+      // Other nodes on the tailnet are decided like any host.
+      expect((await decide(context, web("100.101.102.104"), hubOnTailnet)).reason.code).not.toBe("blocked-host");
+      // The hub's tailnet names leave the policy version alone.
+      expect((await decide(context, web("example.com"), hubOnTailnet)).policyVersion).toBe(
+        (await decide(context, web("example.com"))).policyVersion,
+      );
+    }
   });
 
   it("decides each host, never reaching loopback, link-local or metadata addresses", async () => {
