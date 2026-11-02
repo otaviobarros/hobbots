@@ -1,4 +1,12 @@
-import { type AgentId, isTerminalTask, type Quest, type Task, type TaskId, type TaskTree } from "@hobbots/domain";
+import {
+  type AgentId,
+  isTerminalTask,
+  partyOf,
+  type Quest,
+  type Task,
+  type TaskId,
+  type TaskTree,
+} from "@hobbots/domain";
 import { type RowStatus, rowStatus, waitsOnOf } from "./work-model.ts";
 
 /**
@@ -20,6 +28,8 @@ export interface RoomRow {
   readonly status: RoomStatus;
   /** The Quest this Task holds when its owner brought in hobs of its own: a nested Quest. */
   readonly quest: Quest | null;
+  /** The hobs the owner brought in on that nested Quest, the sub-lead's own party. */
+  readonly party: ReadonlyArray<AgentId>;
   readonly waitingOn: ReadonlyArray<Waited>;
 }
 
@@ -58,11 +68,13 @@ export const roomRows = (tree: TaskTree): ReadonlyArray<RoomRow> => {
   const rows: Array<RoomRow> = [];
   const visit = (task: Task, depth: number) => {
     if (rows.some((row) => row.task.id === task.id)) return;
+    const quest = depth === 0 ? null : (tree.quests.find((each) => each.taskId === task.id) ?? null);
     rows.push({
       task,
       depth,
       status: roomStatus(tree, task),
-      quest: depth === 0 ? null : (tree.quests.find((quest) => quest.taskId === task.id) ?? null),
+      quest,
+      party: quest === null ? [] : partyOf(quest, tree.delegations),
       waitingOn: waitingOnOf(tree, task),
     });
     for (const child of children.get(task.id) ?? []) visit(child, depth + 1);

@@ -29,7 +29,13 @@ import {
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, Dispatcher } from "@hobbots/inbox";
-import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
+import {
+  DEFAULT_TASK_TOOL_LIMITS,
+  StepRunnerLive,
+  TaskSignal,
+  type TaskToolLimits,
+  TaskTools,
+} from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
@@ -62,6 +68,8 @@ const now = "2026-11-02T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
+const ROOK = AgentId.make("rook");
+const PIP = AgentId.make("pip");
 const threadId = ThreadId.make("campaign");
 /** A prompt with this line of its own waits, before it does anything, until the test lets it go on. */
 const HOLD = "fake:hold";
@@ -100,14 +108,32 @@ const ProjectTools = Layer.succeed(
   }),
 );
 
-const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
+/** What the hub answered each scripted call, by the call's key: what the hob read back. */
+type Answers = Map<string, string>;
+
+/** The request with its hub calls' answers kept in `answers`. */
+const answering = (request: PromptRequest, answers: Answers): PromptRequest => {
+  const hubTools = request.hubTools;
+  if (!hubTools) return request;
+  const call: typeof hubTools.call = (name, input, step) =>
+    Effect.tap(hubTools.call(name, input, step), (answer) =>
+      Effect.sync(() => {
+        const key = (input as { readonly key?: unknown } | null)?.key;
+        if (typeof key === "string") answers.set(key, answer.text);
+      }),
+    );
+  return { ...request, hubTools: { ...hubTools, call } };
+};
+
+const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>, answers: Answers) =>
   Layer.effect(
     RuntimeAdapter,
     Effect.gen(function* () {
       const fake = yield* RuntimeAdapter;
       return RuntimeAdapter.of({
         ...fake,
-        sendPrompt: (request) => {
+        sendPrompt: (sent) => {
+          const request = answering(sent, answers);
           requests.push(request);
           const stream = fake.sendPrompt(request);
           return request.prompt.split("\n").includes(HOLD)
@@ -121,21 +147,27 @@ const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
 const Party = Layer.effectDiscard(
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
-    for (const each of [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(ADA, "Ada")]) yield* repo.insertAgent(each);
+    const party = [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(ADA, "Ada"), hob(ROOK, "Rook"), hob(PIP, "Pip")];
+    for (const each of party) yield* repo.insertAgent(each);
     yield* repo.upsertThread(
       new Thread({ id: threadId, agentId: ALDRIC, title: "Black Friday", createdAt: now, updatedAt: now }),
     );
   }),
 );
 
-const makeApp = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
+const makeApp = (
+  gate: Deferred.Deferred<void>,
+  requests: Array<PromptRequest>,
+  answers: Answers,
+  limits?: TaskToolLimits,
+) =>
   Layer.mergeAll(WakeOnArrival, HobLifecycle.layer).pipe(
     Layer.provideMerge(ChatService.layer),
     Layer.provideMerge(ContinuationsLive),
     Layer.provideMerge(
       StepRunnerLive().pipe(
         Layer.provideMerge(MemberContinuationsLive),
-        Layer.provideMerge(TaskTools.layer("/")),
+        Layer.provideMerge(TaskTools.layer("/", limits)),
         Layer.provideMerge(TaskSignal.layer),
       ),
     ),
@@ -154,7 +186,7 @@ const makeApp = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) 
         NodeFolderChecks,
         ProjectTools,
         HobAdmission.layer,
-        held(gate, requests),
+        held(gate, requests, answers),
         Layer.succeed(UserSession, {
           deviceId: WINDOW_DEVICE_ID,
           name: "This computer's Hobbots window",
@@ -174,13 +206,14 @@ afterEach(async () => {
   runtime = undefined;
 });
 
-const setUp = () => {
+const setUp = (limits?: TaskToolLimits) => {
   const requests: Array<PromptRequest> = [];
+  const answers: Answers = new Map();
   const gate = Deferred.makeUnsafe<void>();
-  const app = ManagedRuntime.make(makeApp(gate, requests));
+  const app = ManagedRuntime.make(makeApp(gate, requests, answers, limits));
   runtime = app;
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<App>>) => app.runPromise(effect);
-  return { run, requests, release: () => run(Deferred.succeed(gate, undefined)) };
+  return { run, requests, answers, release: () => run(Deferred.succeed(gate, undefined)) };
 };
 
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -696,5 +729,199 @@ describe("what reaches a lead", () => {
     // Quill's three updates and the hub's own "started" read as one line of the digest.
     const told = woken.map((reply) => reply.content).join("\n");
     expect(told).toContain("sent 4 updates. The latest: Draft 3");
+  }, 20_000);
+});
+
+// Issue #275: a party member brings in a hob of its own and leads that subtree under the same rules
+// the hub holds every lead to. Nesting adds no checks of its own: depth, cycles, the subtree and
+// narrowing authority are the ones every call already passes (#271).
+
+/** The Task of the request's tree that `agentId` owns, which the test knows is there. */
+const taskOf = (tree: TaskTree, agentId: AgentId): Task => {
+  const task = ownedBy(tree, agentId);
+  if (task === undefined) throw new Error(`No Task for ${agentId}`);
+  return task;
+};
+
+/** Aldric brings in Rook with `rookBrief`, waits on him and wraps up once Rook's result is in. */
+const aldricLeads = (rookBrief: ReadonlyArray<string>, after: ReadonlyArray<string> = []) =>
+  [
+    "Plan the Black Friday campaign",
+    hub("delegate_task", { key: "ads", hob: "Rook", brief: ["Run the ads", ...rookBrief].join("\n") }),
+    hub("wait_for", { key: "wait", tasks: ["$ads.task_id"] }),
+    ...after,
+    // Rook's result may arrive with his routine progress or after it: Aldric wraps up in whichever turn has it.
+    `fake:then ${hub("complete_task", { key: "wrap", summary: "The Black Friday campaign is ready" })}`,
+    `fake:then fake:then ${hub("complete_task", { key: "wrap-later", summary: "The Black Friday campaign is ready" })}`,
+  ].join("\n");
+
+/** Rook brings in Pip with `pipBrief`, waits on her, and returns his result once hers is in. */
+const rookLeads = (pipBrief: ReadonlyArray<string>, after: ReadonlyArray<string> = []) => [
+  hub("delegate_task", { key: "keywords", hob: "Pip", brief: ["Research the keywords", ...pipBrief].join("\n") }),
+  hub("wait_for", { key: "rook-wait", tasks: ["$keywords.task_id"] }),
+  ...after,
+];
+
+/** The three levels of the tree, each under the one above, with a Quest on Aldric's Task and one on Rook's. */
+const expectNested = (tree: TaskTree) => {
+  const [top] = tree.tasks;
+  const rook = taskOf(tree, ROOK);
+  const pip = taskOf(tree, PIP);
+  expect(rook.parentId).toBe(top?.id);
+  expect(pip.parentId).toBe(rook.id);
+  expect(pip.rootId).toBe(top?.id);
+  expect(tree.quests.map((quest) => [quest.taskId, quest.leadId, quest.depth])).toEqual([
+    [top?.id, ALDRIC, 1],
+    [rook.id, ROOK, 2],
+  ]);
+  expect(tree.delegations.map((each) => [each.leadId, each.memberId, each.childTaskId])).toEqual([
+    [ALDRIC, ROOK, rook.id],
+    [ROOK, PIP, pip.id],
+  ]);
+  return { rook, pip };
+};
+
+describe("a nested Quest", () => {
+  // covers OR-002, OR-004
+  it("[TC-OR-160] Rook brings in Pip under Aldric's Quest and leads her: her result reaches Rook, and the tree holds all three", async () => {
+    const { run, requests } = setUp();
+    const pipBrief = [hub("complete_task", { key: "keywords-done", summary: "Twelve keywords, led by 'doorbuster'" })];
+    const rookBrief = rookLeads(pipBrief, [
+      `fake:then ${hub("complete_task", { key: "ads-done", summary: "Ads ready around 'doorbuster'" })}`,
+    ]);
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
+
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    const { rook, pip } = expectNested(done);
+    expect(done.tasks.map((task) => task.state)).toEqual(["completed", "completed", "completed"]);
+    expect(pip.result?.summary).toBe("Twelve keywords, led by 'doorbuster'");
+    expect(rook.result?.summary).toBe("Ads ready around 'doorbuster'");
+    expect(done.quests.map((quest) => quest.state)).toEqual(["completed", "completed"]);
+
+    // Pip deals with Rook, her nearest lead, and never with Aldric.
+    const [pipFirst] = promptsTo(requests, pip);
+    expect(pipFirst?.prompt).toContain("Rook gave you this Task as part of a Quest Rook leads.");
+    expect(pipFirst?.prompt).not.toContain("Aldric");
+    // Her result went on in Rook's own session; Aldric heard only Rook's.
+    const rookPrompts = promptsTo(requests, rook);
+    expect(rookPrompts).toHaveLength(2);
+    expect(rookPrompts[1]?.prompt).toContain("Twelve keywords");
+    expect(rookPrompts[1]?.sessionId).not.toBeNull();
+    const all = await run(messagesWhen((each) => continuations(each).length >= 1));
+    const told = continuations(all)
+      .map((reply) => reply.content)
+      .join("\n");
+    expect(told).toContain(`Task ${rook.id}`);
+    expect(told).not.toContain("Twelve keywords");
+  }, 20_000);
+
+  // covers OR-004
+  it("[TC-OR-161] a delegation loop is stopped: Pip cannot bring in a hob past the depth limit, nor anyone above her", async () => {
+    const { run, answers } = setUp();
+    // Pip tries to go one level deeper and to hand the work back up, then does it herself.
+    const pipBrief = [
+      hub("delegate_task", { key: "deeper", hob: "Quill", brief: "Research some more" }),
+      hub("start_quest", { key: "own-quest", goal: "Bring in more hobs", max_depth: 3 }),
+      hub("delegate_task", { key: "to-rook", hob: "Rook", brief: "Your turn" }),
+      hub("delegate_task", { key: "to-aldric", hob: "Aldric", brief: "Your turn" }),
+      hub("complete_task", { key: "keywords-done", summary: "Researched the keywords myself" }),
+    ];
+    const rookBrief = rookLeads(pipBrief, [
+      hub("delegate_task", { key: "rook-to-aldric", hob: "Aldric", brief: "Back to you" }),
+      `fake:then ${hub("complete_task", { key: "ads-done", summary: "Ads ready" })}`,
+    ]);
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
+
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    expectNested(done);
+    // Nothing was created past Pip: the refused calls wrote nothing.
+    expect(done.tasks).toHaveLength(3);
+    expect(done.tasks.map((task) => task.state)).toEqual(["completed", "completed", "completed"]);
+    expect(answers.get("deeper")).toBe(
+      "Refused (depth-limit): This would be a Quest 3 deep, past the limit of 2. Do this work yourself, or split it into steps.",
+    );
+    expect(answers.get("own-quest")).toMatch(/^Refused \(depth-limit\)/);
+    expect(answers.get("to-rook")).toMatch(/^Refused \(cycle\): Rook already owns work this Task is part of/);
+    expect(answers.get("to-aldric")).toMatch(/^Refused \(cycle\): Aldric already owns work this Task is part of/);
+    expect(answers.get("rook-to-aldric")).toMatch(/^Refused \(cycle\): Aldric already owns work/);
+    expect(taskOf(done, PIP).result?.summary).toBe("Researched the keywords myself");
+  }, 20_000);
+
+  // covers OR-004
+  it("[TC-OR-162] with the depth limit raised, a loop is still stopped: by the cycle check, then by the new limit", async () => {
+    const { run, answers } = setUp({ ...DEFAULT_TASK_TOOL_LIMITS, maxDepth: 3 });
+    // Quill, a level further down, tries every hob above him, then one more level.
+    const quillBrief = [
+      "Write the ad copy",
+      hub("delegate_task", { key: "q-rook", hob: "Rook", brief: "Your turn" }),
+      hub("delegate_task", { key: "q-pip", hob: "Pip", brief: "Your turn" }),
+      hub("delegate_task", { key: "q-aldric", hob: "Aldric", brief: "Your turn" }),
+      hub("delegate_task", { key: "q-ada", hob: "Ada", brief: "One more level" }),
+      hub("complete_task", { key: "copy-done", summary: "Wrote the copy myself" }),
+    ].join("\n");
+    const pipBrief = [
+      hub("delegate_task", { key: "copy", hob: "Quill", brief: quillBrief }),
+      hub("wait_for", { key: "pip-wait", tasks: ["$copy.task_id"] }),
+    ];
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookLeads(pipBrief)))));
+
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    expect(done.quests.map((quest) => [quest.leadId, quest.depth])).toEqual([
+      [ALDRIC, 1],
+      [ROOK, 2],
+      [PIP, 3],
+    ]);
+    expect(done.tasks.map((task) => task.ownerId)).toEqual([ALDRIC, ROOK, PIP, QUILL]);
+    for (const [key, name] of [
+      ["q-rook", "Rook"],
+      ["q-pip", "Pip"],
+      ["q-aldric", "Aldric"],
+    ]) {
+      expect(answers.get(key ?? "")).toMatch(new RegExp(`^Refused \\(cycle\\): ${name} already owns work`));
+    }
+    expect(answers.get("q-ada")).toMatch(
+      /^Refused \(depth-limit\): This would be a Quest 4 deep, past the limit of 3\./,
+    );
+  }, 20_000);
+
+  // covers OR-002, IN-002, IN-004
+  it("[TC-OR-163] Pip's question reaches Rook first, climbs to Aldric and then to you, and your answer goes back down to her", async () => {
+    const { run, requests } = setUp();
+    const pipBrief = [
+      hub("ask", { key: "tone", question: "Playful or formal?" }),
+      `fake:then ${hub("complete_task", { key: "keywords-done", summary: "Playful keywords" })}`,
+    ];
+    // Rook's next turn is the one Pip's question starts; the one after it, Pip's result.
+    const rookBrief = rookLeads(pipBrief, [
+      `fake:then ${hub("escalate", { key: "rook-up", question_id: "$tone.question_id" })}`,
+      `fake:then fake:then ${hub("complete_task", { key: "ads-done", summary: "Playful ads" })}`,
+    ]);
+    const aldricUp = [`fake:then ${hub("escalate", { key: "aldric-up", question_id: "$tone.question_id" })}`];
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief, aldricUp))));
+
+    // Rook passed it up and so did Aldric: no lead is left, so it waits for you.
+    const [waiting] = await run(questionsWhen((tree) => tree.questions[0]?.recipientId === null));
+    expect(waiting?.askerId).toBe(PIP);
+    expect(waiting?.chain).toEqual([ROOK, ALDRIC]);
+    const asked = await run(treeWhen(() => true));
+    const rook = taskOf(asked, ROOK);
+    const pip = taskOf(asked, PIP);
+    // Rook heard it first, in his own session; Aldric only once Rook passed it up.
+    const heard = requests.filter((request) => request.prompt.includes(`question ${waiting?.id}`));
+    expect(heard.map((request) => (promptsTo([request], rook).length > 0 ? "rook" : "other"))).toEqual([
+      "rook",
+      "other",
+    ]);
+    expect(heard[0]?.sessionId).not.toBeNull();
+    if (waiting === undefined) throw new Error("no question");
+    await run(QuestionService.use((questions) => questions.answer(waiting.id, "Playful")));
+
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    expect(taskOf(done, PIP).result?.summary).toBe("Playful keywords");
+    expect(taskOf(done, ROOK).result?.summary).toBe("Playful ads");
+    expect(done.questions[0]?.answeredBy).toEqual({ _tag: "User" });
+    const pipPrompts = promptsTo(requests, pip);
+    expect(pipPrompts).toHaveLength(2);
+    expect(pipPrompts[1]?.prompt).toContain('was answered by the user: "Playful"');
   }, 20_000);
 });
