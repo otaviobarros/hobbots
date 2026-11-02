@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -18,7 +18,7 @@ const hubWithHobs = async (count: number) => {
   const api = async (method: string, path: string, body: unknown) => {
     const response = await fetch(`${hub?.url}/api${path}`, {
       method,
-      headers: { "content-type": "application/json", origin: String(hub?.url) },
+      headers: { "content-type": "application/json", ...hub?.headers },
       body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);

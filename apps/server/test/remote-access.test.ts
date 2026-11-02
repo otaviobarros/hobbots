@@ -4,12 +4,15 @@ import { connect, createServer as createNetServer, type Server as NetServer } fr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
-import type { RemoteAccessStatus } from "@hobbots/domain";
+import { DeviceService } from "@hobbots/agents";
+import { type RemoteAccessStatus, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { HubHosts } from "@hobbots/permissions";
-import { Effect, Layer, ManagedRuntime, Option, PubSub, Ref, Scope } from "effect";
+import { DeviceRepositoryLive } from "@hobbots/persistence";
+import { TestDatabase } from "@hobbots/persistence/testing";
+import { Effect, Layer, ManagedRuntime, Option, PubSub, Ref, Result, Scope } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { TailnetPeers } from "../src/devices.ts";
+import { DeviceGate, DeviceSecretsLive, knownWindowKey, TailnetPeers } from "../src/devices.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { HubListenersLive } from "../src/listeners.ts";
 import { readNetworkSettings } from "../src/network-settings.ts";
@@ -19,10 +22,10 @@ import {
   RemoteAccess,
   RemoteAccessLive,
   RemoteAccessStateLive,
-  TailnetClosedUntilPairing,
 } from "../src/remote-access.ts";
 import { DEFAULT_FAKE_TAILNET, type FakeTailnet, TailscaleFake } from "../src/tailscale.ts";
 import { OwnHostsOnly } from "../src/web.ts";
+import { AS_WINDOW, TEST_WINDOW_KEY } from "./window-device.ts";
 
 // The fake tailnet serves on 127.0.0.2, so these need a host that routes all of 127.0.0.0/8 to
 // loopback, as Linux does. macOS has only 127.0.0.1 unless an alias is added, and skips them.
@@ -53,7 +56,12 @@ interface Answer {
 const ask = (
   host: string,
   port: number,
-  options: { readonly from?: string; readonly hostHeader?: string; readonly path?: string } = {},
+  options: {
+    readonly from?: string;
+    readonly hostHeader?: string;
+    readonly path?: string;
+    readonly headers?: Readonly<Record<string, string>>;
+  } = {},
 ) =>
   new Promise<Answer>((done, fail) => {
     const sent = request(
@@ -63,7 +71,7 @@ const ask = (
         path: options.path ?? "/peer",
         agent: false,
         ...(options.from ? { localAddress: options.from } : {}),
-        headers: { host: options.hostHeader ?? `${host}:${port}` },
+        headers: { ...options.headers, host: options.hostHeader ?? `${host}:${port}` },
       },
       (response) => {
         let body = "";
@@ -116,13 +124,7 @@ let holding = 0;
  * that answers who sent the request.
  */
 const startHub = async (
-  options: {
-    readonly enabled?: boolean;
-    readonly tailnet?: FakeTailnet;
-    readonly ranges?: ReadonlyArray<string>;
-    /** Whether tailnet requests are refused until devices can pair, as the hub does today. */
-    readonly untilPairing?: boolean;
-  } = {},
+  options: { readonly enabled?: boolean; readonly tailnet?: FakeTailnet; readonly ranges?: ReadonlyArray<string> } = {},
 ): Promise<Hub> => {
   const port = await freePort();
   const dataDir = mkdtempSync(join(tmpdir(), "hobbots-remote-"));
@@ -149,15 +151,33 @@ const startHub = async (
       Effect.as(HttpServerResponse.text("held")),
     ),
   );
-  const Checks = Layer.mergeAll(OwnHostsOnly, KnownTailnetPeersOnly);
-  const Routes = Layer.mergeAll(
-    PeerRoute,
-    HoldRoute,
-    options.untilPairing ? Layer.merge(Checks, TailnetClosedUntilPairing) : Checks,
+  // Answers which device sent the request, as the hub's device check sees it (ADR 021).
+  const DeviceRoute = HttpRouter.add(
+    "GET",
+    "/device",
+    Effect.gen(function* () {
+      const gate = yield* DeviceGate;
+      const admitted = yield* Effect.result(gate.admit(yield* HttpServerRequest.HttpServerRequest));
+      return Result.match(admitted, {
+        onSuccess: (device) => HttpServerResponse.text(device.id),
+        onFailure: (error) => HttpServerResponse.text(error._tag, { status: 401 }),
+      });
+    }),
   );
+  const Routes = Layer.mergeAll(PeerRoute, HoldRoute, DeviceRoute, OwnHostsOnly, KnownTailnetPeersOnly);
   const hub = HttpRouter.serve(Routes, {
     disableLogger: true,
   }).pipe(
+    // Above remote access, as on the hub, so the device check knows which requests came in on the tailnet.
+    Layer.provideMerge(
+      DeviceGate.layer.pipe(
+        Layer.provideMerge(DeviceService.layer),
+        Layer.provideMerge(knownWindowKey(TEST_WINDOW_KEY)),
+        Layer.provideMerge(DeviceSecretsLive),
+        Layer.provideMerge(DeviceRepositoryLive),
+        Layer.provideMerge(TestDatabase),
+      ),
+    ),
     Layer.provideMerge(RemoteAccessLive(dataDir).pipe(Layer.provideMerge(HubListenersLive(server, port)))),
     Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port })),
     Layer.provideMerge(
@@ -353,15 +373,20 @@ describe("remote access over a fake Tailscale", () => {
   });
 
   // covers DP-004
-  it("[TC-DP-073] refuses every tailnet request until devices can pair, and still serves loopback", async ({
+  it("[TC-DP-086] the device check sees tailnet requests as the tailnet's, so the window key works only on loopback", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
-    const hub = await startHub({ untilPairing: true });
-    expect(await ask("127.0.0.1", hub.port())).toEqual({ status: 200, body: "local" });
-    expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.1" })).toEqual({
-      status: 403,
-      body: "This device is not paired with Hobbots yet.",
+    const hub = await startHub();
+    const asWindow = { path: "/device", headers: AS_WINDOW };
+    expect(await ask("127.0.0.1", hub.port(), asWindow)).toEqual({ status: 200, body: WINDOW_DEVICE_ID });
+    expect(await ask("127.0.0.2", hub.port(), { ...asWindow, from: "127.0.0.1" })).toEqual({
+      status: 401,
+      body: "DeviceRequired",
+    });
+    expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.1", path: "/device" })).toEqual({
+      status: 401,
+      body: "DeviceRequired",
     });
   });
 

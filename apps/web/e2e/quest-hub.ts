@@ -15,11 +15,11 @@ export const stopQuestHub = async () => {
 export const questHub = async () => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir, { HOBBOTS_FAKE_QUEST: "black-friday" });
-  const url = hub.url;
+  const { url, headers } = hub;
   const api = async (method: string, path: string, body: unknown) => {
     const response = await fetch(`${url}/api${path}`, {
       method,
-      headers: { "content-type": "application/json", origin: url },
+      headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);

@@ -1,6 +1,7 @@
 import { SearchHit } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
+import { DeviceSession } from "./user-session.ts";
 
 export class SearchGroup extends HttpApiGroup.make("search")
   .add(
@@ -11,4 +12,5 @@ export class SearchGroup extends HttpApiGroup.make("search")
       success: Schema.Array(SearchHit),
     }),
   )
+  .middleware(DeviceSession)
   .prefix("/api") {}

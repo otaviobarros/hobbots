@@ -11,6 +11,7 @@ import { frameChange, type HubChange } from "./hub-events-model.ts";
 export interface HubEventsOptions {
   /** The hub's `/api/events` URL, read for each connection, since the hub's port can change. */
   readonly url: () => string;
+  /** Headers for each connection, read again every time, as the window key changes when the hub restarts. */
   readonly headers?: () => Readonly<Record<string, string>>;
   /** Whether the hub may answer now; the stream is followed only while it may. */
   readonly canConnect: () => boolean;

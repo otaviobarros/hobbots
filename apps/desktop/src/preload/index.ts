@@ -1,12 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { folderDialogChannel } from "../main/folder-dialog.ts";
-import { hubApiUrlChannel } from "../main/hub-address.ts";
 import { keepRunningChannels } from "../main/keep-running.ts";
 import { loginItemChannels } from "../main/login-item.ts";
 import { openRequestChannel } from "../main/open-request.ts";
-
-// Asked on every page load, so a reload after the hub moved to another port finds it (ADR 021).
-const apiUrl: unknown = ipcRenderer.sendSync(hubApiUrlChannel);
 
 // A request whose notification was clicked, kept until the page listens: a window opened by the
 // click loads before the Inbox can show it.
@@ -32,7 +28,6 @@ const onOpenRequest = (listener: (requestId: string) => void) => {
 };
 
 contextBridge.exposeInMainWorld("hobbots", {
-  apiUrl: typeof apiUrl === "string" ? apiUrl : "http://127.0.0.1:4317",
   loginItem: {
     get: () => ipcRenderer.invoke(loginItemChannels.get),
     set: (openAtLogin: boolean) => ipcRenderer.invoke(loginItemChannels.set, openAtLogin),
