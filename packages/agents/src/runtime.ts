@@ -18,6 +18,21 @@ import {
 import { Context, Effect, Option, Schema, type Stream } from "effect";
 import type { Redactor } from "./secrets.ts";
 
+/** A shell command a tool call runs, as the Workbench's Terminal records it (ADR 023). */
+export interface CommandStart {
+  /** The command line, exactly as the runtime runs it. Hobbots redacts it before it stores it. */
+  readonly line: string;
+  /** The folder it runs in. */
+  readonly folder: string;
+  /** Whether it runs inside Hobbots' sandbox (ADR 014). */
+  readonly sandboxed: boolean;
+  /**
+   * Whether the runtime reports its output as it comes (`ToolOutput`), or only when it ends, as
+   * Claude Code's hooks do.
+   */
+  readonly liveOutput: boolean;
+}
+
 /** The policy allowed a tool call and it began. `id` is unique within the turn. */
 export interface ToolStartedEvent {
   readonly _tag: "ToolStarted";
@@ -29,6 +44,8 @@ export interface ToolStartedEvent {
   readonly targets: ReadonlyArray<string>;
   /** Short words for the step, such as "Running pnpm test". */
   readonly label: string;
+  /** For a call that runs a shell command: the command. */
+  readonly command?: CommandStart;
 }
 
 /** Normalized runtime output. Vendor message shapes stay inside each adapter. */
@@ -65,7 +82,19 @@ export type RuntimeEvent =
    * A started tool call ended; `failed` when the tool reported an error, a sandbox refusal included.
    * `output` is what the call printed, or its error, whole: Hobbots redacts and cuts it, never the adapter.
    */
-  | { readonly _tag: "ToolFinished"; readonly id: string; readonly failed: boolean; readonly output?: string }
+  | {
+      readonly _tag: "ToolFinished";
+      readonly id: string;
+      readonly failed: boolean;
+      readonly output?: string;
+      /** A command's exit code, when the runtime reports one. */
+      readonly exitCode?: number;
+    }
+  /**
+   * A piece of what a running command printed, from a runtime that reports output as it comes.
+   * `ToolFinished` still carries the whole output; this only shows it live.
+   */
+  | { readonly _tag: "ToolOutput"; readonly id: string; readonly text: string }
   /** A tool call never ran: the policy refused it, the user denied it, or its approval expired. */
   | {
       readonly _tag: "ToolDenied";

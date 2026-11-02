@@ -1,4 +1,5 @@
 import {
+  ActivityRecorder,
   ApprovalService,
   accessNow,
   type ChatTurn,
@@ -93,6 +94,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       const publisher = yield* EventPublisher;
       const adapters = yield* runtimeAdapters;
       const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
+      // Records what each session's turn runs and changes for the Workbench (ADR 023).
+      const recorder = yield* Effect.serviceOption(ActivityRecorder);
       // Steps ask nothing, but the hob's grants answer their calls. Absent, nothing answers an Ask.
       const approvalService = yield* Effect.serviceOption(ApprovalService);
       const fibers = yield* FiberMap.make<TaskId>();
@@ -169,25 +172,34 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
         carried: ReadonlyArray<CarriedItem>,
         approvals: TurnApprovals | null,
       ) =>
-        runSessionTurn(adapters, redactor, {
-          agent,
-          config,
-          prompt: stepPrompt(step, tree),
-          // A fresh session: nothing of the hob's chat or of other steps.
-          sessionId: null,
-          access,
-          // A call the policy answers Ask for is refused, since a step has no conversation to ask in,
-          // unless a grant answers it: This Task's cover every step of the Task (ADR 018).
-          approvals,
-          recordToolStart: recordToolStart(step),
-          hubTools: tools.forTurn({ agentId: agent.id, taskId: step.id, carried }, STEP_TOOLS),
-          started: (sessionId) =>
-            Effect.asVoid(
-              Effect.flatMap(nowIso, (at) =>
-                attempt(tasks.updateAttempt(attemptId, { state: "running", sessionId, at }), "record a step's session"),
+        runSessionTurn(
+          adapters,
+          redactor,
+          {
+            agent,
+            config,
+            prompt: stepPrompt(step, tree),
+            attemptId,
+            // A fresh session: nothing of the hob's chat or of other steps.
+            sessionId: null,
+            access,
+            // A call the policy answers Ask for is refused, since a step has no conversation to ask in,
+            // unless a grant answers it: This Task's cover every step of the Task (ADR 018).
+            approvals,
+            recordToolStart: recordToolStart(step),
+            hubTools: tools.forTurn({ agentId: agent.id, taskId: step.id, carried }, STEP_TOOLS),
+            started: (sessionId) =>
+              Effect.asVoid(
+                Effect.flatMap(nowIso, (at) =>
+                  attempt(
+                    tasks.updateAttempt(attemptId, { state: "running", sessionId, at }),
+                    "record a step's session",
+                  ),
+                ),
               ),
-            ),
-        });
+          },
+          recorder,
+        );
 
       /** Records why a step could not complete as a blocker on it, so its failure says what was left open. */
       const explain = (stepId: TaskId, reason: string, at: string) =>
@@ -406,6 +418,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             admission,
             adapters,
             redactor,
+            recorder,
             approvals: approvalService,
             continuations: memberContinuations.value,
             separator,

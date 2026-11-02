@@ -49,6 +49,7 @@ import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
 import { type ChatTaskTurn, type ChatTurnOutcome, TaskTurns } from "./task-turns.ts";
 import { keepToolOutput } from "./tool-output.ts";
 import { accessNow, HobTools, narrows } from "./tools.ts";
+import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
 
 interface Reply {
   readonly current: Ref.Ref<Message>;
@@ -232,6 +233,14 @@ export class ChatService extends Context.Service<
       const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
       // Without a log store, a long tool output keeps only its start and end.
       const toolLogs = yield* Effect.serviceOption(ToolLogs);
+      // Records what each turn runs and changes for the Workbench (ADR 023); absent, nothing is recorded.
+      const recorder = yield* Effect.serviceOption(ActivityRecorder);
+      const activityOf = (tools: ToolAccess | null, taskTurn: ChatTaskTurn | null) =>
+        trackTurn(recorder, {
+          folders: tools?.folders ?? [],
+          attempt: taskTurn?.attempt ?? Effect.succeed(null),
+          redactor,
+        });
       // Without Task work, turns offer no Task tools and hobs run no steps.
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
       // Without Charms, turns offer only the Task tools.
@@ -539,6 +548,9 @@ export class ChatService extends Context.Service<
                     return steps === null ? undefined : MessageTransitions.setSteps(m, steps);
                   });
                 });
+              // A command's output as it comes is the Workbench's, recorded with the turn's activity.
+              case "ToolOutput":
+                return Effect.void;
               // Steps, a tool call's included, are saved with the reply, so they replay on reconnect.
               default:
                 return saveStep(event);
@@ -577,31 +589,38 @@ export class ChatService extends Context.Service<
               )
             : null;
           onTask = taskTurn;
-          yield* adapter
-            .sendPrompt({
-              prompt,
-              briefing: [briefing, taskTurn?.briefing ?? null].filter((part) => part !== null).join("\n\n") || null,
-              sessionId: thread.sessions.find((s) => s.runtime === brain.runtime)?.sessionId ?? null,
-              instructions: systemInstructions(name, config),
-              instructionsChanged: changed,
-              model: brain.model,
-              effort: brain.effort,
-              tools: yield* grant(thread.id, agent),
-              approvals: turnApprovals?.approvals ?? null,
-              redaction: redactor,
-              recordToolStart,
-              hubTools: combineHubTools(
-                taskTurn?.hubTools ?? null,
-                yield* charmsFor({
-                  agentId: agent.id,
-                  threadId: thread.id,
-                  messageId: (yield* Ref.get(reply.current)).id,
-                  currentAccess: currentAccess(agent.id),
-                  redactor,
-                  approvals: turnApprovals?.approvals ?? null,
-                }),
-              ),
-            })
+          const tools = yield* grant(thread.id, agent);
+          // What the turn runs and changes, recorded for the Workbench on the Attempt it works on (ADR 023).
+          // Acquired after the Task's turn, so the end-of-turn compare lands before its Attempt ends.
+          const activity = yield* activityOf(tools, taskTurn);
+          yield* activity
+            .run(
+              {
+                prompt,
+                briefing: [briefing, taskTurn?.briefing ?? null].filter((part) => part !== null).join("\n\n") || null,
+                sessionId: thread.sessions.find((s) => s.runtime === brain.runtime)?.sessionId ?? null,
+                instructions: systemInstructions(name, config),
+                instructionsChanged: changed,
+                model: brain.model,
+                effort: brain.effort,
+                tools,
+                approvals: turnApprovals?.approvals ?? null,
+                redaction: redactor,
+                recordToolStart,
+                hubTools: combineHubTools(
+                  taskTurn?.hubTools ?? null,
+                  yield* charmsFor({
+                    agentId: agent.id,
+                    threadId: thread.id,
+                    messageId: (yield* Ref.get(reply.current)).id,
+                    currentAccess: currentAccess(agent.id),
+                    redactor,
+                    approvals: turnApprovals?.approvals ?? null,
+                  }),
+                ),
+              },
+              adapter.sendPrompt,
+            )
             .pipe(
               Stream.runForEach(handle),
               Effect.catchTags({

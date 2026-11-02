@@ -115,7 +115,7 @@ The Terminal is a read-only record. You cannot type into it.
 
 - **Each command** shows the command line, the folder it ran in, whether it ran in the sandbox, when it started, how long it took and whether it succeeded (its exit code).
 - **Output** passes through the same redaction as tool output before it is stored or shown.
-- **Live** where the runtime reports output as it comes. Where it reports output only at the end, as Claude Code's hooks do, a running command shows "Running · 12 s" and its output when it ends. #384 records which runtime does which.
+- **Live** where the runtime reports output as it comes. Where it reports output only at the end, as Claude Code's hooks do, a running command shows "Running · 12 s" and its output when it ends. Claude Code reports a command's output only when it ends; the fake runtime streams it when a scripted run asks to. Each command record says which (`liveOutput`).
 - **Long output is folded.** A command keeps its first and last 8 KiB on its step, as today. Its whole output is kept up to 4 MiB as a log; past that, the log keeps its first and last 2 MiB and says how much was left out. An Attempt keeps at most 64 MiB of logs; past that, new commands keep only their first and last 8 KiB.
 - **What runs without the Terminal** stays out of it. File reads, edits and searches are steps in Summary, not commands.
 
@@ -176,15 +176,15 @@ Keeping the small records with the Task and the heavy details for 30 days keeps 
 
 The scenarios that would show this decision holds. Each names the issue that will prove it.
 
-- A Task that edits two files, one with a file tool and one with a command, and runs a command, records both changes and the command's output, redacted, on SQLite and PostgreSQL: not proven yet, [#384](https://github.com/otaviobarros/hobbots/issues/384).
-- A command that rewrites a file with the same number of bytes and restores its modification time is still recorded as a change: not proven yet, [#384](https://github.com/otaviobarros/hobbots/issues/384).
-- An image the Task overwrote or deleted shows its earlier version, and one past the size limit says "Earlier version not kept" with why: not proven yet, [#384](https://github.com/otaviobarros/hobbots/issues/384), [#387](https://github.com/otaviobarros/hobbots/issues/387).
-- Change capture works in a Git and a non-Git folder, runs no code from the repository, keeps no contents of a secret file and labels a change made while another hob worked in the same folder: not proven yet, [#384](https://github.com/otaviobarros/hobbots/issues/384).
+- A Task that edits two files, one with a file tool and one with a command, and runs a command, records both changes and the command's output, redacted, on SQLite and PostgreSQL. Proven at hub level with the fake runtime: `[TC-GEN-082]`, and the records themselves in `[TC-IN-173]` to `[TC-IN-177]`.
+- A command that rewrites a file with the same number of bytes and restores its modification time is still recorded as a change. Proven: `[TC-GEN-080]`.
+- An image the Task overwrote or deleted shows its earlier version, and one past the size limit says "Earlier version not kept" with why. The records are proven at hub level: `[TC-GEN-082]`. Not shown yet: [#387](https://github.com/otaviobarros/hobbots/issues/387).
+- Change capture works in a Git and a non-Git folder, runs no code from the repository, keeps no contents of a secret file and labels a change made while another hob worked in the same folder. Proven: `[TC-PE-276]`, `[TC-PE-277]`, `[TC-GEN-079]`, `[TC-GEN-081]`, `[TC-GEN-082]` and `[TC-GEN-083]`.
 - Opening a finished Task shows Summary first with the header, a tab it did not use reads "Not used in this Task", Browser reads Coming soon, and going back keeps your chat and pinned Quest: not proven yet, [#385](https://github.com/otaviobarros/hobbots/issues/385).
 - A finished Task's Summary names what it made and links to each file, with no model call: not proven yet, [#386](https://github.com/otaviobarros/hobbots/issues/386).
 - Selecting a Task that edited files shows its changes, Live during the turn and as History after: not proven yet, [#387](https://github.com/otaviobarros/hobbots/issues/387).
 - A file the Task made opens as a preview and shows in Finder from the app: not proven yet, [#388](https://github.com/otaviobarros/hobbots/issues/388).
 - A finished Task's terminal shows history, not a live session, with long output folded: not proven yet, [#389](https://github.com/otaviobarros/hobbots/issues/389).
 - A nudge from the Workbench reaches the Task's lead as a note: not proven yet, [#390](https://github.com/otaviobarros/hobbots/issues/390).
-- Details past the retention window read Unavailable with why, and the hob's files are untouched: not proven yet, [#384](https://github.com/otaviobarros/hobbots/issues/384).
+- Details past the retention window read Unavailable with why, and the hob's files are untouched. The cleared records and the untouched files are proven at hub level: `[TC-PE-279]`, `[TC-IN-177]` and `[TC-PE-278]`. Not shown yet: [#387](https://github.com/otaviobarros/hobbots/issues/387), [#389](https://github.com/otaviobarros/hobbots/issues/389).
 - The whole slice runs end to end with the fake runtime on SQLite and PostgreSQL: not proven yet, [#391](https://github.com/otaviobarros/hobbots/issues/391).

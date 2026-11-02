@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { CommandId, CommandRecord, FileChange, FileChangeId, FolderScan } from "./activity.ts";
 import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { BackpackItem } from "./backpack.ts";
@@ -17,7 +18,7 @@ import {
   TaskNote,
   TaskWait,
 } from "./quest.ts";
-import { Attempt, Task } from "./task.ts";
+import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { Thread } from "./thread.ts";
 
 const AgentUpserted = Schema.TaggedStruct("AgentUpserted", { agent: Agent });
@@ -104,6 +105,35 @@ const QuestCompleted = Schema.TaggedStruct("QuestCompleted", { quest: Quest });
 const BackpackItemRecorded = Schema.TaggedStruct("BackpackItemRecorded", { item: BackpackItem });
 /** A backpack item was claimed, delivered, acknowledged, processed, put back, resolved or failed. */
 const BackpackItemChanged = Schema.TaggedStruct("BackpackItemChanged", { item: BackpackItem });
+/** A command an Attempt ran started, or ended with its output (ADR 023). */
+const CommandRecorded = Schema.TaggedStruct("CommandRecorded", { command: CommandRecord });
+/**
+ * An Attempt's file changes in one folder, as a scan found them (ADR 023): `changes` were added or
+ * replaced, and the changes in `removed` no longer differ from the turn's start, as a file put back.
+ */
+const FileChangesRecorded = Schema.TaggedStruct("FileChangesRecorded", {
+  attemptId: AttemptId,
+  taskId: TaskId,
+  folder: Schema.String,
+  changes: Schema.Array(FileChange),
+  removed: Schema.Array(FileChangeId),
+});
+/** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
+const FolderScanned = Schema.TaggedStruct("FolderScanned", { scan: FolderScan });
+/**
+ * A piece of what a running command printed, redacted, from a runtime that reports output as it
+ * comes (ADR 023). Transient: the whole output reaches durable state when the command ends.
+ * `offset` is where the piece starts in what the command printed so far, in UTF-16 code units.
+ */
+export const CommandOutput = Schema.TaggedStruct("CommandOutput", {
+  attemptId: AttemptId,
+  taskId: TaskId,
+  commandId: CommandId,
+  offset: Schema.Int,
+  delta: Schema.String,
+});
+export type CommandOutput = typeof CommandOutput.Type;
+
 /**
  * A piece of a streaming reply. Transient: its text reaches durable state through the message (ADR 013).
  * `offset` is where the piece starts in the message's text, in UTF-16 code units, so a client
@@ -130,7 +160,7 @@ export type TurnStarted = typeof TurnStarted.Type;
 export type TurnEnded = typeof TurnEnded.Type;
 
 /** A transient event: delivered live, never journaled. */
-export type TransientEvent = MessageDelta | TurnStarted | TurnEnded;
+export type TransientEvent = MessageDelta | TurnStarted | TurnEnded | CommandOutput;
 
 /** State events: each is written to the event journal in the transaction that makes its change (ADR 013). */
 export const JournaledEvent = Schema.Union([
@@ -162,11 +192,20 @@ export const JournaledEvent = Schema.Union([
   PairingRequested,
   PairingChanged,
   DeviceRevoked,
+  CommandRecorded,
+  FileChangesRecorded,
+  FolderScanned,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
 /** Events pushed to clients over SSE after the matching state change is committed. */
-export const HobbotsEvent = Schema.Union([...JournaledEvent.members, MessageDelta, TurnStarted, TurnEnded]);
+export const HobbotsEvent = Schema.Union([
+  ...JournaledEvent.members,
+  MessageDelta,
+  TurnStarted,
+  TurnEnded,
+  CommandOutput,
+]);
 export type HobbotsEvent = typeof HobbotsEvent.Type;
 export type MessageDelta = typeof MessageDelta.Type;
 
@@ -206,6 +245,9 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   PairingRequested: 1,
   PairingChanged: 1,
   DeviceRevoked: 1,
+  CommandRecorded: 1,
+  FileChangesRecorded: 1,
+  FolderScanned: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */
@@ -264,6 +306,13 @@ export type StreamReady = typeof StreamReady.Type;
 
 /**
  * The SSE event names on the event stream; a journaled entry is a plain `message` frame (ADR 013).
- * `turn` carries `TurnStarted` and `TurnEnded`, and `remote-access` carries `RemoteAccessChanged`.
+ * `turn` carries `TurnStarted` and `TurnEnded`, `remote-access` carries `RemoteAccessChanged` and
+ * `command-output` carries `CommandOutput`.
  */
-export const STREAM_FRAME = { ready: "ready", delta: "delta", turn: "turn", remoteAccess: "remote-access" } as const;
+export const STREAM_FRAME = {
+  ready: "ready",
+  delta: "delta",
+  turn: "turn",
+  remoteAccess: "remote-access",
+  commandOutput: "command-output",
+} as const;

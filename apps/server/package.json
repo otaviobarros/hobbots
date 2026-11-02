@@ -20,6 +20,7 @@
     "@hobbots/permissions": "workspace:*",
     "@hobbots/persistence": "workspace:*",
     "@hobbots/runtimes": "workspace:*",
+    "@hobbots/workbench": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

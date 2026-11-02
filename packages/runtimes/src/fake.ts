@@ -1,3 +1,5 @@
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   AdditionalRuntimes,
   type PromptRequest,
@@ -20,7 +22,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { Clock, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
 import { decideCall, startCall } from "./approval.ts";
 import { toolTurn } from "./claude-code.ts";
-import { toolLabel, toolRequests } from "./tool-calls.ts";
+import { commandOf, toolLabel, toolRequests } from "./tool-calls.ts";
 
 /**
  * The fake runtime's models: a main one with every effort level, and one behind "More models"
@@ -141,9 +143,123 @@ const scriptedOutput = (tool: string, input: Record<string, unknown>): string | 
 };
 
 /**
+ * What a scripted call does once it runs: the files it writes (text) or deletes (null), relative to
+ * the hob's first folder, and for a command what it prints, whether as it comes, and its exit code.
+ */
+interface ScriptedEffect {
+  readonly writes?: Readonly<Record<string, string | null>>;
+  readonly output?: string;
+  readonly exitCode?: number;
+  readonly live?: boolean;
+}
+
+interface ScriptedCall {
+  readonly tool: string;
+  readonly input: Record<string, unknown>;
+  readonly effect?: ScriptedEffect;
+}
+
+/**
+ * A prompt line `fake:run <JSON>` asks the fake runtime to run a command that really changes the
+ * hob's first folder, as a script would: `{"command": "npm run format", "writes": {"a.ts": "…",
+ * "old.ts": null}, "output": "…", "exitCode": 0, "live": true}`. Its writes are made, its output is
+ * reported (as it comes when `live`), and a non-zero exit code fails it. Nothing else runs.
+ */
+export const FAKE_RUN_DIRECTIVE = "fake:run";
+
+/**
+ * A prompt line `fake:write <path> <JSON text>` asks the fake runtime to write that text to the file
+ * with its Write tool, relative to the hob's first folder.
+ */
+export const FAKE_WRITE_DIRECTIVE = "fake:write";
+
+const afterDirective = (line: string, directive: string) =>
+  line.startsWith(`${directive} `) ? line.slice(directive.length + 1).trim() : undefined;
+
+/** The scripted run a `fake:run` line describes, or undefined when its JSON is not one. */
+const scriptedRun = (text: string): ScriptedCall | undefined => {
+  const run = parsedInput(text) as (ScriptedEffect & { readonly command?: unknown }) | string;
+  if (typeof run !== "object" || run === null || typeof run.command !== "string") return undefined;
+  return { tool: "Bash", input: { command: run.command }, effect: run };
+};
+
+/** The scripted write a `fake:write` line describes. */
+const scriptedWrite = (text: string, cwd: string): ScriptedCall => {
+  const [path = "", ...rest] = text.split(" ");
+  const content = parsedInput(rest.join(" "));
+  const target = isAbsolute(path) ? path : join(cwd, path);
+  return {
+    tool: "Write",
+    input: { file_path: target, content: String(content) },
+    effect: { writes: { [relative(cwd, target).split(sep).join("/")]: String(content) } },
+  };
+};
+
+/** The tool call a prompt line scripts, or undefined when it scripts none. */
+const scriptedCall = (line: string, cwd: string): ScriptedCall | undefined => {
+  const tool = afterDirective(line, FAKE_TOOL_DIRECTIVE);
+  if (tool !== undefined) {
+    const [name = "", ...rest] = tool.split(" ");
+    return { tool: name, input: scriptedInput(name, rest.join(" ")) };
+  }
+  const run = afterDirective(line, FAKE_RUN_DIRECTIVE);
+  if (run !== undefined) return scriptedRun(run);
+  const write = afterDirective(line, FAKE_WRITE_DIRECTIVE);
+  return write === undefined ? undefined : scriptedWrite(write, cwd);
+};
+
+/**
+ * Makes a scripted call's writes inside the hob's first folder. A path that leaves the folder, or
+ * passes through a link, is not written: the fake never reaches past what the hob was given.
+ */
+const applyWrites = (writes: Readonly<Record<string, string | null>>, folder: string) => {
+  for (const [path, content] of Object.entries(writes)) {
+    const target = resolve(folder, path);
+    if (!target.startsWith(`${folder}${sep}`)) continue;
+    const parent = dirname(target);
+    mkdirSync(parent, { recursive: true });
+    if (realpathSync(parent) !== parent) continue;
+    if (content === null) rmSync(target, { force: true });
+    else writeFileSync(target, content);
+  }
+};
+
+/** The events a scripted call that ran ends with: its output as it comes, then its end. */
+const finishScripted = (
+  call: ScriptedCall & { readonly id: string },
+  folders: ReadonlyArray<string>,
+): ReadonlyArray<RuntimeEvent> => {
+  const folder = folders[0];
+  if (call.effect?.writes !== undefined && folder !== undefined) applyWrites(call.effect.writes, folder);
+  const output = call.effect?.output ?? scriptedOutput(call.tool, call.input);
+  const exitCode = call.effect?.exitCode;
+  const live =
+    call.effect?.live === true && output !== undefined
+      ? output.split(/(?<=\n)/).map((text): RuntimeEvent => ({ _tag: "ToolOutput", id: call.id, text }))
+      : [];
+  return [
+    ...live,
+    {
+      _tag: "ToolFinished",
+      id: call.id,
+      failed: exitCode !== undefined && exitCode !== 0,
+      ...(output === undefined ? {} : { output }),
+      ...(exitCode === undefined ? {} : { exitCode }),
+    },
+  ];
+};
+
+/** The command a scripted call runs, in the folder the policy decided it in, or undefined for another tool. */
+const scriptedCommand = (
+  call: ScriptedCall & { readonly cwd: string },
+  targets: ReadonlyArray<string>,
+  sandbox: "on" | "unavailable",
+) => commandOf(call.tool, call.input, targets[0] ?? call.cwd, sandbox === "on", call.effect?.live === true);
+
+/**
  * The tool calls a prompt scripts, decided as Claude Code's would be: by the policy engine, and for
  * Ask by the user through the turn's approvals. Each is reported as started and finished, or denied.
- * Nothing is read, written or run.
+ * Only `fake:run` and `fake:write` change files, and only in the hob's first folder; nothing is run.
  */
 export const scriptedToolEvents = (
   request: PromptRequest,
@@ -153,22 +269,15 @@ export const scriptedToolEvents = (
   // Commands are decided as on a hub where the sandbox started, or where it cannot start.
   const turn = engine ? toolTurn(request.tools, sandbox, request.hubTools) : null;
   if (engine === undefined || turn === null) return Stream.empty;
+  const cwd = turn.folders[0] as string;
   const calls = request.prompt
     .split("\n")
     .map((line) => line.trim())
-    .filter((line) => line.startsWith(`${FAKE_TOOL_DIRECTIVE} `))
-    .map((line, index) => {
-      const [tool = "", ...rest] = line
-        .slice(FAKE_TOOL_DIRECTIVE.length + 1)
-        .trim()
-        .split(" ");
-      return {
-        id: `fake-tool-${index + 1}`,
-        tool,
-        input: scriptedInput(tool, rest.join(" ")),
-        cwd: turn.folders[0] as string,
-      };
+    .flatMap((line) => {
+      const call = scriptedCall(line, cwd);
+      return call === undefined ? [] : [call];
     })
+    .map((call, index) => ({ ...call, id: `fake-tool-${index + 1}`, cwd }))
     // Like Claude Code, a known tool not offered this turn is never called; an unknown one is refused.
     .filter((call) => toolRequests(call.tool, call.input, call.cwd) === null || turn.tools.includes(call.tool));
   return Stream.fromIterable(calls).pipe(
@@ -185,6 +294,8 @@ export const scriptedToolEvents = (
             turn.steersPush,
           );
           const label = toolLabel(call.tool, call.input, request.redaction?.text);
+          const command =
+            decision._tag === "Run" ? scriptedCommand(call, decision.verdict.targets, sandbox) : undefined;
           const ran =
             decision._tag === "Run" &&
             (yield* startCall(request.recordToolStart, (event) => Queue.offerUnsafe(queue, event), {
@@ -194,15 +305,12 @@ export const scriptedToolEvents = (
               operation: decision.verdict.operation,
               targets: decision.verdict.targets,
               label,
+              ...(command === undefined ? {} : { command }),
             }));
           if (ran) {
             if (call.tool === "Bash" && String(call.input.command).startsWith("sleep ")) return yield* Effect.never;
-            const output = scriptedOutput(call.tool, call.input);
-            yield* Queue.offer(queue, {
-              _tag: "ToolFinished",
-              id: call.id,
-              failed: false,
-              ...(output === undefined ? {} : { output }),
+            yield* Effect.forEach(finishScripted(call, turn.folders), (event) => Queue.offer(queue, event), {
+              discard: true,
             });
           } else {
             yield* Queue.offer(queue, {

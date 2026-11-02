@@ -27,6 +27,8 @@ export const layers = {
     layer: "adapter",
     may: ["@hobbots/domain", "@hobbots/agents", "@hobbots/permissions"],
   },
+  // The Workbench's records (ADR 023): the scanner of a hob's folders and the store of logs and contents.
+  "@hobbots/workbench": { layer: "adapter", may: ["@hobbots/domain", "@hobbots/agents"] },
   // Pixel art that the app and the site both draw. Plain data and pure functions.
   "@hobbots/art": { layer: "adapter", may: ["@hobbots/domain"] },
   "@hobbots/ui": { layer: "adapter", may: ["@hobbots/art"] },
@@ -42,6 +44,7 @@ export const layers = {
       "@hobbots/permissions",
       "@hobbots/persistence",
       "@hobbots/runtimes",
+      "@hobbots/workbench",
     ],
   },
   "@hobbots/web": { layer: "composition", may: ["@hobbots/domain", "@hobbots/api", "@hobbots/art", "@hobbots/ui"] },
