@@ -6,6 +6,7 @@ export * from "./charm-calls.ts";
 export * from "./charms.ts";
 export * from "./chat.ts";
 export * from "./continuations.ts";
+export * from "./controls.ts";
 export * from "./grants.ts";
 export * from "./hobs.ts";
 export * from "./lifecycle.ts";

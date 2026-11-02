@@ -66,8 +66,20 @@ export class Task extends Schema.Class<Task>("Task")({
   revision: Revision,
 }) {}
 
-/** An Attempt is live while `starting` or `running`; the other states are its outcome. */
-export const AttemptState = Schema.Literals(["starting", "running", "completed", "failed", "interrupted", "cancelled"]);
+/**
+ * An Attempt is live while `starting` or `running`; the other states are its outcome. `unresolved`
+ * is a cancel Hobbots asked for and could not confirm in time: whether its session stopped is not
+ * known (OR-006).
+ */
+export const AttemptState = Schema.Literals([
+  "starting",
+  "running",
+  "completed",
+  "failed",
+  "interrupted",
+  "cancelled",
+  "unresolved",
+]);
 export type AttemptState = typeof AttemptState.Type;
 
 export const isLiveAttempt = (state: AttemptState): boolean => state === "starting" || state === "running";
@@ -133,6 +145,21 @@ export const TaskTransitions = {
     task.state === "completed" || task.state === "cancelled" || task.state === "cancelling"
       ? new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "active" })
       : new Task({ ...task, state: "active", currentAttemptId: attemptId, updatedAt: at }),
+
+  /** A retry puts a failed Task back in the queue, for a new Attempt of the same Task (EX-001). */
+  retry: (task: Task, at: string): Task | IllegalTaskTransition =>
+    task.state === "failed"
+      ? new Task({ ...task, state: "queued", updatedAt: at })
+      : new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "queued" }),
+
+  /**
+   * A reassignment gives a Task that failed, or that is open with nothing running, to another hob,
+   * queued for its first Attempt there. The Task keeps its id and its history.
+   */
+  reassign: (task: Task, ownerId: AgentId, at: string): Task | IllegalTaskTransition =>
+    task.state === "completed" || task.state === "cancelled" || task.state === "cancelling"
+      ? new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "queued" })
+      : new Task({ ...task, ownerId, state: "queued", updatedAt: at }),
 
   complete: (task: Task, result: TaskResult, at: string): Task | IllegalTaskTransition =>
     task.state === "active" || task.state === "waiting"

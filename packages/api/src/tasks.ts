@@ -14,9 +14,11 @@ import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import {
   AgentNotFound,
+  HobUnavailable,
   QuestionClosed,
   QuestionNotFound,
   QuestNotFound,
+  TaskNotControllable,
   TaskNotFound,
   ThreadNotFound,
 } from "./errors.ts";
@@ -54,7 +56,7 @@ export type LedgerRead = typeof LedgerRead.Type;
 export const MemberWorkRead = Schema.Struct({ cursor: Schema.String, work: Schema.Array(MemberWork) });
 export type MemberWorkRead = typeof MemberWorkRead.Type;
 
-/** Tasks and Quests (ADR 018): reads only. Hobs change them through their tools; the user through the Quest tab. */
+/** Tasks and Quests (ADR 018): reads only. Hobs change them through their tools; the user through `TaskControlsGroup`. */
 export class TasksGroup extends HttpApiGroup.make("tasks")
   .add(
     // The Task and everything under it: steps, members' Tasks, nested Quests and their records.
@@ -105,6 +107,48 @@ export class QuestionsGroup extends HttpApiGroup.make("questions")
       payload: AnswerQuestionPayload,
       success: Question,
       error: [QuestionNotFound, QuestionClosed],
+    }),
+  )
+  .middleware(UserSessionOnly)
+  .prefix("/api") {}
+
+/** The hob a Reassign gives the Task to. */
+export const ReassignTaskPayload = Schema.Struct({ agentId: AgentId });
+export type ReassignTaskPayload = typeof ReassignTaskPayload.Type;
+
+/**
+ * The Quest tab's controls (ADR 018, OR-006): Cancel, Retry and Reassign act on a Task directly,
+ * never through its lead. Each returns the Task's tree once the hub recorded what it did, with the
+ * cursor as above; a cancel that needs a running session to stop shows as cancelling, and each
+ * Task's confirmed or unresolved outcome arrives on the event stream. User sessions only: a hob
+ * never uses them (PE-006).
+ */
+export class TaskControlsGroup extends HttpApiGroup.make("taskControls")
+  .add(
+    // The Task and everything under it. Cancelling again returns the tree unchanged.
+    HttpApiEndpoint.post("cancel", "/tasks/:taskId/cancel", {
+      params: { taskId: TaskId },
+      success: TaskTreeRead,
+      error: [TaskNotFound, TaskNotControllable],
+    }),
+    // The Task the Quest sits on, with its whole party.
+    HttpApiEndpoint.post("cancelQuest", "/quests/:questId/cancel", {
+      params: { questId: QuestId },
+      success: TaskTreeRead,
+      error: [QuestNotFound, TaskNotControllable],
+    }),
+    // A failed Task, queued for a new Attempt by its owner.
+    HttpApiEndpoint.post("retry", "/tasks/:taskId/retry", {
+      params: { taskId: TaskId },
+      success: TaskTreeRead,
+      error: [TaskNotFound, TaskNotControllable, HobUnavailable],
+    }),
+    // A party member's Task, given to another hob with its history kept.
+    HttpApiEndpoint.post("reassign", "/tasks/:taskId/reassign", {
+      params: { taskId: TaskId },
+      payload: ReassignTaskPayload,
+      success: TaskTreeRead,
+      error: [TaskNotFound, TaskNotControllable, AgentNotFound, HobUnavailable],
     }),
   )
   .middleware(UserSessionOnly)

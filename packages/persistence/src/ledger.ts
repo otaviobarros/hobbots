@@ -88,6 +88,9 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
         task,
         subtree.tasks.map((each) => each.id),
       )) {
+        // The Task's own result or failure is for the Task above it, even when one hob owns both,
+        // as a step's: an earlier failure of a Task retried since never keeps it open.
+        if (item.taskId === task.id && (item.kind === "result" || item.kind === "failure")) continue;
         const holds = byId.get(item.id);
         if (holds !== undefined && carries(item, live, holds)) consumes.push({ item, carried: holds });
         else blocking.push(item);
@@ -149,11 +152,25 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
       return events;
     });
 
+  /**
+   * What a retry or a reassignment of `task` makes late, still waiting unclaimed: the Failures about
+   * it for whoever is above it, since the Task is open again, and after a reassignment whatever its
+   * earlier owner held about it, since that hob no longer owns it. Late at the version it was.
+   */
+  const staleItems = (task: Task, from: string | null) =>
+    Effect.gen(function* () {
+      const rows = yield* sql<Row>`SELECT * FROM backpack_items
+        WHERE task_id = ${task.id} AND state = 'pending' AND claim_owner IS NULL
+          AND (kind = 'failure' OR recipient_id = ${from ?? ""})
+        ORDER BY recorded_sequence`;
+      return (yield* items.toItems(rows)).map((item) => ({ item, taskRevision: task.revision }));
+    });
+
   /** Who consumed the items: the `complete_task` call the change runs in, or else the Attempt that produced the result. */
   const consumer = (attemptId: string) =>
     Effect.map(CurrentToolCall, (call) =>
       call === null ? `attempt:${attemptId}` : `tool:${call.agentId}:${call.key}`,
     );
 
-  return { readFor, consume, retire, consumer };
+  return { readFor, consume, retire, staleItems, consumer };
 };

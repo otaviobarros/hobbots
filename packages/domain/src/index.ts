@@ -2,6 +2,7 @@ export * from "./agent.ts";
 export * from "./approval.ts";
 export * from "./backpack.ts";
 export * from "./brain.ts";
+export * from "./cancel.ts";
 export * from "./charm-call.ts";
 export * from "./events.ts";
 export * from "./github.ts";

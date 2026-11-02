@@ -1,6 +1,6 @@
-import { HobbotsRepository, QuestionService, TaskRepository } from "@hobbots/agents";
+import { HobbotsRepository, QuestionService, TaskControls, TaskRepository } from "@hobbots/agents";
 import { AgentNotFound, HobbotsApi, QuestNotFound, TaskNotFound, ThreadNotFound } from "@hobbots/api";
-import { partyOf } from "@hobbots/domain";
+import { partyOf, type TaskId } from "@hobbots/domain";
 import { EventJournal } from "@hobbots/persistence";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -70,3 +70,38 @@ export const QuestionsHandlers = HttpApiBuilder.group(HobbotsApi, "questions", (
     });
   }),
 ).pipe(Layer.provide([UserSessionOnlyLive, QuestionService.layer]));
+
+// Your Cancel, Retry and Reassign on a Task (ADR 018), for user sessions only (PE-006). Each answers
+// with the tree once the change is recorded, and the cursor taken after it, so the stream brings
+// each outcome the hub confirms later.
+export const TaskControlsHandlers = HttpApiBuilder.group(HobbotsApi, "taskControls", (handlers) =>
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const controls = yield* TaskControls;
+    const journal = yield* EventJournal;
+    const treeOf = (taskId: TaskId) =>
+      Effect.gen(function* () {
+        const head = yield* journal.head;
+        const tree = yield* tasks.readTree(taskId);
+        if (Option.isNone(tree)) return yield* new TaskNotFound({ taskId });
+        return { cursor: formatCursor(head.epoch, head.sequence), tree: tree.value };
+      });
+    return handlers.handleAll({
+      cancel: ({ params }) => controls.cancel(params.taskId).pipe(Effect.andThen(treeOf(params.taskId))),
+      cancelQuest: ({ params }) =>
+        controls.cancelQuest(params.questId).pipe(
+          Effect.andThen(tasks.findQuest(params.questId)),
+          Effect.flatMap((quest) =>
+            Option.isNone(quest)
+              ? Effect.fail(new QuestNotFound({ questId: params.questId }))
+              : treeOf(quest.value.taskId).pipe(
+                  Effect.catchTag("TaskNotFound", () => Effect.fail(new QuestNotFound({ questId: params.questId }))),
+                ),
+          ),
+        ),
+      retry: ({ params }) => controls.retry(params.taskId).pipe(Effect.andThen(treeOf(params.taskId))),
+      reassign: ({ params, payload }) =>
+        controls.reassign(params.taskId, payload.agentId).pipe(Effect.andThen(treeOf(params.taskId))),
+    });
+  }),
+).pipe(Layer.provide([UserSessionOnlyLive, TaskControls.layer]));

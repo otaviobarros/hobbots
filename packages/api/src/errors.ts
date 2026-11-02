@@ -178,6 +178,18 @@ export class QuestNotFound extends Schema.TaggedError<QuestNotFound>()(
   { httpApiStatus: 404 },
 ) {}
 
+/**
+ * A Cancel, Retry or Reassign the Task's records refuse where it stands, with why: such as a Retry
+ * of a Task that has not failed, or a Reassign while its turn runs. A Retry or Reassign refused
+ * changed nothing; a Cancel refused partway keeps the Tasks it already moved, and asking again
+ * finishes it.
+ */
+export class TaskNotControllable extends Schema.TaggedError<TaskNotControllable>()(
+  "TaskNotControllable",
+  { taskId: TaskId, reason: Schema.String, message: Schema.String },
+  { httpApiStatus: 409 },
+) {}
+
 export class QuestionNotFound extends Schema.TaggedError<QuestionNotFound>()(
   "QuestionNotFound",
   { questionId: QuestionId },

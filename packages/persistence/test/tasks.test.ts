@@ -38,6 +38,16 @@ const carryAll = (id: string) =>
     return carriedFrom(Option.getOrThrow(yield* tasks.readLedger(TaskId.make(id))), () => true);
   });
 
+/** The Task as it is stored now. */
+const latest = (id: string) =>
+  TaskRepository.use((tasks) => tasks.readTree(TaskId.make(id))).pipe(
+    Effect.map((tree) => {
+      const task = Option.getOrThrow(tree).tasks[0];
+      if (task === undefined) throw new Error(`no Task ${id}`);
+      return task;
+    }),
+  );
+
 const now = "2026-11-01T00:00:00.000Z";
 const later = "2026-11-01T01:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
@@ -892,5 +902,140 @@ describe("waits and Task tool calls", () => {
         expect(runs).toBe(runsBefore + 1);
       }),
     );
+  });
+
+  // covers EX-001, OR-006
+  it("[TC-OR-140] a retry queues a failed member's Task for a new Attempt of the same Task, never under a cancel", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = TaskId.make("copy");
+        yield* tasks.startAttempt(copy, (yield* latest("copy")).revision, attempt("a1"));
+        yield* tasks.updateAttempt(AttemptId.make("a1"), { state: "failed", outcome: "It broke.", at: now });
+        const failed = yield* tasks.moveTask(copy, (yield* latest("copy")).revision, "failed", now);
+        const notFailed = yield* tasks
+          .retryTask(TaskId.make("build"), (yield* latest("build")).revision, now)
+          .pipe(Effect.flip);
+        const top = yield* tasks
+          .retryTask(TaskId.make("campaign"), (yield* latest("campaign")).revision, now)
+          .pipe(Effect.flip);
+        const retried = yield* tasks.retryTask(copy, failed.value.revision, later);
+        const again = yield* tasks.startAttempt(copy, retried.value.revision, attempt("a2"));
+        return { notFailed, top, retried, again, tree: Option.getOrThrow(yield* tasks.readTree(copy)) };
+      }),
+    );
+
+    expect(result.notFailed).toMatchObject({ _tag: "IllegalTaskTransition", from: "queued", to: "queued" });
+    expect(result.top).toMatchObject({ _tag: "TaskRefused", reason: "top-task" });
+    expect(result.retried.value).toMatchObject({ id: "copy", state: "queued", ownerId: QUILL });
+    expect(result.retried.entries[0]?.payload).toMatchObject({
+      _tag: "TaskStateChanged",
+      control: { _tag: "Retried", delegation: { childTaskId: "copy", memberId: QUILL } },
+    });
+    expect(result.again.value.attempt.number).toBe(2);
+    expect(result.tree.attempts.map((each) => [each.number, each.state])).toEqual([
+      [1, "failed"],
+      [2, "starting"],
+    ]);
+  });
+
+  // covers OR-006
+  it("[TC-OR-141] nothing new starts under a Task being cancelled, and it reports and asks nothing more", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = TaskId.make("copy");
+        yield* tasks.moveTask(copy, (yield* latest("copy")).revision, "failed", now);
+        const top = yield* latest("campaign");
+        const activeTop = yield* tasks.startAttempt(top.id, top.revision, attempt("a-top"));
+        yield* tasks.moveTask(top.id, activeTop.value.task.revision, "cancelling", now);
+        const child = yield* tasks
+          .createTask({ task: newTask("late", PIP, "campaign"), delegation: brief("d-late"), milestones: [] })
+          .pipe(Effect.flip);
+        const retry = yield* tasks.retryTask(copy, (yield* latest("copy")).revision, now).pipe(Effect.flip);
+        const build = TaskId.make("build");
+        const start = yield* tasks
+          .startAttempt(build, (yield* latest("build")).revision, attempt("a-b"))
+          .pipe(Effect.flip);
+        const report = yield* tasks
+          .recordCheckpoint({
+            id: CheckpointId.make("c-late"),
+            taskId: top.id,
+            source: "unplanned",
+            kind: "finding",
+            milestoneId: null,
+            summary: "Found something",
+            createdAt: now,
+          })
+          .pipe(Effect.flip);
+        const ask = yield* tasks
+          .askQuestion({
+            id: QuestionId.make("q-late"),
+            taskId: top.id,
+            askerId: ALDRIC,
+            text: "Go on?",
+            createdAt: now,
+          })
+          .pipe(Effect.flip);
+        return { child, retry, start, report, ask, cancelling: yield* tasks.listCancellingTasks };
+      }),
+    );
+
+    expect(result.child).toMatchObject({ _tag: "TaskRefused", reason: "parent-cancelling" });
+    expect(result.retry).toMatchObject({ _tag: "TaskRefused", reason: "parent-cancelling" });
+    expect(result.start).toMatchObject({ _tag: "TaskRefused", reason: "parent-cancelling" });
+    // What a Task being cancelled reports or asks would only wake its lead about work that is ending.
+    expect(result.report).toMatchObject({ _tag: "TaskRefused", reason: "task-cancelling" });
+    expect(result.ask).toMatchObject({ _tag: "TaskRefused", reason: "task-cancelling" });
+    expect(result.cancelling.map((each) => each.id)).toEqual(["campaign"]);
+  });
+
+  // covers OR-006
+  it("[TC-OR-142] a reassignment gives a member's Task to another hob and keeps its id and Attempts", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = TaskId.make("copy");
+        const started = yield* tasks.startAttempt(copy, (yield* latest("copy")).revision, attempt("a1"));
+        const reassign = (ownerId: AgentId) =>
+          Effect.flatMap(latest("copy"), (task) => tasks.reassignTask(copy, task.revision, ownerId, later));
+        const live = yield* reassign(PIP).pipe(Effect.flip);
+        yield* tasks.updateAttempt(AttemptId.make("a1"), { state: "completed", at: now });
+        const toLead = yield* reassign(ALDRIC).pipe(Effect.flip);
+        const toSelf = yield* reassign(QUILL).pipe(Effect.flip);
+        const top = yield* tasks
+          .reassignTask(TaskId.make("campaign"), (yield* latest("campaign")).revision, PIP, later)
+          .pipe(Effect.flip);
+        const moved = yield* reassign(PIP);
+        return {
+          started,
+          live,
+          toLead,
+          toSelf,
+          top,
+          moved,
+          tree: Option.getOrThrow(yield* tasks.readTree(copy)),
+          pipWork: yield* tasks.listMemberWork(PIP),
+          quillWork: yield* tasks.listMemberWork(QUILL),
+        };
+      }),
+    );
+
+    expect(result.live).toMatchObject({ _tag: "TaskRefused", reason: "attempt-live" });
+    expect(result.toLead).toMatchObject({ _tag: "TaskRefused", reason: "lineage-owner" });
+    expect(result.toSelf).toMatchObject({ _tag: "TaskRefused", reason: "same-owner" });
+    expect(result.top).toMatchObject({ _tag: "TaskRefused", reason: "not-delegated" });
+    expect(result.moved.value).toMatchObject({ id: "copy", ownerId: PIP, state: "queued" });
+    expect(result.moved.entries[0]?.payload).toMatchObject({
+      control: { _tag: "Reassigned", from: QUILL, delegation: { memberId: PIP, brief: "Delegated d-copy" } },
+    });
+    // The Attempt Quill ran stays his; the Delegation now names Pip, so the work shows as Pip's.
+    expect(result.tree.attempts.map((each) => each.agentId)).toEqual([QUILL]);
+    expect(result.tree.delegations.map((each) => each.memberId)).toEqual([PIP]);
+    expect(result.pipWork.map((each) => each.task.id)).toEqual(["copy"]);
+    expect(result.quillWork).toEqual([]);
   });
 });

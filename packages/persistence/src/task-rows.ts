@@ -234,6 +234,12 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     WHERE t.state = 'queued' AND p.owner_id = t.owner_id
       AND p.state NOT IN ('completed', 'failed', 'cancelled', 'cancelling')
     ORDER BY ${orderBy(sql, ["t.created_at", "t.id"])}`.pipe(Effect.flatMap(decodeRows("task")));
+  /** Tasks whose cancel is not confirmed yet, oldest first. */
+  const cancelling = sql<Row>`SELECT * FROM tasks WHERE state = 'cancelling'
+    ORDER BY ${orderBy(sql, ["created_at", "id"])}`.pipe(Effect.flatMap(decodeRows("task")));
+  /** The Delegation that brought a member its Task, if it was delegated. */
+  const delegationsOf = (taskId: string) =>
+    sql<Row>`SELECT * FROM delegations WHERE child_task_id = ${taskId}`.pipe(Effect.flatMap(decodeRows("delegation")));
   const liveAttempts = sql<Row>`SELECT * FROM attempts WHERE state IN ('starting', 'running')
     ORDER BY ${orderBy(sql, ["started_at", "id"])}`.pipe(Effect.flatMap(decodeRows("attempt")));
   /** Steps that started and have not ended, with no live Attempt: their session ended, oldest first. */
@@ -256,6 +262,8 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     memberWork,
     queuedSteps,
     strandedSteps,
+    cancelling,
+    delegationsOf,
     liveAttempts,
   };
 };

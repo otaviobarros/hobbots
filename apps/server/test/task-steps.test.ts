@@ -146,7 +146,9 @@ interface Options {
 const makeApp = (options: Options, gates: Map<string, Deferred.Deferred<void>>, requests: Array<PromptRequest>) =>
   ChatService.layer.pipe(
     Layer.provideMerge(
-      StepRunnerLive(options.limits ?? { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3 }).pipe(
+      StepRunnerLive(
+        options.limits ?? { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3, cancelTimeoutMs: 30_000 },
+      ).pipe(
         Layer.provideMerge(TaskTools.layer("/", options.taskLimits ?? DEFAULT_TASK_TOOL_LIMITS)),
         Layer.provideMerge(TaskSignal.layer),
       ),
@@ -403,7 +405,9 @@ describe("a Task's steps in fresh sessions", () => {
 
   // covers OR-004, OR-005
   it("[TC-OR-061] a step is given at most 4,000 characters of each step it comes after, and 16,000 in all", async () => {
-    const { run, control, stepsAsked } = setUp({ limits: { maxRunningStepsPerHob: 5, maxRunningStepsPerTree: 5 } });
+    const { run, control, stepsAsked } = setUp({
+      limits: { maxRunningStepsPerHob: 5, maxRunningStepsPerTree: 5, cancelTimeoutMs: 30_000 },
+    });
     const thread = await run(seed);
     // Five results, each longer than one step is given of it.
     const result = (n: number) => `${`Result ${n} keeps going. `.repeat(250)}End of result ${n}.`;
@@ -430,7 +434,9 @@ describe("a Task's steps in fresh sessions", () => {
 
   // covers OR-004, OR-005
   it("[TC-OR-027] steps without an order run in parallel, up to the hob's limit", async () => {
-    const { run, control } = setUp({ limits: { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3 } });
+    const { run, control } = setUp({
+      limits: { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3, cancelTimeoutMs: 30_000 },
+    });
     const thread = await run(seed);
     const briefs = ["Banner A", "Banner B", "Banner C"];
     await run(send(thread.id, hub("plan_steps", { key: "plan", steps: briefs.map((brief) => ({ brief })) })));
@@ -449,7 +455,7 @@ describe("a Task's steps in fresh sessions", () => {
 
   // covers OR-004
   it("[TC-OR-028] the tree's limit holds steps back across its hob's limit", async () => {
-    const { run } = setUp({ limits: { maxRunningStepsPerHob: 4, maxRunningStepsPerTree: 1 } });
+    const { run } = setUp({ limits: { maxRunningStepsPerHob: 4, maxRunningStepsPerTree: 1, cancelTimeoutMs: 30_000 } });
     const thread = await run(seed);
     await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "One" }, { brief: "Two" }] })));
     const one = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
@@ -772,7 +778,7 @@ describe("a Task's steps in fresh sessions", () => {
     const ended = await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
     expect(ended.handOffs).toHaveLength(1);
     const prompt = control.requests.find((request) => request.prompt.startsWith("Publish"))?.prompt ?? "";
-    expect(prompt).toMatch(/Handed to this step:\n  - Doc \(text, artifact [0-9a-f-]+\): The draft/);
+    expect(prompt).toMatch(/Handed to this step:\n {2}- Doc \(text, artifact [0-9a-f-]+\): The draft/);
   });
 
   // covers IN-006, OR-003

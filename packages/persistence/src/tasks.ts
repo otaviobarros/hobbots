@@ -84,6 +84,19 @@ export const TaskRepositoryLive = Layer.effect(
         ),
       );
 
+    /**
+     * A Task that has not ended and whose cancel was not asked for: what its owner reports or asks
+     * about it from then on is not news to anyone (OR-006).
+     */
+    const workingTask = (id: string) =>
+      openTask(id).pipe(
+        Effect.flatMap((task) =>
+          task.state === "cancelling"
+            ? refuse("task-cancelling", `Task ${task.id} is being cancelled`)
+            : Effect.succeed(task),
+        ),
+      );
+
     /** The Task at the revision the change was decided on. */
     const current = (id: string, revision: number) =>
       loadTask(id).pipe(
@@ -168,6 +181,8 @@ export const TaskRepositoryLive = Layer.effect(
         const [parent] = yield* read.task(parentId);
         if (parent === undefined) return yield* refuse("parent-missing", `No parent Task ${parentId}`);
         if (isTerminalTask(parent.state)) return yield* refuse("parent-ended", `Task ${parent.id} is ${parent.state}`);
+        // Work never starts under a Task whose cancel was asked for (OR-006).
+        if (parent.state === "cancelling") return yield* refuse("parent-cancelling", `Task ${parent.id} is cancelling`);
         const step = parent.ownerId === input.ownerId;
         if (step && hasDelegation) return yield* refuse("delegation-mismatch", "A step is not delegated");
         if (!step && !hasDelegation) return yield* refuse("step-owner", "A step has its parent's owner");
@@ -310,12 +325,26 @@ export const TaskRepositoryLive = Layer.effect(
         }
       });
 
-    /** A retry reopens a Task only under ancestors that are still open, and reopens its Quest with it. */
+    /** Nothing starts under a Task whose cancel was asked for (OR-006). */
+    const notUnderCancel = (task: Task) =>
+      Effect.gen(function* () {
+        const cancelling = ancestorsOf(task, yield* read.treeOf(task.rootId)).find((at) => at.state === "cancelling");
+        if (cancelling !== undefined) {
+          return yield* refuse("parent-cancelling", `Task ${cancelling.id} is cancelling`);
+        }
+      });
+
+    /**
+     * A retry reopens a Task only under ancestors that are still open and not being cancelled, and
+     * reopens its Quest with it.
+     */
     const reopen = (task: Task, revision: number) =>
       Effect.gen(function* () {
         if (task.state !== "failed") return null;
-        const ended = ancestorsOf(task, yield* read.treeOf(task.rootId)).find((at) => isTerminalTask(at.state));
+        const above = ancestorsOf(task, yield* read.treeOf(task.rootId));
+        const ended = above.find((at) => isTerminalTask(at.state));
         if (ended !== undefined) return yield* refuse("parent-ended", `Task ${ended.id} is ${ended.state}`);
+        yield* notUnderCancel(task);
         const [quest] = yield* read.questsOn([task.id]);
         if (quest === undefined) return null;
         yield* sql`UPDATE quests SET state = 'active', ended_at = NULL, revision = ${revision} WHERE id = ${quest.id}`;
@@ -327,6 +356,7 @@ export const TaskRepositoryLive = Layer.effect(
         Effect.gen(function* () {
           const before = yield* current(taskId, expected);
           if (yield* liveAttempt(before)) return yield* refuse("attempt-live", `Task ${taskId} has a live Attempt`);
+          yield* notUnderCancel(before);
           const quest = yield* reopen(before, revision);
           const task = new Task({
             ...(yield* orFail(TaskTransitions.start(before, input.id, input.startedAt))),
@@ -410,6 +440,79 @@ export const TaskRepositoryLive = Layer.effect(
               { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null } as const,
               ...(yield* automatic(task, at, revision + 1)),
             ],
+          };
+        }),
+      );
+
+    const retryTask: TaskRepository["Service"]["retryTask"] = (taskId, expected, at) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const before = yield* current(taskId, expected);
+          if (before.parentId === null) {
+            return yield* refuse("top-task", `Task ${taskId} is the one you asked for; ask its hob again instead`);
+          }
+          const task = new Task({ ...(yield* orFail(TaskTransitions.retry(before, at))), revision });
+          const quest = yield* reopen(before, revision);
+          yield* saveTask(task);
+          const [delegation] = yield* read.delegationsOf(task.id);
+          const control = { _tag: "Retried", delegation: delegation ?? null } as const;
+          const late = yield* ledger.retire(yield* ledger.staleItems(before, null), revision + 1);
+          return {
+            value: task,
+            events: [{ _tag: "TaskStateChanged", task, attempt: null, quest, wait: null, control }, ...late],
+          };
+        }),
+      );
+
+    /** Who may take a member's Task: a hob that exists, is not its owner and owns nothing on its way up. */
+    const newOwner = (task: Task, ownerId: AgentId) =>
+      Effect.gen(function* () {
+        const [owner] = yield* sql`SELECT id FROM agents WHERE id = ${ownerId}`;
+        if (owner === undefined) return yield* refuse("owner-missing", `No hob ${ownerId}`);
+        if (task.ownerId === ownerId) return yield* refuse("same-owner", `Task ${task.id} is already ${ownerId}'s`);
+        const tree = yield* read.treeOf(task.rootId);
+        if (ancestorsOf(task, tree).some((above) => above.ownerId === ownerId)) {
+          return yield* refuse("lineage-owner", `${ownerId} already works on a Task above Task ${task.id}`);
+        }
+        return tree;
+      });
+
+    /** A member's Task can change hands only with nothing running in it and nothing open under it. */
+    const handable = (task: Task, tree: ReadonlyArray<Task>) =>
+      Effect.gen(function* () {
+        if (yield* liveAttempt(task)) {
+          return yield* refuse("attempt-live", `Task ${task.id} is running; wait for its turn to end`);
+        }
+        if (descendantsOf(task, tree).some((each) => !isTerminalTask(each.state))) {
+          return yield* refuse("children-open", `Task ${task.id} has work still open under it; cancel it first`);
+        }
+        if ((yield* read.questsOn([task.id])).length > 0) {
+          return yield* refuse("quest-exists", `Task ${task.id} leads a Quest of its own`);
+        }
+      });
+
+    const reassignTask: TaskRepository["Service"]["reassignTask"] = (taskId, expected, ownerId, at) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const before = yield* current(taskId, expected);
+          const [delegation] = yield* read.delegationsOf(before.id);
+          if (delegation === undefined) {
+            return yield* refuse("not-delegated", `Task ${taskId} is not a party member's; only those change hands`);
+          }
+          const task = new Task({ ...(yield* orFail(TaskTransitions.reassign(before, ownerId, at))), revision });
+          yield* handable(before, yield* newOwner(before, ownerId));
+          const quest = yield* reopen(before, revision);
+          yield* saveTask(task);
+          yield* sql`UPDATE delegations SET member_id = ${ownerId} WHERE id = ${delegation.id}`;
+          const control = {
+            _tag: "Reassigned",
+            from: before.ownerId,
+            delegation: new Delegation({ ...delegation, memberId: ownerId }),
+          } as const;
+          const late = yield* ledger.retire(yield* ledger.staleItems(before, before.ownerId), revision + 1);
+          return {
+            value: task,
+            events: [{ _tag: "TaskStateChanged", task, attempt: null, quest, wait: null, control }, ...late],
           };
         }),
       );
@@ -505,7 +608,7 @@ export const TaskRepositoryLive = Layer.effect(
     const recordCheckpoint: TaskRepository["Service"]["recordCheckpoint"] = (input) =>
       change((revision) =>
         Effect.gen(function* () {
-          const task = yield* openTask(input.taskId);
+          const task = yield* workingTask(input.taskId);
           if (!CHECKPOINT_KINDS[input.source].includes(input.kind)) {
             return yield* refuse("checkpoint-kind", `A ${input.source} checkpoint is not a ${input.kind}`);
           }
@@ -519,7 +622,7 @@ export const TaskRepositoryLive = Layer.effect(
     const askQuestion: TaskRepository["Service"]["askQuestion"] = (input) =>
       change((revision) =>
         Effect.gen(function* () {
-          const task = yield* openTask(input.taskId);
+          const task = yield* workingTask(input.taskId);
           if (task.ownerId !== input.askerId) return yield* refuse("not-asker", "Only a Task's owner asks about it");
           const [lead] = leadsAbove(task, yield* read.treeOf(task.rootId));
           const question = new Question({
@@ -654,6 +757,8 @@ export const TaskRepositoryLive = Layer.effect(
       updateAttempt,
       moveTask,
       completeTask,
+      retryTask,
+      reassignTask,
       recordCheckpoint,
       askQuestion,
       answerQuestion,
@@ -686,6 +791,7 @@ export const TaskRepositoryLive = Layer.effect(
       listMemberWork: (agentId) => read.memberWork(agentId).pipe(Effect.orDie),
       listQueuedSteps: read.queuedSteps.pipe(Effect.orDie),
       listStrandedSteps: read.strandedSteps.pipe(Effect.orDie),
+      listCancellingTasks: read.cancelling.pipe(Effect.orDie),
       listLiveAttempts: read.liveAttempts.pipe(Effect.orDie),
     });
   }),

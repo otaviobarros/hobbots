@@ -25,8 +25,6 @@ import {
   CheckpointId,
   type Committed,
   carriedFrom,
-  descendantsOf,
-  isLiveAttempt,
   isTerminalTask,
   type Task,
   type TaskId,
@@ -37,6 +35,7 @@ import { DateTime, Effect, FiberMap, Layer, Option, Semaphore } from "effect";
 import type { PathSeparator } from "./authority.ts";
 import { cut, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
+import { makeCancelSettler } from "./cancels.ts";
 import { delegatedAccess, makeMemberRunner } from "./members.ts";
 import { type Ending, type Running, runSessionTurn, STOPPED, type StopReason } from "./session.ts";
 import { TaskSignal } from "./signal.ts";
@@ -49,9 +48,18 @@ import { TaskTools } from "./task-tools.ts";
 export interface StepLimits {
   readonly maxRunningStepsPerHob: number;
   readonly maxRunningStepsPerTree: number;
+  /**
+   * How long, in milliseconds, a session asked to stop for a cancel has to end before the cancel is
+   * left unresolved (OR-006).
+   */
+  readonly cancelTimeoutMs: number;
 }
 
-export const DEFAULT_STEP_LIMITS: StepLimits = { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3 };
+export const DEFAULT_STEP_LIMITS: StepLimits = {
+  maxRunningStepsPerHob: 2,
+  maxRunningStepsPerTree: 3,
+  cancelTimeoutMs: 30_000,
+};
 
 /** What a step's session may call: it reports and returns its result. It never plans, delegates or asks. */
 const STEP_TOOLS: ReadonlyArray<TaskToolName> = ["report_checkpoint", "complete_task"];
@@ -272,29 +280,18 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           yield* attempt(tasks.moveTask(stepId, latest.value.revision, endOf(latest.value), at), "end a stopped step");
         });
 
-      /**
-       * Confirms the cancel of each Task above `step` that is cancelling and has nothing left
-       * running: no live Attempt and nothing open under it.
-       */
-      const confirmCancelsAbove = (step: Task): Effect.Effect<void> =>
-        Effect.gen(function* () {
-          for (let parentId = step.parentId; parentId !== null; ) {
-            const found = yield* tasks.readTree(step.rootId);
-            if (Option.isNone(found)) return;
-            const { tasks: tree, attempts } = found.value;
-            const above = tree.find((each) => each.id === parentId);
-            if (above === undefined || above.state !== "cancelling") return;
-            const live = attempts.some((each) => each.id === above.currentAttemptId && isLiveAttempt(each.state));
-            if (live || descendantsOf(above, tree).some((each) => !isTerminalTask(each.state))) return;
-            const at = yield* nowIso;
-            const confirmed = yield* attempt(
-              tasks.moveTask(above.id, above.revision, "cancelled", at),
-              "confirm a cancel above a step",
-            );
-            if (Option.isNone(confirmed)) return;
-            parentId = above.parentId;
-          }
-        });
+      // Confirms every cancel asked for once nothing runs in its Task or under it, one pass at a time.
+      const cancels = yield* Semaphore.make(1);
+      const settleCancels = Semaphore.withPermit(
+        cancels,
+        makeCancelSettler({
+          tasks,
+          attempt,
+          timeoutMs: limits.cancelTimeoutMs,
+          wake: signal.notify,
+          scope,
+        }),
+      ).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not confirm the cancels asked for", cause)));
 
       /**
        * Ends the steps left open with no live Attempt (EX-004): one Hobbots stopped while it ran,
@@ -320,7 +317,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             );
             if (Option.isNone(ended)) continue;
             ending = true;
-            yield* confirmCancelsAbove(step);
+            yield* settleCancels;
           }
         }
       });
@@ -375,7 +372,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                     Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
                     Effect.ensuring(
                       Effect.sync(() => running.delete(step.id)).pipe(
-                        Effect.andThen(confirmCancelsAbove(step)),
+                        Effect.andThen(settleCancels),
                         Effect.andThen(signal.notify),
                       ),
                     ),
@@ -412,14 +409,15 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             attempt,
             recordToolStart,
             explain,
-            confirmCancelsAbove,
+            settleCancels,
             notify: signal.notify,
           });
 
       /**
-       * Stops running steps and members' turns whose cancel was asked for, then starts the steps
-       * that are ready and a turn on each member's Task where work waits. A step that returned its
-       * result keeps running until its session ends.
+       * Stops running steps and members' turns whose cancel was asked for and confirms the cancels
+       * that nothing runs in any more, then starts the steps that are ready and a turn on each
+       * member's Task where work waits. A step that returned its result keeps running until its
+       * session ends.
        */
       const round = Effect.gen(function* () {
         for (const [id, run] of running) {
@@ -429,6 +427,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             yield* Effect.forkIn(FiberMap.remove(fibers, id), scope);
           }
         }
+        yield* settleCancels;
         const trees = new Map<TaskId, TaskTree>();
         for (const step of yield* tasks.listQueuedSteps) {
           if (running.has(step.id)) continue;
@@ -477,6 +476,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       return TaskTurns.of({
         forChat: (turn: ChatTurn) => tools.forChat(turn),
         drainAgent: () => signal.notify,
+        reviewTasks: signal.notify,
         interruptAgent: (agentId) => stopWhere("hob", (run) => Effect.succeed(run.agentId === agentId)),
         reviewAuthority: (agentId) =>
           stopWhere("authority", (run) =>

@@ -138,6 +138,34 @@ describe("backpackItemsFor", () => {
     expect(items(attempt)).toEqual([]);
   });
 
+  // covers OR-006, EX-001
+  it("[TC-IN-141] gives a Task you retried or reassigned to its owner again, as the work it now has", () => {
+    const ADA = AgentId.make("ada");
+    const retried = task("copy", QUILL, "campaign", "queued", 7);
+    expect(
+      items({
+        _tag: "TaskStateChanged",
+        task: retried,
+        attempt: null,
+        quest: null,
+        wait: null,
+        control: { _tag: "Retried", delegation: null },
+      }),
+    ).toEqual([{ to: QUILL, kind: "task", task: "copy", quest: "q1", key: "task:copy:v7:task" }]);
+    const reassigned = task("copy", ADA, "campaign", "queued", 8);
+    const delegation = {} as never;
+    expect(
+      items({
+        _tag: "TaskStateChanged",
+        task: reassigned,
+        attempt: null,
+        quest: null,
+        wait: null,
+        control: { _tag: "Reassigned", from: QUILL, delegation },
+      }),
+    ).toEqual([{ to: ADA, kind: "task", task: "copy", quest: "q1", key: "task:copy:v8:task" }]);
+  });
+
   it("sends a member's report to its nearest lead: routine progress as progress, a finding as a checkpoint", () => {
     expect(items({ _tag: "CheckpointRecorded", checkpoint: checkpoint("finding"), milestone: null })).toEqual([
       { to: ALDRIC, kind: "checkpoint", task: "outline", quest: "q1", key: "checkpoint:c-finding:checkpoint" },

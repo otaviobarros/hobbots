@@ -132,8 +132,9 @@ const REPORTS_UP: ReadonlyArray<BackpackItem["kind"]> = ["result", "failure", "c
 
 /**
  * The Task an item is checked against, and whether it is late (ADR 019): the Task its recipient
- * holds it under. With none the Task was reassigned; once it has ended the recipient has nothing
- * left to do. Either way the item is late, at that Task's version.
+ * holds it under. With none the Task was reassigned; once it has ended, or its cancel was asked
+ * for, the recipient has nothing left to do (OR-006). Either way the item is late, at that Task's
+ * version, and never restarts work.
  */
 export const lateness = (item: BackpackItem, tree: ReadonlyArray<Task>): { readonly taskRevision: number } | null => {
   if (item.taskId === null) return null;
@@ -141,7 +142,7 @@ export const lateness = (item: BackpackItem, tree: ReadonlyArray<Task>): { reado
   if (task === undefined) return { taskRevision: 0 };
   const held = heldUnder(item, tree);
   if (held === undefined) return { taskRevision: task.revision };
-  return isTerminalTask(held.state) ? { taskRevision: held.revision } : null;
+  return isTerminalTask(held.state) || held.state === "cancelling" ? { taskRevision: held.revision } : null;
 };
 
 /** A turn that ran to its end without the runtime ever accepting it: nothing was said. */
