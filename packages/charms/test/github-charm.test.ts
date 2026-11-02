@@ -105,6 +105,7 @@ const callWith = (
   current: ToolAccess | null,
   name: string,
   input: unknown,
+  steerFrom: ReadonlyArray<string> = [],
 ) =>
   Effect.gen(function* () {
     const charms = yield* CharmTools;
@@ -116,7 +117,9 @@ const callWith = (
       redactor: makeRedactor(),
       approvals: null,
     });
-    return { names: tools.tools.map((tool) => tool.name), answer: yield* tools.call(name, input) };
+    const steered: Array<string | null> = [];
+    for (const cwd of steerFrom) steered.push(tools.steersPush ? yield* tools.steersPush(cwd) : null);
+    return { names: tools.tools.map((tool) => tool.name), answer: yield* tools.call(name, input), steered };
   }).pipe(
     Effect.provide(
       GitHubCharmTools.pipe(
@@ -192,6 +195,19 @@ describe("GitHub Charm", () => {
     const unknown = await callWith({ asked }, access([project]), "github_delete", {});
     expect(unknown.answer).toEqual({ refused: true, text: "Hobbots has no github_delete tool." });
     expect(asked).toEqual([]);
+  });
+
+  it("[TC-PE-158] points a git push to github_push only in the hob's folders whose origin is on GitHub", async () => {
+    const noRemote = path.join(root, "runtimes");
+    const { steered } = await callWith({ asked: [] }, access([project, noRemote]), "github_repository", {}, [
+      project,
+      noRemote,
+      other,
+    ]);
+    // A folder without a GitHub origin, or one the hob was not given, keeps its push decided as Push.
+    expect(steered).toEqual(["github_push", null, null]);
+    const chatOnly = await callWith({ asked: [] }, null, "github_repository", {}, [project]);
+    expect(chatOnly.steered).toEqual([null]);
   });
 
   it("says why GitHub could not be read", async () => {

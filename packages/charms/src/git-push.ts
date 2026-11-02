@@ -182,7 +182,9 @@ const fromPorcelain = (exit: number, stdout: string, ref: string): PushResult | 
       moved
         ? "The branch on GitHub moved since you last had it, and you cannot fetch it yet: ask the user to bring your branch up to date."
         : "",
-      line.summary.includes("workflow") ? "Hobbots cannot push changes to GitHub Actions workflows." : "",
+      line.summary.includes("workflow")
+        ? "The sign-in Hobbots pushes with is not allowed to change GitHub Actions workflows here: tell the user."
+        : "",
     ].filter((note) => note !== "");
     return { _tag: "Rejected", message: [`GitHub refused the push: ${line.summary}.`, ...notes].join(" ") };
   }

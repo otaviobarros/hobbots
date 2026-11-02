@@ -218,6 +218,11 @@ export interface HubTools {
    * runtime knows it; without one, a call that needs the user's approval is refused.
    */
   readonly call: (name: string, input: unknown, step?: HubCallStep) => Effect.Effect<HubToolAnswer>;
+  /**
+   * The hub tool a `git push` run in `cwd` is made with instead, such as the GitHub Charm's push for a
+   * folder whose origin is on GitHub (ADR 020), or null when the push is decided as a push.
+   */
+  readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
 }
 
 export interface PromptRequest {

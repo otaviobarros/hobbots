@@ -1,5 +1,5 @@
 import type { AgentId, MessageId, ThreadId } from "@hobbots/domain";
-import { Context, type Effect, Schema, type Scope } from "effect";
+import { Context, Effect, Schema, type Scope } from "effect";
 import type { HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
 
@@ -43,6 +43,14 @@ export const combineHubTools = (...sets: ReadonlyArray<HubTools | null>): HubToo
     tools,
     // A tool no set offers goes to the first, which refuses it in its own words.
     call: (name, input, step) => (owner.get(name) ?? (given[0] as HubTools)).call(name, input, step),
+    steersPush: (cwd) =>
+      Effect.gen(function* () {
+        for (const set of given) {
+          const tool = set.steersPush ? yield* set.steersPush(cwd) : null;
+          if (tool !== null) return tool;
+        }
+        return null;
+      }),
   };
 };
 

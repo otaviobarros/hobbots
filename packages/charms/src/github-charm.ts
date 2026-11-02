@@ -1,5 +1,8 @@
+import { realpathSync } from "node:fs";
+import { isAbsolute, relative } from "node:path";
 import { CharmTools, type CharmTurn, type HubCallStep, type HubToolAnswer, type ToolAccess } from "@hobbots/agents";
 import {
+  GITHUB_PUSH_TOOL,
   GITHUB_TOOLS,
   GITHUB_WRITE_TOOLS,
   type GitHubRepository,
@@ -45,6 +48,15 @@ const policyContext = (access: ToolAccess): PolicyContext => ({
   sandbox: "on",
   modelHosts: [],
 });
+
+/** A folder as the file system resolves it, so a link and its target are the same folder. */
+const canonical = (folder: string) => {
+  try {
+    return realpathSync(folder);
+  } catch {
+    return folder;
+  }
+};
 
 const withoutSlash = (folder: string) => (folder.length > 1 ? trimTrailingSlashes(folder) || "/" : folder);
 
@@ -171,8 +183,29 @@ export const GitHubCharmTools = Layer.effect(
         Effect.provideContext(context),
       );
 
+    /**
+     * A `git push` in one of the hob's folders whose origin is on GitHub is made with `github_push`
+     * (ADR 020): Git in the sandbox cannot sign in. A push anywhere else is decided as a push.
+     */
+    const steersPush = (turn: CharmTurn, cwd: string) =>
+      Effect.gen(function* () {
+        const access = yield* turn.currentAccess;
+        if (access === null) return null;
+        const at = canonical(cwd);
+        for (const folder of access.folders) {
+          const from = relative(canonical(folder), at);
+          if (from.startsWith("..") || isAbsolute(from)) continue;
+          if ((yield* remotes.repositoryOf(folder)) !== null) return GITHUB_PUSH_TOOL;
+        }
+        return null;
+      }).pipe(Effect.provideContext(context));
+
     return CharmTools.of({
-      forTurn: (turn) => ({ tools, call: (name, input, step) => call(turn, name, input, step) }),
+      forTurn: (turn) => ({
+        tools,
+        call: (name, input, step) => call(turn, name, input, step),
+        steersPush: (cwd) => steersPush(turn, cwd),
+      }),
     });
   }),
 );

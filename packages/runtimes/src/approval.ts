@@ -40,12 +40,28 @@ export interface ToolCall {
   readonly cwd: string;
 }
 
-/** Whether a call pushes with Git, as the hub reads its command. */
-const pushes = (call: ToolCall) =>
-  (toolRequests(call.tool, call.input, call.cwd) ?? []).some((request) => request._tag === "Push");
+/** The folders a call pushes from with Git, as the hub reads its command. */
+const pushesFrom = (call: ToolCall) => [
+  ...new Set(
+    (toolRequests(call.tool, call.input, call.cwd) ?? []).flatMap((request) =>
+      request._tag === "Push" && request.cwd !== undefined ? [request.cwd] : [],
+    ),
+  ),
+];
+
+/** The hub tool a call's `git push` is pointed to instead, or null when none is. */
+const steeredTo = (call: ToolCall, steersPush: ((cwd: string) => Effect.Effect<string | null>) | undefined) =>
+  Effect.gen(function* () {
+    if (steersPush === undefined) return null;
+    for (const cwd of pushesFrom(call)) {
+      const tool = yield* steersPush(cwd);
+      if (tool !== null) return tool;
+    }
+    return null;
+  });
 
 /**
- * Why a `git push` command is refused when the turn offers the GitHub Charm's push (ADR 020): in any
+ * Why a `git push` command is refused when the turn offers the GitHub Charm's push for its folder (ADR 020): in any
  * preset, since the Charm pushes with the user's sign-in under the hob's policy, and Git in the
  * sandbox cannot.
  */
@@ -86,20 +102,22 @@ export const decideCall = (
   call: ToolCall,
   report: (event: RuntimeEvent) => void,
   redaction?: Redactor | null,
-  pushTool?: string,
+  steersPush?: (cwd: string) => Effect.Effect<string | null>,
 ): Effect.Effect<CallDecision> =>
-  pushTool !== undefined && pushes(call)
-    ? Effect.succeed({ _tag: "Refuse", verdict: undefined, reason: steerPush(pushTool) })
-    : askUntilDecided({
-        call: {
-          id: call.id,
-          tool: call.tool,
-          arguments: call.input,
-          label: toolLabel(call.tool, call.input, redaction?.text),
-        },
-        approvals,
-        decide: (access) =>
-          decideIn(engine, access === null ? context : { ...context, ...access.policy }, approvals, call),
-        report,
-        unknown: UNKNOWN_TOOL(call.tool),
-      });
+  Effect.flatMap(steeredTo(call, steersPush), (pushTool) =>
+    pushTool !== null
+      ? Effect.succeed<CallDecision>({ _tag: "Refuse", verdict: undefined, reason: steerPush(pushTool) })
+      : askUntilDecided({
+          call: {
+            id: call.id,
+            tool: call.tool,
+            arguments: call.input,
+            label: toolLabel(call.tool, call.input, redaction?.text),
+          },
+          approvals,
+          decide: (access) =>
+            decideIn(engine, access === null ? context : { ...context, ...access.policy }, approvals, call),
+          report,
+          unknown: UNKNOWN_TOOL(call.tool),
+        }),
+  );

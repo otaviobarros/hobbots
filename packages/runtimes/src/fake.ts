@@ -182,7 +182,7 @@ export const scriptedToolEvents = (
             call,
             (event) => Queue.offerUnsafe(queue, event),
             request.redaction,
-            turn.pushTool,
+            turn.steersPush,
           );
           const label = toolLabel(call.tool, call.input, request.redaction?.text);
           const ran =

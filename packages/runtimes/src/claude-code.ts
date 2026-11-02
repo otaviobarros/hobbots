@@ -33,7 +33,6 @@ import {
   UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
-  GITHUB_PUSH_TOOL,
   policySandbox,
   type RuntimeEnforcement,
   RuntimeHealth,
@@ -613,8 +612,8 @@ export interface ToolTurn {
   readonly tools: ReadonlyArray<string>;
   /** Claude Code's configuration folder for this hob. */
   readonly runtimeFolder: string;
-  /** The hub tool a `git push` command is pointed to, when the turn offers it (ADR 020). */
-  readonly pushTool?: string;
+  /** The hub tool a `git push` command in a folder is pointed to, when the turn offers one (ADR 020). */
+  readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
 }
 
 /**
@@ -643,13 +642,12 @@ export const toolTurn = (
   if (operationDecision(context, "read-files") === "deny") return null;
   const tools = offeredTools(context);
   if (tools.length === 0) return null;
-  const pushes = hubTools?.tools.some((tool) => tool.name === GITHUB_PUSH_TOOL) === true;
   return {
     context,
     folders,
     tools,
     runtimeFolder: access.runtimeFolder,
-    ...(pushes ? { pushTool: GITHUB_PUSH_TOOL } : {}),
+    ...(hubTools?.steersPush ? { steersPush: hubTools.steersPush } : {}),
   };
 };
 
@@ -719,7 +717,7 @@ export const policyHooks = (
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
     const decision = await Effect.runPromise(
-      decideCall(engine, turn.context, null, call, report, redaction, turn.pushTool),
+      decideCall(engine, turn.context, null, call, report, redaction, turn.steersPush),
     ).catch(() => failed(tool));
     if (decision._tag === "Run") {
       if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
@@ -790,7 +788,7 @@ export const policyHooks = (
     const call = { id: options.toolUseID, tool, input, cwd: hooked?.cwd ?? (turn.folders[0] as string) };
     // An aborted call stops waiting, which expires its request.
     const decision = await Effect.runPromise(
-      decideCall(engine, turn.context, approvals, call, report, redaction, turn.pushTool),
+      decideCall(engine, turn.context, approvals, call, report, redaction, turn.steersPush),
       {
         signal: options.signal,
       },
