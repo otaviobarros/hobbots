@@ -6,13 +6,15 @@ import { SqlClient } from "effect/sql";
 // twice. `input` is the call's input as stable JSON without its key. `site` names where it acts, so
 // two writes of the same tool on one site never overlap while one is uncertain. `plan` is what the hub
 // fixed when it decided, as JSON text. The thread, message and step are the reply step the call
-// showed as, so the user can settle an uncertain call there.
+// showed as, so the user can settle an uncertain call there. `attempt` names this sending of the key,
+// so an outcome for an earlier sending of a reused key never settles this one.
 export default Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`
       CREATE TABLE charm_calls (
         agent_id TEXT NOT NULL REFERENCES agents(id),
         call_key TEXT NOT NULL,
+        attempt TEXT NOT NULL,
         tool TEXT NOT NULL,
         input TEXT NOT NULL,
         site TEXT NOT NULL,

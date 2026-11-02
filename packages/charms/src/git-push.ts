@@ -120,6 +120,16 @@ const exists = (path: string) =>
     ),
   );
 
+const shellQuoted = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * An SSH option for `GIT_SSH_COMMAND`, which a shell runs: quoted for the shell, and its value quoted
+ * for SSH, which splits an unquoted value at spaces. The hub's data folder on macOS is under
+ * `Library/Application Support`.
+ */
+export const sshOption = (name: string, value: string) =>
+  shellQuoted(`${name}="${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`);
+
 /** The variables a Git process of the hub's runs with: nothing a hob or the user's Git setup chose. */
 export const hubGitEnv = (env: NodeJS.ProcessEnv, home: string): Record<string, string> => {
   const passed: Record<string, string> = {
@@ -417,7 +427,7 @@ export const GitPushLive = (config: GitPushConfig) =>
           const sshEnv: Record<string, string> =
             transport._tag === "Ssh"
               ? {
-                  GIT_SSH_COMMAND: `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${knownHosts} -o HostKeyAlias=github.com`,
+                  GIT_SSH_COMMAND: `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ${sshOption("UserKnownHostsFile", knownHosts)} -o HostKeyAlias=github.com`,
                   GIT_SSH_VARIANT: "ssh",
                   ...(transport.agentSocket ? { SSH_AUTH_SOCK: transport.agentSocket } : {}),
                 }

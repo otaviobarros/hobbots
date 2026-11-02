@@ -438,6 +438,7 @@ describe("the GitHub Charm's Push", () => {
       new CharmCall({
         agentId: AgentId.make("hob"),
         key,
+        attempt: `${key}-1`,
         tool: "github_push",
         input: "{}",
         site: `github.com/octo/restarted refs/heads/${key}`,

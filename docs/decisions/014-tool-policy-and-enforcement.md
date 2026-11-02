@@ -56,7 +56,7 @@ Allow proceeds without asking, Ask pauses the turn for an approval, Deny refuses
 - Under Careful, Local Git asks because it is a command; reading needs no approval so investigation stays automatic, as the contract requires.
 - Balanced matches PE-001: reads, edits, tests, builds, local Git and delegation run without asking; deleting and pushing wait for the user.
 - Trusting still keeps every hob inside its folders and the sandbox, and still asks for force pushes and pushes to the default branch. It never grants self-approval or Hobbots administration.
-- Hosts that are never reachable from the sandbox under any preset: loopback (the hub's own API included), link-local and cloud metadata addresses. The runtime's own model API host is always reachable, because the runtime needs it to think.
+- Hosts that are never reachable from the sandbox under any preset: loopback (the hub's own API included), link-local and cloud metadata addresses. With remote access on, the hub's tailnet addresses and MagicDNS name join them ([ADR 021](021-devices-and-remote-access.md)). The runtime's own model API host is always reachable, because the runtime needs it to think.
 - Per-hob overrides only narrow this table (#130). A widening needs a separately recorded user grant.
 
 **Onboarding wording.** The Safety step shows these rows with the preset's answers, so the summary and the policy cannot drift:

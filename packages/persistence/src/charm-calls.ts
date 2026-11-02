@@ -1,5 +1,5 @@
 import { CharmCalls } from "@hobbots/agents";
-import { CharmCall, isCharmCallSettled } from "@hobbots/domain";
+import { CharmCall } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
 import { lockJournal } from "./journal.ts";
@@ -7,6 +7,7 @@ import { lockJournal } from "./journal.ts";
 interface Row {
   readonly agentId: string;
   readonly callKey: string;
+  readonly attempt: string;
   readonly tool: string;
   readonly input: string;
   readonly site: string;
@@ -26,6 +27,7 @@ const fromRow = (row: Row) =>
   decodeCall({
     agentId: row.agentId,
     key: row.callKey,
+    attempt: row.attempt,
     tool: row.tool,
     input: row.input,
     site: row.site,
@@ -42,6 +44,7 @@ const fromRow = (row: Row) =>
 const toRow = (call: CharmCall) => ({
   agent_id: call.agentId,
   call_key: call.key,
+  attempt: call.attempt,
   tool: call.tool,
   input: call.input,
   site: call.site,
@@ -95,15 +98,14 @@ export const CharmCallsLive = Layer.effect(
           yield* sql`INSERT INTO charm_calls ${sql.insert(toRow(call))}`;
           return { _tag: "Started" } as const;
         }).pipe(sql.withTransaction, orDie),
-      settle: (agentId, key, state, result, at) =>
-        Effect.gen(function* () {
-          const stored = yield* find(agentId, key);
-          if (Option.isNone(stored) || isCharmCallSettled(stored.value.state)) return Option.none();
-          yield* sql`
-            UPDATE charm_calls SET state = ${state}, result = ${result}, updated_at = ${at}
-            WHERE agent_id = ${agentId} AND call_key = ${key}`;
-          return Option.some(new CharmCall({ ...stored.value, state, result, updatedAt: at }));
-        }).pipe(sql.withTransaction, orDie),
+      // One conditional update, so of two outcomes racing for the same sending only the first lands,
+      // and an outcome for an earlier sending of the key never lands on a later one.
+      settle: (call, state, result, at) =>
+        sql<Row>`
+          UPDATE charm_calls SET state = ${state}, result = ${result}, updated_at = ${at}
+          WHERE agent_id = ${call.agentId} AND call_key = ${call.key} AND attempt = ${call.attempt}
+            AND state IN ('sending', 'uncertain')
+          RETURNING *`.pipe(Effect.flatMap(one), orDie),
       find: (agentId, key) => orDie(find(agentId, key)),
       findByStep: (threadId, messageId, stepId) =>
         orDie(

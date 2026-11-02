@@ -92,8 +92,8 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
         const found = yield* check(call).pipe(Effect.orElseSucceed(() => false));
         if (!found) return false;
         const at = yield* nowIso;
-        yield* calls.settle(call.agentId, call.key, "applied", appliedText(call), at);
-        return true;
+        // Settles only this sending: the user may have settled it, and the key been sent again, meanwhile.
+        return Option.isSome(yield* calls.settle(call, "applied", appliedText(call), at));
       });
 
     /** Reads an uncertain call back a few more times, in the background, until it settles. */
@@ -102,7 +102,7 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
         for (const delay of READ_BACK_AFTER) {
           yield* Effect.sleep(delay);
           const now = yield* calls.find(call.agentId, call.key);
-          if (Option.isNone(now) || now.value.state !== "uncertain") return;
+          if (Option.isNone(now) || now.value.attempt !== call.attempt || now.value.state !== "uncertain") return;
           if (yield* readBack(now.value)) return;
         }
       }).pipe(Effect.forkIn(scope), Effect.asVoid);
@@ -113,13 +113,7 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
         const at = yield* nowIso;
         const uncertain =
           call.state === "sending"
-            ? yield* calls.settle(
-                call.agentId,
-                call.key,
-                "uncertain",
-                "The hub stopped while this call was being sent.",
-                at,
-              )
+            ? yield* calls.settle(call, "uncertain", "The hub stopped while this call was being sent.", at)
             : Option.some(call);
         if (Option.isSome(uncertain) && !(yield* readBack(uncertain.value))) yield* watch(uncertain.value);
       }
@@ -159,6 +153,7 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
         const record = new CharmCall({
           agentId: write.agentId,
           key: write.key,
+          attempt: crypto.randomUUID(),
           tool: write.tool,
           input: stableJson(write.input),
           site: write.site,
@@ -187,7 +182,7 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
             ? { _tag: "Applied", text: appliedText(record) }
             : sent;
         if (outcome._tag !== "Applied" || sent._tag !== "Uncertain") {
-          yield* calls.settle(write.agentId, write.key, STATE[outcome._tag], outcome.text, yield* nowIso);
+          yield* calls.settle(record, STATE[outcome._tag], outcome.text, yield* nowIso);
         }
         if (outcome._tag === "Uncertain") {
           write.step?.report({ _tag: "ToolUncertain", id: write.step.id, reason: outcome.text });

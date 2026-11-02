@@ -21,12 +21,15 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
           rows.set(id, call);
           return { _tag: "Started" } as const;
         }),
-      settle: (agentId, key, state, result, at) =>
+      settle: (call, state, result, at) =>
         Effect.sync(() => {
-          const stored = rows.get(`${agentId} ${key}`);
-          if (stored === undefined || isCharmCallSettled(stored.state)) return Option.none();
+          const id = `${call.agentId} ${call.key}`;
+          const stored = rows.get(id);
+          if (stored === undefined || stored.attempt !== call.attempt || isCharmCallSettled(stored.state)) {
+            return Option.none();
+          }
           const next = new CharmCall({ ...stored, state, result, updatedAt: at });
-          rows.set(`${agentId} ${key}`, next);
+          rows.set(id, next);
           return Option.some(next);
         }),
       find: (agentId, key) => Effect.sync(() => Option.fromUndefinedOr(rows.get(`${agentId} ${key}`))),

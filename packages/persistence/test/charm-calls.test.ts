@@ -40,6 +40,7 @@ const call = (key: string, overrides: Partial<CharmCall> = {}) =>
   new CharmCall({
     agentId,
     key,
+    attempt: `${key}-1`,
     tool: "github_push",
     input: `{"branch":"feat/x"}`,
     site: "github.com/octo/app refs/heads/feat/x",
@@ -63,9 +64,9 @@ describe("Charm call records", () => {
         const calls = yield* CharmCalls;
         const first = yield* calls.begin(call("k1"));
         const again = yield* calls.begin(call("k1"));
-        const applied = yield* calls.settle(agentId, "k1", "applied", "Pushed.", later);
+        const applied = yield* calls.settle(call("k1"), "applied", "Pushed.", later);
         // A late outcome never overwrites a settled call.
-        const late = yield* calls.settle(agentId, "k1", "uncertain", null, later);
+        const late = yield* calls.settle(call("k1"), "uncertain", null, later);
         const stored = yield* calls.find(agentId, "k1");
         const byStep = yield* calls.findByStep(ThreadId.make("t1"), MessageId.make("m1"), "toolu_1");
         return { first, again, applied, late, stored, byStep };
@@ -86,11 +87,11 @@ describe("Charm call records", () => {
         yield* seed;
         const calls = yield* CharmCalls;
         yield* calls.begin(call("k1"));
-        yield* calls.settle(agentId, "k1", "uncertain", "Unclear.", later);
+        yield* calls.settle(call("k1"), "uncertain", "Unclear.", later);
         const blocked = yield* calls.begin(call("k2"));
         const elsewhere = yield* calls.begin(call("k3", { site: "github.com/octo/app refs/heads/other" }));
         const unsettled = yield* calls.unsettled;
-        yield* calls.settle(agentId, "k1", "applied", "Pushed.", later);
+        yield* calls.settle(call("k1"), "applied", "Pushed.", later);
         const freed = yield* calls.begin(call("k2"));
         return { blocked, elsewhere, unsettled, freed };
       }),
@@ -111,7 +112,7 @@ describe("Charm call records", () => {
         yield* seed;
         const calls = yield* CharmCalls;
         yield* calls.begin(call("k1"));
-        yield* calls.settle(agentId, "k1", "not-sent", "Not sent.", later);
+        yield* calls.settle(call("k1"), "not-sent", "Not sent.", later);
         const other = yield* calls.begin(call("k1", { input: `{"branch":"feat/y"}` }));
         const same = yield* calls.begin(call("k1"));
         return { other, same, stored: yield* calls.find(agentId, "k1") };
@@ -120,6 +121,39 @@ describe("Charm call records", () => {
     expect(result.other._tag === "Existing" && result.other.call.state).toBe("not-sent");
     expect(result.same._tag).toBe("Started");
     expect(Option.getOrThrow(result.stored).state).toBe("sending");
+  });
+
+  // covers IN-003, EX-003
+  it("[TC-IN-056] settles a sending once when outcomes race, and never from an earlier sending of a reused key", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const calls = yield* CharmCalls;
+        yield* calls.begin(call("k1"));
+        yield* calls.settle(call("k1"), "uncertain", "Unclear.", later);
+        // Reading GitHub back and the user settle the same sending at once: only one lands.
+        const raced = yield* Effect.all(
+          [
+            calls.settle(call("k1"), "applied", "Pushed.", later),
+            calls.settle(call("k1"), "not-sent", "Not sent.", later),
+          ],
+          { concurrency: "unbounded" },
+        );
+        const afterRace = yield* calls.find(agentId, "k1");
+        // A key that was not sent is sent again: a late outcome of the first sending must not land.
+        yield* calls.begin(call("k2"));
+        yield* calls.settle(call("k2"), "not-sent", "Not sent.", later);
+        yield* calls.begin(call("k2", { attempt: "k2-2" }));
+        const stale = yield* calls.settle(call("k2"), "applied", "Pushed.", later);
+        const current = yield* calls.find(agentId, "k2");
+        return { raced, afterRace, stale, current };
+      }),
+    );
+    expect(result.raced.filter(Option.isSome)).toHaveLength(1);
+    const landed = result.raced.find(Option.isSome);
+    expect(Option.getOrThrow(result.afterRace).state).toBe(landed === undefined ? null : landed.value.state);
+    expect(Option.isNone(result.stale)).toBe(true);
+    expect(Option.getOrThrow(result.current)).toMatchObject({ attempt: "k2-2", state: "sending", result: null });
   });
 
   // covers EX-003, PE-006
@@ -133,7 +167,7 @@ describe("Charm call records", () => {
         const step = (stepId: string) => [ThreadId.make("t1"), MessageId.make("m1"), stepId] as const;
         yield* calls.begin(call("k1"));
         const sending = yield* service.settle(...step("toolu_1"), "applied").pipe(Effect.flip, Effect.provide(user));
-        yield* calls.settle(agentId, "k1", "uncertain", "Unclear.", later);
+        yield* calls.settle(call("k1"), "uncertain", "Unclear.", later);
         const settled = yield* service.settle(...step("toolu_1"), "not-sent").pipe(Effect.provide(user));
         const again = yield* service.settle(...step("toolu_1"), "applied").pipe(Effect.flip, Effect.provide(user));
         const missing = yield* service.settle(...step("toolu_9"), "applied").pipe(Effect.flip, Effect.provide(user));

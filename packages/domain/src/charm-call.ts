@@ -24,6 +24,11 @@ export class CharmCall extends Schema.Class<CharmCall>("CharmCall")({
   agentId: AgentId,
   /** The key the hob sent, unique among its calls. */
   key: Schema.String,
+  /**
+   * This sending of the key: new each time a key that was not sent is used again, so a late outcome
+   * of an earlier sending never settles a later one.
+   */
+  attempt: Schema.String,
   /** The hub tool, such as `github_push`. */
   tool: Schema.String,
   /** The call's input as stable JSON without its key, so a key sent again with another call is told apart. */

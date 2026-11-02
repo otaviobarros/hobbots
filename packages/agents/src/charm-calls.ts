@@ -26,12 +26,12 @@ export class CharmCalls extends Context.Service<
      */
     readonly begin: (call: CharmCall) => Effect.Effect<CharmCallStart>;
     /**
-     * Moves a call that is not yet settled to `state`, with what the hob is told. None when the call
-     * is not found or has settled already, so a late outcome never overwrites a settled one.
+     * Moves `call`'s sending, if it is not yet settled, to `state`, with what the hob is told, in one
+     * atomic step. None when it is not found, has settled already, or the key was sent again since,
+     * so a late or racing outcome never overwrites a settled one or lands on a later sending.
      */
     readonly settle: (
-      agentId: AgentId,
-      key: string,
+      call: CharmCall,
       state: CharmCallState,
       result: string | null,
       at: string,
@@ -89,7 +89,7 @@ export class CharmCallService extends Context.Service<
             const call = found.value;
             if (call.state !== "uncertain") return yield* new CharmCallSettled({ stepId, state: call.state });
             const at = DateTime.formatIso(yield* DateTime.now);
-            const settled = yield* calls.settle(call.agentId, call.key, outcome, SETTLED[outcome], at);
+            const settled = yield* calls.settle(call, outcome, SETTLED[outcome], at);
             // Reading GitHub back may have settled it a moment before.
             if (Option.isNone(settled)) {
               const now = yield* calls.find(call.agentId, call.key);

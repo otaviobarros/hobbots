@@ -256,7 +256,8 @@ describe("pushing from the hub's staging repository", () => {
       { mode: 0o755 },
     );
     const sshLayer = GitPushLive({
-      folder: path.join(root, "data", "charms", "github-ssh"),
+      // As on macOS, where the hub's data folder is under `Library/Application Support`.
+      folder: path.join(root, "Application Support", "charms", "github-ssh"),
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
     }).pipe(Layer.provide(Layer.mergeAll(directSandbox, NodeServices.layer)));
     const pushed = await Effect.gen(function* () {
@@ -278,7 +279,11 @@ describe("pushing from the hub's staging repository", () => {
     expect(args).toContain("git@github.com");
     expect(args.some((arg) => /^git-receive-pack 'octo\/ssh\.git'$/.test(arg))).toBe(true);
     expect(args).toContain("agent=/run/user/agent.sock");
-    const knownHosts = args.find((arg) => arg.startsWith("UserKnownHostsFile="))?.slice("UserKnownHostsFile=".length);
+    // The path reaches SSH as one argument, quoted so SSH does not split it at the space either.
+    const knownHosts = args
+      .find((arg) => arg.startsWith("UserKnownHostsFile="))
+      ?.match(/^UserKnownHostsFile="(.*)"$/)?.[1];
+    expect(knownHosts).toBe(path.join(root, "Application Support", "charms", "github-ssh", "known_hosts"));
     expect(await fs.readFile(knownHosts ?? "", "utf8")).toMatch(/^github\.com ssh-ed25519 /m);
     await expect(fs.access(ran)).rejects.toThrow();
   });
