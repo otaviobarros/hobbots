@@ -17,6 +17,7 @@ import threadArchivedAt from "../src/migrations/0023_thread_archived_at.ts";
 import githubCharm from "../src/migrations/0027_github_charm.ts";
 import backpackBlockers from "../src/migrations/0029_backpack_blockers.ts";
 import withdrawnQuestions from "../src/migrations/0033_withdrawn_questions.ts";
+import taskGrants from "../src/migrations/0035_task_grants.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -954,6 +955,83 @@ describe("0033_withdrawn_questions", () => {
       ["i-held", "pending", null],
       ["i-live", "pending", null],
       ["i-stale", "resolved", { _tag: "late", taskRevision: 7 }],
+    ]);
+  });
+});
+
+describe("0035_task_grants", () => {
+  // covers DP-003, PE-007
+  it("[TC-DP-128] keeps every existing grant with no Task, and still reads grant events journaled before This Task", async () => {
+    const at = "2026-10-28T00:00:00.000Z";
+    // A grant as the hub saved and journaled it before 0035, with the unused `questId`.
+    const grant = {
+      id: "g1",
+      agentId: "pip",
+      operation: "push",
+      rule: { _tag: "Push", cwd: "/work", remote: "origin", branch: "main" },
+      lifetime: "always",
+      questId: null,
+      approvalId: null,
+      grantedBy: "user",
+      createdAt: at,
+      expiresAt: null,
+      lastUsedAt: null,
+      revokedAt: null,
+      revokedBy: null,
+      revokeReason: null,
+      revision: 1,
+    };
+    const revoked = { ...grant, revokedAt: at, revokedBy: "user", revokeReason: "removed", revision: 2 };
+    const database = TestDatabaseAt(migrationsBefore("0035"));
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: at,
+      })}`;
+      yield* sql`INSERT INTO grants ${sql.insert({
+        id: "g1",
+        agentId: "pip",
+        operation: "push",
+        rule: JSON.stringify(grant.rule),
+        lifetime: "always",
+        grantedBy: "user",
+        createdAt: at,
+        revision: 1,
+      })}`;
+      yield* sql`UPDATE event_journal_head SET sequence = 2 WHERE id = 1`;
+      for (const [sequence, type, payload] of [
+        [1, "GrantCreated", grant],
+        [2, "GrantRevoked", revoked],
+      ] as const) {
+        yield* sql`INSERT INTO event_journal ${sql.insert({
+          sequence,
+          id: `5d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d${sequence}`,
+          type,
+          schemaVersion: 1,
+          occurredAt: at,
+          agentId: "pip",
+          payload: JSON.stringify({ _tag: type, grant: payload }),
+        })}`;
+      }
+      yield* taskGrants;
+      return {
+        grants: yield* sql`SELECT id, task_id FROM grants`,
+        entries: yield* (yield* EventJournal).readAfter(0),
+      };
+    }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
+
+    expect(result.grants).toEqual([{ id: "g1", taskId: null }]);
+    // A client resuming from before the upgrade still gets both events, each grant with no Task.
+    expect(result.entries.map((e) => e.payload)).toMatchObject([
+      { _tag: "GrantCreated", grant: { id: "g1", lifetime: "always", taskId: null } },
+      { _tag: "GrantRevoked", grant: { id: "g1", taskId: null, revokeReason: "removed" } },
     ]);
   });
 });

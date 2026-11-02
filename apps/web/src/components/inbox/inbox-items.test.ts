@@ -89,6 +89,7 @@ describe("statusText and expiryText", () => {
   it("says how a closed request ended", () => {
     expect(statusText(request("a", "approved", { lifetime: "once" }), now)).toBe("You allowed this");
     expect(statusText(request("a", "approved", { lifetime: "always" }), now)).toBe("You allowed this always");
+    expect(statusText(request("a", "approved", { lifetime: "task" }), now)).toBe("You allowed this for its Task");
     expect(statusText(request("a", "denied"), now)).toBe("You denied this");
     expect(statusText(request("a", "expired"), now)).toBe("Expired · nothing ran");
   });
@@ -96,6 +97,7 @@ describe("statusText and expiryText", () => {
   it("names the verdict in History, once for requests from before lifetimes", () => {
     expect(verdictText(request("a", "approved"))).toBe("Once");
     expect(verdictText(request("a", "approved", { lifetime: "always" }))).toBe("Always");
+    expect(verdictText(request("a", "approved", { lifetime: "task" }))).toBe("Task");
     expect(verdictText(request("a", "denied"))).toBe("Denied");
     expect(verdictText(request("a", "expired"))).toBe("Expired");
   });

@@ -460,8 +460,9 @@ describe("Ask decisions", () => {
         const turn = yield* approvals.forTurn(
           { agentId: HOB_ID, threadId: thread.id, messageId },
           Effect.succeed(null),
+          Effect.succeed(null),
         );
-        const pending = yield* turn.approvals.request({
+        const pending = yield* (turn.approvals.request as NonNullable<typeof turn.approvals.request>)({
           stepId: "s1",
           tool: "Bash",
           operation: "push",
@@ -508,8 +509,9 @@ describe("Ask decisions", () => {
         const turn = yield* approvals.forTurn(
           { agentId: HOB_ID, threadId: thread.id, messageId },
           Effect.succeed(null),
+          Effect.succeed(null),
         );
-        yield* turn.approvals.request({
+        yield* (turn.approvals.request as NonNullable<typeof turn.approvals.request>)({
           stepId: "s1",
           tool: "Bash",
           operation: "push",

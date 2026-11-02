@@ -279,8 +279,9 @@ describe("Standing grants", () => {
 
         const asked = yield* runCommand("git push origin feature");
         const request = asked.pending as ApprovalRequest;
-        const quest = yield* Effect.exit(
-          approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest, lifetime: "quest" }),
+        // The turn works on no Task, so there is no Task to bind This Task to.
+        const task = yield* Effect.exit(
+          approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest, lifetime: "task" }),
         );
         const broader = yield* Effect.exit(
           approvals.decide(request.id, {
@@ -301,7 +302,18 @@ describe("Standing grants", () => {
         const once = yield* Effect.exit(
           approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
         );
-        return { glob, globAlways, risky, pushAlways, quest, broader, both, once, saved: yield* grants.live(SCOUT) };
+        return {
+          glob,
+          globAlways,
+          risky,
+          pushAlways,
+          request,
+          task,
+          broader,
+          both,
+          once,
+          saved: yield* grants.live(SCOUT),
+        };
       }),
     );
 
@@ -313,7 +325,8 @@ describe("Standing grants", () => {
     expect(Exit.isFailure(result.pushAlways) && JSON.stringify(result.pushAlways.cause)).toContain(
       "ApprovalNotGrantable",
     );
-    expect(Exit.isFailure(result.quest) && JSON.stringify(result.quest.cause)).toContain("ApprovalNotGrantable");
+    expect(result.request.rootTaskId).toBeNull();
+    expect(Exit.isFailure(result.task) && JSON.stringify(result.task.cause)).toContain("ApprovalNotGrantable");
     expect(Exit.isFailure(result.broader) && JSON.stringify(result.broader.cause)).toContain("GrantRuleRefused");
     expect(result.both.map((a) => a.revision)).toEqual([result.both[0].revision, result.both[0].revision]);
     // Deciding it again with another lifetime does not change it.

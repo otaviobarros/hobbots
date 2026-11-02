@@ -1,4 +1,4 @@
-import type { AgentId, CarriedItem, MessageId, RuntimeKind, ThreadId } from "@hobbots/domain";
+import type { AgentId, CarriedItem, MessageId, RuntimeKind, TaskId, ThreadId } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 import type { HubTools } from "./runtime.ts";
 
@@ -31,6 +31,11 @@ export interface ChatTaskTurn {
    * the Tasks under it, never their sessions. Null when the hob works on no open Task here.
    */
   readonly briefing: string | null;
+  /**
+   * The top Task the turn works on now, which This Task binds a grant to (ADR 018): null while it
+   * works on none. A call that starts a Task changes it partway through the turn.
+   */
+  readonly workingOn: Effect.Effect<TaskId | null>;
   /** Ends the Attempt the turn started on its Task, if it started one. */
   readonly end: (outcome: ChatTurnOutcome, sessionId: string | null) => Effect.Effect<void>;
 }

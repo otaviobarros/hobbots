@@ -48,12 +48,12 @@ export interface PolicyContext {
   /** Narrowing added by the thread, Quest, task or delegation. Each may only narrow. */
   readonly restrictions: ReadonlyArray<PolicyOverrides>;
   /**
-   * The hob's live grants, read again for every call (PE-008): not revoked and not expired. Only this
-   * hob's: a grant never applies to another hob. Absent, no grant answers anything.
+   * The live grants that can answer this call, read again for every call (PE-008): not revoked and
+   * not expired. Only this hob's, since a grant never applies to another hob, and only its Always
+   * grants and its This Task grants for the top Task the call is made in (ADR 018). Absent, no grant
+   * answers anything.
    */
   readonly grants?: ReadonlyArray<Grant>;
-  /** The Quest the work belongs to, which a Quest grant must name; absent or null outside one. */
-  readonly questId?: string | null;
 }
 
 export const FileOperation = Schema.Literals(["read-files", "edit-files", "delete-files"]);
@@ -281,14 +281,9 @@ interface Site {
   readonly matches: (rule: GrantRule) => boolean;
 }
 
-/** The first live grant for this operation and site, bound to this Quest if it names one. */
+/** The first live grant the context gives for this operation and site. */
 const matchingGrant = (context: PolicyContext, operation: PolicyOperation, site: Site): Grant | undefined =>
-  context.grants?.find(
-    (grant) =>
-      grant.operation === operation &&
-      (grant.questId === null || grant.questId === (context.questId ?? null)) &&
-      site.matches(grant.rule),
-  );
+  context.grants?.find((grant) => grant.operation === operation && site.matches(grant.rule));
 
 /**
  * The layers' answer, and where only the preset asks, a live grant for the site (ADR 015 steps 5 to

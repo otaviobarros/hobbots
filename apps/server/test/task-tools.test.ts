@@ -229,12 +229,8 @@ describe("hob tools for Tasks and Quests", () => {
     });
     const [delegation] = (await tree()).delegations;
     expect(delegation?.childTaskId).toBe(quill);
-    expect(delegation?.authority.overrides).toMatchObject({
-      push: "deny",
-      "run-commands": "ask",
-      "delete-files": "ask",
-      "edit-files": "allow",
-    });
+    // Only the answers given on purpose: the preset's own Asks, such as deleting files, are not copied.
+    expect(delegation?.authority.overrides).toEqual({ push: "deny", "run-commands": "ask" });
     expect(delegation?.authority.folders).toEqual([join(work, "copy")]);
 
     const wider = await refused(ALDRIC, TOP, "delegate_task", {
@@ -263,12 +259,14 @@ describe("hob tools for Tasks and Quests", () => {
     });
     expect(pass.reason).toBe("authority-wider");
     const pip = await delegate(QUILL, quill, "Pip", "pip");
-    // A member's own policy narrows what it is given: the intersection of the lead's and its own.
+    // Aldric gave Ada nothing on purpose, so her Delegation holds no answer: her own policy, with
+    // its web Deny, still narrows her when she runs.
     const ada = await delegate(ALDRIC, TOP, "Ada", "ada");
     const adas = (await tree()).delegations.find((each) => each.childTaskId === ada);
-    expect(adas?.authority.overrides).toMatchObject({ "use-web": "deny", "edit-files": "allow" });
+    expect(adas?.authority.overrides).toEqual({});
+    // What Quill was given passes on to Pip.
     const given = (await tree()).delegations.find((each) => each.childTaskId === pip);
-    expect(given?.authority.overrides).toMatchObject({ push: "deny", "run-commands": "ask" });
+    expect(given?.authority.overrides).toEqual({ push: "deny", "run-commands": "ask" });
     expect(given?.authority.folders).toEqual([join(work, "copy")]);
 
     // Only the hub's own separator divides folders: on macOS and Linux this one sits beside Quill's.

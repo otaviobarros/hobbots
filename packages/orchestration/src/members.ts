@@ -75,7 +75,9 @@ const liveAttemptOn = (task: Task, tree: TaskTree): boolean =>
 
 /**
  * A member's tools, narrowed by every Delegation on the way down to its Task (ADR 018): each adds
- * its decisions as a restriction, and the member keeps only the folders each one allows.
+ * the answers it gives as a restriction, and the member keeps only the folders each one allows. A
+ * Delegation holds only the answers given on purpose, so a restriction's Ask is never answered by
+ * a grant, while the member's own preset Ask still can be (ADR 015).
  */
 export const delegatedAccess = (
   access: ToolAccess | null,
@@ -339,6 +341,8 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 // The member's requests reach you in the Inbox under its lead's thread, as its own (PE-006).
                 { agentId: agent.id, threadId: task.threadId, messageId: null, taskId: task.id },
                 run.accessNow ?? Effect.succeed(run.access),
+                // A member's This Task binds to the top of its lead's tree, so it ends with the Quest (ADR 018).
+                Effect.succeed(task.rootId),
               );
         const ending = yield* runSessionTurn(deps.adapters, deps.redactor, {
           agent,

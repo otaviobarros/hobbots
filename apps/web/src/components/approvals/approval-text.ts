@@ -9,7 +9,8 @@ const copy = messages.approval;
 export const resultText = (approval: ApprovalRequest, name: string): string => {
   switch (approval.state) {
     case "approved":
-      return approval.lifetime === "always" ? copy.approvedAlways({ name }) : copy.approved({ name });
+      if (approval.lifetime === "always") return copy.approvedAlways({ name });
+      return approval.lifetime === "task" ? copy.approvedForTask({ name }) : copy.approved({ name });
     case "denied":
       return approval.denyReason === null
         ? copy.denied({ name })
