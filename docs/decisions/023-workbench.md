@@ -94,7 +94,7 @@ Rules for the scan:
 - **It reads only the hob's folders.** It never follows a link out of them; a link is recorded as a link.
 - **Bounded.** A folder past 100,000 files, or a scan that takes longer than 10 seconds, stops tracking for that folder. Changes then reads Unavailable for it, with why. Both limits are configurable.
 - **Contents are kept for text up to 1 MiB.** Larger and binary files keep their hash, size and kind only.
-- **Secrets stay out.** Kept contents pass through the same redaction as tool output. Files whose names mark them as secret, such as `.env` and private keys, keep no contents: Changes says "Contents not kept: this file may hold secrets."
+- **Secrets stay out.** Kept contents pass through the same redaction as tool output. Files whose names mark them as secret, such as `.env` and private keys, keep no contents: Changes and Files say "Contents not kept: this file may hold secrets."
 - **Shared folders are labeled.** When another turn ran in the same folder at the same time, a change there cannot be pinned on one hob. It is shown under both Attempts with "Changed while Ada was also working here."
 
 Contents are stored in the hub's data folder, out of every hob's reach, once per content hash. The file change records point at them.
