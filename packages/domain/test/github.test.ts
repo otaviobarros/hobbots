@@ -1,15 +1,21 @@
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {
+  commentMarker,
   GITHUB_TOOLS,
   GITHUB_UNTRUSTED,
   GitHubToolInputs,
+  githubCommentSummary,
   githubItemText,
+  githubPullRequestSummary,
   githubRepositoryOf,
   githubSearchQuery,
   githubSearchText,
   githubToolJsonSchema,
+  hasCommentMarker,
   isGitHubToolName,
+  PULL_REQUEST_BODY_SHOWN,
+  stripCommentMarkers,
 } from "../src/index.ts";
 
 describe("GitHub remotes", () => {
@@ -120,5 +126,63 @@ describe("GitHub tools", () => {
     expect(text).toContain("No description.");
     expect(text).toContain("3 comments, the first 1 below.");
     expect(text).toContain("Comment on 2026-11-01:\nLooks good.");
+  });
+});
+
+describe("the comment marker", () => {
+  it("strips every HTML comment that starts with the marker's word, closed or not, in any case", () => {
+    expect(stripCommentMarkers("a<!-- hobbots-call: x -->b")).toBe("ab");
+    expect(stripCommentMarkers("a<!--\n\tHOBBOTS-CALL x-->b<!-- note -->c")).toBe("ab<!-- note -->c");
+    expect(stripCommentMarkers("keep <!-- hobbots-call: runs to the end")).toBe("keep ");
+    expect(stripCommentMarkers("<!-- other --> <!--")).toBe("<!-- other --> <!--");
+  });
+
+  it("finds a marker that stripping joined from the text around it", () => {
+    const joined = stripCommentMarkers("<!<!-- hobbots-call: x -->-- hobbots-call: y -->");
+    expect(joined).toBe("<!-- hobbots-call: y -->");
+    expect(hasCommentMarker(joined)).toBe(true);
+    expect(hasCommentMarker("<!-- hobbots -->")).toBe(false);
+    expect(hasCommentMarker(commentMarker("n"))).toBe(true);
+  });
+
+  it("runs in linear time on long runs of the characters it looks for", () => {
+    const started = performance.now();
+    for (const text of ["<!--".repeat(50_000), `<!--${" ".repeat(200_000)}`, "<!-- hobbots-call".repeat(20_000)]) {
+      hasCommentMarker(stripCommentMarkers(text));
+    }
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
+
+describe("the GitHub write cards", () => {
+  const pr = {
+    repository: "octo/app",
+    folder: "/work/app",
+    head: "feat/x",
+    base: "main",
+    title: "feat: x",
+    body: "",
+    draft: false,
+    actingAs: null,
+  };
+
+  it("say what is opened or posted, where, and as whom", () => {
+    expect(githubPullRequestSummary(pr)).toBe(
+      "Open a pull request in octo/app from feat/x into main\nTitle: feat: x\nNo description.\nAs you.",
+    );
+    expect(githubPullRequestSummary({ ...pr, body: "x".repeat(PULL_REQUEST_BODY_SHOWN + 5) })).toContain(
+      "[5 more characters]",
+    );
+    expect(
+      githubCommentSummary({
+        repository: "octo/app",
+        folder: "/work/app",
+        number: 7,
+        pullRequest: false,
+        itemTitle: "Bug",
+        body: "Fixed.",
+        actingAs: "me",
+      }),
+    ).toBe("Comment on issue #7 in octo/app: Bug\n\nFixed.\n\nAs you (@me).");
   });
 });
