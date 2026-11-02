@@ -13,13 +13,14 @@ import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { RuntimeLimitReached } from "@hobbots/agents";
-import { policySandbox } from "@hobbots/domain";
+import { hobAppCommitIdentity, policySandbox } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   APPROVAL_NOTE,
+  botCommitNote,
   brainOptions,
   type ClaudeCodeConfig,
   claudeCandidates,
@@ -471,6 +472,20 @@ describe("the sandbox note", () => {
     expect(turnInstructions("", true)).toBe(SANDBOX_NOTE);
     expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
     expect(SANDBOX_NOTE).toContain("could not write config file .git/config: Operation not permitted");
+  });
+});
+
+describe("the bot commit note", () => {
+  // covers ADR 022
+  it("[TC-CH-200] tells a hob with its own app that it commits unsigned as its bot and GitHub signs on push, and no other hob", () => {
+    const bot = hobAppCommitIdentity({ slug: "frodo-hobbots", botUserId: 90001000 });
+    const note = botCommitNote(bot);
+    expect(turnInstructions("Be brief.", true, true, bot)).toBe(
+      `Be brief.\n\n${APPROVAL_NOTE}\n\n${SANDBOX_NOTE}\n\n${note}`,
+    );
+    expect(turnInstructions("Be brief.", true, true)).toBe(`Be brief.\n\n${APPROVAL_NOTE}\n\n${SANDBOX_NOTE}`);
+    expect(note).toContain("frodo-hobbots[bot] <90001000+frodo-hobbots[bot]@users.noreply.github.com>");
+    expect(note).toContain("never pass -S");
   });
 });
 
