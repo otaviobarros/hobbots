@@ -42,6 +42,7 @@ import { Effect, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { adoptSession, parseKeychainLogin, policyHooks, toolTurn } from "../src/claude-code.ts";
 import { makeFakeRuntime } from "../src/fake.ts";
+import { applyScriptedWrites } from "../src/fake-writes.ts";
 import { decideForLiveTurns, ProcessSandbox, sandboxEnv, sandboxFilesystem } from "../src/sandbox.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-hooks-")));
@@ -606,6 +607,8 @@ describe("scripted tool calls in the fake runtime", () => {
     const away = join(root, "away-race");
     mkdirSync(away, { recursive: true });
     writeFileSync(join(away, "f.txt"), "untouched\n");
+    // A file a delete aimed through the swapped folder would remove.
+    writeFileSync(join(away, "gone.txt"), "still here\n");
     mkdirSync(join(project, "racing"), { recursive: true });
     const swapper = spawn(process.execPath, [
       "-e",
@@ -622,7 +625,39 @@ describe("scripted tool calls in the fake runtime", () => {
     for (let i = 0; i < 150; i++) await turn(line, access());
     await done;
     expect(readFileSync(join(away, "f.txt"), "utf8")).toBe("untouched\n");
-    expect(readdirSync(away)).toEqual(["f.txt"]);
+    expect(readdirSync(away).sort()).toEqual(["f.txt", "gone.txt"]);
+  }, 30_000);
+
+  // covers PE-002
+  it("[TC-PE-287] makes writes from inside the folder, as on macOS, never outside while folders on the way or the folder itself are swapped", async () => {
+    const away = join(root, "away-inside");
+    mkdirSync(away, { recursive: true });
+    writeFileSync(join(away, "f.txt"), "untouched\n");
+    writeFileSync(join(away, "gone.txt"), "still here\n");
+    const base = join(root, "inside-project");
+    mkdirSync(join(base, "racing"), { recursive: true });
+    const swapper = spawn(process.execPath, [
+      "-e",
+      `const fs = require("node:fs");
+       const swap = (dir) => { try { fs.renameSync(dir, dir + "-real"); fs.symlinkSync(${JSON.stringify(away)}, dir); fs.unlinkSync(dir); fs.renameSync(dir + "-real", dir); } catch {} };
+       const end = Date.now() + 3000;
+       while (Date.now() < end) { swap(${JSON.stringify(join(base, "racing"))}); swap(${JSON.stringify(base)}); }`,
+    ]);
+    const done = new Promise((resolve) => swapper.on("exit", resolve));
+    const writes = {
+      "f.txt": "overwritten\n",
+      "gone.txt": null,
+      "racing/f.txt": "overwritten\n",
+      "racing/gone.txt": null,
+      "racing/made/new.txt": "made\n",
+    };
+    for (let i = 0; i < 40; i++) applyScriptedWrites(writes, base, "inside");
+    await done;
+    expect(readFileSync(join(away, "f.txt"), "utf8")).toBe("untouched\n");
+    expect(readdirSync(away).sort()).toEqual(["f.txt", "gone.txt"]);
+    // With nothing swapped, the same writes land in the folder.
+    applyScriptedWrites({ "racing/made/new.txt": "made\n", "racing/f.txt": null }, base, "inside");
+    expect(readFileSync(join(base, "racing", "made", "new.txt"), "utf8")).toBe("made\n");
   }, 30_000);
 
   it("makes no tool calls in a chat-only turn", async () => {
