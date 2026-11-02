@@ -818,8 +818,10 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     const installation = app.installations.find((each) => each.id === installationId);
     if (installation === undefined) return notFound;
     const body = parseBody(request);
-    const names = Array.isArray(body.repositories) ? body.repositories.map(String) : [];
-    const slugs = names.map((name) => `${login}/${name}`);
+    // With no repositories named, as GitHub does, the token reaches every one the installation reaches.
+    const slugs = Array.isArray(body.repositories)
+      ? body.repositories.map((name) => `${login}/${String(name)}`)
+      : [...repositories.keys()].filter((slug) => covers(installation, slug));
     if (slugs.some((slug) => !covers(installation, slug))) {
       return invalid(
         "There is at least one repository that does not exist or is not accessible to the parent installation.",
@@ -860,9 +862,12 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     return installation === undefined ? notFound : json(200, installationJson(app, installation));
   };
 
-  /** What an installation token may reach: its repositories, with its permissions, as its app's bot. */
-  const asInstallation = (request: FakeGitHubRequest, token: FakeInstallationToken, app: FakeApp): FakeGitHubAnswer => {
-    const actor = `${app.slug}[bot]`;
+  /** What an installation token reaches outside one repository: the names of its repositories, and search. */
+  const installationWide = (request: FakeGitHubRequest, token: FakeInstallationToken): FakeGitHubAnswer | undefined => {
+    if (request.path === "/installation/repositories" && request.method === "GET") {
+      const reached = token.repositories.map((slug) => ({ full_name: slug }));
+      return json(200, { total_count: reached.length, repositories: page(request, reached) });
+    }
     if (request.path === "/rate_limit") return rateLimit();
     if (request.path === "/search/issues") {
       const slug = qualifiers(request.query.get("q") ?? "").find(([name]) => name === "repo")?.[1];
@@ -870,6 +875,14 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
         return invalid("The listed repositories cannot be searched.");
       return permits(token, "issues", "read") || permits(token, "pull_requests", "read") ? search(request) : forbidden;
     }
+    return undefined;
+  };
+
+  /** What an installation token may reach: its repositories, with its permissions, as its app's bot. */
+  const asInstallation = (request: FakeGitHubRequest, token: FakeInstallationToken, app: FakeApp): FakeGitHubAnswer => {
+    const actor = `${app.slug}[bot]`;
+    const wide = installationWide(request, token);
+    if (wide !== undefined) return wide;
     const repo = /^\/repos\/([^/]+)\/([^/]+)(.*)$/.exec(request.path);
     if (repo === null) return forbidden;
     const slug = `${repo[1]}/${repo[2]}`;

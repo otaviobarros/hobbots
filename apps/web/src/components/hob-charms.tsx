@@ -8,9 +8,11 @@ import { Link } from "@tanstack/react-router";
 import { useId } from "react";
 import { type ToolHolding, toolHolding } from "../api/enforcement.ts";
 import { githubStatusQuery } from "../api/github.ts";
+import { hobGitHubAppQuery } from "../api/hob-github-app.ts";
 import { useUpdatePermissions } from "../api/queries.ts";
 import { ANSWER, offeredAnswer, ruleColor } from "../api/safety.ts";
 import { EnforcementList, NeedsSandbox } from "./enforcement.tsx";
+import { HobGitHubApp } from "./hob-github-app.tsx";
 import { Loading, useHobPermissions } from "./hob-permissions.tsx";
 import { messages } from "./messages.ts";
 
@@ -112,7 +114,11 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
   const github = useQuery(githubStatusQuery);
   const switchId = useId();
   const granted = update.isPending ? update.variables.githubCharm !== false : permissions.policy.githubCharm !== false;
-  const connected = github.data === undefined || github.data._tag === "Connected" || github.data._tag === "Environment";
+  // A hob with its own app acts as its bot, so it needs no account connected in Settings (ADR 022).
+  const ownApp = useQuery(hobGitHubAppQuery(hob.id)).data;
+  const bot = ownApp?._tag === "Connected" ? ownApp.bot : null;
+  const connected =
+    bot !== null || github.data === undefined || github.data._tag === "Connected" || github.data._tag === "Environment";
   return (
     <div className="cut flex flex-col gap-2.5 border-2 border-line bg-card px-4 py-3.5">
       <div className="flex items-center gap-3.5">
@@ -126,7 +132,9 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
           <label htmlFor={switchId} className="font-bold">
             {copy.name}
           </label>
-          <span className="text-[13px] text-secondary-text">{copy.reads({ name: hob.name })}</span>
+          <span className="text-[13px] text-secondary-text">
+            {bot === null ? copy.reads({ name: hob.name }) : copy.readsAsBot({ name: hob.name, bot })}
+          </span>
         </div>
         <Switch
           id={switchId}
@@ -164,6 +172,7 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
           {copy.saveFailed}
         </span>
       )}
+      <HobGitHubApp hob={hob} />
     </div>
   );
 }

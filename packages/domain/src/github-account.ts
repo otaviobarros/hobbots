@@ -83,7 +83,7 @@ export const hobAppCommitIdentity = (app: Pick<HobGitHubApp, "slug" | "botUserId
   };
 };
 
-/** Where a hob's app is installed: the account, and whether it reaches all of its repositories or some. */
+/** Where a hob's app is installed: the account, whether it reaches all of its repositories or some, and which. */
 export const HobGitHubAppInstallation = Schema.Struct({
   id: Schema.Number,
   account: Schema.String,
@@ -91,5 +91,7 @@ export const HobGitHubAppInstallation = Schema.Struct({
   /** Where the user changes which repositories it reaches. */
   htmlUrl: Schema.String,
   suspended: Schema.Boolean,
+  /** The repositories it reaches, as `owner/name`; null while it is suspended, as GitHub then says none. */
+  repositories: Schema.NullOr(Schema.Array(Schema.String)),
 });
 export type HobGitHubAppInstallation = typeof HobGitHubAppInstallation.Type;
