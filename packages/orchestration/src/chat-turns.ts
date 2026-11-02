@@ -51,6 +51,8 @@ export const makeChatResolver = (
   let briefed: { readonly taskId: TaskId; readonly carried: ReadonlyArray<CarriedItem> } | null = null;
   /** The Task the turn works on, once it was briefed on one or a call reached one. */
   let workingOn: TaskId | null = null;
+  /** The open Task as the briefing read it, for the Attempt the turn runs on it. */
+  let briefedOn: Task | null = null;
   /**
    * What the turn carries on its Task: the items it holds claims on, and those its briefing showed
    * unclaimed, a held claim winning over the same item shown.
@@ -74,6 +76,7 @@ export const makeChatResolver = (
       const open = openThreadTask(yield* tasks.readThreadTrees(turn.threadId), turn.agentId);
       if (open === undefined) return null;
       workingOn = open.top.id;
+      briefedOn = open.top;
       const ledger = yield* tasks.readLedger(open.top.id);
       const shown = briefingShows(open.top, open.tree);
       briefed = {
@@ -82,6 +85,30 @@ export const makeChatResolver = (
       };
       return ownerBriefing(open.top, open.tree);
     }),
+
+    /**
+     * Starts the turn's own Attempt on the Task it was briefed on, so the hub knows the turn is
+     * working on it: a cancel then waits for the turn to stop, or leaves the stop unresolved when it
+     * does not (OR-006). Null when the turn works on no Task yet, or the Task is being cancelled or
+     * changed meanwhile. `was` is the Task's state before, which the turn's end gives back to it.
+     */
+    begin: (at: string) =>
+      Effect.gen(function* () {
+        const task = briefedOn;
+        if (task === null || task.state === "cancelling") return null;
+        const attemptId = AttemptId.make(newId());
+        const started = yield* tasks
+          .startAttempt(task.id, task.revision, {
+            id: attemptId,
+            runtime: turn.runtime,
+            sessionId: null,
+            configVersion: turn.configVersion,
+            policyVersion: null,
+            startedAt: at,
+          })
+          .pipe(Effect.option);
+        return Option.isNone(started) ? null : { attemptId, entries: started.value.entries, was: task.state };
+      }),
 
     /** `ownAttempt` is the Attempt this turn already started, if any. */
     resolve: (

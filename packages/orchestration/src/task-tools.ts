@@ -216,6 +216,13 @@ export class TaskTools extends Context.Service<
               turn: { turn_reply: turn.messageId },
               resolve: (name, at) => chat.resolve(name, at, attemptId),
             };
+            const briefing = yield* chat.briefing;
+            // A turn briefed on its Task works on it as an Attempt of its own from the start.
+            const begun = yield* chat.begin(DateTime.formatIso(yield* DateTime.now));
+            if (begun !== null) {
+              attemptId = begun.attemptId;
+              yield* announce(begun.entries);
+            }
             const end = (outcome: Parameters<ChatTaskTurn["end"]>[0], sessionId: string | null) =>
               Effect.gen(function* () {
                 if (attemptId === null) return;
@@ -223,7 +230,19 @@ export class TaskTools extends Context.Service<
                 const ended = yield* tasks
                   .updateAttempt(attemptId, { state: outcome, at, ...(sessionId === null ? {} : { sessionId }) })
                   .pipe(Effect.option);
-                if (Option.isSome(ended)) yield* announce(ended.value.entries);
+                if (Option.isNone(ended)) return;
+                yield* announce(ended.value.entries);
+                // A Task that waited, or was blocked, before the turn goes back to that unless the turn moved it.
+                const task = ended.value.value.task;
+                const was = begun?.was;
+                if (
+                  (was === "waiting" || was === "blocked") &&
+                  task.state === "active" &&
+                  task.currentAttemptId === attemptId
+                ) {
+                  const back = yield* tasks.moveTask(task.id, task.revision, was, at).pipe(Effect.option);
+                  if (Option.isSome(back)) yield* announce(back.value.entries);
+                }
               }).pipe(
                 Effect.catchCause((cause) => Effect.logWarning("Could not end a chat turn's Attempt", cause)),
                 Effect.provideContext(context),
@@ -237,7 +256,7 @@ export class TaskTools extends Context.Service<
                   }),
                 ),
             };
-            return { hubTools, briefing: yield* chat.briefing, end } satisfies ChatTaskTurn;
+            return { hubTools, briefing, end } satisfies ChatTaskTurn;
           });
 
         return TaskTools.of({ call, forTurn, forChat });

@@ -25,6 +25,7 @@ import {
   type TaskTree,
   Thread,
   ThreadId,
+  WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, Dispatcher } from "@hobbots/inbox";
 import { DEFAULT_STEP_LIMITS, StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -178,7 +179,12 @@ const makeApp = (gates: Gates, requests: Array<PromptRequest>) =>
         ProjectTools,
         HobAdmission.layer,
         scripted(gates, requests),
-        Layer.succeed(UserSession, { origin: "http://localhost:4317" }),
+        Layer.succeed(UserSession, {
+          deviceId: WINDOW_DEVICE_ID,
+          name: "This computer's Hobbots window",
+          kind: "window",
+          whileApproved: (write) => write,
+        }),
       ),
     ),
     Layer.provideMerge(TestDatabase),
@@ -271,6 +277,52 @@ const questUnderWay = (quillBrief: ReadonlyArray<string> = [HOLD]) =>
 
 const underWay = (tree: TaskTree) =>
   ownedBy(tree, ADA)?.state === "waiting" && tree.attempts.some((each) => each.agentId === QUILL && isLive(each.state));
+
+/** Your request in the thread, its step done and every reply ended: the Task the next message works on. */
+const requestDone = Effect.gen(function* () {
+  const first = ["Write the copy", hub("plan_steps", { key: "plan", steps: [{ brief: "Draft the headlines" }] })].join(
+    "\n",
+  );
+  yield* ChatService.use((chat) => chat.sendPrompt(threadId, first));
+  const tree = yield* treeWhen(
+    (each) => each.tasks[1]?.state === "completed" && !each.attempts.some((attempt) => isLive(attempt.state)),
+  );
+  yield* Effect.sleep("300 millis");
+  yield* messagesWhen(() => true);
+  const top = tree.tasks[0];
+  return top === undefined ? yield* Effect.die("no Task") : top;
+});
+
+/** A turn briefed on the open Task that ended its Attempt but holds on to its tools. */
+const strayTurn = Effect.gen(function* () {
+  const [opening] = yield* messages();
+  const turn = yield* TaskTurns.use((turns) =>
+    turns.forChat({
+      agentId: ALDRIC,
+      threadId,
+      messageId: MessageId.make(opening?.id ?? "none"),
+      prompt: "Keep going",
+      runtime: "claude-code",
+      configVersion: 1,
+    }),
+  );
+  yield* turn.end("completed", null);
+  return turn;
+});
+
+/** Your next message in the thread, held by `gate` once its turn has started. */
+const laterReply = (gate: string, requests: ReadonlyArray<PromptRequest>) =>
+  Effect.gen(function* () {
+    const second = ["Now the emails", gate, hub("plan_steps", { key: "more", steps: [{ brief: "Draft the emails" }] })];
+    yield* ChatService.use((chat) => chat.sendPrompt(threadId, second.join("\n")));
+    yield* retry(
+      Effect.suspend(() =>
+        requests.some((each) => each.prompt.includes("Now the emails")) ? Effect.void : Effect.fail("not yet" as const),
+      ),
+    );
+    // Its Attempt is recorded before its session starts.
+    yield* treeWhen((tree) => tree.attempts.some((each) => each.taskId === tree.tasks[0]?.id && isLive(each.state)));
+  });
 
 describe("cancelling with confirmed outcomes", () => {
   // covers OR-006
@@ -383,63 +435,63 @@ describe("cancelling with confirmed outcomes", () => {
     expect(ownedBy(after, QUILL)?.revision).toBe(ownedBy(cancelled, QUILL)?.revision);
   }, 20_000);
   // covers OR-006
-  it("[TC-OR-150] cancelling the Task you asked for stops a later reply working on it, which starts nothing in its place", async () => {
+  it("[TC-OR-150] cancelling the Task you asked for waits for a later reply working on it to stop, and starts nothing in its place", async () => {
     const { run, release, requests } = setUp();
-    const first = [
-      "Write the copy",
-      hub("plan_steps", { key: "plan", steps: [{ brief: "Draft the headlines" }] }),
-    ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, first)));
-    await run(
-      treeWhen((tree) => tree.tasks[1]?.state === "completed" && !tree.attempts.some((each) => isLive(each.state))),
-    );
-    await run(Effect.sleep("300 millis"));
-    await run(messagesWhen(() => true));
+    const top = await run(requestDone);
+    // A turn briefed on the Task before the cancel, which goes on calling after its Attempt ended.
+    const stray = await run(strayTurn);
 
-    // Your next message there works on the same Task, with no Attempt of its own running.
-    const second = [
-      "Now the emails",
-      HOLD_STARTED,
-      hub("plan_steps", { key: "more", steps: [{ brief: "Draft the emails" }] }),
-    ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, second)));
-    const sent = Effect.suspend(() =>
-      requests.some((each) => each.prompt.includes("Now the emails")) ? Effect.void : Effect.fail("not yet" as const),
-    );
-    await run(retry(sent));
-    const before = await run(treeWhen(() => true));
-    const top = before.tasks[0];
-    if (top === undefined) throw new Error("no Task");
-    expect(before.attempts.some((each) => each.taskId === top.id && isLive(each.state))).toBe(false);
-    // Another turn briefed on the Task before the cancel, which no stop reaches.
-    const [opening] = await run(messages());
-    const stray = await run(
-      TaskTurns.use((turns) =>
-        turns.forChat({
-          agentId: ALDRIC,
-          threadId,
-          messageId: MessageId.make(opening?.id ?? "none"),
-          prompt: "Keep going",
-          runtime: "claude-code",
-          configVersion: 1,
-        }),
-      ),
-    );
-
+    // Your next message there works on the same Task, as an Attempt of its own.
+    await run(laterReply(HOLD_STARTED, requests));
     await run(controls((each) => each.cancel(top.id)));
+    const asked = await run(treeWhen(() => true));
+    expect(asked.tasks[0]?.state).toBe("cancelling");
     expect((await run(messages())).at(-1)?.status).toBe("stopping");
+
     await release();
     const all = await run(messagesWhen(() => true));
-    // Whether the fake session gets to its call before the stop lands varies; either way it starts nothing.
     expect(all.at(-1)?.status).toBe("stopped");
-    await run(Effect.sleep("300 millis"));
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "cancelled"));
+    // Your request's turn, the reply its step's result started and the stray turn ended; yours was stopped.
+    expect(attemptsOf(done, done.tasks[0])).toEqual([
+      [ALDRIC, "completed"],
+      [ALDRIC, "completed"],
+      [ALDRIC, "completed"],
+      [ALDRIC, "interrupted"],
+    ]);
 
     const answer = await run(stray.hubTools.call("plan_steps", { key: "stray", steps: [{ brief: "Draft the ads" }] }));
     expect(answer).toMatchObject({ refused: true });
     expect(answer.text).toContain("task-cancelling");
+    await run(Effect.sleep("300 millis"));
     const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
     expect(trees).toHaveLength(1);
     expect(trees[0]?.tasks.map((task) => task.state)).toEqual(["cancelled", "completed"]);
+  }, 20_000);
+
+  // covers OR-006, EX-003
+  it("[TC-OR-152] a later reply that does not stop in time leaves the cancel of the Task you asked for unresolved", async () => {
+    const { run, unstick, requests } = setUp();
+    const top = await run(requestDone);
+    await run(laterReply(STUCK, requests));
+    await run(controls((each) => each.cancel(top.id)));
+    expect((await run(treeWhen(() => true))).tasks[0]?.state).toBe("cancelling");
+
+    // The reply is still stopping when the cancel's time runs out.
+    const ended = await run(treeWhen((tree) => tree.tasks[0]?.state === "cancelled"));
+    const stop = ended.attempts.filter((each) => each.taskId === top.id).at(-1);
+    expect(stop).toMatchObject({ state: "unresolved" });
+    expect(stop?.outcome).toContain("could not confirm");
+    expect((await run(messages())).at(-1)?.status).toBe("stopping");
+
+    // When it lets go at last, the outcome on record stays as it is.
+    await unstick();
+    await run(messagesWhen(() => true));
+    await run(Effect.sleep("300 millis"));
+    const after = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    expect(after).toHaveLength(1);
+    expect(after[0]?.tasks[0]?.state).toBe("cancelled");
+    expect(after[0]?.attempts.find((each) => each.id === stop?.id)?.state).toBe("unresolved");
   }, 20_000);
 });
 
