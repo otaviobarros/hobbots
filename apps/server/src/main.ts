@@ -65,13 +65,22 @@ import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
-import { IPv6Loopback } from "./loopback.ts";
+import { HubListenersLive } from "./listeners.ts";
+import { DEFAULT_PORT, readNetworkSettings } from "./network-settings.ts";
+import {
+  HubHostsLive,
+  KnownTailnetPeersOnly,
+  RemoteAccessLive,
+  RemoteAccessStateLive,
+  TailnetClosedUntilPairing,
+} from "./remote-access.ts";
 import { QuietRoutineReads } from "./request-log.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
+import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { ClientOrigins, userSessionOrigins } from "./user-session.ts";
-import { LoopbackHostOnly, WebClientRoutes } from "./web.ts";
+import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
 
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -85,6 +94,16 @@ const ServerLive = Layer.unwrap(
       version: config.version,
       dataDir,
     });
+    // The port and remote access as the user last chose them (ADR 021); HOBBOTS_PORT overrides the port.
+    const network = readNetworkSettings(dataDir);
+    const port = Option.getOrElse(config.port, () => network.port ?? DEFAULT_PORT);
+    const Remote = HubHostsLive.pipe(
+      Layer.provideMerge(RemoteAccessStateLive({ enabled: network.remoteAccess ?? false, port })),
+    );
+    const Tailnet =
+      config.fakeTailscale === "on"
+        ? TailscaleFakeFile(dataDir)
+        : TailscaleLive(process.platform, process.env).pipe(Layer.provide(NodeServices.layer));
 
     // New installations start without hobs; the user summons the first one during setup.
     const database = join(config.dataDir, "hobbots.sqlite");
@@ -104,7 +123,8 @@ const ServerLive = Layer.unwrap(
       SearchIndex.sqliteWorker(database),
     ).pipe(Layer.provideMerge(Sqlite));
     // One policy engine for the hub, so its index of the folders' Git repositories is built once.
-    // The fake answers for Claude Code and Codex, so a thread can switch brains (ADR 017).
+    // The fake answers for Claude Code and Codex, so a thread can switch brains (ADR 017). Its
+    // sandbox and web tools never reach the hub's own tailnet names (ADR 021).
     const fake = { delay: "40 millis", stopDelay: "600 millis", sandbox: config.fakeSandbox } as const;
     const Runtime = (
       config.runtime === "fake"
@@ -116,7 +136,7 @@ const ServerLive = Layer.unwrap(
             workspaceDir: join(config.dataDir, "workspaces", "default"),
             executable: Option.getOrUndefined(config.claudeExecutable),
           }).pipe(Layer.provide(ProcessSandbox.layer))
-    ).pipe(Layer.provide(PolicyEngine.node));
+    ).pipe(Layer.provide(PolicyEngine.node), Layer.provide(Remote));
     // The GitHub Charm reads and pushes on the hub, outside the sandbox (#317, #323), as the GitHub
     // account the user connected in Settings, whose tokens stay in the OS keychain (ADR 020). A push
     // reads the hob's branch with Git in the hob's sandbox.
@@ -234,10 +254,10 @@ const ServerLive = Layer.unwrap(
       );
     }
     yield* Effect.log(
-      `Hobbots server on http://localhost:${config.port} (runtime: ${config.runtime}, data: ${config.dataDir})`,
+      `Hobbots server on http://localhost:${port} (runtime: ${config.runtime}, data: ${config.dataDir})`,
     );
 
-    // Loopback only, on both IPv4 and IPv6: other machines on the network cannot connect.
+    // Loopback on IPv4 and IPv6, and the tailnet while remote access is on: no other interface.
     const server = createServer();
     // Each provided layer is built before the ones above it. App comes last so the server listens
     // only once the routes can answer: a request that arrives earlier is never answered.
@@ -248,16 +268,18 @@ const ServerLive = Layer.unwrap(
             ApiRoutes.pipe(Layer.provide(Layer.succeed(ClientOrigins, userSessionOrigins(config)))),
             EventStreamRoute,
             WebClientRoutes(config.webDir),
-            LoopbackHostOnly,
+            OwnHostsOnly,
+            KnownTailnetPeersOnly,
+            TailnetClosedUntilPairing,
             QuietRoutineReads,
             // Browsers cache a preflight for this long, in seconds (Chromium's upper limit), rather than 5.
             HttpRouter.cors({ allowedOrigins: config.allowedOrigins, maxAge: 7200 }),
           ),
         ),
       ),
-      Layer.provideMerge(IPv6Loopback(server, config.port)),
-      Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: config.port })),
-      Layer.provide(App),
+      Layer.provideMerge(RemoteAccessLive(dataDir).pipe(Layer.provideMerge(HubListenersLive(server, port)))),
+      Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port })),
+      Layer.provide(Layer.mergeAll(App, Remote, Tailnet)),
     );
   }),
 );

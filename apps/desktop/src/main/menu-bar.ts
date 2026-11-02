@@ -4,6 +4,7 @@
  */
 import { app, type BrowserWindow, dialog, Menu, nativeImage, Tray } from "electron";
 import { coalesce } from "./coalesce.ts";
+import type { HubAddress } from "./hub-address.ts";
 import { keepsRunning } from "./keep-running.ts";
 import { closeAction, quitWhileWorkingDialog, renderTrayIcon, TRAY_SIZE, trayModel } from "./menu-bar-model.ts";
 import { readUntil } from "./read-until.ts";
@@ -20,8 +21,8 @@ interface WorkingHob {
 export interface MenuBarOptions {
   readonly supervisor: ServerSupervisor;
   readonly settings: SettingsStore;
-  readonly apiUrl: string;
-  readonly port: number;
+  /** Read each time: the hub's port can change while the app runs. */
+  readonly hub: HubAddress;
   readonly createWindow: () => Promise<BrowserWindow>;
 }
 
@@ -39,7 +40,7 @@ const trayImage = (state: ServerState) => {
   return image;
 };
 
-export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow }: MenuBarOptions) => {
+export const startMenuBar = ({ supervisor, settings, hub, createWindow }: MenuBarOptions) => {
   const windows = new Set<BrowserWindow>();
   let working: ReadonlyArray<string> = [];
   let starting: Promise<void> = Promise.resolve();
@@ -53,7 +54,7 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
   const fetchWorking = async (): Promise<ReadonlyArray<WorkingHob> | null> => {
     if (!isRunning()) return supervisor.ownsProcess ? null : [];
     try {
-      const response = await fetch(`${apiUrl}/api/activity`, { signal: AbortSignal.timeout(1000) });
+      const response = await fetch(`${hub.apiUrl}/api/activity`, { signal: AbortSignal.timeout(1000) });
       if (!response.ok) return null;
       const body = (await response.json()) as { working?: unknown };
       if (!Array.isArray(body.working)) return null;
@@ -78,7 +79,7 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
   let drawn = "";
   const refresh = () => {
     const status = supervisor.status;
-    const model = trayModel(status, working, port);
+    const model = trayModel(status, working, hub.port);
     const key = JSON.stringify([status, model]);
     if (key === drawn) return;
     drawn = key;
@@ -164,7 +165,7 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
   const showWindow = async (): Promise<BrowserWindow | undefined> => {
     await starting;
     if (!isRunning()) {
-      const model = trayModel(supervisor.status, [], port);
+      const model = trayModel(supervisor.status, [], hub.port);
       const { response } = await dialog.showMessageBox({
         type: "warning",
         message: model.title,

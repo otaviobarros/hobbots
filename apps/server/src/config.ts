@@ -9,7 +9,8 @@ const defaultDataDir = () =>
   platform() === "darwin" ? join(homedir(), "Library", "Application Support", "Hobbots") : join(homedir(), ".hobbots");
 
 export const ServerConfig = Config.all({
-  port: Config.Port("HOBBOTS_PORT").pipe(Config.withDefault(4317)),
+  // Overrides the port the user chose in Settings (network.json in the data folder), and 4317 without one.
+  port: Config.Port("HOBBOTS_PORT").pipe(Config.option),
   dataDir: Config.String("HOBBOTS_DATA_DIR").pipe(Config.withDefault(defaultDataDir())),
   // Reported by the health endpoint. The desktop app passes its own version; a checkout has none.
   version: Config.String("HOBBOTS_VERSION").pipe(Config.withDefault("development")),
@@ -74,6 +75,8 @@ export const ServerConfig = Config.all({
   githubToken: Config.Redacted("HOBBOTS_GITHUB_TOKEN").pipe(Config.option),
   // A stand-in for GitHub's sign-in and an in-memory keychain, to try connecting without either.
   fakeGitHub: Config.Literals(["off", "on"], "HOBBOTS_FAKE_GITHUB").pipe(Config.withDefault("off" as const)),
+  // A stand-in for Tailscale on 127.0.0.2, controlled by fake-tailscale.json in the data folder (ADR 021).
+  fakeTailscale: Config.Literals(["off", "on"], "HOBBOTS_FAKE_TAILSCALE").pipe(Config.withDefault("off" as const)),
   // A scripted Quest the fake runtime plays on the hub's records: asking for a Black Friday campaign starts it.
   fakeQuest: Config.Literals(["off", "black-friday"], "HOBBOTS_FAKE_QUEST").pipe(Config.withDefault("off" as const)),
   // Set when the allow list was given, such as by the desktop app's development build.

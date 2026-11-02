@@ -21,7 +21,7 @@ Every client gets the full experience: chat, Quests, Inbox, approvals and the Wo
 - Quit stops the server gracefully, then exits the app; running work is recovered as interrupted on the next start ([execution lifecycle](execution-lifecycle.md)). A server the app did not start, such as a development server, is used but never stopped.
 - Linux and Windows follow the same shape (a tray icon and a login entry for the app) when they are supported; their exact startup mechanism is decided then.
 - One app instance and one server per user account. A second launch shows the existing window. The app connects to a running server rather than starting a second one, and first checks the server's identity (installation ID, version and data folder from the health endpoint); anything else on the port is an error, not a server to use.
-- The server serves the web client and the API on the same port, 4317 by default, changeable in Settings › Devices. The packaged app's window loads the client from the server like any browser on the hub; only development loads it from the Vite dev server, which forwards the API to the hub so the client still calls it on its own origin.
+- The server serves the web client and the API on the same port, 4317 by default, changeable in Settings › Devices. The chosen port and the remote access setting are kept in `network.json` in the data folder, where the desktop app reads the port before it starts or finds the server; `HOBBOTS_PORT` overrides the port, as in development and tests. A changed port moves every listener at once and reaches every client as a `remote-access` event: the desktop app follows it and reloads its windows, and a browser on a page the hub serves moves to the new port. The packaged app's window loads the client from the server like any browser on the hub; only development loads it from the Vite dev server, which forwards the API to the hub so the client still calls it on its own origin.
 - Hobs use installed, authenticated runtimes on the hub through supported adapters ([runtime adapters](runtime-adapters.md)). Runtime login stays a vendor flow; credentials never enter conversation history.
 - Without remote access the server listens only on loopback. Closing a browser never stops work.
 
@@ -34,7 +34,7 @@ The hub's execution environments are where hob work runs: the hub itself and any
 Tailscale is the MVP route.
 
 - Remote access is off until the user turns it on in onboarding or in Settings › Devices.
-- When it is on and Tailscale is running, the server also listens on the hub's tailnet addresses, read from `tailscale status`, and accepts only loopback and tailnet peers that `tailscale whois` knows. Its address is `http://<magicdns-name>:4317`.
+- When it is on and Tailscale is running, the server also listens on the hub's tailnet addresses, read from `tailscale status`, and accepts only loopback and tailnet peers that `tailscale whois` knows. Its address is `http://<magicdns-name>:4317`. Until devices can pair (#338), it answers every tailnet request with `403`.
 - Optionally, `tailscale serve` gives the hub an HTTPS address on the tailnet. Hobbots shows the command or runs it with the user's consent; it never changes Tailscale settings silently and never uses Funnel.
 - If Tailscale disconnects, the server stops listening on the tailnet and Settings › Devices says why. It never falls back to other interfaces.
 - Pause remote access in the menu-bar icon closes the tailnet listener until Resume; loopback keeps working.

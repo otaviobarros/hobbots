@@ -219,6 +219,6 @@ export type StreamReady = typeof StreamReady.Type;
 
 /**
  * The SSE event names on the event stream; a journaled entry is a plain `message` frame (ADR 013).
- * `turn` carries `TurnStarted` and `TurnEnded`.
+ * `turn` carries `TurnStarted` and `TurnEnded`, and `remote-access` carries `RemoteAccessChanged`.
  */
-export const STREAM_FRAME = { ready: "ready", delta: "delta", turn: "turn" } as const;
+export const STREAM_FRAME = { ready: "ready", delta: "delta", turn: "turn", remoteAccess: "remote-access" } as const;
