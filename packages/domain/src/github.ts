@@ -198,13 +198,13 @@ export const GITHUB_WRITE_TOOLS: ReadonlyArray<{
   {
     name: "github_open_pull_request",
     description:
-      "Open a pull request in your folder's GitHub repository, as the user, from a branch you already pushed with github_push. Use this instead of `gh pr create`. It opens as a draft unless you say otherwise; under most policies the user approves it first.",
+      "Open a pull request in your folder's GitHub repository, from a branch you already pushed with github_push. It opens as your own GitHub app's bot when you have one, and as the user otherwise. Use this instead of `gh pr create`. It opens as a draft unless you say otherwise; under most policies the user approves it first.",
     label: "Opening a pull request",
   },
   {
     name: "github_comment",
     description:
-      "Comment on an issue or pull request in your folder's GitHub repository, as the user. Use this instead of `gh issue comment` or `gh pr comment`. Under most policies the user approves it first.",
+      "Comment on an issue or pull request in your folder's GitHub repository, as your own GitHub app's bot when you have one, and as the user otherwise. Use this instead of `gh issue comment` or `gh pr comment`. Under most policies the user approves it first.",
     label: "Commenting on GitHub",
   },
 ];
