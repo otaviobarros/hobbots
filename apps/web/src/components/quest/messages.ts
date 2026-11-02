@@ -93,6 +93,8 @@ export const messages = {
     noteHint: ({ name }: { name: string }) => `You talk to ${name}, who passes it on.`,
     send: "Send",
     sent: ({ name }: { name: string }) => `Sent to ${name}.`,
+    nudges: "Quick nudges",
+    nudgeSent: ({ words, name }: { words: string; name: string }) => `Sent “${words}” to ${name}.`,
     noteFailed: "Your note could not be sent. Try again.",
     noteRefused: ({ name }: { name: string }) => `This work has ended. Tell ${name} in the chat instead.`,
     notes: "Your notes",

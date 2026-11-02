@@ -65,6 +65,8 @@
   --spacing-work-max: 604px;
   --spacing-drawer: 420px;
   --shadow-drawer: -14px 0 34px rgb(0 0 0 / 0.5);
+  /* The Task chat drawer beside the Workbench's tabs. */
+  --spacing-workbench-chat: 330px;
 
   /* Motion is stepped, like pixel art. */
   --animate-hb-bob: hb-bob 1.2s steps(2) infinite;
