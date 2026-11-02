@@ -101,6 +101,9 @@ export const deviceName = (raw: string): string => {
   return Array.from(printable).slice(0, NAME_LIMIT).join("").trim();
 };
 
-/** True for a pending request whose time has run out at `now`; an expired request cannot be allowed. */
+/**
+ * True for a request still open whose time has run out at `now`: a pending one can no longer be
+ * allowed, and an allowed one can no longer be claimed.
+ */
 export const pairingExpired = (request: PairingRequest, now: string): boolean =>
-  request.state === "pending" && request.expiresAt <= now;
+  (request.state === "pending" || request.state === "allowed") && request.expiresAt <= now;

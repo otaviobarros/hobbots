@@ -66,7 +66,7 @@ export class DeviceRepository extends Context.Service<
     readonly allowPairing: (id: string, device: Device, now: string) => Effect.Effect<Option.Option<PairingRequest>>;
     readonly denyPairing: (id: string, now: string) => Effect.Effect<Option.Option<PairingRequest>>;
     /** Moves an allowed request to claimed and gives its device the token's hash; none when it was claimed already. */
-    readonly claimPairing: (id: string, tokenHash: string) => Effect.Effect<Option.Option<PairingRequest>>;
+    readonly claimPairing: (id: string, tokenHash: string, now: string) => Effect.Effect<Option.Option<PairingRequest>>;
   }
 >()("@hobbots/agents/DeviceRepository") {}
 
@@ -225,7 +225,7 @@ export class DeviceService extends Context.Service<
           // An allowed request is claimed within its lifetime too, so an old secret never turns into a token.
           if (request.state !== "allowed" || pairingExpired(request, now)) return statusOf(request, now);
           const token = yield* secrets.generate(DEVICE_TOKEN_PREFIX);
-          const claimed = yield* repo.claimPairing(request.id, yield* secrets.hash(token));
+          const claimed = yield* repo.claimPairing(request.id, yield* secrets.hash(token), now);
           // Another status call claimed it first: only one of them gets the token.
           if (Option.isNone(claimed)) return yield* missing;
           return statusOf(claimed.value, now, token);

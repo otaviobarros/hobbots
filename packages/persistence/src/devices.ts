@@ -146,10 +146,11 @@ export const DeviceRepositoryLive = Layer.effect(
         Effect.orDie,
       );
 
-    const claimPairing = (id: string, tokenHash: string) =>
+    // Within the request's lifetime only, checked in the same statement that claims it.
+    const claimPairing = (id: string, tokenHash: string, now: string) =>
       Effect.gen(function* () {
         const claimed = yield* sql<{ deviceId: string }>`UPDATE pairing_requests SET state = 'claimed'
-          WHERE id = ${id} AND state = 'allowed' RETURNING device_id`;
+          WHERE id = ${id} AND state = 'allowed' AND expires_at > ${now} RETURNING device_id`;
         const deviceId = claimed[0]?.deviceId;
         if (deviceId === undefined) return Option.none<PairingRequest>();
         yield* sql`UPDATE devices SET token_hash = ${tokenHash} WHERE id = ${deviceId}`;

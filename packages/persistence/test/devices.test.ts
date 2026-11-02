@@ -67,8 +67,8 @@ describe("DeviceRepository", () => {
         const open = yield* repo.listOpenPairing(LATER);
         const allowed = yield* repo.allowPairing("p1", deviceFor(request, "d1"), LATER);
         const again = yield* repo.allowPairing("p1", deviceFor(request, "d2"), LATER);
-        const claimed = yield* repo.claimPairing("p1", "token-hash");
-        const reclaimed = yield* repo.claimPairing("p1", "other-hash");
+        const claimed = yield* repo.claimPairing("p1", "token-hash", LATER);
+        const reclaimed = yield* repo.claimPairing("p1", "other-hash", LATER);
         return {
           open,
           allowed,
@@ -99,19 +99,28 @@ describe("DeviceRepository", () => {
   });
 
   // covers DP-004
-  it("[TC-DP-082] refuses to allow or deny a request that expired or was decided", async () => {
+  it("[TC-DP-082] refuses to allow, deny or claim a request that expired or was decided", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* DeviceRepository;
+        const sql = yield* SqlClient.SqlClient;
         yield* repo.openPairing(asking("late"), "late-hash");
         yield* repo.openPairing(asking("denied", { code: "100200" }), "denied-hash");
+        // Allowed in time, but claimed only after the request expired: no token is ever set.
+        yield* repo.openPairing(asking("unclaimed", { code: "300400" }), "unclaimed-hash");
+        yield* repo.allowPairing("unclaimed", deviceFor(asking("unclaimed"), "du"), LATER);
+        const lateClaim = yield* repo.claimPairing("unclaimed", "late-token-hash", EXPIRED);
+        const unclaimed = yield* repo.findPairing("unclaimed");
+        const tokens = yield* sql<{ tokenHash: string | null }>`SELECT token_hash FROM devices`;
         return {
+          lateClaim,
+          unclaimed,
+          tokens,
           lateAllow: yield* repo.allowPairing("late", deviceFor(asking("late"), "dl"), EXPIRED),
           lateDeny: yield* repo.denyPairing("late", EXPIRED),
           denied: yield* repo.denyPairing("denied", LATER),
           allowAfterDeny: yield* repo.allowPairing("denied", deviceFor(asking("denied"), "dd"), LATER),
           open: yield* repo.listOpenPairing(EXPIRED),
-          devices: yield* repo.list,
         };
       }),
     );
@@ -119,8 +128,10 @@ describe("DeviceRepository", () => {
     expect(Option.isNone(result.lateDeny)).toBe(true);
     expect(Option.getOrThrow(result.denied)).toMatchObject({ state: "denied", deviceId: null });
     expect(Option.isNone(result.allowAfterDeny)).toBe(true);
+    expect(Option.isNone(result.lateClaim)).toBe(true);
+    expect(Option.getOrThrow(result.unclaimed)).toMatchObject({ state: "allowed" });
+    expect(result.tokens).toEqual([{ tokenHash: null }]);
     expect(result.open).toEqual([]);
-    expect(result.devices).toEqual([]);
   });
 
   // covers DP-004, PE-006
