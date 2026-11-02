@@ -81,7 +81,7 @@ const openPath = async (root: string, full: string): Promise<FileHandle | null> 
 };
 
 /** A regular file inside `root`, opened for reading through no link, or null. Every read goes through it. */
-const openInside = async (root: string, full: string): Promise<FileHandle | null> => {
+export const openInside = async (root: string, full: string): Promise<FileHandle | null> => {
   const handle = await openPath(root, full);
   if (handle === null) return null;
   if ((await handle.stat().catch(() => null))?.isFile() === true) return handle;
@@ -90,7 +90,7 @@ const openInside = async (root: string, full: string): Promise<FileHandle | null
 };
 
 /** The SHA-256 of a regular file's contents inside `root`, or null. */
-const hashFile = async (root: string, path: string): Promise<string | null> => {
+export const hashFile = async (root: string, path: string): Promise<string | null> => {
   const handle = await openInside(root, path);
   if (handle === null) return null;
   try {
