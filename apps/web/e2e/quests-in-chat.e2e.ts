@@ -106,7 +106,7 @@ test("[TC-IN-132] a question no lead could answer waits in the Inbox's Needs you
 });
 
 // covers OR-004, OR-006, IN-002
-test("[TC-IN-152] cancelling the work a question waits on withdraws it from the Inbox, the chat and the drawer, and the lead still finishes", async ({
+test("[TC-IN-154] cancelling the work a question waits on withdraws it from the Inbox, the chat and the drawer, and the lead still finishes", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
