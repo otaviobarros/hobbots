@@ -266,7 +266,8 @@ const expectBothStarted = (waiting: TaskTree, requests: ReadonlyArray<PromptRequ
   const [adaFirst] = promptsTo(requests, adaTask);
   expect(adaFirst?.sessionId).toBeNull();
   expect(adaFirst?.prompt).toContain("Aldric gave you this Task as part of a Quest Aldric leads.");
-  expect(adaFirst?.prompt).toContain(`Task ${quillTask?.id}, active: Draft the landing copy`);
+  // Quill's Task is queued or already active, whichever runner reached its Task first.
+  expect(adaFirst?.prompt).toMatch(new RegExp(`Task ${quillTask?.id}, (queued|active): Draft the landing copy`));
   expect(adaFirst?.prompt).not.toContain("20% off everything");
   const [quillFirst] = promptsTo(requests, quillTask);
   expect(quillFirst?.prompt).toContain("Aldric expects back: Three headlines and a short body");
