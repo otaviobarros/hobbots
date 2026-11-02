@@ -13,7 +13,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { arrivalsText, backpackItemsFor, continuationThread, lateness } from "../src/index.ts";
+import { arrivalsText, backpackItemsFor, carryingThread, continuationThread, lateness } from "../src/index.ts";
 
 const at = "2026-11-02T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
@@ -35,6 +35,27 @@ const task = (id: string, ownerId: AgentId, parentId: string | null, state: Task
     createdAt: at,
     updatedAt: at,
     revision: 1,
+  });
+
+/** Routine progress Sam reports on a Task of his, the `order`th update overall. */
+const progressOn = (taskId: string, summary: string, order: number) =>
+  new BackpackItem({
+    ...item(FRODO, taskId, "progress", {
+      _tag: "progress",
+      checkpoint: {
+        id: `c${order}`,
+        taskId: TaskId.make(taskId),
+        attemptId: null,
+        source: "unplanned",
+        kind: "progress",
+        milestoneId: null,
+        summary,
+        createdAt: at,
+        revision: 1,
+      } as never,
+    }),
+    id: BackpackItemId.make(`progress-${order}`),
+    createdAt: `2026-11-02T00:00:${String(order).padStart(2, "0")}.000Z`,
   });
 
 const item = (recipientId: AgentId, taskId: string | null, kind: BackpackItemKind, payload: BackpackPayload) =>
@@ -97,24 +118,35 @@ describe("which thread a backpack item continues", () => {
   });
 
   it("never wakes a hob for routine progress, and continues the thread of work outside any Task", () => {
-    const progress = item(FRODO, "cook", "progress", {
-      _tag: "progress",
-      checkpoint: {
-        id: "c1",
-        taskId: TaskId.make("cook"),
-        attemptId: null,
-        source: "unplanned",
-        kind: "progress",
-        milestoneId: null,
-        summary: "Stirring",
-        createdAt: at,
-        revision: 1,
-      } as never,
-    });
+    const progress = progressOn("cook", "Stirring", 1);
     expect(continuationThread(progress, tree)).toBeNull();
+    // It still rides along the next turn in the lead's thread.
+    expect(carryingThread(progress, tree)).toBe(threadId);
     expect(continuationThread(item(FRODO, null, "message", { _tag: "message", senderId: null, text: "Hi" }), [])).toBe(
       threadId,
     );
+  });
+
+  // covers IN-005
+  it("[TC-IN-070] folds thirty progress updates into one digest, after the work that needs the hob", () => {
+    const updates = Array.from({ length: 30 }, (_, index) =>
+      progressOn(index % 3 === 0 ? "stew" : "cook", `Step ${index + 1}`, index + 1),
+    );
+    const failure = item(FRODO, "pass", "failure", { _tag: "failure", task: task("pass", FRODO, "quest", "failed") });
+    const prompt = arrivalsText([...[...updates].reverse(), failure], "prompt");
+    const lines = prompt.split("\n").filter((line) => line.startsWith("- "));
+    expect(lines).toEqual([
+      "- Task pass (Brief for pass) ended as failed.",
+      "- Task stew sent 10 updates. The latest: Step 28",
+      "- Task cook sent 20 updates. The latest: Step 30",
+    ]);
+    expect(prompt).toContain("Routine progress since your last turn, 30 updates in all. It needs no reply:");
+
+    // Riding along your message alone, it is context the hob needs not act on.
+    const context = arrivalsText(updates.slice(0, 1), "context");
+    expect(context).toContain("Routine progress since your last turn, 1 update in all.");
+    expect(context).toContain("- Task stew sent 1 update. The latest: Step 1");
+    expect(context).toContain("Use this progress only as context.");
   });
 
   it("writes what arrived as Hobbots' own words, as a prompt or as context for your message", () => {

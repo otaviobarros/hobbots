@@ -5,7 +5,7 @@ import {
   Backpack,
   type BackpackScope,
   BackpackTurnFailed,
-  continuationThread,
+  carryingThread,
   type Delivery,
   Dispatcher,
   DispatcherHost,
@@ -15,7 +15,8 @@ import { EventBus } from "./event-bus.ts";
 
 /**
  * The dispatcher's continuation branch (ADR 019): which threads have backpack work waiting for
- * their hob, and putting that work into one turn there under the dispatcher's claims.
+ * their hob, and putting that work into one turn there under the dispatcher's claims. Routine
+ * progress rides along that turn as one digest, and never starts a turn on its own (IN-005).
  */
 export const ContinuationsLive = Layer.effect(
   Continuations,
@@ -24,31 +25,43 @@ export const ContinuationsLive = Layer.effect(
     const dispatcher = yield* Dispatcher;
     const host = yield* DispatcherHost;
 
-    /** Each open item that waits for a turn now, with the thread whose chat it continues. */
-    const routed = (scope: BackpackScope) =>
+    /**
+     * Each open item that waits for a turn now, with the thread whose next turn carries it. Routine
+     * progress is among them only with `routine`: it rides along a turn but never starts one.
+     */
+    const routed = (scope: BackpackScope, routine: boolean) =>
       Effect.gen(function* () {
         const now = DateTime.formatIso(yield* DateTime.now);
         const open = yield* backpack.listOpen(scope);
         const waiting = open.filter(
-          (item) => item.state === "pending" && item.actionable && (item.notBefore === null || item.notBefore <= now),
+          (item) =>
+            item.state === "pending" &&
+            (routine || item.actionable) &&
+            (item.notBefore === null || item.notBefore <= now),
         );
         return yield* Effect.forEach(waiting, (item) =>
           Effect.map(item.taskId === null ? Effect.succeed([]) : host.treeOf(item.taskId), (tree) => ({
             item,
-            threadId: continuationThread(item, tree),
+            threadId: carryingThread(item, tree),
           })),
         );
       });
 
     const waiting: Continuations["Service"]["waiting"] = (agentId) =>
-      Effect.map(routed(agentId === undefined ? { _tag: "Workspace" } : { _tag: "Hob", agentId }), (items) => [
+      Effect.map(routed(agentId === undefined ? { _tag: "Workspace" } : { _tag: "Hob", agentId }, false), (items) => [
         ...new Set(items.flatMap(({ threadId }) => (threadId === null ? [] : [threadId]))),
       ]);
+
+    const progressWaits: Continuations["Service"]["progressWaits"] = (threadId, agentId) =>
+      Effect.map(routed({ _tag: "Hob", agentId }, true), (items) =>
+        items.some(({ item, threadId: carried }) => !item.actionable && carried === threadId),
+      );
 
     const workOf = (deliveries: ReadonlyArray<Delivery>): CarriedWork => {
       const items: ReadonlyArray<BackpackItem> = deliveries.map((delivery) => delivery.item);
       return {
         text: (as) => arrivalsText(items, as),
+        routineOnly: !items.some((item) => item.actionable),
         holding: deliveries.map(({ item, held }) => ({ itemId: item.id, owner: held.owner, token: held.token })),
         // A claim lost meanwhile is found when the turn ends, which then drops its outcome.
         accepted: (sessionId) =>
@@ -62,13 +75,14 @@ export const ContinuationsLive = Layer.effect(
 
     const deliver: Continuations["Service"]["deliver"] = (threadId: ThreadId, agentId: AgentId, turn) =>
       Effect.gen(function* () {
-        const items = (yield* routed({ _tag: "Hob", agentId })).filter((each) => each.threadId === threadId);
+        const items = (yield* routed({ _tag: "Hob", agentId }, true)).filter((each) => each.threadId === threadId);
         if (items.length === 0) return false;
         let ran = false;
         yield* dispatcher.dispatchAll(
           items.map(({ item }) => item.id),
-          () =>
-            Effect.map(turn.plan, (replyId) =>
+          // Planned again after an early end, the turn sees only the items still waiting.
+          (found) =>
+            Effect.map(turn.plan(!found.some((item) => item.actionable)), (replyId) =>
               replyId === null
                 ? null
                 : {
@@ -86,7 +100,7 @@ export const ContinuationsLive = Layer.effect(
         return ran;
       });
 
-    return Continuations.of({ waiting, deliver });
+    return Continuations.of({ waiting, progressWaits, deliver });
   }),
 );
 

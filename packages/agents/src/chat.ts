@@ -797,12 +797,17 @@ export class ChatService extends Context.Service<
         Effect.gen(function* () {
           const ran = yield* service
             .deliver(threadId, agentId, {
-              plan: admission.withHob(
-                agentId,
-                Effect.map(workable(threadId), (found) =>
-                  found === null || holdBack.has(threadId) ? null : MessageId.make(crypto.randomUUID()),
+              // Routine progress alone starts no turn: it waits to ride along a message of yours.
+              plan: (routineOnly) =>
+                admission.withHob(
+                  agentId,
+                  Effect.gen(function* () {
+                    const found = yield* workable(threadId);
+                    if (found === null || holdBack.has(threadId)) return null;
+                    if (routineOnly && Option.isNone(yield* repo.nextQueuedMessage(threadId))) return null;
+                    return MessageId.make(crypto.randomUUID());
+                  }),
                 ),
-              ),
               run: (replyId, work) => carryingTurn(threadId, agentId, replyId, work),
             })
             .pipe(
@@ -837,6 +842,8 @@ export class ChatService extends Context.Service<
               if (found === null || holdBack.has(threadId)) return null;
               const queued = yield* startQueued(threadId, { ...start, context: work.text("context") });
               if (queued !== null) return queued.turn;
+              // The message it was to ride along is gone: routine progress waits for the next one.
+              if (work.routineOnly) return null;
               const continued = yield* beginTurn(found.thread, found.agent, work.text("prompt"), saveMessage, start);
               return continued?.turn ?? null;
             }),
@@ -904,11 +911,15 @@ export class ChatService extends Context.Service<
           );
         });
 
-      // Whether work you stopped in the thread still waits there, so your next message carries it.
-      const stoppedWorkWaits = (threadId: ThreadId, agentId: AgentId) =>
-        holdBack.has(threadId) && Option.isSome(continuations)
-          ? Effect.map(continuations.value.waiting(agentId), (threadIds) => threadIds.includes(threadId))
-          : Effect.succeed(false);
+      // Whether your next message carries work: work you stopped in the thread, or routine
+      // progress, which reaches the hob only as a digest along its next turn (IN-005).
+      const workRidesAlong = (threadId: ThreadId, agentId: AgentId) =>
+        Effect.gen(function* () {
+          if (Option.isNone(continuations)) return false;
+          const service = continuations.value;
+          if (holdBack.has(threadId) && (yield* service.waiting(agentId)).includes(threadId)) return true;
+          return yield* service.progressWaits(threadId, agentId);
+        });
 
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (threadId: ThreadId, content: string) {
         // The status check and the turn's registration happen under the hob's lock, so a turn is
@@ -922,8 +933,9 @@ export class ChatService extends Context.Service<
             // already waiting, so the thread's messages start in the order they were sent (CH-008).
             const waits =
               agent.status === "paused" || busy.has(threadId) || Option.isSome(yield* repo.nextQueuedMessage(threadId));
-            // Work you stopped here rides along: the message starts through the dispatcher, under its claims.
-            const carries = !waits && (yield* stoppedWorkWaits(threadId, agent.id));
+            // Work you stopped here, and routine progress, ride along: the message starts through the
+            // dispatcher, under their claims.
+            const carries = !waits && (yield* workRidesAlong(threadId, agent.id));
             const userMessage = new Message({
               id: MessageId.make(crypto.randomUUID()),
               threadId,

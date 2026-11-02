@@ -2,19 +2,25 @@ import type { BackpackItem, Task, ThreadId } from "@hobbots/domain";
 import { heldUnder } from "./dispatcher.ts";
 
 /**
- * The thread whose chat a backpack item continues (ADR 019), or null when it goes to another
- * session or wakes nobody. An item goes to the session that owns the Task its recipient holds it
- * under: for the Task you asked for, that is its thread, where its owner chats with you. A Task's
- * own item, and anything held under a step or a member's Task, goes to the session that works that
- * Task instead. Routine progress never wakes a hob (IN-005). An item outside any Task goes to its
- * thread. An item whose Task has ended still routes there, so the dispatcher can settle it as late.
+ * The thread whose next turn carries a backpack item (ADR 019), or null when it goes to another
+ * session. An item goes to the session that owns the Task its recipient holds it under: for the
+ * Task you asked for, that is its thread, where its owner chats with you. A Task's own item, and
+ * anything held under a step or a member's Task, goes to the session that works that Task instead.
+ * An item outside any Task goes to its thread. An item whose Task has ended still routes there, so
+ * the dispatcher can settle it as late.
  */
-export const continuationThread = (item: BackpackItem, tree: ReadonlyArray<Task>): ThreadId | null => {
-  if (!item.actionable) return null;
+export const carryingThread = (item: BackpackItem, tree: ReadonlyArray<Task>): ThreadId | null => {
   if (item.taskId === null) return item.threadId;
   const held = heldUnder(item, tree);
   return held !== undefined && held.parentId === null ? held.threadId : null;
 };
+
+/**
+ * The thread whose chat a backpack item continues: its carrying thread, for an actionable item.
+ * Routine progress never wakes a hob (IN-005); it rides along the thread's next turn instead.
+ */
+export const continuationThread = (item: BackpackItem, tree: ReadonlyArray<Task>): ThreadId | null =>
+  item.actionable ? carryingThread(item, tree) : null;
 
 const firstLine = (text: string) => text.split("\n", 1)[0]?.trim() ?? "";
 
@@ -57,24 +63,60 @@ const describeArrival = (item: BackpackItem): string => {
     case "task":
       return `${about(payload.task)} is yours to work on.`;
     case "progress":
-      return `Progress on Task ${payload.checkpoint.taskId}: ${payload.checkpoint.summary}`;
+      return progressDigest([item])[0] ?? "";
   }
+};
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+/**
+ * Routine progress folded into one digest (IN-005): a line per Task, in the order the Tasks first
+ * reported, with how many updates it sent and the latest of them. Thirty updates read as one
+ * summary, not thirty arrivals.
+ */
+const progressDigest = (items: ReadonlyArray<BackpackItem>): ReadonlyArray<string> => {
+  const byTask = new Map<string, { count: number; latest: string }>();
+  for (const item of [...items].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+    if (item.payload._tag !== "progress") continue;
+    const { taskId, summary } = item.payload.checkpoint;
+    byTask.set(taskId, { count: (byTask.get(taskId)?.count ?? 0) + 1, latest: summary });
+  }
+  return [...byTask].map(
+    ([taskId, { count, latest }]) => `Task ${taskId} sent ${plural(count, "update")}. The latest: ${latest}`,
+  );
+};
+
+/** The digest's own section of a turn's text, or nothing when no progress came. */
+const digestSection = (items: ReadonlyArray<BackpackItem>, alone: boolean): ReadonlyArray<string> => {
+  const lines = progressDigest(items);
+  if (lines.length === 0) return [];
+  const heading = `${alone ? "" : "\n"}Routine progress since your last turn, ${plural(items.length, "update")} in all. It needs no reply:`;
+  return [heading, ...lines.map((line) => `- ${line}`)];
 };
 
 /**
  * What a turn that carries backpack items is told (ADR 019). Hobbots writes it and says so, so the
  * hob never takes it for a message from you. As a continuation's prompt it asks the hob to act;
- * riding along a message of yours, it is context only, and your message comes first.
+ * riding along a message of yours, it is context only, and your message comes first. Routine
+ * progress is folded into one digest after the work that needs the hob.
  */
-export const arrivalsText = (items: ReadonlyArray<BackpackItem>, as: "prompt" | "context"): string =>
-  [
+export const arrivalsText = (items: ReadonlyArray<BackpackItem>, as: "prompt" | "context"): string => {
+  const work = items.filter((item) => item.actionable);
+  const progress = items.filter((item) => !item.actionable);
+  return [
     as === "prompt"
       ? "Hobbots wrote this, not the user. Work arrived for you while you were not running:"
-      : "Hobbots adds this, not the user. Work also arrived for you since your last turn:",
+      : work.length === 0
+        ? "Hobbots adds this, not the user."
+        : "Hobbots adds this, not the user. Work also arrived for you since your last turn:",
     "",
-    ...items.map((item) => `- ${describeArrival(item)}`),
+    ...work.map((item) => `- ${describeArrival(item)}`),
+    ...digestSection(progress, work.length === 0),
     "",
     as === "prompt"
       ? "Act on it now. When the Task you work on in this conversation is done, return its result with complete_task. Tell the user briefly what changed."
-      : "Answer the user's message first, then act on this work.",
+      : work.length === 0
+        ? "Answer the user's message. Use this progress only as context."
+        : "Answer the user's message first, then act on this work.",
   ].join("\n");
+};

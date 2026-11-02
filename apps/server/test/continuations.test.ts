@@ -17,8 +17,12 @@ import {
   ApprovalId,
   ApprovalRequest,
   type BackpackItem,
+  CheckpointId,
+  DEFAULT_QUEST_LIMITS,
+  DelegationId,
   Message,
   MessageId,
+  QuestId,
   TaskId,
   Thread,
   ThreadId,
@@ -453,5 +457,125 @@ describe("continuing a hob when work arrives", () => {
     expect(all[0]?.content).toContain("ended as failed.");
     const [settled] = await run(settledItems([failure.id]));
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
+  });
+});
+
+const SAM = AgentId.make("sam");
+
+/** Frodo and his thread, and Sam, who works a Task under Frodo's: stored before the hub starts. */
+const FrodoAndSam: Before = Layer.effectDiscard(
+  Effect.gen(function* () {
+    yield* Layer.build(Frodo).pipe(Effect.scoped);
+    yield* HobbotsRepository.use((repo) =>
+      repo.insertAgent(new Agent({ ...frodo, id: SAM, name: "Sam", roleTitle: "Gardener", lookSeed: 2 })),
+    );
+  }),
+);
+
+/** Frodo's Task, and Sam's Task under it: Sam's routine progress is Frodo's to hear. */
+const samsTask = Effect.gen(function* () {
+  const tasks = yield* TaskRepository;
+  const task = (id: string, ownerId: AgentId, parentId: string | null) => ({
+    id: TaskId.make(id),
+    ownerId,
+    parentId: parentId === null ? null : TaskId.make(parentId),
+    threadId,
+    brief: `Brief for ${id}`,
+    dependsOn: [],
+    createdAt: now,
+  });
+  const quest = yield* tasks.createTask({ task: task("quest", FRODO, null), delegation: null, milestones: [] });
+  yield* tasks.startQuest({
+    id: QuestId.make("supper"),
+    taskId: quest.value.id,
+    goal: "Supper on the road",
+    acceptance: [],
+    limits: DEFAULT_QUEST_LIMITS,
+    createdAt: now,
+  });
+  const delegation = {
+    id: DelegationId.make("d-cook"),
+    brief: "Cook the stew",
+    expectedOutput: null,
+    authority: { overrides: {}, folders: null },
+    timeoutMs: null,
+  };
+  return (yield* tasks.createTask({ task: task("cook", SAM, "quest"), delegation, milestones: [] })).value;
+});
+
+/** Sam reports `count` routine progress updates on his Task: returns the items they made for Frodo. */
+const reportProgress = (count: number) =>
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const items: Array<BackpackItem> = [];
+    for (let index = 1; index <= count; index++) {
+      const reported = yield* tasks.recordCheckpoint({
+        id: CheckpointId.make(`progress-${index}`),
+        taskId: TaskId.make("cook"),
+        source: "unplanned",
+        kind: "progress",
+        milestoneId: null,
+        summary: `Stirred ${index} times`,
+        createdAt: now,
+      });
+      for (const entry of reported.entries) {
+        if (entry.payload._tag === "BackpackItemRecorded") items.push(entry.payload.item);
+      }
+    }
+    return items;
+  });
+
+describe("coalescing routine progress", () => {
+  // covers IN-005
+  it("[TC-OR-100] thirty progress updates start no turn, and reach the lead as one digest in the continuation work starts", async () => {
+    const { run, requests } = setUp(FrodoAndSam);
+    const cook = await run(samsTask);
+    const progress = await run(reportProgress(30));
+    expect(progress).toHaveLength(30);
+    expect(progress.every((item) => item.recipientId === FRODO && !item.actionable)).toBe(true);
+
+    // Even woken, Frodo's thread starts nothing for progress alone: it waits, pending.
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(retry(Effect.suspend(() => (dispatches > 0 ? Effect.void : Effect.fail("not yet" as const)))));
+    await run(Effect.sleep("150 millis"));
+    expect(await run(messages())).toEqual([]);
+    expect((await run(itemsOf(progress.map((item) => item.id)))).every((item) => item.state === "pending")).toBe(true);
+
+    // Sam's Task fails: that is actionable, and starts one continuation carrying the progress too.
+    await run(TaskRepository.use((tasks) => tasks.moveTask(cook.id, cook.revision, "failed", now)));
+    // A repository write here announces nothing, so the test wakes the thread as its announcement would.
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    const all = await run(messagesWhen((each) => each.length === 1));
+    expect(all[0]?.content).toContain("ended as failed.");
+    const asked = requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"));
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.prompt).toContain("Routine progress since your last turn, 30 updates in all.");
+    expect(asked[0]?.prompt).toContain("- Task cook sent 30 updates. The latest: Stirred 30 times");
+    expect(asked[0]?.prompt).not.toContain("Stirred 29 times");
+
+    // The one turn consumed every update along with the Failure.
+    const settled = await run(settledItems(progress.map((item) => item.id)));
+    expect(settled.every((item) => item.disposition?._tag === "consumed")).toBe(true);
+    await run(Effect.sleep("150 millis"));
+    expect(requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"))).toHaveLength(1);
+  }, 10_000);
+
+  // covers IN-005, CH-008
+  it("[TC-OR-101] progress that piled up rides along your next message as one digest, and that turn consumes it", async () => {
+    const { run, requests } = setUp(FrodoAndSam);
+    await run(samsTask);
+    const progress = await run(reportProgress(3));
+
+    const sent = await run(ChatService.use((chat) => chat.sendPrompt(threadId, "How is Sam doing?")));
+    // It starts through the dispatcher, which puts the progress into its turn.
+    expect(sent.assistantMessage).toBeNull();
+    const all = await run(messagesWhen((each) => each.length === 2));
+    expect(all.map((m) => m.role)).toEqual(["user", "assistant"]);
+    const answered = requests.find((request) => request.prompt === "How is Sam doing?");
+    expect(answered?.briefing).toContain("Routine progress since your last turn, 3 updates in all.");
+    expect(answered?.briefing).toContain("Use this progress only as context.");
+    expect(requests.some((request) => request.prompt.startsWith("Hobbots wrote this"))).toBe(false);
+    const settled = await run(settledItems(progress.map((item) => item.id)));
+    expect(settled.map((item) => item.disposition)).toEqual(progress.map(() => ({ _tag: "consumed", by: all[1]?.id })));
   });
 });

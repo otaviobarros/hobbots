@@ -1,5 +1,5 @@
 export { Backpack, type BackpackScope, type HeldClaim } from "./backpack.ts";
-export { arrivalsText, continuationThread } from "./continuations.ts";
+export { arrivalsText, carryingThread, continuationThread } from "./continuations.ts";
 export {
   BackpackTurnFailed,
   type BatchTurn,
