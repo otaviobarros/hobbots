@@ -19,6 +19,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   approvalNote,
+  type HubTools,
   operationDecision,
   type PromptRequest,
   type Redactor,
@@ -32,6 +33,7 @@ import {
   UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
+  GITHUB_PUSH_TOOL,
   policySandbox,
   type RuntimeEnforcement,
   RuntimeHealth,
@@ -611,13 +613,19 @@ export interface ToolTurn {
   readonly tools: ReadonlyArray<string>;
   /** Claude Code's configuration folder for this hob. */
   readonly runtimeFolder: string;
+  /** The hub tool a `git push` command is pointed to, when the turn offers it (ADR 020). */
+  readonly pushTool?: string;
 }
 
 /**
  * The turn's tools, or null for a chat-only turn: no access, no folder that exists, reading the
  * folders denied (Claude Code cannot start in a folder it cannot read), or no tool open.
  */
-export const toolTurn = (access: ToolAccess | null | undefined, sandbox: SandboxState): ToolTurn | null => {
+export const toolTurn = (
+  access: ToolAccess | null | undefined,
+  sandbox: SandboxState,
+  hubTools?: HubTools | null,
+): ToolTurn | null => {
   if (!access) return null;
   const folders = [
     ...new Set(
@@ -634,7 +642,15 @@ export const toolTurn = (access: ToolAccess | null | undefined, sandbox: Sandbox
   const context: PolicyContext = { ...access.policy, sandbox, modelHosts: CLAUDE_CODE_MODEL_HOSTS };
   if (operationDecision(context, "read-files") === "deny") return null;
   const tools = offeredTools(context);
-  return tools.length === 0 ? null : { context, folders, tools, runtimeFolder: access.runtimeFolder };
+  if (tools.length === 0) return null;
+  const pushes = hubTools?.tools.some((tool) => tool.name === GITHUB_PUSH_TOOL) === true;
+  return {
+    context,
+    folders,
+    tools,
+    runtimeFolder: access.runtimeFolder,
+    ...(pushes ? { pushTool: GITHUB_PUSH_TOOL } : {}),
+  };
 };
 
 /**
@@ -702,9 +718,9 @@ export const policyHooks = (
     const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
-    const decision = await Effect.runPromise(decideCall(engine, turn.context, null, call, report, redaction)).catch(
-      () => failed(tool),
-    );
+    const decision = await Effect.runPromise(
+      decideCall(engine, turn.context, null, call, report, redaction, turn.pushTool),
+    ).catch(() => failed(tool));
     if (decision._tag === "Run") {
       if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
         const reason = refuse(call.id, tool, toolInput, unrecorded(decision));
@@ -773,9 +789,12 @@ export const policyHooks = (
     }
     const call = { id: options.toolUseID, tool, input, cwd: hooked?.cwd ?? (turn.folders[0] as string) };
     // An aborted call stops waiting, which expires its request.
-    const decision = await Effect.runPromise(decideCall(engine, turn.context, approvals, call, report, redaction), {
-      signal: options.signal,
-    }).catch(() => failed(tool));
+    const decision = await Effect.runPromise(
+      decideCall(engine, turn.context, approvals, call, report, redaction, turn.pushTool),
+      {
+        signal: options.signal,
+      },
+    ).catch(() => failed(tool));
     if (decision._tag === "Run") {
       // A call the hook allowed was recorded then.
       if (started.has(call.id) || (await begin(call.id, tool, input, decision.verdict))) {
@@ -911,7 +930,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const binary = yield* executable;
           // Tools are decided as if the sandbox were missing until it is verified here (ADR 014), but a
           // sandbox that starts still wraps the runtime.
-          const tools = toolTurn(request.tools, policySandbox(declared));
+          const tools = toolTurn(request.tools, policySandbox(declared), request.hubTools);
           const sandboxed = tools !== null && sandbox.state === "on";
           const instructions = turnInstructions(
             request.instructions,

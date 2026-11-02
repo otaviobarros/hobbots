@@ -33,7 +33,6 @@ import { type FakeGitHubGit, startFakeGitHubGit } from "./fake-github-git.ts";
 import { directSandbox, fixedToken, memoryCharmCalls } from "./support.ts";
 
 const TOKEN = "ghu_pushtoken0123456789abcdefghijklmnopqrstuv";
-const OCTO: GitHubRepository = { owner: "octo", name: "app" };
 
 let root = "";
 let github: FakeGitHubGit;
@@ -424,7 +423,7 @@ describe("the GitHub Charm's Push", () => {
     await Effect.gen(function* () {
       yield* CharmTools;
       yield* Effect.sleep("500 millis");
-    }).pipe(Effect.provide(charmLayer(folder, OCTO, rows)), Effect.runPromise);
+    }).pipe(Effect.provide(charmLayer(folder, repository, rows)), Effect.runPromise);
     expect([...rows.values()].map((r) => [r.key, r.state, r.result])).toEqual([
       ["found", "applied", "Pushed."],
       ["missing", "uncertain", "The hub stopped while this call was being sent."],

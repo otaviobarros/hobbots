@@ -40,6 +40,18 @@ export interface ToolCall {
   readonly cwd: string;
 }
 
+/** Whether a call pushes with Git, as the hub reads its command. */
+const pushes = (call: ToolCall) =>
+  (toolRequests(call.tool, call.input, call.cwd) ?? []).some((request) => request._tag === "Push");
+
+/**
+ * Why a `git push` command is refused when the turn offers the GitHub Charm's push (ADR 020): in any
+ * preset, since the Charm pushes with the user's sign-in under the hob's policy, and Git in the
+ * sandbox cannot.
+ */
+export const steerPush = (tool: string) =>
+  `Push with the ${tool} tool instead of git push: Hobbots pushes your branch to GitHub for you, as the user and under your policy. A git push from your sandbox cannot sign in.`;
+
 /** Whether a call runs, and the verdict it runs under or why it does not. */
 export type CallDecision = AskedDecision<PolicyVerdict>;
 
@@ -74,16 +86,20 @@ export const decideCall = (
   call: ToolCall,
   report: (event: RuntimeEvent) => void,
   redaction?: Redactor | null,
+  pushTool?: string,
 ): Effect.Effect<CallDecision> =>
-  askUntilDecided({
-    call: {
-      id: call.id,
-      tool: call.tool,
-      arguments: call.input,
-      label: toolLabel(call.tool, call.input, redaction?.text),
-    },
-    approvals,
-    decide: (access) => decideIn(engine, access === null ? context : { ...context, ...access.policy }, approvals, call),
-    report,
-    unknown: UNKNOWN_TOOL(call.tool),
-  });
+  pushTool !== undefined && pushes(call)
+    ? Effect.succeed({ _tag: "Refuse", verdict: undefined, reason: steerPush(pushTool) })
+    : askUntilDecided({
+        call: {
+          id: call.id,
+          tool: call.tool,
+          arguments: call.input,
+          label: toolLabel(call.tool, call.input, redaction?.text),
+        },
+        approvals,
+        decide: (access) =>
+          decideIn(engine, access === null ? context : { ...context, ...access.policy }, approvals, call),
+        report,
+        unknown: UNKNOWN_TOOL(call.tool),
+      });

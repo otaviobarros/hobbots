@@ -151,7 +151,7 @@ export const scriptedToolEvents = (
   sandbox: "on" | "unavailable" = "on",
 ): Stream.Stream<RuntimeEvent> => {
   // Commands are decided as on a hub where the sandbox started, or where it cannot start.
-  const turn = engine ? toolTurn(request.tools, sandbox) : null;
+  const turn = engine ? toolTurn(request.tools, sandbox, request.hubTools) : null;
   if (engine === undefined || turn === null) return Stream.empty;
   const calls = request.prompt
     .split("\n")
@@ -182,6 +182,7 @@ export const scriptedToolEvents = (
             call,
             (event) => Queue.offerUnsafe(queue, event),
             request.redaction,
+            turn.pushTool,
           );
           const label = toolLabel(call.tool, call.input, request.redaction?.text);
           const ran =
