@@ -23,7 +23,7 @@ const finishSetup = async (current: Hub) => {
 };
 
 // covers DP-004
-test("[TC-DP-100] a browser waits with a code, and after Allow on an approved device it works without asking again", async ({
+test("[TC-DP-115] a browser waits with a code, and after Allow on an approved device it works without asking again", async ({
   page,
   browser,
 }) => {
@@ -63,7 +63,7 @@ test("[TC-DP-100] a browser waits with a code, and after Allow on an approved de
 });
 
 // covers DP-004
-test("[TC-DP-101] a denied browser is told so and can ask again later", async ({ page, browser }) => {
+test("[TC-DP-116] a denied browser is told so and can ask again later", async ({ page, browser }) => {
   const current = await startHub(dataDir);
   hub = current;
   await finishSetup(current);
@@ -84,5 +84,50 @@ test("[TC-DP-101] a denied browser is told so and can ask again later", async ({
   await expect(newcomer.getByRole("heading", { name: "Too many requests" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("region", { name: /asks to use Hobbots$/ })).toHaveCount(0);
+  await stranger.close();
+});
+
+// The hub's own window, as the desktop app's preload names it.
+const asDesktop = () => {
+  (window as unknown as Record<string, unknown>).hobbots = { onOpenRequest: () => () => undefined };
+};
+
+// covers DP-004
+test("[TC-DP-122] the prompt over the hub's window keeps the keyboard inside it until it is answered", async ({
+  page,
+  browser,
+}) => {
+  const current = await startHub(dataDir);
+  hub = current;
+  await finishSetup(current);
+  await page.addInitScript(asDesktop);
+  await page.goto(`${current.url}/#/inbox`);
+  await expect(page.getByRole("navigation")).toBeVisible();
+
+  const stranger = await browser.newContext();
+  const newcomer = await stranger.newPage();
+  await newcomer.goto(current.url);
+  await newcomer.getByLabel("Name this device").fill("Kitchen laptop");
+  await newcomer.getByRole("button", { name: "Ask for access" }).click();
+
+  const prompt = page.getByRole("dialog", { name: "Kitchen laptop wants to use Hobbots" });
+  await expect(prompt).toBeVisible();
+  await expect(prompt.getByRole("heading", { name: "Kitchen laptop wants to use Hobbots" })).toBeFocused();
+  // Tab and Shift+Tab go round the prompt's own buttons, never to the page behind it.
+  const insidePrompt = () =>
+    page.evaluate(() => document.querySelector('[role="dialog"]')?.contains(document.activeElement) ?? false);
+  for (const key of ["Tab", "Tab", "Tab", "Tab", "Shift+Tab", "Shift+Tab", "Shift+Tab", "Shift+Tab"]) {
+    await page.keyboard.press(key);
+    expect(await insidePrompt()).toBe(true);
+  }
+  // Escape does not answer for the user.
+  await page.keyboard.press("Escape");
+  await expect(prompt).toBeVisible();
+
+  await prompt.getByRole("button", { name: "Allow", exact: true }).click();
+  const answered = page.getByRole("dialog", { name: "Kitchen laptop can use Hobbots now" });
+  await expect(answered.getByRole("button", { name: "Done" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await stranger.close();
 });

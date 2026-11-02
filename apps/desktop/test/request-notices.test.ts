@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { followHub } from "../src/main/hub-events.ts";
 import { deviceNotices, requestNotices } from "../src/main/request-notices.ts";
 import {
@@ -197,7 +197,7 @@ const asking = (id: string, state = "pending", minutes = 10) => ({
 
 describe("device notifications", () => {
   // covers DP-004
-  it("[TC-DP-096] announces a device asking to pair with its code, and closes it once the device was answered", async () => {
+  it("[TC-DP-111] announces a device asking to pair with its code, and closes it once the device was answered", async () => {
     let waiting: Array<unknown> = [];
     const notices: Array<{ title: string; body: string; closed: boolean; click: () => void }> = [];
     const opened: Array<string> = [];
@@ -234,11 +234,51 @@ describe("device notifications", () => {
 
   it("reads only devices still prompted, and keeps a long name within what macOS shows", () => {
     expect(devicePairings([asking("a"), asking("b", "denied"), asking("c", "pending", 60), { request: null }])).toEqual(
-      [{ id: "a", name: "Safari on iPhone", code: "482913" }],
+      [{ id: "a", name: "Safari on iPhone", code: "482913", expiresAt: "2026-11-02T10:10:00.000Z" }],
     );
     expect(devicePairings({ error: "nope" })).toBeNull();
-    const { title, body } = deviceNoticeText({ id: "a", name: "é".repeat(300), code: "482913" });
+    const { title, body } = deviceNoticeText({
+      id: "a",
+      name: "é".repeat(300),
+      code: "482913",
+      expiresAt: "2026-11-02T10:10:00.000Z",
+    });
     expect(new TextEncoder().encode(title + body).length).toBeLessThanOrEqual(256);
     expect(title).toContain("…");
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // covers DP-004
+  it("[TC-DP-119] closes a device's notification once its request runs out, with no event to say so", async () => {
+    vi.useFakeTimers({ now: Date.parse("2026-11-02T10:00:00.000Z") });
+    const all = [asking("p1")];
+    // The hub lists only requests that have not run out.
+    const waiting = () => all.filter((item) => Date.parse(item.request.expiresAt) > Date.now());
+    const notices: Array<{ closed: boolean }> = [];
+    let reads = 0;
+    const { check } = deviceNotices({
+      read: async () => {
+        reads += 1;
+        return reads === 1 ? [] : waiting();
+      },
+      isFocused: () => false,
+      notify: () => {
+        const notice = { closed: false };
+        notices.push(notice);
+        return {
+          close: () => {
+            notice.closed = true;
+          },
+        };
+      },
+      open: () => undefined,
+    });
+    await check();
+    await check();
+    expect(notices).toEqual([{ closed: false }]);
+    await vi.advanceTimersByTimeAsync(10 * 60_000 + 1000);
+    expect(notices).toEqual([{ closed: true }]);
   });
 });

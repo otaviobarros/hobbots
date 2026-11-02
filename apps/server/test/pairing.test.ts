@@ -201,4 +201,44 @@ describe("pairing a device", () => {
     expect(failureTag(result.anonymous)).toBe("PairingThrottled");
     expect(failureTag(result.local)).toBe("Success");
   });
+  // covers DP-004
+  it("[TC-DP-117] a secret that names no request from here counts against the node's limit like no secret at all", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const devices = yield* DeviceService;
+        const opened = yield* ask(PHONE);
+        const tv = tailnet(node("nTV"));
+        // Malformed, unknown, and another node's secret: 60 of them use up a minute's requests.
+        const guesses = ["", "hbp_invalid", `${opened.secret}x`, opened.secret];
+        const tries = yield* Effect.forEach(Array.from({ length: 60 }), (_, index) =>
+          Effect.exit(devices.pairingStatus(guesses[index % guesses.length] ?? "", tv)),
+        );
+        const overLimit = yield* Effect.exit(devices.pairingStatus("hbp_invalid", tv));
+        // The phone's own secret is spared: it was never counted.
+        const own = yield* Effect.exit(devices.pairingStatus(opened.secret, PHONE));
+        return { tries, overLimit, own };
+      }),
+    );
+    expect(new Set(result.tries.map(failureTag))).toEqual(new Set(["PairingNotFound"]));
+    expect(failureTag(result.overLimit)).toBe("PairingThrottled");
+    expect(failureTag(result.own)).toBe("Success");
+  });
+
+  // covers DP-004
+  it("[TC-DP-118] devices asking at the same moment cannot pass a node's three open requests together", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const devices = yield* DeviceService;
+        yield* ask(PHONE);
+        yield* ask(PHONE);
+        const together = yield* Effect.all(
+          Array.from({ length: 4 }, () => Effect.exit(ask(PHONE))),
+          { concurrency: "unbounded" },
+        );
+        return { together, open: yield* devices.listOpenPairing(HUB) };
+      }),
+    );
+    expect(result.together.filter((exit) => Exit.isSuccess(exit))).toHaveLength(1);
+    expect(result.open).toHaveLength(3);
+  });
 });

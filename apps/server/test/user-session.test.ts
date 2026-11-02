@@ -362,7 +362,7 @@ describe("only approved devices reach the hub", () => {
   });
 
   // covers DP-004
-  it("[TC-DP-095] Deny turns a browser away with Retry-After on its next ask, and Decide later keeps it waiting", async () => {
+  it("[TC-DP-110] Deny turns a browser away with Retry-After on its next ask, and Decide later keeps it waiting", async () => {
     const ask = (caller: Caller) =>
       send({ origin: OWN_ORIGIN, ...caller }, "POST", "/api/pairing", {
         name: "Firefox",

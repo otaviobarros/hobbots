@@ -34,7 +34,16 @@ interface NoticeSource<P extends { readonly id: string }> {
   readonly pending: (body: unknown) => ReadonlyArray<P> | null;
   /** The notifications for new items, in their order. */
   readonly texts: (items: ReadonlyArray<P>) => Promise<ReadonlyArray<{ title: string; body: string }>>;
+  /** When an item runs out on its own, with no event to say so: the list is read again then. */
+  readonly expiresAt?: (item: P) => string;
 }
+
+/** How long until a moment after the first item runs out, or undefined when none does. */
+const untilFirstExpiry = <P>(items: ReadonlyArray<P>, expiresAt: ((item: P) => string) | undefined) => {
+  if (expiresAt === undefined || items.length === 0) return undefined;
+  const first = Math.min(...items.map((item) => Date.parse(expiresAt(item))));
+  return Math.max(1000, first - Date.now() + 500);
+};
 
 /**
  * Notifies the user of new items of one kind from the main process, comparing each read with what
@@ -47,6 +56,7 @@ const makeNotices = <P extends { readonly id: string }>(
 ) => {
   let state: NoticeState = { known: undefined, shown: new Set() };
   const shown = new Map<string, ShownNotice>();
+  let expiry: ReturnType<typeof setTimeout> | undefined;
 
   const reconcile = async () => {
     // A read that did not answer is made again until one does, since no later event may come. Until
@@ -70,6 +80,10 @@ const makeNotices = <P extends { readonly id: string }>(
       });
     }
     state = { known: changes.known, shown: new Set(shown.keys()) };
+    // An item that runs out sends no event, so its notification closes when the list is read then.
+    clearTimeout(expiry);
+    const wait = untilFirstExpiry(pending, source.expiresAt);
+    if (wait !== undefined) expiry = setTimeout(() => void check(), wait);
   };
 
   /**
@@ -116,4 +130,5 @@ export const deviceNotices = (options: RequestNoticesOptions) =>
     path: "/api/pairing/requests",
     pending: devicePairings,
     texts: async (devices) => devices.map(deviceNoticeText),
+    expiresAt: (device) => device.expiresAt,
   });

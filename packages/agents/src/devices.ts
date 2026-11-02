@@ -25,7 +25,7 @@ import {
   WINDOW_DEVICE_ID,
   WINDOW_KEY_PREFIX,
 } from "@hobbots/domain";
-import { Clock, Context, DateTime, Duration, Effect, Layer, Option } from "effect";
+import { Clock, Context, DateTime, Duration, Effect, Layer, Option, Semaphore } from "effect";
 import { EventPublisher } from "./ports.ts";
 
 /**
@@ -217,7 +217,8 @@ export class DeviceService extends Context.Service<
     ) => Effect.Effect<{ readonly status: PairingStatus; readonly secret: string }, PairingRefused | PairingThrottled>;
     /**
      * Where the request the secret names stands, from where it was opened. Once allowed, the first
-     * call hands out the device token and the secret stops working.
+     * call hands out the device token and the secret stops working. A secret that names no request
+     * from `place` counts against the node's limit like any request without a device.
      */
     readonly pairingStatus: (
       secret: string,
@@ -261,6 +262,9 @@ export class DeviceService extends Context.Service<
         limiter.consume(key, limit, Duration.fromInputUnsafe(window));
       yield* repo.ensureWindow(yield* nowIso);
       const windowDevice = Option.getOrThrow(yield* repo.find(WINDOW_DEVICE_ID));
+      // Opening is one step at a time, so the open-request limits are checked against the requests
+      // already saved: two devices asking at once cannot both pass with the last free place.
+      const opening = yield* Semaphore.make(1);
       // When each device's last activity was written, so it is written at most once a minute.
       const touched = new Map<DeviceId, number>();
 
@@ -335,11 +339,19 @@ export class DeviceService extends Context.Service<
           }
           const name = deviceName(payload.name);
           if (name === "") return yield* new PairingRefused({ reason: "name" });
-          yield* checkLimits(limitKey(place), yield* repo.listOpenPairing(at));
+          return yield* Semaphore.withPermit(opening, create(name, payload, place, now));
+        });
+
+      // Checks the limits against the requests saved now and saves the new one, under `opening`.
+      const create = (name: string, payload: OpenPairingPayload, place: DevicePlace, now: DateTime.Utc) =>
+        Effect.gen(function* () {
+          const at = DateTime.formatIso(now);
+          const open = yield* repo.listOpenPairing(at);
+          yield* checkLimits(limitKey(place), open);
           const secret = yield* secrets.generate(PAIRING_SECRET_PREFIX);
           const request = new PairingRequest({
             id: crypto.randomUUID(),
-            code: yield* uniqueCode(yield* repo.listOpenPairing(at)),
+            code: yield* uniqueCode(open),
             name,
             kind: payload.kind,
             platform: deviceName(payload.platform),
@@ -354,14 +366,21 @@ export class DeviceService extends Context.Service<
           return { status: statusOf(opened, at), secret };
         });
 
+      const throttleAnonymous = (place: DevicePlace) =>
+        place._tag === "Local"
+          ? Effect.void
+          : consume(`pairing:anonymous:${limitKey(place)}`, PAIRING_LIMITS.anonymousPerMinute, "1 minute");
+
       const pairingStatus = (secret: string, place: DevicePlace) =>
         Effect.gen(function* () {
           const missing = new PairingNotFound();
-          if (!secret.startsWith(PAIRING_SECRET_PREFIX)) return yield* missing;
+          // A missing, malformed, unknown or misplaced secret is a request without a device, so it counts
+          // against the node's limit; only a secret that names a request from here is spared (ADR 021).
+          const unknown = Effect.andThen(throttleAnonymous(place), Effect.fail(missing));
+          if (!secret.startsWith(PAIRING_SECRET_PREFIX)) return yield* unknown;
           const found = yield* repo.findPairingBySecret(yield* secrets.hash(secret));
-          // A secret from another place is refused like an unknown one.
           if (Option.isNone(found) || !samePlace(found.value.tailscale?.nodeId ?? null, place)) {
-            return yield* missing;
+            return yield* unknown;
           }
           const request = found.value;
           const now = yield* nowIso;
@@ -428,11 +447,6 @@ export class DeviceService extends Context.Service<
           }
           return yield* announce(saved.value);
         });
-
-      const throttleAnonymous = (place: DevicePlace) =>
-        place._tag === "Local"
-          ? Effect.void
-          : consume(`pairing:anonymous:${limitKey(place)}`, PAIRING_LIMITS.anonymousPerMinute, "1 minute");
 
       return DeviceService.of({
         authenticate,

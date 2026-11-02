@@ -97,6 +97,8 @@ export interface PendingDevice {
   readonly id: string;
   readonly name: string;
   readonly code: string;
+  /** When the request runs out, so its notification closes then. */
+  readonly expiresAt: string;
 }
 
 /**
@@ -112,7 +114,7 @@ export const devicePairings = (body: unknown): ReadonlyArray<PendingDevice> | nu
     if (typeof id !== "string" || typeof name !== "string" || typeof code !== "string") return [];
     if (typeof createdAt !== "string" || typeof expiresAt !== "string") return [];
     if (pairingDeferred({ createdAt, expiresAt })) return [];
-    return [{ id, name, code }];
+    return [{ id, name, code, expiresAt }];
   });
 };
 

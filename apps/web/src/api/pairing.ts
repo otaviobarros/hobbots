@@ -10,11 +10,23 @@ import { followsEvents } from "./queries.ts";
  */
 const waitingKey = ["pairing", "waiting"] as const;
 
+/**
+ * When the list is read again because a request in it runs out: no event says so, and an expired
+ * request can no longer be answered. A moment after the first one expires; never while none waits.
+ */
+export const untilFirstExpiry = (waiting: ReadonlyArray<WaitingDevice> | undefined, now: number): number | false => {
+  if (waiting === undefined || waiting.length === 0) return false;
+  const first = Math.min(...waiting.map((device) => Date.parse(device.request.expiresAt)));
+  return Math.max(1000, first - now + 500);
+};
+
 /** Every device waiting for an answer, deferred ones included, oldest first. */
 export const waitingDevicesQuery = queryOptions({
   queryKey: waitingKey,
   queryFn: () => call((c) => c.pairingRequests.list()),
   ...followsEvents,
+  refetchInterval: (query) => untilFirstExpiry(query.state.data, Date.now()),
+  refetchIntervalInBackground: true,
 });
 
 /** A device asked, or its request changed: the list is read again, as the hub decides who is listed. */
@@ -46,11 +58,21 @@ export const useDecidePairing = (request: PairingRequest) => {
 /** What the waiting screen shows: not asked yet, waiting, or how the request ended. */
 export type WaitingState =
   | { readonly _tag: "Ask" }
-  | { readonly _tag: "Waiting"; readonly status: PairingStatus }
+  | {
+      readonly _tag: "Waiting";
+      readonly status: PairingStatus;
+      /** Set when the hub asked this page to wait before checking again, in whole seconds. */
+      readonly retryAfterSeconds?: number;
+    }
   | { readonly _tag: "Allowed" }
   | { readonly _tag: "Denied" }
   | { readonly _tag: "Expired" }
-  | { readonly _tag: "Throttled"; readonly seconds: number }
+  | {
+      readonly _tag: "Throttled";
+      readonly seconds: number;
+      /** Whether the screen checks again by itself once the wait is over: so after a status check, not an ask. */
+      readonly checksAgain?: boolean;
+    }
   | { readonly _tag: "NotYours" };
 
 /** The waiting screen's state for a status the hub answered. */
@@ -81,14 +103,23 @@ export const refusedState = (error: unknown): WaitingState | undefined => {
 
 /**
  * Where this browser's request stands. With no request, or one whose secret no longer answers, it
- * has not asked yet. The hub hands the token over as a cookie the page never sees.
+ * has not asked yet. The hub hands the token over as a cookie the page never sees. A check the hub
+ * turns away for now, such as from a second tab, keeps the request this page was waiting on and
+ * checks again once the hub says it may.
  */
-const readPairing = async (): Promise<WaitingState> => {
+export const readPairing = async (
+  previous: WaitingState | undefined,
+  read: () => Promise<PairingStatus> = () => call((c) => c.pairing.status()),
+): Promise<WaitingState> => {
   try {
-    return waitingState(await call((c) => c.pairing.status()));
+    return waitingState(await read());
   } catch (error) {
     if (error instanceof ApiError && error.tag === "PairingNotFound") return { _tag: "Ask" };
     const refused = refusedState(error);
+    if (refused?._tag === "Throttled") {
+      if (previous?._tag === "Waiting") return { ...previous, retryAfterSeconds: refused.seconds };
+      return { ...refused, checksAgain: true };
+    }
     if (refused !== undefined) return refused;
     throw error;
   }
@@ -111,15 +142,22 @@ const statusKey = ["pairing", "status"] as const;
 /** Every two seconds, as ADR 021 has a waiting device ask. */
 const POLL_MS = 2000;
 
+/** When the screen checks again: every two seconds while it waits, later when the hub asked it to wait. */
+export const nextCheckMs = (state: WaitingState | undefined): number | false => {
+  if (state?._tag === "Waiting") return Math.max(POLL_MS, (state.retryAfterSeconds ?? 0) * 1000);
+  if (state?._tag === "Throttled" && state.checksAgain === true) return state.seconds * 1000;
+  return false;
+};
+
 /**
- * Where this browser's request stands, asked again every two seconds while it waits, so the screen
- * moves on by itself once the hub answers.
+ * Where this browser's request stands, asked again while it waits, so the screen moves on by
+ * itself once the hub answers.
  */
 export const pairingStatusQuery = queryOptions({
   queryKey: statusKey,
-  queryFn: readPairing,
+  queryFn: ({ client }) => readPairing(client.getQueryData<WaitingState>(statusKey)),
   staleTime: 0,
-  refetchInterval: (query) => (query.state.data?._tag === "Waiting" ? POLL_MS : false),
+  refetchInterval: (query) => nextCheckMs(query.state.data),
 });
 
 /** Asks, or asks again, and shows what the hub answered. */

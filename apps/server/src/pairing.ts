@@ -100,8 +100,6 @@ export const PairingHandlers = HttpApiBuilder.group(HobbotsApi, "pairing", (hand
           const { secret, viaCookie } = yield* presentedSecret;
           if (viaCookie && foreignOrigin(request) !== null) return yield* foreign;
           const place = yield* placeOrMissing(request);
-          // Without a secret, the check counts against the node's limit like any request without a device.
-          if (secret === "") yield* devices.throttleAnonymous(place);
           const status = yield* devices.pairingStatus(secret, place);
           if (status.token === undefined || !viaCookie) return status;
           // A browser takes its token as the device cookie, never in the body, and drops the pairing secret.
