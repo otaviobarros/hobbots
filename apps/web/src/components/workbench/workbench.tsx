@@ -189,7 +189,7 @@ function Bench({
                 onRetry={() => void read.refetch()}
               />
               {tab !== "browser" && states[tab].kind !== "not-used" && (
-                <Panel tab={tab} props={{ ...shared, state: states[tab] }} />
+                <Panel tab={tab} props={{ ...shared, state: states[tab], focus: on ? view.file : undefined }} />
               )}
             </div>
           );

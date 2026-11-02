@@ -190,7 +190,7 @@ const archivedThreadsRoute = createRoute({
 
 // `?message=` names a message to scroll to, as a search result does; `?task=` a Task to open in
 // the drawer beside the chat; `?bench=` a Task whose Workbench shows in the chat's place, with its
-// `tab`, `attempt` and `chat` when its chat drawer is open (ADR 023).
+// `tab`, `attempt`, the `file` a tab shows first and `chat` when its chat drawer is open (ADR 023).
 const threadRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId/threads/$threadId",
@@ -202,6 +202,7 @@ const threadRoute = createRoute({
     bench: typeof search.bench === "string" ? search.bench : undefined,
     tab: isWorkbenchTab(search.tab) ? search.tab : undefined,
     attempt: typeof search.attempt === "string" ? search.attempt : undefined,
+    file: typeof search.file === "string" ? search.file : undefined,
     chat: search.chat === "open" ? "open" : undefined,
   }),
   beforeLoad: ({ params }) => {
@@ -210,7 +211,7 @@ const threadRoute = createRoute({
   },
   component: function ThreadPage() {
     const params = threadRoute.useParams();
-    const { message, task, bench, tab, attempt, chat } = threadRoute.useSearch();
+    const { message, task, bench, tab, attempt, file, chat } = threadRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
@@ -224,6 +225,7 @@ const threadRoute = createRoute({
                 taskId: TaskId.make(bench),
                 tab: tab ?? "summary",
                 attemptId: attempt === undefined ? undefined : AttemptId.make(attempt),
+                file,
                 from: task === bench ? "drawer" : "chat",
                 chatOpen: chat === "open",
               }
