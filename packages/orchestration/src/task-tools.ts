@@ -11,6 +11,7 @@ import {
 } from "@hobbots/agents";
 import {
   type AttemptId,
+  type CarriedItem,
   type EventEnvelope,
   isTaskToolName,
   stableJson,
@@ -52,13 +53,16 @@ const COULD_NOT_RECORD = "Hobbots could not record this call, so it did not happ
  */
 interface CallSource {
   readonly turn: Record<string, string>;
+  /** The backpack claims the turn holds, which fence each of its calls (ADR 019). */
+  readonly fence: ReadonlyArray<CarriedItem>;
   readonly resolve: (name: TaskToolName, at: string) => Effect.Effect<ResolvedCaller, TaskToolRefused>;
 }
 
 /**
  * The Hobbots tools for Tasks and Quests (ADR 018). Every call is checked by the hub: who may make
  * it, depth, open-Task limits, cycles and authority. A refused call writes nothing and says why;
- * a call with a key already used returns its first result.
+ * a call with a key already used returns its first result. A turn that carries backpack items
+ * under claims is fenced by them: once any claim is lost, its calls are refused (ADR 019).
  */
 export class TaskTools extends Context.Service<
   TaskTools,
@@ -140,7 +144,7 @@ export class TaskTools extends Context.Service<
             // Set inside the call's transaction; read only once it has committed.
             const seen: { resolved: ResolvedCaller | null } = { resolved: null };
             const outcome = yield* ledger.once(
-              { agentId, key, tool: name, input: stableJson({ ...rest, ...source.turn }), at },
+              { agentId, key, tool: name, input: stableJson({ ...rest, ...source.turn }), at, fence: source.fence },
               Effect.gen(function* () {
                 const resolved = yield* source.resolve(name, at);
                 seen.resolved = resolved;
@@ -168,6 +172,7 @@ export class TaskTools extends Context.Service<
             caller.agentId,
             {
               turn: { turn_task: caller.taskId },
+              fence: caller.carried ?? [],
               resolve: () => Effect.succeed({ caller, entries: [], attemptId: null }),
             },
             name,
@@ -214,6 +219,7 @@ export class TaskTools extends Context.Service<
             let attemptId: AttemptId | null = null;
             const source: CallSource = {
               turn: { turn_reply: turn.messageId },
+              fence: turn.holding ?? [],
               resolve: (name, at) => chat.resolve(name, at, attemptId),
             };
             const briefing = yield* chat.briefing;
