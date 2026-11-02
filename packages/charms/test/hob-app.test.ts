@@ -855,6 +855,83 @@ describe("A hob's own GitHub App's tokens", () => {
   });
 
   // covers ADR 022
+  it("[TC-GEN-155] marks the hob's app for reinstalling when it is uninstalled everywhere, and sends nothing more until then", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const repository = repositoryFor("pony-pen");
+    const outcome = await runCharm(
+      w,
+      calls,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, ["otaviobarros/pony-pen"]);
+        const credential = yield* GitHubCredential;
+        const api = yield* GitHubApi;
+        const service = yield* HobGitHubAppService;
+        // The Charms tab showed it installed. Uninstalled before any call: GitHub finds no installation
+        // for the repository, and lists none left anywhere.
+        yield* service.installations(FRODO);
+        github.uninstallApp(app.slug);
+        const refused = yield* api.comment(FRODO, repository, 1, "Pip.");
+        const status = yield* service.status(FRODO);
+        const asked = github.requests.length;
+        const second = yield* Effect.flip(credential.tokenFor(FRODO, { repository, action: "read" }));
+        const sentAfter = github.requests.length - asked;
+        // Reinstalled on GitHub, the Charms tab lists the installations again, which clears the mark.
+        github.installApp(app.slug, "selected", ["otaviobarros/pony-pen"]);
+        yield* service.installations(FRODO);
+        const cleared = yield* service.status(FRODO);
+        const token = yield* credential.tokenFor(FRODO, { repository, action: "read" });
+        return { app, refused, status, second, sentAfter, cleared, token };
+      }),
+    );
+    expect(outcome.refused).toMatchObject({ _tag: "NotSent" });
+    expect(outcome.refused._tag === "NotSent" && outcome.refused.message).toContain(
+      `${outcome.app.slug}[bot] is not installed on otaviobarros/pony-pen, nor anywhere else on GitHub`,
+    );
+    expect(outcome.status).toMatchObject({ _tag: "Connected", needsReconnect: { reason: "installation" } });
+    expect(outcome.second.message).toContain(`${github.base}/apps/${outcome.app.slug}/installations/new`);
+    expect(outcome.sentAfter).toBe(0);
+    expect(outcome.cleared).toMatchObject({ _tag: "Connected", needsReconnect: null });
+    expect(Redacted.value(outcome.token)).toMatch(/^ghs_/);
+    expect(github.items("otaviobarros/pony-pen")[0]?.comments).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  // covers ADR 022
+  it("[TC-GEN-156] leaves the hob's app unmarked when one installation goes but another is left", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const loft = repositoryFor("pony-loft");
+    const barn = repositoryFor("pony-barn");
+    const outcome = await runCharm(
+      w,
+      calls,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, ["otaviobarros/pony-loft"]);
+        github.installApp(app.slug, "selected", ["otaviobarros/pony-barn"]);
+        const fake = github.apps.find((each) => each.slug === app.slug);
+        if (fake === undefined) return yield* Effect.die("no app");
+        const credential = yield* GitHubCredential;
+        const api = yield* GitHubApi;
+        // The hub knows the installation behind the loft, and has a token for it.
+        yield* api.repository(FRODO, loft);
+        const gone = fake.installations.findIndex((each) => each.repositories.includes("otaviobarros/pony-loft"));
+        fake.installations.splice(gone, 1);
+        github.expireInstallationTokens();
+        const refused = yield* Effect.flip(api.repository(FRODO, loft));
+        const status = yield* (yield* HobGitHubAppService).status(FRODO);
+        const token = yield* credential.tokenFor(FRODO, { repository: barn, action: "read" });
+        return { app, refused, status, token };
+      }),
+    );
+    expect(outcome.refused.message).toContain(`${outcome.app.slug}[bot] is not installed on otaviobarros/pony-loft`);
+    expect(outcome.refused.message).not.toContain("anywhere else");
+    expect(outcome.status).toMatchObject({ _tag: "Connected", needsReconnect: null });
+    expect(Redacted.value(outcome.token)).toMatch(/^ghs_/);
+    expect(calls).toEqual([]);
+  });
+
+  // covers ADR 022
   it("[TC-GEN-064] stops a call checked under the hob's app once the app is disconnected, and the hob acts as you after", async () => {
     const w = world();
     const calls: Array<string> = [];
