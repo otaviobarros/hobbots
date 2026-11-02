@@ -1,5 +1,6 @@
 import { homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
+import { HOBBOTS_GITHUB_APP } from "@hobbots/charms";
 import { DEFAULT_STEP_LIMITS, DEFAULT_TASK_TOOL_LIMITS } from "@hobbots/orchestration";
 import { Config, Option } from "effect";
 
@@ -56,6 +57,17 @@ export const ServerConfig = Config.all({
       Config.withDefault(DEFAULT_STEP_LIMITS.maxRunningStepsPerTree),
     ),
   }),
+  // The GitHub App the hub signs in through for the GitHub Charm (ADR 020): Hobbots' own unless a
+  // self-hosted hub names its own. A client ID and a slug are public; the hub holds no app secret.
+  githubClientId: Config.String("HOBBOTS_GITHUB_CLIENT_ID").pipe(
+    Config.option,
+    Config.map((id) => Option.getOrElse(id, () => HOBBOTS_GITHUB_APP.clientId)),
+  ),
+  githubAppSlug: Config.String("HOBBOTS_GITHUB_APP_SLUG").pipe(Config.withDefault(HOBBOTS_GITHUB_APP.slug)),
+  // A GitHub token that replaces the connected account, for a hub with no keychain and for tests.
+  githubToken: Config.Redacted("HOBBOTS_GITHUB_TOKEN").pipe(Config.option),
+  // A stand-in for GitHub's sign-in and an in-memory keychain, to try connecting without either.
+  fakeGitHub: Config.Literals(["off", "on"], "HOBBOTS_FAKE_GITHUB").pipe(Config.withDefault("off" as const)),
   // A scripted Quest the fake runtime plays on the hub's records: asking for a Black Friday campaign starts it.
   fakeQuest: Config.Literals(["off", "black-friday"], "HOBBOTS_FAKE_QUEST").pipe(Config.withDefault("off" as const)),
   // Set when the allow list was given, such as by the desktop app's development build.

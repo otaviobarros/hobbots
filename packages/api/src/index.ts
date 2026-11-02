@@ -3,6 +3,7 @@ export * from "./approvals.ts";
 export * from "./backpack.ts";
 export * from "./charm-calls.ts";
 export * from "./errors.ts";
+export * from "./github.ts";
 export * from "./permissions.ts";
 export * from "./search.ts";
 export * from "./setup.ts";

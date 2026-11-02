@@ -25,7 +25,11 @@ export interface CharmTurn {
 export class CharmTools extends Context.Service<
   CharmTools,
   {
-    readonly forTurn: (turn: CharmTurn) => HubTools;
+    /**
+     * The Charm tools the turn offers, read at its start: none (null) for a hob without the Charm
+     * or while its app is not connected, so a change applies from the next turn.
+     */
+    readonly forTurn: (turn: CharmTurn) => Effect.Effect<HubTools | null>;
   }
 >()("@hobbots/agents/CharmTools") {}
 

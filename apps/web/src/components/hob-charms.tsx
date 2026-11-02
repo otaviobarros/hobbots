@@ -1,8 +1,14 @@
 import type { HobPermissions } from "@hobbots/api";
 import type { Agent, PolicyOperation } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { Switch } from "@hobbots/ui/components/switch";
 import { cn } from "@hobbots/ui/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { useId } from "react";
 import { type ToolHolding, toolHolding } from "../api/enforcement.ts";
+import { githubStatusQuery } from "../api/github.ts";
+import { useUpdatePermissions } from "../api/queries.ts";
 import { ANSWER, offeredAnswer, ruleColor } from "../api/safety.ts";
 import { EnforcementList, NeedsSandbox } from "./enforcement.tsx";
 import { Loading, useHobPermissions } from "./hob-permissions.tsx";
@@ -71,7 +77,8 @@ export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: (
       <h2 className="lbl m-0 pt-2 text-xs text-label">Charms</h2>
       <GitHubCharm hob={hob} permissions={data} />
       <span className="text-[13px] text-label">
-        Charms connect a hob to apps such as GitHub or Slack, and each action has its own Allow, Ask or Never.
+        Charms connect a hob to apps such as GitHub or Slack, and each action has its own Allow, Ask or Never. Turn one
+        off and {hob.name} is offered none of its actions from its next reply.
       </span>
       <h2 className="lbl m-0 pt-2 text-xs text-label">{messages.enforcement.heading}</h2>
       <span className="text-[13px] text-secondary-text">{messages.enforcement.intro({ name: hob.name })}</span>
@@ -86,37 +93,72 @@ export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: (
 }
 
 /**
- * The GitHub Charm (#317): it reads the repository of the hob's folders on the hub, with the user's
- * GitHub sign-in there, so it needs no sandbox and no credential reaches the hob. Pushing comes later.
+ * The GitHub Charm (#317, ADR 020): it reads the repository of the hob's folders on the hub, with the
+ * GitHub account connected in Settings, so it needs no sandbox and no credential reaches the hob. You
+ * grant it per hob here; without the grant, or with no account connected, the hob is offered none of
+ * its actions. Pushing comes later.
  */
 function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermissions }) {
   const copy = messages.charms.github;
+  const update = useUpdatePermissions(hob.id);
+  const github = useQuery(githubStatusQuery);
+  const switchId = useId();
+  const granted = update.isPending ? update.variables.githubCharm !== false : permissions.policy.githubCharm !== false;
+  const connected = github.data === undefined || github.data._tag === "Connected" || github.data._tag === "Environment";
   const read = ANSWER[offeredAnswer("read-github", permissions.decisions["read-github"])];
   return (
-    <div className="cut flex items-center gap-3.5 border-2 border-line bg-card px-4 py-3.5">
-      <span
-        aria-hidden
-        className="grid size-10 flex-none place-items-center bg-line font-pixel text-lg font-bold text-moonlight"
-      >
-        GH
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="font-bold">{copy.name}</span>
-        <span className="text-[13px] text-secondary-text">{copy.reads({ name: hob.name })}</span>
-        <span className="text-[13px] text-label">
-          {copy.pushLater({ name: hob.name, push: ANSWER[permissions.decisions.push] })}
+    <div className="cut flex flex-col gap-2.5 border-2 border-line bg-card px-4 py-3.5">
+      <div className="flex items-center gap-3.5">
+        <span
+          aria-hidden
+          className="grid size-10 flex-none place-items-center bg-line font-pixel text-lg font-bold text-moonlight"
+        >
+          GH
         </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <label htmlFor={switchId} className="font-bold">
+            {copy.name}
+          </label>
+          <span className="text-[13px] text-secondary-text">{copy.reads({ name: hob.name })}</span>
+        </div>
+        <Switch
+          id={switchId}
+          aria-label={copy.grant({ name: hob.name })}
+          checked={granted}
+          disabled={update.isPending}
+          onCheckedChange={(on) => update.mutate({ githubCharm: on })}
+        />
       </div>
-      <span className="flex flex-none flex-wrap justify-end gap-1.5">
-        <span className="flex items-center gap-1 text-[13px]">
-          <span className="text-secondary-text">{copy.read}</span>
-          <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(read))}>{read}</span>
+      {granted ? (
+        <ul aria-label={copy.name} className="m-0 flex list-none flex-wrap gap-3 p-0 ps-[54px]">
+          <li className="flex items-center gap-1 text-[13px]">
+            <span className="text-secondary-text">{copy.read}</span>
+            <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(read))}>{read}</span>
+          </li>
+          <li className="flex items-center gap-1 text-[13px]">
+            <span className="text-secondary-text">{copy.push}</span>
+            <span className="bg-lantern px-1.5 text-xs text-ground">{copy.later}</span>
+            <span className="text-label">
+              {copy.pushLater({ name: hob.name, push: ANSWER[permissions.decisions.push] })}
+            </span>
+          </li>
+        </ul>
+      ) : (
+        <span className="ps-[54px] text-[13px] text-label">{copy.off({ name: hob.name })}</span>
+      )}
+      {!connected && (
+        <span className="ps-[54px] text-[13px] text-secondary-text">
+          {copy.notConnected}{" "}
+          <Link to="/settings" hash="charms" className="text-lantern">
+            {copy.connectInSettings}
+          </Link>
         </span>
-        <span className="flex items-center gap-1 text-[13px]">
-          <span className="text-secondary-text">{copy.push}</span>
-          <span className="bg-lantern px-1.5 text-xs text-ground">{copy.later}</span>
+      )}
+      {update.isError && (
+        <span role="alert" className="ps-[54px] text-[13px] text-rose">
+          {copy.saveFailed}
         </span>
-      </span>
+      )}
     </div>
   );
 }

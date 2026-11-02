@@ -14,12 +14,18 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import {
+  GitHubAccountLive,
   GitHubApiNode,
   GitHubCharmTools,
   GitHubPushSettings,
-  GitHubToken,
+  GitHubSignInFake,
+  GitHubSignInNode,
   GitPushLive,
   GitRemotes,
+  KeychainLive,
+  KeychainMemory,
+  LocalGitHubSignInsFake,
+  LocalGitHubSignInsLive,
 } from "@hobbots/charms";
 import { secretsFromEnv } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
@@ -30,6 +36,7 @@ import {
   BackpackLive,
   CharmCallsLive,
   EventJournal,
+  GitHubAccountRepository,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   SearchIndex,
@@ -80,6 +87,8 @@ const ServerLive = Layer.unwrap(
     // New installations start without hobs; the user summons the first one during setup.
     const database = join(config.dataDir, "hobbots.sqlite");
     // Search reads the same file from a worker thread, so a long search never blocks the server.
+    // One SQLite client for the hub: the layer is shared, so it is built once.
+    const Sqlite = SqliteLive(database);
     const Persistence = Layer.mergeAll(
       HobbotsRepositoryLive,
       ApprovalRepositoryLive,
@@ -91,7 +100,7 @@ const ServerLive = Layer.unwrap(
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
-    ).pipe(Layer.provideMerge(SqliteLive(database)));
+    ).pipe(Layer.provideMerge(Sqlite));
     // One policy engine for the hub, so its index of the folders' Git repositories is built once.
     // The fake answers for Claude Code and Codex, so a thread can switch brains (ADR 017).
     const fake = { delay: "40 millis", stopDelay: "600 millis", sandbox: config.fakeSandbox } as const;
@@ -106,9 +115,24 @@ const ServerLive = Layer.unwrap(
             executable: Option.getOrUndefined(config.claudeExecutable),
           }).pipe(Layer.provide(ProcessSandbox.layer))
     ).pipe(Layer.provide(PolicyEngine.node));
-    // The GitHub Charm reads and pushes with the user's sign-in on the hub, outside the sandbox
-    // (ADR 020). A push reads the hob's branch with Git in the hob's sandbox, which the hub starts
-    // once and shares with Claude Code's turns.
+    // The GitHub Charm reads and pushes on the hub, outside the sandbox (#317, #323), as the GitHub
+    // account the user connected in Settings, whose tokens stay in the OS keychain (ADR 020). A push
+    // reads the hob's branch with Git in the hob's sandbox.
+    const fakeGitHub = config.fakeGitHub === "on";
+    const Account = GitHubAccountLive({
+      clientId: fakeGitHub ? "fake" : config.githubClientId,
+      slug: config.githubAppSlug,
+      environmentToken: Option.getOrNull(config.githubToken),
+    }).pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          fakeGitHub ? KeychainMemory : KeychainLive(process.platform, process.env),
+          fakeGitHub ? GitHubSignInFake : GitHubSignInNode(),
+          fakeGitHub ? LocalGitHubSignInsFake : LocalGitHubSignInsLive(process.env),
+          GitHubAccountRepository.pipe(Layer.provide(Sqlite)),
+        ),
+      ),
+    );
     const charmFolder = join(dataDir, "charms", "github");
     const Charms = GitHubCharmTools.pipe(
       Layer.provide(
@@ -129,7 +153,7 @@ const ServerLive = Layer.unwrap(
           }),
         ),
       ),
-      Layer.provide(GitHubToken.layer(process.env)),
+      Layer.provideMerge(Account),
       Layer.provide(NodeServices.layer),
     );
     const App = HobLifecycle.layer

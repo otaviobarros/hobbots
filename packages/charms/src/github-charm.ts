@@ -2,6 +2,7 @@ import { realpathSync } from "node:fs";
 import { isAbsolute, relative } from "node:path";
 import { CharmTools, type CharmTurn, type HubCallStep, type HubToolAnswer, type ToolAccess } from "@hobbots/agents";
 import {
+  type AgentId,
   GITHUB_PUSH_TOOL,
   GITHUB_TOOLS,
   GITHUB_WRITE_TOOLS,
@@ -23,14 +24,17 @@ import {
 import { type PolicyContext, PolicyEngine } from "@hobbots/permissions";
 import { Data, Effect, Layer, Schema } from "effect";
 import { makeCharmCallRunner } from "./charm-calls.ts";
-import { GitHubApi, type GitHubError } from "./github-api.ts";
+import { GitHubCredential } from "./github-account.ts";
+import { GitHubApi } from "./github-api.ts";
+import type { GitHubError } from "./github-error.ts";
 import { makeGitHubPush, pushReadBack } from "./github-push.ts";
 import { GitRemotes } from "./remotes.ts";
 
 /**
- * The GitHub Charm's read actions as hub tools (#317, ADR 014). Each call is decided by the policy
- * engine on the repository the hub found from the hob's own folder, then read on the hub with the
- * user's sign-in. Nothing a hob writes names the repository, and no credential reaches it.
+ * The GitHub Charm's actions as hub tools (#317, #323, ADR 014): its reads, and its push. A turn offers them only to a hob
+ * the user gave the Charm, while GitHub is connected on the hub (#322). Each call is decided by the
+ * policy engine on the repository the hub found from the hob's own folder, then read on the hub with
+ * the connected account. Nothing a hob writes names the repository, and no credential reaches it.
  */
 
 class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> {}
@@ -66,6 +70,7 @@ export const GitHubCharmTools = Layer.effect(
     const api = yield* GitHubApi;
     const remotes = yield* GitRemotes;
     const engine = yield* PolicyEngine;
+    const credential = yield* GitHubCredential;
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
     const runner = yield* makeCharmCallRunner({ github_push: pushReadBack(api) });
@@ -106,13 +111,14 @@ export const GitHubCharmTools = Layer.effect(
       });
 
     const read = (
+      agentId: AgentId,
       name: GitHubToolName,
       input: unknown,
       repository: GitHubRepository,
     ): Effect.Effect<string, Refused | GitHubError> => {
       switch (name) {
         case "github_repository":
-          return api.repository(repository).pipe(Effect.map(githubRepositoryText));
+          return api.repository(agentId, repository).pipe(Effect.map(githubRepositoryText));
         case "github_search": {
           const search = input as (typeof GitHubToolInputs)["github_search"]["Type"];
           if (search.state === "merged" && search.kind === "issue") {
@@ -121,12 +127,12 @@ export const GitHubCharmTools = Layer.effect(
             );
           }
           return api
-            .search(githubSearchQuery(repository, search), search.limit ?? 10)
+            .search(agentId, githubSearchQuery(repository, search), search.limit ?? 10)
             .pipe(Effect.map(githubSearchText));
         }
         case "github_item": {
           const item = input as (typeof GitHubToolInputs)["github_item"]["Type"];
-          return api.item(repository, item.number, item.comments ?? 10).pipe(Effect.map(githubItemText));
+          return api.item(agentId, repository, item.number, item.comments ?? 10).pipe(Effect.map(githubItemText));
         }
       }
     };
@@ -137,11 +143,17 @@ export const GitHubCharmTools = Layer.effect(
         Effect.mapError((error) => new Refused({ message: describe(error) })),
       );
 
-    /** The turn's access, and the folder and repository a call names, or a refusal when the turn has no tools. */
+    /**
+     * The turn's access, and the folder and repository a call names, or a refusal when the turn has
+     * no tools or the user took the Charm away during the turn.
+     */
     const resolved = (turn: CharmTurn, named: string | undefined, otherwise: string) =>
       Effect.gen(function* () {
         const access = yield* turn.currentAccess;
         if (access === null) return yield* new Refused({ message: `You have no tools this turn, so ${otherwise}.` });
+        if (access.policy.hob.githubCharm === false) {
+          return yield* new Refused({ message: `The GitHub Charm is off for you now, so ${otherwise}.` });
+        }
         return { access, ...(yield* repositoryFor(access, named)) };
       });
 
@@ -166,9 +178,15 @@ export const GitHubCharmTools = Layer.effect(
         if (verdict.decision === "ask")
           return yield* new Refused({ message: `${verdict.reason.message} ${GITHUB_UNASKABLE}` });
         if (verdict.decision === "deny") return yield* new Refused({ message: verdict.reason.message });
-        return yield* read(name, input, repository).pipe(
-          Effect.mapError((error) => new Refused({ message: error.message })),
-        );
+        // The app's sign-in also reads public repositories it is not installed on (ADR 020), and
+        // the read must use the sign-in that check was made for.
+        return yield* credential
+          .onRepository(
+            turn.agentId,
+            repository,
+            Effect.suspend(() => read(turn.agentId, name, input, repository)),
+          )
+          .pipe(Effect.mapError((error) => new Refused({ message: error.message })));
       }).pipe(
         Effect.match({
           onFailure: (refused): HubToolAnswer => ({ text: turn.redactor.text(refused.message), refused: true }),
@@ -177,7 +195,7 @@ export const GitHubCharmTools = Layer.effect(
         // A defect becomes an answer; an interrupted turn stays interrupted.
         Effect.catchDefect((defect) =>
           Effect.logError("A GitHub Charm call failed", defect).pipe(
-            Effect.as({ text: "Hobbots could not reach GitHub this time.", refused: true }),
+            Effect.as({ text: "Hobbots could not reach GitHub this time. Try again.", refused: true }),
           ),
         ),
         Effect.provideContext(context),
@@ -201,11 +219,17 @@ export const GitHubCharmTools = Layer.effect(
       }).pipe(Effect.provideContext(context));
 
     return CharmTools.of({
-      forTurn: (turn) => ({
-        tools,
-        call: (name, input, step) => call(turn, name, input, step),
-        steersPush: (cwd) => steersPush(turn, cwd),
-      }),
+      forTurn: (turn) =>
+        Effect.gen(function* () {
+          const access = yield* turn.currentAccess;
+          if (access === null || access.policy.hob.githubCharm === false) return null;
+          if (!(yield* credential.connected)) return null;
+          return {
+            tools,
+            call: (name: string, input: unknown, step?: HubCallStep) => call(turn, name, input, step),
+            steersPush: (cwd: string) => steersPush(turn, cwd),
+          };
+        }).pipe(Effect.provideContext(context)),
     });
   }),
 );

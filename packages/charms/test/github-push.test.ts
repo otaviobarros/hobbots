@@ -30,7 +30,7 @@ import { Effect, Layer } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { GitHubApi, GitHubCharmTools, GitPushLive, GitRemotes } from "../src/index.ts";
 import { type FakeGitHubGit, startFakeGitHubGit } from "./fake-github-git.ts";
-import { directSandbox, fixedToken, memoryCharmCalls } from "./support.ts";
+import { directSandbox, fixedCredential, memoryCharmCalls } from "./support.ts";
 
 const TOKEN = "ghu_pushtoken0123456789abcdefghijklmnopqrstuv";
 
@@ -88,7 +88,7 @@ const headOf = (remote: string, branch: string) => {
 const fakeApi = Layer.succeed(
   GitHubApi,
   GitHubApi.of({
-    repository: (repository) =>
+    repository: (_agentId, repository) =>
       Effect.succeed({
         fullName: `${repository.owner}/${repository.name}`,
         description: null,
@@ -99,8 +99,8 @@ const fakeApi = Layer.succeed(
       }),
     search: () => Effect.die("not used"),
     item: () => Effect.die("not used"),
-    branchHead: (repository, branch) => Effect.sync(() => headOf(remoteOf(repository), branch)),
-    viewer: Effect.succeed("otaviobarros"),
+    branchHead: (_agentId, repository, branch) => Effect.sync(() => headOf(remoteOf(repository), branch)),
+    viewer: () => Effect.succeed("otaviobarros"),
   }),
 );
 
@@ -144,9 +144,16 @@ interface Turn {
   readonly events?: Array<RuntimeEvent>;
   readonly rows?: Map<string, CharmCall>;
   readonly step?: string;
+  /** The hob's sign-in: the fake GitHub's own token unless a test gives another. */
+  readonly credential?: ReturnType<typeof fixedCredential>;
 }
 
-const charmLayer = (folder: string, repository: GitHubRepository, rows: Map<string, CharmCall>) =>
+const charmLayer = (
+  folder: string,
+  repository: GitHubRepository,
+  rows: Map<string, CharmCall>,
+  credential: ReturnType<typeof fixedCredential>,
+) =>
   GitHubCharmTools.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -157,7 +164,7 @@ const charmLayer = (folder: string, repository: GitHubRepository, rows: Map<stri
         ),
         PolicyEngine.node,
         memoryCharmCalls(rows),
-        fixedToken(TOKEN),
+        credential.layer,
         GitPushLive({ folder: path.join(root, "data", "charms", "github"), httpsBase: github.base }).pipe(
           Layer.provide(Layer.mergeAll(directSandbox, NodeServices.layer)),
         ),
@@ -169,7 +176,7 @@ const pushIn = (folder: string, repository: GitHubRepository, turn: Turn, input:
   Effect.gen(function* () {
     const charms = yield* CharmTools;
     const events = turn.events ?? [];
-    const tools = charms.forTurn({
+    const tools = yield* charms.forTurn({
       agentId: AgentId.make("hob"),
       threadId: ThreadId.make("t1"),
       messageId: MessageId.make("m1"),
@@ -177,12 +184,15 @@ const pushIn = (folder: string, repository: GitHubRepository, turn: Turn, input:
       redactor: makeRedactor(),
       approvals: userApprovals(turn.access, turn.asked ?? [], turn.answer),
     });
+    if (tools === null) throw new Error("The turn was offered no GitHub tools");
     const answer: HubToolAnswer = yield* tools.call("github_push", input, {
       id: turn.step ?? "toolu_1",
-      report: (event) => events.push(event),
+      report: (event: RuntimeEvent) => events.push(event),
     });
     return answer;
-  }).pipe(Effect.provide(charmLayer(folder, repository, turn.rows ?? new Map())));
+  }).pipe(
+    Effect.provide(charmLayer(folder, repository, turn.rows ?? new Map(), turn.credential ?? fixedCredential(TOKEN))),
+  );
 
 const push = (folder: string, repository: GitHubRepository, turn: Turn, input: Record<string, unknown>) =>
   Effect.runPromise(pushIn(folder, repository, turn, input));
@@ -331,6 +341,32 @@ describe("the GitHub Charm's Push", () => {
     expect(headRef.refused).toBe(true);
   });
 
+  // covers PE-005, EX-004
+  it("[TC-IN-055] pushes with a refreshed token when GitHub refused the sign-in, and disconnects when it refuses that too", async () => {
+    const { folder, repository, remote, commit } = await setUp("refreshed");
+    const refreshed = fixedCredential("ghu_expired", TOKEN);
+    const pushed = await push(
+      folder,
+      repository,
+      { access: accessFor(folder, "trusting"), credential: refreshed },
+      { branch: "feat/x", key: "r-1" },
+    );
+    expect(pushed.refused).toBe(false);
+    expect(headOf(remote, "feat/x")).toBe(commit);
+    expect(refreshed.revoked).toEqual([]);
+
+    const refused = fixedCredential("ghu_expired", "ghu_also_refused");
+    const signedOut = await push(
+      folder,
+      repository,
+      { access: accessFor(folder, "trusting"), credential: refused },
+      { branch: "feat/x", remote_branch: "feat/z", key: "r-2" },
+    );
+    expect(signedOut).toMatchObject({ refused: true, text: expect.stringContaining("connect GitHub again") });
+    expect(refused.revoked).toEqual(["ghu_also_refused"]);
+    expect(headOf(remote, "feat/z")).toBeNull();
+  });
+
   // covers IN-003, EX-004
   it("[TC-IN-053] returns the first result for a retried key without asking or pushing again", async () => {
     const { folder, repository } = await setUp("retried");
@@ -423,7 +459,7 @@ describe("the GitHub Charm's Push", () => {
     await Effect.gen(function* () {
       yield* CharmTools;
       yield* Effect.sleep("500 millis");
-    }).pipe(Effect.provide(charmLayer(folder, repository, rows)), Effect.runPromise);
+    }).pipe(Effect.provide(charmLayer(folder, repository, rows, fixedCredential(TOKEN))), Effect.runPromise);
     expect([...rows.values()].map((r) => [r.key, r.state, r.result])).toEqual([
       ["found", "applied", "Pushed."],
       ["missing", "uncertain", "The hub stopped while this call was being sent."],

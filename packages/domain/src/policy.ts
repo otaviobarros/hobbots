@@ -128,13 +128,16 @@ export type PolicyOverrides = typeof PolicyOverrides.Type;
  * shared folders from this hob only; a hob cannot add a folder to itself. `signCommits` lets the
  * hob's commands sign Git commits with the user's 1Password SSH key, which opens 1Password's SSH
  * agent to them: the agent cannot be limited to signing, so it also lets them log in over SSH with
- * the user's keys. Off unless the user turns it on.
+ * the user's keys. Off unless the user turns it on. `githubCharm` is the hob's grant of the GitHub Charm
+ * (ADR 014, ADR 020): granted unless it is `false`, and without it the hob is offered none of the
+ * Charm's actions.
  */
 export const HobPolicy = Schema.Struct({
   ownFolders: Schema.Array(Schema.String),
   hiddenSharedFolders: Schema.Array(Schema.String),
   overrides: PolicyOverrides,
   signCommits: Schema.optionalKey(Schema.Boolean),
+  githubCharm: Schema.optionalKey(Schema.Boolean),
 });
 export type HobPolicy = typeof HobPolicy.Type;
 

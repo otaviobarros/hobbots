@@ -1,9 +1,9 @@
 import { CharmCalls, FolderSandbox } from "@hobbots/agents";
 import { CharmCall, isCharmCallSettled } from "@hobbots/domain";
 import { Effect, Layer, Option, Redacted } from "effect";
-import { GitHubToken } from "../src/index.ts";
+import { GitHubCredential } from "../src/index.ts";
 
-/** Charm call records in memory, with the rules of the SQL ones (migration 0027). */
+/** Charm call records in memory, with the rules of the SQL ones (migration 0028). */
 export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
   Layer.succeed(
     CharmCalls,
@@ -57,5 +57,22 @@ export const directSandbox = Layer.succeed(
   }),
 );
 
-export const fixedToken = (token: string) =>
-  Layer.succeed(GitHubToken, GitHubToken.of({ get: Effect.succeed(Redacted.make(token)) }));
+/**
+ * GitHub connected on the hub with `token` for every hob, reaching every repository. `refusedOnce`
+ * hands out `fresh` after GitHub refused the first, as a refresh would.
+ */
+export const fixedCredential = (token: string, fresh: string = token) => {
+  const revoked: Array<string> = [];
+  const layer = Layer.succeed(
+    GitHubCredential,
+    GitHubCredential.of({
+      connected: Effect.succeed(true),
+      tokenFor: () => Effect.succeed(Redacted.make(token)),
+      refused: () => Effect.succeed(Redacted.make(fresh)),
+      revoked: (refused) => Effect.sync(() => void revoked.push(Redacted.value(refused))),
+      reaches: () => Effect.void,
+      onRepository: (_agentId, _repository, use) => use,
+    }),
+  );
+  return { layer, revoked };
+};

@@ -7,6 +7,7 @@ import {
   type ToolAccess,
 } from "@hobbots/agents";
 import {
+  type AgentId,
   type GitHubPushPlan,
   type GitHubRepository,
   type GitHubWriteInput,
@@ -14,10 +15,11 @@ import {
   repositorySlug,
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
-import { Context, Data, Effect, Option } from "effect";
+import { Context, Data, Effect, Option, type Redacted } from "effect";
 import type { CharmCallRunner, ReadBack, WriteOutcome } from "./charm-calls.ts";
 import { GitPush, type PushResult, type PushTransport } from "./git-push.ts";
-import { GitHubApi, type GitHubError, GitHubToken } from "./github-api.ts";
+import { GitHubCredential } from "./github-account.ts";
+import { GitHubApi, type GitHubError } from "./github-api.ts";
 
 /**
  * The GitHub Charm's Push (ADR 020, #323). The hub fixes the commit the hob's branch points to and
@@ -56,14 +58,14 @@ export const pushReadBack =
     Effect.gen(function* () {
       const plan = JSON.parse(call.plan) as GitHubPushPlan;
       const [owner = "", name = ""] = plan.repository.split("/");
-      const head = yield* api.branchHead({ owner, name }, plan.remoteBranch);
+      const head = yield* api.branchHead(call.agentId, { owner, name }, plan.remoteBranch);
       return head === plan.commit;
     });
 
 export const makeGitHubPush = (runner: CharmCallRunner) =>
   Effect.gen(function* () {
     const api = yield* GitHubApi;
-    const token = yield* GitHubToken;
+    const credential = yield* GitHubCredential;
     const git = yield* GitPush;
     const engine = yield* PolicyEngine;
 
@@ -78,36 +80,44 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
           ),
         );
 
-    /** One push attempt, then once more when nothing reached GitHub or the sign-in was refused (ADR 020). */
+    /**
+     * One push attempt, then once more when nothing reached GitHub, or with a refreshed token when
+     * GitHub refused the sign-in (ADR 020). Refused again after the refresh, GitHub is disconnected.
+     */
     const send = (
+      agentId: AgentId,
       staged: { readonly staging: string; readonly commit: string },
       plan: GitHubPushPlan,
       repository: GitHubRepository,
     ): Effect.Effect<WriteOutcome> =>
       Effect.gen(function* () {
         const settings = yield* GitHubPushSettings;
-        const transport: Effect.Effect<PushTransport, GitHubError> =
-          settings.over === "ssh"
-            ? Effect.succeed({ _tag: "Ssh", agentSocket: settings.agentSocket ?? process.env.SSH_AUTH_SOCK })
-            : token.get.pipe(Effect.map((t) => ({ _tag: "Https", token: t }) as const));
+        const target = {
+          repository,
+          commit: plan.commit,
+          remoteBranch: plan.remoteBranch,
+          force: plan.force,
+          replaces: plan.replaces,
+        };
+        const viaSsh: PushTransport = { _tag: "Ssh", agentSocket: settings.agentSocket ?? process.env.SSH_AUTH_SOCK };
+        const over = (token: Redacted.Redacted<string> | null) =>
+          git.push(staged, target, token === null ? viaSsh : { _tag: "Https", token });
+        const signedOut = { _tag: "SignedOut" } as PushResult;
         const once = Effect.gen(function* () {
-          const how = yield* transport.pipe(Effect.option);
-          if (Option.isNone(how)) return { _tag: "SignedOut" } as PushResult;
-          return yield* git.push(
-            staged,
-            {
-              repository,
-              commit: plan.commit,
-              remoteBranch: plan.remoteBranch,
-              force: plan.force,
-              replaces: plan.replaces,
-            },
-            how.value,
-          );
+          if (settings.over === "ssh") return yield* over(null);
+          const token = yield* credential.tokenFor(agentId).pipe(Effect.option);
+          if (Option.isNone(token)) return signedOut;
+          const result = yield* over(token.value);
+          if (result._tag !== "SignedOut") return result;
+          const fresh = yield* credential.refused(agentId, token.value).pipe(Effect.option);
+          if (Option.isNone(fresh)) return signedOut;
+          const again = yield* over(fresh.value);
+          if (again._tag === "SignedOut") yield* credential.revoked(fresh.value);
+          return again;
         });
         let result = yield* once;
-        // Nothing was done in either case, so trying once more cannot send it twice.
-        if (result._tag === "NotSent" || result._tag === "SignedOut") result = yield* once;
+        // Nothing reached GitHub, so trying once more cannot send it twice.
+        if (result._tag === "NotSent") result = yield* once;
         switch (result._tag) {
           case "Pushed":
             return { _tag: "Applied", text: pushedText(plan) };
@@ -121,7 +131,7 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
               text:
                 settings.over === "ssh"
                   ? "GitHub refused the SSH login, so nothing was pushed. Ask the user to check their SSH agent."
-                  : "GitHub refused the hub's sign-in, so nothing was pushed. Ask the user to sign in to GitHub on the hub again.",
+                  : "GitHub refused the hub's sign-in, so nothing was pushed. Ask the user to connect GitHub again in Settings › Charms.",
             };
           case "Uncertain":
             return { _tag: "Uncertain", text: result.message };
@@ -165,13 +175,18 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
           .stage(access.folders, folder, input.branch)
           .pipe(Effect.mapError((error) => new Refused({ message: error.message })));
         const slug = repositorySlug(repository);
-        const info = yield* api.repository(repository).pipe(Effect.mapError(githubError));
-        const replaces = yield* api.branchHead(repository, remoteBranch).pipe(Effect.mapError(githubError));
+        const agentId = turn.agentId;
+        // The app's sign-in also reads public repositories it is not installed on (ADR 020): the
+        // hub reads and pushes only where the hob's sign-in reaches.
+        const github = <A>(effect: Effect.Effect<A, GitHubError>) =>
+          credential.onRepository(agentId, repository, effect).pipe(Effect.mapError(githubError));
+        const info = yield* github(api.repository(agentId, repository));
+        const replaces = yield* github(api.branchHead(agentId, repository, remoteBranch));
         const defaultHead =
           info.defaultBranch === remoteBranch
             ? replaces
-            : yield* api.branchHead(repository, info.defaultBranch).pipe(Effect.mapError(githubError));
-        const actingAs = yield* api.viewer.pipe(Effect.option, Effect.map(Option.getOrNull));
+            : yield* github(api.branchHead(agentId, repository, info.defaultBranch));
+        const actingAs = yield* api.viewer(agentId).pipe(Effect.option, Effect.map(Option.getOrNull));
         const commits = yield* git.commits(staged, [replaces, defaultHead]);
         const settings = yield* GitHubPushSettings;
         const plan: GitHubPushPlan = {
@@ -237,7 +252,13 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
             threadId: turn.threadId,
             messageId: turn.messageId,
           },
-          send(staged, plan, repository),
+          credential
+            .onRepository(agentId, repository, send(agentId, staged, plan, repository))
+            .pipe(
+              Effect.catch((error) =>
+                Effect.succeed<WriteOutcome>({ _tag: "NotSent", text: `${error.message} Nothing was pushed.` }),
+              ),
+            ),
         );
         const note = decision.approval === undefined ? "" : ` ${approvalNote(decision.approval)}`;
         if (outcome._tag === "Applied") return `${outcome.text}${note}`;

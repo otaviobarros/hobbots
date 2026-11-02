@@ -11,7 +11,7 @@ export type CharmCallStart =
   | { readonly _tag: "Blocked"; readonly call: CharmCall };
 
 /**
- * The Charm call records (ADR 020, migration 0027): every Charm write, recorded with its key before
+ * The Charm call records (ADR 020, migration 0028): every Charm write, recorded with its key before
  * anything is sent, so a call the runtime retries is never sent twice, and a call that ended without
  * a clear result is read back before anything else is sent to the same place.
  */

@@ -200,7 +200,8 @@ export class ChatService extends Context.Service<
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
       // Without Charms, turns offer only the Task tools.
       const charms = yield* Effect.serviceOption(CharmTools);
-      const charmsFor = (turn: CharmTurn) => (Option.isSome(charms) ? charms.value.forTurn(turn) : null);
+      const charmsFor = (turn: CharmTurn) =>
+        Option.isSome(charms) ? charms.value.forTurn(turn) : Effect.succeed(null);
       const turns = yield* FiberMap.make<ThreadId>();
       const scope = yield* Effect.scope;
       // The reply each running turn is writing, so a stop request can reach it.
@@ -536,7 +537,7 @@ export class ChatService extends Context.Service<
               recordToolStart,
               hubTools: combineHubTools(
                 taskTurn?.hubTools ?? null,
-                charmsFor({
+                yield* charmsFor({
                   agentId: agent.id,
                   threadId: thread.id,
                   messageId: (yield* Ref.get(reply.current)).id,

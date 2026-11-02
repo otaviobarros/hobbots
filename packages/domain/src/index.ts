@@ -5,6 +5,7 @@ export * from "./brain.ts";
 export * from "./charm-call.ts";
 export * from "./events.ts";
 export * from "./github.ts";
+export * from "./github-account.ts";
 export * from "./grant.ts";
 export * from "./grant-rule.ts";
 export * from "./ids.ts";

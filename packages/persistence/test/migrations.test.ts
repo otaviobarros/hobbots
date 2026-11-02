@@ -13,6 +13,7 @@ import hobPolicy from "../src/migrations/0015_hob_policy.ts";
 import threadBrains from "../src/migrations/0020_thread_brains.ts";
 import hobSignCommits from "../src/migrations/0021_hob_sign_commits.ts";
 import threadArchivedAt from "../src/migrations/0023_thread_archived_at.ts";
+import githubCharm from "../src/migrations/0027_github_charm.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -749,5 +750,50 @@ describe("0023_thread_archived_at", () => {
     expect(result.entries.map((e) => e.payload)).toMatchObject([
       { _tag: "ThreadUpserted", thread: { id: "t1", archivedAt: null } },
     ]);
+  });
+});
+
+describe("0027_github_charm", () => {
+  // covers DP-003, PE-002
+  it("[TC-PE-145] keeps the GitHub Charm for every existing hob and version, and holds one account with no token", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* sql`INSERT INTO agent_config_versions ${sql.insert({
+        agentId: "pip",
+        version: 1,
+        roleTitle: "Writer",
+        model: "sonnet",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      yield* githubCharm;
+      yield* sql`INSERT INTO github_account (id, source, login, connected_at) VALUES (1, 'app', 'pip', 'now')`;
+      const second = yield* Effect.result(
+        sql`INSERT INTO github_account (id, source, login, connected_at) VALUES (2, 'gh', 'other', 'now')`,
+      );
+      return {
+        agents: yield* sql`SELECT github_charm FROM agents`,
+        versions: yield* sql`SELECT github_charm FROM agent_config_versions`,
+        columns: Object.keys((yield* sql`SELECT * FROM github_account`)[0] ?? {}).sort(),
+        second: second._tag,
+      };
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0027"))), Effect.runPromise);
+
+    expect(result.agents.map((row) => Number(row.githubCharm))).toEqual([1]);
+    expect(result.versions.map((row) => Number(row.githubCharm))).toEqual([1]);
+    expect(result.columns).toEqual(["connectedAt", "id", "login", "source"]);
+    expect(result.second).toBe("Failure");
   });
 });
