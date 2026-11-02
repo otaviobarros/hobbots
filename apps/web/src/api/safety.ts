@@ -97,8 +97,18 @@ export const RULES: ReadonlyArray<RuleInfo> = [
     operation: "read-github",
     label: "Read GitHub",
     note: "Repository details, issues and pull requests of its folders, read on the hub.",
-    // A GitHub read cannot pause for an approval yet, so the hub offers no Ask (#317).
+    // Asking before a read would interrupt without protecting anything, so the hub offers no Ask (ADR 020).
     answers: ["allow", "deny"],
+  },
+  {
+    operation: "open-pull-request",
+    label: "Open pull requests",
+    note: "Pull requests from its pushed branches, in the repository of its folders.",
+  },
+  {
+    operation: "comment-github",
+    label: "Comment on GitHub",
+    note: "Comments on issues and pull requests in the repository of its folders.",
   },
   {
     operation: "outside-folders",

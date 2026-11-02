@@ -121,14 +121,23 @@ const writeKey = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(200
     "A key you choose for this call, unique among your calls. Send the same key when you retry the same call, so it is sent once.",
 });
 
+/** The folder a write acts from, whose repository the hub resolves. */
+const writeFolder = (what: string) =>
+  Schema.optionalKey(
+    Schema.String.check(Schema.isNonEmpty()).annotate({
+      description: `An absolute folder of yours whose repository to ${what}. Leave it out to use your first folder that has one on GitHub.`,
+    }),
+  );
+
+/** GitHub keeps at most 65,536 characters in a body or comment; the hub's marker and notes take a little. */
+export const MAX_GITHUB_BODY = 60_000;
+
+const githubBody = (description: string) =>
+  Schema.String.check(Schema.isMaxLength(MAX_GITHUB_BODY)).annotate({ description });
+
 export const GitHubWriteInputs = {
   github_push: Schema.Struct({
-    folder: Schema.optionalKey(
-      Schema.String.check(Schema.isNonEmpty()).annotate({
-        description:
-          "An absolute folder of yours whose repository to push. Leave it out to push from your first folder that has one on GitHub.",
-      }),
-    ),
+    folder: writeFolder("push"),
     branch: branchName("Your local branch to push. The hub pushes the commit it points to when the call is decided."),
     remote_branch: Schema.optionalKey(branchName("The branch on GitHub to update. Defaults to the same name.")),
     force: Schema.optionalKey(
@@ -137,6 +146,27 @@ export const GitHubWriteInputs = {
           "Replace the branch on GitHub even when your branch does not build on it. Always asks the user, once only.",
       }),
     ),
+    key: writeKey,
+  }),
+  github_open_pull_request: Schema.Struct({
+    folder: writeFolder("open the pull request in"),
+    head: branchName("The branch on GitHub with your changes, already pushed with github_push."),
+    base: Schema.optionalKey(branchName("The branch to merge into. Defaults to the repository's default branch.")),
+    title: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(256)).annotate({
+      description: "The pull request's title.",
+    }),
+    body: Schema.optionalKey(githubBody("The pull request's description, in GitHub Markdown.")),
+    draft: Schema.optionalKey(
+      Schema.Boolean.annotate({ description: "Open it as a draft (the default), or ready for review." }),
+    ),
+    key: writeKey,
+  }),
+  github_comment: Schema.Struct({
+    folder: writeFolder("comment in"),
+    number: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).annotate({
+      description: "The issue or pull request number to comment on.",
+    }),
+    body: githubBody("The comment, in GitHub Markdown.").check(Schema.isNonEmpty()),
     key: writeKey,
   }),
 } as const;
@@ -164,6 +194,18 @@ export const GITHUB_WRITE_TOOLS: ReadonlyArray<{
     description:
       "Push a branch of your folder's repository to GitHub, as the user. Use this instead of `git push`, which cannot sign in from your sandbox. The hub pushes the commit your branch points to when the call is decided; under most policies the user approves it first. Without force, GitHub refuses a push when its branch moved.",
     label: "Pushing to GitHub",
+  },
+  {
+    name: "github_open_pull_request",
+    description:
+      "Open a pull request in your folder's GitHub repository, as the user, from a branch you already pushed with github_push. Use this instead of `gh pr create`. It opens as a draft unless you say otherwise; under most policies the user approves it first.",
+    label: "Opening a pull request",
+  },
+  {
+    name: "github_comment",
+    description:
+      "Comment on an issue or pull request in your folder's GitHub repository, as the user. Use this instead of `gh issue comment` or `gh pr comment`. Under most policies the user approves it first.",
+    label: "Commenting on GitHub",
   },
 ];
 
@@ -202,6 +244,109 @@ export const githubPushSummary = (plan: GitHubPushPlan): string =>
     ...plan.subjects.map((subject) => `  ${subject}`),
     `${plan.over === "ssh" ? "Over SSH with your agent, " : ""}as you${plan.actingAs === null ? "" : ` (@${plan.actingAs})`}.`,
   ].join("\n");
+
+/** What opening a pull request sends and where, as the hub fixed it when deciding. */
+export interface GitHubPullRequestPlan {
+  readonly repository: string;
+  readonly folder: string;
+  readonly head: string;
+  readonly base: string;
+  /** The title and body after redaction: exactly what is sent. */
+  readonly title: string;
+  readonly body: string;
+  readonly draft: boolean;
+  readonly actingAs: string | null;
+}
+
+/** What a comment sends and where, as the hub fixed it when deciding. */
+export interface GitHubCommentPlan {
+  readonly repository: string;
+  readonly folder: string;
+  readonly number: number;
+  readonly pullRequest: boolean;
+  /** The issue or pull request's title, as GitHub had it when deciding. */
+  readonly itemTitle: string;
+  /** The comment after redaction, without the hub's marker: exactly what the hob wrote that is sent. */
+  readonly body: string;
+  readonly actingAs: string | null;
+}
+
+/** How much of a pull request's body its approval card shows, which ADR 020 calls the start of the body. */
+export const PULL_REQUEST_BODY_SHOWN = 1200;
+
+const asYou = (actingAs: string | null) => `As you${actingAs === null ? "" : ` (@${actingAs})`}.`;
+
+/** Opening a pull request in words, as the approval card shows it and its digest covers it. */
+export const githubPullRequestSummary = (plan: GitHubPullRequestPlan): string => {
+  const body =
+    plan.body.length <= PULL_REQUEST_BODY_SHOWN
+      ? plan.body
+      : `${plan.body.slice(0, PULL_REQUEST_BODY_SHOWN)}\n[${plan.body.length - PULL_REQUEST_BODY_SHOWN} more characters]`;
+  return [
+    `Open a ${plan.draft ? "draft " : ""}pull request in ${plan.repository} from ${plan.head} into ${plan.base}`,
+    `Title: ${plan.title}`,
+    ...(body === "" ? ["No description."] : ["", body, ""]),
+    asYou(plan.actingAs),
+  ].join("\n");
+};
+
+/** A comment in words, as the approval card shows it and its digest covers it. */
+export const githubCommentSummary = (plan: GitHubCommentPlan): string =>
+  [
+    `Comment on ${plan.pullRequest ? "pull request" : "issue"} #${plan.number} in ${plan.repository}: ${plan.itemTitle}`,
+    "",
+    plan.body,
+    "",
+    asYou(plan.actingAs),
+  ].join("\n");
+
+/**
+ * The hidden marker the hub ends each comment with (ADR 020), so reading GitHub back after an unclear
+ * end finds this call's comment. The nonce is the hub's, random per call, and never shown to the hob.
+ */
+export const commentMarker = (nonce: string): string => `<!-- hobbots-call: ${nonce} -->`;
+
+const MARKER_WORD = "hobbots-call";
+
+/**
+ * The body without anything shaped like the hub's marker: every HTML comment that starts with
+ * `hobbots-call`, in any case, closed or running to the end. One plain scan, so it runs in linear time
+ * on any input (STD-SEC-005). Removing one can join the text around it into another, which
+ * `hasCommentMarker` finds on the result.
+ */
+export const stripCommentMarkers = (body: string): string => {
+  let out = "";
+  let at = 0;
+  for (;;) {
+    const open = body.indexOf("<!--", at);
+    if (open === -1) return out + body.slice(at);
+    const word = markerWordAt(body, open);
+    if (word === -1) {
+      out += body.slice(at, open + 4);
+      at = open + 4;
+      continue;
+    }
+    const close = body.indexOf("-->", word);
+    out += body.slice(at, open);
+    at = close === -1 ? body.length : close + 3;
+  }
+};
+
+/** Where the marker's word ends when an HTML comment opened at `open` starts with it, else -1. */
+const markerWordAt = (text: string, open: number): number => {
+  let start = open + 4;
+  while (start < text.length && /\s/.test(text[start] as string)) start++;
+  const end = start + MARKER_WORD.length;
+  return text.slice(start, end).toLowerCase() === MARKER_WORD ? end : -1;
+};
+
+/** Whether the text holds anything shaped like the hub's marker, in linear time. */
+export const hasCommentMarker = (text: string): boolean => {
+  for (let open = text.indexOf("<!--"); open !== -1; open = text.indexOf("<!--", open + 4)) {
+    if (markerWordAt(text, open) !== -1) return true;
+  }
+  return false;
+};
 
 export type GitHubToolName = keyof typeof GitHubToolInputs;
 export type GitHubToolInput<N extends GitHubToolName> = (typeof GitHubToolInputs)[N]["Type"];

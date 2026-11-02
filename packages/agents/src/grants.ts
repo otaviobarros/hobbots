@@ -63,6 +63,8 @@ const rulePaths = (rule: GrantRule): ReadonlyArray<string> => {
       return rule.paths;
     case "Command":
     case "Push":
+    case "PullRequest":
+    case "GitHubComment":
       return [rule.cwd];
     case "Host":
       return [];

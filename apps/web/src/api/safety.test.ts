@@ -45,9 +45,11 @@ describe("safety presets", () => {
 describe("per-hob rules", () => {
   it("lists every operation the policy decides once", () => {
     expect(RULES.map((r) => r.operation).sort()).toEqual([
+      "comment-github",
       "delete-files",
       "edit-files",
       "local-git",
+      "open-pull-request",
       "outside-folders",
       "push",
       "read-files",
@@ -85,6 +87,8 @@ describe("per-hob rules", () => {
       push: "ask",
       "use-web": "allow",
       "read-github": "allow",
+      "open-pull-request": "ask",
+      "comment-github": "ask",
       "outside-folders": "deny",
     } as const;
     expect(enforcement("delete-files", balanced)).toBe("checked");
@@ -104,6 +108,8 @@ describe("per-hob rules", () => {
       push: "ask",
       "use-web": "allow",
       "read-github": "allow",
+      "open-pull-request": "ask",
+      "comment-github": "ask",
       "outside-folders": "deny",
     } as const;
     expect(enforcement("local-git", balanced)).toBe("enforced");

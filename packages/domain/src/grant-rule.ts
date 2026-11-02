@@ -21,6 +21,9 @@ const GrantCommandOperation = Schema.Literals(["run-commands", "local-git"]);
  * - `Command`: exactly these literal words, run in exactly this folder.
  * - `Host`: exactly this host, lowercase and in ASCII form, without its subdomains.
  * - `Push`: a push to this remote and branch, from this folder.
+ * - `PullRequest`: opening a pull request into this base branch of this repository (`owner/name`),
+ *   from this folder. Titles and bodies change with every call, so a rule never names them (ADR 020).
+ * - `GitHubComment`: commenting on any issue or pull request of this repository, from this folder.
  */
 export const GrantRule = Schema.TaggedUnion({
   Folder: { operation: GrantFileOperation, folder: Schema.String },
@@ -28,6 +31,8 @@ export const GrantRule = Schema.TaggedUnion({
   Command: { operation: GrantCommandOperation, cwd: Schema.String, words: Schema.Array(Schema.String) },
   Host: { host: Schema.String },
   Push: { cwd: Schema.String, remote: Schema.String, branch: Schema.String },
+  PullRequest: { cwd: Schema.String, repository: Schema.String, base: Schema.String },
+  GitHubComment: { cwd: Schema.String, repository: Schema.String },
 });
 export type GrantRule = typeof GrantRule.Type;
 
@@ -42,5 +47,9 @@ export const ruleOperation = (rule: GrantRule): PolicyOperation => {
       return "use-web";
     case "Push":
       return "push";
+    case "PullRequest":
+      return "open-pull-request";
+    case "GitHubComment":
+      return "comment-github";
   }
 };

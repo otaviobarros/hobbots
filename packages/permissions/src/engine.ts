@@ -98,6 +98,13 @@ export const PolicyRequest = Schema.TaggedUnion({
    * `folder`. The hub reads it outside the sandbox, so it is decided on the folder alone.
    */
   GitHub: { folder: Schema.String, repository: Schema.String },
+  /**
+   * Opening a pull request (ADR 020) in `repository` into `base`, which the hub found from `folder`.
+   * Decided on the folder and the hob's answers, like a read; a grant names the base branch.
+   */
+  PullRequest: { folder: Schema.String, repository: Schema.String, base: Schema.String },
+  /** Commenting on issue or pull request `number` of `repository` (ADR 020); a grant names the repository. */
+  GitHubComment: { folder: Schema.String, repository: Schema.String, number: Schema.Number },
 });
 export type PolicyRequest = typeof PolicyRequest.Type;
 
@@ -185,7 +192,19 @@ export type ResolvedRequest =
     }
   | (Omit<Extract<PolicyRequest, { readonly _tag: "Push" }>, "cwd"> & { readonly cwd?: ResolvedTarget })
   | Extract<PolicyRequest, { readonly _tag: "Web" }>
-  | { readonly _tag: "GitHub"; readonly folder: ResolvedTarget; readonly repository: string };
+  | { readonly _tag: "GitHub"; readonly folder: ResolvedTarget; readonly repository: string }
+  | {
+      readonly _tag: "PullRequest";
+      readonly folder: ResolvedTarget;
+      readonly repository: string;
+      readonly base: string;
+    }
+  | {
+      readonly _tag: "GitHubComment";
+      readonly folder: ResolvedTarget;
+      readonly repository: string;
+      readonly number: number;
+    };
 
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
@@ -234,6 +253,8 @@ const OPERATION_WORDS: Record<PolicyOperation, string> = {
   push: "pushing",
   "use-web": "using the web",
   "read-github": "reading GitHub",
+  "open-pull-request": "opening pull requests",
+  "comment-github": "commenting on GitHub",
   "outside-folders": "anything outside the hob's folders",
 };
 
@@ -544,6 +565,44 @@ const evaluateGitHub = (
   return { targets: [request.repository], answers: [located(place) ? fromLayers(context, "read-github") : place] };
 };
 
+/**
+ * A GitHub write the hub sends for the hob (ADR 020): the folder it was found from must be the hob's.
+ * A grant is for the repository and base branch of a pull request, or the repository of a comment,
+ * from that folder; never for a title or body, which change with every call.
+ */
+const evaluateGitHubWrite = (
+  context: PolicyContext,
+  scope: ResolvedScope,
+  request: Extract<ResolvedRequest, { readonly _tag: "PullRequest" | "GitHubComment" }>,
+): Evaluated => {
+  const place = locate(scope, request.folder);
+  if (!located(place)) return { targets: [request.repository], answers: [place] };
+  const cwd = place.canonical;
+  if (request._tag === "PullRequest") {
+    const site: Site = {
+      rule: { _tag: "PullRequest", cwd: cwd.path, repository: request.repository, base: request.base },
+      matches: (rule) =>
+        rule._tag === "PullRequest" &&
+        samePath(cwd, rule.cwd) &&
+        rule.repository === request.repository &&
+        rule.base === request.base,
+    };
+    return {
+      targets: [`github.com/${request.repository} into ${request.base}`],
+      answers: [fromLayers(context, "open-pull-request", site)],
+    };
+  }
+  const site: Site = {
+    rule: { _tag: "GitHubComment", cwd: cwd.path, repository: request.repository },
+    matches: (rule) =>
+      rule._tag === "GitHubComment" && samePath(cwd, rule.cwd) && rule.repository === request.repository,
+  };
+  return {
+    targets: [`github.com/${request.repository} #${request.number}`],
+    answers: [fromLayers(context, "comment-github", site)],
+  };
+};
+
 const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: ResolvedRequest): Evaluated => {
   switch (request._tag) {
     case "Files":
@@ -556,6 +615,9 @@ const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: Re
       return evaluateWeb(context, request);
     case "GitHub":
       return evaluateGitHub(context, scope, request);
+    case "PullRequest":
+    case "GitHubComment":
+      return evaluateGitHubWrite(context, scope, request);
   }
 };
 
@@ -690,6 +752,8 @@ export class PolicyEngine extends Context.Service<
           case "Web":
             return Effect.succeed(request);
           case "GitHub":
+          case "PullRequest":
+          case "GitHubComment":
             return (isAbsolute(request.folder) ? resolve(request.folder, "/") : unresolved(request.folder)).pipe(
               Effect.map((folder) => ({ ...request, folder })),
             );
