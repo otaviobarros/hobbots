@@ -114,6 +114,8 @@ const fakeApi = Layer.succeed(
     pullRequests: () => Effect.die("not used"),
     commentsSince: () => Effect.die("not used"),
     openPullRequest: () => Effect.die("not used"),
+    gitObject: () => Effect.die("not used"),
+    rateLimit: () => Effect.die("not used"),
     comment: () => Effect.die("not used"),
   }),
 );
@@ -416,6 +418,8 @@ describe("the GitHub Charm's Push", () => {
       Effect.map(Effect.service(GitPush), (real) =>
         GitPush.of({
           ...real,
+          // GitHub has the commit already, so the push only moves the branch.
+          toSend: (staged) => Effect.succeed({ commits: [], tip: staged.commit }),
           push: (staged, target, transport) =>
             Effect.suspend(() => {
               transports.push(transport._tag);

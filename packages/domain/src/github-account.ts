@@ -65,6 +65,24 @@ export type HobGitHubApp = typeof HobGitHubApp.Type;
 /** The bot account GitHub gives an app, such as `frodo-hobbots[bot]`. */
 export const hobAppBot = (app: Pick<HobGitHubApp, "slug">) => `${app.slug}[bot]`;
 
+/** Who a hob with its own app commits as locally: its bot, at the bot's noreply address (ADR 022). */
+export interface CommitIdentity {
+  readonly name: string;
+  readonly email: string;
+}
+
+/**
+ * The bot's commit identity. GitHub's noreply address carries the bot's user ID when the hub has it,
+ * `<id>+<slug>[bot]@users.noreply.github.com`, and is the older `<slug>[bot]@…` form otherwise.
+ */
+export const hobAppCommitIdentity = (app: Pick<HobGitHubApp, "slug" | "botUserId">): CommitIdentity => {
+  const bot = hobAppBot(app);
+  return {
+    name: bot,
+    email: `${app.botUserId === null ? "" : `${app.botUserId}+`}${bot}@users.noreply.github.com`,
+  };
+};
+
 /** Where a hob's app is installed: the account, and whether it reaches all of its repositories or some. */
 export const HobGitHubAppInstallation = Schema.Struct({
   id: Schema.Number,

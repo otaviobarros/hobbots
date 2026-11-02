@@ -71,6 +71,17 @@ export class GitHubApi extends Context.Service<
       repository: GitHubRepository,
       pullRequest: NewPullRequest,
     ) => Effect.Effect<GitHubWrite<GitHubPullRequest>>;
+    /**
+     * Stores one object with GitHub's Git database API, under the push's token (ADR 022). Nothing it
+     * stores is published until a branch points at it, so these are never uncertain for the push.
+     */
+    readonly gitObject: (
+      agentId: AgentId,
+      scope: GitHubTokenScope,
+      object: GitObject,
+    ) => Effect.Effect<GitHubWrite<{ readonly sha: string }>>;
+    /** How many core requests the push's token has left this hour, and when that resets. */
+    readonly rateLimit: (agentId: AgentId, scope: GitHubTokenScope) => Effect.Effect<RateLimit, GitHubError>;
     /** Adds one comment to an issue or pull request; never retried here (#324). */
     readonly comment: (
       agentId: AgentId,
@@ -80,6 +91,33 @@ export class GitHubApi extends Context.Service<
     ) => Effect.Effect<GitHubWrite<GitHubPostedComment>>;
   }
 >()("@hobbots/charms/GitHubApi") {}
+
+/** One object for GitHub's Git database API: a file's bytes, a tree on a base tree, or a commit. */
+export type GitObject =
+  | { readonly _tag: "Blob"; readonly bytes: Uint8Array }
+  | {
+      readonly _tag: "Tree";
+      readonly baseTree: string | null;
+      readonly entries: ReadonlyArray<{
+        readonly path: string;
+        readonly mode: string;
+        readonly type: "blob" | "commit";
+        readonly sha: string | null;
+      }>;
+    }
+  /** No author, committer or signature, so GitHub writes and signs it as the bot (ADR 022). */
+  | {
+      readonly _tag: "Commit";
+      readonly message: string;
+      readonly tree: string;
+      readonly parents: ReadonlyArray<string>;
+    };
+
+export interface RateLimit {
+  readonly remaining: number;
+  /** When the hour's requests come back, as an ISO date. */
+  readonly resetsAt: string;
+}
 
 /** A pull request as reading one back needs it. */
 export interface GitHubPullRequest {
@@ -242,6 +280,25 @@ const refusalText = (response: HttpClientResponse.HttpClientResponse) =>
     Effect.orElseSucceed(() => `GitHub refused it (${response.status}).`),
   );
 const ViewerJson = Schema.Struct({ login: Schema.String });
+const ShaJson = Schema.Struct({ sha: Schema.String });
+const RateLimitJson = Schema.Struct({
+  resources: Schema.Struct({ core: Schema.Struct({ remaining: Schema.Number, reset: Schema.Number }) }),
+});
+
+/** The request body GitHub's Git database API takes for each object, and where it goes. */
+const gitObjectRequest = (object: GitObject): { readonly path: string; readonly body: Record<string, unknown> } => {
+  switch (object._tag) {
+    case "Blob":
+      return { path: "blobs", body: { content: Buffer.from(object.bytes).toString("base64"), encoding: "base64" } };
+    case "Tree":
+      return {
+        path: "trees",
+        body: { ...(object.baseTree === null ? {} : { base_tree: object.baseTree }), tree: object.entries },
+      };
+    case "Commit":
+      return { path: "commits", body: { message: object.message, tree: object.tree, parents: object.parents } };
+  }
+};
 
 /** The longest body or comment a hob reads, so one long thread does not fill its context. */
 export const MAX_TEXT = 4000;
@@ -300,14 +357,15 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
 
       const read = <S extends Schema.Constraint>(
         agentId: AgentId,
-        repository: GitHubRepository | null,
+        repository: GitHubRepository | GitHubTokenScope | null,
         path: string,
         schema: S,
         what: string,
         params: Record<string, string> = {},
       ): Effect.Effect<S["Type"], GitHubError, S["DecodingServices"]> =>
         Effect.gen(function* () {
-          const scope = scopeOf(repository, "read");
+          // A repository reads with a read token; a scope names the action whose token it uses.
+          const scope = repository !== null && "action" in repository ? repository : scopeOf(repository, "read");
           const token = yield* credential.tokenFor(agentId, scope);
           let response = yield* send(token, path, params, what);
           // A refused token is refreshed once and the read tried again; refused again, GitHub is disconnected.
@@ -441,6 +499,23 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
         });
 
       return GitHubApi.of({
+        gitObject: (agentId, scope, object) => {
+          const request = gitObjectRequest(object);
+          return signedWrite(
+            agentId,
+            scope,
+            `/repos/${repositorySlug(scope.repository)}/git/${request.path}`,
+            request.body,
+            ShaJson,
+          );
+        },
+        rateLimit: (agentId, scope) =>
+          read(agentId, scope, "/rate_limit", RateLimitJson, "the rate limit").pipe(
+            Effect.map((json) => ({
+              remaining: json.resources.core.remaining,
+              resetsAt: new Date(json.resources.core.reset * 1000).toISOString(),
+            })),
+          ),
         openPullRequest: (agentId, repository, pullRequest) =>
           signedWrite(
             agentId,

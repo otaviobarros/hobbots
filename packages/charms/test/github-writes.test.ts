@@ -167,6 +167,8 @@ const makeFakeGitHub = () => {
           pulls.push(stored);
           return stored;
         }),
+      gitObject: () => Effect.die("not used"),
+      rateLimit: () => Effect.die("not used"),
       comment: (_agentId, _repository, number, body) =>
         writeWith(`comment #${number}`, () => {
           const stored = {

@@ -8,13 +8,14 @@ import {
   repositorySlug,
 } from "@hobbots/domain";
 import { PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
-import { Context, Data, Effect, Option, type Redacted, Result } from "effect";
+import { Context, Data, Effect, Option, Redacted, Result } from "effect";
 import type { CharmCallRunner, ReadBack, WriteOutcome } from "./charm-calls.ts";
-import { GitPush, type PushTransport } from "./git-push.ts";
-import { GitHubCredential, refusedTwice } from "./github-account.ts";
+import { GitPush, type PushTransport, type StagedBranch } from "./git-push.ts";
+import { GitHubCredential, type GitHubTokenScope, refusedTwice } from "./github-account.ts";
 import { githubActor } from "./github-actor.ts";
 import { GitHubApi, type GitHubError } from "./github-api.ts";
 import { branchNameCheck, decideCharmWrite } from "./github-writes.ts";
+import { recreateOnGitHub } from "./hob-app-push.ts";
 
 /**
  * The GitHub Charm's Push (ADR 020, #323). The hub fixes the commit the hob's branch points to and
@@ -42,19 +43,45 @@ const pushSite = (repository: GitHubRepository, branch: string) =>
 
 const short = (commit: string) => commit.slice(0, 12);
 
-/** What the hob is told when a push took effect. */
-const pushedText = (plan: GitHubPushPlan) =>
-  `Pushed ${short(plan.commit)} to ${plan.repository} branch ${plan.remoteBranch}. Its commits are on GitHub now: https://github.com/${plan.repository}/tree/${plan.remoteBranch}`;
+/** Whether the branch on GitHub is at the pushed commit, or at the one GitHub made from it for the hob's app. */
+const alreadyThere = (replaces: string | null, commit: string, sentAs: string | null) =>
+  replaces === commit || (sentAs !== null && replaces === sentAs);
 
-/** Reads a push back: it took effect when the branch on GitHub is at the pushed commit. */
+/** The most commit pairs a pushed answer lists, so a long history does not fill the hob's context. */
+const PAIRS_SHOWN = 20;
+
+/**
+ * What the hob is told when a push took effect. A hob's app pushes commits GitHub made anew, so the
+ * hob is given both IDs of each (ADR 022).
+ */
+const pushedText = (plan: GitHubPushPlan, sent: ReadonlyArray<readonly [string, string]> = []) => {
+  const pushed = `Pushed ${short(plan.commit)} to ${plan.repository} branch ${plan.remoteBranch}. Its commits are on GitHub now: https://github.com/${plan.repository}/tree/${plan.remoteBranch}`;
+  if (plan.actingAs._tag !== "HobApp") return pushed;
+  const pairs = sent.slice(-PAIRS_SHOWN).map(([local, github]) => `  ${short(local)} is ${short(github)} on GitHub`);
+  return [
+    pushed,
+    `GitHub made the commits again as ${plan.actingAs.bot} and signed them, so their IDs and dates differ from yours. Your branch still points at your own commits.`,
+    ...(sent.length > PAIRS_SHOWN ? [`The last ${PAIRS_SHOWN} of ${sent.length}:`] : []),
+    ...pairs,
+  ].join("\n");
+};
+
+/**
+ * Reads a push back: it took effect when the branch on GitHub is at the pushed commit, or, for a
+ * hob's app, at the commit GitHub made from it.
+ */
 export const pushReadBack =
-  (api: GitHubApi["Service"]): ReadBack =>
+  (api: GitHubApi["Service"], git: GitPush["Service"]): ReadBack =>
   (call) =>
     Effect.gen(function* () {
       const plan = JSON.parse(call.plan) as GitHubPushPlan;
       const [owner = "", name = ""] = plan.repository.split("/");
-      const head = yield* api.branchHead(call.agentId, { owner, name }, plan.remoteBranch);
-      return head === plan.commit;
+      const repository = { owner, name };
+      const head = yield* api.branchHead(call.agentId, repository, plan.remoteBranch);
+      if (head === null) return false;
+      if (head === plan.commit) return true;
+      const sentAs = yield* git.sentAs(plan.folder, repository, plan.commit);
+      return head === sentAs && pushedText(plan, [[plan.commit, sentAs]]);
     });
 
 export const makeGitHubPush = (runner: CharmCallRunner) =>
@@ -75,9 +102,10 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
      */
     const send = (
       agentId: AgentId,
-      staged: { readonly staging: string; readonly commit: string },
+      staged: StagedBranch,
       plan: GitHubPushPlan,
       repository: GitHubRepository,
+      known: ReadonlyArray<string | null>,
     ): Effect.Effect<WriteOutcome> =>
       Effect.gen(function* () {
         const settings = yield* GitHubPushSettings;
@@ -89,8 +117,8 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
           replaces: plan.replaces,
         };
         const viaSsh: PushTransport = { _tag: "Ssh", agentSocket: settings.agentSocket ?? process.env.SSH_AUTH_SOCK };
-        const over = (token: Redacted.Redacted<string> | null) =>
-          git.push(staged, target, token === null ? viaSsh : { _tag: "Https", token });
+        // The commits GitHub made from the hob's in this push, for the hob's answer and for forgetting them.
+        let sent: ReadonlyArray<readonly [string, string]> = [];
         // Why the hub has no token for the push, such as a hob's app that needs a reconnect.
         const noToken = (error: GitHubError) => ({ _tag: "NoToken", message: error.message }) as const;
         const once = Effect.gen(function* () {
@@ -100,8 +128,25 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
           const app = yield* credential.hobApp(agentId).pipe(Effect.result);
           if (Result.isFailure(app)) return noToken(app.failure);
           const viaApp = app.success !== null;
+          let over = (token: Redacted.Redacted<string> | null) =>
+            git.push(staged, target, token === null ? viaSsh : { _tag: "Https", token });
+          let scope: GitHubTokenScope = { repository, action: "push" };
           if (settings.over === "ssh" && !viaApp) return yield* over(null);
-          const scope = { repository, action: "push" } as const;
+          if (viaApp) {
+            // GitHub makes the commits as the bot first; the branch then moves to its last one with Git.
+            const made = yield* recreateOnGitHub(api, git, agentId, staged, repository, known);
+            if (made._tag !== "Made") return made;
+            if (made.sent.length > 0) sent = made.sent;
+            scope = made.scope;
+            const tip = { ...staged, commit: made.tip };
+            over = (token) =>
+              Effect.gen(function* () {
+                const https: PushTransport = { _tag: "Https", token: token ?? Redacted.make("") };
+                const fetched = yield* git.record(staged, repository, made.sent, https);
+                if (fetched._tag !== "Fetched") return fetched;
+                return yield* git.push(tip, { ...target, commit: made.tip }, https);
+              });
+          }
           const token = yield* credential.tokenFor(agentId, scope).pipe(Effect.result);
           if (Result.isFailure(token)) return noToken(token.failure);
           const result = yield* over(token.success);
@@ -116,11 +161,26 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
         let result = yield* once;
         // Nothing reached GitHub, so trying once more cannot send it twice.
         if (result._tag === "NotSent") result = yield* once;
+        // A refused push leaves GitHub's commits unpublished, so a later push makes them anew.
+        if (result._tag === "Rejected" || result._tag === "Refused") {
+          yield* git.forget(
+            staged,
+            repository,
+            sent.map(([local]) => local),
+          );
+        }
         switch (result._tag) {
           case "Pushed":
-            return { _tag: "Applied", text: pushedText(plan) };
+            return { _tag: "Applied", text: pushedText(plan, sent) };
           case "Rejected":
             return { _tag: "Refused", text: result.message };
+          case "Refused":
+            return { _tag: "Refused", text: `${result.message} Nothing was pushed.` };
+          case "Unpublished":
+            return {
+              _tag: "NotSent",
+              text: `${result.message} No branch was changed, but what the hub already made on GitHub may stay there, unpublished, until GitHub cleans it up. You may try again.`,
+            };
           case "NotSent":
             return { _tag: "NotSent", text: `${result.message} You may try again.` };
           case "SignedOut":
@@ -137,6 +197,22 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
             return { _tag: "NotSent", text: `${result.message} Nothing was pushed.` };
         }
       });
+
+    /**
+     * The commits a push adds beyond `known`. A hob's app also counts the commits it already sent as
+     * GitHub's, under the IDs GitHub gave them, and gives GitHub's commit for the pushed one.
+     */
+    const newCommits = (
+      staged: StagedBranch,
+      known: ReadonlyArray<string | null>,
+      app: { readonly folder: string; readonly repository: GitHubRepository } | null,
+    ) =>
+      app === null
+        ? Effect.map(git.commits(staged, known), (commits) => ({ commits, sentAs: null }))
+        : Effect.all({
+            commits: git.commits(staged, known, app.repository),
+            sentAs: git.sentAs(app.folder, app.repository, staged.commit),
+          });
 
     /** Pushes a hob's branch: `folder` and `repository` are the hob's, resolved by the caller. */
     const push = (
@@ -174,7 +250,11 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
               ? replaces
               : yield* github(api.branchHead(agentId, repository, info.defaultBranch));
           const actingAs = yield* github(githubActor(credential, api, agentId));
-          const commits = yield* git.commits(staged, [replaces, defaultHead]);
+          const { commits, sentAs } = yield* newCommits(
+            staged,
+            [replaces, defaultHead],
+            actingAs._tag === "HobApp" ? { folder, repository } : null,
+          );
           const settings = yield* GitHubPushSettings;
           const plan: GitHubPushPlan = {
             repository: slug,
@@ -191,7 +271,7 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
             actingAs,
             over: settings.over,
           };
-          if (replaces === staged.commit) {
+          if (alreadyThere(replaces, staged.commit, sentAs)) {
             return `${plan.repository} branch ${remoteBranch} is already at ${short(staged.commit)}, so there was nothing to push.`;
           }
           const request: PolicyRequest = {
@@ -240,7 +320,7 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
               messageId: turn.messageId,
             },
             credential
-              .onRepository(agentId, repository, send(agentId, staged, plan, repository))
+              .onRepository(agentId, repository, send(agentId, staged, plan, repository, [replaces, defaultHead]))
               .pipe(
                 Effect.catch((error) =>
                   Effect.succeed<WriteOutcome>({ _tag: "NotSent", text: `${error.message} Nothing was pushed.` }),
@@ -257,5 +337,5 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
           .pipe(Effect.mapError((error) => (error instanceof Refused ? error : githubError(error))));
       }).pipe(Effect.scoped);
 
-    return { push, readBack: pushReadBack(api) };
+    return { push, readBack: pushReadBack(api, git) };
   });

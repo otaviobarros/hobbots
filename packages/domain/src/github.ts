@@ -266,6 +266,10 @@ export const githubPushSummary = (plan: GitHubPushPlan): string =>
         : `Updates the branch from ${short(plan.replaces)}.`,
     `${plan.commits} commit${plan.commits === 1 ? "" : "s"} GitHub's branches do not have${plan.subjects.length > 0 ? ":" : "."}`,
     ...plan.subjects.map((subject) => `  ${subject}`),
+    // A hob's app pushes through GitHub's API, which makes the commits anew (ADR 022).
+    ...(plan.actingAs._tag === "HobApp"
+      ? ["GitHub creates these commits again, signed as the bot, with new IDs and dates."]
+      : []),
     plan.over === "ssh"
       ? `Over SSH with your agent, ${githubActorText(plan.actingAs)}.`
       : sentence(githubActorText(plan.actingAs)),

@@ -74,6 +74,8 @@ const FakeGitHub = Layer.succeed(
     pullRequests: () => Effect.die("not read in these tests"),
     commentsSince: () => Effect.die("not read in these tests"),
     openPullRequest: () => Effect.die("not written in these tests"),
+    gitObject: () => Effect.die("not written in these tests"),
+    rateLimit: () => Effect.die("not written in these tests"),
     comment: () => Effect.die("not written in these tests"),
   }),
 );

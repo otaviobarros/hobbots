@@ -59,6 +59,49 @@ export interface CommitSummary {
   readonly subjects: ReadonlyArray<string>;
 }
 
+/** One path a commit changes against its first parent, as GitHub's tree API takes it (ADR 022). */
+export interface TreeChange {
+  readonly path: string;
+  /** Git's mode: `100644`, `100755`, `120000` for a symbolic link, or `160000` for a submodule. */
+  readonly mode: string;
+  readonly type: "blob" | "commit";
+  /** The object, or null when the commit removes the path. */
+  readonly sha: string | null;
+  /** The blob's size in bytes; zero for a submodule or a removal. */
+  readonly size: number;
+}
+
+/** A parent of a commit to send: the hob's commit, and the one GitHub has for it, or null when this push makes it. */
+export interface SentParent {
+  readonly local: string;
+  readonly github: string | null;
+}
+
+/** A commit of the hob's that GitHub does not have yet, to recreate there with its message and tree. */
+export interface CommitToSend {
+  readonly sha: string;
+  readonly tree: string;
+  /** The message exactly as the commit has it. */
+  readonly message: string;
+  readonly parents: ReadonlyArray<SentParent>;
+  /** The first parent's tree, which GitHub builds the new tree on; null for a root commit. */
+  readonly baseTree: string | null;
+  readonly changes: ReadonlyArray<TreeChange>;
+}
+
+/** What a push as a hob's app sends: its commits oldest first, or the commit GitHub already has for the branch. */
+export interface SendPlan {
+  readonly commits: ReadonlyArray<CommitToSend>;
+  /** GitHub's commit for the pushed one when nothing is left to make, or null. */
+  readonly tip: string | null;
+}
+
+/** How fetching GitHub's new commits into the staging repository ended. */
+export type FetchResult =
+  | { readonly _tag: "Fetched" }
+  | { readonly _tag: "NotSent"; readonly message: string }
+  | { readonly _tag: "SignedOut" };
+
 export class GitPush extends Context.Service<
   GitPush,
   {
@@ -71,9 +114,46 @@ export class GitPush extends Context.Service<
       folder: string,
       branch: string,
     ) => Effect.Effect<StagedBranch, PushRefused, Scope.Scope>;
-    /** The commits a push of `commit` adds beyond `known`, the remote commits the staging repository has. */
-    readonly commits: (staged: StagedBranch, known: ReadonlyArray<string | null>) => Effect.Effect<CommitSummary>;
+    /**
+     * The commits a push of `commit` adds beyond `known`, the remote commits the staging repository
+     * has, and beyond those already sent to `sentTo` as a hob's app.
+     */
+    readonly commits: (
+      staged: StagedBranch,
+      known: ReadonlyArray<string | null>,
+      sentTo?: GitHubRepository,
+    ) => Effect.Effect<CommitSummary>;
     readonly push: (staged: StagedBranch, target: PushTarget, transport: PushTransport) => Effect.Effect<PushResult>;
+    /**
+     * The commits a push of the staged branch as a hob's app recreates on GitHub (ADR 022): those
+     * reachable from it that are not in `known`, the remote commits the staging repository has, nor
+     * already sent to `repository`, oldest first.
+     */
+    readonly toSend: (
+      staged: StagedBranch,
+      repository: GitHubRepository,
+      known: ReadonlyArray<string | null>,
+    ) => Effect.Effect<SendPlan, PushRefused>;
+    /** A blob's bytes from the staging repository. */
+    readonly blob: (staged: StagedBranch, sha: string) => Effect.Effect<Uint8Array, PushRefused>;
+    /**
+     * Fetches the commits GitHub made into the staging repository and keeps the map from each of the
+     * hob's commits to GitHub's, so the next push sends only newer ones.
+     */
+    readonly record: (
+      staged: StagedBranch,
+      repository: GitHubRepository,
+      sent: ReadonlyArray<readonly [local: string, github: string]>,
+      transport: PushTransport,
+    ) => Effect.Effect<FetchResult>;
+    /** Drops the map for these commits of the hob's, so a later push makes them again. */
+    readonly forget: (
+      staged: StagedBranch,
+      repository: GitHubRepository,
+      locals: ReadonlyArray<string>,
+    ) => Effect.Effect<void>;
+    /** GitHub's commit for one of the hob's that was pushed from `folder` as a hob's app, or null. */
+    readonly sentAs: (folder: string, repository: GitHubRepository, commit: string) => Effect.Effect<string | null>;
     /** Whether Git takes the name as a branch name (`git check-ref-format --branch`). */
     readonly isBranchName: (name: string) => Effect.Effect<boolean>;
   }
@@ -234,6 +314,54 @@ export const pushResult = (exit: number, stdout: string, stderr: string, ref: st
 
 const folderKey = (folder: string) => createHash("sha256").update(folder).digest("hex").slice(0, 24);
 
+/**
+ * The staging repository's map for a repository on GitHub (ADR 022). `github/<key>/<local>` points at
+ * the commit GitHub made from the hob's, which keeps it; `sent/<key>/<local>` at the hob's own, so
+ * Git can leave every sent commit out of the next push. A hash names the repository, since a GitHub
+ * name such as `.github` is not a valid part of a ref.
+ */
+const mapRefs = (repository: GitHubRepository) => {
+  const key = createHash("sha256").update(repositorySlug(repository)).digest("hex").slice(0, 24);
+  return { github: `refs/hobbots/github/${key}`, sent: `refs/hobbots/sent/${key}` };
+};
+
+/** Reads a commit object: its tree, its parents and its message, exactly as written. */
+export const parseCommit = (raw: string) => {
+  const end = raw.indexOf("\n\n");
+  const headers = (end === -1 ? raw : raw.slice(0, end)).split("\n");
+  const value = (line: string) => line.slice(line.indexOf(" ") + 1);
+  return {
+    tree: value(headers.find((line) => line.startsWith("tree ")) ?? ""),
+    parents: headers.filter((line) => line.startsWith("parent ")).map(value),
+    message: end === -1 ? "" : raw.slice(end + 2),
+  };
+};
+
+/** Reads `git diff-tree -r -z --raw` against the first parent into the paths it changes. */
+export const parseRawDiff = (output: string): ReadonlyArray<Omit<TreeChange, "size">> => {
+  const fields = output.split("\0");
+  const changes: Array<Omit<TreeChange, "size">> = [];
+  for (let at = 0; at + 1 < fields.length; at += 2) {
+    // `:<old mode> <new mode> <old object> <new object> <status>`, then the path.
+    const [, mode = "", , sha = "", status = ""] = (fields[at] ?? "").replace(/^:/, "").split(" ");
+    const path = fields[at + 1] ?? "";
+    if (status.startsWith("D")) changes.push({ path, mode: "100644", type: "blob", sha: null });
+    else changes.push({ path, mode, type: mode === "160000" ? "commit" : "blob", sha });
+  }
+  return changes;
+};
+
+/** Reads `git ls-tree -r -z` of a root commit's tree into the paths it adds. */
+export const parseTreeListing = (output: string): ReadonlyArray<Omit<TreeChange, "size">> =>
+  output
+    .split("\0")
+    .filter((entry) => entry !== "")
+    .map((entry) => {
+      const tab = entry.indexOf("\t");
+      const [mode = "", type = "", sha = ""] = entry.slice(0, tab).split(" ");
+      return { path: entry.slice(tab + 1), mode, type: type === "commit" ? "commit" : "blob", sha } as const;
+    });
+
 export const GitPushLive = (config: GitPushConfig) =>
   Layer.effect(
     GitPush,
@@ -275,6 +403,8 @@ export const GitPushLive = (config: GitPushConfig) =>
         options: {
           readonly extraEnv?: Record<string, string>;
           readonly input?: Uint8Array;
+          /** What Git reads on its standard input. */
+          readonly stdin?: Uint8Array;
           readonly timeout?: Duration.Input;
         } = {},
       ) =>
@@ -285,21 +415,17 @@ export const GitPushLive = (config: GitPushConfig) =>
               ChildProcess.make("git", [...base, ...args], {
                 env: { ...hubGitEnv(env, home), ...options.extraEnv },
                 extendEnv: false,
-                stdin: "ignore",
+                stdin: options.stdin === undefined ? "ignore" : Stream.make(options.stdin),
                 ...(options.input === undefined
                   ? {}
                   : { additionalFds: { fd3: { type: "input" as const, stream: Stream.make(options.input) } } }),
               }),
             );
-            const [stdout, stderr, exit] = yield* Effect.all(
-              [
-                Stream.mkString(Stream.decodeText(handle.stdout)),
-                Stream.mkString(Stream.decodeText(handle.stderr)),
-                handle.exitCode,
-              ],
+            const [bytes, stderr, exit] = yield* Effect.all(
+              [Stream.mkUint8Array(handle.stdout), Stream.mkString(Stream.decodeText(handle.stderr)), handle.exitCode],
               { concurrency: "unbounded" },
             );
-            return { stdout, stderr, exit: Number(exit) };
+            return { stdout: new TextDecoder().decode(bytes), bytes, stderr, exit: Number(exit) };
           }),
         ).pipe(Effect.timeout(options.timeout ?? "30 seconds"));
 
@@ -384,23 +510,29 @@ export const GitPushLive = (config: GitPushConfig) =>
           return { staging, commit };
         });
 
-      const commits = (staged: StagedBranch, known: ReadonlyArray<string | null>) =>
+      /** The commits among `known` the staging repository has, each once. */
+      const presentIn = (staging: string, known: ReadonlyArray<string | null>) =>
         Effect.gen(function* () {
           const present: Array<string> = [];
           for (const commit of known) {
             if (commit === null || !isCommitId(commit) || present.includes(commit)) continue;
-            const found = yield* run([
-              "-C",
-              staged.staging,
-              "cat-file",
-              "-e",
-              "--end-of-options",
-              `${commit}^{commit}`,
-            ]);
+            const found = yield* run(["-C", staging, "cat-file", "-e", "--end-of-options", `${commit}^{commit}`]);
             if (found.exit === 0) present.push(commit);
           }
-          // Every word is a commit id checked above, so none reads as an option; `--not` must stay one.
-          const range = [staged.commit, "--not", ...present];
+          return present;
+        });
+
+      const commits = (staged: StagedBranch, known: ReadonlyArray<string | null>, sentTo?: GitHubRepository) =>
+        Effect.gen(function* () {
+          const present = yield* presentIn(staged.staging, known);
+          // Every word is a commit id checked above or the hub's own glob, so none reads as an option;
+          // `--not` must stay one.
+          const range = [
+            staged.commit,
+            "--not",
+            ...present,
+            ...(sentTo === undefined ? [] : [`--glob=${mapRefs(sentTo).sent}/*`]),
+          ];
           const count = Number(yield* git(["-C", staged.staging, "rev-list", "--count", ...range]));
           const log = yield* git(["-C", staged.staging, "log", "--format=%s", "--max-count=5", ...range]);
           return { count, subjects: log === "" ? [] : log.split("\n") };
@@ -409,29 +541,10 @@ export const GitPushLive = (config: GitPushConfig) =>
       const push = (staged: StagedBranch, target: PushTarget, transport: PushTransport) =>
         Effect.gen(function* () {
           const ref = `refs/heads/${target.remoteBranch}`;
-          const slug = repositorySlug(target.repository);
-          const url = transport._tag === "Ssh" ? `git@github.com:${slug}.git` : `${httpsBase}/${slug}.git`;
+          const url = reachOf(target.repository, transport).url;
           // A force push replaces only the commit the hub read when deciding; a push without force never forces.
           const lease = target.force ? [`--force-with-lease=${ref}:${target.replaces ?? ""}`] : [];
-          const access =
-            transport._tag === "Https"
-              ? [
-                  "-c",
-                  "credential.helper=",
-                  "-c",
-                  `credential.helper=${PIPE_HELPER}`,
-                  "-c",
-                  "credential.useHttpPath=false",
-                ]
-              : [];
-          const sshEnv: Record<string, string> =
-            transport._tag === "Ssh"
-              ? {
-                  GIT_SSH_COMMAND: `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ${sshOption("UserKnownHostsFile", knownHosts)} -o HostKeyAlias=github.com`,
-                  GIT_SSH_VARIANT: "ssh",
-                  ...(transport.agentSocket ? { SSH_AUTH_SOCK: transport.agentSocket } : {}),
-                }
-              : {};
+          const { access, url: _, ...reach } = reachOf(target.repository, transport);
           const out = yield* run(
             [
               ...access,
@@ -445,11 +558,7 @@ export const GitPushLive = (config: GitPushConfig) =>
               url,
               `${staged.commit}:${ref}`,
             ],
-            {
-              extraEnv: sshEnv,
-              timeout: config.pushTimeout ?? "2 minutes",
-              ...(transport._tag === "Https" ? { input: credential(transport.token) } : {}),
-            },
+            { ...reach, timeout: config.pushTimeout ?? "2 minutes" },
           ).pipe(Effect.option);
           if (out._tag === "None") {
             return { _tag: "Uncertain", message: "GitHub did not answer the push in time." } as const;
@@ -461,12 +570,237 @@ export const GitPushLive = (config: GitPushConfig) =>
           ),
         );
 
+      /** Where Git reaches the repository, and how it signs in: the token over a pipe, or the SSH agent. */
+      const reachOf = (repository: GitHubRepository, transport: PushTransport) => {
+        const slug = repositorySlug(repository);
+        if (transport._tag === "Https") {
+          return {
+            url: `${httpsBase}/${slug}.git`,
+            access: [
+              "-c",
+              "credential.helper=",
+              "-c",
+              `credential.helper=${PIPE_HELPER}`,
+              "-c",
+              "credential.useHttpPath=false",
+            ],
+            extraEnv: {},
+            input: credential(transport.token),
+          };
+        }
+        return {
+          url: `git@github.com:${slug}.git`,
+          access: [],
+          extraEnv: {
+            GIT_SSH_COMMAND: `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ${sshOption("UserKnownHostsFile", knownHosts)} -o HostKeyAlias=github.com`,
+            GIT_SSH_VARIANT: "ssh",
+            ...(transport.agentSocket ? { SSH_AUTH_SOCK: transport.agentSocket } : {}),
+          } as Record<string, string>,
+        };
+      };
+
+      /** The map of the commits already sent to `repository`: the hob's commit to GitHub's. */
+      const sentMap = (staging: string, repository: GitHubRepository) =>
+        Effect.gen(function* () {
+          const refs = mapRefs(repository);
+          const listed = yield* git([
+            "-C",
+            staging,
+            "for-each-ref",
+            "--format=%(refname:lstrip=-1) %(objectname)",
+            `${refs.github}/`,
+          ]);
+          const map = new Map<string, string>();
+          for (const line of listed.split("\n")) {
+            const [local = "", github = ""] = line.split(" ");
+            if (isCommitId(local) && isCommitId(github)) map.set(local, github);
+          }
+          return map;
+        });
+
+      /** The paths a commit changes against its first parent, or all of its tree for a root commit. */
+      const changesOf = (staging: string, commit: string, firstParent: string | undefined) =>
+        Effect.gen(function* () {
+          const listed =
+            firstParent === undefined
+              ? parseTreeListing(
+                  (yield* run(["-C", staging, "ls-tree", "-r", "-z", "--full-tree", "--end-of-options", commit]))
+                    .stdout,
+                )
+              : parseRawDiff(
+                  (yield* run([
+                    "-C",
+                    staging,
+                    "diff-tree",
+                    "-r",
+                    "-z",
+                    "--raw",
+                    "--no-renames",
+                    "--no-commit-id",
+                    "--no-abbrev",
+                    "--end-of-options",
+                    firstParent,
+                    commit,
+                  ])).stdout,
+                );
+          const blobs = listed.filter((change) => change.type === "blob" && change.sha !== null);
+          const sizes = new Map<string, number>();
+          if (blobs.length > 0) {
+            const out = yield* run(["-C", staging, "cat-file", "--batch-check=%(objectname) %(objectsize)"], {
+              stdin: new TextEncoder().encode(blobs.map((change) => `${change.sha}\n`).join("")),
+            });
+            for (const line of out.stdout.split("\n")) {
+              const [sha = "", size = ""] = line.split(" ");
+              sizes.set(sha, Number(size));
+            }
+          }
+          return listed.map((change) => ({ ...change, size: change.sha === null ? 0 : (sizes.get(change.sha) ?? 0) }));
+        });
+
+      const toSend = (staged: StagedBranch, repository: GitHubRepository, known: ReadonlyArray<string | null>) =>
+        Effect.gen(function* () {
+          const map = yield* sentMap(staged.staging, repository);
+          const mapped = map.get(staged.commit);
+          if (mapped !== undefined) return { commits: [], tip: mapped };
+          const present = yield* presentIn(staged.staging, known);
+          // Every word is a commit id checked above or a glob of the hub's, so none reads as an option.
+          const listed = yield* git([
+            "-C",
+            staged.staging,
+            "rev-list",
+            "--reverse",
+            "--topo-order",
+            staged.commit,
+            "--not",
+            ...present,
+            `--glob=${mapRefs(repository).sent}/*`,
+          ]);
+          const order = listed === "" ? [] : listed.split("\n");
+          // The pushed commit is one GitHub already has, such as one on its default branch.
+          if (order.length === 0) return { commits: [], tip: staged.commit };
+          const made = new Set(order);
+          const commits: Array<CommitToSend> = [];
+          for (const sha of order) {
+            if (!isCommitId(sha)) return yield* new PushRefused({ message: "Git named no commit to send." });
+            const raw = yield* run(["-C", staged.staging, "cat-file", "commit", sha]);
+            const parsed = parseCommit(raw.stdout);
+            const first = parsed.parents[0];
+            const baseTree =
+              first === undefined ? null : yield* git(["-C", staged.staging, "rev-parse", `${first}^{tree}`]);
+            commits.push({
+              sha,
+              tree: parsed.tree,
+              message: parsed.message,
+              parents: parsed.parents.map((local) => ({
+                local,
+                github: made.has(local) ? null : (map.get(local) ?? local),
+              })),
+              baseTree,
+              changes: yield* changesOf(staged.staging, sha, first),
+            });
+          }
+          return { commits, tip: null };
+        }).pipe(
+          Effect.mapError((error) =>
+            error._tag === "PushRefused"
+              ? error
+              : new PushRefused({ message: "Git could not read the commits to send." }),
+          ),
+        );
+
+      const blob = (staged: StagedBranch, sha: string) =>
+        isCommitId(sha)
+          ? run(["-C", staged.staging, "cat-file", "blob", sha]).pipe(
+              Effect.mapError(() => new PushRefused({ message: "Git did not answer in time." })),
+              Effect.flatMap((out) =>
+                out.exit === 0
+                  ? Effect.succeed(out.bytes)
+                  : Effect.fail(new PushRefused({ message: `The staging repository has no file ${sha}.` })),
+              ),
+            )
+          : Effect.fail(new PushRefused({ message: "Git named no file to send." }));
+
+      const record = (
+        staged: StagedBranch,
+        repository: GitHubRepository,
+        sent: ReadonlyArray<readonly [string, string]>,
+        transport: PushTransport,
+      ) =>
+        Effect.gen(function* () {
+          const last = sent.at(-1);
+          if (last === undefined) return { _tag: "Fetched" } as const;
+          if (!sent.every(([local, github]) => isCommitId(local) && isCommitId(github))) {
+            return { _tag: "NotSent", message: "GitHub named no commit for what it made." } as const;
+          }
+          const { access, url, ...reach } = reachOf(repository, transport);
+          // GitHub's newest commit brings every one it made before it, and fetching moves no branch.
+          const out = yield* run(
+            [
+              ...access,
+              "-C",
+              staged.staging,
+              "fetch",
+              "--quiet",
+              "--no-tags",
+              "--no-write-fetch-head",
+              "--no-recurse-submodules",
+              "--end-of-options",
+              url,
+              last[1],
+            ],
+            { ...reach, timeout: "2 minutes" },
+          ).pipe(Effect.option);
+          if (out._tag === "None") return { _tag: "NotSent", message: "GitHub did not answer in time." } as const;
+          if (out.value.exit !== 0) {
+            const why = pushResult(out.value.exit, "", out.value.stderr, "");
+            if (why._tag === "SignedOut") return why;
+            return {
+              _tag: "NotSent",
+              message: "The hub could not fetch the commits GitHub made, so no branch was moved.",
+            } as const;
+          }
+          const refs = mapRefs(repository);
+          const updates = sent
+            .flatMap(([local, github]) => [
+              `update ${refs.github}/${local} ${github}\n`,
+              `update ${refs.sent}/${local} ${local}\n`,
+            ])
+            .join("");
+          yield* run(["-C", staged.staging, "update-ref", "--stdin"], { stdin: new TextEncoder().encode(updates) });
+          return { _tag: "Fetched" } as const;
+        }).pipe(
+          Effect.orElseSucceed((): FetchResult => ({ _tag: "NotSent", message: "Git could not run on the hub." })),
+          Effect.catchDefect(() =>
+            Effect.succeed<FetchResult>({ _tag: "NotSent", message: "Git could not run on the hub." }),
+          ),
+        );
+
+      const forget = (staged: StagedBranch, repository: GitHubRepository, locals: ReadonlyArray<string>) => {
+        const refs = mapRefs(repository);
+        const deletes = locals
+          .filter(isCommitId)
+          .flatMap((local) => [`delete ${refs.github}/${local}\n`, `delete ${refs.sent}/${local}\n`])
+          .join("");
+        return deletes === ""
+          ? Effect.void
+          : run(["-C", staged.staging, "update-ref", "--stdin"], { stdin: new TextEncoder().encode(deletes) }).pipe(
+              Effect.ignore,
+            );
+      };
+
+      const sentAs = (folder: string, repository: GitHubRepository, commit: string) =>
+        Effect.gen(function* () {
+          if (!isCommitId(commit)) return null;
+          const staging = yield* stagingOf(folder);
+          return (yield* sentMap(staging, repository)).get(commit) ?? null;
+        }).pipe(Effect.orElseSucceed(() => null));
+
       const isBranchName = (name: string) =>
         run(["-C", home, "check-ref-format", "--branch", name]).pipe(
           Effect.map((out) => out.exit === 0 && out.stdout.trim() === name),
           Effect.orElseSucceed(() => false),
         );
 
-      return GitPush.of({ stage, commits, push, isBranchName });
+      return GitPush.of({ stage, commits, push, toSend, blob, record, forget, sentAs, isBranchName });
     }),
   );
