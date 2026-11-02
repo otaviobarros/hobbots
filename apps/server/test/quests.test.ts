@@ -178,6 +178,12 @@ const setUp = () => {
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 800 }));
 
+const isLive = (state: string) => state === "starting" || state === "running";
+
+/** The states of a hob's Attempts in the tree, oldest first. */
+const attemptStates = (tree: TaskTree, agentId: AgentId) =>
+  tree.attempts.filter((each) => each.agentId === agentId).map((each) => each.state);
+
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
 const messages = () => HobbotsRepository.use((repo) => repo.listMessages(threadId));
@@ -217,6 +223,36 @@ const promptsTo = (requests: ReadonlyArray<PromptRequest>, task: Task | undefine
 /** A reply with no message of yours before it: a continuation Hobbots started. */
 const continuations = (all: ReadonlyArray<Message>) =>
   all.filter((m, index) => m.role === "assistant" && all[index - 1]?.role !== "user");
+
+/** Both members started side by side: Ada's first turn ended while Quill's was still held open. */
+const expectBothStarted = (waiting: TaskTree, requests: ReadonlyArray<PromptRequest>) => {
+  const quillTask = ownedBy(waiting, QUILL);
+  const adaTask = ownedBy(waiting, ADA);
+  expect(attemptStates(waiting, QUILL).filter(isLive)).not.toEqual([]);
+  expect(attemptStates(waiting, ADA)).toContain("completed");
+  expect(adaTask?.dependsOn).toEqual([quillTask?.id]);
+  expect(waiting.tasks[0]?.state).toBe("waiting");
+  expect(waiting.delegations.map((each) => each.memberId).sort()).toEqual([ADA, QUILL].sort());
+  const [adaFirst] = promptsTo(requests, adaTask);
+  expect(adaFirst?.sessionId).toBeNull();
+  expect(adaFirst?.prompt).toContain("Aldric gave you this Task as part of a Quest Aldric leads.");
+  expect(adaFirst?.prompt).toContain(`Task ${quillTask?.id}, active: Draft the landing copy`);
+  expect(adaFirst?.prompt).not.toContain("20% off everything");
+  const [quillFirst] = promptsTo(requests, quillTask);
+  expect(quillFirst?.prompt).toContain("Aldric expects back: Three headlines and a short body");
+  return { quillTask, adaTask };
+};
+
+/** Ada's second turn got Quill's copy from Aldric and went on in the same session. */
+const expectAdaResumed = (done: TaskTree, requests: ReadonlyArray<PromptRequest>, adaTask: Task | undefined) => {
+  const adaPrompts = promptsTo(requests, adaTask);
+  expect(adaPrompts).toHaveLength(2);
+  expect(adaPrompts[1]?.prompt).toContain('"Landing copy" was handed to Task');
+  expect(adaPrompts[1]?.prompt).toContain("Black Friday: 20% off everything");
+  const adaAttempts = done.attempts.filter((each) => each.taskId === adaTask?.id);
+  expect(adaAttempts.map((each) => each.state)).toEqual(["completed", "completed"]);
+  expect(adaPrompts[1]?.sessionId).toBe(adaAttempts[0]?.sessionId);
+};
 
 describe("leading a party on a Quest", () => {
   // covers OR-002, OR-003, IN-004
@@ -262,18 +298,7 @@ describe("leading a party on a Quest", () => {
         return ownedBy(tree, ADA)?.state === "waiting" && quill?.state === "active" && tree.quests.length === 1;
       }),
     );
-    const quillTask = ownedBy(waiting, QUILL);
-    const adaTask = ownedBy(waiting, ADA);
-    expect(adaTask?.dependsOn).toEqual([quillTask?.id]);
-    expect(waiting.tasks[0]?.state).toBe("waiting");
-    expect(waiting.delegations.map((each) => each.memberId).sort()).toEqual([ADA, QUILL].sort());
-    const [adaFirst] = promptsTo(requests, adaTask);
-    expect(adaFirst?.sessionId).toBeNull();
-    expect(adaFirst?.prompt).toContain("Aldric gave you this Task as part of a Quest Aldric leads.");
-    expect(adaFirst?.prompt).toContain(`Task ${quillTask?.id}, active: Draft the landing copy`);
-    expect(adaFirst?.prompt).not.toContain("20% off everything");
-    const [quillFirst] = promptsTo(requests, quillTask);
-    expect(quillFirst?.prompt).toContain("Aldric expects back: Three headlines and a short body");
+    const { quillTask, adaTask } = expectBothStarted(waiting, requests);
 
     // Aldric waits without blocking his chat: you still get an answer from him.
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, "How is it going?")));
@@ -288,14 +313,7 @@ describe("leading a party on a Quest", () => {
     expect(ownedBy(done, ADA)?.state).toBe("completed");
     expect(done.handOffs.map((each) => each.toTaskId)).toEqual([adaTask?.id]);
 
-    const adaPrompts = promptsTo(requests, adaTask);
-    expect(adaPrompts).toHaveLength(2);
-    expect(adaPrompts[1]?.prompt).toContain('"Landing copy" was handed to Task');
-    expect(adaPrompts[1]?.prompt).toContain("Black Friday: 20% off everything");
-    // The same session goes on: she keeps what she did while she waited.
-    const adaAttempts = done.attempts.filter((each) => each.taskId === adaTask?.id);
-    expect(adaAttempts.map((each) => each.state)).toEqual(["completed", "completed"]);
-    expect(adaPrompts[1]?.sessionId).toBe(adaAttempts[0]?.sessionId);
+    expectAdaResumed(done, requests, adaTask);
 
     // Two continuations in the chat: the hand-off, then the wrap-up with the Quest's result.
     const all = await run(messagesWhen((each) => continuations(each).length === 2));
@@ -328,6 +346,28 @@ describe("leading a party on a Quest", () => {
       messagesWhen((each) => continuations(each).some((reply) => reply.content.includes("ended as blocked."))),
     );
     expect(continuations(all).some((reply) => reply.content.includes("A blocker was reported on Task"))).toBe(true);
+  }, 20_000);
+});
+
+describe("a retired party member", () => {
+  // covers OR-002
+  it("[TC-OR-092] a member retired while it works fails its Task with a blocker that says why, and its lead hears of it", async () => {
+    const { run } = setUp();
+    const prompt = [
+      "Plan the campaign",
+      hub("delegate_task", { key: "copy", hob: "Quill", brief: ["Draft the copy", HOLD].join("\n") }),
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(treeWhen((each) => each.attempts.some((attempt) => attempt.agentId === QUILL)));
+
+    await run(HobLifecycle.use((lifecycle) => lifecycle.retire(QUILL, "stop")));
+
+    const tree = await run(treeWhen((each) => ownedBy(each, QUILL)?.state === "failed"));
+    const quill = ownedBy(tree, QUILL);
+    const blocker = tree.checkpoints.find((each) => each.taskId === quill?.id && each.kind === "blocker");
+    expect(blocker?.summary).toContain("retired");
+    expect(tree.attempts.find((each) => each.taskId === quill?.id)?.state).toBe("interrupted");
+    await run(messagesWhen((each) => continuations(each).some((reply) => reply.content.includes("ended as failed."))));
   }, 20_000);
 });
 
@@ -365,6 +405,10 @@ describe("a party member's authority", () => {
     expect(pending.threadId).toBe(threadId);
     expect(pending.operation).toBe("edit-files");
     expect(pending.targets).toEqual([file]);
+    // It is Quill's request on his own Task, not one of Aldric's messages.
+    const asked = await run(treeWhen((each) => ownedBy(each, QUILL) !== undefined));
+    expect(pending.messageId).toBeNull();
+    expect(pending.taskId).toBe(ownedBy(asked, QUILL)?.id);
 
     await run(
       ApprovalService.use((approvals) =>
@@ -379,5 +423,39 @@ describe("a party member's authority", () => {
     const decided = await run(ApprovalService.use((approvals) => approvals.get(pending.id)));
     expect(decided.state).toBe("approved");
     expect(Option.isSome(Option.fromNullishOr(decided.decidedAt))).toBe(true);
+  }, 20_000);
+
+  it("[TC-PE-162] a member only reaches the folders its delegation gives it, even where its own policy reaches further", async () => {
+    const { run } = setUp();
+    const given = join(project, "copy");
+    mkdirSync(given, { recursive: true });
+    const inside = join(given, "draft.md");
+    const outside = join(project, "secrets.md");
+    const prompt = [
+      "Plan the campaign",
+      hub("delegate_task", {
+        key: "copy",
+        hob: "Quill",
+        brief: [
+          "Write the copy",
+          `fake:tool Write ${inside}`,
+          `fake:tool Write ${outside}`,
+          hub("complete_task", { key: "copy-done", summary: "Copy written" }),
+        ].join("\n"),
+        authority: { folders: [given] },
+      }),
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+
+    const tree = await run(treeWhen((each) => ownedBy(each, QUILL)?.state === "completed"));
+    const quill = ownedBy(tree, QUILL);
+    const ran = (path: string) =>
+      tree.checkpoints.some(
+        (each) => each.taskId === quill?.id && each.summary.includes(path.split("/").pop() ?? path),
+      );
+    // Balanced lets Quill edit the whole project; the delegation keeps him to the copy folder.
+    expect(ran(inside)).toBe(true);
+    expect(ran(outside)).toBe(false);
+    expect(await run(ApprovalRepository.use((approvals) => approvals.listPending))).toEqual([]);
   }, 20_000);
 });

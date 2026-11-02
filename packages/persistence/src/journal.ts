@@ -80,6 +80,7 @@ const correlationOf = (event: JournaledEventType): RowCorrelation => {
         agentId: event.approval.agentId,
         threadId: event.approval.threadId,
         messageId: event.approval.messageId,
+        taskId: event.approval.taskId,
       };
     case "GrantCreated":
     case "GrantRevoked":

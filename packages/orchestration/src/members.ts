@@ -79,21 +79,34 @@ export const delegatedAccess = (
   if (access === null) return null;
   const path = new Set<string>([task.id, ...ancestorsOf(task, tree.tasks).map((each) => each.id)]);
   const given = tree.delegations.filter((delegation) => path.has(delegation.childTaskId));
+  const restrictions = [...access.policy.restrictions, ...given.map((delegation) => delegation.authority.overrides)];
+  const narrowing = given.flatMap((delegation) =>
+    delegation.authority.folders === null ? [] : [delegation.authority.folders],
+  );
+  if (narrowing.length === 0) return { ...access, policy: { ...access.policy, restrictions } };
+  const folders = narrowing.reduce((kept, allowed) => sharedFolders(kept, allowed, separator), access.folders);
+  // The policy engine reads its folders from the policy, not from the access: the member's
+  // folders become the only ones it may reach, its own and hidden ones folded into them.
   return {
     ...access,
     policy: {
       ...access.policy,
-      restrictions: [...access.policy.restrictions, ...given.map((delegation) => delegation.authority.overrides)],
+      restrictions,
+      sharedFolders: folders,
+      hob: { ...access.policy.hob, ownFolders: [], hiddenSharedFolders: [] },
     },
-    folders: given.reduce<ReadonlyArray<string>>(
-      (folders, delegation) =>
-        delegation.authority.folders === null
-          ? folders
-          : sharedFolders(folders, delegation.authority.folders, separator),
-      access.folders,
-    ),
+    folders,
   };
 };
+
+/**
+ * Whether a Task still waits for what the Tasks it comes after give it: one of them is not done
+ * yet, or nothing has been handed to it. Its first turn then never completes it.
+ */
+const awaitsHandOff = (task: Task, tree: TaskTree): boolean =>
+  task.dependsOn.length > 0 &&
+  (task.dependsOn.some((id) => tree.tasks.find((each) => each.id === id)?.state !== "completed") ||
+    !tree.handOffs.some((each) => each.toTaskId === task.id));
 
 /** The session the member's last turn on the Task ran in, to resume, or null before its first. */
 const lastSession = (task: Task, tree: TaskTree): string | null =>
@@ -108,7 +121,7 @@ const lastSession = (task: Task, tree: TaskTree): string | null =>
  * dispatcher, and is an Attempt of the Task. A turn that ends without the Task's result leaves it
  * waiting for what comes next, such as a hand-off from its lead or an answer, which starts the
  * next turn in the same session. A member's tool calls that need approval ask you directly, in the
- * thread of the request (PE-006).
+ * Inbox, under the lead's thread (PE-006).
  */
 export const makeMemberRunner = (deps: MemberDeps) => {
   const { tasks, repo, running } = deps;
@@ -133,7 +146,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
   /**
    * After a turn: the Attempt ends with it. Unless the turn returned the result itself, its final
    * reply completes the Task once nothing keeps it open; the first turn of a Task that comes after
-   * others never does, since what it needs from them comes later, through its lead. A Task still
+   * others does not while what it needs from them is still to come, through its lead. A Task still
    * open waits, or is blocked when only its own unreported milestones keep it open, which its lead
    * then hears about.
    */
@@ -164,12 +177,12 @@ export const makeMemberRunner = (deps: MemberDeps) => {
       }
       const found = yield* read(taskId);
       if (Option.isNone(found) || isTerminalTask(found.value.task.state)) return { _tag: "Handled" } as CarriedEnd;
-      const { task } = found.value;
+      const { task, tree } = found.value;
       if (task.state === "cancelling") {
         yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
         return { _tag: "Handled" } as CarriedEnd;
       }
-      if (!first || task.dependsOn.length === 0) {
+      if (!first || !awaitsHandOff(task, tree)) {
         const done = yield* tasks
           .completeTask(task.id, task.revision, {
             summary: deps.redactor.text(ending.text).trim() || "The Task finished without a reply.",
@@ -212,7 +225,30 @@ export const makeMemberRunner = (deps: MemberDeps) => {
       }
     });
 
-  /** A turn stopped before it ended: cancelled with its Task when that was asked for; otherwise the Task goes on later. */
+  /**
+   * A member's Task its hob can no longer work on, since the hob was retired: it fails with a
+   * blocker that says why, so its lead hears of it and can hand the work to another hob.
+   */
+  const retire = (taskId: TaskId, at: string) =>
+    Effect.gen(function* () {
+      const found = yield* read(taskId);
+      if (Option.isNone(found) || isTerminalTask(found.value.task.state)) return;
+      if (found.value.task.state === "cancelling") {
+        const task = found.value.task;
+        yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
+        return;
+      }
+      yield* deps.explain(taskId, "Its hob was retired before the Task was done.", at);
+      const latest = yield* read(taskId);
+      if (Option.isNone(latest) || isTerminalTask(latest.value.task.state)) return;
+      const task = latest.value.task;
+      yield* deps.attempt(tasks.moveTask(task.id, task.revision, "failed", at), "fail a retired member's Task");
+    });
+
+  /**
+   * A turn stopped before it ended: cancelled with its Task when that was asked for, failed when its
+   * hob was retired; otherwise the Task waits and goes on once work arrives again.
+   */
   const stopped = (taskId: TaskId, attemptId: AttemptId, run: Running) =>
     Effect.gen(function* () {
       // Stopped with the hub: the next start finds the Attempt live and ends it.
@@ -228,10 +264,15 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         }),
         "end a stopped member's turn",
       );
+      const hob = yield* repo.findAgent(run.agentId);
+      if (Option.isNone(hob) || hob.value.status === "retired") return yield* retire(taskId, at);
       const latest = yield* read(taskId);
-      if (Option.isSome(latest) && latest.value.task.state === "cancelling") {
-        const task = latest.value.task;
+      if (Option.isNone(latest)) return;
+      const task = latest.value.task;
+      if (task.state === "cancelling") {
         yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
+      } else if (task.state === "active") {
+        yield* deps.attempt(tasks.moveTask(task.id, task.revision, "waiting", at), "leave a member's Task waiting");
       }
     });
 
@@ -276,7 +317,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
           Option.isNone(deps.approvals) || task.threadId === null
             ? null
             : yield* deps.approvals.value.forTurn(
-                // The member's requests show in the thread of the request, as its own (PE-006).
+                // The member's requests reach you in the Inbox under its lead's thread, as its own (PE-006).
                 { agentId: agent.id, threadId: task.threadId, messageId: null, taskId: task.id },
                 run.accessNow ?? Effect.succeed(run.access),
               );
@@ -314,8 +355,9 @@ export const makeMemberRunner = (deps: MemberDeps) => {
       agentId,
       Effect.gen(function* () {
         const agent = yield* repo.findAgent(agentId);
-        // A paused hob's work waits until it wakes; a retired hob's never starts.
-        if (Option.isNone(agent) || agent.value.status !== "active") return;
+        // A paused hob's work waits until it wakes; a retired hob's Task fails, so its lead hears.
+        if (Option.isNone(agent) || agent.value.status === "retired") return yield* retire(taskId, yield* nowIso);
+        if (agent.value.status !== "active") return;
         const config = yield* repo.findAgentConfig(agent.value.id, agent.value.configVersion);
         const found = yield* read(taskId);
         if (Option.isNone(config) || Option.isNone(found)) return;

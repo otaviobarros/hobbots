@@ -95,7 +95,9 @@ export function ChatView({
   const asking = useQuery({
     ...approvalsQuery(threadId ?? ("" as ThreadId)),
     enabled: threadId !== undefined,
-    select: (approvals) => approvals.filter((approval) => approval.state === "pending").length,
+    // A party member's request is answered in the Inbox, not under a reply, so it never scrolls the chat.
+    select: (approvals) =>
+      approvals.filter((approval) => approval.state === "pending" && approval.messageId !== null).length,
   });
   const activity = useActivity();
   const navigate = useNavigate();

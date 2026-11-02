@@ -29,6 +29,8 @@ export function InboxDetail({
   now: Date;
 }) {
   const pending = request.state === "pending";
+  // A party member asks in its lead's thread, whose hob is known only once the threads load.
+  const chatHob = threadHob ?? (request.taskId === null ? request.agentId : undefined);
   const retired = hob.status === "retired";
   const title = requestTitle(request);
   return (
@@ -58,12 +60,12 @@ export function InboxDetail({
         {request.decidedAt !== null && <Fact term={copy.detail.decided}>{formatWhen(request.decidedAt)}</Fact>}
       </dl>
       <ApprovalCard approval={request} hob={hob} />
-      {!retired && (
+      {!retired && chatHob !== undefined && (
         <div className="flex flex-wrap gap-2.5">
           <Button asChild variant="outline">
             <Link
               to="/hobs/$hobId/threads/$threadId"
-              params={{ hobId: threadHob ?? request.agentId, threadId: request.threadId }}
+              params={{ hobId: chatHob, threadId: request.threadId }}
               search={request.messageId === null ? {} : { message: request.messageId }}
             >
               {copy.detail.openChat}

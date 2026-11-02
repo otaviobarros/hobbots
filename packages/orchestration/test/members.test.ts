@@ -91,6 +91,9 @@ describe("a party member's session", () => {
     const narrowed = delegatedAccess(access, read.tasks[1] as Task, read, "/");
     expect(narrowed?.policy.restrictions).toEqual([{ "edit-files": "ask", push: "deny" }]);
     expect(narrowed?.folders).toEqual(["/work/copy"]);
+    // The policy engine reads its folders from the policy, so they are narrowed there too.
+    expect(narrowed?.policy.sharedFolders).toEqual(["/work/copy"]);
+    expect(narrowed?.policy.hob.ownFolders).toEqual([]);
     // The rest of its policy is its own.
     expect(narrowed?.policy.preset).toBe("balanced");
     expect(narrowed?.runtimeFolder).toBe(access.runtimeFolder);
