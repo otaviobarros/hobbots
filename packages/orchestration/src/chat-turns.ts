@@ -5,7 +5,7 @@ import {
   type CarriedItem,
   carriedFrom,
   type EventEnvelope,
-  isTerminalTask,
+  openThreadTask,
   type Task,
   TaskId,
   type TaskToolName,
@@ -29,14 +29,12 @@ export interface ResolvedCaller {
   readonly attemptId: AttemptId | null;
 }
 
-/** The open Task the hob works on in a thread: the latest Task asked of it there that has not ended. */
-const openTaskOf = (trees: ReadonlyArray<TaskTree>, turn: ChatTurn) =>
-  trees
-    .flatMap((tree) => {
-      const top = tree.tasks[0];
-      return top !== undefined && top.ownerId === turn.agentId && !isTerminalTask(top.state) ? [{ top, tree }] : [];
-    })
-    .at(-1);
+/** Whether `taskId` is among `trees` and you cancelled it, or asked to. */
+const cancelledIn = (trees: ReadonlyArray<TaskTree>, taskId: TaskId) =>
+  trees.some((tree) => {
+    const top = tree.tasks[0];
+    return top?.id === taskId && (top.state === "cancelled" || top.state === "cancelling");
+  });
 
 /**
  * How a chat turn reaches the Task its hob works on in the thread. The Task is found, or started
@@ -51,6 +49,8 @@ export const makeChatResolver = (
 ) => {
   /** The Task the turn was briefed on, and the backpack items the briefing showed it. */
   let briefed: { readonly taskId: TaskId; readonly carried: ReadonlyArray<CarriedItem> } | null = null;
+  /** The Task the turn works on, once it was briefed on one or a call reached one. */
+  let workingOn: TaskId | null = null;
   /**
    * What the turn carries on its Task: the items it holds claims on, and those its briefing showed
    * unclaimed, a held claim winning over the same item shown.
@@ -71,8 +71,9 @@ export const makeChatResolver = (
      * arrived in between stays open for a later turn.
      */
     briefing: Effect.gen(function* () {
-      const open = openTaskOf(yield* tasks.readThreadTrees(turn.threadId), turn);
+      const open = openThreadTask(yield* tasks.readThreadTrees(turn.threadId), turn.agentId);
       if (open === undefined) return null;
+      workingOn = open.top.id;
       const ledger = yield* tasks.readLedger(open.top.id);
       const shown = briefingShows(open.top, open.tree);
       briefed = {
@@ -90,7 +91,15 @@ export const makeChatResolver = (
     ): Effect.Effect<ResolvedCaller, TaskToolRefused> =>
       Effect.gen(function* () {
         const journal = journalOf();
-        let task: Task | undefined = openTaskOf(yield* tasks.readThreadTrees(turn.threadId), turn)?.top;
+        const trees = yield* tasks.readThreadTrees(turn.threadId);
+        // A turn whose Task you cancelled does nothing more about it, and starts nothing in its place.
+        if (workingOn !== null && cancelledIn(trees, workingOn)) {
+          return yield* refuse(
+            "task-cancelling",
+            `Task ${workingOn} was cancelled, so this turn does no more work on it and starts none in its place.`,
+          );
+        }
+        let task: Task | undefined = openThreadTask(trees, turn.agentId)?.top;
         if (task === undefined) {
           if (!STARTS_WORK.has(name)) {
             return yield* refuse(
@@ -118,6 +127,7 @@ export const makeChatResolver = (
             ),
           );
         }
+        workingOn = task.id;
         const caller = { agentId: turn.agentId, taskId: task.id, carried: carriedBy(task.id) };
         const own = ownAttempt !== null && task.currentAttemptId === ownAttempt;
         if (own || !NEEDS_ATTEMPT.has(name) || (name !== "complete_task" && task.currentAttemptId !== null)) {

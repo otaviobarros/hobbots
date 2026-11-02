@@ -110,11 +110,16 @@ const awaitsHandOff = (task: Task, tree: TaskTree): boolean =>
   (task.dependsOn.some((id) => tree.tasks.find((each) => each.id === id)?.state !== "completed") ||
     !tree.handOffs.some((each) => each.toTaskId === task.id));
 
-/** The session the member's last turn on the Task ran in, to resume, or null before its first. */
-const lastSession = (task: Task, tree: TaskTree): string | null =>
-  tree.attempts
-    .filter((each) => each.taskId === task.id && each.agentId === task.ownerId && each.sessionId !== null)
-    .reduce<string | null>((_, each) => each.sessionId, null);
+/**
+ * The session the member's last turn on the Task ran in, to resume, or null before its first. Only
+ * the Task's current Attempt counts, and only when its owner ran it: a reassignment leaves it none,
+ * so a hob the Task comes back to starts afresh rather than in the session it had before. Each turn
+ * starts in the session it resumes, so the current Attempt carries it even if it ended early.
+ */
+const lastSession = (task: Task, tree: TaskTree): string | null => {
+  const current = tree.attempts.find((each) => each.id === task.currentAttemptId);
+  return current !== undefined && current.agentId === task.ownerId ? current.sessionId : null;
+};
 
 /**
  * Runs party members' Tasks (ADR 018, ADR 019). A member works on its Task in a session of its

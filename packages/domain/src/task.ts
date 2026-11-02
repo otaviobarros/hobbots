@@ -154,12 +154,13 @@ export const TaskTransitions = {
 
   /**
    * A reassignment gives a Task that failed, or that is open with nothing running, to another hob,
-   * queued for its first Attempt there. The Task keeps its id and its history.
+   * queued for its first Attempt there. The Task keeps its id and its history; no Attempt is its
+   * current one until the new owner starts, so nothing of the earlier owner's carries over.
    */
   reassign: (task: Task, ownerId: AgentId, at: string): Task | IllegalTaskTransition =>
     task.state === "completed" || task.state === "cancelled" || task.state === "cancelling"
       ? new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "queued" })
-      : new Task({ ...task, ownerId, state: "queued", updatedAt: at }),
+      : new Task({ ...task, ownerId, state: "queued", currentAttemptId: null, updatedAt: at }),
 
   complete: (task: Task, result: TaskResult, at: string): Task | IllegalTaskTransition =>
     task.state === "active" || task.state === "waiting"

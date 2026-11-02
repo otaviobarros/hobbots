@@ -13,6 +13,7 @@ import {
   type IllegalTaskTransition,
   isLiveAttempt,
   isTerminalTask,
+  openThreadTask,
   type QuestId,
   type StaleTask,
   type Task,
@@ -105,13 +106,25 @@ export class TaskControls extends Context.Service<
           if (hob.value.status === "retired") return yield* new HobUnavailable({ agentId, status: "retired" });
         });
 
-      /** Stops the reply of the Task's hob that works on it, when the Task you asked for has one running. */
-      const stopReply = (task: Task, tree: TaskTree) => {
-        const live = tree.attempts.some((each) => each.id === task.currentAttemptId && isLiveAttempt(each.state));
-        return task.parentId !== null || task.threadId === null || !live
+      /**
+       * Whether a reply in the thread of the Task you asked for may work on it: the Task has an
+       * Attempt running, or it is the one its hob's turns there work on. A later turn works on the
+       * Task without an Attempt of its own, so the Attempt alone does not tell.
+       */
+      const repliedOn = (task: Task, tree: TaskTree) =>
+        Effect.gen(function* () {
+          if (task.parentId !== null || task.threadId === null) return false;
+          if (tree.attempts.some((each) => each.id === task.currentAttemptId && isLiveAttempt(each.state))) return true;
+          const thread = yield* repo.findThread(task.threadId);
+          if (Option.isNone(thread) || thread.value.agentId !== task.ownerId) return false;
+          return openThreadTask(yield* tasks.readThreadTrees(task.threadId), task.ownerId)?.top.id === task.id;
+        });
+
+      /** Stops the thread's reply, which the stop leaves as stopped once it ended. */
+      const stopReply = (task: Task) =>
+        task.threadId === null
           ? Effect.void
           : chat.stop(task.threadId).pipe(Effect.catchTag("ThreadNotFound", () => Effect.void));
-      };
 
       const requestCancel = (taskId: TaskId) =>
         Effect.gen(function* () {
@@ -123,13 +136,15 @@ export class TaskControls extends Context.Service<
               message: `Task ${taskId} is ${task.state}; there is nothing to cancel.`,
             });
           }
+          // Read before the moves: once cancelled, the Task is no longer the one its hob's turns work on.
+          const replying = yield* repliedOn(task, tree);
           const at = yield* nowIso;
           for (const move of cancelMoves(task, tree)) {
             yield* tasks
               .moveTask(move.task.id, move.task.revision, move.to, at)
               .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));
           }
-          yield* stopReply(task, tree);
+          if (replying) yield* stopReply(task);
         });
 
       const cancel = (taskId: TaskId) =>

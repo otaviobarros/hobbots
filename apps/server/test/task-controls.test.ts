@@ -12,6 +12,7 @@ import {
   RuntimeAdapter,
   TaskControls,
   TaskRepository,
+  TaskTurns,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
 import {
@@ -19,6 +20,7 @@ import {
   AgentId,
   EMPTY_HOB_POLICY,
   type Message,
+  MessageId,
   type Task,
   type TaskTree,
   Thread,
@@ -60,10 +62,14 @@ const ADA = AgentId.make("ada");
 const threadId = ThreadId.make("campaign");
 /** A prompt with this line of its own waits, before it does anything, until the test lets it go on. */
 const HOLD = "fake:hold";
+/** A prompt with this line waits like HOLD once its session has started, so a stop can reach it. */
+const HOLD_STARTED = "fake:hold-started";
 /** A prompt with this line waits like HOLD, and cannot be stopped while it waits. */
 const STUCK = "fake:stuck";
 /** A prompt with this line fails the first time it is sent, and runs as written after. */
 const FLAKY = "fake:flaky";
+/** A prompt with this line fails every time it is sent. */
+const FAILS = "fake:fails";
 const CANCEL_TIMEOUT_MS = 300;
 
 const hob = (id: AgentId, name: string) =>
@@ -114,13 +120,21 @@ const scripted = (gates: Gates, requests: Array<PromptRequest>) =>
         ...fake,
         sendPrompt: (sent) => {
           const lines = sent.prompt.split("\n");
-          const flaky = lines.includes(FLAKY) && !failedOnce.has(sent.prompt);
+          const flaky = lines.includes(FAILS) || (lines.includes(FLAKY) && !failedOnce.has(sent.prompt));
           if (flaky) failedOnce.add(sent.prompt);
           const request = flaky ? { ...sent, prompt: `fake:cut-off\n${sent.prompt}` } : sent;
           requests.push(request);
           const stream = fake.sendPrompt(request);
           if (lines.includes(STUCK))
             return Stream.unwrap(Effect.as(Effect.uninterruptible(Deferred.await(gates.stuck)), stream));
+          if (lines.includes(HOLD_STARTED)) {
+            let started = false;
+            return Stream.mapEffect(stream, (event) => {
+              const wait = started ? Deferred.await(gates.hold) : Effect.void;
+              started = started || event._tag === "SessionStarted";
+              return Effect.as(wait, event);
+            });
+          }
           return lines.includes(HOLD) ? Stream.unwrap(Effect.as(Deferred.await(gates.hold), stream)) : stream;
         },
       });
@@ -368,6 +382,65 @@ describe("cancelling with confirmed outcomes", () => {
     expect(after.artifacts).toEqual([]);
     expect(ownedBy(after, QUILL)?.revision).toBe(ownedBy(cancelled, QUILL)?.revision);
   }, 20_000);
+  // covers OR-006
+  it("[TC-OR-150] cancelling the Task you asked for stops a later reply working on it, which starts nothing in its place", async () => {
+    const { run, release, requests } = setUp();
+    const first = [
+      "Write the copy",
+      hub("plan_steps", { key: "plan", steps: [{ brief: "Draft the headlines" }] }),
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, first)));
+    await run(
+      treeWhen((tree) => tree.tasks[1]?.state === "completed" && !tree.attempts.some((each) => isLive(each.state))),
+    );
+    await run(Effect.sleep("300 millis"));
+    await run(messagesWhen(() => true));
+
+    // Your next message there works on the same Task, with no Attempt of its own running.
+    const second = [
+      "Now the emails",
+      HOLD_STARTED,
+      hub("plan_steps", { key: "more", steps: [{ brief: "Draft the emails" }] }),
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, second)));
+    const sent = Effect.suspend(() =>
+      requests.some((each) => each.prompt.includes("Now the emails")) ? Effect.void : Effect.fail("not yet" as const),
+    );
+    await run(retry(sent));
+    const before = await run(treeWhen(() => true));
+    const top = before.tasks[0];
+    if (top === undefined) throw new Error("no Task");
+    expect(before.attempts.some((each) => each.taskId === top.id && isLive(each.state))).toBe(false);
+    // Another turn briefed on the Task before the cancel, which no stop reaches.
+    const [opening] = await run(messages());
+    const stray = await run(
+      TaskTurns.use((turns) =>
+        turns.forChat({
+          agentId: ALDRIC,
+          threadId,
+          messageId: MessageId.make(opening?.id ?? "none"),
+          prompt: "Keep going",
+          runtime: "claude-code",
+          configVersion: 1,
+        }),
+      ),
+    );
+
+    await run(controls((each) => each.cancel(top.id)));
+    expect((await run(messages())).at(-1)?.status).toBe("stopping");
+    await release();
+    const all = await run(messagesWhen(() => true));
+    // Whether the fake session gets to its call before the stop lands varies; either way it starts nothing.
+    expect(all.at(-1)?.status).toBe("stopped");
+    await run(Effect.sleep("300 millis"));
+
+    const answer = await run(stray.hubTools.call("plan_steps", { key: "stray", steps: [{ brief: "Draft the ads" }] }));
+    expect(answer).toMatchObject({ refused: true });
+    expect(answer.text).toContain("task-cancelling");
+    const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    expect(trees).toHaveLength(1);
+    expect(trees[0]?.tasks.map((task) => task.state)).toEqual(["cancelled", "completed"]);
+  }, 20_000);
 });
 
 describe("retrying and reassigning", () => {
@@ -464,5 +537,42 @@ describe("retrying and reassigning", () => {
     await run(HobLifecycle.use((lifecycle) => lifecycle.retire(ADA, "stop")));
     expect(await refused(quill.id, ADA)).toMatchObject({ _tag: "HobUnavailable", agentId: ADA });
     expect(ownedBy(await run(treeWhen(() => true)), QUILL)?.ownerId).toBe(QUILL);
+  }, 20_000);
+
+  // covers OR-006, EX-001
+  it("[TC-OR-151] a Task given back to a hob it had before starts afresh there, not in its old session", async () => {
+    const { run, requests } = setUp();
+    const prompt = [
+      "Plan the campaign",
+      hub("delegate_task", { key: "copy", hob: "Quill", brief: ["Draft the copy", FAILS].join("\n") }),
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    /** The Task's Attempts once `count` of them have ended. */
+    const ended = (count: number) =>
+      run(
+        treeWhen((tree) => {
+          const copy = tree.tasks[1];
+          const attempts = tree.attempts.filter((each) => each.taskId === copy?.id);
+          return attempts.length === count && !attempts.some((each) => isLive(each.state));
+        }),
+      );
+    const once = await ended(1);
+    const copy = once.tasks[1];
+    if (copy === undefined) throw new Error("no Task for Quill");
+    expect(once.attempts[0]?.sessionId).not.toBeNull();
+
+    await run(controls((each) => each.reassign(copy.id, ADA)));
+    await ended(2);
+    await run(controls((each) => each.reassign(copy.id, QUILL)));
+    const back = await ended(3);
+
+    const attempts = back.attempts.filter((each) => each.taskId === copy.id);
+    expect(attempts.map((each) => each.agentId)).toEqual([QUILL, ADA, QUILL]);
+    expect(attempts[2]?.sessionId).not.toBe(attempts[0]?.sessionId);
+    // Each owner starts from the lead's brief in a session of its own, Quill the second time too.
+    const fresh = requests.filter(
+      (each) => each.prompt.includes("Draft the copy") && !each.prompt.includes("delegate_task"),
+    );
+    expect(fresh.map((each) => each.sessionId)).toEqual([null, null, null]);
   }, 20_000);
 });
