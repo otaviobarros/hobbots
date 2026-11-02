@@ -17,6 +17,7 @@ import {
   Option,
   Redacted,
   Ref,
+  Result,
   Schema,
   Semaphore,
 } from "effect";
@@ -81,14 +82,41 @@ export class GitHubConnectRefused extends Schema.TaggedError<GitHubConnectRefuse
   message: Schema.String,
 }) {}
 
-/** The token a Charm call uses, chosen per hob: today always the user's own account (#221 adds a second source). */
+/**
+ * What a call does on GitHub, which bounds the permissions of a hob's app token (ADR 022). `push`
+ * leaves out workflows; `push-workflows` is for commits that change `.github/workflows`.
+ */
+export type GitHubAction = "read" | "push" | "push-workflows" | "open-pull-request" | "comment";
+
+/** The one repository a call acts on and what it does there. */
+export interface GitHubTokenScope {
+  readonly repository: GitHubRepository;
+  readonly action: GitHubAction;
+}
+
+/**
+ * The token a Charm call uses, chosen per hob: the hob's own GitHub App when it has one (ADR 022),
+ * the user's account otherwise, never one in place of the other.
+ */
 export class GitHubCredential extends Context.Service<
   GitHubCredential,
   {
-    /** Whether GitHub is connected, so a turn may offer the Charm. Reads no secret. */
+    /** Whether the user's account is connected. A hob with its own app reaches GitHub without it. Reads no secret. */
     readonly connected: Effect.Effect<boolean>;
-    /** A token for the hob's call (null: the hub's own read), refreshed first when it is close to expiry. */
-    readonly tokenFor: (agentId: AgentId | null) => Effect.Effect<Redacted.Redacted<string>, GitHubError>;
+    /**
+     * The bot the hob acts as when it has its own app, or null when it acts as the user's account.
+     * Inside `onRepository` it fails `signed-out` once that is no longer the source the call was
+     * checked under, so a call never changes identity midway.
+     */
+    readonly bot: (agentId: AgentId) => Effect.Effect<string | null, GitHubError>;
+    /**
+     * A token for the hob's call (null: the hub's own read), refreshed first when it is close to
+     * expiry. A hob's app token is scoped to `scope`'s repository and action, so its calls name one.
+     */
+    readonly tokenFor: (
+      agentId: AgentId | null,
+      scope?: GitHubTokenScope,
+    ) => Effect.Effect<Redacted.Redacted<string>, GitHubError>;
     /**
      * After GitHub refused `token` (401): a refreshed token to try once more, or `signed-out` once
      * the hub has marked GitHub disconnected.
@@ -120,6 +148,30 @@ export class GitHubCredential extends Context.Service<
     ) => Effect.Effect<A, E | GitHubError, R>;
   }
 >()("@hobbots/charms/GitHubCredential") {}
+
+const noLongerAccepted = new GitHubError({
+  reason: "signed-out",
+  message: "GitHub is disconnected: it no longer accepts the hub's sign-in. Connect GitHub again in Settings › Charms.",
+});
+
+/**
+ * GitHub refused `token` even after it was renewed: tells the credential, then says why the hob has
+ * no sign-in now. A hob's own app is marked as needing a reconnect, which asking again names.
+ */
+export const refusedTwice = (
+  credential: GitHubCredential["Service"],
+  agentId: AgentId,
+  scope: GitHubTokenScope | undefined,
+  token: Redacted.Redacted<string>,
+) =>
+  Effect.gen(function* () {
+    yield* credential.revoked(token);
+    const bot = yield* credential.bot(agentId).pipe(Effect.result);
+    if (Result.isFailure(bot)) return bot.failure;
+    if (bot.success === null) return noLongerAccepted;
+    const why = yield* credential.tokenFor(agentId, scope).pipe(Effect.flip, Effect.result);
+    return Result.isSuccess(why) ? why.success : noLongerAccepted;
+  });
 
 /** Connecting and disconnecting the account from Settings. */
 export class GitHubConnection extends Context.Service<
@@ -425,7 +477,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         return current;
       });
 
-      // Today every hob uses the user's own account; a hob's own identity (#221) would be chosen here.
+      // The user's account is the same for every hob, and reaches whatever it can see.
       const tokenFor = (_agentId: AgentId | null): Effect.Effect<Redacted.Redacted<string>, GitHubError> =>
         Effect.gen(function* () {
           if (config.environmentToken !== null) return config.environmentToken;
@@ -699,6 +751,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
       const credential = GitHubCredential.of({
         connected:
           config.environmentToken !== null ? Effect.succeed(true) : Effect.map(accounts.get, (a) => a !== null),
+        bot: () => Effect.succeed(null),
         tokenFor,
         refused,
         revoked,

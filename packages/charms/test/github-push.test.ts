@@ -26,9 +26,19 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { GitHubApi, GitHubCharmTools, GitPushLive, GitRemotes } from "../src/index.ts";
+import {
+  GitHubApi,
+  GitHubCharmTools,
+  GitHubCredential,
+  GitHubError,
+  GitHubPushSettings,
+  GitPush,
+  GitPushLive,
+  GitRemotes,
+  type PushTransport,
+} from "../src/index.ts";
 import { type FakeGitHub, startFakeGitHub } from "../src/testing.ts";
 import { directSandbox, fixedCredential, memoryCharmCalls } from "./support.ts";
 
@@ -373,6 +383,93 @@ describe("the GitHub Charm's Push", () => {
     expect(signedOut).toMatchObject({ refused: true, text: expect.stringContaining("connect GitHub again") });
     expect(refused.revoked).toEqual(["ghu_also_refused"]);
     expect(headOf(remote, "feat/z")).toBeNull();
+  });
+
+  // covers ADR 022
+  it("[TC-GEN-065] never retries a push over the user's SSH key once the hob's app it was checked under is gone", async () => {
+    const { folder, repository, remote } = await setUp("app-gone");
+    // The hob has its own app when the push is checked and first sent, and none from then on.
+    let appConnected = true;
+    const changed = new GitHubError({
+      reason: "signed-out",
+      message: "The hob's GitHub sign-in changed during this call, so it did not run. Try again.",
+    });
+    const credential = Layer.succeed(
+      GitHubCredential,
+      GitHubCredential.of({
+        connected: Effect.succeed(true),
+        bot: () => (appConnected ? Effect.succeed("pip-hobbots[bot]") : Effect.fail(changed)),
+        tokenFor: () => Effect.succeed(Redacted.make(TOKEN)),
+        refused: () => Effect.fail(changed),
+        revoked: () => Effect.void,
+        reaches: () => Effect.void,
+        onRepository: (_agentId, _repository, use) => use,
+      }),
+    );
+    // The first attempt never reaches GitHub, and the app is disconnected meanwhile.
+    const transports: Array<PushTransport["_tag"]> = [];
+    const gitPush = Layer.effect(
+      GitPush,
+      Effect.map(Effect.service(GitPush), (real) =>
+        GitPush.of({
+          ...real,
+          push: (staged, target, transport) =>
+            Effect.suspend(() => {
+              transports.push(transport._tag);
+              if (transports.length > 1) return real.push(staged, target, transport);
+              appConnected = false;
+              return Effect.succeed({ _tag: "NotSent", message: "The hub could not reach GitHub." } as const);
+            }),
+        }),
+      ),
+    ).pipe(
+      Layer.provide(
+        GitPushLive({ folder: path.join(root, "data", "charms", "github"), httpsBase: github.base }).pipe(
+          Layer.provide(Layer.mergeAll(directSandbox, NodeServices.layer)),
+        ),
+      ),
+    );
+    const layer = GitHubCharmTools.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          fakeApi,
+          Layer.succeed(
+            GitRemotes,
+            GitRemotes.of({ repositoryOf: (f) => Effect.succeed(f === folder ? repository : null) }),
+          ),
+          PolicyEngine.node,
+          memoryCharmCalls(new Map()),
+          credential,
+          gitPush,
+        ),
+      ),
+    );
+    const access = accessFor(folder, "trusting");
+    const answer = await Effect.runPromise(
+      Effect.gen(function* () {
+        const tools = yield* (yield* CharmTools).forTurn({
+          agentId: AgentId.make("hob"),
+          threadId: ThreadId.make("t1"),
+          messageId: MessageId.make("m1"),
+          currentAccess: Effect.succeed(access),
+          redactor: makeRedactor(),
+          approvals: userApprovals(access, []),
+        });
+        if (tools === null) throw new Error("The turn was offered no GitHub tools");
+        return yield* tools.call(
+          "github_push",
+          { branch: "feat/x", key: "gone-1" },
+          { id: "toolu_1", report: () => {} },
+        );
+      }).pipe(
+        Effect.provide(layer),
+        // The hub pushes over SSH for the user's account; the hob's app always uses its token.
+        Effect.provideService(GitHubPushSettings, { over: "ssh", agentSocket: "/nonexistent/agent.sock" }),
+      ),
+    );
+    expect(transports).toEqual(["Https"]);
+    expect(answer).toMatchObject({ refused: true, text: expect.stringContaining("sign-in changed") });
+    expect(headOf(remote, "feat/x")).toBeNull();
   });
 
   // covers PE-003, PE-005
