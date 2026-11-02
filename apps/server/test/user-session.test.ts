@@ -444,7 +444,9 @@ describe("only approved devices reach the hub", () => {
         const devicesRows = yield* sql`SELECT * FROM devices`;
         const pairingRows = yield* sql`SELECT * FROM pairing_requests`;
         const journal = yield* sql`SELECT * FROM event_journal`;
-        return JSON.stringify([devicesRows, pairingRows, journal]);
+        return JSON.stringify([devicesRows, pairingRows, journal], (_, value) =>
+          typeof value === "bigint" ? String(value) : value,
+        );
       }),
     );
     for (const text of [dump, logged.join("\n")]) {
