@@ -449,7 +449,7 @@ describe("A hob's own GitHub App on a hub", () => {
             SAM,
             { owner: "otaviobarros", name: "sam-shed" },
             Effect.gen(function* () {
-              const bot = yield* credential.bot(SAM);
+              const bot = yield* credential.hobApp(SAM);
               const request = turn.approvals.request as NonNullable<typeof turn.approvals.request>;
               const pending = yield* request({
                 stepId: "s1",
@@ -499,7 +499,7 @@ describe("A hob's own GitHub App on a hub", () => {
     );
     const outcome = await runtime.runPromise(asked.pending.decision);
 
-    expect(asked.bot).toBe("sam-hobbots[bot]");
+    expect(asked.bot).toEqual({ _tag: "HobApp", hob: "Sam", bot: "sam-hobbots[bot]" });
     expect(decided.body).toMatchObject({ _tag: "ApprovalClosed", state: "expired" });
     expect(outcome).toEqual({ _tag: "Expired" });
     expect(saved).toEqual([]);

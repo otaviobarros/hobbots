@@ -258,7 +258,7 @@ describe("the GitHub Charm's Push", () => {
       replaces: null,
       commits: 1,
       subjects: ["Add b"],
-      actingAs: "otaviobarros",
+      actingAs: { _tag: "You", login: "otaviobarros" },
     });
     expect(card.arguments.summary).toContain(`Push ${commit.slice(0, 12)} from feat/x to octo/balanced branch feat/x`);
     expect(events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval", "ToolStarted"]);
@@ -398,7 +398,10 @@ describe("the GitHub Charm's Push", () => {
       GitHubCredential,
       GitHubCredential.of({
         connected: Effect.succeed(true),
-        bot: () => (appConnected ? Effect.succeed("pip-hobbots[bot]") : Effect.fail(changed)),
+        hobApp: () =>
+          appConnected
+            ? Effect.succeed({ _tag: "HobApp", hob: "Pip", bot: "pip-hobbots[bot]" } as const)
+            : Effect.fail(changed),
         tokenFor: () => Effect.succeed(Redacted.make(TOKEN)),
         refused: () => Effect.fail(changed),
         revoked: () => Effect.void,
