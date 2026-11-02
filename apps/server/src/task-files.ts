@@ -1,11 +1,11 @@
 import { TaskFiles } from "@hobbots/agents";
 import { AttemptId, TaskFileId } from "@hobbots/domain";
 import { Effect, Option, Result } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { DeviceGate } from "./devices.ts";
+import { HttpRouter, HttpServerResponse } from "effect/http";
+import { forApprovedDevice } from "./devices.ts";
 
 /** Where one of an Attempt's files is served: `?download=1` serves it as a download. */
-export const TASK_FILE_PATH = "/api/attempts/:attemptId/files/:fileId";
+const TASK_FILE_PATH = "/api/attempts/:attemptId/files/:fileId";
 
 const answer = (status: number, text: string) =>
   HttpServerResponse.text(text, { status, headers: { "Cache-Control": "no-store" } });
@@ -24,40 +24,32 @@ const disposition = (name: string) =>
 export const TaskFileRoute = HttpRouter.add(
   "GET",
   TASK_FILE_PATH,
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    // The same device check as every API route, before anything is read (ADR 021).
-    const admitted = yield* Effect.result((yield* DeviceGate).admit(request));
-    if (Result.isFailure(admitted)) {
-      const error = admitted.failure;
-      return HttpServerResponse.jsonUnsafe(
-        { _tag: error._tag, message: error.message },
-        { status: error._tag === "ForeignOrigin" ? 403 : 401 },
+  forApprovedDevice((request) =>
+    Effect.gen(function* () {
+      const files = yield* Effect.serviceOption(TaskFiles);
+      if (Option.isNone(files)) return answer(404, "Not Found");
+      const params = yield* HttpRouter.params;
+      const download = new URL(request.url, "http://localhost").searchParams.get("download") === "1";
+      const served = yield* Effect.result(
+        files.value.serve(
+          AttemptId.make(params.attemptId ?? ""),
+          TaskFileId.make(params.fileId ?? ""),
+          download ? "download" : "preview",
+        ),
       );
-    }
-    const files = yield* Effect.serviceOption(TaskFiles);
-    if (Option.isNone(files)) return answer(404, "Not Found");
-    const params = yield* HttpRouter.params;
-    const download = new URL(request.url, "http://localhost").searchParams.get("download") === "1";
-    const served = yield* Effect.result(
-      files.value.serve(
-        AttemptId.make(params.attemptId ?? ""),
-        TaskFileId.make(params.fileId ?? ""),
-        download ? "download" : "preview",
-      ),
-    );
-    if (Result.isFailure(served)) return answer(404, "This file is not one the hub can serve.");
-    const { file, bytes, mediaType } = served.success;
-    const name = file.path.slice(file.path.lastIndexOf("/") + 1);
-    return HttpServerResponse.uint8Array(bytes, {
-      contentType: mediaType,
-      headers: {
-        "Cache-Control": "no-store",
-        "X-Content-Type-Options": "nosniff",
-        "Cross-Origin-Resource-Policy": "same-origin",
-        "Referrer-Policy": "no-referrer",
-        "Content-Disposition": download ? disposition(name) : "inline",
-      },
-    });
-  }),
+      if (Result.isFailure(served)) return answer(404, "This file is not one the hub can serve.");
+      const { file, bytes, mediaType } = served.success;
+      const name = file.path.slice(file.path.lastIndexOf("/") + 1);
+      return HttpServerResponse.uint8Array(bytes, {
+        contentType: mediaType,
+        headers: {
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+          "Cross-Origin-Resource-Policy": "same-origin",
+          "Referrer-Policy": "no-referrer",
+          "Content-Disposition": download ? disposition(name) : "inline",
+        },
+      });
+    }),
+  ),
 );

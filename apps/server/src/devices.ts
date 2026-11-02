@@ -17,10 +17,10 @@ import {
   SecureDeviceCookie,
 } from "@hobbots/api";
 import { DEVICE_TOKEN_PREFIX, type Device, type TailscaleOwner, WINDOW_KEY_PREFIX } from "@hobbots/domain";
-import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, Context, Effect, Layer, Option, Redacted, Result } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
-import type { HttpServerRequest } from "effect/http";
+import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { RateLimiter } from "effect/persistence";
 import { throughServe } from "./arrival.ts";
@@ -207,6 +207,13 @@ export const foreignOrigin = (request: HttpServerRequest.HttpServerRequest): str
   return origin === ownOrigin(request) ? null : `a change from ${origin}`;
 };
 
+/** The answer to a request the device check refused, as every API route gives it (ADR 021). */
+const deviceRefusal = (error: DeviceRequired | DeviceRevoked | ForeignOrigin) =>
+  HttpServerResponse.jsonUnsafe(
+    { _tag: error._tag, message: error.message },
+    { status: error._tag === "ForeignOrigin" ? 403 : 401 },
+  );
+
 /** Refusals name the route and the peer, never a token (ADR 021). */
 const logRefusal = (request: HttpServerRequest.HttpServerRequest, why: string) =>
   Effect.logWarning(`Refused ${request.method} ${request.url.split("?")[0]}: ${why}`).pipe(
@@ -347,3 +354,21 @@ export class DeviceGate extends Context.Service<
     }),
   );
 }
+
+/**
+ * Runs `answer` for a request from an approved device, on a route outside the API's groups, after
+ * the same device check as every API route and before anything is read; any other request gets
+ * the API's refusal (ADR 021).
+ */
+export const forApprovedDevice = <E, R>(
+  answer: (
+    request: HttpServerRequest.HttpServerRequest,
+    device: Device,
+  ) => Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
+) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const admitted = yield* Effect.result((yield* DeviceGate).admit(request));
+    if (Result.isFailure(admitted)) return deviceRefusal(admitted.failure);
+    return yield* answer(request, admitted.success);
+  });

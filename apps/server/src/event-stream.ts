@@ -1,23 +1,9 @@
 import { ChatService, DeviceRepository } from "@hobbots/agents";
 import { type DeviceId, EventEnvelope, STREAM_FRAME, type StreamReady } from "@hobbots/domain";
 import { EventJournal, type JournalHead } from "@hobbots/persistence";
-import {
-  type Cause,
-  Context,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Option,
-  PubSub,
-  Queue,
-  Result,
-  Schema,
-  Scope,
-  Stream,
-} from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { DeviceGate } from "./devices.ts";
+import { type Cause, Context, Effect, Exit, Fiber, Layer, Option, PubSub, Queue, Schema, Scope, Stream } from "effect";
+import { HttpRouter, HttpServerResponse } from "effect/http";
+import { forApprovedDevice } from "./devices.ts";
 import { type BusEvent, EventBus, type HubTransientEvent } from "./event-bus.ts";
 
 /** What a connection sends, in order: `Ready`, journal entries by sequence, transient reply and turn events, keep-alives (ADR 013). */
@@ -226,29 +212,22 @@ export class EventStream extends Context.Service<
 export const EventStreamRoute = HttpRouter.add(
   "GET",
   "/api/events",
-  Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    // The same device check as every API route, before anything is read (ADR 021).
-    const admitted = yield* Effect.result((yield* DeviceGate).admit(request));
-    if (Result.isFailure(admitted)) {
-      const error = admitted.failure;
-      return HttpServerResponse.jsonUnsafe(
-        { _tag: error._tag, message: error.message },
-        { status: error._tag === "ForeignOrigin" ? 403 : 401 },
+  forApprovedDevice((request, device) =>
+    Effect.gen(function* () {
+      const events = yield* EventStream;
+      const cursor =
+        request.headers["last-event-id"] ??
+        new URL(request.url, "http://localhost").searchParams.get("after") ??
+        undefined;
+      const frames = events.connect(cursor === "" ? undefined : cursor, device.id).pipe(Stream.map(encodeFrame));
+      // Browsers wait a second before reconnecting.
+      return HttpServerResponse.stream(
+        Stream.succeed("retry: 1000\n\n").pipe(Stream.concat(frames), Stream.encodeText),
+        {
+          contentType: "text/event-stream",
+          headers: { "cache-control": "no-cache", "x-accel-buffering": "no" },
+        },
       );
-    }
-    const events = yield* EventStream;
-    const cursor =
-      request.headers["last-event-id"] ??
-      new URL(request.url, "http://localhost").searchParams.get("after") ??
-      undefined;
-    const frames = events
-      .connect(cursor === "" ? undefined : cursor, admitted.success.id)
-      .pipe(Stream.map(encodeFrame));
-    // Browsers wait a second before reconnecting.
-    return HttpServerResponse.stream(Stream.succeed("retry: 1000\n\n").pipe(Stream.concat(frames), Stream.encodeText), {
-      contentType: "text/event-stream",
-      headers: { "cache-control": "no-cache", "x-accel-buffering": "no" },
-    });
-  }),
+    }),
+  ),
 );

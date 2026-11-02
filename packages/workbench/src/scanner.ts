@@ -81,7 +81,7 @@ const openPath = async (root: string, full: string): Promise<FileHandle | null> 
 };
 
 /** A regular file inside `root`, opened for reading through no link, or null. Every read goes through it. */
-export const openInside = async (root: string, full: string): Promise<FileHandle | null> => {
+const openInside = async (root: string, full: string): Promise<FileHandle | null> => {
   const handle = await openPath(root, full);
   if (handle === null) return null;
   if ((await handle.stat().catch(() => null))?.isFile() === true) return handle;
@@ -89,8 +89,20 @@ export const openInside = async (root: string, full: string): Promise<FileHandle
   return null;
 };
 
+/**
+ * A regular file at `path` (`/`-separated, no `.` or `..`) inside `folder`, opened through no link,
+ * or null. The folder is the canonical one the hob was given, never resolved again: a folder
+ * swapped for a link since is refused by the open, which allows no link on the path.
+ */
+export const openFileIn = async (folder: string, path: string): Promise<FileHandle | null> => {
+  const parts = path.split("/");
+  if (parts.some((part) => part === "" || part === "." || part === "..")) return null;
+  if (!isAbsolute(folder) || normalize(folder) !== folder) return null;
+  return openInside(folder, join(folder, ...parts));
+};
+
 /** The SHA-256 of a regular file's contents inside `root`, or null. */
-export const hashFile = async (root: string, path: string): Promise<string | null> => {
+const hashFile = async (root: string, path: string): Promise<string | null> => {
   const handle = await openInside(root, path);
   if (handle === null) return null;
   try {
@@ -264,12 +276,7 @@ export const makeFolderScanner = () => {
 
   /** The first `maxBytes` of a regular file inside `folder`, reached through no link. */
   const read = async (folder: string, path: string, maxBytes: number): Promise<Uint8Array | null> => {
-    const parts = path.split("/");
-    if (parts.some((part) => part === "" || part === "." || part === "..")) return null;
-    // The folder as the hob was given it, canonical, never resolved again: a folder swapped for a
-    // link since is refused by the open, which allows no link on the path, not followed.
-    if (!isAbsolute(folder) || normalize(folder) !== folder) return null;
-    const handle = await openInside(folder, join(folder, ...parts));
+    const handle = await openFileIn(folder, path);
     if (handle === null) return null;
     try {
       const buffer = new Uint8Array(maxBytes);

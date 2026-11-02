@@ -193,6 +193,10 @@ export interface PlacedArtifact {
 
 const keyOf = (folder: string, path: string) => `${folder}\0${path}`;
 
+/** By path, then by folder. */
+const byPlace = (a: { folder: string; path: string }, b: { folder: string; path: string }) =>
+  a.path < b.path ? -1 : a.path > b.path ? 1 : a.folder < b.folder ? -1 : a.folder > b.folder ? 1 : 0;
+
 /** Joins a folder and a `/`-separated path inside it. */
 export const fileLocation = (folder: string, path: string) =>
   folder.endsWith("/") || folder.endsWith("\\") ? `${folder}${path}` : `${folder}/${path}`;
@@ -212,8 +216,8 @@ const latestChanges = (changes: ReadonlyArray<FileChange>): ReadonlyMap<string, 
 };
 
 /**
- * The files an Attempt made or touched, in order: the ones it named as results first, in the order
- * it named them, then the ones it changed, by path. A file named and changed is listed once, as made,
+ * The files an Attempt made or touched, in order: the ones it named as results first, then the
+ * ones it changed, each by path. A file named and changed is listed once, as made,
  * with what its change left. `placed` are its file Artifact references the hub found inside the
  * hob's folders; any other is not listed.
  */
@@ -226,7 +230,7 @@ export const fileCandidates = (
     change?.after == null ? null : { hash: change.after.hash, size: change.after.size };
   const listed = new Set<string>();
   const made: Array<FileCandidate> = [];
-  for (const artifact of placed) {
+  for (const artifact of [...placed].sort(byPlace)) {
     const key = keyOf(artifact.folder, artifact.path);
     if (listed.has(key)) continue;
     listed.add(key);
@@ -242,7 +246,7 @@ export const fileCandidates = (
   const touched = [...changes]
     .filter(([key]) => !listed.has(key))
     .map(([, change]) => change)
-    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : a.folder < b.folder ? -1 : 1))
+    .sort(byPlace)
     .map(
       (change): FileCandidate => ({
         id: TaskFileId.make(change.id),

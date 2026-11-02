@@ -1,22 +1,14 @@
+import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { isAbsolute, join, normalize, relative, sep } from "node:path";
 import { HobFiles } from "@hobbots/agents";
 import { Effect, Layer, Option } from "effect";
-import { hashFile, openInside } from "./scanner.ts";
+import { openFileIn } from "./scanner.ts";
 
 /**
  * The hob's folders as the Workbench's Files tab reads them (ADR 023). Every read opens the file
  * through no link, inside the canonical folder the hob was given, as the scanner does.
  */
-
-/** The full path of `path` inside `folder`, or null when either is not one the hub reads. */
-const fullPath = (folder: string, path: string): string | null => {
-  const parts = path.split("/");
-  if (parts.some((part) => part === "" || part === "." || part === "..")) return null;
-  // The folder as the hob was given it, canonical, never resolved again.
-  if (!isAbsolute(folder) || normalize(folder) !== folder) return null;
-  return join(folder, ...parts);
-};
 
 const inside = (target: string, folder: string) =>
   target !== folder && target.startsWith(folder.endsWith(sep) ? folder : `${folder}${sep}`);
@@ -40,23 +32,25 @@ const place = async (folders: ReadonlyArray<string>, value: string) => {
   return { folder, path: relative(folder, target).split(sep).join("/") };
 };
 
+/** The size and SHA-256 of what one open of the file reads, so the two always agree. */
 const look = async (folder: string, path: string) => {
-  const full = fullPath(folder, path);
-  if (full === null) return null;
-  const handle = await openInside(folder, full);
+  const handle = await openFileIn(folder, path);
   if (handle === null) return null;
-  const size = await handle
-    .stat()
-    .then((stats) => stats.size)
-    .finally(() => handle.close());
-  const hash = await hashFile(folder, full);
-  return hash === null ? null : { size, hash };
+  try {
+    const hash = createHash("sha256");
+    let size = 0;
+    for await (const chunk of handle.createReadStream({ autoClose: false })) {
+      hash.update(chunk as Uint8Array);
+      size += (chunk as Uint8Array).length;
+    }
+    return { size, hash: hash.digest("hex") };
+  } finally {
+    await handle.close();
+  }
 };
 
 const read = async (folder: string, path: string, maxBytes: number) => {
-  const full = fullPath(folder, path);
-  if (full === null) return null;
-  const handle = await openInside(folder, full);
+  const handle = await openFileIn(folder, path);
   if (handle === null) return null;
   try {
     const buffer = new Uint8Array(maxBytes);
