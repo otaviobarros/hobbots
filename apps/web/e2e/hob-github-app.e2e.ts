@@ -69,7 +69,12 @@ const connected = (needsReconnect: { reason: "key" | "installation"; message: st
  * change asked for. Reading `status` and `installations` answers what the test set last.
  */
 const standIn = async (page: Page, initial: { status: unknown; installations?: ReadonlyArray<unknown> }) => {
-  const state = { ...initial, installations: initial.installations ?? [] };
+  const state: {
+    status: unknown;
+    installations: ReadonlyArray<unknown>;
+    /** When set, reading the installations fails, as when GitHub refuses the app's key, and the hub marks it so. */
+    refusing: unknown;
+  } = { ...initial, installations: initial.installations ?? [], refusing: null };
   const asked: Array<string> = [];
   const disconnects: Array<unknown> = [];
   await page.route("**/api/agents/*/github-app**", (route: Route, request: Request) => {
@@ -77,6 +82,10 @@ const standIn = async (page: Page, initial: { status: unknown; installations?: R
     asked.push(`${request.method()} ${path === "" ? "/" : path}`);
     const answer = (body: unknown) => route.fulfill({ json: body });
     if (path === "") return answer(state.status);
+    if (path === "/installations" && state.refusing !== null) {
+      state.status = state.refusing;
+      return route.fulfill({ status: 502, json: { _tag: "GitHubFailed", message: "GitHub refused the app's key." } });
+    }
     if (path === "/installations") return answer({ installations: state.installations });
     if (path === "/disconnect") return answer(disconnects.shift() ?? { deleteUrl, problem: null });
     return route.continue();
@@ -173,10 +182,14 @@ test("[TC-GEN-056] gives a hob its own GitHub app from its Charms tab and shows 
       repositorySelection: "selected",
       htmlUrl: "https://github.com/settings/installations/41",
       suspended: false,
+      repositories: ["otaviobarros/pip-notes", "frodo/shire-maps"],
     },
   ];
   const installed = section.getByRole("list", { name: "Installed on" });
   await expect(installed).toContainText("@otaviobarros: the repositories you picked", { timeout: 10_000 });
+  // Each repository it reaches is named, without the account when it is the installation's.
+  const reached = installed.getByRole("list", { name: "Repositories @otaviobarros lets it reach" });
+  await expect(reached.getByRole("listitem")).toHaveText(["pip-notes", "frodo/shire-maps"]);
   await expect(installed.getByRole("link", { name: "Change on GitHub" })).toHaveAttribute(
     "href",
     "https://github.com/settings/installations/41",
@@ -192,13 +205,24 @@ test("[TC-GEN-057] fixes a hob's app that needs a reconnect in one action", asyn
   const manifests = await catchManifests(context);
   const section = page.getByRole("region", { name: "Acts on GitHub as" });
 
-  // Uninstalled: one action, reinstalling it on GitHub.
-  const { state, asked, disconnects } = await standIn(page, {
-    status: connected({ reason: "installation", message: "GitHub refused the app's installation." }),
-  });
+  // The key is revoked while the tab is open on a connected app: reading where it is installed is
+  // refused, which marks it on the hub. Only that read is asked again, and the tab shows the fix.
+  const { state, asked, disconnects } = await standIn(page, { status: connected() });
+  state.refusing = connected();
   await page.reload();
   await page.getByRole("tab", { name: "Charms" }).click();
-  const alert = section.getByRole("alert");
+  const failed = section.getByRole("alert").filter({ hasText: "could not ask GitHub where the app is installed" });
+  await expect(failed).toBeVisible({ timeout: 15_000 });
+  state.refusing = connected({ reason: "key", message: "GitHub refused the app's key." });
+  await failed.getByRole("button", { name: "Try again" }).click();
+  const alert = section.getByRole("alert").filter({ hasText: "Needs a reconnect" });
+  await expect(alert.getByRole("button", { name: "Give Pip a new app" })).toBeVisible();
+  state.refusing = null;
+
+  // Uninstalled: one action, reinstalling it on GitHub.
+  state.status = connected({ reason: "installation", message: "GitHub refused the app's installation." });
+  await page.reload();
+  await page.getByRole("tab", { name: "Charms" }).click();
   await expect(alert).toContainText("Needs a reconnect");
   await expect(alert).toContainText("never run as you");
   await expect(alert.getByRole("link", { name: "Reinstall on GitHub" })).toHaveAttribute("href", installUrl);
@@ -248,12 +272,17 @@ test("[TC-GEN-058] disconnects a hob's app after asking, and shows an old app th
         repositorySelection: "all",
         htmlUrl: "https://github.com/settings/installations/41",
         suspended: false,
+        repositories: Array.from({ length: 10 }, (_, at) => `otaviobarros/repo-${at + 1}`),
       },
     ],
   });
   await page.reload();
   await page.getByRole("tab", { name: "Charms" }).click();
   await expect(section.getByRole("list", { name: "Installed on" })).toContainText("@otaviobarros: every repository");
+  // Past eight, the rest of the repositories are counted.
+  const reached = section.getByRole("list", { name: "Repositories @otaviobarros lets it reach" }).getByRole("listitem");
+  await expect(reached).toHaveCount(9);
+  await expect(reached.last()).toHaveText("and 2 more");
 
   // Disconnect asks first; Cancel changes nothing.
   await section.getByRole("button", { name: "Disconnect" }).click();

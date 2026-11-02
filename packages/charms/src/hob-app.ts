@@ -193,6 +193,18 @@ const InstallationJson = Schema.Struct({
   suspended_at: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
+const AccessTokenJson = Schema.Struct({ token: Schema.String, expires_at: Schema.String });
+const InstallationRepositoriesJson = Schema.Struct({
+  repositories: Schema.Array(Schema.Struct({ full_name: Schema.String })),
+});
+
+/** A token for the repositories' names this close to expiry is replaced. */
+const NAMES_TOKEN_AHEAD_MS = 5 * 60_000;
+
+const answeredError = (status: number, what: string) =>
+  new GitHubError({ reason: "failed", message: `GitHub answered ${status} for ${what}.` });
+const answered = (status: number, what: string) => Effect.fail(answeredError(status, what));
+
 // A code GitHub hands back is short and URL-safe; anything else never reaches its API.
 const CODE = /^[A-Za-z0-9_-]{1,256}$/;
 
@@ -466,6 +478,57 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
 
       const tokens = yield* makeHobAppTokens({ hosts, send, read, jwtFor, remember, installUrl });
 
+      // A token that may only read the repositories' names, kept until five minutes before it lapses, so
+      // reading where the app is installed every few seconds mints one an hour for each installation.
+      const namesTokens = new Map<string, { readonly token: string; readonly expiresAt: number }>();
+
+      /** A token for one installation that reads metadata only, which reaches all its repositories. */
+      const namesToken = (agentId: AgentId, app: HobGitHubApp, installation: number, jwt: Redacted.Redacted<string>) =>
+        Effect.gen(function* () {
+          const key = `${agentId}:${app.appId}:${installation}`;
+          const now = yield* Clock.currentTimeMillis;
+          const kept = namesTokens.get(key);
+          if (kept !== undefined && kept.expiresAt - NAMES_TOKEN_AHEAD_MS > now) return kept.token;
+          const response = yield* send(
+            HttpClientRequest.post(`${hosts.api}/app/installations/${installation}/access_tokens`).pipe(
+              HttpClientRequest.bearerToken(Redacted.value(jwt)),
+              HttpClientRequest.bodyJsonUnsafe({ permissions: { metadata: "read" } }),
+            ),
+            "the names of the app's repositories",
+          );
+          if (response.status === 401) return yield* Effect.flip(tokens.keyRefused(agentId, app));
+          if (response.status !== 201) return yield* answered(response.status, "the names of the app's repositories");
+          const json = yield* read(response, AccessTokenJson, "the names of the app's repositories");
+          yield* remember(json.token, `${hobAppBot(app)} token`);
+          namesTokens.set(key, { token: json.token, expiresAt: Date.parse(json.expires_at) });
+          return json.token;
+        });
+
+      /** The repositories one installation reaches, as `owner/name`: `GET /installation/repositories`. */
+      const reached = (agentId: AgentId, app: HobGitHubApp, installation: number, jwt: Redacted.Redacted<string>) =>
+        Effect.gen(function* () {
+          const token = yield* namesToken(agentId, app, installation, jwt);
+          const listed = yield* allPages((page) =>
+            send(
+              HttpClientRequest.get(`${hosts.api}/installation/repositories`, {
+                urlParams: { per_page: String(GITHUB_PAGE_SIZE), page: String(page) },
+              }).pipe(HttpClientRequest.bearerToken(token)),
+              "the names of the app's repositories",
+            ).pipe(
+              Effect.flatMap((response) =>
+                response.status === 200
+                  ? read(response, InstallationRepositoriesJson, "the names of the app's repositories")
+                  : Effect.fail(answeredError(response.status, "the names of the app's repositories")),
+              ),
+              Effect.map((body) => body.repositories),
+            ),
+          ).pipe(
+            // A token GitHub stops taking is not used again; the next read mints another.
+            Effect.tapError(() => Effect.sync(() => namesTokens.delete(`${agentId}:${app.appId}:${installation}`))),
+          );
+          return listed.map((repository) => repository.full_name);
+        });
+
       const listInstallations = (agentId: AgentId, app: HobGitHubApp, jwt: Redacted.Redacted<string>) =>
         allPages((page) =>
           send(
@@ -474,27 +537,27 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           ).pipe(
             Effect.flatMap((response) => {
               if (response.status === 401) return Effect.flip(tokens.keyRefused(agentId, app));
-              if (response.status !== 200) {
-                return Effect.fail(
-                  new GitHubError({
-                    reason: "failed",
-                    message: `GitHub answered ${response.status} for the app's installations.`,
-                  }),
-                );
-              }
+              if (response.status !== 200) return answered(response.status, "the app's installations");
               return read(response, Schema.Array(InstallationJson), "the app's installations");
             }),
           ),
         ).pipe(
-          Effect.map((listed) =>
-            listed.map(
-              (installation): HobGitHubAppInstallation => ({
-                id: installation.id,
-                account: installation.account?.login ?? app.owner,
-                repositorySelection: installation.repository_selection,
-                htmlUrl: installation.html_url,
-                suspended: installation.suspended_at != null,
-              }),
+          Effect.flatMap((listed) =>
+            Effect.forEach(
+              listed,
+              (installation) =>
+                Effect.gen(function* () {
+                  const suspended = installation.suspended_at != null;
+                  return {
+                    id: installation.id,
+                    account: installation.account?.login ?? app.owner,
+                    repositorySelection: installation.repository_selection,
+                    htmlUrl: installation.html_url,
+                    suspended,
+                    repositories: suspended ? null : yield* reached(agentId, app, installation.id, jwt),
+                  } satisfies HobGitHubAppInstallation;
+                }),
+              { concurrency: 4 },
             ),
           ),
         );

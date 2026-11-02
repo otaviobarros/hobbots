@@ -342,6 +342,9 @@ export const messages = {
           all ? `@${account}: every repository` : `@${account}: the repositories you picked`,
         suspended: "suspended",
         change: "Change on GitHub",
+        reaches: ({ account }: { account: string }) => `Repositories @${account} lets it reach`,
+        noRepositories: "No repositories yet",
+        moreRepositories: ({ count }: { count: number }) => `and ${count} more`,
         notInstalled: ({ name }: { name: string }) =>
           `Not installed on any repository yet, so ${name} can't act on GitHub. Install it on the repositories ${name} should reach.`,
         install: "Install on GitHub",

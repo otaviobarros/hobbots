@@ -6,9 +6,9 @@ import { useEffect, useState } from "react";
 import { ApiError } from "../api/client.ts";
 import {
   HOB_APP_WATCH,
-  hobGitHubAppInstallationsQuery,
   hobGitHubAppQuery,
   useDisconnectHobGitHubApp,
+  useHobGitHubAppInstallations,
   useStartHobGitHubApp,
 } from "../api/hob-github-app.ts";
 import { formatDay } from "../lib/format.ts";
@@ -349,7 +349,7 @@ function Installations({
   watching: boolean;
   onWatch: () => void;
 }) {
-  const installations = useQuery(hobGitHubAppInstallationsQuery(hob.id, status.app.appId, watching));
+  const installations = useHobGitHubAppInstallations(hob.id, status.app.appId, watching);
   const listed = installations.data?.installations;
   if (installations.isError) {
     return (
@@ -393,10 +393,35 @@ function Installations({
             >
               {copy.change}
             </a>
+            {installation.repositories !== null && (
+              <Repositories account={installation.account} names={installation.repositories} />
+            )}
           </li>
         ))}
       </ul>
     </>
+  );
+}
+
+/** At most this many repositories are named for one installation; the rest are counted. */
+const NAMED_REPOSITORIES = 8;
+
+/** The repositories one installation reaches, by name, without the account when it is the installation's. */
+function Repositories({ account, names }: { account: string; names: ReadonlyArray<string> }) {
+  if (names.length === 0) {
+    return <span className="basis-full text-xs text-secondary-text">{copy.noRepositories}</span>;
+  }
+  const shown = names.slice(0, NAMED_REPOSITORIES);
+  return (
+    <ul
+      aria-label={copy.reaches({ account })}
+      className="m-0 flex basis-full list-none flex-wrap gap-x-2.5 gap-y-1 p-0 font-mono text-xs text-secondary-text"
+    >
+      {shown.map((name) => (
+        <li key={name}>{name.startsWith(`${account}/`) ? name.slice(account.length + 1) : name}</li>
+      ))}
+      {names.length > shown.length && <li>{copy.moreRepositories({ count: names.length - shown.length })}</li>}
+    </ul>
   );
 }
 
