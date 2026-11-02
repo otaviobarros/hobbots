@@ -55,6 +55,7 @@ const item = (recipientId: AgentId, taskId: string | null, kind: BackpackItemKin
     claim: null,
     fencingToken: 0,
     deliveries: [],
+    blockers: [],
     disposition: null,
     error: null,
     createdAt: at,

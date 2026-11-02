@@ -53,6 +53,7 @@ const item = (recipientId: AgentId, taskId: string | null, kind: "result" | "mes
     claim: null,
     fencingToken: 0,
     deliveries: [],
+    blockers: [],
     disposition: null,
     error: null,
     createdAt: at,

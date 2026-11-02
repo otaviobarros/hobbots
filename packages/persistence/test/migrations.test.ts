@@ -14,6 +14,7 @@ import threadBrains from "../src/migrations/0020_thread_brains.ts";
 import hobSignCommits from "../src/migrations/0021_hob_sign_commits.ts";
 import threadArchivedAt from "../src/migrations/0023_thread_archived_at.ts";
 import githubCharm from "../src/migrations/0027_github_charm.ts";
+import backpackBlockers from "../src/migrations/0028_backpack_blockers.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -795,5 +796,69 @@ describe("0027_github_charm", () => {
     expect(result.versions.map((row) => Number(row.githubCharm))).toEqual([1]);
     expect(result.columns).toEqual(["connectedAt", "id", "login", "source"]);
     expect(result.second).toBe("Failure");
+  });
+});
+
+describe("0028_backpack_blockers", () => {
+  // covers DP-003, IN-007
+  it("[TC-IN-095] gives every item that failed before it a blocker to retry, counting its deliveries, and none to the rest", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "pip",
+        name: "Pip",
+        roleTitle: "Writer",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: "2026-10-28T00:00:00.000Z",
+      })}`;
+      const item = (id: string, state: string, error: string | null) =>
+        sql`INSERT INTO backpack_items ${sql.insert({
+          id,
+          recipientId: "pip",
+          kind: "message",
+          actionable: 1,
+          priority: 1,
+          state,
+          dedupeKey: id,
+          payload: JSON.stringify({ _tag: "message", senderId: null, text: "Hi" }),
+          error,
+          createdAt: "2026-10-28T00:00:00.000Z",
+          updatedAt: "2026-10-29T00:00:00.000Z",
+          recordedSequence: 1,
+        })}`;
+      yield* item("failed", "failed", "Delivered 2 times, and every turn ended early.");
+      yield* item("waiting", "pending", null);
+      for (const number of [1, 2]) {
+        yield* sql`INSERT INTO backpack_deliveries ${sql.insert({
+          itemId: "failed",
+          number,
+          claimToken: number,
+          target: "thread:t1",
+          turnId: `turn-${number}`,
+          deliveredAt: "2026-10-28T00:00:00.000Z",
+        })}`;
+      }
+      yield* backpackBlockers;
+      return yield* sql`SELECT * FROM backpack_blockers`;
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0028"))), Effect.runPromise);
+
+    expect(
+      result.map((row) => ({ ...row, number: Number(row.number), afterDeliveries: Number(row.afterDeliveries) })),
+    ).toEqual([
+      {
+        itemId: "failed",
+        number: 1,
+        reason: "retries-exhausted",
+        nextAction: "retry",
+        error: "Delivered 2 times, and every turn ended early.",
+        afterDeliveries: 2,
+        raisedAt: "2026-10-29T00:00:00.000Z",
+        decision: null,
+        decidedAt: null,
+      },
+    ]);
   });
 });

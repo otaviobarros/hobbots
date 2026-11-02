@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
 import { AgentId, ThreadId } from "./ids.ts";
 import { ArtifactRef, Checkpoint, Delegation, HandOff, QuestId, Question } from "./quest.ts";
@@ -120,6 +120,40 @@ export class BackpackDelivery extends Schema.Class<BackpackDelivery>("BackpackDe
   acknowledgedAt: Schema.NullOr(Schema.String),
 }) {}
 
+/**
+ * Why an item failed and became a blocker (IN-007): its deliveries ran out, every turn ending early,
+ * or its hob retired, so nobody can take it.
+ */
+export const BlockerReason = Schema.Literals(["retries-exhausted", "recipient-retired"]);
+export type BlockerReason = typeof BlockerReason.Type;
+
+/** What you can do about a blocker. Reassign needs a Task that can change owners (#311). */
+export const BlockerAction = Schema.Literals(["retry", "reassign", "dismiss"]);
+export type BlockerAction = typeof BlockerAction.Type;
+
+/** The next action a blocker suggests: try again, unless nobody is left to take it. */
+export const blockerNextAction = (reason: BlockerReason): BlockerAction =>
+  reason === "retries-exhausted" ? "retry" : "dismiss";
+
+/**
+ * A failed item as a blocker with its next action (IN-007, ADR 019). An item can block more than
+ * once: a retry gives it a fresh set of deliveries, and running out again raises another blocker.
+ */
+export class BackpackBlocker extends Schema.Class<BackpackBlocker>("BackpackBlocker")({
+  /** 1 for the item's first blocker, one more for each later one. */
+  number: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  reason: BlockerReason,
+  nextAction: BlockerAction,
+  /** The item's error when it failed. */
+  error: Schema.String,
+  /** How many deliveries the item had when it failed: a retry counts its new ones from here. */
+  afterDeliveries: Schema.Int,
+  raisedAt: Schema.String,
+  /** What you chose, once you did: the blocker stays as the record of it. */
+  decision: Schema.NullOr(BlockerAction),
+  decidedAt: Schema.NullOr(Schema.String),
+}) {}
+
 export class BackpackItem extends Schema.Class<BackpackItem>("BackpackItem")({
   id: BackpackItemId,
   /** The hob whose backpack it is in. */
@@ -147,10 +181,26 @@ export class BackpackItem extends Schema.Class<BackpackItem>("BackpackItem")({
   disposition: Schema.NullOr(BackpackDisposition),
   /** Why it failed, once it has. */
   error: Schema.NullOr(Schema.String),
+  /** Every time it failed, oldest first, with what you chose; the last is open while it is failed. */
+  blockers: Schema.Array(BackpackBlocker).pipe(
+    // Items journaled before blockers existed decode with none, so their events stay version 1 (ADR 013).
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
   createdAt: Schema.String,
   updatedAt: Schema.String,
   revision: Revision,
 }) {}
+
+/** The blocker that waits for you: the item's last one, while the item is failed and you have not chosen. */
+export const openBlocker = (item: BackpackItem): BackpackBlocker | undefined => {
+  const last = item.blockers.at(-1);
+  return item.state === "failed" && last !== undefined && last.decision === null ? last : undefined;
+};
+
+/** The deliveries an item has used since you last retried it, counted against its limit. */
+export const deliveriesSinceRetry = (item: BackpackItem): number =>
+  item.deliveries.length - (item.blockers.at(-1)?.afterDeliveries ?? 0);
 
 /** A backpack item as the change that causes it describes it, before it is stored. */
 export interface NewBackpackItem {
@@ -164,8 +214,21 @@ export interface NewBackpackItem {
   readonly notBefore: string | null;
 }
 
-/** The steps an item takes after it is recorded; each needs the item's live claim. */
-export const BackpackStep = Schema.Literals(["deliver", "acknowledge", "process", "requeue", "resolve", "fail"]);
+/**
+ * The steps an item takes after it is recorded. Each needs the item's live claim, except `abandon`,
+ * which needs no claim held, and `retry` and `dismiss`, your choices on a failed item's blocker.
+ */
+export const BackpackStep = Schema.Literals([
+  "deliver",
+  "acknowledge",
+  "process",
+  "requeue",
+  "resolve",
+  "fail",
+  "abandon",
+  "retry",
+  "dismiss",
+]);
 export type BackpackStep = typeof BackpackStep.Type;
 
 const STEPS: Record<BackpackStep, { readonly from: ReadonlyArray<BackpackItemState>; readonly to: BackpackItemState }> =
@@ -178,6 +241,11 @@ const STEPS: Record<BackpackStep, { readonly from: ReadonlyArray<BackpackItemSta
     // A late or dismissed item resolves without a turn, so a pending one can resolve too.
     resolve: { from: ["pending", "delivered", "acknowledged", "processing"], to: "resolved" },
     fail: { from: ["pending", "delivered", "acknowledged", "processing"], to: "failed" },
+    // Its hob retired: an item no claim holds fails, as a blocker (IN-007).
+    abandon: { from: ["pending"], to: "failed" },
+    // Your choice on a blocker: a failed item goes back to pending, or resolves as dismissed.
+    retry: { from: ["failed"], to: "pending" },
+    dismiss: { from: ["failed"], to: "resolved" },
   };
 
 /** The states a step can start from, and the state it leads to. */
@@ -207,4 +275,10 @@ export class BackpackItemMissing extends Schema.TaggedError<BackpackItemMissing>
 export class BackpackItemUnclaimable extends Schema.TaggedError<BackpackItemUnclaimable>()("BackpackItemUnclaimable", {
   itemId: BackpackItemId,
   reason: Schema.Literals(["not-pending", "claimed"]),
+}) {}
+
+/** The item has no blocker waiting for a choice: it is not failed, or the choice was made already. */
+export class BackpackItemNotBlocked extends Schema.TaggedError<BackpackItemNotBlocked>()("BackpackItemNotBlocked", {
+  itemId: BackpackItemId,
+  state: BackpackItemState,
 }) {}

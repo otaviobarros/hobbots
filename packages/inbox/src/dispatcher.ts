@@ -4,6 +4,7 @@ import {
   type BackpackItemId,
   BackpackItemMissing,
   type Committed,
+  deliveriesSinceRetry,
   type EventEnvelope,
   IllegalBackpackTransition,
   isTerminalTask,
@@ -20,6 +21,7 @@ import { Backpack, type HeldClaim } from "./backpack.ts";
  */
 export interface DispatchLimits {
   readonly lease: Duration.Input;
+  /** Deliveries per item before it fails as a blocker; a retry of the blocker gives it as many again. */
   readonly maxDeliveries: number;
   readonly firstRetry: Duration.Input;
   readonly maxRetry: Duration.Input;
@@ -134,6 +136,14 @@ export const lateness = (item: BackpackItem, tree: ReadonlyArray<Task>): { reado
   const held = heldUnder(item, tree);
   if (held === undefined) return { taskRevision: task.revision };
   return isTerminalTask(held.state) ? { taskRevision: held.revision } : null;
+};
+
+/** Why an item ran out of deliveries: how many it used since its last retry, and why the last ended early. */
+const exhausted = (item: BackpackItem, last: string | null) => {
+  const count = deliveriesSinceRetry(item);
+  const tries =
+    count === 1 ? "Delivered once, and the turn ended early." : `Delivered ${count} times, and every turn ended early.`;
+  return `${tries}${last === null ? "" : ` The last: ${last}`}`;
 };
 
 /** What the dispatcher needs from the hub around it. */
@@ -251,13 +261,8 @@ export class Dispatcher extends Context.Service<
               const resolved = yield* step(backpack.resolve(item.id, held, { _tag: "late", ...late }));
               return { _tag: "Late", item: resolved } as Dispatched;
             }
-            if (item.deliveries.length >= limits.maxDeliveries) {
-              const why = last.reason === null ? "" : ` The last: ${last.reason}`;
-              return yield* fail(
-                held,
-                item,
-                `Delivered ${item.deliveries.length} times, and every turn ended early.${why}`,
-              );
+            if (deliveriesSinceRetry(item) >= limits.maxDeliveries) {
+              return yield* fail(held, item, exhausted(item, last.reason));
             }
             return null;
           });
@@ -265,12 +270,8 @@ export class Dispatcher extends Context.Service<
         /** The turn ended early for this item: it fails on its last delivery, or goes back to pending (null). */
         const endedEarly = ({ item, held }: Claimed, reason: string) =>
           Effect.gen(function* () {
-            if (item.deliveries.length >= limits.maxDeliveries) {
-              return yield* fail(
-                held,
-                item,
-                `Delivered ${item.deliveries.length} times, and every turn ended early. The last: ${reason}`,
-              );
+            if (deliveriesSinceRetry(item) >= limits.maxDeliveries) {
+              return yield* fail(held, item, exhausted(item, reason));
             }
             yield* step(backpack.requeue(item.id, held));
             return null;
