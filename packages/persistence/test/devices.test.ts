@@ -158,15 +158,23 @@ describe("DeviceRepository", () => {
         const before = yield* Effect.exit(repo.whileApproved(DeviceId.make("d1"))(mark("while-approved")));
         const revoked = yield* repo.revoke(DeviceId.make("d1"), EXPIRED);
         const revokedAgain = yield* repo.revoke(DeviceId.make("d1"), EXPIRED);
+        yield* repo.ensureWindow(NOW);
+        const windowRevoked = yield* repo.revoke(WINDOW_DEVICE_ID, EXPIRED);
         const after = yield* Effect.exit(repo.whileApproved(DeviceId.make("d1"))(mark("after-revoke")));
         const unknown = yield* Effect.exit(repo.whileApproved(DeviceId.make("nobody"))(mark("unknown")));
         const marks = yield* sql<{ id: string }>`SELECT id FROM pairing_requests WHERE id <> 'p1' ORDER BY id`;
-        return { before, revoked, revokedAgain, after, unknown, marks: marks.map((row) => row.id) };
+        return { before, revoked, revokedAgain, windowRevoked, after, unknown, marks: marks.map((row) => row.id) };
       }),
     );
     expect(Exit.isSuccess(result.before)).toBe(true);
-    expect(Option.getOrThrow(result.revoked)).toMatchObject({ id: "d1", revokedAt: EXPIRED });
+    // The Revoke is journaled with the device, so every approved client hears of it (ADR 021).
+    const revoked = Option.getOrThrow(result.revoked);
+    expect(revoked.value).toMatchObject({ id: "d1", revokedAt: EXPIRED });
+    expect(revoked.entries.map((entry) => entry.payload)).toMatchObject([
+      { _tag: "DeviceRevoked", device: { id: "d1", revokedAt: EXPIRED } },
+    ]);
     expect(Option.isNone(result.revokedAgain)).toBe(true);
+    expect(Option.isNone(result.windowRevoked)).toBe(true);
     expect(result.after).toMatchObject({ _tag: "Failure" });
     expect(JSON.stringify(result.after)).toContain("DeviceRevoked");
     expect(JSON.stringify(result.unknown)).toContain("DeviceRevoked");

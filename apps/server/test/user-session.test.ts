@@ -464,6 +464,111 @@ describe("only approved devices reach the hub", () => {
   });
 });
 
+describe("revoking a device", () => {
+  /** An open event stream, read until the hub sent `ready`, so its connection is subscribed and live. */
+  const openStream = async (caller: Caller) => {
+    const response = await send(caller, "GET", "/api/events");
+    expect(response.status).toBe(200);
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+    let text = "";
+    while (!text.includes("event: ready")) {
+      const read = await reader.read();
+      if (read.done) throw new Error("The stream ended before it was ready");
+      text += new TextDecoder().decode(read.value);
+    }
+    return reader;
+  };
+
+  /** Whether the stream ends within `ms`, whatever else it sends first. */
+  const endsWithin = async (reader: ReadableStreamDefaultReader<Uint8Array>, ms: number) => {
+    const ended = (async () => {
+      for (;;) if ((await reader.read()).done) return true;
+    })();
+    const late = new Promise<boolean>((done) => setTimeout(() => done(false), ms));
+    const result = await Promise.race([ended, late]);
+    if (!result) await reader.cancel();
+    return result;
+  };
+
+  // covers DP-004, PE-006
+  it("[TC-DP-097] revoking a device mid-stream cuts its stream at once, refuses its next request and clears its cookie, and it can ask again", async () => {
+    const { cookie } = await pairedBrowser();
+    const [, phone] = await devices();
+    const stream = await openStream(browser(cookie));
+    // The hub's window keeps its own stream open through the whole Revoke.
+    const windowStream = await openStream(APP);
+
+    const revoked = await request<{ id: string; revokedAt: string | null }>(
+      APP,
+      "POST",
+      `/api/devices/${phone?.id}/revoke`,
+    );
+    expect(revoked).toMatchObject({ status: 200, body: { id: phone?.id } });
+    expect(revoked.body.revokedAt).not.toBeNull();
+    expect(await endsWithin(stream, 1000)).toBe(true);
+    expect(await endsWithin(windowStream, 200)).toBe(false);
+
+    // Its next request is refused as revoked, and that answer drops its cookie.
+    const next = await request(browser(cookie), "GET", "/api/agents");
+    expect(next).toMatchObject({ status: 401, body: { _tag: "DeviceRevoked" } });
+    const cleared = next.setCookie.find((line) => line.startsWith("hobbots_device=")) ?? "";
+    expect(cleared).toMatch(/^hobbots_device=;/);
+    expect(cleared).toMatch(/Max-Age=0/i);
+    const streamAgain = await send(browser(cookie), "GET", "/api/events");
+    expect(streamAgain.status).toBe(401);
+    expect(streamAgain.headers.getSetCookie().some((line) => line.startsWith("hobbots_device=;"))).toBe(true);
+    expect(refusals.some((line) => line.includes("DeviceRevoked"))).toBe(true);
+
+    // Every approved client hears of it through the journal, and the list keeps the device as revoked.
+    const listed = await request<ReadonlyArray<{ id: string; revokedAt: string | null }>>(APP, "GET", "/api/devices");
+    expect(listed.body.find((device) => device.id === phone?.id)?.revokedAt).not.toBeNull();
+    const journal = await runtime.runPromise(
+      Effect.flatMap(SqlClient.SqlClient, (sql) => sql<{ type: string }>`SELECT type FROM event_journal`),
+    );
+    expect(journal.map((row) => row.type)).toContain("DeviceRevoked");
+    // Revoking it again answers it as it is.
+    expect((await request(APP, "POST", `/api/devices/${phone?.id}/revoke`)).status).toBe(200);
+
+    // Asking again pairs it as a new device, which works.
+    const again = await pairedBrowser();
+    expect((await request(browser(again.cookie), "GET", "/api/agents")).status).toBe(200);
+  });
+
+  // covers DP-004, PE-006
+  it("[TC-DP-098] only an approved device revokes, the device in use included, and never the hub's window", async () => {
+    const first = await pairedBrowser();
+    const second = await pairedBrowser();
+    const [, firstDevice, secondDevice] = await devices();
+
+    expect(await request(SCRIPT, "POST", `/api/devices/${firstDevice?.id}/revoke`)).toMatchObject({
+      status: 401,
+      body: REQUIRED,
+    });
+    expect(await request(APP, "POST", "/api/devices/window/revoke")).toMatchObject({
+      status: 409,
+      body: { _tag: "CannotRevokeWindow" },
+    });
+    expect(await request(APP, "POST", "/api/devices/unknown/revoke")).toMatchObject({
+      status: 404,
+      body: { _tag: "DeviceNotFound" },
+    });
+
+    // One browser revokes the other, then itself.
+    expect(
+      (await request(browser(first.cookie, "POST"), "POST", `/api/devices/${secondDevice?.id}/revoke`)).status,
+    ).toBe(200);
+    expect(await request(browser(second.cookie), "GET", "/api/agents")).toMatchObject({ status: 401 });
+    expect(
+      (await request(browser(first.cookie, "POST"), "POST", `/api/devices/${firstDevice?.id}/revoke`)).status,
+    ).toBe(200);
+    // Now revoked, it can revoke nothing more.
+    expect(
+      await request(browser(first.cookie, "POST"), "POST", `/api/devices/${secondDevice?.id}/revoke`),
+    ).toMatchObject({ status: 401, body: { _tag: "DeviceRevoked" } });
+    expect((await request(APP, "GET", "/api/agents")).status).toBe(200);
+  });
+});
+
 describe("only the user decides approvals and manages grants", () => {
   // covers PE-006
   it("[TC-PE-110] refuses and records every decision or grant request that is not from an approved device", async () => {

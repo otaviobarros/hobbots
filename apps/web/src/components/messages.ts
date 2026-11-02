@@ -380,7 +380,23 @@ export const messages = {
       noAddress:
         "Tailscale is running but gave this computer no tailnet address yet, so Hobbots is not on your tailnet.",
       cannotListen: ({ detail }: { detail: string }) => `Hobbots could not listen on your tailnet: ${detail}.`,
+      paused:
+        "Remote access is paused from the menu-bar icon, so your other devices cannot reach Hobbots. They stay approved and work again once you resume.",
     },
+    resume: "Resume remote access",
+  },
+  deviceAccess: {
+    removedTitle: ({ hub }: { hub: string }) => `This device was removed from ${hub}`,
+    removedTitleNoName: "This device was removed from the hub",
+    removedBody:
+      "Someone revoked it in Settings › Devices on the hub, so it can no longer reach your hobs. Ask again, then allow it on the hub, to use Hobbots here.",
+    askAgain: "Ask again",
+    reconnecting: "Reconnecting to Hobbots… Messages you send wait here and go out when it is back.",
+    unreachable: ({ hub }: { hub: string }) =>
+      `Hobbots cannot reach ${hub}. The hub may be off, or remote access may be paused. Messages you send wait here.`,
+    unreachableNoName:
+      "Hobbots cannot reach the hub. It may be off, or remote access may be paused. Messages you send wait here.",
+    tryNow: "Try now",
   },
   signing: {
     label: "Sign commits with my 1Password key",

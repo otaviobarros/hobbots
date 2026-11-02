@@ -37,7 +37,7 @@ Tailscale is the MVP route.
 - When it is on and Tailscale is running, the server also listens on the hub's tailnet addresses, read from `tailscale status`, and accepts only loopback and tailnet peers that `tailscale whois` knows. Its address is `http://<magicdns-name>:4317`. Until devices can pair (#338), it answers every tailnet request with `403`.
 - Optionally, `tailscale serve` gives the hub an HTTPS address on the tailnet. Hobbots shows the command or runs it with the user's consent; it never changes Tailscale settings silently and never uses Funnel.
 - If Tailscale disconnects, the server stops listening on the tailnet and Settings › Devices says why. It never falls back to other interfaces.
-- Pause remote access in the menu-bar icon closes the tailnet listener until Resume; loopback keeps working.
+- Pause remote access in the menu-bar icon closes the tailnet listener and its connections until Resume; loopback keeps working. It is kept in `network.json` as `remoteAccessPaused`, so it survives a restart. Settings › Devices says remote access is paused and offers Resume; turning remote access on there also resumes it.
 - Tailnet membership is not authentication. Every request still needs an approved device token, bound to the Tailscale node it was approved on.
 
 [ADR 021](../decisions/021-devices-and-remote-access.md) decides the listener, the peer and host checks, HTTPS and Pause.

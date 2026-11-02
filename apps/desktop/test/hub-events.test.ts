@@ -75,7 +75,7 @@ describe("following the hub's event stream", () => {
     const following = follow({
       url: () => `${address.apiUrl}/api/events`,
       onChange: (change) => {
-        if (change._tag !== "Port" || !address.move(change.port)) return;
+        if (change._tag !== "RemoteAccess" || !address.move(change.port)) return;
         moves.push(change.port);
         void following.reconnect();
       },
@@ -83,7 +83,15 @@ describe("following the hub's event stream", () => {
     const { hub } = following;
     await expect.poll(() => hub.connections.length).toBe(1);
     hub.last().write(readyFrame);
-    const status = { enabled: false, port: 4400, tailscale: null, listening: [], problem: "off", detail: null };
+    const status = {
+      enabled: false,
+      paused: false,
+      port: 4400,
+      tailscale: null,
+      listening: [],
+      problem: "off",
+      detail: null,
+    };
     hub.last().write(`event: remote-access\ndata: ${JSON.stringify({ _tag: "RemoteAccessChanged", status })}\n\n`);
     await expect.poll(() => hub.connections.length).toBe(2);
     expect(moves).toEqual([4400]);
@@ -163,11 +171,19 @@ describe("the event stream model", () => {
     expect(message("not json")).toBeNull();
   });
 
-  it("reads the hub's new port from a remote access change", () => {
-    const status = { enabled: true, port: 4400, tailscale: null, listening: [], problem: null, detail: null };
+  it("reads the hub's port, and whether remote access is on and paused, from a remote access change", () => {
+    const status = {
+      enabled: true,
+      paused: true,
+      port: 4400,
+      tailscale: null,
+      listening: [],
+      problem: "paused",
+      detail: null,
+    };
     expect(
       frameChange({ event: "remote-access", data: JSON.stringify({ _tag: "RemoteAccessChanged", status }) }),
-    ).toEqual({ _tag: "Port", port: 4400 });
+    ).toEqual({ _tag: "RemoteAccess", port: 4400, enabled: true, paused: true });
     expect(frameChange({ event: "remote-access", data: "{}" })).toBeNull();
   });
 });

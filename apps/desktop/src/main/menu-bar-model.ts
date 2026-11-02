@@ -113,6 +113,31 @@ export const trayModel = (status: ServerStatus, working: ReadonlyArray<string>, 
   }
 };
 
+/** What the hub said about remote access, as far as the menu-bar menu needs it. */
+export interface RemoteAccessSwitch {
+  readonly enabled: boolean;
+  readonly paused: boolean;
+}
+
+/** The menu's Pause remote access item: Pause, Resume, or none while remote access is off or unknown. */
+export interface PauseItem {
+  readonly label: string;
+  readonly sublabel: string;
+  /** What choosing it asks the hub for. */
+  readonly pause: boolean;
+}
+
+/**
+ * Pause remote access (ADR 021): shown while the server runs with remote access on. Pausing stops
+ * the tailnet until Resume and revokes nothing; this computer keeps working.
+ */
+export const pauseItem = (state: ServerState, remote: RemoteAccessSwitch | null): PauseItem | null => {
+  if (state !== "running" || remote === null || !remote.enabled) return null;
+  return remote.paused
+    ? { label: "Resume remote access", sublabel: "Paused · only this computer can open Hobbots", pause: false }
+    : { label: "Pause remote access", sublabel: "Your other devices can open Hobbots", pause: true };
+};
+
 export type CloseAction =
   /** Let the window close; the app, the server and running work stay alive. */
   | "close"

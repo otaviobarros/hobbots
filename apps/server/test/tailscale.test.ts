@@ -106,7 +106,14 @@ describe("addressRanges", () => {
 
 describe("remoteAccessStatus", () => {
   const running = { state: "running", dnsName: "hub.example.ts.net", addresses: ["100.101.102.103"] } as const;
-  const base = { enabled: true, port: 4317, tailscale: running, listening: ["100.101.102.103"], failed: [] };
+  const base = {
+    enabled: true,
+    paused: false,
+    port: 4317,
+    tailscale: running,
+    listening: ["100.101.102.103"],
+    failed: [],
+  };
 
   it("has no problem while it listens on every address Tailscale gave it", () => {
     expect(remoteAccessStatus(base)).toMatchObject({ problem: null, detail: null, listening: ["100.101.102.103"] });
@@ -115,6 +122,13 @@ describe("remoteAccessStatus", () => {
   it("says why it does not listen on the tailnet", () => {
     expect(remoteAccessStatus({ ...base, enabled: false }).problem).toBe("off");
     expect(remoteAccessStatus({ ...base, enabled: false }).listening).toEqual([]);
+    // Paused, it keeps what Tailscale said but listens nowhere on the tailnet; off wins over paused.
+    expect(remoteAccessStatus({ ...base, paused: true })).toMatchObject({
+      problem: "paused",
+      listening: [],
+      tailscale: running,
+    });
+    expect(remoteAccessStatus({ ...base, enabled: false, paused: true }).problem).toBe("off");
     expect(remoteAccessStatus({ ...base, tailscale: null, listening: [] }).problem).toBe("tailscale");
     expect(
       remoteAccessStatus({ ...base, tailscale: { state: "signedOut", dnsName: null, addresses: [] }, listening: [] })

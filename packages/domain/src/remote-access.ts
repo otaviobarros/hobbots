@@ -20,12 +20,13 @@ export const TailscaleStatus = Schema.Struct({
 export type TailscaleStatus = typeof TailscaleStatus.Type;
 
 /**
- * Why the hub is not listening on its tailnet. `off`: remote access is off. `tailscale`: Tailscale
+ * Why the hub is not listening on its tailnet. `off`: remote access is off. `paused`: the user
+ * paused it from the menu-bar icon until they resume it. `tailscale`: Tailscale
  * is not running on the hub; `tailscale.state` says how. `noAddress`: Tailscale runs but gave the hub
  * no tailnet address. `cannotListen`: the hub could not open its port on a tailnet address; `detail`
  * says why.
  */
-export const RemoteAccessProblem = Schema.Literals(["off", "tailscale", "noAddress", "cannotListen"]);
+export const RemoteAccessProblem = Schema.Literals(["off", "paused", "tailscale", "noAddress", "cannotListen"]);
 export type RemoteAccessProblem = typeof RemoteAccessProblem.Type;
 
 /** A port the hub may listen on: never a privileged one. */
@@ -35,6 +36,11 @@ export const HubPort = Schema.Int.check(Schema.isBetween({ minimum: 1024, maximu
 export const RemoteAccessStatus = Schema.Struct({
   /** Whether the user turned remote access on. Off by default. */
   enabled: Schema.Boolean,
+  /**
+   * Whether the user paused remote access from the menu-bar icon. While paused the hub listens only
+   * on loopback; the setting stays on, survives a restart and lasts until Resume.
+   */
+  paused: Schema.Boolean,
   /** The hub's port, on loopback and on the tailnet. */
   port: Schema.Int,
   /** Null until the hub first asked Tailscale. */
@@ -49,7 +55,7 @@ export const RemoteAccessStatus = Schema.Struct({
 export type RemoteAccessStatus = typeof RemoteAccessStatus.Type;
 
 /**
- * Remote access changed: it was turned on or off, Tailscale changed, the hub started or stopped
+ * Remote access changed: it was turned on or off, paused or resumed, Tailscale changed, the hub started or stopped
  * listening on its tailnet, or the port changed. Transient: the status lives in the hub's process.
  */
 export const RemoteAccessChanged = Schema.TaggedStruct("RemoteAccessChanged", { status: RemoteAccessStatus });

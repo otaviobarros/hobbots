@@ -1,4 +1,5 @@
 import type { RemoteAccessStatus } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { Switch } from "@hobbots/ui/components/switch";
 import { useQuery } from "@tanstack/react-query";
 import { useId } from "react";
@@ -17,6 +18,8 @@ export const remoteAccessWhy = (status: RemoteAccessStatus): string | null => {
       return status.tailscale === null || status.tailscale.state === "running"
         ? copy.why.notRunning
         : copy.why[status.tailscale.state];
+    case "paused":
+      return copy.why.paused;
     case "noAddress":
       return copy.why.noAddress;
     case "cannotListen":
@@ -32,14 +35,29 @@ export const remoteAddress = (status: RemoteAccessStatus): string | null => {
 };
 
 /** Where the hub is on the tailnet, or why it is not there, once remote access is on. */
-function RemoteAccessState({ status }: { readonly status: RemoteAccessStatus }) {
+function RemoteAccessState({
+  status,
+  onResume,
+  resuming,
+}: {
+  readonly status: RemoteAccessStatus;
+  readonly onResume: () => void;
+  readonly resuming: boolean;
+}) {
   const why = remoteAccessWhy(status);
   if (why !== null) {
     return (
-      <p role="status" className="m-0 flex items-start gap-2 text-sm">
-        <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
-        <span>{why}</span>
-      </p>
+      <div className="flex flex-col items-start gap-2">
+        <p role="status" className="m-0 flex items-start gap-2 text-sm">
+          <span aria-hidden className="mt-1.5 size-2 flex-none bg-lantern" />
+          <span>{why}</span>
+        </p>
+        {status.problem === "paused" && (
+          <Button variant="outline" size="sm" disabled={resuming} onClick={onResume}>
+            {copy.resume}
+          </Button>
+        )}
+      </div>
     );
   }
   const address = remoteAddress(status);
@@ -67,7 +85,7 @@ export function RemoteAccessSettings() {
   const access = useQuery(remoteAccessQuery);
   const change = useUpdateRemoteAccess();
   const status = access.data;
-  const on = change.isPending ? (change.variables.enabled ?? false) : (status?.enabled ?? false);
+  const on = (change.isPending ? change.variables.enabled : undefined) ?? status?.enabled ?? false;
 
   return (
     <>
@@ -86,7 +104,13 @@ export function RemoteAccessSettings() {
           onCheckedChange={(enabled) => change.mutate({ enabled })}
         />
       </div>
-      {status?.enabled && <RemoteAccessState status={status} />}
+      {status?.enabled && (
+        <RemoteAccessState
+          status={status}
+          resuming={change.isPending}
+          onResume={() => change.mutate({ paused: false })}
+        />
+      )}
       {(access.isError || change.isError) && (
         <p role="alert" className="m-0 text-sm text-rose">
           {copy.failed}

@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 import { Agent } from "./agent.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { BackpackItem } from "./backpack.ts";
+import { Device } from "./device.ts";
 import { Grant } from "./grant.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { Message } from "./message.ts";
@@ -42,6 +43,8 @@ const ApprovalResolved = Schema.TaggedStruct("ApprovalResolved", { approval: App
 const GrantCreated = Schema.TaggedStruct("GrantCreated", { grant: Grant });
 /** A grant stopped applying: the user removed it, or a change took away the authority it relied on. */
 const GrantRevoked = Schema.TaggedStruct("GrantRevoked", { grant: Grant });
+/** The user revoked a device: its requests are refused from now on (ADR 021). Carries no token. */
+const DeviceRevoked = Schema.TaggedStruct("DeviceRevoked", { device: Device });
 /** A Task, a step or a delegated Task was created, with its Delegation and planned Milestones (ADR 018). */
 const TaskCreated = Schema.TaggedStruct("TaskCreated", {
   task: Task,
@@ -136,6 +139,7 @@ export const JournaledEvent = Schema.Union([
   QuestCompleted,
   BackpackItemRecorded,
   BackpackItemChanged,
+  DeviceRevoked,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -175,6 +179,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // An item's `blockers` was added with a default, compatibly.
   BackpackItemRecorded: 1,
   BackpackItemChanged: 1,
+  DeviceRevoked: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */
