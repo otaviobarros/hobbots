@@ -142,7 +142,8 @@ export class Checkpoint extends Schema.Class<Checkpoint>("Checkpoint")({
   revision: Revision,
 }) {}
 
-export const QuestionState = Schema.Literals(["open", "answered"]);
+/** A question is open until it is answered, or withdrawn when its Task ends first and nobody is left to hear the answer. */
+export const QuestionState = Schema.Literals(["open", "answered", "withdrawn"]);
 export type QuestionState = typeof QuestionState.Type;
 
 /** Who answered a question: a lead, or the user. */

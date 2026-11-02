@@ -181,6 +181,7 @@ function Detail({
                     })}
                   </span>
                 )}
+                {question.state === "withdrawn" && <span className="text-secondary-text">{copy.withdrawn}</span>}
               </li>
             ))}
           </ul>

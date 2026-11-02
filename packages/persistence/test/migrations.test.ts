@@ -15,6 +15,7 @@ import hobSignCommits from "../src/migrations/0021_hob_sign_commits.ts";
 import threadArchivedAt from "../src/migrations/0023_thread_archived_at.ts";
 import githubCharm from "../src/migrations/0027_github_charm.ts";
 import backpackBlockers from "../src/migrations/0029_backpack_blockers.ts";
+import withdrawnQuestions from "../src/migrations/0033_withdrawn_questions.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -860,6 +861,52 @@ describe("0029_backpack_blockers", () => {
         decision: null,
         decidedAt: null,
       },
+    ]);
+  });
+});
+
+describe("0033_withdrawn_questions", () => {
+  // covers DP-003, OR-004
+  it("[TC-OR-169] withdraws the questions left open on Tasks that ended as cancelled or failed, and keeps the rest", async () => {
+    const result = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const at = "2026-11-01T00:00:00.000Z";
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "ada",
+        name: "Ada",
+        roleTitle: "Builder",
+        runtime: "claude-code",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: at,
+      })}`;
+      for (const state of ["cancelled", "failed", "active"]) {
+        yield* sql`INSERT INTO tasks ${sql.insert({
+          id: state,
+          ownerId: "ada",
+          rootId: state,
+          brief: "Build",
+          state,
+          createdAt: at,
+          updatedAt: at,
+        })}`;
+      }
+      const question = (id: string, taskId: string, state: string) =>
+        sql`INSERT INTO questions ${sql.insert({ id, taskId, askerId: "ada", text: id, state, createdAt: at })}`;
+      yield* question("on-cancelled", "cancelled", "open");
+      yield* question("on-failed", "failed", "open");
+      yield* question("answered", "cancelled", "answered");
+      yield* question("on-active", "active", "open");
+      yield* withdrawnQuestions;
+      return yield* sql<{ readonly id: string; readonly state: string }>`SELECT id, state FROM questions ORDER BY id`;
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0033"))), Effect.runPromise);
+
+    expect(result.map((row) => [row.id, row.state])).toEqual([
+      ["answered", "answered"],
+      ["on-active", "open"],
+      ["on-cancelled", "withdrawn"],
+      ["on-failed", "withdrawn"],
     ]);
   });
 });

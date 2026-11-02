@@ -24,6 +24,7 @@ export type TaskEvent = Extract<
       | "QuestionAsked"
       | "QuestionAnswered"
       | "QuestionEscalated"
+      | "QuestionWithdrawn"
       | "NoteLeft"
       | "HandedOff"
       | "TaskCompleted"
@@ -135,6 +136,7 @@ const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
   QuestionAsked: questionChange,
   QuestionAnswered: questionChange,
   QuestionEscalated: questionChange,
+  QuestionWithdrawn: questionChange,
   NoteLeft: (tree, { note }, ids) => (ids.has(note.taskId) ? { notes: upsertNewer(tree.notes, note) } : null),
   HandedOff: (tree, { handOff, artifact }, ids) => {
     if (!ids.has(handOff.toTaskId) && !ids.has(artifact.taskId)) return null;

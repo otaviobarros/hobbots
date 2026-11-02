@@ -63,6 +63,7 @@ export const messages = {
     youAnswered: ({ answer }: { answer: string }) => `You answered: ${answer}`,
     failed: "Your answer could not be sent. Try again.",
     closed: "This question was already answered.",
+    withdrawn: "Withdrawn: the work it was about ended before anyone answered.",
     leadAnswered: ({ lead, asker }: { lead: string; asker: string }) => `${lead} answered ${asker} for you`,
   },
   drawer: {
@@ -83,6 +84,7 @@ export const messages = {
     reached: "Reached",
     notReached: "Not reached yet",
     answer: ({ name, answer }: { name: string; answer: string }) => `${name}: ${answer}`,
+    withdrawn: "Withdrawn when this Task ended.",
     you: "You",
     notFound: "This Task is not in this thread.",
     noteLabel: ({ name }: { name: string }) => `Tell ${name} about this task`,
