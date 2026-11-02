@@ -156,7 +156,7 @@ const ServerLive = Layer.unwrap(
     const Charms = GitHubCharmTools.pipe(
       Layer.provide(
         Layer.mergeAll(
-          GitHubApiNode,
+          GitHubApiNode(),
           GitRemotes.layer,
           PolicyEngine.node,
           GitPushLive({ folder: charmFolder }).pipe(

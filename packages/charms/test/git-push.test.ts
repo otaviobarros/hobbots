@@ -6,14 +6,14 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer, Redacted, type Scope } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { GitPush, GitPushLive, type PushTarget, pushResult } from "../src/index.ts";
-import { type FakeGitHubGit, startFakeGitHubGit } from "./fake-github-git.ts";
+import { type FakeGitHub, startFakeGitHub } from "../src/testing.ts";
 import { directSandbox } from "./support.ts";
 
 const TOKEN = "ghu_faketoken0123456789abcdefghijklmnopqrstuv";
 const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 
 let root = "";
-let github: FakeGitHubGit;
+let github: FakeGitHub;
 
 const sh = (cwd: string, ...args: Array<string>) =>
   execFileSync("git", args, {
@@ -76,7 +76,7 @@ const https = { _tag: "Https", token: Redacted.make(TOKEN) } as const;
 
 beforeAll(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "hobbots-push-")));
-  github = await startFakeGitHubGit(path.join(root, "github"), TOKEN);
+  github = await startFakeGitHub({ folder: path.join(root, "github"), tokens: [TOKEN] });
 });
 afterAll(async () => {
   await github.close();
@@ -106,7 +106,9 @@ describe("pushing from the hub's staging repository", () => {
     expect(result.pushed).toEqual({ _tag: "Pushed", created: true, forced: false });
     expect(sh(remote, "rev-parse", "refs/heads/feat/x")).toBe(expected);
     // The token reached GitHub as Git's credential, through the hub's helper.
-    expect(github.authorizations).toContain(`Basic ${Buffer.from(`x-access-token:${TOKEN}`).toString("base64")}`);
+    expect(github.requests.map((request) => request.authorization)).toContain(
+      `Basic ${Buffer.from(`x-access-token:${TOKEN}`).toString("base64")}`,
+    );
   });
 
   // covers PE-005, PE-006
