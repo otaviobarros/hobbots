@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -83,6 +85,34 @@ describe("the folder scan", () => {
       new TextEncoder().encode("# Notes\n"),
     );
   });
+
+  // covers PE-002, PE-005
+  it("[TC-PE-280] never reads outside the folder while a command swaps a folder in it for a link and back", async () => {
+    const outside = folder("elsewhere", { "notes.md": "SECRET outside\n" });
+    const root = folder("swapped", { "docs/notes.md": "inside\n" });
+    const secret = createHash("sha256").update("SECRET outside\n").digest("hex");
+    // A separate process swaps docs for a link to the outside folder and back, as fast as it can.
+    const swapper = spawn(process.execPath, [
+      "-e",
+      `const fs = require("node:fs");
+       const docs = ${JSON.stringify(join(root, "docs"))}, kept = docs + "-real", out = ${JSON.stringify(outside)};
+       const end = Date.now() + 3000;
+       while (Date.now() < end) {
+         try { fs.renameSync(docs, kept); fs.symlinkSync(out, docs); fs.unlinkSync(docs); fs.renameSync(kept, docs); } catch {}
+       }`,
+    ]);
+    const done = new Promise((resolve) => swapper.on("exit", resolve));
+    const scanner = makeFolderScanner();
+    const seen: Array<string> = [];
+    for (let i = 0; i < 400; i++) {
+      const read = await Effect.runPromise(scanner.read(root, "docs/notes.md", 1024));
+      if (Option.isSome(read)) seen.push(new TextDecoder().decode(read.value));
+      const scanned = await Effect.runPromise(scanner.scan(root, limits));
+      for (const file of scanned.listing.values()) seen.push(file.hash);
+    }
+    await done;
+    expect(seen.some((each) => each.includes("SECRET") || each === secret)).toBe(false);
+  }, 20_000);
 
   // covers UX-002
   it("[TC-GEN-079] skips what .gitignore files ignore in a Git folder only, and .git and node_modules in any", async () => {

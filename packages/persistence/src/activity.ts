@@ -254,6 +254,9 @@ export const ActivityRepositoryLive = Layer.effect(
         (rows) => rows.length > 0,
       );
 
+    const unfinishedCommands = sql<Row>`SELECT * FROM attempt_commands WHERE state = 'running'
+      ORDER BY ${byteOrder(sql, ["started_at", "id"])}`.pipe(Effect.flatMap(commandsIn));
+
     const findCommand = (attemptId: AttemptId, commandId: string) =>
       Effect.map(commandRows(attemptId, { id: commandId }), (rows) => Option.fromUndefinedOr(rows[0]));
 
@@ -295,6 +298,7 @@ export const ActivityRepositoryLive = Layer.effect(
       read: (attemptId) => Effect.orDie(read(attemptId)),
       names: (attemptId, contentId) => Effect.orDie(names(attemptId, contentId)),
       findCommand: (attemptId, commandId) => Effect.orDie(findCommand(attemptId, commandId)),
+      unfinishedCommands: Effect.orDie(unfinishedCommands),
       unnamed: (ids) => Effect.orDie(unnamed(ids)),
       clearDetails: (endedBefore, at) => Effect.orDie(clearDetails(endedBefore, at)),
     });

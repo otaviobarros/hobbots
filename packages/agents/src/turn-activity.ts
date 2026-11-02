@@ -12,6 +12,7 @@ import {
   FolderScanId,
   foldersOverlap,
   foldLog,
+  type KeepPlan,
   keepPlan,
   type ListingChange,
   type NotKept,
@@ -119,28 +120,6 @@ const withoutContents = (file: ScannedFile, kind: FileVersion["kind"], notKept: 
   notKept,
 });
 
-/**
- * The changes as an Attempt keeps them: contents past what it may keep are dropped, in path order,
- * and say so. `sizes` are the bytes of each kept content.
- */
-const withinBudget = (
-  drafts: ReadonlyArray<FileChangeDraft>,
-  sizes: ReadonlyMap<ContentId, number>,
-  limit: number,
-): ReadonlyArray<FileChangeDraft> => {
-  const counted = new Set<ContentId>();
-  let used = 0;
-  const fit = (version: FileVersion | null): FileVersion | null => {
-    if (version?.contentId == null || counted.has(version.contentId)) return version;
-    const size = sizes.get(version.contentId) ?? 0;
-    if (used + size > limit) return { ...version, contentId: null, notKept: "attempt-limit" };
-    used += size;
-    counted.add(version.contentId);
-    return version;
-  };
-  return drafts.map((draft) => ({ ...draft, before: fit(draft.before), after: fit(draft.after) }));
-};
-
 const makeRecorder = (limits: ActivityLimits) =>
   Effect.gen(function* () {
     const scanner = yield* FolderScanner;
@@ -186,8 +165,14 @@ const makeRecorder = (limits: ActivityLimits) =>
         const lock = yield* Semaphore.make(1);
         const scanLock = yield* Semaphore.make(1);
         const baselines = new Map<string, Baseline>();
-        const added = new Set<ContentId>();
-        const sizes = new Map<ContentId, number>();
+        // Contents this turn keeps pinned, so neither another turn nor pruning drops them while it runs.
+        const mine = new Set<ContentId>();
+        // The file contents the Attempt holds now, and their bytes: one budget for every folder,
+        // reserved before a content is stored, and freed when a later scan no longer needs one.
+        const held = new Map<ContentId, number>();
+        let heldBytes = 0;
+        // Contents freed since the last write, dropped once no record names them.
+        const freed = new Set<ContentId>();
         const scans: Array<Omit<FolderScanDraft, "attemptId">> = [];
         const commands = new Map<string, Omit<CommandDraft, "attemptId">>();
         const dirtyCommands = new Set<string>();
@@ -198,41 +183,70 @@ const makeRecorder = (limits: ActivityLimits) =>
         const writers = new Set<string>();
         let logsUsed = 0;
         let taskId: TaskId | null = null;
-        // Contents read at the start, bounded like an Attempt's own.
-        let baselineUsed = 0;
+
+        const keep = (id: ContentId) => {
+          if (mine.has(id)) return;
+          mine.add(id);
+          pin(id);
+        };
+        /** Holds `bytes` more for a content, or says no when the Attempt's budget would be passed. */
+        const reserve = (bytes: number) => {
+          if (heldBytes + bytes > limits.contentsPerAttempt) return false;
+          heldBytes += bytes;
+          return true;
+        };
+        /** Turns a reservation of `reserved` bytes into the content `id` of `size` bytes, counted once. */
+        const settle = (reserved: number, id: ContentId, size: number) => {
+          heldBytes -= reserved;
+          if (held.has(id)) return;
+          held.set(id, size);
+          heldBytes += size;
+          keep(id);
+        };
+
+        /** Reads a file's contents and stores them, redacted when they are text. */
+        const readAndStore = (folder: string, path: string, plan: KeepPlan, reserved: number) =>
+          Effect.gen(function* () {
+            const bytes = yield* scanner.read(folder, path, Math.min(plan.readUpTo ?? 0, reserved));
+            if (Option.isNone(bytes)) return { _tag: "NotKept", kind: plan.kind, why: "unreadable" } as const;
+            const text = plan.kind === "image" ? null : textOf(bytes.value);
+            if (plan.kind !== "image" && text === null)
+              return { _tag: "NotKept", kind: "other", why: "not-shown" } as const;
+            const content = text === null ? bytes.value : encoder.encode(turn.redactor.text(text));
+            const stored = yield* store.put(content).pipe(Effect.option);
+            if (Option.isNone(stored)) return { _tag: "NotKept", kind: plan.kind, why: "unreadable" } as const;
+            return { _tag: "Kept", id: stored.value.id, size: content.byteLength } as const;
+          });
 
         /** Keeps a version of a file, reading it once per content hash while it is kept. */
-        const keepVersion = (folder: string, path: string, file: ScannedFile, atStart: boolean) =>
+        const keepVersion = (folder: string, path: string, file: ScannedFile) =>
           Effect.gen(function* () {
             const plan = keepPlan(path, file, limits);
             if (plan.readUpTo === null) return withoutContents(file, plan.kind, plan.notKept);
             const known = kept.get(file.hash);
             if (known !== undefined && (yield* store.has(known.id))) {
-              sizes.set(known.id, known.size);
-              if (!added.has(known.id)) {
-                added.add(known.id);
-                pin(known.id);
-              }
+              if (!held.has(known.id) && !reserve(known.size))
+                return withoutContents(file, known.kind, "attempt-limit");
+              if (!held.has(known.id)) settle(known.size, known.id, known.size);
               return { ...withoutContents(file, known.kind, null), contentId: known.id };
             }
-            if (atStart && baselineUsed + file.size > limits.contentsPerAttempt) {
-              return withoutContents(file, plan.kind, "attempt-limit");
+            // The file's size as scanned is reserved before it is read, so no read passes the budget.
+            if (!reserve(file.size)) return withoutContents(file, plan.kind, "attempt-limit");
+            // A read cut short, as by the turn's end, gives its reservation back.
+            const stored = yield* readAndStore(folder, path, plan, file.size).pipe(
+              Effect.onError(() =>
+                Effect.sync(() => {
+                  heldBytes -= file.size;
+                }),
+              ),
+            );
+            if (stored._tag === "NotKept") {
+              heldBytes -= file.size;
+              return withoutContents(file, stored.kind, stored.why);
             }
-            const bytes = yield* scanner.read(folder, path, plan.readUpTo);
-            if (Option.isNone(bytes)) return withoutContents(file, plan.kind, "unreadable");
-            const text = plan.kind === "image" ? null : textOf(bytes.value);
-            if (plan.kind !== "image" && text === null) return withoutContents(file, "other", "not-shown");
-            const content = text === null ? bytes.value : encoder.encode(turn.redactor.text(text));
-            const stored = yield* store.put(content).pipe(Effect.option);
-            if (Option.isNone(stored)) return withoutContents(file, plan.kind, "unreadable");
-            const id = stored.value.id;
-            if (atStart) baselineUsed += content.byteLength;
-            sizes.set(id, content.byteLength);
-            kept.set(file.hash, { id, kind: plan.kind, size: content.byteLength });
-            if (!added.has(id)) {
-              added.add(id);
-              pin(id);
-            }
+            const id = stored.id;
+            settle(file.size, id, stored.size);
+            kept.set(file.hash, { id, kind: plan.kind, size: stored.size });
             return { ...withoutContents(file, plan.kind, null), contentId: id };
           });
 
@@ -258,7 +272,7 @@ const makeRecorder = (limits: ActivityLimits) =>
               change.before === null
                 ? null
                 : (baseline.versions.get(wasAt) ?? withoutContents(change.before, "other", "unreadable"));
-            const after = change.after === null ? null : yield* keepVersion(folder, change.path, change.after, false);
+            const after = change.after === null ? null : yield* keepVersion(folder, change.path, change.after);
             return {
               id,
               path: change.path,
@@ -271,6 +285,31 @@ const makeRecorder = (limits: ActivityLimits) =>
               recordedAt: at,
             } satisfies FileChangeDraft;
           });
+
+        /**
+         * Frees the contents no baseline or current change needs any more, such as the version of a
+         * file a later rewrite replaced, so a long turn holds only what its records can show.
+         */
+        const release = (rescanning?: string): ReadonlyArray<ContentId> => {
+          const needed = new Set<ContentId | null>();
+          for (const baseline of baselines.values())
+            for (const version of baseline.versions.values()) needed.add(version.contentId);
+          for (const [folder, drafts] of changeSets) {
+            if (folder === rescanning) continue;
+            for (const draft of drafts) {
+              needed.add(draft.before?.contentId ?? null);
+              needed.add(draft.after?.contentId ?? null);
+            }
+          }
+          const freed = [...held.keys()].filter((id) => !needed.has(id));
+          for (const id of freed) {
+            heldBytes -= held.get(id) ?? 0;
+            held.delete(id);
+            mine.delete(id);
+            unpin(id);
+          }
+          return freed;
+        };
 
         /** Records the turn's changes in every tracked folder as they are now, and each folder's end scan. */
         const compare = (settled: boolean) =>
@@ -286,6 +325,8 @@ const makeRecorder = (limits: ActivityLimits) =>
                   scans.push(scanDraft(folder, "end", scanned.filesScanned, scanned.stopped, startedAt, at));
                 }
                 if (scanned.stopped !== null) return;
+                // What this folder's last changes held is freed first, so the new ones can use it.
+                for (const id of release(folder)) freed.add(id);
                 const drafts = yield* Effect.forEach(compareListings(baseline.listing, scanned.listing), (change) =>
                   draftOf(folder, baseline, change, settled, at),
                 );
@@ -298,7 +339,19 @@ const makeRecorder = (limits: ActivityLimits) =>
                 );
               }),
             { discard: true },
-          ).pipe(Effect.andThen(sync));
+          ).pipe(
+            Effect.andThen(sync),
+            Effect.andThen(
+              Effect.suspend(() => {
+                for (const id of release()) freed.add(id);
+                const loose = [...freed].filter((id) => !held.has(id));
+                freed.clear();
+                return dropUnnamed(loose);
+              }).pipe(
+                Effect.catchCause((cause) => Effect.logWarning("Could not drop a turn's superseded contents", cause)),
+              ),
+            ),
+          );
 
         const scanDraft = (
           folder: string,
@@ -328,7 +381,7 @@ const makeRecorder = (limits: ActivityLimits) =>
             }
             for (const folder of [...dirtyFolders]) {
               dirtyFolders.delete(folder);
-              const drafts = withinBudget(changeSets.get(folder) ?? [], sizes, limits.contentsPerAttempt);
+              const drafts = changeSets.get(folder) ?? [];
               const saved = yield* repo.saveChanges(attemptId, folder, drafts);
               if (Option.isSome(saved)) entries.push(...saved.value.entries);
             }
@@ -421,10 +474,7 @@ const makeRecorder = (limits: ActivityLimits) =>
               return { output: { ...preview, logged: false }, log: null, logNotKept: why };
             }
             logsUsed += bytes.byteLength;
-            if (!added.has(stored.value.id)) {
-              added.add(stored.value.id);
-              pin(stored.value.id);
-            }
+            keep(stored.value.id);
             return {
               output: { ...preview, logged: true },
               log: { contentId: stored.value.id, totalBytes: folded.totalBytes, omittedBytes: folded.omittedBytes },
@@ -496,8 +546,7 @@ const makeRecorder = (limits: ActivityLimits) =>
             if (scanned.stopped === null) {
               yield* Effect.forEach(
                 [...scanned.listing],
-                ([path, file]) =>
-                  Effect.map(keepVersion(folder, path, file, true), (version) => versions.set(path, version)),
+                ([path, file]) => Effect.map(keepVersion(folder, path, file), (version) => versions.set(path, version)),
                 { concurrency: 8, discard: true },
               );
             }
@@ -510,9 +559,9 @@ const makeRecorder = (limits: ActivityLimits) =>
           for (const id of commands.keys()) uncertain(id, at);
           yield* Semaphore.withPermit(scanLock, compare(true));
           live.delete(me);
-          const mine = [...added];
-          for (const id of mine) unpin(id);
-          yield* dropUnnamed(mine);
+          const pinned = [...mine];
+          for (const id of pinned) unpin(id);
+          yield* dropUnnamed(pinned);
         }).pipe(
           Effect.catchCause((cause) => Effect.logWarning("Could not record the end of a turn's activity", cause)),
         );
@@ -536,6 +585,17 @@ const makeRecorder = (limits: ActivityLimits) =>
             }).pipe(Stream.tap(observe)),
         } satisfies TurnActivity;
       });
+
+    // After a restart no command of an earlier run still runs (EX-004): each one left running may or
+    // may not have finished, so it is recorded as uncertain, with its journal entry.
+    yield* Effect.gen(function* () {
+      const at = yield* nowIso;
+      for (const command of yield* repo.unfinishedCommands) {
+        const { taskId: _, ...draft } = command;
+        const saved = yield* repo.saveCommand({ ...draft, state: "uncertain", endedAt: at });
+        if (Option.isSome(saved)) yield* publisher.publish(saved.value.entries);
+      }
+    }).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not settle the commands left running", cause)));
 
     const prune = Effect.gen(function* () {
       const now = yield* DateTime.now;

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { type BigIntStats, constants, type Dirent } from "node:fs";
-import { lstat, open, opendir, readlink, realpath } from "node:fs/promises";
+import { type FileHandle, lstat, open, opendir, readlink, realpath } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 import { FolderScanner, type ScannedFolder } from "@hobbots/agents";
 import type { ActivityLimits, ScannedFile, ScanStop } from "@hobbots/domain";
@@ -49,12 +49,51 @@ const unchangedSince = (seen: Seen | undefined, stats: BigIntStats): seen is See
 
 const sha256 = (data: string | Uint8Array) => createHash("sha256").update(data).digest("hex");
 
-/** The SHA-256 of a regular file's contents, read without following a link at its name. */
-const hashFile = async (path: string): Promise<string | null> => {
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
+/** Whether `full` sits in `root` (canonical) through real folders only, as the path resolves now. */
+const insideRoot = async (root: string, full: string) => {
+  const parent = await realpath(dirname(full)).catch(() => null);
+  return parent !== null && (parent === root || parent.startsWith(`${root}${sep}`));
+};
+
+/** macOS's `O_NOFOLLOW_ANY`: the open fails if any part of the path is a link. Node does not name it. */
+const O_NOFOLLOW_ANY = 0x20000000;
+
+/**
+ * Opens `full`, a path in the canonical folder `root`, without passing through a link anywhere on
+ * the way, as one step: a folder a command swaps for a link while the hub opens a file is never
+ * passed through. On macOS the kernel refuses any link on the path (`O_NOFOLLOW_ANY`). On Linux the
+ * open refuses a link at the name, and the kernel's own record of what the descriptor opened must
+ * be `full` itself. Elsewhere, the path must still resolve inside `root` after the open, which a
+ * swap timed between the two can get past.
+ */
+const openPath = async (root: string, full: string): Promise<FileHandle | null> => {
+  const base = constants.O_RDONLY | constants.O_NONBLOCK;
+  if (process.platform === "darwin") return open(full, base | O_NOFOLLOW_ANY).catch(() => null);
+  const handle = await open(full, base | constants.O_NOFOLLOW).catch(() => null);
+  if (handle === null) return null;
+  const opened =
+    process.platform === "linux"
+      ? (await readlink(`/proc/self/fd/${handle.fd}`).catch(() => null)) === full
+      : await insideRoot(root, full);
+  if (opened) return handle;
+  await handle.close();
+  return null;
+};
+
+/** A regular file inside `root`, opened for reading through no link, or null. Every read goes through it. */
+const openInside = async (root: string, full: string): Promise<FileHandle | null> => {
+  const handle = await openPath(root, full);
+  if (handle === null) return null;
+  if ((await handle.stat().catch(() => null))?.isFile() === true) return handle;
+  await handle.close();
+  return null;
+};
+
+/** The SHA-256 of a regular file's contents inside `root`, or null. */
+const hashFile = async (root: string, path: string): Promise<string | null> => {
+  const handle = await openInside(root, path);
   if (handle === null) return null;
   try {
-    if (!(await handle.stat()).isFile()) return null;
     const hash = createHash("sha256");
     for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk as Uint8Array);
     return hash.digest("hex");
@@ -84,12 +123,11 @@ const ignoredBy = (rules: ReadonlyArray<Rules>, path: string) => {
 };
 
 /** A `.gitignore` read as data, or none when there is no regular file by that name. */
-const readRules = async (folder: string, base: string, file: string): Promise<Rules | null> => {
-  const path = join(folder, ...base.split("/").filter(Boolean), file);
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
+const readRules = async (root: string, base: string, file: string): Promise<Rules | null> => {
+  const path = join(root, ...base.split("/").filter(Boolean), file);
+  const handle = await openInside(root, path);
   if (handle === null) return null;
   try {
-    if (!(await handle.stat()).isFile()) return null;
     return { base, ignore: ignore().add(await handle.readFile("utf8")) };
   } catch {
     return null;
@@ -136,13 +174,13 @@ const visit = async (walk: Walk, path: string, full: string) => {
   if (walk.listing.size >= walk.limits.maxFiles) throw new Stopped("too-many-files");
   if (stats.isSymbolicLink()) {
     const target = await readlink(full).catch(() => null);
-    if (target !== null)
+    if (target !== null && (await insideRoot(walk.folder, full)))
       walk.listing.set(path, { kind: "link", size: Buffer.byteLength(target), hash: sha256(target) });
     return;
   }
   if (!stats.isFile()) return;
   const before = walk.seen.get(path);
-  const hash = unchangedSince(before, stats) ? before.hash : await hashFile(full);
+  const hash = unchangedSince(before, stats) ? before.hash : await hashFile(walk.folder, full);
   if (hash === null) return;
   walk.listing.set(path, { kind: "file", size: Number(stats.size), hash });
   walk.next.set(path, {
@@ -161,6 +199,9 @@ const entriesOf = async (walk: Walk, base: string, rules: ReadonlyArray<Rules>) 
   if (directory === null) return { entries: [] as Array<Dirent>, rules };
   const entries: Array<Dirent> = [];
   for await (const entry of directory) entries.push(entry);
+  // A folder swapped for a link lists nothing: what it holds is outside. Each entry is checked again as it is read.
+  const listed = join(walk.folder, ...base.split("/").filter(Boolean), "entry");
+  if (base !== "" && !(await insideRoot(walk.folder, listed))) return { entries: [], rules };
   const own = walk.git && entries.some((entry) => entry.name === ".gitignore" && entry.isFile());
   const added = own ? await readRules(walk.folder, base, ".gitignore") : null;
   return { entries, rules: added === null ? rules : [...rules, added] };
@@ -195,7 +236,9 @@ export const makeFolderScanner = () => {
   ): Promise<ScannedFolder> => {
     const startNs = BigInt(Date.now()) * 1_000_000n;
     const stats = await lstat(folder).catch(() => null);
-    if (stats === null || !stats.isDirectory()) return { listing: new Map(), filesScanned: 0, stopped: "unreadable" };
+    const root = await realpath(folder).catch(() => null);
+    if (stats === null || !stats.isDirectory() || root !== folder)
+      return { listing: new Map(), filesScanned: 0, stopped: "unreadable" };
     const git = await inGit(folder);
     const walk: Walk = {
       folder,
@@ -223,12 +266,10 @@ export const makeFolderScanner = () => {
   const read = async (folder: string, path: string, maxBytes: number): Promise<Uint8Array | null> => {
     const parts = path.split("/");
     if (parts.some((part) => part === "" || part === "." || part === "..")) return null;
-    const full = join(folder, ...parts);
-    const [root, parent] = await Promise.all([realpath(folder), realpath(dirname(full))]);
-    if (parent !== root && !parent.startsWith(`${root}${sep}`)) return null;
-    const handle = await open(full, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const root = await realpath(folder);
+    const handle = await openInside(root, join(root, ...parts));
+    if (handle === null) return null;
     try {
-      if (!(await handle.stat()).isFile()) return null;
       const buffer = new Uint8Array(maxBytes);
       const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
       return buffer.subarray(0, bytesRead);

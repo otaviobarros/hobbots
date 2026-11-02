@@ -21,6 +21,7 @@ import {
   Agent,
   AgentId,
   type AttemptId,
+  CommandId,
   type CommandOutput,
   DEFAULT_ACTIVITY_LIMITS,
   EMPTY_HOB_POLICY,
@@ -53,6 +54,8 @@ import { NodeFolderChecks } from "../src/folders.ts";
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-workbench-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 let project = "";
+/** More folders the hob has beside its project, for a test that needs them. */
+let others: ReadonlyArray<string> = [];
 const dataFolder = join(temp, "data");
 
 const now = "2026-11-02T00:00:00.000Z";
@@ -73,12 +76,12 @@ const ProjectTools = Layer.effect(
         Effect.succeed({
           policy: {
             preset: "balanced",
-            sharedFolders: [project],
+            sharedFolders: [project, ...others],
             hob: EMPTY_HOB_POLICY,
             dataFolder,
             restrictions: [],
           },
-          folders: [project],
+          folders: [project, ...others],
           runtimeFolder: join(temp, "runtime", agent.id),
         }),
     }),
@@ -131,13 +134,13 @@ const Seed = Layer.effectDiscard(
 // Small limits, so a test can pass them; no retention window, so a Task's details clear once it ends.
 const limits = { ...DEFAULT_ACTIVITY_LIMITS, imageBytes: 64, retentionDays: 0 };
 
-const makeApp = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
+const makeApp = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>, kept = limits) =>
   ChatService.layer.pipe(
     Layer.provideMerge(
       StepRunnerLive().pipe(Layer.provideMerge(TaskTools.layer("/")), Layer.provideMerge(TaskSignal.layer)),
     ),
     Layer.provideMerge(
-      ActivityRecorder.layer(limits).pipe(
+      ActivityRecorder.layer(kept).pipe(
         Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataFolder, "activity")))),
       ),
     ),
@@ -169,15 +172,20 @@ afterEach(async () => {
 
 let projects = 0;
 /** A fresh project folder with `files`, and the hub around it. */
-const setUp = (files: Record<string, string | Uint8Array>) => {
+const setUp = (
+  files: Record<string, string | Uint8Array>,
+  options: { readonly limits?: typeof limits; readonly others?: ReadonlyArray<string> } = {},
+) => {
+  others = options.others ?? [];
   project = join(temp, `project-${++projects}`);
+  mkdirSync(project, { recursive: true });
   for (const [path, contents] of Object.entries(files)) {
     mkdirSync(join(project, path, ".."), { recursive: true });
     writeFileSync(join(project, path), contents);
   }
   const requests: Array<PromptRequest> = [];
   const gate = Deferred.makeUnsafe<void>();
-  const app = ManagedRuntime.make(makeApp(gate, requests));
+  const app = ManagedRuntime.make(makeApp(gate, requests, options.limits));
   runtime = app;
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<App>>) => app.runPromise(effect);
   // Every command's output shown live, as clients receive it.
@@ -193,7 +201,7 @@ const setUp = (files: Record<string, string | Uint8Array>) => {
       ),
     ),
   );
-  return { run, live, release: () => run(Deferred.succeed(gate, undefined)) };
+  return { run, live, requests, release: () => run(Deferred.succeed(gate, undefined)) };
 };
 
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -436,5 +444,95 @@ describe("a Task's activity", () => {
     expect(after.changes[0]).toMatchObject({ path: "notes.md", after: { contentId: null, notKept: "cleared" } });
     expect(existsSync(join(dataFolder, "activity", kept ?? ""))).toBe(false);
     expect(readFileSync(join(project, "notes.md"), "utf8")).toBe("# Notes\n\nDone.\n");
+  }, 30_000);
+  // covers UX-002, PE-005
+  it("[TC-PE-282] keeps one content budget for the whole Attempt, across its folders, and frees a version a rewrite replaced", async () => {
+    const second = join(temp, "second");
+    mkdirSync(second, { recursive: true });
+    const text = (mark: string) => `${mark.repeat(999)}\n`;
+    const setUpWith = (contentsPerAttempt: number) =>
+      setUp({}, { limits: { ...limits, contentsPerAttempt }, others: [second] });
+    // The turn waits after its baseline while the test writes in both folders, then rewrites a.txt twice.
+    const turn = [
+      "Tidy both",
+      HOLD,
+      run({ command: "draft one", writes: { "a.txt": text("1") } }),
+      run({ command: "draft two", writes: { "a.txt": text("2") } }),
+      run({ command: "draft three", writes: { "a.txt": text("3") } }),
+      hub("start_quest", { key: "quest", goal: "Tidy both" }),
+    ].join("\n");
+    const recorded = async (contentsPerAttempt: number) => {
+      rmSync(second, { recursive: true, force: true });
+      mkdirSync(second, { recursive: true });
+      const { run: inHub, release, requests } = setUpWith(contentsPerAttempt);
+      const sent = inHub(say(turn));
+      // The prompt reaches the runtime once the turn's baseline is taken.
+      await inHub(retry(Effect.suspend(() => (requests.length > 0 ? Effect.void : Effect.fail("not yet" as const)))));
+      writeFileSync(join(project, "c.txt"), text("c"));
+      writeFileSync(join(second, "b.txt"), text("b"));
+      await release();
+      await sent;
+      const tree = await inHub(treeWhen((each) => each.attempts.length > 0));
+      const attempt = tree.attempts[0];
+      if (attempt === undefined) throw new Error("no Attempt");
+      const activity = await inHub(endedActivity(attempt.id, 2));
+      await runtime?.dispose();
+      runtime = undefined;
+      return activity.changes.map(({ path, after }) => ({ path, notKept: after?.notKept ?? null }));
+    };
+
+    // Room for the three files as they end: the versions of a.txt its rewrites replaced were freed.
+    expect(await recorded(3_000)).toEqual([
+      { path: "a.txt", notKept: null },
+      { path: "c.txt", notKept: null },
+      { path: "b.txt", notKept: null },
+    ]);
+    // Room for two: the third, in the other folder, is past what the Attempt may keep.
+    const tight = await recorded(2_500);
+    expect(tight.filter((each) => each.notKept === "attempt-limit")).toHaveLength(1);
+    expect(tight.filter((each) => each.notKept === null)).toHaveLength(2);
+  }, 30_000);
+  // covers UX-002, EX-004
+  it("[TC-PE-283] after a restart, a command left running from before it is recorded as uncertain, with its journal entry", async () => {
+    const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
+    await inHub(say(["Check the notes", hub("start_quest", { key: "quest", goal: "Check" })].join("\n")));
+    const tree = await inHub(treeWhen((each) => each.attempts.length > 0));
+    const attempt = tree.attempts[0];
+    if (attempt === undefined) throw new Error("no Attempt");
+    await inHub(endedActivity(attempt.id));
+    // What a hub that stopped mid-command leaves behind: the command's record says it still runs.
+    await inHub(
+      ActivityRepository.use((repo) =>
+        repo.saveCommand({
+          id: CommandId.make("left-running"),
+          attemptId: attempt.id,
+          stepId: "lost-step",
+          command: "npm test",
+          folder: project,
+          sandboxed: true,
+          liveOutput: false,
+          state: "running",
+          exitCode: null,
+          startedAt: now,
+          endedAt: null,
+          output: null,
+          log: null,
+          logNotKept: null,
+        }),
+      ),
+    );
+    const before = await inHub(EventJournal.use((journal) => journal.readAfter(0, 10_000)));
+
+    // The hub starts again: its recorder settles what no turn still runs.
+    await inHub(Effect.scoped(Layer.build(ActivityRecorder.layer(limits))));
+
+    const activity = await inHub(activityOf(attempt.id));
+    const command = activity.commands.find((each) => each.id === "left-running");
+    expect(command).toMatchObject({ state: "uncertain", exitCode: null });
+    expect(command?.endedAt).not.toBeNull();
+    const after = await inHub(EventJournal.use((journal) => journal.readAfter(before.at(-1)?.sequence ?? 0, 10_000)));
+    expect(after.filter((entry) => entry.type === "CommandRecorded").map((entry) => entry.payload)).toMatchObject([
+      { _tag: "CommandRecorded", command: { id: "left-running", state: "uncertain" } },
+    ]);
   }, 30_000);
 });

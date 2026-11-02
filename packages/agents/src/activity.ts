@@ -109,6 +109,8 @@ export interface ActivityRepositoryShape {
   readonly names: (attemptId: AttemptId, contentId: ContentId) => Effect.Effect<boolean>;
   /** The command, when it is the Attempt's. */
   readonly findCommand: (attemptId: AttemptId, commandId: CommandId) => Effect.Effect<Option.Option<CommandRecord>>;
+  /** Every command still recorded as running: after a restart, none of them still runs. */
+  readonly unfinishedCommands: Effect.Effect<ReadonlyArray<CommandRecord>>;
   /** Of `ids`, those no record names. */
   readonly unnamed: (ids: ReadonlyArray<ContentId>) => Effect.Effect<ReadonlyArray<ContentId>>;
   /**

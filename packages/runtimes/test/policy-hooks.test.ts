@@ -585,6 +585,22 @@ describe("scripted tool calls in the fake runtime", () => {
     expect(events).toEqual([expect.objectContaining({ _tag: "ToolDenied", tool: "WebFetch", decidedBy: "policy" })]);
   });
 
+  // covers PE-002
+  it("[TC-PE-281] never writes through a link in a scripted run, at the file's name or on the way to it", async () => {
+    const away = join(root, "away");
+    mkdirSync(away, { recursive: true });
+    writeFileSync(join(away, "keep.txt"), "untouched\n");
+    symlinkSync(away, join(project, "linked"));
+    symlinkSync(join(away, "keep.txt"), join(project, "keep-link.txt"));
+    const writes = { "keep-link.txt": "overwritten\n", "linked/new.txt": "made\n", "linked/sub/deep.txt": "made\n" };
+
+    const events = await turn(`fake:run ${JSON.stringify({ command: "true", writes })}`, access());
+
+    expect(events.map((e) => e._tag)).toEqual(["ToolStarted", "ToolFinished"]);
+    expect(readFileSync(join(away, "keep.txt"), "utf8")).toBe("untouched\n");
+    expect(readdirSync(away)).toEqual(["keep.txt"]);
+  });
+
   it("makes no tool calls in a chat-only turn", async () => {
     expect(await turn(`fake:tool Edit ${join(project, "a.ts")}`, null)).toEqual([]);
   });

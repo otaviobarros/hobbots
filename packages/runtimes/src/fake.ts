@@ -1,5 +1,5 @@
-import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { closeSync, constants, lstatSync, mkdirSync, openSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   AdditionalRuntimes,
   type PromptRequest,
@@ -209,18 +209,52 @@ const scriptedCall = (line: string, cwd: string): ScriptedCall | undefined => {
 };
 
 /**
+ * The folder a scripted write goes in, made one level at a time inside `folder`, or undefined when
+ * any level is a link or a file: nothing is made or written through a link.
+ */
+const realParent = (folder: string, parts: ReadonlyArray<string>): string | undefined => {
+  let at = folder;
+  for (const part of parts) {
+    at = join(at, part);
+    const stats = lstatSync(at, { throwIfNoEntry: false });
+    if (stats === undefined) mkdirSync(at);
+    else if (!stats.isDirectory()) return undefined;
+  }
+  return at;
+};
+
+/**
  * Makes a scripted call's writes inside the hob's first folder. A path that leaves the folder, or
- * passes through a link, is not written: the fake never reaches past what the hob was given.
+ * passes through a link, is not written, and a link at the file's own name is replaced, never
+ * written through: the fake never reaches past what the hob was given.
  */
 const applyWrites = (writes: Readonly<Record<string, string | null>>, folder: string) => {
+  if (realpathSync(folder) !== folder) return;
   for (const [path, content] of Object.entries(writes)) {
     const target = resolve(folder, path);
     if (!target.startsWith(`${folder}${sep}`)) continue;
-    const parent = dirname(target);
-    mkdirSync(parent, { recursive: true });
-    if (realpathSync(parent) !== parent) continue;
-    if (content === null) rmSync(target, { force: true });
-    else writeFileSync(target, content);
+    const parent = realParent(folder, relative(folder, dirname(target)).split(sep).filter(Boolean));
+    if (parent === undefined) continue;
+    const file = join(parent, basename(target));
+    if (content === null) {
+      rmSync(file, { force: true });
+      continue;
+    }
+    let descriptor: number;
+    try {
+      descriptor = openSync(
+        file,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW,
+        0o644,
+      );
+    } catch {
+      continue;
+    }
+    try {
+      writeFileSync(descriptor, content);
+    } finally {
+      closeSync(descriptor);
+    }
   }
 };
 
