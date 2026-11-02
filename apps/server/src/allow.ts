@@ -22,7 +22,7 @@ const allow = Effect.gen(function* () {
     baseUrl: `http://127.0.0.1:${config.port}`,
     transformClient: HttpClient.mapRequest(HttpClientRequest.bearerToken(key)),
   });
-  const waiting = yield* client.pairingRequests.list();
+  const waiting = (yield* client.pairingRequests.list()).map((device) => device.request);
   const code = process.argv.slice(2).join("").replaceAll(" ", "");
   if (code === "") {
     if (waiting.length === 0) return yield* Console.log("No device is waiting for approval.");

@@ -125,6 +125,8 @@ export const RemoteAccessLive = (dataDir: string) =>
       const bus = yield* EventBus;
       const oneAtATime = yield* Semaphore.make(1);
       const whois = yield* Cache.make({ lookup: tailscale.whois, capacity: 1024, timeToLive: WHOIS_FOR });
+      // The hub's own node, while remote access is on; tailnet requests arrive only then.
+      const hub = yield* Ref.make(Option.none<TailnetPeer>());
 
       const settle = (next: RemoteAccessStatus) =>
         Effect.gen(function* () {
@@ -159,10 +161,12 @@ export const RemoteAccessLive = (dataDir: string) =>
         if (!current.enabled) {
           yield* listeners.listenOnTailnet([]);
           yield* Cache.invalidateAll(whois);
+          yield* Ref.set(hub, Option.none());
           return yield* settle(remoteAccessStatus({ ...current, port, listening: [], failed: [] }));
         }
         const snapshot = yield* tailscale.snapshot;
         yield* forget(snapshot.peers);
+        yield* Ref.set(hub, Option.fromNullishOr(snapshot.self));
         // Paused, the hub still watches Tailscale, so Settings can say what Resume would find.
         const wanted = snapshot.status.state === "running" && !current.paused ? snapshot.status.addresses : [];
         const { listening, failed } = yield* listeners.listenOnTailnet(wanted);
@@ -230,7 +234,7 @@ export const RemoteAccessLive = (dataDir: string) =>
       };
 
       return Context.make(RemoteAccess, RemoteAccess.of({ status, update, check: reconcile })).pipe(
-        Context.add(TailnetPeers, TailnetPeers.of({ peerOf })),
+        Context.add(TailnetPeers, TailnetPeers.of({ peerOf, hub: Ref.get(hub) })),
         Context.add(TailnetRequests, { peerOf, arrivedOnTailnet: (request) => arrivedOnTailnet(socketOf(request)) }),
       );
     }),

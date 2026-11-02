@@ -1,7 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { followHub } from "../src/main/hub-events.ts";
-import { requestNotices } from "../src/main/request-notices.ts";
-import { noticeChanges, noticeText, pendingRequests } from "../src/main/request-notices-model.ts";
+import { deviceNotices, requestNotices } from "../src/main/request-notices.ts";
+import {
+  deviceNoticeText,
+  devicePairings,
+  noticeChanges,
+  noticeText,
+  pendingRequests,
+} from "../src/main/request-notices-model.ts";
 import { entryFrame, fakeEventStream, readyFrame } from "./fake-event-stream.ts";
 
 const approval = (id: string, state: string, command = "git push origin feature") => ({
@@ -174,5 +180,105 @@ describe("the request notification model", () => {
     const { title, body } = noticeText({ id: "a", agentId: "pip", action: `echo ${"é".repeat(400)}` }, "Pip");
     expect(new TextEncoder().encode(title + body).length).toBeLessThanOrEqual(256);
     expect(body.endsWith("…")).toBe(true);
+  });
+});
+
+const asking = (id: string, state = "pending", minutes = 10) => ({
+  request: {
+    id,
+    code: "482913",
+    name: "Safari on iPhone",
+    state,
+    createdAt: "2026-11-02T10:00:00.000Z",
+    expiresAt: new Date(Date.parse("2026-11-02T10:00:00.000Z") + minutes * 60_000).toISOString(),
+  },
+  fromHub: false,
+});
+
+describe("device notifications", () => {
+  // covers DP-004
+  it("[TC-DP-111] announces a device asking to pair with its code, and closes it once the device was answered", async () => {
+    let waiting: Array<unknown> = [];
+    const notices: Array<{ title: string; body: string; closed: boolean; click: () => void }> = [];
+    const opened: Array<string> = [];
+    const { check } = deviceNotices({
+      read: async (path) => (path === "/api/pairing/requests" ? waiting : null),
+      isFocused: () => false,
+      notify: ({ title, body }, onClick) => {
+        const notice = { title, body, closed: false, click: onClick };
+        notices.push(notice);
+        return {
+          close: () => {
+            notice.closed = true;
+          },
+        };
+      },
+      open: (id) => void opened.push(id),
+    });
+    await check();
+    waiting = [asking("p1"), asking("later", "pending", 24 * 60)];
+    await check();
+    expect(notices).toEqual([
+      expect.objectContaining({
+        title: "Safari on iPhone wants to use Hobbots",
+        body: "Check that it shows 482 913, then Allow or Deny.",
+      }),
+    ]);
+    waiting = [];
+    await check();
+    expect(notices[0]?.closed).toBe(true);
+    // Clicking one opens the window, where the prompt shows.
+    notices[0]?.click();
+    expect(opened).toEqual(["p1"]);
+  });
+
+  it("reads only devices still prompted, and keeps a long name within what macOS shows", () => {
+    expect(devicePairings([asking("a"), asking("b", "denied"), asking("c", "pending", 60), { request: null }])).toEqual(
+      [{ id: "a", name: "Safari on iPhone", code: "482913", expiresAt: "2026-11-02T10:10:00.000Z" }],
+    );
+    expect(devicePairings({ error: "nope" })).toBeNull();
+    const { title, body } = deviceNoticeText({
+      id: "a",
+      name: "é".repeat(300),
+      code: "482913",
+      expiresAt: "2026-11-02T10:10:00.000Z",
+    });
+    expect(new TextEncoder().encode(title + body).length).toBeLessThanOrEqual(256);
+    expect(title).toContain("…");
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // covers DP-004
+  it("[TC-DP-119] closes a device's notification once its request runs out, with no event to say so", async () => {
+    vi.useFakeTimers({ now: Date.parse("2026-11-02T10:00:00.000Z") });
+    const all = [asking("p1")];
+    // The hub lists only requests that have not run out.
+    const waiting = () => all.filter((item) => Date.parse(item.request.expiresAt) > Date.now());
+    const notices: Array<{ closed: boolean }> = [];
+    let reads = 0;
+    const { check } = deviceNotices({
+      read: async () => {
+        reads += 1;
+        return reads === 1 ? [] : waiting();
+      },
+      isFocused: () => false,
+      notify: () => {
+        const notice = { closed: false };
+        notices.push(notice);
+        return {
+          close: () => {
+            notice.closed = true;
+          },
+        };
+      },
+      open: () => undefined,
+    });
+    await check();
+    await check();
+    expect(notices).toEqual([{ closed: false }]);
+    await vi.advanceTimersByTimeAsync(10 * 60_000 + 1000);
+    expect(notices).toEqual([{ closed: true }]);
   });
 });

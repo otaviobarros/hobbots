@@ -1,4 +1,4 @@
-import type { WaitingQuestion } from "@hobbots/api";
+import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
 import type { ApprovalRequest, BackpackItem } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -7,9 +7,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockersQuery } from "../../api/blockers.ts";
+import { usePromptedDevices } from "../../api/pairing.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
 import { BlockerCard } from "../blockers/blocker-card.tsx";
 import { messages as blockerCopy } from "../blockers/messages.ts";
+import { AskingDevices } from "../pairing/asking-devices.tsx";
 import { useHobLookup } from "../quest/use-work.ts";
 import { Stars } from "../scene.tsx";
 import { InboxDetail } from "./inbox-detail.tsx";
@@ -56,9 +58,10 @@ const emptyState = (
   requests: ReadonlyArray<unknown>,
   blockers: BlockersRead,
   questions: QuestionsRead,
+  devices: ReadonlyArray<WaitingDevice>,
 ) => {
   if (tab === "history" || !read || requests.length > 0) return undefined;
-  if (tab === "needs" && !(readEmpty(blockers) && readEmpty(questions))) return undefined;
+  if (tab === "needs" && !(readEmpty(blockers) && readEmpty(questions) && devices.length === 0)) return undefined;
   return EMPTY[tab];
 };
 
@@ -77,8 +80,9 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
   const selected = tab === "history" || shown.hold !== undefined ? undefined : selectedRequest(requests, requestId);
   const blockers = useBlockersQuery();
   const questions = useWaitingQuestionsQuery();
-  const waiting = waitingCount(approvals, blockers, questions);
-  const empty = emptyState(tab, inbox.isSuccess, requests, blockers, questions);
+  const devices = usePromptedDevices();
+  const waiting = waitingCount(approvals, blockers, questions) + devices.length;
+  const empty = emptyState(tab, inbox.isSuccess, requests, blockers, questions, devices);
   const now = useNow();
   const navigate = useNavigate();
   // The request shown goes into the address as soon as it shows, so it stays in view while it is
@@ -98,6 +102,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
         <div className="min-h-0 flex-1 overflow-y-auto">
           {inbox.isPending && <p className="px-3 py-4 text-sm text-label">{copy.loading}</p>}
           {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
+          {tab === "needs" && <AskingDevices devices={devices} now={now} />}
           {tab === "needs" && <QuestionsForYou read={questions} />}
           {tab === "needs" && <StuckWork read={blockers} />}
           {empty !== undefined && <Empty {...empty} />}

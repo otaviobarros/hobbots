@@ -123,51 +123,68 @@ export const DeviceRepositoryLive = Layer.effect(
           return yield* write;
         }).pipe(sql.withTransaction, Effect.catchTag("SqlError", Effect.die)) as Effect.Effect<A, E | DeviceRevoked, R>;
 
+    // A pairing change journals the request as it now stands (ADR 021): the code and the device's
+    // details, never a secret. None when the conditional update found nothing to change.
+    const changed = (id: string, updated: ReadonlyArray<unknown>) =>
+      updated.length === 0
+        ? Effect.succeed(null)
+        : findPairing(id).pipe(
+            Effect.orDie,
+            Effect.map(Option.getOrThrow),
+            Effect.map((request) => ({ value: request, events: [{ _tag: "PairingChanged", request } as const] })),
+          );
+
+    // The device is created in the same transaction; a request decided or expired meanwhile changes
+    // nothing, and the device's row rolls back with it.
     const allowPairing = (id: string, device: Device, now: string) =>
-      Effect.gen(function* () {
-        yield* sql`INSERT INTO devices ${sql.insert({
-          id: device.id,
-          name: device.name,
-          kind: device.kind,
-          platform: device.platform,
-          ...tailscaleColumns(device.tailscale),
-          token_hash: null,
-          approved_at: device.approvedAt,
-          last_active_at: null,
-          revoked_at: null,
-        })}`;
-        const updated = yield* sql`UPDATE pairing_requests
-          SET state = 'allowed', decided_at = ${now}, device_id = ${device.id}
-          WHERE id = ${id} AND state = 'pending' AND expires_at > ${now} RETURNING id`;
-        // Decided or expired meanwhile: the device is never created.
-        if (updated.length === 0) return yield* Effect.fail("unchanged" as const);
-        return yield* findPairing(id).pipe(Effect.orDie);
-      }).pipe(
-        sql.withTransaction,
-        Effect.catchIf(
-          (error) => error === "unchanged",
-          () => Effect.succeed(Option.none()),
-        ),
-        Effect.orDie,
+      journaled(1, () =>
+        Effect.gen(function* () {
+          yield* sql`INSERT INTO devices ${sql.insert({
+            id: device.id,
+            name: device.name,
+            kind: device.kind,
+            platform: device.platform,
+            ...tailscaleColumns(device.tailscale),
+            token_hash: null,
+            approved_at: device.approvedAt,
+            last_active_at: null,
+            revoked_at: null,
+          })}`;
+          const updated = yield* sql`UPDATE pairing_requests
+            SET state = 'allowed', decided_at = ${now}, device_id = ${device.id}
+            WHERE id = ${id} AND state = 'pending' AND expires_at > ${now} RETURNING id`;
+          return yield* changed(id, updated);
+        }),
       );
 
     const denyPairing = (id: string, now: string) =>
-      sql`UPDATE pairing_requests SET state = 'denied', decided_at = ${now}
-        WHERE id = ${id} AND state = 'pending' AND expires_at > ${now} RETURNING id`.pipe(
-        Effect.flatMap((updated) => (updated.length === 0 ? Effect.succeed(Option.none()) : findPairing(id))),
-        Effect.orDie,
+      journaled(1, () =>
+        sql`UPDATE pairing_requests SET state = 'denied', decided_at = ${now}
+          WHERE id = ${id} AND state = 'pending' AND expires_at > ${now} RETURNING id`.pipe(
+          Effect.flatMap((updated) => changed(id, updated)),
+        ),
+      );
+
+    // Only a request still open, and only ever later: a second Decide later changes nothing.
+    const deferPairing = (id: string, expiresAt: string, now: string) =>
+      journaled(1, () =>
+        sql`UPDATE pairing_requests SET expires_at = ${expiresAt}
+          WHERE id = ${id} AND state = 'pending' AND expires_at > ${now} AND expires_at < ${expiresAt}
+          RETURNING id`.pipe(Effect.flatMap((updated) => changed(id, updated))),
       );
 
     // Within the request's lifetime only, checked in the same statement that claims it.
     const claimPairing = (id: string, tokenHash: string, now: string) =>
-      Effect.gen(function* () {
-        const claimed = yield* sql<{ deviceId: string }>`UPDATE pairing_requests SET state = 'claimed'
-          WHERE id = ${id} AND state = 'allowed' AND expires_at > ${now} RETURNING device_id`;
-        const deviceId = claimed[0]?.deviceId;
-        if (deviceId === undefined) return Option.none<PairingRequest>();
-        yield* sql`UPDATE devices SET token_hash = ${tokenHash} WHERE id = ${deviceId}`;
-        return yield* findPairing(id);
-      }).pipe(sql.withTransaction, Effect.orDie);
+      journaled(1, () =>
+        Effect.gen(function* () {
+          const claimed = yield* sql<{ deviceId: string }>`UPDATE pairing_requests SET state = 'claimed'
+            WHERE id = ${id} AND state = 'allowed' AND expires_at > ${now} RETURNING device_id`;
+          const deviceId = claimed[0]?.deviceId;
+          if (deviceId === undefined) return null;
+          yield* sql`UPDATE devices SET token_hash = ${tokenHash} WHERE id = ${deviceId}`;
+          return yield* changed(id, claimed);
+        }),
+      );
 
     return DeviceRepository.of({
       findByTokenHash: (hash) => findByTokenHash(hash).pipe(Effect.orDie),
@@ -208,25 +225,28 @@ export const DeviceRepositoryLive = Layer.effect(
         }).pipe(sql.withTransaction, Effect.catchTag("SqlError", Effect.die)),
       whileApproved,
       openPairing: (request, secretHash) =>
-        sql`INSERT INTO pairing_requests ${sql.insert({
-          id: request.id,
-          code: request.code,
-          secret_hash: secretHash,
-          name: request.name,
-          kind: request.kind,
-          platform: request.platform,
-          ...tailscaleColumns(request.tailscale),
-          state: request.state,
-          created_at: request.createdAt,
-          expires_at: request.expiresAt,
-          decided_at: request.decidedAt,
-          device_id: request.deviceId,
-        })}`.pipe(Effect.asVoid, Effect.orDie),
+        journaled(1, () =>
+          sql`INSERT INTO pairing_requests ${sql.insert({
+            id: request.id,
+            code: request.code,
+            secret_hash: secretHash,
+            name: request.name,
+            kind: request.kind,
+            platform: request.platform,
+            ...tailscaleColumns(request.tailscale),
+            state: request.state,
+            created_at: request.createdAt,
+            expires_at: request.expiresAt,
+            decided_at: request.decidedAt,
+            device_id: request.deviceId,
+          })}`.pipe(Effect.as({ value: request, events: [{ _tag: "PairingRequested", request } as const] })),
+        ).pipe(Effect.map(Option.getOrThrow)),
       findPairing: (id) => findPairing(id).pipe(Effect.orDie),
       findPairingBySecret: (hash) => findPairingBySecret(hash).pipe(Effect.orDie),
       listOpenPairing: (now) => listOpenPairing(now).pipe(Effect.orDie),
       allowPairing,
       denyPairing,
+      deferPairing,
       claimPairing,
     });
   }),

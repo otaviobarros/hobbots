@@ -60,7 +60,7 @@ import { DispatcherHostLive } from "./backpack.ts";
 import { BlockOnRetirement } from "./blockers.ts";
 import { ServerConfig } from "./config.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "./continuations.ts";
-import { DeviceGate, DeviceSecretsLive, WindowKeyLive } from "./devices.ts";
+import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from "./devices.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
@@ -284,6 +284,7 @@ const ServerLive = Layer.unwrap(
           Layer.provideMerge(DeviceService.layer),
           Layer.provideMerge(WindowKeyLive(dataDir)),
           Layer.provideMerge(DeviceSecretsLive),
+          Layer.provideMerge(PairingLimiterLive),
         ),
       ),
       Layer.provideMerge(RemoteAccessLive(dataDir).pipe(Layer.provideMerge(HubListenersLive(server, port)))),
