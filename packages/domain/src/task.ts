@@ -173,3 +173,11 @@ export const ancestorsOf = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArra
 export const leadsAbove = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<AgentId> => [
   ...new Set(ancestorsOf(task, tree).flatMap((each) => (each.ownerId === task.ownerId ? [] : [each.ownerId]))),
 ];
+
+/**
+ * The hob a note you leave on a Task goes to (ADR 018): the nearest lead whose own Task is still
+ * open, so a lead that finished never holds it unread, or the Task's owner when nobody leads it.
+ */
+export const noteRecipientOf = (task: Task, tree: ReadonlyArray<Task>): AgentId =>
+  ancestorsOf(task, tree).find((each) => each.ownerId !== task.ownerId && !isTerminalTask(each.state))?.ownerId ??
+  task.ownerId;

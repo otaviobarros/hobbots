@@ -69,6 +69,7 @@ const tree = (delegations: ReadonlyArray<Delegation>, milestones: ReadonlyArray<
     questions: [],
     artifacts: [],
     handOffs: [],
+    notes: [],
     waits: [],
   });
 

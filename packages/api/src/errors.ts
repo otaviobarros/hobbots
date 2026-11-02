@@ -191,6 +191,16 @@ export class QuestionClosed extends Schema.TaggedError<QuestionClosed>()(
   { httpApiStatus: 409 },
 ) {}
 
+/**
+ * A note the Task can no longer take: the Task has ended, or the note's key was already used for
+ * another Task or text.
+ */
+export class NoteRefused extends Schema.TaggedError<NoteRefused>()(
+  "NoteRefused",
+  { taskId: TaskId, reason: Schema.Literals(["task-ended", "key-reused"]) },
+  { httpApiStatus: 409 },
+) {}
+
 /** No Charm call shows as this reply step. */
 export class CharmCallNotFound extends Schema.TaggedError<CharmCallNotFound>()(
   "CharmCallNotFound",

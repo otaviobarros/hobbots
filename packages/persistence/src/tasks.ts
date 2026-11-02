@@ -19,6 +19,7 @@ import {
   leadsAbove,
   ledgerRefusal,
   Milestone,
+  noteRecipientOf,
   Quest,
   Question,
   type QuestState,
@@ -26,6 +27,7 @@ import {
   StaleTask,
   Task,
   type TaskId,
+  TaskNote,
   type TaskRefusal,
   TaskRefused,
   type TaskState,
@@ -555,6 +557,11 @@ export const TaskRepositoryLive = Layer.effect(
         const [question] = yield* read.question(questionId);
         if (question === undefined) return yield* refuse("question-missing", `No question ${questionId}`);
         if (question.state !== "open") return yield* refuse("question-answered", `Question ${questionId} is answered`);
+        // A question about work that ended has nobody left to hear its answer.
+        const task = yield* loadTask(question.taskId);
+        const top = task.rootId === task.id ? task : yield* loadTask(task.rootId);
+        if (isTerminalTask(task.state) || isTerminalTask(top.state))
+          return yield* refuse("task-ended", `The work question ${questionId} is about has ended`);
         const recipient = by._tag === "User" ? null : by.agentId;
         if (question.recipientId !== recipient) return yield* refuse("not-recipient", "Only its recipient answers it");
         return question;
@@ -597,6 +604,36 @@ export const TaskRepositoryLive = Layer.effect(
           });
           yield* saveQuestion(question);
           return { value: question, events: [{ _tag: "QuestionEscalated", question } as const] };
+        }),
+      );
+
+    const leaveNote: TaskRepository["Service"]["leaveNote"] = (input) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const [left] = yield* read.note(input.id);
+          if (left !== undefined) {
+            if (left.taskId !== input.taskId || left.text !== input.text) {
+              return yield* refuse("note-key-reused", `Note ${input.id} was left with another Task or text`);
+            }
+            return { value: left, events: [] };
+          }
+          // A member's Task that ended can still be talked about while the work it is part of goes on.
+          const task = yield* loadTask(input.taskId);
+          const top = task.rootId === task.id ? task : yield* loadTask(task.rootId);
+          if (isTerminalTask(top.state))
+            return yield* refuse("task-ended", `The work Task ${task.id} is part of has ended`);
+          // You talk only to the lead: the note goes to the nearest one still at work, or to the owner of a Task nobody leads.
+          const recipientId = noteRecipientOf(task, yield* read.treeOf(task.rootId));
+          const note = new TaskNote({ ...input, recipientId, revision });
+          yield* sql`INSERT INTO task_notes ${sql.insert({
+            id: note.id,
+            task_id: note.taskId,
+            recipient_id: note.recipientId,
+            text: note.text,
+            created_at: note.createdAt,
+            revision,
+          })}`;
+          return { value: note, events: [{ _tag: "NoteLeft", note } as const] };
         }),
       );
 
@@ -658,6 +695,8 @@ export const TaskRepositoryLive = Layer.effect(
       askQuestion,
       answerQuestion,
       escalateQuestion,
+      leaveNote,
+      listWaitingQuestions: read.waitingQuestions.pipe(Effect.orDie),
       handOff,
       waitFor,
       readLedger: (taskId) =>

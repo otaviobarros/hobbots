@@ -1,4 +1,4 @@
-import { type TaskId, TaskWait } from "@hobbots/domain";
+import { NoteId, TaskId, TaskNote, TaskWait } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   ADA,
@@ -136,6 +136,26 @@ describe("applyToTree", () => {
     expect(next.handOffs).toHaveLength(1);
     expect(next.artifacts.map((each) => each.label)).toEqual(["Landing copy"]);
     expect(next.quests[0]?.state).toBe("completed");
+  });
+});
+
+describe("applyToTree with notes", () => {
+  it("adds your note on a Task in the tree once, and leaves another tree's alone", () => {
+    const start = blackFriday();
+    const note = new TaskNote({
+      id: NoteId.make("n1"),
+      taskId: COPY,
+      recipientId: ALDRIC,
+      text: "Keep it short",
+      createdAt: "2026-11-01T00:00:30.000Z",
+      revision: 20,
+    });
+    const event = { _tag: "NoteLeft", note } as const;
+    const once = applyToTree(start, event);
+    expect(once.notes).toEqual([note]);
+    expect(applyToTree(once, event).notes).toEqual([note]);
+    const elsewhere = { _tag: "NoteLeft", note: new TaskNote({ ...note, taskId: TaskId.make("other") }) } as const;
+    expect(applyToTree(start, elsewhere)).toBe(start);
   });
 });
 

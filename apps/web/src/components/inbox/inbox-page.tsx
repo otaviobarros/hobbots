@@ -1,3 +1,4 @@
+import type { WaitingQuestion } from "@hobbots/api";
 import type { ApprovalRequest, BackpackItem } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -6,6 +7,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockersQuery } from "../../api/blockers.ts";
+import { useWaitingQuestionsQuery } from "../../api/questions.ts";
 import { BlockerCard } from "../blockers/blocker-card.tsx";
 import { messages as blockerCopy } from "../blockers/messages.ts";
 import { useHobLookup } from "../quest/use-work.ts";
@@ -15,6 +17,7 @@ import { Empty, InboxHistory } from "./inbox-history.tsx";
 import { type InboxTab, pendingCount, selectedRequest, tabRequests } from "./inbox-items.ts";
 import { InboxList, InboxTabs } from "./inbox-list.tsx";
 import { messages } from "./messages.ts";
+import { QuestionForYou } from "./question-for-you.tsx";
 import { type ShownHold, useWithShown } from "./shown-request.ts";
 import { type InboxDirectory, useInboxDirectory } from "./use-inbox-directory.ts";
 import { useNow } from "./use-now.ts";
@@ -29,17 +32,33 @@ const EMPTY: Record<Exclude<InboxTab, "history">, { readonly title: string; read
 };
 
 const NO_ITEMS: ReadonlyArray<BackpackItem> = [];
+const NO_QUESTIONS: ReadonlyArray<WaitingQuestion> = [];
 
 type BlockersRead = ReturnType<typeof useBlockersQuery>;
+type QuestionsRead = ReturnType<typeof useWaitingQuestionsQuery>;
+
+/** How many things wait for you: pending requests, questions for you and stuck work. */
+const waitingCount = (approvals: ReadonlyArray<ApprovalRequest>, blockers: BlockersRead, questions: QuestionsRead) =>
+  pendingCount(approvals) + (blockers.data ?? NO_ITEMS).length + (questions.data ?? NO_QUESTIONS).length;
+
+/** Whether a read has finished and holds nothing. */
+const readEmpty = (read: { readonly isSuccess: boolean; readonly data?: ReadonlyArray<unknown> | undefined }) =>
+  read.isSuccess && read.data?.length === 0;
 
 /**
- * What an empty tab says once it lists nothing: no requests, and in Needs you no stuck work
- * either. Needs you waits for both reads: while stuck work loads, or after its read failed, it never
+ * What an empty tab says once it lists nothing: no requests, and in Needs you no stuck work and no
+ * questions either. Needs you waits for every read: while one loads, or after it failed, it never
  * says nothing waits. History says nothing here.
  */
-const emptyState = (tab: InboxTab, read: boolean, requests: ReadonlyArray<unknown>, blockers: BlockersRead) => {
+const emptyState = (
+  tab: InboxTab,
+  read: boolean,
+  requests: ReadonlyArray<unknown>,
+  blockers: BlockersRead,
+  questions: QuestionsRead,
+) => {
   if (tab === "history" || !read || requests.length > 0) return undefined;
-  if (tab === "needs" && !(blockers.isSuccess && blockers.data.length === 0)) return undefined;
+  if (tab === "needs" && !(readEmpty(blockers) && readEmpty(questions))) return undefined;
   return EMPTY[tab];
 };
 
@@ -57,8 +76,9 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
   const requests = tabRequests(approvals, tab, requestId);
   const selected = tab === "history" || shown.hold !== undefined ? undefined : selectedRequest(requests, requestId);
   const blockers = useBlockersQuery();
-  const waiting = pendingCount(approvals) + (blockers.data ?? NO_ITEMS).length;
-  const empty = emptyState(tab, inbox.isSuccess, requests, blockers);
+  const questions = useWaitingQuestionsQuery();
+  const waiting = waitingCount(approvals, blockers, questions);
+  const empty = emptyState(tab, inbox.isSuccess, requests, blockers, questions);
   const now = useNow();
   const navigate = useNavigate();
   // The request shown goes into the address as soon as it shows, so it stays in view while it is
@@ -78,6 +98,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
         <div className="min-h-0 flex-1 overflow-y-auto">
           {inbox.isPending && <p className="px-3 py-4 text-sm text-label">{copy.loading}</p>}
           {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
+          {tab === "needs" && <QuestionsForYou read={questions} />}
           {tab === "needs" && <StuckWork read={blockers} />}
           {empty !== undefined && <Empty {...empty} />}
           {tab !== "history" && (
@@ -159,6 +180,29 @@ function StuckWork({ read }: { read: BlockersRead }) {
           <span className="lbl text-xs text-label">{blockerCopy.count({ count: items.length })}</span>
           {items.map((item) => (
             <BlockerCard key={item.id} item={item} hobs={hobs} />
+          ))}
+        </section>
+      )}
+    </>
+  );
+}
+
+/**
+ * Questions no lead could answer (ADR 018), first in Needs you, each with its answer box. While they
+ * are read it says so, and a read that failed says so with a way to read them again.
+ */
+function QuestionsForYou({ read }: { read: QuestionsRead }) {
+  const hobs = useHobLookup();
+  if (read.isPending) return <p className="m-0 px-3 pt-4 text-sm text-label">{copy.question.loading}</p>;
+  const questions = read.data ?? NO_QUESTIONS;
+  return (
+    <>
+      {read.isError && <LoadFailed message={copy.question.loadFailed} onRetry={() => void read.refetch()} />}
+      {questions.length > 0 && (
+        <section aria-label={copy.question.section} className="flex flex-col gap-2 px-2.5 pt-2.5 pb-1">
+          <span className="lbl text-xs text-label">{copy.question.count({ count: questions.length })}</span>
+          {questions.map((waiting) => (
+            <QuestionForYou key={waiting.question.id} waiting={waiting} hobs={hobs} />
           ))}
         </section>
       )}

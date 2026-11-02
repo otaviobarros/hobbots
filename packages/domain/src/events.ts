@@ -5,7 +5,17 @@ import { BackpackItem } from "./backpack.ts";
 import { Grant } from "./grant.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { Message } from "./message.ts";
-import { ArtifactRef, Checkpoint, Delegation, HandOff, Milestone, Quest, Question, TaskWait } from "./quest.ts";
+import {
+  ArtifactRef,
+  Checkpoint,
+  Delegation,
+  HandOff,
+  Milestone,
+  Quest,
+  Question,
+  TaskNote,
+  TaskWait,
+} from "./quest.ts";
 import { Attempt, Task } from "./task.ts";
 import { Thread } from "./thread.ts";
 
@@ -60,6 +70,8 @@ const QuestionAsked = Schema.TaggedStruct("QuestionAsked", { question: Question 
 const QuestionAnswered = Schema.TaggedStruct("QuestionAnswered", { question: Question });
 /** A lead passed a question up: to the next lead, or to the user when `recipientId` is null. */
 const QuestionEscalated = Schema.TaggedStruct("QuestionEscalated", { question: Question });
+/** You left a note on a Task; it goes to the Task's nearest lead (ADR 018). */
+const NoteLeft = Schema.TaggedStruct("NoteLeft", { note: TaskNote });
 /** A lead gave one Task's artifact to another Task. */
 const HandedOff = Schema.TaggedStruct("HandedOff", { handOff: HandOff, artifact: ArtifactRef });
 /** A Task passed the completion gate, with its result and the artifacts it made. */
@@ -118,6 +130,7 @@ export const JournaledEvent = Schema.Union([
   QuestionAsked,
   QuestionAnswered,
   QuestionEscalated,
+  NoteLeft,
   HandedOff,
   TaskCompleted,
   QuestCompleted,
@@ -155,6 +168,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   QuestionAsked: 1,
   QuestionAnswered: 1,
   QuestionEscalated: 1,
+  NoteLeft: 1,
   HandedOff: 1,
   TaskCompleted: 1,
   QuestCompleted: 1,
