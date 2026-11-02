@@ -48,11 +48,14 @@ export class ApprovalRepository extends Context.Service<
      * Saves the request's state, lifetime, deny reason and decision time from `next` with its
      * ApprovalResolved event, and in the same transaction the grants it saves, each with its
      * GrantCreated event. None, and nothing changed, when its stored state is no longer `from`.
+     * With `unwaited`, no live turn waits for the outcome, so it goes to the hob's backpack in the
+     * same transaction (ADR 019).
      */
     readonly resolve: (
       next: ApprovalRequest,
       from: ApprovalState,
       grants?: ReadonlyArray<Grant>,
+      options?: { readonly unwaited?: boolean },
     ) => Effect.Effect<Option.Option<Committed<ApprovalRequest>>>;
   }
 >()("@hobbots/agents/ApprovalRepository") {}
@@ -278,8 +281,13 @@ export class ApprovalService extends Context.Service<
           if (waiter) yield* Deferred.succeed(waiter.decision, { _tag: "Expired" });
         }).pipe(Effect.uninterruptible);
 
-      // A previous process may have died while turns waited; those turns are gone, so their requests expire.
-      for (const approval of yield* repo.listPending) yield* settle(yield* expired(approval));
+      // A previous process may have died while turns waited; those turns are gone, so their requests
+      // expire. Each hob is told in its backpack that its call never ran, since no turn of its is
+      // left to hear it (ADR 019): an ended turn never drops the obligation.
+      for (const approval of yield* repo.listPending) {
+        const committed = yield* repo.resolve(yield* expired(approval), "pending", [], { unwaited: true });
+        if (Option.isSome(committed)) yield* announce(committed.value);
+      }
 
       const liveGrants = (agentId: AgentId) =>
         Option.isSome(grants) ? grants.value.live(agentId) : Effect.succeed([]);

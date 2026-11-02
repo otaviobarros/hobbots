@@ -1,7 +1,7 @@
 import { CharmCalls, FolderSandbox } from "@hobbots/agents";
 import { CharmCall, isCharmCallSettled } from "@hobbots/domain";
-import { Effect, Layer, Option, Redacted } from "effect";
-import { GitHubCredential } from "../src/index.ts";
+import { Context, Effect, Layer, Option, Redacted } from "effect";
+import { GitHubCredential, GitHubError } from "../src/index.ts";
 
 /** Charm call records in memory, with the rules of the SQL ones (migration 0028). */
 export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
@@ -60,22 +60,46 @@ export const directSandbox = Layer.succeed(
   }),
 );
 
+/** The sign-in a call was pinned to, as the hub's credential keeps it. */
+const PinnedSignIn = Context.Reference<number | null>("@hobbots/charms/test/PinnedSignIn", {
+  defaultValue: () => null,
+});
+
 /**
- * GitHub connected on the hub with `token` for every hob, reaching every repository. `refusedOnce`
- * hands out `fresh` after GitHub refused the first, as a refresh would.
+ * GitHub connected on the hub with `token` for every hob, reaching every repository. `fresh` is
+ * handed out after GitHub refused a token, as a refresh would. `switchAccount` connects another
+ * account, which fails whatever was pinned to the one before, as the hub's credential does.
  */
 export const fixedCredential = (token: string, fresh: string = token) => {
   const revoked: Array<string> = [];
+  let signIn = 0;
+  const current = Effect.gen(function* () {
+    const pinned = yield* PinnedSignIn;
+    if (pinned !== null && pinned !== signIn) {
+      return yield* new GitHubError({
+        reason: "signed-out",
+        message: "The hub's GitHub sign-in changed during this call, so it did not run. Try again.",
+      });
+    }
+    return signIn;
+  });
   const layer = Layer.succeed(
     GitHubCredential,
     GitHubCredential.of({
       connected: Effect.succeed(true),
-      tokenFor: () => Effect.succeed(Redacted.make(token)),
-      refused: () => Effect.succeed(Redacted.make(fresh)),
+      tokenFor: () => current.pipe(Effect.as(Redacted.make(token))),
+      refused: () => current.pipe(Effect.as(Redacted.make(fresh))),
       revoked: (refused) => Effect.sync(() => void revoked.push(Redacted.value(refused))),
       reaches: () => Effect.void,
-      onRepository: (_agentId, _repository, use) => use,
+      onRepository: (_agentId, _repository, use) =>
+        Effect.flatMap(current, (started) => Effect.provideService(use, PinnedSignIn, started)),
     }),
   );
-  return { layer, revoked };
+  return {
+    layer,
+    revoked,
+    switchAccount: () => {
+      signIn += 1;
+    },
+  };
 };

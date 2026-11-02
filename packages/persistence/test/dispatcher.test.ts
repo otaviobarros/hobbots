@@ -17,6 +17,7 @@ import {
 import {
   Backpack,
   BackpackTurnFailed,
+  type Delivery,
   Dispatcher,
   DispatcherHost,
   type DispatchLimits,
@@ -511,5 +512,69 @@ describe("The dispatcher", () => {
       ["copy", "completed"],
     ]);
     expect(tree.attempts.map((each) => each.id)).toEqual(["a1"]);
+  });
+  // covers IN-003, IN-004
+  it("[TC-IN-060] puts every waiting item into one turn, plans it again after an early end, and leaves items alone when no turn can start", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item: first } = yield* campaign;
+        const tasks = yield* TaskRepository;
+        const dispatcher = yield* Dispatcher;
+        const backpack = yield* Backpack;
+        const more = yield* Effect.forEach(["build", "test"], (id) =>
+          tasks
+            .createTask({
+              task: newTask(id, QUILL, "campaign"),
+              delegation: {
+                id: DelegationId.make(`d-${id}`),
+                brief: `Do ${id}`,
+                expectedOutput: null,
+                authority: { overrides: {}, folders: null },
+                timeoutMs: null,
+              },
+              milestones: [],
+            })
+            .pipe(Effect.map(recorded)),
+        );
+        const ids = [first.id, ...more.map((each) => each.id)];
+
+        // No turn can start: nothing is claimed, and every item stays pending.
+        const notReady = yield* dispatcher.dispatchAll(ids, () => Effect.succeed(null));
+        const untouched = yield* Effect.forEach(ids, (id) => backpack.find(id));
+
+        // The first turn ends early, the second handles all three: two turns, never one per item.
+        const turns: Array<ReadonlyArray<string>> = [];
+        const outcomes = yield* dispatcher.dispatchAll(ids, (items) =>
+          Effect.succeed({
+            target: "thread:t1",
+            turnId: `batch-${turns.length + 1}`,
+            run: (deliveries: ReadonlyArray<Delivery>) =>
+              Effect.gen(function* () {
+                turns.push(deliveries.map((delivery) => delivery.item.id));
+                yield* Effect.forEach(deliveries, (delivery) => delivery.accepted(`session-${turns.length}`));
+                if (turns.length === 1) return yield* new BackpackTurnFailed({ reason: "The runtime failed" });
+              }),
+          }),
+        );
+        return { notReady, untouched, turns, outcomes, ids };
+      }),
+    );
+
+    expect(result.notReady).toEqual([
+      { _tag: "Skipped", reason: "not-ready" },
+      { _tag: "Skipped", reason: "not-ready" },
+      { _tag: "Skipped", reason: "not-ready" },
+    ]);
+    expect(result.untouched.map((item) => [item.state, item.fencingToken, item.deliveries.length])).toEqual([
+      ["pending", 0, 0],
+      ["pending", 0, 0],
+      ["pending", 0, 0],
+    ]);
+    expect(result.turns).toEqual([result.ids, result.ids]);
+    expect(result.outcomes.map((each) => (each._tag === "Consumed" ? each.item.disposition : each._tag))).toEqual([
+      { _tag: "consumed", by: "batch-2" },
+      { _tag: "consumed", by: "batch-2" },
+      { _tag: "consumed", by: "batch-2" },
+    ]);
   });
 });

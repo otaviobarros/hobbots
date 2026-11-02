@@ -176,94 +176,100 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
           .pipe(Effect.mapError((error) => new Refused({ message: error.message })));
         const slug = repositorySlug(repository);
         const agentId = turn.agentId;
-        // The app's sign-in also reads public repositories it is not installed on (ADR 020): the
-        // hub reads and pushes only where the hob's sign-in reaches.
-        const github = <A>(effect: Effect.Effect<A, GitHubError>) =>
-          credential.onRepository(agentId, repository, effect).pipe(Effect.mapError(githubError));
-        const info = yield* github(api.repository(agentId, repository));
-        const replaces = yield* github(api.branchHead(agentId, repository, remoteBranch));
-        const defaultHead =
-          info.defaultBranch === remoteBranch
-            ? replaces
-            : yield* github(api.branchHead(agentId, repository, info.defaultBranch));
-        const actingAs = yield* api.viewer(agentId).pipe(Effect.option, Effect.map(Option.getOrNull));
-        const commits = yield* git.commits(staged, [replaces, defaultHead]);
-        const settings = yield* GitHubPushSettings;
-        const plan: GitHubPushPlan = {
-          repository: slug,
-          folder,
-          branch: input.branch,
-          remoteBranch,
-          commit: staged.commit,
-          force: input.force === true,
-          replaces,
-          defaultBranch: info.defaultBranch,
-          toDefaultBranch: remoteBranch === info.defaultBranch,
-          commits: commits.count,
-          subjects: commits.subjects,
-          actingAs,
-          over: settings.over,
-        };
-        if (replaces === staged.commit) {
-          return `${plan.repository} branch ${remoteBranch} is already at ${short(staged.commit)}, so there was nothing to push.`;
-        }
-        const request: PolicyRequest = {
-          _tag: "Push",
-          remote: `github.com/${slug}`,
-          branch: remoteBranch,
-          force: plan.force,
-          toDefaultBranch: plan.toDefaultBranch,
-          cwd: folder,
-          exact: true,
-        };
-        const label = `Pushing ${input.branch} to GitHub`;
-        // A call without a step has no card to show, so it cannot ask.
-        const decision = yield* askUntilDecided({
-          call: {
-            id: step?.id ?? key,
+        const github = <A>(effect: Effect.Effect<A, GitHubError>) => effect.pipe(Effect.mapError(githubError));
+        // One sign-in from planning to sending (ADR 020): the card names the account that pushes, so
+        // if the user connects another account while the card waits, the push does not run under it,
+        // and calling again asks again. The app's sign-in also reads public repositories it is not
+        // installed on, so the hub reads and pushes only where the hob's sign-in reaches.
+        const pinned = Effect.gen(function* () {
+          const info = yield* github(api.repository(agentId, repository));
+          const replaces = yield* github(api.branchHead(agentId, repository, remoteBranch));
+          const defaultHead =
+            info.defaultBranch === remoteBranch
+              ? replaces
+              : yield* github(api.branchHead(agentId, repository, info.defaultBranch));
+          const actingAs = yield* api.viewer(agentId).pipe(Effect.option, Effect.map(Option.getOrNull));
+          const commits = yield* git.commits(staged, [replaces, defaultHead]);
+          const settings = yield* GitHubPushSettings;
+          const plan: GitHubPushPlan = {
+            repository: slug,
+            folder,
+            branch: input.branch,
+            remoteBranch,
+            commit: staged.commit,
+            force: input.force === true,
+            replaces,
+            defaultBranch: info.defaultBranch,
+            toDefaultBranch: remoteBranch === info.defaultBranch,
+            commits: commits.count,
+            subjects: commits.subjects,
+            actingAs,
+            over: settings.over,
+          };
+          if (replaces === staged.commit) {
+            return `${plan.repository} branch ${remoteBranch} is already at ${short(staged.commit)}, so there was nothing to push.`;
+          }
+          const request: PolicyRequest = {
+            _tag: "Push",
+            remote: `github.com/${slug}`,
+            branch: remoteBranch,
+            force: plan.force,
+            toDefaultBranch: plan.toDefaultBranch,
+            cwd: folder,
+            exact: true,
+          };
+          const label = `Pushing ${input.branch} to GitHub`;
+          // A call without a step has no card to show, so it cannot ask.
+          const decision = yield* askUntilDecided({
+            call: {
+              id: step?.id ?? key,
+              tool: "github_push",
+              arguments: { ...plan, summary: githubPushSummary(plan) },
+              label,
+            },
+            approvals: step === undefined ? null : turn.approvals,
+            decide: decide(turn, access, request),
+            report: step?.report ?? (() => {}),
+            unknown: "Hobbots cannot decide this push.",
+          });
+          if (decision._tag === "Refuse") return yield* new Refused({ message: decision.reason });
+          step?.report({
+            _tag: "ToolStarted",
+            id: step.id,
             tool: "github_push",
-            arguments: { ...plan, summary: githubPushSummary(plan) },
+            operation: decision.verdict.operation,
+            targets: decision.verdict.targets,
             label,
-          },
-          approvals: step === undefined ? null : turn.approvals,
-          decide: decide(turn, access, request),
-          report: step?.report ?? (() => {}),
-          unknown: "Hobbots cannot decide this push.",
-        });
-        if (decision._tag === "Refuse") return yield* new Refused({ message: decision.reason });
-        step?.report({
-          _tag: "ToolStarted",
-          id: step.id,
-          tool: "github_push",
-          operation: decision.verdict.operation,
-          targets: decision.verdict.targets,
-          label,
-        });
-        const outcome = yield* runner.run(
-          {
-            agentId: turn.agentId,
-            tool: "github_push",
-            key,
-            input: withoutKey,
-            site: pushSite(repository, remoteBranch),
-            plan,
-            appliedText: pushedText(plan),
-            step,
-            threadId: turn.threadId,
-            messageId: turn.messageId,
-          },
-          credential
-            .onRepository(agentId, repository, send(agentId, staged, plan, repository))
-            .pipe(
-              Effect.catch((error) =>
-                Effect.succeed<WriteOutcome>({ _tag: "NotSent", text: `${error.message} Nothing was pushed.` }),
+          });
+          const outcome = yield* runner.run(
+            {
+              agentId: turn.agentId,
+              tool: "github_push",
+              key,
+              input: withoutKey,
+              site: pushSite(repository, remoteBranch),
+              plan,
+              appliedText: pushedText(plan),
+              step,
+              threadId: turn.threadId,
+              messageId: turn.messageId,
+            },
+            credential
+              .onRepository(agentId, repository, send(agentId, staged, plan, repository))
+              .pipe(
+                Effect.catch((error) =>
+                  Effect.succeed<WriteOutcome>({ _tag: "NotSent", text: `${error.message} Nothing was pushed.` }),
+                ),
               ),
-            ),
-        );
-        const note = decision.approval === undefined ? "" : ` ${approvalNote(decision.approval)}`;
-        if (outcome._tag === "Applied") return `${outcome.text}${note}`;
-        if (outcome._tag === "Uncertain") return yield* new Refused({ message: outcome.text });
-        return yield* new Refused({ message: `${outcome.text}${note}` });
+          );
+          const note = decision.approval === undefined ? "" : ` ${approvalNote(decision.approval)}`;
+          if (outcome._tag === "Applied") return `${outcome.text}${note}`;
+          if (outcome._tag === "Uncertain") return yield* new Refused({ message: outcome.text });
+          return yield* new Refused({ message: `${outcome.text}${note}` });
+        });
+        return yield* credential
+          .onRepository(agentId, repository, pinned)
+          .pipe(Effect.mapError((error) => (error instanceof Refused ? error : githubError(error))));
       }).pipe(Effect.scoped);
 
     return { push, readBack: pushReadBack(api) };

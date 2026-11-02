@@ -121,10 +121,12 @@ const userApprovals = (
   access: ToolAccess,
   asked: Array<ApprovalAction>,
   answer: "approve" | "deny" = "approve",
+  whileAsking: () => void = () => {},
 ): TurnApprovals => ({
   request: (action) =>
     Effect.gen(function* () {
       asked.push(action);
+      whileAsking();
       const digest = yield* actionDigest(action);
       const decision: ApprovalOutcome =
         answer === "approve"
@@ -146,6 +148,8 @@ interface Turn {
   readonly step?: string;
   /** The hob's sign-in: the fake GitHub's own token unless a test gives another. */
   readonly credential?: ReturnType<typeof fixedCredential>;
+  /** What happens while the card waits, before the user answers. */
+  readonly whileAsking?: () => void;
 }
 
 const charmLayer = (
@@ -182,7 +186,7 @@ const pushIn = (folder: string, repository: GitHubRepository, turn: Turn, input:
       messageId: MessageId.make("m1"),
       currentAccess: Effect.succeed(turn.access),
       redactor: makeRedactor(),
-      approvals: userApprovals(turn.access, turn.asked ?? [], turn.answer),
+      approvals: userApprovals(turn.access, turn.asked ?? [], turn.answer, turn.whileAsking),
     });
     if (tools === null) throw new Error("The turn was offered no GitHub tools");
     const answer: HubToolAnswer = yield* tools.call("github_push", input, {
@@ -365,6 +369,34 @@ describe("the GitHub Charm's Push", () => {
     expect(signedOut).toMatchObject({ refused: true, text: expect.stringContaining("connect GitHub again") });
     expect(refused.revoked).toEqual(["ghu_also_refused"]);
     expect(headOf(remote, "feat/z")).toBeNull();
+  });
+
+  // covers PE-003, PE-005
+  it("[TC-IN-057] does not push under another GitHub account connected while the card waits, and asks again", async () => {
+    const { folder, repository, remote, commit } = await setUp("switched");
+    const credential = fixedCredential(TOKEN);
+    const asked: Array<ApprovalAction> = [];
+    const switched = await push(
+      folder,
+      repository,
+      { access: accessFor(folder), asked, credential, whileAsking: credential.switchAccount },
+      { branch: "feat/x", key: "s-1" },
+    );
+    expect(switched).toMatchObject({ refused: true, text: expect.stringContaining("sign-in changed") });
+    expect(headOf(remote, "feat/x")).toBeNull();
+    // Called again, the push is planned under the account connected now and asks again.
+    const again = await push(
+      folder,
+      repository,
+      { access: accessFor(folder), asked, credential },
+      {
+        branch: "feat/x",
+        key: "s-1",
+      },
+    );
+    expect(again.refused).toBe(false);
+    expect(asked).toHaveLength(2);
+    expect(headOf(remote, "feat/x")).toBe(commit);
   });
 
   // covers IN-003, EX-004
