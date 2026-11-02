@@ -1,8 +1,8 @@
 import { copyFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { expect, type Page, type Request, test } from "@playwright/test";
-import { emptyDataDir, type Hub, type Relay, removeDataDir, startHub, startRelay } from "./hub.ts";
+import type { Page, Request } from "@playwright/test";
+import { emptyDataDir, expect, type Hub, type Relay, removeDataDir, startHub, startRelay, test } from "./hub.ts";
 
 // The slice's done-when checks for reliable chat (#118), against a hub from source with the fake
 // runtime. The hub's own suites check the same journal on SQLite and PostgreSQL.
@@ -28,7 +28,7 @@ type Message = { readonly id: string; readonly role: string; readonly content: s
 const call = async <A>(current: Hub, method: string, path: string, body?: unknown): Promise<A> => {
   const response = await fetch(`${current.url}/api${path}`, {
     method,
-    headers: { origin: current.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    headers: { ...current.headers, ...(body !== undefined && { "content-type": "application/json" }) },
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);

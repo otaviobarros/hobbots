@@ -24,6 +24,7 @@ import {
   type TaskTree,
   Thread,
   ThreadId,
+  WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -152,7 +153,12 @@ const makeApp = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) 
         ProjectTools,
         HobAdmission.layer,
         held(gate, requests),
-        Layer.succeed(UserSession, { origin: "http://localhost:4317" }),
+        Layer.succeed(UserSession, {
+          deviceId: WINDOW_DEVICE_ID,
+          name: "This computer's Hobbots window",
+          kind: "window",
+          whileApproved: (write) => write,
+        }),
       ),
     ),
     Layer.provideMerge(TestDatabase),

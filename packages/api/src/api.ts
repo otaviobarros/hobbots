@@ -25,6 +25,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchem
 import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
 import { BackpackGroup, BlockersGroup } from "./backpack.ts";
 import { CharmCallsGroup } from "./charm-calls.ts";
+import { PairingGroup, PairingRequestsGroup } from "./devices.ts";
 import {
   AgentNotFound,
   HobUnavailable,
@@ -42,6 +43,7 @@ import { RemoteAccessGroup } from "./remote-access.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
 import { QuestionsGroup, TasksGroup } from "./tasks.ts";
+import { DeviceSession } from "./user-session.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
 const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(40));
@@ -202,6 +204,7 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       error: [AgentNotFound, HobUnavailable],
     }),
   )
+  .middleware(DeviceSession)
   .prefix("/api") {}
 
 export class ThreadsGroup extends HttpApiGroup.make("threads")
@@ -261,16 +264,25 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
       error: [ThreadNotFound, ThreadArchiveRefused],
     }),
   )
+  .middleware(DeviceSession)
+  .prefix("/api") {}
+
+/**
+ * The health endpoint answers without a device, so a client can tell this hub from another program
+ * before it has a token (ADR 012, ADR 021).
+ */
+export class HealthGroup extends HttpApiGroup.make("health")
+  .add(HttpApiEndpoint.get("health", "/health", { success: ServerIdentity }))
   .prefix("/api") {}
 
 export class SystemGroup extends HttpApiGroup.make("system")
   .add(
-    HttpApiEndpoint.get("health", "/health", { success: ServerIdentity }),
     HttpApiEndpoint.get("activity", "/activity", { success: Activity }),
     HttpApiEndpoint.get("runtimes", "/runtimes", {
       success: Schema.Array(RuntimeHealth),
     }),
   )
+  .middleware(DeviceSession)
   .prefix("/api") {}
 
 /** What each runtime offers a hob's brain. */
@@ -281,9 +293,13 @@ export class RuntimesGroup extends HttpApiGroup.make("runtimes")
       success: RuntimeModels,
     }),
   )
+  .middleware(DeviceSession)
   .prefix("/api") {}
 
 export class HobbotsApi extends HttpApi.make("hobbots")
+  .add(HealthGroup)
+  .add(PairingGroup)
+  .add(PairingRequestsGroup)
   .add(AgentsGroup)
   .add(ThreadsGroup)
   .add(SystemGroup)

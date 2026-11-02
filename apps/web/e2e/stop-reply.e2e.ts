@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -17,7 +16,7 @@ test.afterEach(async () => {
 const api = async <A>(current: Hub, method: string, path: string, body?: unknown): Promise<A> => {
   const response = await fetch(`${current.url}${path}`, {
     method,
-    headers: { origin: current.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    headers: { ...current.headers, ...(body !== undefined && { "content-type": "application/json" }) },
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);
@@ -59,7 +58,7 @@ test("[TC-CH-005] Stop shows Stopping, then Stopped with the partial reply kept,
   await expect(page.getByRole("button", { name: "Stopping…" })).toBeDisabled();
   await expect(page.getByText("Stopping this reply…")).toBeVisible();
   // Asking again while stopping, as a second client would, changes nothing.
-  const again = await fetch(`${hub.url}/api/threads/${thread}/interrupt`, { method: "POST" });
+  const again = await fetch(`${hub.url}/api/threads/${thread}/interrupt`, { method: "POST", headers: hub.headers });
   expect(again.ok).toBe(true);
 
   await expect(page.getByText("■ You stopped this reply. Pip kept what it wrote so far.")).toBeVisible();

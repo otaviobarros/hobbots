@@ -2,7 +2,7 @@ import { AgentId, BackpackItem, BackpackItemId, BackpackItemState, QuestId } fro
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { AgentNotFound, HobUnavailable, QuestNotFound } from "./errors.ts";
-import { UserSessionOnly } from "./user-session.ts";
+import { DeviceSession } from "./user-session.ts";
 
 /**
  * Backpack items not yet resolved or failed, highest priority first, then oldest first, with the
@@ -29,6 +29,7 @@ export class BackpackGroup extends HttpApiGroup.make("backpack")
       error: QuestNotFound,
     }),
   )
+  .middleware(DeviceSession)
   .prefix("/api") {}
 
 export class BackpackItemNotFound extends Schema.TaggedError<BackpackItemNotFound>()(
@@ -73,5 +74,5 @@ export class BlockersGroup extends HttpApiGroup.make("blockers")
       error: [BackpackItemNotFound, BlockerClosed, HobUnavailable],
     }),
   )
-  .middleware(UserSessionOnly)
+  .middleware(DeviceSession)
   .prefix("/api") {}

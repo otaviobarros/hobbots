@@ -1,7 +1,7 @@
 import { HubPort, RemoteAccessStatus } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { UserSessionOnly } from "./user-session.ts";
+import { DeviceSession } from "./user-session.ts";
 
 /**
  * A change to remote access; fields left out keep their value. A new port moves the hub's loopback
@@ -30,5 +30,5 @@ export class RemoteAccessGroup extends HttpApiGroup.make("remoteAccess")
       error: PortUnavailable,
     }),
   )
-  .middleware(UserSessionOnly)
+  .middleware(DeviceSession)
   .prefix("/api") {}

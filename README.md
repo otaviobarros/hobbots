@@ -64,6 +64,20 @@ pnpm check         # Biome, typecheck and tests
 pnpm package:mac   # unsigned .dmg installers for Apple silicon and Intel in apps/desktop/release
 ```
 
+Every client is an approved device. The desktop app's window needs no approval, so `pnpm dev:desktop` works as it is. A browser asks once, and you allow it on the hub. In `pnpm dev`, the web dev server forwards `/api` to the server, so the browser calls its own origin. Until the waiting screen is built ([#339](https://github.com/otaviobarros/hobbots/issues/339)), pair a browser from its devtools console:
+
+```js
+await (
+  await fetch("/api/pairing", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Dev browser", platform: "dev", kind: "browser" }),
+  })
+).json();
+```
+
+Then `pnpm --filter @hobbots/server allow` lists the devices waiting and `pnpm --filter @hobbots/server allow <code>` allows one. Back in the console, `await fetch("/api/pairing")` gives the browser its device cookie; reload the page.
+
 Set `HOBBOTS_RUNTIME=fake` to run the server with a deterministic fake runtime instead of Claude Code.
 
 The server logs writes and failures. Set `HOBBOTS_LOG_LEVEL=Debug` to log every request, reads included, or pick another of Effect's levels (`All`, `Trace`, `Debug`, `Info`, `Warn`, `Error`, `Fatal`, `None`). The default is `Info`.

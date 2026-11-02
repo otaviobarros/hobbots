@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { Agent, get, request } from "node:http";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -46,7 +46,9 @@ const startHub = async () => {
   hub = child;
   const url = `http://127.0.0.1:${port}`;
   await waitForHealth(url, child);
-  return { port, url, child };
+  // As the hub's window, with the key this start of the hub wrote (ADR 021).
+  const key = readFileSync(join(dataDir, "window-key"), "utf8").trim();
+  return { port, url, child, asWindow: { authorization: `Bearer ${key}` } };
 };
 
 afterEach(() => {
@@ -58,14 +60,19 @@ afterEach(() => {
 describe("hub shutdown", () => {
   // covers DP-001
   it("[TC-DP-032] stops at once while a browser holds connections open", { timeout: 60_000 }, async () => {
-    const { port, url, child } = await startHub();
+    const { port, url, child, asWindow } = await startHub();
 
     // A browser window's subscription: the hub holds the request open until it ends the stream.
     const ended = new Promise<void>((done, fail) => {
-      const subscription = request(`${url}/api/events`, { headers: { accept: "text/event-stream" } }, (response) => {
-        response.resume();
-        response.once("end", () => done());
-      });
+      const subscription = request(
+        `${url}/api/events`,
+        { headers: { accept: "text/event-stream", ...asWindow } },
+        (response) => {
+          expect(response.statusCode).toBe(200);
+          response.resume();
+          response.once("end", () => done());
+        },
+      );
       subscription.once("error", fail);
       subscription.end();
     });
@@ -96,7 +103,7 @@ describe("hub shutdown", () => {
     ["a request whose body is still arriving", {}],
     ["one sent with Expect: 100-continue", { expect: "100-continue" }],
   ])("[TC-DP-033] lets %s finish while the hub stops", { timeout: 60_000 }, async (_, headers) => {
-    const { url, child } = await startHub();
+    const { url, child, asWindow } = await startHub();
     const body = JSON.stringify({ completed: true });
     const half = Math.floor(body.length / 2);
 
@@ -104,7 +111,7 @@ describe("hub shutdown", () => {
     const sending = new Promise<void>((done) => (started = done));
     const call = request(`${url}/api/setup`, {
       method: "PATCH",
-      headers: { "content-type": "application/json", "content-length": String(body.length), origin: url, ...headers },
+      headers: { "content-type": "application/json", "content-length": String(body.length), ...asWindow, ...headers },
     });
     const answered = new Promise<number | undefined>((done, fail) => {
       call.once("response", (response) => {

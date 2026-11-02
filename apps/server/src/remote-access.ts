@@ -11,7 +11,6 @@ import { EventBus } from "./event-bus.ts";
 import { arrivedOnTailnet, HubListeners, type ListenFailure } from "./listeners.ts";
 import { writeNetworkSettings } from "./network-settings.ts";
 import { Tailscale } from "./tailscale.ts";
-import { UserSessionOnlyLive } from "./user-session.ts";
 
 /**
  * Remote access (ADR 021): while it is on, the hub asks Tailscale every 10 seconds where it is on
@@ -258,15 +257,6 @@ export const KnownTailnetPeersOnly = tailnetCheck((request, requests) =>
   }),
 );
 
-/**
- * Refuses every request that came in on the tailnet until devices can pair with the hub (#338): a
- * tailnet browser would otherwise pass the origin check and act as the user. Device tokens replace
- * it.
- */
-export const TailnetClosedUntilPairing = tailnetCheck(() =>
-  Effect.succeed(Option.some(HttpServerResponse.text("This device is not paired with Hobbots yet.", { status: 403 }))),
-);
-
 /** A hub without listeners of its own, as in tests, has remote access off and keeps it off. */
 const WITHOUT_REMOTE_ACCESS: RemoteAccessStatus = {
   enabled: false,
@@ -290,4 +280,4 @@ export const RemoteAccessHandlers = HttpApiBuilder.group(HobbotsApi, "remoteAcce
         Option.match(access, { onNone: () => status, onSome: (access) => access.update(payload) }),
     });
   }),
-).pipe(Layer.provide(UserSessionOnlyLive));
+);

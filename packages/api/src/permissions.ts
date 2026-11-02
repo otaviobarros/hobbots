@@ -11,7 +11,7 @@ import {
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { AgentNotFound, InvalidFolder, OverrideWidens } from "./errors.ts";
-import { UserSessionOnly } from "./user-session.ts";
+import { DeviceSession } from "./user-session.ts";
 
 /**
  * What a hob may touch (ADR 014): its stored policy, and what it adds up to under the installation's
@@ -69,5 +69,5 @@ export class PermissionsGroup extends HttpApiGroup.make("permissions")
       error: [AgentNotFound, InvalidFolder, OverrideWidens],
     }),
   )
-  .middleware(UserSessionOnly)
+  .middleware(DeviceSession)
   .prefix("/api") {}

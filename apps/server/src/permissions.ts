@@ -10,7 +10,6 @@ import {
 import { HobbotsApi } from "@hobbots/api";
 import { Effect, Layer } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { UserSessionOnlyLive } from "./user-session.ts";
 
 // A hob's policy with what it adds up to under the installation's current preset and shared folders.
 export const PermissionsHandlers = HttpApiBuilder.group(HobbotsApi, "permissions", (handlers) =>
@@ -35,4 +34,4 @@ export const PermissionsHandlers = HttpApiBuilder.group(HobbotsApi, "permissions
         }),
     });
   }),
-).pipe(Layer.provide(UserSessionOnlyLive));
+);

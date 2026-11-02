@@ -21,7 +21,7 @@ import {
   GrantRuleRefused,
   ThreadNotFound,
 } from "./errors.ts";
-import { UserSessionOnly } from "./user-session.ts";
+import { DeviceSession } from "./user-session.ts";
 
 /**
  * The user's decision on a pending approval request (PE-003, PE-007): approve it with a lifetime, or
@@ -76,7 +76,7 @@ export class ApprovalsGroup extends HttpApiGroup.make("approvals")
       ],
     }),
   )
-  .middleware(UserSessionOnly)
+  .middleware(DeviceSession)
   .prefix("/api") {}
 
 /** Standing grants (ADR 015): what each hob may do without asking again, and removing it. Only a user session reaches it (PE-006). */
@@ -94,5 +94,5 @@ export class GrantsGroup extends HttpApiGroup.make("grants")
       error: GrantNotFound,
     }),
   )
-  .middleware(UserSessionOnly)
+  .middleware(DeviceSession)
   .prefix("/api") {}

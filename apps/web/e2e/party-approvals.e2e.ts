@@ -1,6 +1,5 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { expect, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 // Issue #273 in the browser: a party member's request reaches you in the Inbox, under its lead's
 // thread, and never its lead. The hub-level side is apps/server/test/quests.test.ts.
@@ -24,8 +23,8 @@ test.afterEach(async () => {
 const api = async <A>(current: Hub, method: string, path: string, body?: unknown): Promise<A> => {
   const response = await fetch(`${current.url}${path}`, {
     method,
-    // As another window of the app, on the hub's own origin: approvals answer only the user (PE-006).
-    headers: { origin: current.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    // As the hub's window, with its key: approvals answer only the user (PE-006).
+    headers: { ...current.headers, ...(body !== undefined && { "content-type": "application/json" }) },
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);

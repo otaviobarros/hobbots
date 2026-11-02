@@ -1,5 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+import type { Page } from "@playwright/test";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -18,7 +18,7 @@ const call = async <A>(path: string, method = "GET", body?: unknown): Promise<A>
   if (hub === undefined) throw new Error("No hub is running.");
   const response = await fetch(`${hub.url}${path}`, {
     method,
-    headers: { origin: hub.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    headers: { ...hub.headers, ...(body !== undefined && { "content-type": "application/json" }) },
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}`);

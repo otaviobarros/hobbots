@@ -1,8 +1,8 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { expect, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -20,7 +20,7 @@ test.afterEach(async () => {
 const api = async <A>(current: Hub, method: string, path: string, body?: unknown): Promise<A> => {
   const response = await fetch(`${current.url}${path}`, {
     method,
-    headers: { origin: current.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    headers: { ...current.headers, ...(body !== undefined && { "content-type": "application/json" }) },
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);
@@ -123,7 +123,7 @@ test("[TC-OR-075] an uncertain GitHub push is settled from its step, once, and t
     ]);
     const again = await fetch(`${hub.url}/api/threads/${thread}/messages/${reply.id}/steps/${step.id}/settlement`, {
       method: "POST",
-      headers: { origin: hub.url, "content-type": "application/json" },
+      headers: { ...hub.headers, "content-type": "application/json" },
       body: JSON.stringify({ outcome: "not-sent" }),
     });
     expect(again.status).toBe(409);

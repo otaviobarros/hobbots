@@ -2,7 +2,6 @@ import { ChatService, GrantService } from "@hobbots/agents";
 import { HobbotsApi } from "@hobbots/api";
 import { Effect, Layer } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { UserSessionOnlyLive } from "./user-session.ts";
 
 // Standing grants and removing them (ADR 015), for user sessions only (PE-006). The next call a removed grant matched asks again.
 export const GrantsHandlers = HttpApiBuilder.group(HobbotsApi, "grants", (handlers) =>
@@ -19,4 +18,4 @@ export const GrantsHandlers = HttpApiBuilder.group(HobbotsApi, "grants", (handle
         ),
     });
   }),
-).pipe(Layer.provide(UserSessionOnlyLive));
+);

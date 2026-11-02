@@ -1,4 +1,4 @@
-import { GrantNotFound, UserSession } from "@hobbots/api";
+import { type DeviceRevoked, GrantNotFound, UserSession } from "@hobbots/api";
 import {
   type AgentId,
   type ApprovalRequest,
@@ -19,6 +19,7 @@ import {
   stableJson,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option, Semaphore } from "effect";
+import { unguarded, type WriteGuard } from "./devices.ts";
 import { EventPublisher } from "./ports.ts";
 import type { ToolAccess } from "./runtime.ts";
 
@@ -173,7 +174,7 @@ export class GrantService extends Context.Service<
     readonly revoke: (
       id: GrantId,
       then?: (grant: Grant) => Effect.Effect<void>,
-    ) => Effect.Effect<Grant, GrantNotFound, UserSession>;
+    ) => Effect.Effect<Grant, GrantNotFound | DeviceRevoked, UserSession>;
     /** Revokes the grants, of one hob or all, that the change took authority from. */
     readonly revokeLost: (agentId: AgentId | null, loss: AuthorityLoss) => Effect.Effect<void>;
     /** Revokes every grant of a hob that retired. */
@@ -197,10 +198,16 @@ export class GrantService extends Context.Service<
       const liveOf = (grants: ReadonlyArray<Grant>) =>
         Effect.map(nowIso, (now) => grants.filter((grant) => isLiveGrant(grant, now)));
 
-      const end = (grant: Grant, by: "user" | "hub", reason: GrantRevokeReason) =>
+      // The user's removal is `guarded` by their device still being approved (ADR 021).
+      const end = <X = never>(
+        grant: Grant,
+        by: "user" | "hub",
+        reason: GrantRevokeReason,
+        guarded: WriteGuard<X> = unguarded,
+      ) =>
         Effect.gen(function* () {
           const next = { ...grant, revokedAt: yield* nowIso, revokedBy: by, revokeReason: reason } as Grant;
-          const saved = yield* repo.revoke(next);
+          const saved = yield* guarded(repo.revoke(next));
           if (Option.isNone(saved)) return Option.none<Grant>();
           yield* bus.publish(saved.value.entries);
           return Option.some(saved.value.value);
@@ -224,14 +231,14 @@ export class GrantService extends Context.Service<
           Effect.flatMap(repo.list(agentId), (grants) => (all === true ? Effect.succeed(grants) : liveOf(grants))),
         revoke: (id, then) =>
           Effect.gen(function* () {
-            yield* UserSession;
+            const session = yield* UserSession;
             const found = yield* repo.find(id);
             if (Option.isNone(found)) return yield* new GrantNotFound({ grantId: id });
             if (found.value.revokedAt !== null) return found.value;
             // Once saved, a revocation is never retried, so what follows it runs to the end even when
             // the request is cancelled, such as by the client disconnecting.
             const revoked = yield* Effect.uninterruptible(
-              Effect.tap(end(found.value, "user", "removed"), (saved) =>
+              Effect.tap(end<DeviceRevoked>(found.value, "user", "removed", session.whileApproved), (saved) =>
                 Option.isSome(saved) && then ? then(saved.value) : Effect.void,
               ),
             );

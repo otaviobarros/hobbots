@@ -35,6 +35,7 @@ import { EventStream, EventStreamRoute } from "../src/event-stream.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 const hob = {
   name: "Wren",
@@ -88,6 +89,7 @@ beforeEach(() => {
   );
   const web = HttpRouter.toWebHandler(
     Layer.mergeAll(ApiRoutes, EventStreamRoute).pipe(
+      Layer.provideMerge(TestDevices),
       Layer.provideMerge(App),
       Layer.provide(NodeHttpServer.layerHttpServices),
     ),
@@ -103,7 +105,7 @@ const request = async (method: string, path: string, body?: unknown) => {
   const response = await handler(
     new Request(`http://localhost:4381${path}`, {
       method,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...AS_WINDOW },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
@@ -133,7 +135,7 @@ interface TurnRead {
  * arrives and before the next frame is read.
  */
 const followTurns = async () => {
-  const response = await handler(new Request("http://localhost:4381/api/events"));
+  const response = await handler(new Request("http://localhost:4381/api/events", { headers: AS_WINDOW }));
   const reader = (response.body as ReadableStream<Uint8Array>).getReader();
   const decoder = new TextDecoder();
   const reads: Array<TurnRead> = [];

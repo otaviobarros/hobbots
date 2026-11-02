@@ -35,6 +35,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 const hob = {
   name: "Wren",
@@ -137,7 +138,7 @@ const start = (options: { readonly codex?: boolean } = {}) => {
       ),
     );
   const web = HttpRouter.toWebHandler(
-    ApiRoutes.pipe(Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
+    ApiRoutes.pipe(Layer.provide(TestDevices), Layer.provide(App), Layer.provide(NodeHttpServer.layerHttpServices)),
     { disableLogger: true },
   );
   handler = (request) => web.handler(request);
@@ -150,7 +151,7 @@ const request = async (method: string, path: string, body?: unknown) => {
   const response = await handler(
     new Request(`http://localhost:4364${path}`, {
       method,
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...AS_WINDOW },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );

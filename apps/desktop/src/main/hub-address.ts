@@ -32,6 +32,3 @@ export const hubAddress = (port: number): HubAddress => {
     },
   };
 };
-
-/** The channel the window's preload asks the hub's address on, each time a page loads. */
-export const hubApiUrlChannel = "hobbots:hub-api-url";

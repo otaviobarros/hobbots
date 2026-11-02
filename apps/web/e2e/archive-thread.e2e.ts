@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { expect, type Page, type Route, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+import type { Page, Route } from "@playwright/test";
+import { admit, emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -18,7 +18,7 @@ test.afterEach(async () => {
 const api = async <A>(current: Hub, method: string, path: string, body?: unknown): Promise<A> => {
   const response = await fetch(`${current.url}/api${path}`, {
     method,
-    headers: { origin: current.url, ...(body !== undefined && { "content-type": "application/json" }) },
+    headers: { ...current.headers, ...(body !== undefined && { "content-type": "application/json" }) },
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);
@@ -71,6 +71,7 @@ test("[TC-CH-150] archiving the open thread opens the next one, and Undo brings 
 
   // A second window follows along live.
   const other = await browser.newPage();
+  await admit(other.context(), hub);
   await other.goto(`${hub.url}/#/hobs/${pip}/threads/${threads[0]}`);
   await expect(threadLink(other, "Support triage")).toBeVisible();
 

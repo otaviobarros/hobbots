@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { expect, type Locator, type Page, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+import type { Locator, Page } from "@playwright/test";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 // Slice 8's done-when checks in the browser (ADR 015). The hub-level side of the same checks,
 // on SQLite and PostgreSQL, is apps/server/test/approvals-end-to-end.test.ts.
@@ -22,8 +22,8 @@ test.afterEach(async () => {
 });
 
 const api = async <A>(current: Hub, path: string): Promise<A> => {
-  // As another window of the app, on the hub's own origin: approvals answer only the user (PE-006).
-  const response = await fetch(`${current.url}${path}`, { headers: { origin: current.url } });
+  // As the hub's window, with its key: approvals answer only the user (PE-006).
+  const response = await fetch(`${current.url}${path}`, { headers: { ...current.headers } });
   if (!response.ok) throw new Error(`GET ${path} answered ${response.status}: ${await response.text()}`);
   return (await response.json()) as A;
 };
@@ -31,7 +31,7 @@ const api = async <A>(current: Hub, path: string): Promise<A> => {
 const setUp = async (current: Hub, method: string, path: string, body: unknown) => {
   const response = await fetch(`${current.url}${path}`, {
     method,
-    headers: { origin: current.url, "content-type": "application/json" },
+    headers: { ...current.headers, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!response.ok) throw new Error(`${method} ${path} answered ${response.status}: ${await response.text()}`);

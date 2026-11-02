@@ -5,7 +5,6 @@ import { EventJournal } from "@hobbots/persistence";
 import { Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { formatCursor } from "./event-stream.ts";
-import { UserSessionOnlyLive } from "./user-session.ts";
 
 // Reads of Task trees and Quests (ADR 018). The cursor is taken before the read, so resuming the
 // event stream from it replays every change the read could have missed (ADR 013).
@@ -69,4 +68,4 @@ export const QuestionsHandlers = HttpApiBuilder.group(HobbotsApi, "questions", (
       answer: ({ params, payload }) => questions.answer(params.questionId, payload.answer),
     });
   }),
-).pipe(Layer.provide([UserSessionOnlyLive, QuestionService.layer]));
+).pipe(Layer.provide(QuestionService.layer));
