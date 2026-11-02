@@ -1,13 +1,22 @@
 import type { AgentId, ApprovalRequest } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { inboxQuery } from "../../api/approvals.ts";
+import { useBlockers } from "../../api/blockers.ts";
 import { pendingCount } from "./inbox-items.ts";
 
-/** How many requests wait for the user, kept live by the journal; 0 until the Inbox is read. */
-export const useWaitingCount = (): number => useQuery({ ...inboxQuery, select: pendingCount }).data ?? 0;
+/**
+ * How many things wait for the user, kept live by the journal: pending requests and stuck work
+ * (IN-007). 0 until the Inbox is read.
+ */
+export const useWaitingCount = (): number =>
+  (useQuery({ ...inboxQuery, select: pendingCount }).data ?? 0) + useBlockers().length;
 
-/** The hobs with a request waiting for the user. */
-export const useWaitingHobs = (): ReadonlySet<AgentId> => useQuery({ ...inboxQuery, select: waitingHobs }).data ?? NONE;
+/** The hobs with a request, or stuck work, waiting for the user. */
+export const useWaitingHobs = (): ReadonlySet<AgentId> => {
+  const asking = useQuery({ ...inboxQuery, select: waitingHobs }).data ?? NONE;
+  const stuck = useBlockers();
+  return stuck.length === 0 ? asking : new Set([...asking, ...stuck.map((item) => item.recipientId)]);
+};
 
 const NONE: ReadonlySet<AgentId> = new Set();
 
