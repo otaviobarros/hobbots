@@ -149,4 +149,31 @@ describe("GitHub API writes", () => {
     expect(comments.seen.map((s) => new URL(s.url).searchParams.get("page"))).toEqual(["1", "2"]);
     expect(new URL(comments.seen[0]?.url ?? "").searchParams.get("since")).toBe("2026-11-02T00:00:00.000Z");
   });
+
+  // covers PE-006, EX-003
+  it("[TC-GEN-044] hides the hub's call markers from what a hob reads of an issue and its comments", async () => {
+    const marker = "<!-- hobbots-call: 0f0f0f0f-0000-0000-0000-000000000000 -->";
+    const read = await run(
+      [
+        {
+          status: 200,
+          body: {
+            number: 7,
+            title: "Bug",
+            state: "open",
+            user: null,
+            updated_at: "t",
+            html_url: "u",
+            body: `Body.${marker}`,
+            labels: [],
+            comments: 1,
+          },
+        },
+        { status: 200, body: [{ user: { login: "me" }, created_at: "t", body: `Done.\n\n${marker}` }] },
+      ],
+      (api) => api.item(hob, repository, 7, 5),
+    );
+    expect(JSON.stringify(read.value)).not.toContain("hobbots-call");
+    expect(read.value).toMatchObject({ body: "Body.", comments: [{ body: "Done.\n\n" }] });
+  });
 });

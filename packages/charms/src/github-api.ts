@@ -7,6 +7,7 @@ import {
   type GitHubRepositoryInfo,
   type GitHubSearchResult,
   repositorySlug,
+  stripCommentMarkers,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
@@ -537,18 +538,19 @@ export const GitHubApiLive = Layer.effect(
                     per_page: String(comments),
                   },
                 );
+          // The hub's call markers stay hidden from the hob, so it never reads a nonce (ADR 020).
           return {
             ...summary(json),
             pullRequest: json.pull_request !== undefined,
             url: json.html_url,
-            body: cut(json.body),
+            body: cut(stripCommentMarkers(json.body ?? "")),
             labels: json.labels.map((label) => (typeof label === "string" ? label : label.name)),
             commentCount: json.comments,
             comments: thread.map(
               (comment): GitHubComment => ({
                 author: comment.user?.login ?? null,
                 createdAt: comment.created_at,
-                body: cut(comment.body),
+                body: cut(stripCommentMarkers(comment.body ?? "")),
               }),
             ),
           } satisfies GitHubItem;

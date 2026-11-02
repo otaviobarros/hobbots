@@ -72,6 +72,14 @@ const openedText = (plan: GitHubPullRequestPlan, number: number, url: string) =>
 const commentedText = (plan: GitHubCommentPlan, url: string) =>
   `Commented on ${plan.pullRequest ? "pull request" : "issue"} #${plan.number} in ${plan.repository}: ${url}`;
 
+/** A pull request's plan as recorded: the card's plan and the pull requests already there when deciding. */
+interface RecordedPullRequestPlan extends GitHubPullRequestPlan {
+  readonly existing?: ReadonlyArray<number>;
+}
+
+/** How far before the call reading a comment back looks, so a clock behind GitHub's never misses it. */
+const COMMENT_MARGIN_MS = 10 * 60 * 1000;
+
 /** A comment's plan as recorded: the card's plan and the hub's marker nonce, which the hob never sees. */
 interface RecordedCommentPlan extends GitHubCommentPlan {
   readonly marker: string;
@@ -80,18 +88,23 @@ interface RecordedCommentPlan extends GitHubCommentPlan {
 /**
  * Reads opening a pull request back (ADR 020): it took effect when a pull request in any state from
  * that head into that base was opened by the acting account after the call was recorded. An older
- * one from the same head is never taken for it.
+ * one from the same head is never taken for it: those GitHub listed when deciding are left out by
+ * number, so a hub clock behind GitHub's cannot mistake one for this call's. Every hob acts as the
+ * user's own account until #221, so one the user opens there meanwhile counts as this call's.
  */
 export const pullRequestReadBack =
   (api: GitHubApi["Service"]): ReadBack =>
   (call) =>
     Effect.gen(function* () {
-      const plan = JSON.parse(call.plan) as GitHubPullRequestPlan;
+      const plan = JSON.parse(call.plan) as RecordedPullRequestPlan;
+      const existing = new Set(plan.existing ?? []);
       const repository = ownerAndName(plan.repository);
       const actingAs = plan.actingAs ?? (yield* api.viewer(call.agentId));
       const since = recordedSecond(call.createdAt);
       const list = yield* api.pullRequests(call.agentId, repository, plan.head, plan.base);
-      const found = list.find((pr) => pr.author === actingAs && Date.parse(pr.createdAt) >= since);
+      const found = list.find(
+        (pr) => !existing.has(pr.number) && pr.author === actingAs && Date.parse(pr.createdAt) >= since,
+      );
       return found === undefined ? false : openedText(plan, found.number, found.url);
     });
 
@@ -106,7 +119,8 @@ export const commentReadBack =
       const plan = JSON.parse(call.plan) as RecordedCommentPlan;
       const repository = ownerAndName(plan.repository);
       const actingAs = plan.actingAs ?? (yield* api.viewer(call.agentId));
-      const since = new Date(recordedSecond(call.createdAt)).toISOString();
+      // The nonce alone identifies this call's comment, so the time only narrows how much is read.
+      const since = new Date(recordedSecond(call.createdAt) - COMMENT_MARGIN_MS).toISOString();
       const marker = commentMarker(plan.marker);
       const comments = yield* api.commentsSince(call.agentId, repository, plan.number, since);
       const found = comments.find((comment) => comment.author === actingAs && comment.body.includes(marker));
@@ -129,6 +143,12 @@ const outcomeOf = <A>(result: GitHubWrite<A>, applied: (value: A) => string): Wr
     case "Uncertain":
       return { _tag: "Uncertain", text: result.message };
   }
+};
+
+/** The call's key, and its input as the record keeps it: redacted, so no secret the hob wrote lands in the database. */
+const keyed = <I extends { readonly key: string }>(turn: CharmTurn, input: I) => {
+  const { key, ...rest } = input;
+  return { key, withoutKey: turn.redactor.value(rest) };
 };
 
 /** What the hob is told when redaction changed what it wrote. */
@@ -250,7 +270,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
       step: HubCallStep | undefined,
     ): Effect.Effect<string, Refused> =>
       Effect.gen(function* () {
-        const { key, ...withoutKey } = input;
+        const { key, withoutKey } = keyed(turn, input);
         yield* checkBranch(input.head);
         if (input.base !== undefined) yield* checkBranch(input.base);
         const earlier = yield* runner.earlier(turn.agentId, key, withoutKey);
@@ -281,6 +301,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
               });
             }
             const actingAs = yield* api.viewer(agentId).pipe(Effect.option, Effect.map(Option.getOrNull));
+            const existing = yield* github(api.pullRequests(agentId, repository, input.head, base));
             const plan: GitHubPullRequestPlan = {
               repository: slug,
               folder,
@@ -298,6 +319,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
               site: `github.com/${slug} pull ${input.head} into ${base}`,
               plan,
               summary: githubPullRequestSummary(plan),
+              recorded: { existing: existing.map((pr) => pr.number) },
               appliedText: `Opened a pull request from ${plan.head} into ${plan.base} in ${slug}.`,
               label: `Opening a pull request from ${input.head}`,
               request: { _tag: "PullRequest", folder, repository: slug, base },
@@ -326,7 +348,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
       step: HubCallStep | undefined,
     ): Effect.Effect<string, Refused> =>
       Effect.gen(function* () {
-        const { key, ...withoutKey } = input;
+        const { key, withoutKey } = keyed(turn, input);
         const earlier = yield* runner.earlier(turn.agentId, key, withoutKey);
         if (Option.isSome(earlier)) return earlier.value;
 

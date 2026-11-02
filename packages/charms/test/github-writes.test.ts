@@ -70,7 +70,7 @@ interface StoredComment extends GitHubPostedComment {
  * How the fake answers the next writes, in order: `ok` does what GitHub would; `lost` does it and then
  * drops the answer; `dropped` loses the request before GitHub does anything; the rest answer as named.
  */
-type Script = "ok" | "lost" | "dropped" | "not-sent" | "rate-limited" | "refused";
+type Script = "ok" | "lost" | "dropped" | "posted-by-other" | "not-sent" | "rate-limited" | "refused";
 
 /** GitHub's REST API for one repository, in memory, with the writes it was sent. */
 const makeFakeGitHub = () => {
@@ -86,6 +86,7 @@ const makeFakeGitHub = () => {
   ]);
   const now = () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 
+  let author = ME;
   const writeWith = <A>(what: string, apply: () => A): Effect.Effect<GitHubWrite<A>> =>
     Effect.sync(() => {
       sent.push(what);
@@ -97,6 +98,12 @@ const makeFakeGitHub = () => {
           apply();
           return { _tag: "Uncertain", message: "GitHub did not answer in time, or the connection dropped." };
         case "dropped":
+          return { _tag: "Uncertain", message: "GitHub did not answer in time, or the connection dropped." };
+        case "posted-by-other":
+          // Lands under another account, as a read-back must never take for the acting one's.
+          author = "someone";
+          apply();
+          author = ME;
           return { _tag: "Uncertain", message: "GitHub did not answer in time, or the connection dropped." };
         case "not-sent":
           return { _tag: "NotSent", message: "The hub could not reach GitHub, so nothing was sent." };
@@ -154,7 +161,7 @@ const makeFakeGitHub = () => {
             ...pr,
             number,
             url: `https://github.com/octo/app/pull/${number}`,
-            author: ME,
+            author,
             createdAt: now(),
           };
           pulls.push(stored);
@@ -165,7 +172,7 @@ const makeFakeGitHub = () => {
           const stored = {
             number,
             body,
-            author: ME,
+            author,
             createdAt: now(),
             url: `https://github.com/octo/app/issues/${number}#issuecomment-${comments.length + 1}`,
           };
@@ -366,6 +373,8 @@ describe("the GitHub Charm's pull requests and comments", () => {
     expect(JSON.stringify(asked)).not.toContain(SECRET);
     expect(JSON.stringify(hub.github.pulls)).not.toContain(SECRET);
     expect(JSON.stringify(hub.github.comments)).not.toContain(SECRET);
+    // Nor does the call's record, which keeps the call as redacted.
+    expect(JSON.stringify([...hub.rows.values()])).not.toContain(SECRET);
     expect(opened.text).toContain("redacted what looked like secrets from the title and description");
     expect(commented.text).toContain("redacted what looked like secrets from the comment");
   });
@@ -600,5 +609,50 @@ describe("never twice: retried and uncertain pull requests and comments", () => 
       ["n-2", "applied"],
       ["n-3", "refused"],
     ]);
+  });
+
+  // covers EX-003, EX-004
+  it("[TC-IN-106] never takes another account's pull request, or one there when deciding, for this call's", async () => {
+    const github = makeFakeGitHub();
+    // Dated after the call, as a hub clock behind GitHub's would see it, but listed when deciding.
+    const later = new Date(Date.now() + 60_000).toISOString();
+    github.pulls.push({
+      number: 10,
+      url: "https://github.com/octo/app/pull/10",
+      author: ME,
+      createdAt: later,
+      head: "feat/x",
+      base: "main",
+      title: "Closed earlier",
+      body: "",
+      draft: false,
+    });
+    github.script.push("posted-by-other");
+    const hub = makeHub(github);
+    const answer = await hub.call(
+      "github_open_pull_request",
+      { head: "feat/x", title: "Mine", key: "o-pr" },
+      { access: accessFor("trusting") },
+    );
+    expect(github.pulls.map((pr) => [pr.number, pr.author])).toEqual([
+      [10, ME],
+      [101, "someone"],
+    ]);
+    expect(answer).toMatchObject({ refused: true, text: expect.stringContaining("Do not repeat it") });
+    expect(states(hub.rows)).toEqual([["o-pr", "uncertain"]]);
+  });
+
+  // covers EX-003, EX-004
+  it("[TC-IN-107] never takes a comment with this call's marker posted by another account for this call's", async () => {
+    const hub = makeHub();
+    hub.github.script.push("posted-by-other");
+    const answer = await hub.call(
+      "github_comment",
+      { number: 7, body: "Mine.", key: "o-c" },
+      { access: accessFor("trusting") },
+    );
+    expect(hub.github.comments.map((c) => c.author)).toEqual(["someone"]);
+    expect(answer).toMatchObject({ refused: true, text: expect.stringContaining("Do not repeat it") });
+    expect(states(hub.rows)).toEqual([["o-c", "uncertain"]]);
   });
 });
