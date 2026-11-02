@@ -1,4 +1,4 @@
-import { HobGitHubApps } from "@hobbots/agents";
+import { GitHubIdentityPin, GrantService, HobGitHubApps } from "@hobbots/agents";
 import { type AgentId, type GitHubRepository, hobAppBot } from "@hobbots/domain";
 import { Context, Effect, Layer, type Redacted } from "effect";
 import { GitHubConnection, GitHubCredential, type GitHubTokenScope } from "./github-account.ts";
@@ -38,6 +38,7 @@ export const GitHubCredentialPerHob = Layer.effectContext(
     const connection = yield* GitHubConnection;
     const apps = yield* HobGitHubApps;
     const hobApps = yield* HobAppTokens;
+    const grants = yield* GrantService;
 
     /** The hob's app, failing when the call was checked under another source. */
     const sourceOf = (agentId: AgentId) =>
@@ -83,13 +84,23 @@ export const GitHubCredentialPerHob = Layer.effectContext(
       reaches,
       onRepository: (agentId, repository, use) =>
         Effect.gen(function* () {
-          const app = yield* sourceOf(agentId);
-          const pin: Pinned = { agentId, source: app?.appId ?? "account" };
-          if (app === null) {
-            return yield* account.onRepository(agentId, repository, Effect.provideService(use, PinnedSource, pin));
-          }
+          // The credential and the identity count are read together, between switches (ADR 022), so
+          // a request the call asks names the identity it acts as, even while a switch is under way.
+          const [app, identity] = yield* grants.exclusive(
+            Effect.all([sourceOf(agentId), grants.githubIdentity(agentId)]),
+          );
+          const outer = yield* GitHubIdentityPin;
+          const pinned = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+            effect.pipe(
+              Effect.provideService(PinnedSource, { agentId, source: app?.appId ?? "account" } satisfies Pinned),
+              Effect.provideService(
+                GitHubIdentityPin,
+                outer !== null && outer.agentId === agentId ? outer : { agentId, identity },
+              ),
+            );
+          if (app === null) return yield* account.onRepository(agentId, repository, pinned(use));
           yield* hobApps.reaches(agentId, app, repository);
-          return yield* Effect.provideService(use, PinnedSource, pin);
+          return yield* pinned(use);
         }),
     });
 

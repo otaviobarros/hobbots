@@ -408,8 +408,7 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               connectedAt: DateTime.formatIso(yield* DateTime.now),
             };
             // What the user allowed the hob to do on GitHub as them is not allowed as its bot (ADR 022).
-            yield* grants.revokeGitHub(open.agentId);
-            yield* apps.save(open.agentId, app);
+            yield* grants.switchGitHub(open.agentId, apps.save(open.agentId, app));
             yield* tokens.forget(open.agentId);
             yield* Effect.logInfo("A hob's GitHub app was made", { agentId: open.agentId, slug: app.slug });
             return { hobName: open.hobName, app, installUrl: installUrl(app) };
@@ -560,8 +559,6 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               yield* apps.remove(agentId);
               return { deleteUrl: deleteUrl(left.app.slug), problem: null };
             }
-            // Before the hob acts as the user again: nothing allowed for its bot runs as them (ADR 022).
-            yield* grants.revokeGitHub(agentId);
             // Tried once and shown, never retried in a loop (ADR 022).
             const problem = yield* uninstall(agentId, app);
             const kept = yield* keys.remove(agentId).pipe(
@@ -571,14 +568,16 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               ),
             );
             const problems = [problem, kept].filter((each) => each !== null);
+            // The hob acts as the bot until here, then as the user: nothing allowed for its bot runs as
+            // them, and no request it asked as the bot saves a grant for them (ADR 022).
             if (problems.length === 0) {
-              yield* apps.remove(agentId);
+              yield* grants.switchGitHub(agentId, apps.remove(agentId));
               yield* Effect.logInfo("A hob's GitHub app was disconnected", { agentId, slug: app.slug });
               return { deleteUrl: deleteUrl(app.slug), problem: null };
             }
             // Kept as left over, so the problem and where to delete the app stay shown (ADR 022).
             const left = problems.join(" ");
-            yield* apps.leave(agentId, left);
+            yield* grants.switchGitHub(agentId, apps.leave(agentId, left));
             yield* Effect.logWarning("A hob's GitHub app was not fully removed", { agentId, slug: app.slug });
             return { deleteUrl: deleteUrl(app.slug), problem: left };
           }),

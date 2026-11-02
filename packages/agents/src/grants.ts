@@ -48,6 +48,16 @@ const GITHUB_RULES: ReadonlySet<GrantRule["_tag"]> = new Set(["Push", "PullReque
 /** Whether a rule allows a GitHub write, so a grant of it belongs to one GitHub identity (ADR 022). */
 export const isGitHubRule = (rule: GrantRule) => GITHUB_RULES.has(rule._tag);
 
+/**
+ * The hob's GitHub identity a call was pinned to when it chose its credential (ADR 022), as
+ * `GrantService.githubIdentity` counted it then. A request the call asks records it, rather than the
+ * identity when the request is stored, so a call that began as one identity never asks as the other.
+ */
+export const GitHubIdentityPin = Context.Reference<{ readonly agentId: AgentId; readonly identity: number } | null>(
+  "@hobbots/agents/GitHubIdentityPin",
+  { defaultValue: () => null },
+);
+
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
 const sep = "/";
@@ -186,14 +196,17 @@ export class GrantService extends Context.Service<
     /** Revokes every grant of a hob that retired. */
     readonly revokeForAgent: (agentId: AgentId, reason: GrantRevokeReason) => Effect.Effect<void>;
     /**
-     * Revokes the hob's grants for GitHub writes (Push, pull requests, comments) before its GitHub
-     * identity changes (ADR 022), so nothing allowed for one identity runs as the other.
+     * Switches the hob's GitHub identity (ADR 022) with `change`, the write that makes the hob act as
+     * its own app or as the user. In one turn of the lock it counts the change, revokes the hob's
+     * grants for GitHub writes (Push, pull requests, comments), then runs `change`: no grant is saved
+     * between them, and none allowed for one identity runs as the other.
      */
-    readonly revokeGitHub: (agentId: AgentId) => Effect.Effect<void>;
+    readonly switchGitHub: <A, E, R>(agentId: AgentId, change: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
     /**
      * How many times the hob's GitHub identity changed since the hub started. A decision saves a grant
-     * for a GitHub write only while it is what it was when the request was asked, checked inside
-     * `exclusive`, so no grant approved for one identity is saved after the switch to the other.
+     * for a GitHub write only while it is what it was when the call asking chose its credential,
+     * checked inside `exclusive`, so no grant approved for one identity is saved for the other. Read
+     * inside `exclusive` together with the credential, it names the identity that credential is.
      */
     readonly githubIdentity: (agentId: AgentId) => Effect.Effect<number>;
     readonly used: (ids: ReadonlyArray<GrantId>) => Effect.Effect<void>;
@@ -232,22 +245,18 @@ export class GrantService extends Context.Service<
           return Option.some(saved.value.value);
         });
 
-      const revokeWhere = (
-        agentId: AgentId | null,
-        reasonOf: (grant: Grant) => GrantRevokeReason | null,
-        first: Effect.Effect<void> = Effect.void,
-      ) =>
-        Semaphore.withPermit(
-          lock,
-          Effect.gen(function* () {
-            yield* first;
-            const grants = yield* liveOf(yield* repo.list(agentId ?? undefined));
-            for (const grant of grants) {
-              const reason = reasonOf(grant);
-              if (reason !== null) yield* end(grant, "hub", reason);
-            }
-          }),
-        );
+      // Runs under the lock.
+      const revokeEach = (agentId: AgentId | null, reasonOf: (grant: Grant) => GrantRevokeReason | null) =>
+        Effect.gen(function* () {
+          const grants = yield* liveOf(yield* repo.list(agentId ?? undefined));
+          for (const grant of grants) {
+            const reason = reasonOf(grant);
+            if (reason !== null) yield* end(grant, "hub", reason);
+          }
+        });
+
+      const revokeWhere = (agentId: AgentId | null, reasonOf: (grant: Grant) => GrantRevokeReason | null) =>
+        Semaphore.withPermit(lock, revokeEach(agentId, reasonOf));
 
       return GrantService.of({
         live: (agentId) => Effect.flatMap(repo.list(agentId), liveOf),
@@ -274,11 +283,14 @@ export class GrantService extends Context.Service<
             ? Effect.void
             : revokeWhere(agentId, (grant) => lostAuthority(grant, loss)),
         revokeForAgent: (agentId, reason) => revokeWhere(agentId, () => reason),
-        revokeGitHub: (agentId) =>
-          revokeWhere(
-            agentId,
-            (grant) => (isGitHubRule(grant.rule) ? "github-identity" : null),
-            Effect.sync(() => void identities.set(agentId, (identities.get(agentId) ?? 0) + 1)),
+        switchGitHub: (agentId, change) =>
+          Semaphore.withPermit(
+            lock,
+            Effect.gen(function* () {
+              identities.set(agentId, (identities.get(agentId) ?? 0) + 1);
+              yield* revokeEach(agentId, (grant) => (isGitHubRule(grant.rule) ? "github-identity" : null));
+              return yield* change;
+            }),
           ),
         githubIdentity: (agentId) => Effect.sync(() => identities.get(agentId) ?? 0),
         exclusive: (effect) => Semaphore.withPermit(lock, effect),

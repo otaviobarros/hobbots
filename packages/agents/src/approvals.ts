@@ -30,7 +30,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Duration, Effect, Layer, Option, Semaphore } from "effect";
 import { unguarded, type WriteGuard } from "./devices.ts";
-import { GrantService, isGitHubRule, ruleHolds, ruleOffered } from "./grants.ts";
+import { GitHubIdentityPin, GrantService, isGitHubRule, ruleHolds, ruleOffered } from "./grants.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { ApprovalAction, ApprovalOutcome, PendingApproval, ToolAccess, TurnApprovals } from "./runtime.ts";
@@ -455,11 +455,14 @@ export class ApprovalService extends Context.Service<
           (top) => top !== null && top === approval.rootTaskId,
         );
 
-      // The hob's GitHub identity now, for a call whose grant would be one for a GitHub write.
+      // For a call whose grant would be one for a GitHub write, the hob's GitHub identity the call was
+      // pinned to when it chose its credential, or the one now for a call that chose none.
       const githubIdentityOf = (agentId: AgentId, action: ApprovalAction) =>
-        Option.isSome(grants) && action.rules.some(isGitHubRule)
-          ? grants.value.githubIdentity(agentId)
-          : Effect.succeed(null);
+        Effect.gen(function* () {
+          if (Option.isNone(grants) || !action.rules.some(isGitHubRule)) return null;
+          const pin = yield* GitHubIdentityPin;
+          return pin !== null && pin.agentId === agentId ? pin.identity : yield* grants.value.githubIdentity(agentId);
+        });
 
       const asksAsGitHub = (approval: ApprovalRequest) => (waiters.get(approval.id)?.githubIdentity ?? null) !== null;
 

@@ -152,13 +152,19 @@ const layer = (w: World, keys: Layer.Layer<HobAppKeys> = HobAppKeysMemory) =>
       Layer.succeed(DeviceRepository, {
         find: (id: DeviceId) => Effect.succeed(Option.fromNullishOr(w.devices.get(id))),
       } as unknown as DeviceRepository["Service"]),
-      // Only revoking a hob's GitHub grants is used here.
-      Layer.succeed(GrantService, {
-        revokeGitHub: (id: AgentId) => Effect.sync(() => void w.revokedGitHub.push(id)),
-      } as unknown as GrantService["Service"]),
+      grantsOf(w),
       appsOf(w),
     ]),
   );
+
+/** The hob's GitHub identity switches, each recorded with the grants it revoked. */
+const grantsOf = (w: World) =>
+  Layer.succeed(GrantService, {
+    switchGitHub: <A, E, R>(id: AgentId, change: Effect.Effect<A, E, R>) =>
+      Effect.sync(() => void w.revokedGitHub.push(id)).pipe(Effect.andThen(change)),
+    githubIdentity: (id: AgentId) => Effect.sync(() => w.revokedGitHub.filter((each) => each === id).length),
+    exclusive: <A, E, R>(effect: Effect.Effect<A, E, R>) => effect,
+  } as unknown as GrantService["Service"]);
 
 /** What the user's browser does: posts the hub's form to GitHub, which redirects back with a code. */
 const createOnGitHub = (action: string, manifest: string) =>
@@ -523,7 +529,7 @@ const userAccount = (calls: Array<string>) =>
 const charmLayer = (w: World, calls: Array<string>) =>
   GitHubApiLive(github.hosts.api).pipe(
     Layer.provideMerge(GitHubCredentialPerHob),
-    Layer.provide([userAccount(calls), appsOf(w)]),
+    Layer.provide([userAccount(calls), appsOf(w), grantsOf(w)]),
     Layer.provideMerge(layer(w)),
     Layer.provide(FetchHttpClient.layer),
   );

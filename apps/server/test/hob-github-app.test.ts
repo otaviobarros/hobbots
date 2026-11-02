@@ -12,10 +12,18 @@ import {
   HobService,
   PermissionSummary,
   SecretRedaction,
+  type ToolAccess,
 } from "@hobbots/agents";
-import { HobAppKeys, HobAppKeysMemory, HobGitHubAppLive } from "@hobbots/charms";
+import {
+  GitHubConnection,
+  GitHubCredential,
+  GitHubCredentialPerHob,
+  HobAppKeys,
+  HobAppKeysMemory,
+  HobGitHubAppLive,
+} from "@hobbots/charms";
 import { type FakeGitHub, startFakeGitHub } from "@hobbots/charms/testing";
-import { Agent, AgentId } from "@hobbots/domain";
+import { Agent, AgentId, type ApprovalRequest, EMPTY_HOB_POLICY, type Message } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
@@ -31,7 +39,7 @@ import {
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
-import { FetchHttpClient, HttpRouter } from "effect/http";
+import { FetchHttpClient, HttpClient, HttpRouter } from "effect/http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type TailnetPeer, TailnetPeers } from "../src/devices.ts";
 import { EventBus } from "../src/event-bus.ts";
@@ -53,6 +61,7 @@ const HUB = "localhost:4366";
 const FRODO = AgentId.make("frodo");
 const MERRY = AgentId.make("merry");
 const PIPPIN = AgentId.make("pippin");
+const SAM = AgentId.make("sam");
 
 // A test names the Tailscale node a request comes from with this header; without it, it is local.
 const NODE_HEADER = "x-test-tailnet-node";
@@ -71,6 +80,10 @@ let github: FakeGitHub;
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 let readKey: (agentId: AgentId) => Promise<string | null>;
+// biome-ignore lint/suspicious/noExplicitAny: the hub's whole context, for the cases that drive services directly
+let runtime: ManagedRuntime.ManagedRuntime<any, any>;
+/** When set, the next request that removes an installation waits until the test lets it go. */
+let paused: { readonly reached: () => void; readonly release: Promise<void> } | null = null;
 /** Every body the hub answered, to look for a secret in what a client reads. */
 const answered: Array<string> = [];
 
@@ -91,9 +104,28 @@ const hob = (id: AgentId, name: string) =>
 
 beforeAll(async () => {
   github = await startFakeGitHub({ folder: join(temp, "github"), login: "otaviobarros" });
+  // GitHub's answers, with a removal of an installation held while a case needs it to be under way.
+  const Gated = Layer.effect(
+    HttpClient.HttpClient,
+    Effect.map(
+      HttpClient.HttpClient,
+      HttpClient.transform((effect, request) => {
+        const gate = paused;
+        if (gate === null || request.method !== "DELETE" || !request.url.includes("/app/installations/")) return effect;
+        paused = null;
+        return Effect.andThen(
+          Effect.promise(() => {
+            gate.reached();
+            return gate.release;
+          }),
+          effect,
+        );
+      }),
+    ),
+  ).pipe(Layer.provide(FetchHttpClient.layer));
   const HobApp = HobGitHubAppLive(github.hosts).pipe(
     Layer.provideMerge(HobAppKeysMemory),
-    Layer.provide([FetchHttpClient.layer, HobGitHubAppRepository]),
+    Layer.provide([Gated, HobGitHubAppRepository]),
   );
   const App = HobLifecycle.layer
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))
@@ -126,13 +158,14 @@ beforeAll(async () => {
         ),
       ),
     );
-  const runtime = ManagedRuntime.make(App);
+  runtime = ManagedRuntime.make(App);
   await runtime.runPromise(
     Effect.flatMap(HobbotsRepository, (repo) =>
       Effect.all([
         repo.insertAgent(hob(FRODO, "Frodo")),
         repo.insertAgent(hob(MERRY, "Merry")),
         repo.insertAgent(hob(PIPPIN, "Pippin")),
+        repo.insertAgent(hob(SAM, "Sam")),
       ]),
     ),
   );
@@ -362,6 +395,113 @@ describe("A hob's own GitHub App on a hub", () => {
       problem: null,
     });
     expect((await api("GET", `/api/agents/${PIPPIN}/github-app`)).body).toEqual({ _tag: "None", cannotCreate: null });
+  });
+
+  // covers ADR 022, PE-007
+  it("[TC-GEN-068] saves no grant from a request the hob asked as its bot while its app was being disconnected", async () => {
+    const folder = join(temp, "sam-work");
+    mkdirSync(folder, { recursive: true });
+    github.createRepository({ owner: "otaviobarros", name: "sam-shed" });
+    const started = await api<Started>("POST", `/api/agents/${SAM}/github-app/start`);
+    const flow = await throughGitHub((await send("GET", started.body.url, {})).text);
+    expect((await send("GET", flow.back, {})).status).toBe(200);
+    github.installApp("sam-hobbots", "all");
+
+    // Balanced, where a push asks, with the hob's folder: a grant for it would be saved.
+    const access: ToolAccess = {
+      policy: {
+        preset: "balanced",
+        sharedFolders: [folder],
+        hob: EMPTY_HOB_POLICY,
+        dataFolder: join(temp, "sam-data"),
+        restrictions: [],
+      },
+      folders: [folder],
+      runtimeFolder: join(temp, "sam-runtime"),
+    };
+    // The Charm's choice of credential, over the user's account (unused here) or the hob's app.
+    const Credential = GitHubCredentialPerHob.pipe(
+      Layer.provide([
+        Layer.succeed(GitHubCredential, {} as GitHubCredential["Service"]),
+        Layer.succeed(GitHubConnection, {} as GitHubConnection["Service"]),
+        HobGitHubAppRepository,
+      ]),
+    );
+    const turn = await runtime.runPromise(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const thread = yield* chat.createThread(SAM);
+        const sent = yield* chat.sendPrompt(thread.id, "hello");
+        return yield* (yield* ApprovalService).forTurn(
+          { agentId: SAM, threadId: thread.id, messageId: (sent.assistantMessage as Message).id },
+          Effect.succeed(access),
+          Effect.succeed(null),
+        );
+      }),
+    );
+    // A push asked under the credential the call chose, as the Charm's push asks it.
+    const ask = () =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const credential = yield* GitHubCredential;
+          return yield* credential.onRepository(
+            SAM,
+            { owner: "otaviobarros", name: "sam-shed" },
+            Effect.gen(function* () {
+              const bot = yield* credential.bot(SAM);
+              const request = turn.approvals.request as NonNullable<typeof turn.approvals.request>;
+              const pending = yield* request({
+                stepId: "s1",
+                tool: "github_push",
+                operation: "push",
+                targets: ["github.com/otaviobarros/sam-shed feature"],
+                arguments: { branch: "feature" },
+                label: "Pushing feature to GitHub",
+                reason: "Pushing asks first.",
+                policyVersion: "r1-test",
+                onceOnly: false,
+                grantable: true,
+                rules: [{ _tag: "Push", cwd: folder, remote: "github.com/otaviobarros/sam-shed", branch: "feature" }],
+              });
+              return { bot, pending };
+            }),
+          );
+        }).pipe(Effect.provide(Credential)),
+      );
+
+    // Disconnecting holds while GitHub removes the installation: the hob still acts as its bot then,
+    // and asks for the push as its bot.
+    let reached = () => {};
+    let release = () => {};
+    const atRemoval = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    paused = { reached, release: new Promise<void>((resolve) => (release = resolve)) };
+    const disconnecting = api("POST", `/api/agents/${SAM}/github-app/disconnect`);
+    await atRemoval;
+    const asked = await ask();
+    release();
+    expect((await disconnecting).body).toMatchObject({ problem: null });
+
+    // The card the hob asked as its bot, approved Always once it acts as the user, saves nothing.
+    const card = await runtime.runPromise(
+      Effect.flatMap(ApprovalService, (approvals) => approvals.get(asked.pending.approvalId)),
+    );
+    const decided = await api<{ readonly _tag?: string; readonly state?: string }>(
+      "POST",
+      `/api/approvals/${asked.pending.approvalId}/decision`,
+      AS_WINDOW,
+      { decision: "approve", actionDigest: (card as ApprovalRequest).actionDigest, lifetime: "always" },
+    );
+    const saved = await runtime.runPromise(
+      Effect.flatMap(GrantService, (grants) => grants.list({ agentId: SAM, all: true })),
+    );
+    const outcome = await runtime.runPromise(asked.pending.decision);
+
+    expect(asked.bot).toBe("sam-hobbots[bot]");
+    expect(decided.body).toMatchObject({ _tag: "ApprovalClosed", state: "expired" });
+    expect(outcome).toEqual({ _tag: "Expired" });
+    expect(saved).toEqual([]);
   });
 
   // covers ADR 022
