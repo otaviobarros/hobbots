@@ -26,6 +26,8 @@ import { EventBus } from "./event-bus.ts";
  * card, strip, drawer and questions can be followed end to end before hobs lead Quests themselves.
  * Asking a hob for a Black Friday campaign starts it, with that hob as the lead and the hobs named
  * Quill and Ada as its party. Ada's question climbs to you; the Quest finishes once you answer it.
+ * When hobs named Rook and Pip are there too, Aldric also brings in Rook, who leads a Quest of his
+ * own under Aldric's and brings in Pip (#275).
  * Only `HOBBOTS_FAKE_QUEST=black-friday` with the fake runtime turns it on.
  */
 
@@ -38,6 +40,8 @@ interface Cast {
   readonly lead: AgentId;
   readonly quill: AgentId;
   readonly ada: AgentId;
+  /** Rook and Pip, for the nested Quest, when both are there. */
+  readonly nested: { readonly rook: AgentId; readonly pip: AgentId } | null;
 }
 
 /** The thread of a request for a Black Friday campaign, or null for any other event. */
@@ -144,24 +148,35 @@ const play = (cast: Cast, step: Duration.Input, bus: EventBus["Service"]) =>
       .pipe(Effect.flatMap(announce));
     yield* start(campaign, "a-campaign");
     yield* pause;
-    yield* tasks
-      .startQuest({
-        id: QuestId.make(id("quest")),
-        taskId: campaign.id,
-        goal: "A Black Friday campaign: landing copy and a launch email, live by Friday",
-        acceptance: ["Landing copy approved", "Campaign scheduled"],
-        limits: DEFAULT_QUEST_LIMITS,
-        createdAt: yield* iso,
-      })
-      .pipe(Effect.flatMap(announce));
-    const member = (name: string, owner: AgentId, brief: string, milestones: ReadonlyArray<string>, after: TaskId[]) =>
+    const quest = (name: string, taskId: TaskId, goal: string) =>
+      Effect.gen(function* () {
+        yield* tasks
+          .startQuest({
+            id: QuestId.make(id(name)),
+            taskId,
+            goal,
+            acceptance: name === "quest" ? ["Landing copy approved", "Campaign scheduled"] : [],
+            limits: DEFAULT_QUEST_LIMITS,
+            createdAt: yield* iso,
+          })
+          .pipe(Effect.flatMap(announce));
+      });
+    yield* quest("quest", campaign.id, "A Black Friday campaign: landing copy and a launch email, live by Friday");
+    const member = (
+      name: string,
+      owner: AgentId,
+      brief: string,
+      milestones: ReadonlyArray<string>,
+      after: TaskId[],
+      parentId: TaskId = campaign.id,
+    ) =>
       Effect.gen(function* () {
         const task = yield* tasks
           .createTask({
             task: {
               id: TaskId.make(id(name)),
               ownerId: owner,
-              parentId: campaign.id,
+              parentId,
               threadId: null,
               brief,
               dependsOn: after,
@@ -196,6 +211,27 @@ const play = (cast: Cast, step: Duration.Input, bus: EventBus["Service"]) =>
     );
     yield* tasks.moveTask(build.id, build.revision, "waiting", yield* iso).pipe(Effect.flatMap(announce));
     yield* pause;
+
+    // Rook runs the ads and brings in Pip for the keywords, leading a Quest of his own under Aldric's.
+    const ads =
+      cast.nested === null
+        ? null
+        : yield* member("ads", cast.nested.rook, "Run the ads\nSearch and social ads for the weekend.", [], []);
+    if (ads !== null && cast.nested !== null) {
+      yield* quest("ads-quest", ads.id, "Search and social ads for the weekend");
+      const keywords = yield* member(
+        "keywords",
+        cast.nested.pip,
+        "Research the keywords\nThe searches Black Friday shoppers make for the shop.",
+        [],
+        [],
+        ads.id,
+      );
+      yield* pause;
+      yield* complete(keywords.id, "a-keywords", "Twelve keywords, led by doorbuster", null);
+      yield* pause;
+      yield* complete(ads.id, "a-ads", "Ads ready around doorbuster", null);
+    }
 
     // Quill asks Aldric, who answers without bothering you.
     yield* report(copy.id, "milestone", "Three headlines drafted", "copy-0");
@@ -282,7 +318,10 @@ const castFor = (threadId: Thread["id"]) =>
       yield* Effect.logWarning("The Black Friday Quest needs hobs named Quill and Ada besides the lead.");
       return Option.none<Cast>();
     }
-    return Option.some({ thread: thread.value, lead: thread.value.agentId, quill: quill.id, ada: ada.id });
+    const rook = named("rook");
+    const pip = named("pip");
+    const nested = rook === undefined || pip === undefined ? null : { rook: rook.id, pip: pip.id };
+    return Option.some({ thread: thread.value, lead: thread.value.agentId, quill: quill.id, ada: ada.id, nested });
   });
 
 /** Plays the Black Friday Quest for each request that asks for one, `step` apart. */
