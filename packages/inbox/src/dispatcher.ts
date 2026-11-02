@@ -251,7 +251,7 @@ export class Dispatcher extends Context.Service<
               const resolved = yield* step(backpack.resolve(item.id, held, { _tag: "late", ...late }));
               return { _tag: "Late", item: resolved } as Dispatched;
             }
-            if (item.deliveries.length >= limits.maxDeliveries) {
+            if (outOfDeliveries(item)) {
               const why = last.reason === null ? "" : ` The last: ${last.reason}`;
               return yield* fail(
                 held,
@@ -262,10 +262,17 @@ export class Dispatcher extends Context.Service<
             return null;
           });
 
+        /**
+         * Whether the item was delivered as often as the limit allows. Routine progress never runs
+         * out: it only rides along turns, so a turn that ended early leaves it for the next (IN-005).
+         */
+        const outOfDeliveries = (item: BackpackItem) =>
+          item.actionable && item.deliveries.length >= limits.maxDeliveries;
+
         /** The turn ended early for this item: it fails on its last delivery, or goes back to pending (null). */
         const endedEarly = ({ item, held }: Claimed, reason: string) =>
           Effect.gen(function* () {
-            if (item.deliveries.length >= limits.maxDeliveries) {
+            if (outOfDeliveries(item)) {
               return yield* fail(
                 held,
                 item,
@@ -413,8 +420,10 @@ export class Dispatcher extends Context.Service<
             let requeued = false;
             for (const each of delivered) {
               const settled = reason === null ? yield* afterTurn(each, turn.turnId) : yield* endedEarly(each, reason);
-              if (settled === null) requeued = true;
-              else outcomes.set(each.item.id, settled);
+              if (settled !== null) outcomes.set(each.item.id, settled);
+              // Routine progress sent back waits for the next turn: it never plans one again itself.
+              else if (!each.item.actionable) outcomes.set(each.item.id, { _tag: "Skipped", reason: "not-ready" });
+              else requeued = true;
             }
             if (requeued) {
               const why = reason ?? "The runtime never accepted the turn.";

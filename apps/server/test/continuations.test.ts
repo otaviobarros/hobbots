@@ -56,6 +56,8 @@ const HOLD = "fake:hold";
 
 /** Whether continuations wait for the gate before they write. */
 let holdContinuations = false;
+/** A prompt whose turn waits for the gate before it writes, so it can be stopped. */
+let holdPrompt: string | null = null;
 
 const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
   Layer.effect(
@@ -68,7 +70,7 @@ const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
           requests.push(request);
           const stream = fake.sendPrompt(request);
           // A continuation, while held, waits before it writes anything, so it can be stopped.
-          if (holdContinuations && request.prompt.startsWith("Hobbots wrote this")) {
+          if ((holdContinuations && request.prompt.startsWith("Hobbots wrote this")) || request.prompt === holdPrompt) {
             return Stream.unwrap(Effect.as(Deferred.await(gate), stream));
           }
           return request.prompt.includes(HOLD)
@@ -142,6 +144,7 @@ let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<App>, Layer.Error<App>>
 
 afterEach(async () => {
   holdContinuations = false;
+  holdPrompt = null;
   emptyDispatch = null;
   dispatches = 0;
   await runtime?.dispose();
@@ -578,4 +581,50 @@ describe("coalescing routine progress", () => {
     const settled = await run(settledItems(progress.map((item) => item.id)));
     expect(settled.map((item) => item.disposition)).toEqual(progress.map(() => ({ _tag: "consumed", by: all[1]?.id })));
   });
+
+  // covers IN-005, CH-008
+  it("[TC-OR-102] a turn that carried only progress and ended early holds nothing back, and the progress never runs out of deliveries", async () => {
+    const { run, requests, release } = setUp(FrodoAndSam);
+    const cook = await run(samsTask);
+    const progress = await run(reportProgress(2));
+
+    // Three of your messages are cut off, each carrying the progress: it goes back to pending every time.
+    for (let round = 1; round <= 3; round++) {
+      await run(ChatService.use((chat) => chat.sendPrompt(threadId, `fake:cut-off try ${round}`)));
+      await run(messagesWhen((each) => each.length === round * 2));
+    }
+    const after = await run(
+      retry(
+        Effect.flatMap(itemsOf(progress.map((item) => item.id)), (items) =>
+          items.every((item) => item.state === "pending" && item.deliveries.length === 3)
+            ? Effect.succeed(items)
+            : Effect.fail("not yet" as const),
+        ),
+      ),
+    );
+    expect(after.every((item) => item.error === null)).toBe(true);
+
+    // You stop the next one: that holds back nothing, so work that needs Frodo still starts at once.
+    holdPrompt = "Stew?";
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, "Stew?")));
+    await run(
+      retry(
+        Effect.flatMap(messages(), (all) =>
+          all.length === 8 && all.at(-1)?.status === "streaming" ? Effect.void : Effect.fail("not yet" as const),
+        ),
+      ),
+    );
+    await run(ChatService.use((chat) => chat.stop(threadId)));
+    await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
+    await release();
+    await run(TaskRepository.use((tasks) => tasks.moveTask(cook.id, cook.revision, "failed", now)));
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    const all = await run(messagesWhen((each) => each.length === 9));
+    expect(all[8]?.content).toContain("ended as failed.");
+    const asked = requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"));
+    expect(asked).toHaveLength(1);
+    expect(asked[0]?.prompt).toContain("- Task cook sent 2 updates. The latest: Stirred 2 times");
+    const settled = await run(settledItems(progress.map((item) => item.id)));
+    expect(settled.every((item) => item.disposition?._tag === "consumed")).toBe(true);
+  }, 15_000);
 });

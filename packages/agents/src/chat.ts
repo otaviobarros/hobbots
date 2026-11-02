@@ -55,15 +55,15 @@ interface Reply {
   readonly stepsFrom: number;
   /** The text the reply already had when Continue resumed it; the runtime's final text comes after it. */
   readonly prefix: string;
-  /** Whether the turn carries backpack items, so a stop holds them back until you write again. */
+  /** Whether the turn carries work that needs the hob, so a stop holds it back until you write again. */
   readonly carries: boolean;
 }
 
 /** Backpack items a turn carries (ADR 019): told to it, held under its claims, and accepted with its session. */
-type Carry = Pick<CarriedWork, "holding" | "accepted">;
+type Carry = Pick<CarriedWork, "holding" | "accepted" | "routineOnly">;
 
 /** What a turn carries when it carries no backpack items. */
-const NOTHING_CARRIED: Carry = { holding: [], accepted: () => Effect.void };
+const NOTHING_CARRIED: Carry = { holding: [], accepted: () => Effect.void, routineOnly: true };
 
 /** How a turn starts: its reply's id, what it carries, and whether its end starts what waits next. */
 interface TurnStart {
@@ -692,7 +692,8 @@ export class ChatService extends Context.Service<
             lock: yield* Semaphore.make(1),
             stepsFrom: saved.steps.length,
             prefix: saved.content,
-            carries: start.carry != null,
+            // Only work that needs the hob is held back when you stop the turn; progress waits anyway.
+            carries: start.carry != null && !start.carry.routineOnly,
           };
           replies.set(thread.id, reply);
           // The drain is forked outside the turn: it waits for the hob's lock, which a retirement
