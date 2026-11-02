@@ -228,8 +228,9 @@ export class DeviceService extends Context.Service<
     ) => Effect.Effect<{ readonly status: PairingStatus; readonly secret: string }, PairingRefused | PairingThrottled>;
     /**
      * Where the request the secret names stands, from where it was opened. Once allowed, the first
-     * call hands out the device token and the secret stops working. A secret that names no request
-     * from `place` counts against the node's limit like any request without a device.
+     * call hands out the device token and the secret stops working. Only a secret whose request still
+     * waits, or is just allowed, is spared the node's limit for requests without a device: an unknown,
+     * misplaced, claimed, denied or expired one counts against it.
      */
     readonly pairingStatus: (
       secret: string,
@@ -409,13 +410,19 @@ export class DeviceService extends Context.Service<
           if (request.state === "pending" && !pairingExpired(request, now)) {
             yield* consume(`pairing:status:${request.id}`, PAIRING_LIMITS.statusPerSecond, "1 second");
           }
-          if (request.state === "claimed") return yield* missing;
+          // A claimed secret stopped working: it is refused, and counted, like an unknown one.
+          if (request.state === "claimed") return yield* unknown;
           // An allowed request is claimed within its lifetime too, so an old secret never turns into a token.
-          if (request.state !== "allowed" || pairingExpired(request, now)) return statusOf(request, now);
+          if (request.state !== "allowed" || pairingExpired(request, now)) {
+            // Denied or expired, the answer no longer changes, so asking again counts like any request
+            // without a device; only a request still waiting is spared.
+            if (request.state !== "pending" || pairingExpired(request, now)) yield* throttleAnonymous(place);
+            return statusOf(request, now);
+          }
           const token = yield* secrets.generate(DEVICE_TOKEN_PREFIX);
           const claimed = yield* repo.claimPairing(request.id, yield* secrets.hash(token), now);
           // Another status call claimed it first: only one of them gets the token.
-          if (Option.isNone(claimed)) return yield* missing;
+          if (Option.isNone(claimed)) return yield* unknown;
           return statusOf(yield* announce(claimed.value), now, token);
         });
 

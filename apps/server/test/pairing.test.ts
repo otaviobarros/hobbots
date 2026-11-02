@@ -202,23 +202,28 @@ describe("pairing a device", () => {
     expect(failureTag(result.local)).toBe("Success");
   });
   // covers DP-004
-  it("[TC-DP-117] a secret that names no request from here counts against the node's limit like no secret at all", async () => {
+  it("[TC-DP-117] a secret that names no request waiting here, a claimed one included, counts against the node's limit like no secret at all", async () => {
     const result = await run(
       Effect.gen(function* () {
         const devices = yield* DeviceService;
         const opened = yield* ask(PHONE);
         const tv = tailnet(node("nTV"));
-        // Malformed, unknown, and another node's secret: 60 of them use up a minute's requests.
-        const guesses = ["", "hbp_invalid", `${opened.secret}x`, opened.secret];
+        // The TV's own request, allowed and claimed: its secret stopped working.
+        const claimed = yield* ask(tv);
+        yield* devices.allow(claimed.status.id);
+        const token = (yield* devices.pairingStatus(claimed.secret, tv)).token;
+        // Malformed, unknown, another node's and a claimed secret: 60 of them use up a minute's requests.
+        const guesses = ["", "hbp_invalid", `${opened.secret}x`, opened.secret, claimed.secret];
         const tries = yield* Effect.forEach(Array.from({ length: 60 }), (_, index) =>
           Effect.exit(devices.pairingStatus(guesses[index % guesses.length] ?? "", tv)),
         );
         const overLimit = yield* Effect.exit(devices.pairingStatus("hbp_invalid", tv));
         // The phone's own secret is spared: it was never counted.
         const own = yield* Effect.exit(devices.pairingStatus(opened.secret, PHONE));
-        return { tries, overLimit, own };
+        return { token, tries, overLimit, own };
       }),
     );
+    expect(result.token).toMatch(/^hbd_/);
     expect(new Set(result.tries.map(failureTag))).toEqual(new Set(["PairingNotFound"]));
     expect(failureTag(result.overLimit)).toBe("PairingThrottled");
     expect(failureTag(result.own)).toBe("Success");

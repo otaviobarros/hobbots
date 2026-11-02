@@ -93,7 +93,7 @@ const asDesktop = () => {
 };
 
 // covers DP-004
-test("[TC-DP-122] the prompt over the hub's window keeps the keyboard inside it until it is answered", async ({
+test("[TC-DP-122] the prompt over the hub's window keeps the keyboard inside it until it is answered, then gives focus back", async ({
   page,
   browser,
 }) => {
@@ -102,17 +102,31 @@ test("[TC-DP-122] the prompt over the hub's window keeps the keyboard inside it 
   await finishSetup(current);
   await page.addInitScript(asDesktop);
   await page.goto(`${current.url}/#/inbox`);
-  await expect(page.getByRole("navigation")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
+  // Where the keyboard was before each prompt: it comes back there once the prompt closes.
+  const before = page.getByRole("navigation", { name: "Sections" }).getByRole("link").first();
+  const strangers: Array<{ close: () => Promise<void> }> = [];
+  const askAs = async (name: string) => {
+    await before.focus();
+    const stranger = await browser.newContext();
+    strangers.push(stranger);
+    const newcomer = await stranger.newPage();
+    await newcomer.goto(current.url);
+    await newcomer.getByLabel("Name this device").fill(name);
+    await newcomer.getByRole("button", { name: "Ask for access" }).click();
+    const prompt = page.getByRole("dialog", { name: `${name} wants to use Hobbots` });
+    await expect(prompt).toBeVisible();
+    await expect(prompt.getByRole("heading", { name: `${name} wants to use Hobbots` })).toBeFocused();
+    return prompt;
+  };
 
-  const stranger = await browser.newContext();
-  const newcomer = await stranger.newPage();
-  await newcomer.goto(current.url);
-  await newcomer.getByLabel("Name this device").fill("Kitchen laptop");
-  await newcomer.getByRole("button", { name: "Ask for access" }).click();
+  // Decide later closes the prompt and the keyboard is back where it was.
+  const first = await askAs("Kitchen laptop");
+  await first.getByRole("button", { name: "Decide later" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(before).toBeFocused();
 
-  const prompt = page.getByRole("dialog", { name: "Kitchen laptop wants to use Hobbots" });
-  await expect(prompt).toBeVisible();
-  await expect(prompt.getByRole("heading", { name: "Kitchen laptop wants to use Hobbots" })).toBeFocused();
+  const second = await askAs("Garden tablet");
   // Tab and Shift+Tab go round the prompt's own buttons, never to the page behind it.
   const insidePrompt = () =>
     page.evaluate(() => document.querySelector('[role="dialog"]')?.contains(document.activeElement) ?? false);
@@ -122,12 +136,22 @@ test("[TC-DP-122] the prompt over the hub's window keeps the keyboard inside it 
   }
   // Escape does not answer for the user.
   await page.keyboard.press("Escape");
-  await expect(prompt).toBeVisible();
-
-  await prompt.getByRole("button", { name: "Allow", exact: true }).click();
-  const answered = page.getByRole("dialog", { name: "Kitchen laptop can use Hobbots now" });
-  await expect(answered.getByRole("button", { name: "Done" })).toBeFocused();
+  await expect(second).toBeVisible();
+  await second.getByRole("button", { name: "Allow", exact: true }).click();
+  const allowed = page.getByRole("dialog", { name: "Garden tablet can use Hobbots now" });
+  await expect(allowed.getByRole("button", { name: "Done" })).toBeFocused();
+  // Once answered, Escape closes it like Done.
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await stranger.close();
+  await expect(before).toBeFocused();
+
+  const third = await askAs("Hall speaker");
+  await third.getByRole("button", { name: "Deny", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Hall speaker was turned away" })
+    .getByRole("button", { name: "Done" })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(before).toBeFocused();
+  for (const stranger of strangers) await stranger.close();
 });
