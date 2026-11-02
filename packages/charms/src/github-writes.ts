@@ -25,6 +25,7 @@ import { Data, Effect, Option } from "effect";
 import type { CharmCallRunner, ReadBack, WriteOutcome } from "./charm-calls.ts";
 import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
+import { githubActor, recordedLogin } from "./github-actor.ts";
 import { GitHubApi, type GitHubError, type GitHubWrite } from "./github-api.ts";
 
 /**
@@ -89,8 +90,9 @@ interface RecordedCommentPlan extends GitHubCommentPlan {
  * Reads opening a pull request back (ADR 020): it took effect when a pull request in any state from
  * that head into that base was opened by the acting account after the call was recorded. An older
  * one from the same head is never taken for it: those GitHub listed when deciding are left out by
- * number, so a hub clock behind GitHub's cannot mistake one for this call's. Every hob acts as the
- * user's own account until #221, so one the user opens there meanwhile counts as this call's.
+ * number, so a hub clock behind GitHub's cannot mistake one for this call's. A hob acting as the
+ * user's account shares it, so one the user opens there meanwhile counts as this call's; a hob's own
+ * app's bot is its alone (ADR 022).
  */
 export const pullRequestReadBack =
   (api: GitHubApi["Service"]): ReadBack =>
@@ -99,7 +101,7 @@ export const pullRequestReadBack =
       const plan = JSON.parse(call.plan) as RecordedPullRequestPlan;
       const existing = new Set(plan.existing ?? []);
       const repository = ownerAndName(plan.repository);
-      const actingAs = plan.actingAs ?? (yield* api.viewer(call.agentId));
+      const actingAs = recordedLogin(plan.actingAs) ?? (yield* api.viewer(call.agentId));
       const since = recordedSecond(call.createdAt);
       const list = yield* api.pullRequests(call.agentId, repository, plan.head, plan.base);
       const found = list.find(
@@ -118,7 +120,7 @@ export const commentReadBack =
     Effect.gen(function* () {
       const plan = JSON.parse(call.plan) as RecordedCommentPlan;
       const repository = ownerAndName(plan.repository);
-      const actingAs = plan.actingAs ?? (yield* api.viewer(call.agentId));
+      const actingAs = recordedLogin(plan.actingAs) ?? (yield* api.viewer(call.agentId));
       // The nonce alone identifies this call's comment, so the time only narrows how much is read.
       const since = new Date(recordedSecond(call.createdAt) - COMMENT_MARGIN_MS).toISOString();
       const marker = commentMarker(plan.marker);
@@ -300,7 +302,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
                 message: `${slug} has no branch ${input.head} on GitHub. Push it with github_push first.`,
               });
             }
-            const actingAs = yield* api.viewer(agentId).pipe(Effect.option, Effect.map(Option.getOrNull));
+            const actingAs = yield* github(githubActor(credential, api, agentId));
             const existing = yield* github(api.pullRequests(agentId, repository, input.head, base));
             const plan: GitHubPullRequestPlan = {
               repository: slug,
@@ -377,7 +379,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
           repository,
           Effect.gen(function* () {
             const item = yield* github(api.item(agentId, repository, input.number, 0));
-            const actingAs = yield* api.viewer(agentId).pipe(Effect.option, Effect.map(Option.getOrNull));
+            const actingAs = yield* github(githubActor(credential, api, agentId));
             const plan: GitHubCommentPlan = {
               repository: slug,
               folder,

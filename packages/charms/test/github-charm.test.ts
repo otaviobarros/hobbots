@@ -119,7 +119,7 @@ const fakeCredential = (connected: boolean) =>
     GitHubCredential,
     GitHubCredential.of({
       connected: Effect.succeed(connected),
-      bot: () => Effect.succeed(null),
+      hobApp: () => Effect.succeed(null),
       tokenFor: () => Effect.succeed(Redacted.make("token")),
       refused: () => Effect.succeed(Redacted.make("token")),
       revoked: () => Effect.void,
@@ -344,7 +344,7 @@ describe("GitHub API", () => {
               GitHubCredential,
               GitHubCredential.of({
                 connected: Effect.succeed(true),
-                bot: () => Effect.succeed(null),
+                hobApp: () => Effect.succeed(null),
                 tokenFor: (agentId) =>
                   Effect.sync(() => credential.push(`token for ${agentId}`)).pipe(Effect.as(Redacted.make(token))),
                 refused: () =>

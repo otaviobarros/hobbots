@@ -209,6 +209,29 @@ export const GITHUB_WRITE_TOOLS: ReadonlyArray<{
   },
 ];
 
+/**
+ * Who acts on GitHub for a hob's call (ADR 022): the hob's own app, as its bot, or the user's
+ * account, with its login when the hub knows it. The step and the approval card name it.
+ */
+export type GitHubActor =
+  | { readonly _tag: "HobApp"; readonly hob: string; readonly bot: string }
+  | { readonly _tag: "You"; readonly login: string | null };
+
+/** The hob's own app as who acts. */
+export type GitHubHobAppActor = Extract<GitHubActor, { readonly _tag: "HobApp" }>;
+
+/** Who acts in words, as a card's last line ends: "as Frodo's app, frodo-hobbots[bot]" or "as you (@login)". */
+export const githubActorText = (actor: GitHubActor): string =>
+  actor._tag === "HobApp"
+    ? `as ${actor.hob}'s app, ${actor.bot}`
+    : `as you${actor.login === null ? "" : ` (@${actor.login})`}`;
+
+/** The account GitHub shows as the author of what the actor writes, when the hub knows it. */
+export const githubActorLogin = (actor: GitHubActor): string | null =>
+  actor._tag === "HobApp" ? actor.bot : actor.login;
+
+const sentence = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+
 /** What a push sends and where, as the hub fixed it when deciding, and what the approval card shows. */
 export interface GitHubPushPlan {
   readonly repository: string;
@@ -224,8 +247,9 @@ export interface GitHubPushPlan {
   /** The commits the push adds beyond what GitHub's branches have, and the first of their subjects. */
   readonly commits: number;
   readonly subjects: ReadonlyArray<string>;
-  /** Who acts on GitHub: the login of the account the hub signs in with, when it knows it. */
-  readonly actingAs: string | null;
+  /** Who acts on GitHub. */
+  readonly actingAs: GitHubActor;
+  /** Over SSH with the user's agent, which only the user's account uses. */
   readonly over: "https" | "ssh";
 }
 
@@ -242,7 +266,9 @@ export const githubPushSummary = (plan: GitHubPushPlan): string =>
         : `Updates the branch from ${short(plan.replaces)}.`,
     `${plan.commits} commit${plan.commits === 1 ? "" : "s"} GitHub's branches do not have${plan.subjects.length > 0 ? ":" : "."}`,
     ...plan.subjects.map((subject) => `  ${subject}`),
-    `${plan.over === "ssh" ? "Over SSH with your agent, " : ""}as you${plan.actingAs === null ? "" : ` (@${plan.actingAs})`}.`,
+    plan.over === "ssh"
+      ? `Over SSH with your agent, ${githubActorText(plan.actingAs)}.`
+      : sentence(githubActorText(plan.actingAs)),
   ].join("\n");
 
 /** What opening a pull request sends and where, as the hub fixed it when deciding. */
@@ -255,7 +281,7 @@ export interface GitHubPullRequestPlan {
   readonly title: string;
   readonly body: string;
   readonly draft: boolean;
-  readonly actingAs: string | null;
+  readonly actingAs: GitHubActor;
 }
 
 /** What a comment sends and where, as the hub fixed it when deciding. */
@@ -268,13 +294,11 @@ export interface GitHubCommentPlan {
   readonly itemTitle: string;
   /** The comment after redaction, without the hub's marker: exactly what the hob wrote that is sent. */
   readonly body: string;
-  readonly actingAs: string | null;
+  readonly actingAs: GitHubActor;
 }
 
 /** How much of a pull request's body its approval card shows, which ADR 020 calls the start of the body. */
 export const PULL_REQUEST_BODY_SHOWN = 1200;
-
-const asYou = (actingAs: string | null) => `As you${actingAs === null ? "" : ` (@${actingAs})`}.`;
 
 /** Opening a pull request in words, as the approval card shows it and its digest covers it. */
 export const githubPullRequestSummary = (plan: GitHubPullRequestPlan): string => {
@@ -286,7 +310,7 @@ export const githubPullRequestSummary = (plan: GitHubPullRequestPlan): string =>
     `Open a ${plan.draft ? "draft " : ""}pull request in ${plan.repository} from ${plan.head} into ${plan.base}`,
     `Title: ${plan.title}`,
     ...(body === "" ? ["No description."] : ["", body, ""]),
-    asYou(plan.actingAs),
+    sentence(githubActorText(plan.actingAs)),
   ].join("\n");
 };
 
@@ -297,7 +321,7 @@ export const githubCommentSummary = (plan: GitHubCommentPlan): string =>
     "",
     plan.body,
     "",
-    asYou(plan.actingAs),
+    sentence(githubActorText(plan.actingAs)),
   ].join("\n");
 
 /**

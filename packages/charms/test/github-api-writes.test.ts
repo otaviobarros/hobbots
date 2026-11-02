@@ -64,7 +64,7 @@ const run = <A>(
     GitHubCredential,
     GitHubCredential.of({
       connected: Effect.succeed(true),
-      bot: () => Effect.succeed(null),
+      hobApp: () => Effect.succeed(null),
       tokenFor: () => Effect.succeed(Redacted.make(TOKEN)),
       refused: () => Effect.sync(() => credential.push("refused")).pipe(Effect.as(Redacted.make(`${TOKEN}2`))),
       revoked: () => Effect.sync(() => void credential.push("revoked")),

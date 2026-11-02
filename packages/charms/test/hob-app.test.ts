@@ -136,19 +136,19 @@ const appsOf = (w: World) =>
     }),
   );
 
+/** The hobs, of which only reading one is used here. */
+const hobsOf = (w: World) =>
+  Layer.succeed(HobbotsRepository, {
+    findAgent: (id: AgentId) => Effect.succeed(Option.fromNullishOr(w.hobs.get(id))),
+  } as unknown as HobbotsRepository["Service"]);
+
 const layer = (w: World, keys: Layer.Layer<HobAppKeys> = HobAppKeysMemory) =>
   HobGitHubAppLive(github.hosts).pipe(
     Layer.provideMerge(keys),
     Layer.provide([
       FetchHttpClient.layer,
       Layer.succeed(SecretRedaction, w.redactor),
-      Layer.succeed(
-        HobbotsRepository,
-        // Only reading a hob is used here.
-        {
-          findAgent: (id: AgentId) => Effect.succeed(Option.fromNullishOr(w.hobs.get(id))),
-        } as unknown as HobbotsRepository["Service"],
-      ),
+      hobsOf(w),
       Layer.succeed(DeviceRepository, {
         find: (id: DeviceId) => Effect.succeed(Option.fromNullishOr(w.devices.get(id))),
       } as unknown as DeviceRepository["Service"]),
@@ -510,7 +510,7 @@ const userAccount = (calls: Array<string>) =>
       GitHubCredential,
       GitHubCredential.of({
         connected: Effect.succeed(true),
-        bot: () => Effect.succeed(null),
+        hobApp: () => Effect.succeed(null),
         tokenFor: () => Effect.sync(() => void calls.push("tokenFor")).pipe(Effect.as(Redacted.make("user-token"))),
         refused: () => Effect.sync(() => void calls.push("refused")).pipe(Effect.as(Redacted.make("user-token"))),
         revoked: () => Effect.sync(() => void calls.push("revoked")),
@@ -529,7 +529,7 @@ const userAccount = (calls: Array<string>) =>
 const charmLayer = (w: World, calls: Array<string>) =>
   GitHubApiLive(github.hosts.api).pipe(
     Layer.provideMerge(GitHubCredentialPerHob),
-    Layer.provide([userAccount(calls), appsOf(w), grantsOf(w)]),
+    Layer.provide([userAccount(calls), appsOf(w), grantsOf(w), hobsOf(w)]),
     Layer.provideMerge(layer(w)),
     Layer.provide(FetchHttpClient.layer),
   );
@@ -779,7 +779,7 @@ describe("A hob's own GitHub App's tokens", () => {
           ),
         );
         const after = yield* credential.tokenFor(FRODO, { repository, action: "comment" });
-        return { revokedOnConnect, stopped, after, bot: yield* credential.bot(FRODO) };
+        return { revokedOnConnect, stopped, after, bot: yield* credential.hobApp(FRODO) };
       }),
     );
     // Grants approved under one GitHub identity never carry over to the other: both switches revoke them.

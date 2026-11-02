@@ -5,6 +5,8 @@ import {
   GITHUB_TOOLS,
   GITHUB_UNTRUSTED,
   GitHubToolInputs,
+  githubActorLogin,
+  githubActorText,
   githubCommentSummary,
   githubItemText,
   githubPullRequestSummary,
@@ -163,8 +165,8 @@ describe("the GitHub write cards", () => {
     title: "feat: x",
     body: "",
     draft: false,
-    actingAs: null,
-  };
+    actingAs: { _tag: "You", login: null },
+  } as const;
 
   it("say what is opened or posted, where, and as whom", () => {
     expect(githubPullRequestSummary(pr)).toBe(
@@ -181,8 +183,16 @@ describe("the GitHub write cards", () => {
         pullRequest: false,
         itemTitle: "Bug",
         body: "Fixed.",
-        actingAs: "me",
+        actingAs: { _tag: "You", login: "me" },
       }),
     ).toBe("Comment on issue #7 in octo/app: Bug\n\nFixed.\n\nAs you (@me).");
+  });
+
+  it("name a hob's own app and its bot as who acts", () => {
+    const actingAs = { _tag: "HobApp", hob: "Frodo", bot: "frodo-hobbots[bot]" } as const;
+    expect(githubPullRequestSummary({ ...pr, actingAs })).toMatch(/\nAs Frodo's app, frodo-hobbots\[bot\]\.$/);
+    expect(githubActorText(actingAs)).toBe("as Frodo's app, frodo-hobbots[bot]");
+    expect(githubActorLogin(actingAs)).toBe("frodo-hobbots[bot]");
+    expect(githubActorLogin({ _tag: "You", login: null })).toBeNull();
   });
 });
