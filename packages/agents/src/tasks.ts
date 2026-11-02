@@ -221,8 +221,9 @@ export class TaskRepository extends Context.Service<
      */
     readonly listQueuedSteps: Effect.Effect<ReadonlyArray<Task>>;
     /**
-     * Steps left active or cancelling whose Attempt has ended, oldest first: Hobbots stopped
-     * between ending a step's session and ending the step, so nothing will end it on its own.
+     * Steps that started and have not ended, whose Attempt has ended, oldest first: Hobbots
+     * stopped while they ran, or between ending a step's session and ending the step, so nothing
+     * will end them on their own.
      */
     readonly listStrandedSteps: Effect.Effect<ReadonlyArray<Task>>;
     /** Every Attempt still starting or running, oldest first: after a restart, none of them runs. */

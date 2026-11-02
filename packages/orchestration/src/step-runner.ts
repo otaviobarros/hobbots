@@ -77,6 +77,9 @@ type Ending =
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
+/** How a step that ends without a result ends: cancelled when its cancel was asked for, failed otherwise. */
+const endOf = (step: Task) => (step.state === "cancelling" ? "cancelled" : "failed");
+
 /** Every Task `step` comes after has completed. */
 const ready = (step: Task, tree: TaskTree) =>
   step.dependsOn.every((id) => tree.tasks.find((each) => each.id === id)?.state === "completed");
@@ -267,8 +270,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           if (completed) return;
           const latest = yield* currentTask(stepId);
           if (Option.isNone(latest) || isTerminalTask(latest.value.state)) return;
-          const to = latest.value.state === "cancelling" ? "cancelled" : "failed";
-          yield* attempt(tasks.moveTask(stepId, latest.value.revision, to, at), "end a step");
+          yield* attempt(tasks.moveTask(stepId, latest.value.revision, endOf(latest.value), at), "end a step");
         });
 
       /**
@@ -324,8 +326,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           );
           const latest = yield* currentTask(stepId);
           if (Option.isNone(latest) || isTerminalTask(latest.value.state)) return;
-          const to = latest.value.state === "cancelling" ? "cancelled" : "failed";
-          yield* attempt(tasks.moveTask(stepId, latest.value.revision, to, at), "end a stopped step");
+          yield* attempt(tasks.moveTask(stepId, latest.value.revision, endOf(latest.value), at), "end a stopped step");
         });
 
       /**
@@ -355,17 +356,29 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
       /**
        * Ends the steps left open with no live Attempt (EX-004): one Hobbots stopped while it ran,
        * or just after its session ended, fails, since what it did is not known, and one being
-       * cancelled is cancelled. A step with work still open under it stays for that work.
+       * cancelled is cancelled. A step ends only once the steps under it have, so each pass ends
+       * the deepest, and the passes go on until one ends nothing.
        */
       const endStranded = Effect.gen(function* () {
-        for (const step of yield* tasks.listStrandedSteps) {
-          const at = yield* nowIso;
-          const to = step.state === "cancelling" ? "cancelled" : "failed";
-          const ended = yield* attempt(
-            tasks.moveTask(step.id, step.revision, to, at),
-            "end a step left from before a restart",
-          );
-          if (Option.isSome(ended)) yield* confirmCancelsAbove(step);
+        for (let ending = true; ending; ) {
+          ending = false;
+          for (const step of yield* tasks.listStrandedSteps) {
+            const tree = yield* tasks.readTree(step.rootId);
+            if (
+              Option.isSome(tree) &&
+              tree.value.tasks.some((each) => each.parentId === step.id && !isTerminalTask(each.state))
+            ) {
+              continue;
+            }
+            const at = yield* nowIso;
+            const ended = yield* attempt(
+              tasks.moveTask(step.id, step.revision, endOf(step), at),
+              "end a step left from before a restart",
+            );
+            if (Option.isNone(ended)) continue;
+            ending = true;
+            yield* confirmCancelsAbove(step);
+          }
         }
       });
 

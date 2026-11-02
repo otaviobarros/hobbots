@@ -134,7 +134,7 @@ const start = async (
 /** Writes records as a hub that stopped right after would have left them, with nothing running. */
 const leftBehind = <A, E>(
   database: Layer.Layer<Layer.Success<typeof TestDatabase>>,
-  write: Effect.Effect<A, E, HobbotsRepository | TaskRepository>,
+  write: Effect.Effect<A, E, HobbotsRepository | TaskRepository | Backpack>,
 ) =>
   Effect.runPromise(
     Effect.provide(
@@ -146,40 +146,54 @@ const leftBehind = <A, E>(
     ),
   );
 
-/** Frodo's Task and one step of it whose session has ended, in `ended`, while the step stayed open. */
-const stepWhoseSessionEnded = (ended: "completed" | "failed") =>
-  Effect.gen(function* () {
-    yield* frodoAndThread;
-    const tasks = yield* TaskRepository;
-    const task = (id: string, parentId: string | null) => ({
-      id: TaskId.make(id),
-      ownerId: FRODO,
-      parentId: parentId === null ? null : TaskId.make(parentId),
-      threadId,
-      brief: `Brief for ${id}`,
-      dependsOn: [],
-      createdAt: now,
-    });
-    yield* tasks.createTask({ task: task("quest", null), delegation: null, milestones: [] });
-    const step = yield* tasks.createTask({ task: task("pass", "quest"), delegation: null, milestones: [] });
-    const attempt = {
+/** Creates Frodo's Task `id` under `parentId`, a step when the parent is his too. */
+const createTask = (id: string, parentId: string | null) =>
+  TaskRepository.use((tasks) =>
+    tasks.createTask({
+      task: {
+        id: TaskId.make(id),
+        ownerId: FRODO,
+        parentId: parentId === null ? null : TaskId.make(parentId),
+        threadId,
+        brief: `Brief for ${id}`,
+        dependsOn: [],
+        createdAt: now,
+      },
+      delegation: null,
+      milestones: [],
+    }),
+  ).pipe(Effect.map((created) => created.value));
+
+/** Starts the Task's Attempt, as a step's session does. */
+const startSession = (task: { readonly id: TaskId; readonly revision: number }) =>
+  TaskRepository.use((tasks) =>
+    tasks.startAttempt(task.id, task.revision, {
+      id: AttemptId.make(`attempt-${task.id}`),
       runtime: "claude-code",
       sessionId: null,
       configVersion: 1,
       policyVersion: null,
       startedAt: now,
-    } as const;
-    const started = yield* tasks.startAttempt(step.value.id, step.value.revision, {
-      id: AttemptId.make("walk"),
-      ...attempt,
-    });
-    yield* tasks.updateAttempt(started.value.attempt.id, {
-      state: ended,
-      outcome: "The step's session finished.",
-      at: now,
-    });
-    return step.value.id;
+    }),
+  ).pipe(Effect.map((started) => started.value));
+
+/** Frodo's Task and one step of it whose session has ended, in `ended`, while the step stayed open. */
+const stepWhoseSessionEnded = (ended: "completed" | "failed") =>
+  Effect.gen(function* () {
+    yield* frodoAndThread;
+    yield* createTask("quest", null);
+    const { attempt, task } = yield* startSession(yield* createTask("pass", "quest"));
+    yield* TaskRepository.use((tasks) =>
+      tasks.updateAttempt(attempt.id, { state: ended, outcome: "The step's session finished.", at: now }),
+    );
+    return task.id;
   });
+
+/** The state of each of the thread's Tasks, by id. */
+const statesOf = Effect.map(
+  TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+  ([tree]) => new Map(tree?.tasks.map((task) => [task.id, task.state])),
+);
 
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 500 }));
@@ -237,7 +251,7 @@ const continuations = (all: ReadonlyArray<Message>) =>
 
 describe("recovering after a restart", () => {
   // covers EX-004, IN-004
-  it("[TC-OR-110] a step's result recorded just before Hobbots stopped reaches its lead once it starts again", async () => {
+  it("[TC-OR-110] a step's result that has not reached its lead when Hobbots stops reaches it once it starts again", async () => {
     const database = await sharedDatabase();
     const first = await start(database);
     await first.run(frodoAndThread);
@@ -304,13 +318,14 @@ describe("recovering after a restart", () => {
     // The step's own session never ends: Hobbots stops while it runs.
     const prompt = ["Carry the ring", hub("plan_steps", { key: "plan", steps: [{ brief: `Walk\n${HOLD}` }] })];
     await first.run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt.join("\n"))));
+    await first.run(messagesWhen((each) => each.length === 2));
+    // Wait for the step itself to run, not only the turn that planned it.
     await first.run(
       until(
-        TaskRepository.use((tasks) => tasks.listLiveAttempts),
-        (live) => live.length === 1,
+        TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+        ([tree]) => tree?.tasks.some((task) => task.brief.startsWith("Walk") && task.state === "active") ?? false,
       ),
     );
-    await first.run(messagesWhen((each) => each.length === 2));
 
     // The next start ends the step as failed, since what it did is not known, and its Failure
     // continues Frodo's thread.
@@ -360,5 +375,60 @@ describe("recovering after a restart", () => {
     const [tree] = await second.run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
     expect(tree?.tasks.find((task) => task.id === stepId)?.state).toBe("cancelled");
     expect(tree?.tasks.find((task) => task.id === TaskId.make("quest"))?.state).toBe("cancelled");
+  });
+
+  // covers EX-004, IN-004
+  it("[TC-OR-115] a step that completed just before Hobbots stopped keeps its result, and its lead hears of it", async () => {
+    const database = await sharedDatabase();
+    // The step completed from its final reply; its session had not ended yet.
+    const stepId = await leftBehind(
+      database,
+      Effect.gen(function* () {
+        yield* frodoAndThread;
+        yield* createTask("quest", null);
+        const { attempt, task } = yield* startSession(yield* createTask("pass", "quest"));
+        // It carried its own Task's item, which its completion consumes.
+        const carried = (yield* openItems)
+          .filter((item) => item.taskId === task.id)
+          .map((item) => ({ itemId: item.id, owner: null, token: item.fencingToken }));
+        const completion = { summary: "Reached the pass", attemptId: attempt.id, artifacts: [], at: now, carried };
+        yield* TaskRepository.use((tasks) => tasks.completeTask(task.id, task.revision, completion));
+        return task.id;
+      }),
+    );
+
+    const second = await start(database);
+    const all = await second.run(messagesWhen((each) => each.length === 1));
+    expect(second.requests.find((r) => r.prompt.startsWith(CONTINUATION))?.prompt).toContain("Reached the pass");
+    const [tree] = await second.run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    const step = tree?.tasks.find((task) => task.id === stepId);
+    expect(step?.state).toBe("completed");
+    expect(step?.result?.summary).toBe("Reached the pass");
+    expect(tree?.attempts.find((each) => each.taskId === stepId)?.state).toBe("interrupted");
+    expect(continuations(all)).toHaveLength(1);
+  });
+
+  // covers EX-004
+  it("[TC-OR-116] a step and the step under it, both cut off by a restart, both end at the next start", async () => {
+    const database = await sharedDatabase();
+    await leftBehind(
+      database,
+      Effect.gen(function* () {
+        yield* frodoAndThread;
+        yield* createTask("quest", null);
+        // The step planned a step of its own and waits for it; both sessions ran when Hobbots stopped.
+        yield* startSession(yield* createTask("survey", "quest"));
+        yield* startSession(yield* createTask("dig", "survey"));
+        const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+        const survey = tree?.tasks.find((task) => task.id === TaskId.make("survey"));
+        if (survey === undefined) throw new Error("no step");
+        yield* TaskRepository.use((tasks) => tasks.moveTask(survey.id, survey.revision, "waiting", now));
+      }),
+    );
+
+    const second = await start(database);
+    const states = await second.run(until(statesOf, (each) => each.get(TaskId.make("survey")) === "failed"));
+    expect(states.get(TaskId.make("dig"))).toBe("failed");
+    expect(await second.run(TaskRepository.use((tasks) => tasks.listStrandedSteps))).toEqual([]);
   });
 });
