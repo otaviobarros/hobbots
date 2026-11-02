@@ -129,7 +129,7 @@ Every write action is a Charm call with a key, recorded before anything is sent.
 **Reconciling an uncertain call.** The hub reads GitHub back to learn what happened:
 
 - Push: the remote branch is at the pushed commit, so it was applied.
-- Open a pull request: an open pull request from that head to that base, opened by the acting account after the call was recorded, means it was applied.
+- Open a pull request: a pull request in any state (open, closed or merged) from that head to that base, opened by the acting account after the call was recorded, means it was applied.
 - Comment: each comment ends with a hidden marker, `<!-- hobbots-call: <nonce> -->`. The nonce is random, made by the hub for that call, and never shown to the hob. The hub strips anything shaped like a marker from the body the hob gives, with a linear-time match (STD-SEC-005). A comment by the acting account with that marker on the item means it was applied.
 
 An applied call returns its result as success. Not finding the effect proves nothing: GitHub may still be working on a request after the hub stopped waiting for it. So a call whose effect is not found stays **uncertain**, never "not sent":
@@ -138,7 +138,6 @@ An applied call returns its result as success. Not finding the effect proves not
 - The hub refuses a new call of the same action on the same site (the same branch, or the same issue or pull request) while one is uncertain, so two writes never overlap.
 - The hub reads GitHub back again a few times over the next minutes. Finding the effect settles the call as applied.
 - Otherwise you settle it from the step: you look on GitHub and mark it applied or not sent. Only then may the hob call again, which is decided again.
-- Opening a pull request is the one exception to the refusal: GitHub refuses a second open pull request for the same head and base, so a new call cannot duplicate it.
 
 Calls left in flight when the hub stops are uncertain when it starts, and are read back the same way.
 
