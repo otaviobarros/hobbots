@@ -230,11 +230,15 @@ export const TASK_TOOLS: ReadonlyArray<{
 export const isTaskToolName = (name: string): name is TaskToolName => Object.hasOwn(TaskToolInputs, name);
 
 /** The JSON Schema a runtime advertises for a tool's input. */
-export const taskToolJsonSchema = (name: TaskToolName): Record<string, unknown> => {
-  const document = Schema.toJsonSchemaDocument(TaskToolInputs[name]);
+export const toolInputJsonSchema = (schema: Schema.Top): Record<string, unknown> => {
+  const document = Schema.toJsonSchemaDocument(schema);
   const definitions = Object.keys(document.definitions).length > 0 ? { $defs: document.definitions } : {};
   return { ...document.schema, ...definitions };
 };
+
+/** The JSON Schema a runtime advertises for a Task tool's input. */
+export const taskToolJsonSchema = (name: TaskToolName): Record<string, unknown> =>
+  toolInputJsonSchema(TaskToolInputs[name]);
 
 /** Why the hub refused a tool call, beyond the records' own invariants (`TaskRefusal`). */
 export const TaskToolRefusal = Schema.Literals([

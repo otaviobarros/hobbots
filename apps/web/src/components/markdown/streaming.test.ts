@@ -21,6 +21,14 @@ describe("holdBackPartialTable", () => {
   it("leaves text without a table alone", () => {
     expect(holdBackPartialTable("Hello\n\nworld")).toBe("Hello\n\nworld");
   });
+
+  it("reads a table line full of spaces in linear time", () => {
+    const started = performance.now();
+    const text = `| a | b |\n|-${" ".repeat(100_000)}x |\n`;
+    expect(holdBackPartialTable(text)).toBe("");
+    expect(holdBackPartialTable("| a | b |\n  |  --- | :-: |  \n")).toBe("| a | b |\n  |  --- | :-: |  \n");
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });
 
 describe("streamingMarkdown", () => {

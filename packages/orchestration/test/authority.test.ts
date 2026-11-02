@@ -10,6 +10,7 @@ const lead: Authority = {
     "local-git": "allow",
     push: "ask",
     "use-web": "allow",
+    "read-github": "allow",
     "outside-folders": "deny",
   },
   folders: ["/work/campaign", "/work/site"],

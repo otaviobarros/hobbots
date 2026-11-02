@@ -7,6 +7,7 @@ import {
   ruleEnforcement,
   type SafetyPreset,
   type SandboxState,
+  trimTrailingSlashes,
 } from "@hobbots/domain";
 
 /**
@@ -79,6 +80,8 @@ export interface RuleInfo {
   readonly operation: PolicyOperation;
   readonly label: string;
   readonly note: string;
+  /** The answers the hub can give this rule; absent, Allow, Ask and Never. */
+  readonly answers?: ReadonlyArray<PolicyDecision>;
 }
 
 /** Every operation the policy decides, in the order the Permissions tab lists them. */
@@ -91,11 +94,27 @@ export const RULES: ReadonlyArray<RuleInfo> = [
   { operation: "push", label: "Push your work", note: "Sending commits to a remote." },
   { operation: "use-web", label: "Use the web", note: "Fetching pages, package installs and downloads." },
   {
+    operation: "read-github",
+    label: "Read GitHub",
+    note: "Repository details, issues and pull requests of its folders, read on the hub.",
+    // A GitHub read cannot pause for an approval yet, so the hub offers no Ask (#317).
+    answers: ["allow", "deny"],
+  },
+  {
     operation: "outside-folders",
     label: "Anything outside its folders",
     note: "Any other file on the hub. Always Never.",
   },
 ];
+
+/**
+ * The answer the hub gives a rule, among those it offers: an Ask a rule cannot give, as an override
+ * saved through the API could hold, refuses every call, so it shows as Never.
+ */
+export const offeredAnswer = (operation: PolicyOperation, decision: PolicyDecision): PolicyDecision => {
+  const offered = RULES.find((rule) => rule.operation === operation)?.answers;
+  return offered === undefined || offered.includes(decision) ? decision : "deny";
+};
 
 /** The answers a hob may pick for a rule: the preset's own and every narrower one. */
 export const answersWithin = (preset: PolicyDecision): ReadonlyArray<PolicyDecision> =>
@@ -128,7 +147,7 @@ export const ruleColor = (answer: RuleAnswer) =>
 
 /** A folder's last part for its row; the root folder keeps its slash. */
 export const folderName = (folder: string): string => {
-  const trimmed = folder.replace(/\/+$/, "");
+  const trimmed = trimTrailingSlashes(folder);
   return trimmed === "" ? "/" : (trimmed.split("/").pop() ?? trimmed);
 };
 

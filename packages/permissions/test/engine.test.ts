@@ -26,6 +26,7 @@ const requests = (h: Home): Record<PolicyOperation, PolicyRequest> => ({
   "local-git": { _tag: "Command", operation: "local-git", cwd: path.join(h.project, "src") },
   push: { _tag: "Push", remote: "origin", branch: "feature", force: false, toDefaultBranch: false },
   "use-web": { _tag: "Web", host: "registry.npmjs.org", addresses: [] },
+  "read-github": { _tag: "GitHub", folder: h.project, repository: "otaviobarros/hobbots" },
   "outside-folders": files("read-files", h.project, "../secret.txt"),
 });
 
@@ -38,6 +39,7 @@ const ADR_014: Record<PolicyOperation, readonly [PolicyDecision, PolicyDecision,
   "local-git": ["ask", "allow", "allow"],
   push: ["ask", "ask", "allow"],
   "use-web": ["ask", "allow", "allow"],
+  "read-github": ["allow", "allow", "allow"],
   "outside-folders": ["deny", "deny", "deny"],
 };
 
@@ -570,6 +572,40 @@ describe("policy engine", () => {
     expect((await decide(context, files("delete-files", home.project, "src"))).decision).toBe("allow");
     expect((await decide(context, files("delete-files", home.repo, "docs"))).decision).toBe("allow");
     expect((await decide(context, files("read-files", home.project, "."))).decision).toBe("allow");
+  });
+});
+
+describe("GitHub reads", () => {
+  const read = (folder: string): PolicyRequest => ({ _tag: "GitHub", folder, repository: "otaviobarros/hobbots" });
+
+  it("[TC-PE-130] reads a repository only from the hob's own folders, and never under Ask or Never", async () => {
+    const allowed = await decide(contextFor(home, "careful"), read(home.project));
+    expect(allowed).toMatchObject({
+      decision: "allow",
+      operation: "read-github",
+      targets: ["otaviobarros/hobbots"],
+      enforcement: "enforced",
+      grantable: false,
+    });
+    for (const folder of [home.root, path.join(home.project, "private-link"), "relative/folder"]) {
+      expect(await decide(contextFor(home, "trusting"), read(folder))).toMatchObject({
+        decision: "deny",
+        operation: "outside-folders",
+      });
+    }
+    // The sandbox does not hold this rule, so a hob without one still reads through the hub.
+    const unsandboxed = contextFor(home, "balanced", { sandbox: "unavailable" });
+    expect((await decide(unsandboxed, read(home.project))).decision).toBe("allow");
+    for (const answer of ["ask", "deny"] as const) {
+      const narrowed = contextFor(home, "trusting", {
+        hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { "read-github": answer } },
+      });
+      expect(await decide(narrowed, read(home.project))).toMatchObject({
+        decision: answer,
+        reason: { code: "override" },
+        grantable: false,
+      });
+    }
   });
 });
 

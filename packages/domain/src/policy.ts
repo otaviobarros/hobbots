@@ -16,6 +16,7 @@ export const PolicyOperation = Schema.Literals([
   "local-git",
   "push",
   "use-web",
+  "read-github",
   "outside-folders",
 ]);
 export type PolicyOperation = typeof PolicyOperation.Type;
@@ -46,6 +47,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "local-git": "ask",
     push: "ask",
     "use-web": "ask",
+    "read-github": "allow",
     "outside-folders": "deny",
   },
   balanced: {
@@ -56,6 +58,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "local-git": "allow",
     push: "ask",
     "use-web": "allow",
+    "read-github": "allow",
     "outside-folders": "deny",
   },
   trusting: {
@@ -66,6 +69,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "local-git": "allow",
     push: "allow",
     "use-web": "allow",
+    "read-github": "allow",
     "outside-folders": "deny",
   },
 };
@@ -114,6 +118,7 @@ export const PolicyOverrides = Schema.Struct({
   "local-git": Schema.optionalKey(PolicyDecision),
   push: Schema.optionalKey(PolicyDecision),
   "use-web": Schema.optionalKey(PolicyDecision),
+  "read-github": Schema.optionalKey(PolicyDecision),
   "outside-folders": Schema.optionalKey(PolicyDecision),
 });
 export type PolicyOverrides = typeof PolicyOverrides.Type;

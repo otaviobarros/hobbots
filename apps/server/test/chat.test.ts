@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ChatService, HobAdmission, HobbotsRepository, HobTools, type ToolAccess } from "@hobbots/agents";
+import { CharmTools, ChatService, HobAdmission, HobbotsRepository, HobTools, type ToolAccess } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
@@ -312,6 +312,53 @@ describe("tool calls in a reply", () => {
     ]);
     expect(journaled).toContainEqual(["thinking-1:done", "fake-tool-1:running"]);
     expect(journaled.at(-1)).toEqual(["thinking-1:done", "fake-tool-1:done", "fake-tool-2:done", "fake-tool-3:denied"]);
+  });
+
+  // covers PE-002, PE-008
+  it("[TC-PE-134] offers the hub's Charm tools beside the Task tools, with the hob's access read at each call", async () => {
+    const seen: Array<ReadonlyArray<string> | null> = [];
+    const charms = Layer.succeed(
+      CharmTools,
+      CharmTools.of({
+        forTurn: (turn) => ({
+          tools: [
+            {
+              name: "github_search",
+              description: "Search",
+              inputSchema: { type: "object" },
+              label: "Searching GitHub",
+            },
+          ],
+          call: (name, input) =>
+            turn.currentAccess.pipe(
+              Effect.map((access) => {
+                seen.push(access?.folders ?? null);
+                return { text: `${name} read ${JSON.stringify(input)}`, refused: false };
+              }),
+            ),
+        }),
+      }),
+    );
+    const reply = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const repo = yield* HobbotsRepository;
+      const thread = yield* chat.createThread(HOB_ID);
+      yield* chat.sendPrompt(thread.id, 'How many issues?\nfake:hub github_search {"kind":"issue"}');
+      return yield* repo.listMessages(thread.id).pipe(
+        Effect.flatMap((messages) => {
+          const last = messages.at(-1);
+          return last?.role === "assistant" && !isInProgress(last.status) ? Effect.succeed(last) : Effect.fail("busy");
+        }),
+        Effect.retry(Schedule.spaced("5 millis")),
+      );
+    }).pipe(
+      Effect.provide(testLayer(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)), Layer.merge(tools, charms))),
+      Effect.scoped,
+      Effect.runPromise,
+    );
+    expect(reply.content).toContain('github_search: github_search read {"kind":"issue"}');
+    expect(reply.steps.map((step) => step.label)).toContain("Searching GitHub");
+    expect(seen).toEqual([[folder]]);
   });
 
   // covers PE-008

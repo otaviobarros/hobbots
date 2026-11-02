@@ -12,6 +12,7 @@
     "@effect/platform-node": "catalog:",
     "@hobbots/agents": "workspace:*",
     "@hobbots/api": "workspace:*",
+    "@hobbots/charms": "workspace:*",
     "@hobbots/domain": "workspace:*",
     "@hobbots/inbox": "workspace:*",
     "@hobbots/orchestration": "workspace:*",

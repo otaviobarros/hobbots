@@ -3,7 +3,7 @@ import type { Agent, PolicyOperation } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { type ToolHolding, toolHolding } from "../api/enforcement.ts";
-import { ANSWER, ruleColor } from "../api/safety.ts";
+import { ANSWER, offeredAnswer, ruleColor } from "../api/safety.ts";
 import { EnforcementList, NeedsSandbox } from "./enforcement.tsx";
 import { Loading, useHobPermissions } from "./hob-permissions.tsx";
 import { messages } from "./messages.ts";
@@ -69,24 +69,7 @@ export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: (
       </ul>
 
       <h2 className="lbl m-0 pt-2 text-xs text-label">Charms</h2>
-      <div className="cut flex items-center gap-3.5 border-2 border-dashed border-line-2 px-4 py-3.5">
-        <span
-          aria-hidden
-          className="grid size-10 flex-none place-items-center bg-line font-pixel text-lg font-bold text-moonlight"
-        >
-          GH
-        </span>
-        <div className="flex flex-1 flex-col gap-0.5">
-          <span className="flex items-center gap-2 font-bold">
-            GitHub
-            <span className="bg-lantern px-1.5 text-xs font-normal text-ground">Later</span>
-          </span>
-          <span className="text-[13px] text-secondary-text">
-            Pushes {hob.name}'s commits. You connect GitHub once on the hub, then pick which hobs may push. Push is{" "}
-            {ANSWER[data.decisions.push]} for {hob.name}.
-          </span>
-        </div>
-      </div>
+      <GitHubCharm hob={hob} permissions={data} />
       <span className="text-[13px] text-label">
         Charms connect a hob to apps such as GitHub or Slack, and each action has its own Allow, Ask or Never.
       </span>
@@ -98,6 +81,42 @@ export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: (
           Change what {hob.name} may do
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The GitHub Charm (#317): it reads the repository of the hob's folders on the hub, with the user's
+ * GitHub sign-in there, so it needs no sandbox and no credential reaches the hob. Pushing comes later.
+ */
+function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermissions }) {
+  const copy = messages.charms.github;
+  const read = ANSWER[offeredAnswer("read-github", permissions.decisions["read-github"])];
+  return (
+    <div className="cut flex items-center gap-3.5 border-2 border-line bg-card px-4 py-3.5">
+      <span
+        aria-hidden
+        className="grid size-10 flex-none place-items-center bg-line font-pixel text-lg font-bold text-moonlight"
+      >
+        GH
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="font-bold">{copy.name}</span>
+        <span className="text-[13px] text-secondary-text">{copy.reads({ name: hob.name })}</span>
+        <span className="text-[13px] text-label">
+          {copy.pushLater({ name: hob.name, push: ANSWER[permissions.decisions.push] })}
+        </span>
+      </div>
+      <span className="flex flex-none flex-wrap justify-end gap-1.5">
+        <span className="flex items-center gap-1 text-[13px]">
+          <span className="text-secondary-text">{copy.read}</span>
+          <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(read))}>{read}</span>
+        </span>
+        <span className="flex items-center gap-1 text-[13px]">
+          <span className="text-secondary-text">{copy.push}</span>
+          <span className="bg-lantern px-1.5 text-xs text-ground">{copy.later}</span>
+        </span>
+      </span>
     </div>
   );
 }

@@ -10,6 +10,9 @@ import {
   uniqueRules,
 } from "@hobbots/permissions";
 
+/** A request a runtime tool call becomes: every kind but a Charm's, which the hub makes itself. */
+type ToolRequest = Exclude<PolicyRequest, { readonly _tag: "GitHub" }>;
+
 /**
  * Claude Code's tool calls in the policy engine's terms (ADR 014). Only what the call itself says is
  * used, never the model's account of it. A tool this module does not know is refused, so a new
@@ -338,13 +341,13 @@ const refspecBranch = (refspec: string) => {
  * remotes and branches are assumed the riskiest. `exact` is false when the words do not say
  * everything the push does, so no grant answers it (ADR 015).
  */
-const pushRequests = (args: ReadonlyArray<string>, cwd: string, literal: boolean): ReadonlyArray<PolicyRequest> => {
+const pushRequests = (args: ReadonlyArray<string>, cwd: string, literal: boolean): ReadonlyArray<ToolRequest> => {
   const options = args.filter((a) => a.startsWith("-"));
   const positional = args.filter((a) => !a.startsWith("-"));
   const force = options.some(isForce);
   const remote = positional[0] ?? "origin";
   const exact = literal && options.every((a) => PLAIN_PUSH_OPTIONS.has(a));
-  const push = (branch: string, forced: boolean, toDefaultBranch: boolean, exactPush: boolean): PolicyRequest => ({
+  const push = (branch: string, forced: boolean, toDefaultBranch: boolean, exactPush: boolean): ToolRequest => ({
     _tag: "Push",
     remote,
     branch,
@@ -427,7 +430,7 @@ const programRequests = (
   folder: string,
   home: string,
   literal: ReadonlyArray<string> | null,
-): ReadonlyArray<PolicyRequest> => {
+): ReadonlyArray<ToolRequest> => {
   const [name, ...args] = words;
   if (name === undefined) return [];
   const program = basename(name);
@@ -440,7 +443,7 @@ const programRequests = (
       ? pushRequests(args.slice(git.sub + 1), git.folders[0] as string, literal !== null && git.sub === 0)
       : git.folders.map((cwd) => ({ _tag: "Command", operation: "local-git", cwd, words: literal }));
   }
-  const run: PolicyRequest = {
+  const run: ToolRequest = {
     _tag: "Command",
     operation: "run-commands",
     cwd: program === "make" ? makeFolder(args, folder, tilde) : folder,
@@ -572,13 +575,9 @@ const separatorOf = (token: CommandToken | undefined): Separator | undefined =>
  * `cd` and `pushd` move later commands, and `git -C`, `make -C` and `env -C` move their own.
  * Relative paths start from `cwd`, the folder the runtime reports for the call, and `~` from `home`.
  */
-export const commandRequests = (
-  command: string,
-  cwd: string,
-  home: string = homedir(),
-): ReadonlyArray<PolicyRequest> => {
-  const requests: Array<PolicyRequest> = [];
-  const add = (request: PolicyRequest) => {
+export const commandRequests = (command: string, cwd: string, home: string = homedir()): ReadonlyArray<ToolRequest> => {
+  const requests: Array<ToolRequest> = [];
+  const add = (request: ToolRequest) => {
     const key = JSON.stringify(request);
     if (!requests.some((r) => JSON.stringify(r) === key)) requests.push(request);
   };
@@ -613,8 +612,8 @@ export const toolRequests = (
   tool: string,
   input: Record<string, unknown>,
   cwd: string,
-): ReadonlyArray<PolicyRequest> | null => {
-  const files = (operation: "read-files" | "edit-files", path: string | undefined): ReadonlyArray<PolicyRequest> => [
+): ReadonlyArray<ToolRequest> | null => {
+  const files = (operation: "read-files" | "edit-files", path: string | undefined): ReadonlyArray<ToolRequest> => [
     { _tag: "Files", operation, paths: path === undefined ? [] : [path], cwd },
   ];
   switch (tool) {

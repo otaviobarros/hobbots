@@ -253,6 +253,9 @@ importers:
       '@hobbots/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@hobbots/charms':
+        specifier: workspace:*
+        version: link:../../packages/charms
       '@hobbots/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -433,6 +436,31 @@ importers:
         specifier: workspace:*
         version: link:../domain
     devDependencies:
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/charms:
+    dependencies:
+      '@hobbots/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@hobbots/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@hobbots/permissions':
+        specifier: workspace:*
+        version: link:../permissions
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.0
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.3.0(@opentelemetry/api@1.10.0))
+      '@types/node':
+        specifier: 26.6.5
+        version: 26.6.5
       vitest:
         specifier: 5.0.5
         version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))

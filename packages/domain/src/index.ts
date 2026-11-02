@@ -3,6 +3,7 @@ export * from "./approval.ts";
 export * from "./backpack.ts";
 export * from "./brain.ts";
 export * from "./events.ts";
+export * from "./github.ts";
 export * from "./grant.ts";
 export * from "./grant-rule.ts";
 export * from "./ids.ts";

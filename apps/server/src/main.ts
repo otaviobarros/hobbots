@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { createServer } from "node:http";
 import { join, sep } from "node:path";
-import { NodeHttpServer, NodeRuntime } from "@effect/platform-node";
+import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
   ApprovalService,
   ChatService,
@@ -12,6 +12,7 @@ import {
   PermissionSummary,
   SecretRedaction,
 } from "@hobbots/agents";
+import { GitHubApiNode, GitHubCharmTools, GitHubToken, GitRemotes } from "@hobbots/charms";
 import { secretsFromEnv } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -89,6 +90,12 @@ const ServerLive = Layer.unwrap(
             executable: Option.getOrUndefined(config.claudeExecutable),
           }).pipe(Layer.provide(ProcessSandbox.layer))
     ).pipe(Layer.provide(PolicyEngine.node));
+    // The GitHub Charm reads with the user's sign-in on the hub, outside the sandbox (#317).
+    const Charms = GitHubCharmTools.pipe(
+      Layer.provide(Layer.mergeAll(GitHubApiNode, GitRemotes.layer, PolicyEngine.node)),
+      Layer.provide(GitHubToken.layer(process.env)),
+      Layer.provide(NodeServices.layer),
+    );
     const App = HobLifecycle.layer
       .pipe(
         Layer.provideMerge(
@@ -131,6 +138,7 @@ const ServerLive = Layer.unwrap(
             HobAdmission.layer,
             NodeFolderChecks,
             Runtime,
+            Charms,
             identity,
             // The hub's credentials, provider keys included, are redacted by value from what tools report.
             SecretRedaction.layer(secretsFromEnv(process.env)),
