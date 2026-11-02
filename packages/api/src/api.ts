@@ -25,7 +25,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchem
 import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
 import { BackpackGroup, BlockersGroup } from "./backpack.ts";
 import { CharmCallsGroup } from "./charm-calls.ts";
-import { DevicesGroup, PairingGroup, PairingRequestsGroup } from "./devices.ts";
+import { DevicesGroup, PairingGroup, PairingRequestsGroup, PairingThrottled } from "./devices.ts";
 import {
   AgentNotFound,
   HobUnavailable,
@@ -140,6 +140,8 @@ export type SetBrainPayload = typeof SetBrainPayload.Type;
  */
 export const ServerIdentity = Schema.Struct({
   app: Schema.Literal("hobbots"),
+  /** The hub's name, the computer's own, for "Waiting for approval on <hub name>" (ADR 021). */
+  name: Schema.optionalKey(Schema.String),
   installationId: Schema.NonEmptyString,
   version: Schema.String,
   dataDir: Schema.String,
@@ -153,6 +155,7 @@ export type ServerIdentity = typeof ServerIdentity.Type;
  */
 export const PublicServerIdentity = Schema.Struct({
   app: Schema.Literal("hobbots"),
+  name: Schema.optionalKey(Schema.String),
   version: Schema.String,
 });
 export type PublicServerIdentity = typeof PublicServerIdentity.Type;
@@ -284,7 +287,13 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
  * before it has a token (ADR 012, ADR 021).
  */
 export class HealthGroup extends HttpApiGroup.make("health")
-  .add(HttpApiEndpoint.get("health", "/health", { success: Schema.Union([ServerIdentity, PublicServerIdentity]) }))
+  .add(
+    // A tailnet node without a device that asks too often is throttled, as pairing is (ADR 021).
+    HttpApiEndpoint.get("health", "/health", {
+      success: Schema.Union([ServerIdentity, PublicServerIdentity]),
+      error: PairingThrottled,
+    }),
+  )
   .prefix("/api") {}
 
 export class SystemGroup extends HttpApiGroup.make("system")

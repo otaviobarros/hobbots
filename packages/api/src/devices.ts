@@ -31,12 +31,33 @@ export const OpenedPairing = Schema.Struct({
   secret: Schema.optionalKey(Schema.String),
 });
 
-/** The name left nothing to show once cleaned, or the hub already holds as many open requests as it keeps. */
+/**
+ * Why the hub opened no request: the name left nothing to show once cleaned, the hub already holds
+ * as many open requests as it keeps, or the device is not one of the hub owner's own on Tailscale
+ * (ADR 021).
+ */
 export class PairingRefused extends Schema.TaggedError<PairingRefused>()(
   "PairingRefused",
-  { reason: Schema.Literals(["name", "full"]) },
+  { reason: Schema.Literals(["name", "full", "notYours"]) },
   { httpApiStatus: 422 },
 ) {}
+
+/**
+ * Over one of the pairing limits (ADR 021): nothing was created, and no prompt shows. The answer
+ * also carries `Retry-After`.
+ */
+export class PairingThrottled extends Schema.TaggedError<PairingThrottled>()(
+  "PairingThrottled",
+  { retryAfterSeconds: Schema.Int },
+  { httpApiStatus: 429 },
+) {}
+
+/**
+ * A device waiting for the user's answer, as the hub's prompt, Needs you and Settings › Devices
+ * show it. `fromHub` when it asked from the hub itself: locally, or from the hub's own Tailscale node.
+ */
+export const WaitingDevice = Schema.Struct({ request: PairingRequest, fromHub: Schema.Boolean });
+export type WaitingDevice = typeof WaitingDevice.Type;
 
 /** No pairing request answers to the secret the device presented, or none was presented. */
 export class PairingNotFound extends Schema.TaggedError<PairingNotFound>()(
@@ -61,12 +82,12 @@ export class PairingGroup extends HttpApiGroup.make("pairing")
     HttpApiEndpoint.post("open", "/pairing", {
       payload: OpenPairingPayload,
       success: OpenedPairing,
-      error: [PairingRefused, ForeignOrigin],
+      error: [PairingRefused, PairingThrottled, ForeignOrigin],
     }),
     // The device asks every 2 seconds; the secret comes as the pairing cookie or a bearer token.
     HttpApiEndpoint.get("status", "/pairing", {
       success: PairingStatus,
-      error: [PairingNotFound, ForeignOrigin],
+      error: [PairingNotFound, PairingThrottled, ForeignOrigin],
     }),
   )
   .prefix("/api") {}
@@ -74,14 +95,20 @@ export class PairingGroup extends HttpApiGroup.make("pairing")
 /** Deciding who may pair, which needs an approved device (PE-006). */
 export class PairingRequestsGroup extends HttpApiGroup.make("pairingRequests")
   .add(
-    // The requests still waiting, oldest first.
-    HttpApiEndpoint.get("list", "/pairing/requests", { success: Schema.Array(PairingRequest) }),
+    // The requests still waiting, deferred ones included, oldest first.
+    HttpApiEndpoint.get("list", "/pairing/requests", { success: Schema.Array(WaitingDevice) }),
     HttpApiEndpoint.post("allow", "/pairing/requests/:requestId/allow", {
       params: { requestId: Schema.String },
       success: PairingRequest,
       error: [PairingNotFound, PairingClosed],
     }),
     HttpApiEndpoint.post("deny", "/pairing/requests/:requestId/deny", {
+      params: { requestId: Schema.String },
+      success: PairingRequest,
+      error: [PairingNotFound, PairingClosed],
+    }),
+    // Decide later: the request leaves the prompt and waits in Settings › Devices for 24 hours from when it was opened.
+    HttpApiEndpoint.post("later", "/pairing/requests/:requestId/later", {
       params: { requestId: Schema.String },
       success: PairingRequest,
       error: [PairingNotFound, PairingClosed],

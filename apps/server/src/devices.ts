@@ -1,5 +1,13 @@
 import { chmodSync, renameSync, writeFileSync } from "node:fs";
-import { type DevicePlace, DeviceSecrets, DeviceService, LOCAL, WindowKey } from "@hobbots/agents";
+import {
+  type DevicePlace,
+  DeviceSecrets,
+  DeviceService,
+  LOCAL,
+  PairingLimiter,
+  throttled,
+  WindowKey,
+} from "@hobbots/agents";
 import {
   DeviceBearer,
   DeviceCookie,
@@ -14,6 +22,7 @@ import { Digest, SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import type { HttpServerRequest } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
+import { RateLimiter } from "effect/persistence";
 import { windowKeyFile } from "./window-key.ts";
 
 /** Who owns a tailnet node: a Tailscale user, or the tags a tagged node carries instead. */
@@ -37,11 +46,15 @@ export interface TailnetPeer {
  */
 export class TailnetPeers extends Context.Service<
   TailnetPeers,
-  { readonly peerOf: (request: HttpServerRequest.HttpServerRequest) => Effect.Effect<Option.Option<TailnetPeer>> }
+  {
+    readonly peerOf: (request: HttpServerRequest.HttpServerRequest) => Effect.Effect<Option.Option<TailnetPeer>>;
+    /** The hub's own Tailscale node, as Tailscale last reported it while remote access is on. */
+    readonly hub: Effect.Effect<Option.Option<TailnetPeer>>;
+  }
 >()("@hobbots/server/TailnetPeers") {}
 
 /** No request comes from the tailnet, as on a hub with only loopback listeners. */
-export const LocalPeers = Layer.succeed(TailnetPeers, { peerOf: () => Effect.succeedNone });
+export const LocalPeers = Layer.succeed(TailnetPeers, { peerOf: () => Effect.succeedNone, hub: Effect.succeedNone });
 
 /**
  * Whether a request with no peer address at all counts as local. Only tests that call the routes
@@ -78,6 +91,23 @@ const placeOf = (
     onNone: () => Effect.succeed(local),
   });
 };
+
+/** The pairing limits, counted in memory with Effect's rate limiter (ADR 021). */
+export const PairingLimiterLive = Layer.effect(
+  PairingLimiter,
+  Effect.gen(function* () {
+    const limiter = yield* RateLimiter.RateLimiter;
+    return PairingLimiter.of({
+      consume: (key, limit, window) =>
+        limiter.consume({ key, limit, window }).pipe(
+          Effect.asVoid,
+          Effect.catchTag("RateLimiterError", (error) =>
+            Effect.fail(throttled(error.reason._tag === "RateLimitExceeded" ? error.reason.retryAfter : window)),
+          ),
+        ),
+    });
+  }),
+).pipe(Layer.provide(RateLimiter.layer.pipe(Layer.provide(RateLimiter.layerStoreMemory))));
 
 const SECRET_BYTES = 32;
 
@@ -221,6 +251,8 @@ export class DeviceGate extends Context.Service<
     >;
     /** Where a request reached the hub; none when it came from an address the hub does not serve. */
     readonly placeOf: (request: HttpServerRequest.HttpServerRequest) => Effect.Effect<Option.Option<DevicePlace>>;
+    /** The hub's own Tailscale node, when it is on the tailnet. */
+    readonly hub: Effect.Effect<Option.Option<TailnetPeer>>;
   }
 >()("@hobbots/server/DeviceGate") {
   static readonly layer = Layer.effect(
@@ -280,7 +312,11 @@ export class DeviceGate extends Context.Service<
           return device;
         });
 
-      return DeviceGate.of({ admit, placeOf: (request) => placeOf(peers, inProcess, request) });
+      return DeviceGate.of({
+        admit,
+        placeOf: (request) => placeOf(peers, inProcess, request),
+        hub: Option.match(peers, { onNone: () => Effect.succeedNone, onSome: (tailnet) => tailnet.hub }),
+      });
     }),
   );
 }

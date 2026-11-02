@@ -4,10 +4,11 @@
  * no window open, and every read is compared with what is shown: a request decided anywhere,
  * missed events included, closes.
  */
-import { exactAction } from "@hobbots/domain";
+import { exactAction, pairingDeferred } from "@hobbots/domain";
 import { messages } from "./messages.ts";
 
 const copy = messages.requestNotice;
+const deviceCopy = messages.deviceNotice;
 
 /** A request waiting for the user, as the notification needs it. */
 export interface PendingRequest {
@@ -51,12 +52,12 @@ export interface NoticeState {
  * what already waits, so opening the app announces nothing, and a request that arrives while the
  * window is focused is never announced later.
  */
-export const noticeChanges = (
+export const noticeChanges = <P extends { readonly id: string }>(
   state: NoticeState,
-  pending: ReadonlyArray<PendingRequest>,
+  pending: ReadonlyArray<P>,
   focused: boolean,
 ): {
-  readonly show: ReadonlyArray<PendingRequest>;
+  readonly show: ReadonlyArray<P>;
   readonly close: ReadonlyArray<string>;
   readonly known: ReadonlySet<string>;
 } => {
@@ -89,4 +90,45 @@ export const noticeText = (
     body += char;
   }
   return { title, body: `${body}…` };
+};
+
+/** A device asking to pair, as its notification needs it (ADR 021). */
+export interface PendingDevice {
+  readonly id: string;
+  readonly name: string;
+  readonly code: string;
+  /** When the request runs out, so its notification closes then. */
+  readonly expiresAt: string;
+}
+
+/**
+ * The devices still waiting for an answer in the hub's pairing list, or null when it is not one. A
+ * request put off with Decide later waits in Settings and is never announced.
+ */
+export const devicePairings = (body: unknown): ReadonlyArray<PendingDevice> | null => {
+  if (!Array.isArray(body)) return null;
+  return body.flatMap((item: unknown) => {
+    const request = (item as { request?: Record<string, unknown> } | null)?.request;
+    if (typeof request !== "object" || request === null || request.state !== "pending") return [];
+    const { id, name, code, createdAt, expiresAt } = request;
+    if (typeof id !== "string" || typeof name !== "string" || typeof code !== "string") return [];
+    if (typeof createdAt !== "string" || typeof expiresAt !== "string") return [];
+    if (pairingDeferred({ createdAt, expiresAt })) return [];
+    return [{ id, name, code, expiresAt }];
+  });
+};
+
+/** The notification for a device asking: its name, and the code to match, cut to fit. */
+export const deviceNoticeText = (device: PendingDevice): { readonly title: string; readonly body: string } => {
+  const code = device.code.length === 6 ? `${device.code.slice(0, 3)} ${device.code.slice(3)}` : device.code;
+  const body = deviceCopy.body({ code });
+  const room = NOTICE_BYTES - bytes(body);
+  let name = "";
+  for (const char of device.name) {
+    if (bytes(deviceCopy.title({ name: `${name}${char}…` })) > room) {
+      return { title: deviceCopy.title({ name: `${name}…` }), body };
+    }
+    name += char;
+  }
+  return { title: deviceCopy.title({ name }), body };
 };

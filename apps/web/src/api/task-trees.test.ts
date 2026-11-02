@@ -139,6 +139,71 @@ describe("applyToTree", () => {
   });
 });
 
+describe("applyToTree with your controls", () => {
+  it("moves a reassigned Task's party member to its new hob, and ignores an older copy", () => {
+    const base = blackFriday();
+    const given = delegation(QUILL, BUILD, "Build the campaign");
+    const reassigned: TaskEvent = {
+      _tag: "TaskStateChanged",
+      task: task(BUILD, { ownerId: QUILL, state: "queued", revision: 5 }),
+      attempt: null,
+      quest: null,
+      wait: null,
+      control: { _tag: "Reassigned", from: ADA, delegation: given },
+    };
+    const next = applyToTree(base, reassigned);
+    expect(next.tasks.find((each) => each.id === BUILD)?.ownerId).toBe(QUILL);
+    expect(next.delegations.map((each) => [each.childTaskId, each.memberId])).toEqual([
+      [COPY, QUILL],
+      [BUILD, QUILL],
+    ]);
+    const older: TaskEvent = {
+      ...reassigned,
+      task: task(BUILD, { ownerId: ADA, revision: 4 }),
+      control: { _tag: "Reassigned", from: QUILL, delegation: delegation(ADA, BUILD, "Build the campaign") },
+    };
+    expect(applyToTree(next, older)).toEqual(next);
+  });
+});
+
+describe("applyToTree with a control's answer", () => {
+  it("keeps the party current when the hub's answer arrives before the reassignment's own event", () => {
+    const base = blackFriday();
+    const moved = delegation(QUILL, BUILD, "Build the campaign");
+    // Quill started on it before the answer was read: the answer holds a newer copy than the event.
+    const started = task(BUILD, { ownerId: QUILL, state: "active", revision: 6 });
+    const answer = tree({ ...base, tasks: [base.tasks[0] ?? task(CAMPAIGN), started], delegations: [moved] });
+    const reassigned: TaskEvent = {
+      _tag: "TaskStateChanged",
+      task: task(BUILD, { ownerId: QUILL, state: "queued", revision: 5 }),
+      attempt: null,
+      quest: null,
+      wait: null,
+      control: { _tag: "Reassigned", from: ADA, delegation: moved },
+    };
+    const answered = applyToTree(base, { _tag: "ControlRecorded", tree: answer });
+    const party = (each: typeof base) => each.delegations.map((d) => [d.childTaskId, d.memberId]);
+    expect(answered.tasks.find((each) => each.id === BUILD)?.state).toBe("active");
+    expect(party(answered)).toEqual([
+      [COPY, QUILL],
+      [BUILD, QUILL],
+    ]);
+    expect(applyToTree(answered, reassigned)).toEqual(answered);
+  });
+
+  it("leaves a newer copy alone, and a tree the answer is not about", () => {
+    const base = blackFriday();
+    const old = tree({
+      ...base,
+      tasks: [task(BUILD, { ownerId: QUILL, revision: 0 })],
+      delegations: [delegation(QUILL, BUILD, "Build the campaign")],
+    });
+    expect(applyToTree(base, { _tag: "ControlRecorded", tree: old })).toEqual(base);
+    const other = tree({ tasks: [task(TaskId.make("elsewhere"), { parentId: null })] });
+    expect(applyToTree(other, { _tag: "ControlRecorded", tree: base })).toBe(other);
+  });
+});
+
 describe("applyToTree with notes", () => {
   it("adds your note on a Task in the tree once, and leaves another tree's alone", () => {
     const start = blackFriday();

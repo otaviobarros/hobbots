@@ -11,8 +11,11 @@ export const stopQuestHub = async () => {
   removeDataDir(dataDir);
 };
 
-/** A hub past setup that plays the scripted Black Friday Quest, with Aldric, Quill and Ada. */
-export const questHub = async () => {
+/**
+ * A hub past setup that plays the scripted Black Friday Quest, with Aldric, Quill and Ada. With
+ * `nested`, Rook and Pip join too, and Rook leads a Quest of his own under Aldric's.
+ */
+export const questHub = async ({ nested = false }: { readonly nested?: boolean } = {}) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir, { HOBBOTS_FAKE_QUEST: "black-friday" });
   const { url, headers } = hub;
@@ -27,7 +30,8 @@ export const questHub = async () => {
   };
   await api("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
   const ids: Record<string, string> = {};
-  for (const [index, name] of ["Aldric", "Quill", "Ada"].entries()) {
+  const names = nested ? ["Aldric", "Quill", "Ada", "Rook", "Pip"] : ["Aldric", "Quill", "Ada"];
+  for (const [index, name] of names.entries()) {
     const hob = await api("POST", "/agents", {
       id: randomUUID(),
       name,
@@ -37,7 +41,7 @@ export const questHub = async () => {
       hat: null,
       tool: null,
       lookSeed: 4000 + index * 911,
-      lookColor: (["amber", "sky", "moss"] as const)[index],
+      lookColor: (["amber", "sky", "moss", "amber", "sky"] as const)[index],
       runtime: "claude-code",
       model: null,
       effort: null,

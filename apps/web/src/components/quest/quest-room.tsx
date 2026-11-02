@@ -6,21 +6,14 @@ import { formatWhen } from "../../lib/time.ts";
 import { RoomBackpack } from "../backpack/quest-backpack.tsx";
 import { HobSprite } from "../hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
-import { type RoomRow, type RoomStatus, roomRows, topCancel } from "./control-room.ts";
+import { type RoomRow, roomRows, roomStatusLabel, roomTone, topCancel } from "./control-room.ts";
 import { messages } from "./messages.ts";
 import { RoomControls } from "./room-controls.tsx";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import type { HobLookup } from "./use-work.ts";
-import { type RowStatus, taskTitle, workCard } from "./work-model.ts";
+import { taskTitle, workCard } from "./work-model.ts";
 
 const copy = messages.room;
-
-/** A cancel shows in the waiting tone: nothing runs, and nothing is done either. */
-const toneOf = (status: RoomStatus): RowStatus =>
-  status === "cancelling" || status === "cancelled" ? "waiting" : status;
-
-const statusLabel = (status: RoomStatus): string =>
-  status === "cancelling" || status === "cancelled" ? copy.status[status] : messages.status[status];
 
 /** Indents a row by its depth in the tree; deeper Tasks keep the last indent. */
 const INDENT = ["ps-2", "ps-6", "ps-10", "ps-14", "ps-18"] as const;
@@ -106,13 +99,7 @@ export function QuestRoom({
         ))}
       </ul>
       <RoomBackpack tree={tree} hobs={hobs} onOpen={open} />
-      <RoomControls
-        tree={tree}
-        task={chosen?.task ?? null}
-        hobs={hobs}
-        cancel={topCancel(tree)}
-        hasQuest={card.quest !== null}
-      />
+      <RoomControls tree={tree} task={chosen?.task ?? null} hobs={hobs} cancel={topCancel(tree)} quest={card.quest} />
     </section>
   );
 }
@@ -147,6 +134,7 @@ function Row({
   const owner = hobs(row.task.ownerId);
   const title = taskTitle(row.task);
   const waits = row.waitingOn.map((each) => (each.kind === "you" ? copy.you : hobs(each.id).name));
+  const party = row.party.map((id) => hobs(id).name);
   return (
     <button
       type="button"
@@ -159,19 +147,23 @@ function Row({
       )}
     >
       {row.depth > 0 && <span aria-hidden className="h-0.5 w-2.5 shrink-0 bg-line-2" />}
-      <StatusDot status={toneOf(row.status)} />
+      <StatusDot status={roomTone(row.status)} />
       <HobSprite hob={owner} size={20} state={row.status === "running" ? "working" : "idle"} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm">{copy.row({ name: owner.name, title })}</span>
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-label">
-          {row.quest !== null && <span className="shrink-0 bg-line px-1.5 font-bold text-moonlight">{copy.leads}</span>}
+          {row.quest !== null && (
+            <span className="max-w-1/2 shrink-0 truncate bg-line px-1.5 font-bold text-moonlight">
+              {party.length > 0 ? copy.leadsParty({ names: messages.names(party) }) : copy.leads}
+            </span>
+          )}
           {waits.length > 0 && (
             <span className="truncate text-lantern">{messages.card.waitingOn({ names: messages.names(waits) })}</span>
           )}
           <Age task={row.task} now={now} />
         </span>
       </span>
-      <StatusTag status={toneOf(row.status)}>{statusLabel(row.status)}</StatusTag>
+      <StatusTag status={roomTone(row.status)}>{roomStatusLabel(row.status)}</StatusTag>
     </button>
   );
 }

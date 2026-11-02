@@ -80,8 +80,11 @@ export const DEVICE_TOKEN_PREFIX = "hbd_";
 export const PAIRING_SECRET_PREFIX = "hbp_";
 export const WINDOW_KEY_PREFIX = "hbw_";
 
-/** A pairing request lasts this long, unless the user decides later (#339). */
+/** A pairing request lasts this long, unless the user decides later (ADR 021). */
 export const PAIRING_LIFETIME_MS = 10 * 60 * 1000;
+
+/** Decide later keeps a request open this long from when it was opened, as pending approvals last (ADR 015). */
+export const PAIRING_DEFERRED_MS = 24 * 60 * 60 * 1000;
 
 const NAME_LIMIT = 64;
 
@@ -107,3 +110,10 @@ export const deviceName = (raw: string): string => {
  */
 export const pairingExpired = (request: PairingRequest, now: string): boolean =>
   (request.state === "pending" || request.state === "allowed") && request.expiresAt <= now;
+
+/**
+ * True for a request the user put off with Decide later: its lifetime was extended past the first
+ * ten minutes. It leaves the hub's prompt and Needs you, and waits in Settings › Devices.
+ */
+export const pairingDeferred = (request: Pick<PairingRequest, "createdAt" | "expiresAt">): boolean =>
+  Date.parse(request.expiresAt) - Date.parse(request.createdAt) > PAIRING_LIFETIME_MS;

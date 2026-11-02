@@ -8,6 +8,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { keptDraftOrStored } from "./api/first-hob.ts";
+import { needsPairing } from "./api/pairing.ts";
 import { agentsQuery, archivedAgentsQuery, threadsQuery } from "./api/queries.ts";
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
@@ -23,6 +24,7 @@ import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
 import { ArchivedHobsPage, SettingsPage, UsagePage } from "./components/pages.tsx";
+import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
 import { Summon } from "./components/summon.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
@@ -31,8 +33,26 @@ import { readStored, writeStored } from "./lib/storage.ts";
 const lastHobKey = "lastHob";
 const lastThreadKey = (hobId: string) => `lastThread.${hobId}`;
 
+const PAIR_PATH = "/pair";
+
+// A browser without a device on the hub asks for one before anything else (ADR 021).
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  beforeLoad: async ({ location, context }) => {
+    if (location.pathname !== PAIR_PATH && (await needsPairing(context.queryClient))) {
+      throw redirect({ to: PAIR_PATH });
+    }
+  },
   component: AppWindow,
+});
+
+// The pairing screen: ask once, wait with the matching code, and open Hobbots once allowed.
+const pairRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "pair",
+  beforeLoad: async ({ context }) => {
+    if (!(await needsPairing(context.queryClient))) throw redirect({ to: "/" });
+  },
+  component: PairingScreen,
 });
 
 // A new installation opens on Welcome, outside the app shell, until setup is done:
@@ -257,6 +277,7 @@ const archivedThreadRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
+  pairRoute,
   welcomeRoute,
   setupWhereRoute,
   providersRoute,
