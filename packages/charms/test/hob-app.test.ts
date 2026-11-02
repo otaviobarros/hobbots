@@ -984,229 +984,252 @@ const runPush = <A, E>(
   effect: Effect.Effect<A, E, CharmServices | CharmTools>,
 ) => Effect.runPromise(Effect.provide(effect, pushLayer(w, calls, folder, repository)));
 
+// Each case makes an app, with its RSA key, and runs Git and the hub's staging repository for real.
+const PUSH_TIMEOUT = 30_000;
+
 describe("Push as a hob's own GitHub App", () => {
   // covers ADR 022
-  it("[TC-GEN-087] makes the hob's commits on GitHub as its bot, verified, then moves the branch with Git", async () => {
-    const w = world();
-    const calls: Array<string> = [];
-    const { folder, repository, slug } = pushSetUp("pony-push");
-    // Files, an executable, a symbolic link and a removal, and a commit made under another name.
-    const first = commitIn(folder, "Add the stable\n\nWith a door.", { "stable/door.txt": "door\n" });
-    writeFileSync(join(folder, "run.sh"), "#!/bin/sh\n");
-    chmodSync(join(folder, "run.sh"), 0o755);
-    symlinkSync("stable/door.txt", join(folder, "door"));
-    gitIn(folder, "add", "run.sh", "door");
-    const second = commitIn(
-      folder,
-      "Add a way in",
-      {},
-      { removed: ["a.txt"], author: "Someone <someone@example.com>" },
-    );
-    const fromMade = github.madeCommits.length;
-    const fromToken = github.installationTokens.length;
-    const asked: Array<ApprovalAction> = [];
-    const outcome = await runPush(
-      w,
-      calls,
-      folder,
-      repository,
-      Effect.gen(function* () {
-        const app = yield* withApp(FRODO, [slug]);
-        const answer = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
-        return { app, answer };
-      }),
-    );
-    const bot = `${outcome.app.slug}[bot]`;
-    const made = madeSince(fromMade);
-    expect(outcome.answer.refused).toBe(false);
-    // Two new commits on GitHub, both written and signed as the bot, never as the user or the hob's author.
-    expect(made).toHaveLength(2);
-    for (const commit of made) {
-      expect(commit).toMatchObject({ madeBy: bot, verified: true, author: { name: bot }, committer: { name: bot } });
-    }
-    // The branch is at GitHub's last commit, with the hob's files, modes, link and messages exactly.
-    const head = github.headOf(slug, "feat/x");
-    expect(head).toBe(made[1]?.sha);
-    const remote = join(temp, "github", "otaviobarros", "pony-push.git");
-    expect(gitIn(remote, "rev-parse", "feat/x^{tree}")).toBe(gitIn(folder, "rev-parse", `${second}^{tree}`));
-    expect(gitIn(remote, "rev-parse", "feat/x~1^{tree}")).toBe(gitIn(folder, "rev-parse", `${first}^{tree}`));
-    expect(gitIn(remote, "log", "--format=%B", "-1", "feat/x~1")).toBe("Add the stable\n\nWith a door.");
-    expect(gitIn(remote, "rev-parse", "feat/x~2")).toBe(gitIn(folder, "rev-parse", "main"));
-    // The card said who acts and that GitHub makes the commits again; the answer gives both IDs.
-    expect(asked[0]?.arguments.summary).toContain("GitHub creates these commits again, signed as the bot");
-    expect(asked[0]?.arguments.summary).toContain(`As Frodo's app, ${bot}.`);
-    expect(outcome.answer.text).toContain(`${second.slice(0, 12)} is ${made[1]?.sha.slice(0, 12)} on GitHub`);
-    expect(outcome.answer.text).toContain(`${first.slice(0, 12)} is ${made[0]?.sha.slice(0, 12)} on GitHub`);
-    // One token for the push, with Contents write only; the user's account was never asked.
-    expect(github.installationTokens.slice(fromToken).map((token) => token.permissions)).toContainEqual(
-      ACTION_PERMISSIONS.push,
-    );
-    expect(github.installationTokens.slice(fromToken).map((token) => token.permissions)).not.toContainEqual(
-      ACTION_PERMISSIONS["push-workflows"],
-    );
-    expect(calls).toEqual([]);
-  });
+  it(
+    "[TC-GEN-087] makes the hob's commits on GitHub as its bot, verified, then moves the branch with Git",
+    async () => {
+      const w = world();
+      const calls: Array<string> = [];
+      const { folder, repository, slug } = pushSetUp("pony-push");
+      // Files, an executable, a symbolic link and a removal, and a commit made under another name.
+      const first = commitIn(folder, "Add the stable\n\nWith a door.", { "stable/door.txt": "door\n" });
+      writeFileSync(join(folder, "run.sh"), "#!/bin/sh\n");
+      chmodSync(join(folder, "run.sh"), 0o755);
+      symlinkSync("stable/door.txt", join(folder, "door"));
+      gitIn(folder, "add", "run.sh", "door");
+      const second = commitIn(
+        folder,
+        "Add a way in",
+        {},
+        { removed: ["a.txt"], author: "Someone <someone@example.com>" },
+      );
+      const fromMade = github.madeCommits.length;
+      const fromToken = github.installationTokens.length;
+      const asked: Array<ApprovalAction> = [];
+      const outcome = await runPush(
+        w,
+        calls,
+        folder,
+        repository,
+        Effect.gen(function* () {
+          const app = yield* withApp(FRODO, [slug]);
+          const answer = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
+          return { app, answer };
+        }),
+      );
+      const bot = `${outcome.app.slug}[bot]`;
+      const made = madeSince(fromMade);
+      expect(outcome.answer.refused).toBe(false);
+      // Two new commits on GitHub, both written and signed as the bot, never as the user or the hob's author.
+      expect(made).toHaveLength(2);
+      for (const commit of made) {
+        expect(commit).toMatchObject({ madeBy: bot, verified: true, author: { name: bot }, committer: { name: bot } });
+      }
+      // The branch is at GitHub's last commit, with the hob's files, modes, link and messages exactly.
+      const head = github.headOf(slug, "feat/x");
+      expect(head).toBe(made[1]?.sha);
+      const remote = join(temp, "github", "otaviobarros", "pony-push.git");
+      expect(gitIn(remote, "rev-parse", "feat/x^{tree}")).toBe(gitIn(folder, "rev-parse", `${second}^{tree}`));
+      expect(gitIn(remote, "rev-parse", "feat/x~1^{tree}")).toBe(gitIn(folder, "rev-parse", `${first}^{tree}`));
+      expect(gitIn(remote, "log", "--format=%B", "-1", "feat/x~1")).toBe("Add the stable\n\nWith a door.");
+      expect(gitIn(remote, "rev-parse", "feat/x~2")).toBe(gitIn(folder, "rev-parse", "main"));
+      // The card said who acts and that GitHub makes the commits again; the answer gives both IDs.
+      expect(asked[0]?.arguments.summary).toContain("GitHub creates these commits again, signed as the bot");
+      expect(asked[0]?.arguments.summary).toContain(`As Frodo's app, ${bot}.`);
+      expect(outcome.answer.text).toContain(`${second.slice(0, 12)} is ${made[1]?.sha.slice(0, 12)} on GitHub`);
+      expect(outcome.answer.text).toContain(`${first.slice(0, 12)} is ${made[0]?.sha.slice(0, 12)} on GitHub`);
+      // One token for the push, with Contents write only; the user's account was never asked.
+      expect(github.installationTokens.slice(fromToken).map((token) => token.permissions)).toContainEqual(
+        ACTION_PERMISSIONS.push,
+      );
+      expect(github.installationTokens.slice(fromToken).map((token) => token.permissions)).not.toContainEqual(
+        ACTION_PERMISSIONS["push-workflows"],
+      );
+      expect(calls).toEqual([]);
+    },
+    PUSH_TIMEOUT,
+  );
 
   // covers ADR 022
-  it("[TC-GEN-088] sends only newer commits on the next push, and counts only those on its card", async () => {
-    const w = world();
-    const { folder, repository, slug } = pushSetUp("pony-again");
-    commitIn(folder, "Add hay", { "hay.txt": "hay\n" });
-    const asked: Array<ApprovalAction> = [];
-    const fromMade = github.madeCommits.length;
-    const outcome = await runPush(
-      w,
-      [],
-      folder,
-      repository,
-      Effect.gen(function* () {
-        yield* withApp(FRODO, [slug]);
-        const first = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
-        const unchanged = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-2" });
-        commitIn(folder, "Add oats", { "oats.txt": "oats\n" });
-        const second = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-3" });
-        return { first, unchanged, second };
-      }),
-    );
-    expect(outcome.first.refused).toBe(false);
-    // Nothing new: the branch is already at GitHub's commit for the hob's, so nothing is asked or sent.
-    expect(outcome.unchanged.text).toContain("nothing to push");
-    expect(outcome.second.refused).toBe(false);
-    const made = madeSince(fromMade);
-    expect(made).toHaveLength(2);
-    expect(asked.map((card) => card.arguments.commits)).toEqual([1, 1]);
-    expect(asked[1]?.arguments.subjects).toEqual(["Add oats"]);
-    // GitHub's second commit builds on its first, which the branch already had: a plain push.
-    expect(github.headOf(slug, "feat/x")).toBe(made[1]?.sha);
-    const remote = join(temp, "github", "otaviobarros", "pony-again.git");
-    expect(gitIn(remote, "rev-parse", "feat/x~1")).toBe(made[0]?.sha);
-  });
+  it(
+    "[TC-GEN-088] sends only newer commits on the next push, and counts only those on its card",
+    async () => {
+      const w = world();
+      const { folder, repository, slug } = pushSetUp("pony-again");
+      commitIn(folder, "Add hay", { "hay.txt": "hay\n" });
+      const asked: Array<ApprovalAction> = [];
+      const fromMade = github.madeCommits.length;
+      const outcome = await runPush(
+        w,
+        [],
+        folder,
+        repository,
+        Effect.gen(function* () {
+          yield* withApp(FRODO, [slug]);
+          const first = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
+          const unchanged = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-2" });
+          commitIn(folder, "Add oats", { "oats.txt": "oats\n" });
+          const second = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-3" });
+          return { first, unchanged, second };
+        }),
+      );
+      expect(outcome.first.refused).toBe(false);
+      // Nothing new: the branch is already at GitHub's commit for the hob's, so nothing is asked or sent.
+      expect(outcome.unchanged.text).toContain("nothing to push");
+      expect(outcome.second.refused).toBe(false);
+      const made = madeSince(fromMade);
+      expect(made).toHaveLength(2);
+      expect(asked.map((card) => card.arguments.commits)).toEqual([1, 1]);
+      expect(asked[1]?.arguments.subjects).toEqual(["Add oats"]);
+      // GitHub's second commit builds on its first, which the branch already had: a plain push.
+      expect(github.headOf(slug, "feat/x")).toBe(made[1]?.sha);
+      const remote = join(temp, "github", "otaviobarros", "pony-again.git");
+      expect(gitIn(remote, "rev-parse", "feat/x~1")).toBe(made[0]?.sha);
+    },
+    PUSH_TIMEOUT,
+  );
 
   // covers ADR 022
-  it("[TC-GEN-089] refuses a branch that moved on GitHub, and a force push keeps its lease", async () => {
-    const w = world();
-    const { folder, repository, slug } = pushSetUp("pony-moved");
-    commitIn(folder, "Add a saddle", { "saddle.txt": "saddle\n" });
-    const remote = join(temp, "github", "otaviobarros", "pony-moved.git");
-    // Someone else's commit on the branch, which the hob does not have.
-    const elsewhere = join(temp, "pony-moved-elsewhere");
-    gitIn(temp, "clone", "--quiet", remote, elsewhere);
-    const theirs = commitIn(elsewhere, "Theirs", { "theirs.txt": "theirs\n" });
-    gitIn(elsewhere, "push", "--quiet", remote, `${theirs}:refs/heads/feat/x`);
-    const asked: Array<ApprovalAction> = [];
-    const leased: Array<ApprovalAction> = [];
-    const outcome = await runPush(
-      w,
-      [],
-      folder,
-      repository,
-      Effect.gen(function* () {
-        yield* withApp(FRODO, [slug]);
-        const plain = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
-        const forced = yield* pushAs(folder, asked, { branch: "feat/x", force: true, key: "push-2" });
-        const forcedHead = github.headOf(slug, "feat/x");
-        // A force push whose branch moves again while its card waits is refused by its lease.
-        commitIn(folder, "Add a bridle", { "bridle.txt": "bridle\n" });
-        const moved = commitIn(elsewhere, "Theirs again", { "again.txt": "again\n" });
-        const lease = yield* pushAs(folder, leased, { branch: "feat/x", force: true, key: "push-3" }, () =>
-          gitIn(elsewhere, "push", "--quiet", "--force", remote, `${moved}:refs/heads/feat/x`),
-        );
-        return { plain, forced, forcedHead, lease, moved };
-      }),
-    );
-    // The plain push is refused as not a fast-forward and moves nothing.
-    expect(outcome.plain).toMatchObject({ refused: true, text: expect.stringContaining("refused the push") });
-    // The force push replaced exactly the commit read when deciding, and is the bot's.
-    expect(outcome.forced.refused).toBe(false);
-    expect(github.madeCommits.find((commit) => commit.sha === outcome.forcedHead)).toMatchObject({ verified: true });
-    expect(asked[1]?.arguments).toMatchObject({ force: true, replaces: theirs });
-    expect(outcome.lease).toMatchObject({ refused: true, text: expect.stringContaining("refused the push") });
-    expect(github.headOf(slug, "feat/x")).toBe(outcome.moved);
-  });
+  it(
+    "[TC-GEN-089] refuses a branch that moved on GitHub, and a force push keeps its lease",
+    async () => {
+      const w = world();
+      const { folder, repository, slug } = pushSetUp("pony-moved");
+      commitIn(folder, "Add a saddle", { "saddle.txt": "saddle\n" });
+      const remote = join(temp, "github", "otaviobarros", "pony-moved.git");
+      // Someone else's commit on the branch, which the hob does not have.
+      const elsewhere = join(temp, "pony-moved-elsewhere");
+      gitIn(temp, "clone", "--quiet", remote, elsewhere);
+      const theirs = commitIn(elsewhere, "Theirs", { "theirs.txt": "theirs\n" });
+      gitIn(elsewhere, "push", "--quiet", remote, `${theirs}:refs/heads/feat/x`);
+      const asked: Array<ApprovalAction> = [];
+      const leased: Array<ApprovalAction> = [];
+      const outcome = await runPush(
+        w,
+        [],
+        folder,
+        repository,
+        Effect.gen(function* () {
+          yield* withApp(FRODO, [slug]);
+          const plain = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
+          const forced = yield* pushAs(folder, asked, { branch: "feat/x", force: true, key: "push-2" });
+          const forcedHead = github.headOf(slug, "feat/x");
+          // A force push whose branch moves again while its card waits is refused by its lease.
+          commitIn(folder, "Add a bridle", { "bridle.txt": "bridle\n" });
+          const moved = commitIn(elsewhere, "Theirs again", { "again.txt": "again\n" });
+          const lease = yield* pushAs(folder, leased, { branch: "feat/x", force: true, key: "push-3" }, () =>
+            gitIn(elsewhere, "push", "--quiet", "--force", remote, `${moved}:refs/heads/feat/x`),
+          );
+          return { plain, forced, forcedHead, lease, moved };
+        }),
+      );
+      // The plain push is refused as not a fast-forward and moves nothing.
+      expect(outcome.plain).toMatchObject({ refused: true, text: expect.stringContaining("refused the push") });
+      // The force push replaced exactly the commit read when deciding, and is the bot's.
+      expect(outcome.forced.refused).toBe(false);
+      expect(github.madeCommits.find((commit) => commit.sha === outcome.forcedHead)).toMatchObject({ verified: true });
+      expect(asked[1]?.arguments).toMatchObject({ force: true, replaces: theirs });
+      expect(outcome.lease).toMatchObject({ refused: true, text: expect.stringContaining("refused the push") });
+      expect(github.headOf(slug, "feat/x")).toBe(outcome.moved);
+    },
+    PUSH_TIMEOUT,
+  );
 
   // covers ADR 022
-  it("[TC-GEN-090] changes no branch when GitHub fails before the branch moves, and moves it once when called again", async () => {
-    const w = world();
-    const { folder, repository, slug } = pushSetUp("pony-retry");
-    commitIn(folder, "Add a bucket", { "bucket.txt": "bucket\n" });
-    commitIn(folder, "Fill the bucket", { "bucket.txt": "water\n" });
-    const asked: Array<ApprovalAction> = [];
-    const outcome = await runPush(
-      w,
-      [],
-      folder,
-      repository,
-      Effect.gen(function* () {
-        yield* withApp(FRODO, [slug]);
-        // Too few requests left this hour: refused before anything is sent.
-        github.rateRemaining = 3;
-        const fromLimited = github.requests.length;
-        const limited = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
-        const sentWhileLimited = gitDatabaseSince(fromLimited);
-        github.rateRemaining = 5000;
-        // GitHub fails the second commit: the first was made, but no branch moves.
-        let commits = 0;
-        github.answer = (request) =>
-          request.method === "POST" && request.path.endsWith("/git/commits") && ++commits === 2
-            ? { status: 502, body: { message: "Server Error" } }
-            : undefined;
-        const failed = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-2" });
-        const headAfterFailure = github.headOf(slug, "feat/x");
-        github.answer = null;
-        const fromAgain = github.madeCommits.length;
-        const again = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-3" });
-        return { limited, sentWhileLimited, failed, headAfterFailure, again, madeAgain: madeSince(fromAgain) };
-      }),
-    );
-    expect(outcome.limited).toMatchObject({ refused: true, text: expect.stringContaining("Try again after") });
-    expect(outcome.sentWhileLimited).toEqual([]);
-    expect(outcome.failed).toMatchObject({
-      refused: true,
-      text: expect.stringContaining("No branch was changed, but what the hub already made on GitHub may stay there"),
-    });
-    expect(outcome.headAfterFailure).toBeNull();
-    // Called again, the hub makes both commits anew and moves the branch once, to the last of them.
-    expect(outcome.again.refused).toBe(false);
-    expect(outcome.madeAgain).toHaveLength(2);
-    expect(github.headOf(slug, "feat/x")).toBe(outcome.madeAgain[1]?.sha);
-  });
+  it(
+    "[TC-GEN-090] changes no branch when GitHub fails before the branch moves, and moves it once when called again",
+    async () => {
+      const w = world();
+      const { folder, repository, slug } = pushSetUp("pony-retry");
+      commitIn(folder, "Add a bucket", { "bucket.txt": "bucket\n" });
+      commitIn(folder, "Fill the bucket", { "bucket.txt": "water\n" });
+      const asked: Array<ApprovalAction> = [];
+      const outcome = await runPush(
+        w,
+        [],
+        folder,
+        repository,
+        Effect.gen(function* () {
+          yield* withApp(FRODO, [slug]);
+          // Too few requests left this hour: refused before anything is sent.
+          github.rateRemaining = 3;
+          const fromLimited = github.requests.length;
+          const limited = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
+          const sentWhileLimited = gitDatabaseSince(fromLimited);
+          github.rateRemaining = 5000;
+          // GitHub fails the second commit: the first was made, but no branch moves.
+          let commits = 0;
+          github.answer = (request) =>
+            request.method === "POST" && request.path.endsWith("/git/commits") && ++commits === 2
+              ? { status: 502, body: { message: "Server Error" } }
+              : undefined;
+          const failed = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-2" });
+          const headAfterFailure = github.headOf(slug, "feat/x");
+          github.answer = null;
+          const fromAgain = github.madeCommits.length;
+          const again = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-3" });
+          return { limited, sentWhileLimited, failed, headAfterFailure, again, madeAgain: madeSince(fromAgain) };
+        }),
+      );
+      expect(outcome.limited).toMatchObject({ refused: true, text: expect.stringContaining("Try again after") });
+      expect(outcome.sentWhileLimited).toEqual([]);
+      expect(outcome.failed).toMatchObject({
+        refused: true,
+        text: expect.stringContaining("No branch was changed, but what the hub already made on GitHub may stay there"),
+      });
+      expect(outcome.headAfterFailure).toBeNull();
+      // Called again, the hub makes both commits anew and moves the branch once, to the last of them.
+      expect(outcome.again.refused).toBe(false);
+      expect(outcome.madeAgain).toHaveLength(2);
+      expect(github.headOf(slug, "feat/x")).toBe(outcome.madeAgain[1]?.sha);
+    },
+    PUSH_TIMEOUT,
+  );
 
   // covers ADR 022
-  it("[TC-GEN-091] asks for Workflows only when a commit changes one, and reads a lost answer back by GitHub's ID", async () => {
-    const w = world();
-    const { folder, repository, slug } = pushSetUp("pony-workflow");
-    commitIn(folder, "Add a check", { ".github/workflows/check.yml": "on: push\n" });
-    const fromToken = github.installationTokens.length;
-    const asked: Array<ApprovalAction> = [];
-    const outcome = await runPush(
-      w,
-      [],
-      folder,
-      repository,
-      Effect.gen(function* () {
-        yield* withApp(FRODO, [slug]);
-        // The push reaches GitHub, but its answer is lost.
-        github.drop = { after: github.requests.length, when: "after" };
-        const fromMade = github.madeCommits.length;
-        const lost = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
-        github.drop = null;
-        const made = madeSince(fromMade).length;
-        // Calling again with the same key gives the same answer instead of pushing twice.
-        const again = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
-        return { lost, made, again };
-      }),
-    );
-    expect(github.installationTokens.slice(fromToken).map((token) => token.permissions)).toContainEqual(
-      ACTION_PERMISSIONS["push-workflows"],
-    );
-    const head = github.headOf(slug, "feat/x");
-    expect(github.madeCommits.find((commit) => commit.sha === head)).toMatchObject({ verified: true });
-    // The lost answer was read back: the branch is at GitHub's commit for the hob's, not at the hob's own.
-    expect(outcome.made).toBe(1);
-    expect(outcome.lost).toMatchObject({ refused: false, text: expect.stringContaining("Pushed") });
-    expect(outcome.lost.text).toContain(`is ${head?.slice(0, 12)} on GitHub`);
-    expect(outcome.again).toMatchObject({ refused: false, text: expect.stringContaining("not sent again") });
-  });
+  it(
+    "[TC-GEN-091] asks for Workflows only when a commit changes one, and reads a lost answer back by GitHub's ID",
+    async () => {
+      const w = world();
+      const { folder, repository, slug } = pushSetUp("pony-workflow");
+      commitIn(folder, "Add a check", { ".github/workflows/check.yml": "on: push\n" });
+      const fromToken = github.installationTokens.length;
+      const asked: Array<ApprovalAction> = [];
+      const outcome = await runPush(
+        w,
+        [],
+        folder,
+        repository,
+        Effect.gen(function* () {
+          const app = yield* withApp(FRODO, [slug]);
+          // The push reaches GitHub, but its answer is lost.
+          github.drop = { after: github.requests.length, when: "after" };
+          const fromMade = github.madeCommits.length;
+          const lost = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
+          github.drop = null;
+          const made = madeSince(fromMade).filter((commit) => commit.madeBy === `${app.slug}[bot]`).length;
+          // Calling again with the same key gives the same answer instead of pushing twice.
+          const again = yield* pushAs(folder, asked, { branch: "feat/x", key: "push-1" });
+          return { lost, made, again };
+        }),
+      );
+      expect(github.installationTokens.slice(fromToken).map((token) => token.permissions)).toContainEqual(
+        ACTION_PERMISSIONS["push-workflows"],
+      );
+      const head = github.headOf(slug, "feat/x");
+      expect(github.madeCommits.find((commit) => commit.sha === head)).toMatchObject({ verified: true });
+      // The lost answer was read back: the branch is at GitHub's commit for the hob's, not at the hob's own.
+      expect(outcome.made).toBe(1);
+      expect(outcome.lost).toMatchObject({ refused: false, text: expect.stringContaining("Pushed") });
+      expect(outcome.lost.text).toContain(`is ${head?.slice(0, 12)} on GitHub`);
+      expect(outcome.again).toMatchObject({ refused: false, text: expect.stringContaining("not sent again") });
+    },
+    PUSH_TIMEOUT,
+  );
 });
 
 describe("hobAppName", () => {
