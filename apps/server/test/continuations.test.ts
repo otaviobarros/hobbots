@@ -49,6 +49,9 @@ const FRODO = AgentId.make("frodo");
 /** A chat prompt with this line keeps its turn running until the test lets it end. */
 const HOLD = "fake:hold";
 
+/** Whether continuations wait for the gate before they write. */
+let holdContinuations = false;
+
 const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
   Layer.effect(
     RuntimeAdapter,
@@ -59,6 +62,10 @@ const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
         sendPrompt: (request) => {
           requests.push(request);
           const stream = fake.sendPrompt(request);
+          // A continuation, while held, waits before it writes anything, so it can be stopped.
+          if (holdContinuations && request.prompt.startsWith("Hobbots wrote this")) {
+            return Stream.unwrap(Effect.as(Deferred.await(gate), stream));
+          }
           return request.prompt.includes(HOLD)
             ? stream.pipe(Stream.concat(Stream.fromEffect(Deferred.await(gate)).pipe(Stream.drain)))
             : stream;
@@ -105,6 +112,7 @@ type App = ReturnType<typeof makeApp>;
 let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<App>, Layer.Error<App>> | undefined;
 
 afterEach(async () => {
+  holdContinuations = false;
   await runtime?.dispose();
   runtime = undefined;
 });
@@ -162,6 +170,16 @@ const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
 /** Frodo's backpack items, settled or not. */
 const itemsOf = (ids: ReadonlyArray<BackpackItem["id"]>) =>
   Effect.forEach(ids, (id) => Backpack.use((b) => b.find(id)));
+
+/** The items once every one of them is resolved or failed. */
+const settledItems = (ids: ReadonlyArray<BackpackItem["id"]>) =>
+  retry(
+    Effect.flatMap(itemsOf(ids), (items) =>
+      items.every((each) => each.state === "resolved" || each.state === "failed")
+        ? Effect.succeed(items)
+        : Effect.fail("not yet" as const),
+    ),
+  );
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
@@ -238,7 +256,8 @@ describe("continuing a hob when work arrives", () => {
     const answered = requests.find((request) => request.prompt === "Where are we?");
     expect(answered?.briefing).toContain("Hobbots adds this, not the user.");
     expect(answered?.briefing).toContain("finished. Its result:");
-    const [item] = await run(itemsOf(waiting.map((each) => each.id)));
+    // The item resolves once the turn has ended, just after its reply is saved.
+    const [item] = await run(settledItems(waiting.map((each) => each.id)));
     expect(item?.disposition).toEqual({ _tag: "consumed", by: all[3]?.id });
   });
 
@@ -279,13 +298,7 @@ describe("continuing a hob when work arrives", () => {
     const all = await run(messagesWhen((each) => each.length === 1));
     expect(all[0]?.role).toBe("assistant");
     expect(all[0]?.content).toContain("ended as failed.");
-    const [settled] = await run(
-      retry(
-        Effect.flatMap(itemsOf([id]), (items) =>
-          items[0]?.state === "resolved" ? Effect.succeed(items) : Effect.fail("not yet" as const),
-        ),
-      ),
-    );
+    const [settled] = await run(settledItems([id]));
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
   });
 
@@ -343,4 +356,48 @@ describe("continuing a hob when work arrives", () => {
     expect(all[1]?.content).toContain("That tool call never ran.");
     expect((await run(ApprovalService.use((approvals) => approvals.get(pending.id)))).state).toBe("expired");
   });
+  // covers IN-004, CH-008
+  it("[TC-OR-084] a continuation you stop does not start again on its own, and its work rides along your next message", async () => {
+    holdContinuations = true;
+    const { run, requests, release } = setUp();
+    const prompt = ["Carry the ring", hub("plan_steps", { key: "plan", steps: [{ brief: "Walk" }] })].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    // The step's result starts a continuation, which you stop before it writes.
+    const started = await run(
+      retry(
+        Effect.gen(function* () {
+          const all = yield* messages();
+          const last = all.at(-1);
+          const asked = requests.some((request) => request.prompt.startsWith("Hobbots wrote this"));
+          return asked && all.length === 3 && last?.status === "streaming"
+            ? last
+            : yield* Effect.fail("not yet" as const);
+        }),
+      ),
+    );
+    await run(ChatService.use((chat) => chat.stop(threadId)));
+    await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
+    await release();
+
+    // Nothing starts again: the work waits, pending, for you.
+    await run(Effect.sleep("300 millis"));
+    const after = await run(messages());
+    expect(after.map((m) => m.status)).toEqual(["complete", "complete", "stopped"]);
+    expect(after[2]?.id).toBe(started.id);
+    const [waiting] = await run(
+      Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId: FRODO })).pipe(
+        Effect.map((open) => open.filter((item) => item.kind === "result")),
+      ),
+    );
+    expect(waiting?.state).toBe("pending");
+
+    // Your next message takes it along, and its turn consumes it: no second continuation starts.
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, "Go on")));
+    const all = await run(messagesWhen((each) => each.length === 5));
+    expect(all.map((m) => m.role)).toEqual(["user", "assistant", "assistant", "user", "assistant"]);
+    expect(all[4]?.content).toContain("Hobbots adds this, not the user.");
+    const [settled] = await run(settledItems(waiting === undefined ? [] : [waiting.id]));
+    expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[4]?.id });
+    expect(requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"))).toHaveLength(1);
+  }, 10_000);
 });

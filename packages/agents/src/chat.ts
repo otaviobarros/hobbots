@@ -767,6 +767,10 @@ export class ChatService extends Context.Service<
       // puts the work waiting there into its next turn; your queued message still starts first.
       const startNext = (threadId: ThreadId): Effect.Effect<void> =>
         Effect.gen(function* () {
+          // A message of yours waiting there takes the work you stopped along with it.
+          if (holdBack.has(threadId) && Option.isSome(yield* repo.nextQueuedMessage(threadId))) {
+            holdBack.delete(threadId);
+          }
           if (Option.isNone(continuations) || holdBack.has(threadId)) {
             yield* startQueued(threadId);
             return;
@@ -830,7 +834,9 @@ export class ChatService extends Context.Service<
             }),
           );
           if (begun === null) return { _tag: "EndedEarly", reason: "Its hob or thread no longer takes work." };
-          yield* Fiber.await(begun.turn);
+          // A dispatch that stops waiting, as when the turn's claim is lost, stops the turn too, so
+          // no second turn starts over it.
+          yield* Fiber.await(begun.turn).pipe(Effect.onInterrupt(() => FiberMap.remove(turns, threadId)));
           const ended = yield* Ref.get(begun.reply.current);
           if (ended.status === "complete") return { _tag: "Handled" };
           return { _tag: "EndedEarly", reason: ended.error ?? `The turn ended as ${ended.status}.` };
@@ -1095,13 +1101,16 @@ export class ChatService extends Context.Service<
       });
 
       const restore = Effect.fn("ChatService.restore")(function* (threadId: ThreadId) {
-        return yield* withThreadHob(threadId, (thread, agent) =>
-          Effect.gen(function* () {
-            if (thread.archivedAt === null) return thread;
-            if (agent.status === "retired") return yield* refuse(threadId, "hob-retired");
-            return yield* setArchivedAt(thread, null);
-          }),
-        );
+        return yield* withThreadHob(
+          threadId,
+          (thread, agent) =>
+            Effect.gen(function* () {
+              if (thread.archivedAt === null) return thread;
+              if (agent.status === "retired") return yield* refuse(threadId, "hob-retired");
+              return yield* setArchivedAt(thread, null);
+            }),
+          // Work that arrived while it was archived starts once it is back.
+        ).pipe(Effect.tap(() => drainThreads([threadId])));
       });
 
       // The threads with your queued messages or backpack work waiting: of one hob, or of every hob.

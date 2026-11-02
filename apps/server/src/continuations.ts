@@ -99,6 +99,7 @@ export const WakeOnArrival = Layer.effectDiscard(
   Effect.gen(function* () {
     const bus = yield* EventBus;
     const chat = yield* ChatService;
+    const continuations = yield* Continuations;
     const subscription = yield* bus.subscribe;
     const wake = (item: BackpackItem) =>
       item.state === "pending" && item.actionable && item.threadId !== null
@@ -115,5 +116,7 @@ export const WakeOnArrival = Layer.effectDiscard(
       ),
       Effect.forkScoped,
     );
+    // Subscribed now: work recorded since the chat first looked at start is woken here.
+    yield* Effect.forEach(yield* continuations.waiting(), (threadId) => chat.wake(threadId), { discard: true });
   }),
 );

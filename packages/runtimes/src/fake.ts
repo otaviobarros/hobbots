@@ -343,7 +343,9 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     // A briefing is echoed ahead of the prompt, so a test can see what the session was told.
     const told = request.briefing ? `${request.briefing}\n\n${request.prompt}` : request.prompt;
     const echo = request.prompt === fakeInstructionsPrompt ? followed : `Echo: ${told}`;
-    const ending = fakeEnding(scripted);
+    // The turn's own prompt decides first, so a line kept from before never hides its directive.
+    const own = fakeEnding(request.prompt);
+    const ending = own === "complete" ? fakeEnding(scripted) : own;
     const answers: Array<string> = [];
     // The reply ends with what the hub answered its scripted calls, known once they are made.
     const written = Stream.suspend(() => {

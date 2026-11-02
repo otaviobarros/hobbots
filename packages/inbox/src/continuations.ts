@@ -20,15 +20,24 @@ const firstLine = (text: string) => text.split("\n", 1)[0]?.trim() ?? "";
 
 const about = (task: Task) => `Task ${task.id} (${firstLine(task.brief)})`;
 
+/** A result, with what its Task made. */
+const describeResult = (task: Task, artifacts: ReadonlyArray<{ readonly label: string }>) => {
+  const made = artifacts.length === 0 ? "" : ` It made: ${artifacts.map((artifact) => artifact.label).join(", ")}.`;
+  return `${about(task)} finished. Its result: ${task.result?.summary ?? "none given"}.${made}`;
+};
+
+/** An approval's outcome, and whether its call ran. */
+const describeApproval = (approval: { readonly label: string; readonly state: string }) =>
+  `The approval you asked for, "${approval.label}", ended as ${approval.state}.${
+    approval.state === "approved" ? "" : " That tool call never ran."
+  }`;
+
 /** One item, as the continuation's prompt lists it: what arrived, and from where. */
 const describeArrival = (item: BackpackItem): string => {
   const payload = item.payload;
   switch (payload._tag) {
-    case "result": {
-      const made = payload.artifacts.map((artifact) => artifact.label);
-      const artifacts = made.length === 0 ? "" : ` It made: ${made.join(", ")}.`;
-      return `${about(payload.task)} finished. Its result: ${payload.task.result?.summary ?? "none given"}.${artifacts}`;
-    }
+    case "result":
+      return describeResult(payload.task, payload.artifacts);
     case "failure":
       return `${about(payload.task)} ended as ${payload.task.state}.`;
     case "checkpoint":
@@ -40,13 +49,9 @@ const describeArrival = (item: BackpackItem): string => {
     case "hand-off":
       return `"${payload.artifact.label}" was handed to Task ${payload.handOff.toTaskId}: ${payload.artifact.value}`;
     case "message":
-      return payload.senderId === null
-        ? `The user left a note: ${payload.text}`
-        : `Hob ${payload.senderId} sent you a message: ${payload.text}`;
+      return `${payload.senderId === null ? "The user left a note" : `Hob ${payload.senderId} sent you a message`}: ${payload.text}`;
     case "approval-outcome":
-      return `The approval you asked for, "${payload.approval.label}", ended as ${payload.approval.state}. ${
-        payload.approval.state === "approved" ? "" : "That tool call never ran."
-      }`.trim();
+      return describeApproval(payload.approval);
     case "deadline":
       return `The deadline on Task ${payload.taskId} passed at ${payload.dueAt}.`;
     case "task":
