@@ -44,10 +44,13 @@ export function QuestCard({
   tree,
   hobs,
   onOpen,
+  onWorkbench,
 }: {
   tree: TaskTree;
   hobs: HobLookup;
   onOpen: (taskId: TaskId) => void;
+  /** Opens the Task's Workbench: what it ran, changed and made (ADR 023). */
+  onWorkbench: (taskId: TaskId) => void;
 }) {
   const card = workCard(tree);
   const stuck = useStuck(tree);
@@ -99,7 +102,10 @@ export function QuestCard({
       <div className="flex items-center gap-2 text-detail text-label">
         {card.more > 0 && <span>{copy.moreCount({ count: card.more })}</span>}
         {card.done > 0 && <span>{copy.doneCount({ count: card.done })}</span>}
-        <Button variant="link" size="xs" className="ms-auto" onClick={() => onOpen(card.top.id)}>
+        <Button variant="link" size="xs" className="ms-auto" onClick={() => onWorkbench(card.top.id)}>
+          {copy.workbench}
+        </Button>
+        <Button variant="link" size="xs" onClick={() => onOpen(card.top.id)}>
           {card.rows.length + card.done + card.more > 0 ? copy.showAll : copy.details}
         </Button>
       </div>

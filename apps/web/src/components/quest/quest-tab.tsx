@@ -1,6 +1,7 @@
 import type { AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { WorkspaceBackpack } from "../backpack/quest-backpack.tsx";
+import { useOpenWorkbench } from "../workbench/use-workbench.ts";
 import { messages } from "./messages.ts";
 import { QuestRoom } from "./quest-room.tsx";
 import { type Pins, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
@@ -26,6 +27,7 @@ export function QuestTab({
   const { thread, elsewhere, missing, failed } = useFollowedTrees(threadId, pins.pinned);
   const hobs = useHobLookup();
   const open = useOpenTask(hobId, threadId ?? ("" as ThreadId));
+  const openWorkbench = useOpenWorkbench(hobId, threadId ?? ("" as ThreadId));
   const trees = [
     ...elsewhere.map((tree) => ({ tree, own: false })),
     ...thread.map((tree) => ({ tree, own: true })).reverse(),
@@ -65,6 +67,7 @@ export function QuestTab({
           pinned={tree.tasks[0] !== undefined && pins.pinned.includes(tree.tasks[0].id)}
           onPin={pins.toggle}
           onOpen={threadId === undefined ? undefined : open}
+          onWorkbench={threadId === undefined ? undefined : openWorkbench}
         />
       ))}
       <WorkspaceBackpack hobs={hobs} />
