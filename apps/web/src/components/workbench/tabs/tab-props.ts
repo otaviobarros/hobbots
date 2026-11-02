@@ -17,6 +17,11 @@ export interface WorkbenchTabProps {
   /** The tab's label: Live, History or Unavailable, whose reason the frame shows above the tab. */
   readonly state: TabState;
   readonly hobs: HobLookup;
-  /** Shows another tab, as Summary's buttons to the tabs the Task used do. */
-  readonly onTab: (tab: WorkbenchTab) => void;
+  /**
+   * A file this tab shows first, by its absolute path (a change's folder and path joined by `/`, or
+   * a file Artifact reference's value), as Summary's links ask; undefined for none.
+   */
+  readonly focus: string | undefined;
+  /** Shows another tab, as Summary's buttons to the tabs the Task used do, with a file to show first. */
+  readonly onTab: (tab: WorkbenchTab, focus?: string) => void;
 }

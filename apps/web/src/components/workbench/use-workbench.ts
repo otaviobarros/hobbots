@@ -11,6 +11,8 @@ export interface WorkbenchSearch {
   readonly bench?: string | undefined;
   readonly tab?: WorkbenchTab | undefined;
   readonly attempt?: string | undefined;
+  /** A file to show in the tab, by its absolute path, as Summary's links into Changes and Files ask. */
+  readonly file?: string | undefined;
 }
 
 /** Opens a Task's Workbench in the chat's place. It always opens on Summary, on the latest Attempt. */
@@ -32,12 +34,12 @@ export const useWorkbenchMoves = (hobId: AgentId, threadId: ThreadId) => {
   const params = { hobId, threadId };
   return {
     // Moving between tabs or Attempts replaces the address, so Back in the browser leaves the Workbench.
-    tab: (tab: WorkbenchTab) =>
+    tab: (tab: WorkbenchTab, file?: string) =>
       void navigate({
         from,
         to,
         params,
-        search: (prev) => ({ ...prev, tab: tab === "summary" ? undefined : tab }),
+        search: (prev) => ({ ...prev, tab: tab === "summary" ? undefined : tab, file }),
         replace: true,
       }),
     attempt: (attemptId: AttemptId) =>
@@ -57,6 +59,8 @@ export interface WorkbenchView {
   readonly taskId: TaskId;
   readonly tab: WorkbenchTab;
   readonly attemptId: AttemptId | undefined;
+  /** A file the tab shows first, by its absolute path, or undefined. */
+  readonly file: string | undefined;
   /** Where it was opened from, which Back returns to. */
   readonly from: "chat" | "drawer";
 }
