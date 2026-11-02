@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-02
 - **Issue:** [#280](https://github.com/otaviobarros/hobbots/issues/280)
-- **Pull request:** PULL_REQUEST
+- **Pull request:** [#399](https://github.com/otaviobarros/hobbots/pull/399)
 - **Commit:** not yet on `main` (ran on the pull request branch, which starts from `main` at `9ced54d`)
 - **Setup:** Linux x86_64, Node 22.23.4, the fake runtime. Hub cases on SQLite in memory and on PostgreSQL 16.15 (a local server on port 54329, as `pnpm test:pg` uses). Hobs named Aldric, Quill, Ada, Rook and Pip, under the Balanced preset in one project folder. The restart case starts a second hub over the database of a first one that stopped mid-Quest without ending its turns, as a crash leaves it.
 - **Result:** Passed with gaps. A request runs end to end from one message: Aldric's steps, a party with a hand-off through him, a question he answers and one he passes up to you, and a nested Quest whose loop the limits stop. Retry, Reassign, Cancel Task and Cancel Quest end with confirmed outcomes, a This Task grant holds across a restart and ends with the Quest, and a restart mid-Quest loses and duplicates nothing. The run found two gaps in what the backpack leaves behind. Real Claude Code was not run.
