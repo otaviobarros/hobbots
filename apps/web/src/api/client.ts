@@ -28,6 +28,12 @@ declare global {
       /** Opens the system folder picker; resolves with the chosen folder, or null when cancelled. */
       readonly chooseFolder?: () => Promise<string | null>;
       /**
+       * Shows one of an Attempt's files in Finder, selected. The desktop app asks the hub which
+       * file the id names, so the page never hands it a path; resolves false when the hub does not
+       * list it or it is gone.
+       */
+      readonly showFile?: (attemptId: string, fileId: string) => Promise<boolean>;
+      /**
        * Calls `listener` with each request the desktop app asks to show in the Inbox, as when its
        * notification is clicked; answers a function that stops listening.
        */
