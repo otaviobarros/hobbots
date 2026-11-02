@@ -5,11 +5,12 @@ import { Option, Schema } from "effect";
 
 /**
  * Where the hub can be reached (ADR 021), kept in `network.json` in the Hobbots data folder: whether
- * remote access is on, and the port the user chose. The desktop app reads the port from the same
+ * remote access is on, whether it is paused, and the port the user chose. The desktop app reads the port from the same
  * file before it starts or finds the hub. A setting never chosen is absent, so it keeps its default.
  */
 export interface NetworkSettings {
   readonly remoteAccess?: boolean;
+  readonly remoteAccessPaused?: boolean;
   readonly port?: number;
 }
 
@@ -30,9 +31,13 @@ export const readNetworkSettings = (dataDir: string): NetworkSettings => {
     return {};
   }
   if (typeof value !== "object" || value === null) return {};
-  const { remoteAccess, port } = value as Record<string, unknown>;
+  const { remoteAccess, remoteAccessPaused, port } = value as Record<string, unknown>;
   return {
     ...Option.match(decodeRemoteAccess(remoteAccess), { onNone: () => ({}), onSome: (on) => ({ remoteAccess: on }) }),
+    ...Option.match(decodeRemoteAccess(remoteAccessPaused), {
+      onNone: () => ({}),
+      onSome: (paused) => ({ remoteAccessPaused: paused }),
+    }),
     ...Option.match(decodePort(port), { onNone: () => ({}), onSome: (chosen) => ({ port: chosen }) }),
   };
 };

@@ -5,6 +5,7 @@ import { movedPage } from "./remote-access.ts";
 
 const status = (change: Partial<RemoteAccessStatus>): RemoteAccessStatus => ({
   enabled: true,
+  paused: false,
   port: 4317,
   tailscale: { state: "running", dnsName: "studio-desk.example.ts.net", addresses: ["100.101.102.103"] },
   listening: ["100.101.102.103"],
@@ -41,6 +42,9 @@ describe("remote access in Settings", () => {
     expect(tailscale("notRunning")).toMatch(/^Tailscale is off on this computer/);
     expect(tailscale("signedOut")).toMatch(/^Tailscale is signed out on this computer/);
     expect(remoteAccessWhy(status({ problem: "noAddress", listening: [] }))).toMatch(/no tailnet address/);
+    expect(remoteAccessWhy(status({ paused: true, problem: "paused", listening: [] }))).toMatch(
+      /^Remote access is paused from the menu-bar icon/,
+    );
     expect(
       remoteAccessWhy(
         status({

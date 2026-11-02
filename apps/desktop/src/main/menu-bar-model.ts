@@ -2,7 +2,10 @@
  * What the menu-bar icon draws and says, and what closing the window does (design screen 14,
  * ADR 012). Pure, so the rules are testable without Electron; menu-bar.ts puts them on screen.
  */
+import { messages } from "./messages.ts";
 import type { ServerState, ServerStatus } from "./server.ts";
+
+const copy = messages.remoteAccess;
 
 /** The chief of the hobs in 10 × 10 cells, as the design draws it for the menu bar; "." and "k" (eyes) are clear. */
 const TRAY_CHIEF = [
@@ -111,6 +114,31 @@ export const trayModel = (status: ServerStatus, working: ReadonlyArray<string>, 
         canRestart: true,
       };
   }
+};
+
+/** What the hub said about remote access, as far as the menu-bar menu needs it. */
+export interface RemoteAccessSwitch {
+  readonly enabled: boolean;
+  readonly paused: boolean;
+}
+
+/** The menu's Pause remote access item: Pause, Resume, or none while remote access is off or unknown. */
+export interface PauseItem {
+  readonly label: string;
+  readonly sublabel: string;
+  /** What choosing it asks the hub for. */
+  readonly pause: boolean;
+}
+
+/**
+ * Pause remote access (ADR 021): shown while the server runs with remote access on. Pausing stops
+ * the tailnet until Resume and revokes nothing; this computer keeps working.
+ */
+export const pauseItem = (state: ServerState, remote: RemoteAccessSwitch | null): PauseItem | null => {
+  if (state !== "running" || remote === null || !remote.enabled) return null;
+  return remote.paused
+    ? { label: copy.resume, sublabel: copy.resumeHint, pause: false }
+    : { label: copy.pause, sublabel: copy.pauseHint, pause: true };
 };
 
 export type CloseAction =

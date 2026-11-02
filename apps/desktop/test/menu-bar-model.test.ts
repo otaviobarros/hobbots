@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   closeAction,
   listNames,
+  pauseItem,
   quitWhileWorkingDialog,
   renderTrayIcon,
   TRAY_SIZE,
@@ -54,6 +55,22 @@ describe("the menu-bar menu", () => {
       detail: "Boom.",
       canRestart: true,
     });
+  });
+});
+
+describe("Pause remote access in the menu", () => {
+  it("offers Pause while remote access is on, Resume while paused, and nothing while it is off or the server is not running", () => {
+    expect(pauseItem("running", { enabled: true, paused: false })).toMatchObject({
+      label: "Pause remote access",
+      pause: true,
+    });
+    expect(pauseItem("running", { enabled: true, paused: true })).toMatchObject({
+      label: "Resume remote access",
+      pause: false,
+    });
+    expect(pauseItem("running", { enabled: false, paused: true })).toBeNull();
+    expect(pauseItem("running", null)).toBeNull();
+    expect(pauseItem("stopped", { enabled: true, paused: false })).toBeNull();
   });
 });
 

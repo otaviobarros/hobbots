@@ -2,15 +2,28 @@
  * Hobbots as a menu-bar app (ADR 012, design screen 14): the menu-bar icon, what closing the window
  * does, the Dock icon only while a window is open, and Quit stopping the server before the app exits.
  */
+import { Option, Schema } from "effect";
 import { app, type BrowserWindow, dialog, Menu, nativeImage, Tray } from "electron";
 import { coalesce } from "./coalesce.ts";
 import type { HubAddress } from "./hub-address.ts";
+import { RemoteAccessView } from "./hub-events-model.ts";
 import { keepsRunning } from "./keep-running.ts";
-import { closeAction, quitWhileWorkingDialog, renderTrayIcon, TRAY_SIZE, trayModel } from "./menu-bar-model.ts";
+import {
+  closeAction,
+  pauseItem,
+  quitWhileWorkingDialog,
+  type RemoteAccessSwitch,
+  renderTrayIcon,
+  TRAY_SIZE,
+  trayModel,
+} from "./menu-bar-model.ts";
+import { messages } from "./messages.ts";
 import { readUntil } from "./read-until.ts";
 import type { ServerState, ServerSupervisor } from "./server.ts";
 import type { SettingsStore } from "./settings.ts";
 import { reveal } from "./single-instance.ts";
+
+const copy = messages.remoteAccess;
 
 /** A hob with a turn in progress, and the thread it runs in. */
 interface WorkingHob {
@@ -42,9 +55,13 @@ const trayImage = (state: ServerState) => {
   return image;
 };
 
+const decodeRemoteAccess = Schema.decodeUnknownOption(RemoteAccessView);
+
 export const startMenuBar = ({ supervisor, settings, hub, fetchHub, createWindow }: MenuBarOptions) => {
   const windows = new Set<BrowserWindow>();
   let working: ReadonlyArray<string> = [];
+  // Remote access as the hub last said, for Pause remote access; null until it answers.
+  let remote: RemoteAccessSwitch | null = null;
   let starting: Promise<void> = Promise.resolve();
   let quitting = false;
   let confirming = false;
@@ -77,12 +94,51 @@ export const startMenuBar = ({ supervisor, settings, hub, fetchHub, createWindow
     return starting;
   };
 
+  /** Reads remote access from the hub's answer, keeping what it knew when the answer is not one. */
+  const takeRemoteAccess = (body: unknown) => {
+    remote = Option.getOrElse(decodeRemoteAccess(body), () => remote);
+    refresh();
+  };
+
+  const readRemoteAccess = async () => {
+    if (!isRunning()) return;
+    try {
+      const response = await fetchHub(`${hub.apiUrl}/api/remote-access`, { signal: AbortSignal.timeout(1000) });
+      if (response.ok) takeRemoteAccess(await response.json());
+    } catch {
+      // The event stream says when the hub answers again.
+    }
+  };
+
+  /** Pause remote access or Resume (ADR 021), as the hub's window, which needs no `Origin`. */
+  const setPaused = async (paused: boolean) => {
+    try {
+      const response = await fetchHub(`${hub.apiUrl}/api/remote-access`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ paused }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) throw new Error(`The hub answered ${response.status}`);
+      takeRemoteAccess(await response.json());
+    } catch (error) {
+      console.error(error);
+      await dialog.showMessageBox({
+        type: "warning",
+        message: paused ? copy.couldNotPause : copy.couldNotResume,
+        detail: copy.checkServer,
+        buttons: [copy.ok],
+      });
+    }
+  };
+
   const tray = new Tray(trayImage(supervisor.status.state));
   let drawn = "";
   const refresh = () => {
     const status = supervisor.status;
     const model = trayModel(status, working, hub.port);
-    const key = JSON.stringify([status, model]);
+    const pause = pauseItem(status.state, remote);
+    const key = JSON.stringify([status, model, pause]);
     if (key === drawn) return;
     drawn = key;
     tray.setImage(trayImage(status.state));
@@ -93,8 +149,9 @@ export const startMenuBar = ({ supervisor, settings, hub, fetchHub, createWindow
         { type: "separator" },
         { label: "Open Hobbots", accelerator: "CmdOrCtrl+O", click: () => void showWindow() },
         { label: "Start the server again", visible: model.canRestart, click: () => void startServer() },
-        // Remote access arrives with slice 13.
-        { label: "Pause remote access", sublabel: "Later", enabled: false },
+        ...(pause === null
+          ? []
+          : [{ label: pause.label, sublabel: pause.sublabel, click: () => void setPaused(pause.pause) }]),
         { type: "separator" },
         { label: "Quit Hobbots", accelerator: "CmdOrCtrl+Q", click: () => app.quit() },
       ]),
@@ -121,7 +178,7 @@ export const startMenuBar = ({ supervisor, settings, hub, fetchHub, createWindow
    */
   const recheck = async () => {
     await checkHealth();
-    await readWorking();
+    await Promise.all([readWorking(), readRemoteAccess()]);
   };
 
   const guard = (window: BrowserWindow) => {
@@ -211,5 +268,5 @@ export const startMenuBar = ({ supervisor, settings, hub, fetchHub, createWindow
     });
   });
 
-  return { startServer, showWindow, recheck, activityChanged: readWorking };
+  return { startServer, showWindow, recheck, activityChanged: readWorking, remoteAccessChanged: takeRemoteAccess };
 };

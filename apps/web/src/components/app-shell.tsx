@@ -1,19 +1,39 @@
 import { Button } from "@hobbots/ui/components/button";
 import { Outlet } from "@tanstack/react-router";
 import { useHobbotsEvents } from "../api/events.ts";
+import { useDeviceAccess } from "../api/live.ts";
+import { hubNameOf, isLoopbackHost } from "../lib/hub-name.ts";
+import { DeviceRemoved } from "./device-removed.tsx";
 import { HobJump } from "./hob-jump.tsx";
 import { useOpenRequests } from "./inbox/use-open-requests.ts";
+import { messages } from "./messages.ts";
 import { Rail } from "./rail.tsx";
+
+const copy = messages.deviceAccess;
+
+/**
+ * Why the stream is down, in the banner's words. A device on the tailnet that gets no answer at all
+ * says the hub may be off or remote access paused (ADR 021); on the hub's own computer, pausing
+ * changes nothing, so it only reconnects.
+ */
+const reconnectingText = (unreachable: boolean) => {
+  const hostname = globalThis.location?.hostname ?? "";
+  if (!unreachable || isLoopbackHost(hostname)) return copy.reconnecting;
+  const hub = hubNameOf(hostname);
+  return hub === null ? copy.unreachableNoName : copy.unreachable({ hub });
+};
 
 /** The window: its title bar and whichever page fills it, with or without the rail. */
 export function AppWindow() {
+  // A revoked device sees only that it was removed, whichever page it was on.
+  const removed = useDeviceAccess() === "removed";
   return (
     <div className="flex h-screen min-h-[610px] flex-col bg-ground text-text">
       {/* Window chrome: macOS draws the traffic lights over the left of this bar in Electron. */}
       <header className="flex h-[30px] flex-none items-center justify-center bg-deep text-[13px] text-label [-webkit-app-region:drag]">
         Hobbots
       </header>
-      <Outlet />
+      {removed ? <DeviceRemoved /> : <Outlet />}
     </div>
   );
 }
@@ -21,6 +41,7 @@ export function AppWindow() {
 /** The app once setup is done: live events, the rail and the current page. */
 export function AppShell() {
   const connection = useHobbotsEvents();
+  const unreachable = useDeviceAccess() === "unreachable";
   useOpenRequests();
 
   return (
@@ -33,16 +54,14 @@ export function AppShell() {
           <span aria-hidden className="animate-hb-blink">
             ●
           </span>
-          <span className="flex-1">
-            Reconnecting to Hobbots… Messages you send wait here and go out when it is back.
-          </span>
+          <span className="flex-1">{reconnectingText(unreachable)}</span>
           <Button
             variant="outline"
             size="xs"
             className="border-ground text-ground hover:bg-lantern-hover"
             onClick={connection.retry}
           >
-            Try now
+            {copy.tryNow}
           </Button>
         </div>
       )}

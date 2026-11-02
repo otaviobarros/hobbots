@@ -14,9 +14,9 @@ import { Tailscale } from "./tailscale.ts";
 
 /**
  * Remote access (ADR 021): while it is on, the hub asks Tailscale every 10 seconds where it is on
- * the tailnet and listens there beside loopback. When Tailscale stops, loses the hub's addresses or
- * remote access turns off, the hub closes its tailnet listeners and their connections, and the
- * status says why. Tailscale's settings are only read, never changed.
+ * the tailnet and listens there beside loopback. When Tailscale stops, loses the hub's addresses, or
+ * remote access turns off or is paused, the hub closes its tailnet listeners and their connections,
+ * and the status says why. Loopback is never affected. Tailscale's settings are only read, never changed.
  */
 
 /** How often the hub asks Tailscale while remote access is on. */
@@ -29,15 +29,20 @@ export class RemoteAccessState extends Context.Service<RemoteAccessState, Ref.Re
   "@hobbots/server/RemoteAccessState",
 ) {}
 
-export const RemoteAccessStateLive = (start: { readonly enabled: boolean; readonly port: number }) =>
+export const RemoteAccessStateLive = (start: {
+  readonly enabled: boolean;
+  readonly paused?: boolean;
+  readonly port: number;
+}) =>
   Layer.effect(
     RemoteAccessState,
     Ref.make<RemoteAccessStatus>({
       enabled: start.enabled,
+      paused: start.paused ?? false,
       port: start.port,
       tailscale: null,
       listening: [],
-      problem: start.enabled ? null : "off",
+      problem: start.enabled ? (start.paused ? "paused" : null) : "off",
       detail: null,
     }),
   );
@@ -60,14 +65,16 @@ export const HubHostsLive = Layer.effect(
  */
 export const remoteAccessStatus = (input: {
   readonly enabled: boolean;
+  readonly paused: boolean;
   readonly port: number;
   readonly tailscale: TailscaleStatus | null;
   readonly listening: ReadonlyArray<string>;
   readonly failed: ReadonlyArray<ListenFailure>;
 }): RemoteAccessStatus => {
-  const { enabled, port, tailscale, listening, failed } = input;
-  const base = { enabled, port, tailscale, listening, detail: null };
+  const { enabled, paused, port, tailscale, listening, failed } = input;
+  const base = { enabled, paused, port, tailscale, listening, detail: null };
   if (!enabled) return { ...base, listening: [], problem: "off" };
+  if (paused) return { ...base, listening: [], problem: "paused" };
   if (tailscale === null || tailscale.state !== "running") return { ...base, problem: "tailscale" };
   if (tailscale.addresses.length === 0) return { ...base, problem: "noAddress" };
   const failure = failed[0];
@@ -156,10 +163,18 @@ export const RemoteAccessLive = (dataDir: string) =>
         }
         const snapshot = yield* tailscale.snapshot;
         yield* forget(snapshot.peers);
-        const wanted = snapshot.status.state === "running" ? snapshot.status.addresses : [];
+        // Paused, the hub still watches Tailscale, so Settings can say what Resume would find.
+        const wanted = snapshot.status.state === "running" && !current.paused ? snapshot.status.addresses : [];
         const { listening, failed } = yield* listeners.listenOnTailnet(wanted);
         return yield* settle(
-          remoteAccessStatus({ enabled: true, port, tailscale: snapshot.status, listening, failed }),
+          remoteAccessStatus({
+            enabled: true,
+            paused: current.paused,
+            port,
+            tailscale: snapshot.status,
+            listening,
+            failed,
+          }),
         );
       }).pipe(oneAtATime.withPermits(1));
 
@@ -174,8 +189,16 @@ export const RemoteAccessLive = (dataDir: string) =>
             const enabled = change.enabled;
             yield* Ref.update(state, (status) => ({ ...status, enabled }));
           }
+          // Turning remote access on in Settings also resumes it, unless the change says otherwise.
+          const resumes = change.enabled === true && (yield* Ref.get(state)).paused;
+          const paused = change.paused ?? (resumes ? false : undefined);
+          if (paused !== undefined) {
+            const before = yield* Ref.getAndUpdate(state, (status) => ({ ...status, paused }));
+            if (before.paused !== paused) yield* Effect.log(paused ? "Paused remote access" : "Resumed remote access");
+          }
           writeNetworkSettings(dataDir, {
             ...(change.enabled === undefined ? {} : { remoteAccess: change.enabled }),
+            ...(paused === undefined ? {} : { remoteAccessPaused: paused }),
             ...(change.port === undefined ? {} : { port: change.port }),
           });
         }).pipe(oneAtATime.withPermits(1));
@@ -260,6 +283,7 @@ export const KnownTailnetPeersOnly = tailnetCheck((request, requests) =>
 /** A hub without listeners of its own, as in tests, has remote access off and keeps it off. */
 const WITHOUT_REMOTE_ACCESS: RemoteAccessStatus = {
   enabled: false,
+  paused: false,
   port: 0,
   tailscale: null,
   listening: [],

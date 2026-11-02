@@ -9,6 +9,8 @@ import { DeviceSession } from "./user-session.ts";
  */
 export const UpdateRemoteAccessPayload = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
+  // Pause remote access in the menu-bar icon, and Resume. Pausing revokes no device.
+  paused: Schema.optionalKey(Schema.Boolean),
   // Ports below 1024 need system privileges the hub does not have.
   port: Schema.optionalKey(HubPort),
 });
