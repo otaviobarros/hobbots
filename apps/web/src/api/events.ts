@@ -7,6 +7,7 @@ import {
   type Message,
   MessageDelta,
   RemoteAccessChanged,
+  type RemoteAccessStatus,
   STREAM_FRAME,
   StreamReady,
 } from "@hobbots/domain";
@@ -26,7 +27,7 @@ import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
-import { applyRemoteAccess } from "./remote-access.ts";
+import { applyRemoteAccess, remoteAccessQuery } from "./remote-access.ts";
 import {
   newer,
   recordAgent,
@@ -210,6 +211,16 @@ const applyWorkEvent = (
   }
 };
 
+/**
+ * Takes a change of remote access the hub announced. Its event is not replayed, so nothing would
+ * correct an older answer that lands after it: a read already on its way, such as the one a fresh
+ * stream starts, is cancelled first.
+ */
+export const remoteAccessChanged = (queryClient: QueryClient, status: RemoteAccessStatus) => {
+  void queryClient.cancelQueries({ queryKey: remoteAccessQuery.queryKey, exact: true });
+  applyRemoteAccess(queryClient, status);
+};
+
 /** True when this client knows how to read the entry: its type and payload version. */
 const understands = (entry: EventEnvelope) =>
   entry.type in EVENT_SCHEMA_VERSIONS &&
@@ -272,7 +283,7 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
     });
     source.addEventListener(STREAM_FRAME.remoteAccess, (frame) => {
       try {
-        applyRemoteAccess(queryClient, decodeRemoteAccess(frame.data).status);
+        remoteAccessChanged(queryClient, decodeRemoteAccess(frame.data).status);
       } catch (error) {
         console.warn("Ignoring malformed event", error);
       }
