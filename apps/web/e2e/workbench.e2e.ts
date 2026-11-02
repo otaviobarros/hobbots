@@ -130,7 +130,7 @@ test("[TC-UX-021] a finished Task's Workbench opens on Summary, greys out the Te
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-022] the Workbench opens from the Task drawer and the Quest tab, and goes back to the drawer it came from", async ({
+test("[TC-UX-022] the Workbench opens from the Task drawer and the Quest tab, and goes back to the drawer it came from with its unsent note", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -142,15 +142,18 @@ test("[TC-UX-022] the Workbench opens from the Task drawer and the Quest tab, an
   const card = page.getByRole("region", { name: "Aldric's work on Tidy the notes" });
   await expect(card).toBeVisible({ timeout: 20_000 });
 
-  // From the drawer, Back to the task reopens the drawer.
+  // From the drawer, Back to the task reopens the drawer with its unsent note.
   await card.getByRole("button", { name: "Show details" }).click();
   const drawer = page.getByRole("complementary", { name: "Tidy the notes, Task details" });
+  const note = drawer.getByRole("textbox", { name: "Tell Aldric about this task" });
+  await note.fill("Keep the headings short");
   await drawer.getByRole("button", { name: "Open in Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   await expect(bench).toBeVisible();
   await expect(drawer).toBeHidden();
   await bench.getByRole("button", { name: "← Back to the task" }).click();
   await expect(drawer).toBeVisible();
+  await expect(note).toHaveValue("Keep the headings short");
 
   // From the Quest tab, the open Task's controls open its Workbench.
   await page.getByRole("tab", { name: "Quest" }).click();

@@ -81,8 +81,11 @@ function Workspace({
             onTogglePanel: () => setPanelOpen(!panelOpen),
           })}
         </div>
-        {threadId !== undefined && taskId !== undefined && !benchOpen && (
-          <TaskDrawer key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} pinned={pins.pinned} />
+        {/* The drawer also stays mounted under the Workbench, so Back to the task finds its unsent notes. */}
+        {threadId !== undefined && taskId !== undefined && (
+          <div className={cn(benchOpen && "invisible")} inert={benchOpen}>
+            <TaskDrawer key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} pinned={pins.pinned} />
+          </div>
         )}
         {threadId !== undefined && workbench !== undefined && (
           <Workbench hobId={hobId} threadId={threadId} view={workbench} pinned={pins.pinned} />

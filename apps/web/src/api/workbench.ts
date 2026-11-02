@@ -1,6 +1,8 @@
+import type { AttemptActivityRead } from "@hobbots/api";
 import type { AttemptId, HobbotsEvent } from "@hobbots/domain";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { call } from "./client.ts";
+import { syncState } from "./sync.ts";
 
 /**
  * What an Attempt ran, changed and made, as the Workbench reads it (ADR 023). A recorded command,
@@ -12,10 +14,23 @@ const workbenchKeys = {
   activity: (attemptId: AttemptId) => ["workbench", "activity", attemptId] as const,
 };
 
+/**
+ * Reads an Attempt's records for the current sync generation. A read that lands after a new
+ * generation began may predate records the stream can no longer replay, so it is read again; a new
+ * generation only invalidates, and with no data yet TanStack Query hands back the read on its way.
+ */
+const readActivity = async (client: QueryClient, attemptId: AttemptId): Promise<AttemptActivityRead> => {
+  for (;;) {
+    const generation = syncState(client).generation;
+    const read = await call((c) => c.workbench.activity({ params: { attemptId } }));
+    if (syncState(client).generation === generation) return read;
+  }
+};
+
 export const attemptActivityQuery = (attemptId: AttemptId) =>
   queryOptions({
     queryKey: workbenchKeys.activity(attemptId),
-    queryFn: () => call((c) => c.workbench.activity({ params: { attemptId } })),
+    queryFn: ({ client }) => readActivity(client, attemptId),
     select: (read) => read.activity,
   });
 
