@@ -72,6 +72,7 @@ const node = (nodeId: string): TailnetPeer => ({
   owner: { _tag: "User", login: "you@example.com" },
 });
 const TestPeers = Layer.succeed(TailnetPeers, {
+  remote: (request) => request.headers[NODE_HEADER] !== undefined,
   hub: Effect.succeed(Option.some(node("nHUB"))),
   peerOf: (request) =>
     Effect.succeed(Option.map(Option.fromNullishOr(request.headers[NODE_HEADER]), (nodeId) => node(nodeId))),

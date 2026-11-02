@@ -1,16 +1,28 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { BlockList, isIPv4, isIPv6 } from "node:net";
 import { join } from "node:path";
 import { runTool, type ToolRun, toolEnv } from "@hobbots/charms";
-import type { TailscaleState, TailscaleStatus } from "@hobbots/domain";
+import { SERVE_OFF_ARGS, type TailscaleState, type TailscaleStatus } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Ref, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import type { TailnetOwner, TailnetPeer } from "./devices.ts";
 
 /**
- * Tailscale on the hub, read through its command line (ADR 021). The hub only reads: it never
- * changes Tailscale's settings.
+ * Tailscale on the hub, read through its command line (ADR 021). The hub only reads, except for
+ * `tailscale serve`, which it runs only after the user consents in Settings › Devices. It never runs
+ * `tailscale funnel`.
  */
+
+/** One web handler `tailscale serve` has: the host and port it answers on, its path, and where it forwards. */
+export interface ServedRoute {
+  /** The SNI name and port, such as `hub.example.ts.net:443`. */
+  readonly host: string;
+  readonly path: string;
+  /** Where it forwards, such as `http://127.0.0.1:4318`; empty for a handler that serves files or text. */
+  readonly proxy: string;
+  /** Whether Tailscale lets funnel traffic from the internet reach it. */
+  readonly funnel: boolean;
+}
 
 /** What one `tailscale status` tells the hub: its own node, and the addresses of every peer it lists. */
 export interface TailnetSnapshot {
@@ -28,6 +40,10 @@ export class Tailscale extends Context.Service<
     readonly whois: (address: string) => Effect.Effect<Option.Option<TailnetPeer>>;
     /** Whether a connection from this address can come from the tailnet at all. */
     readonly isTailnetAddress: (address: string) => boolean;
+    /** What `tailscale serve status --json` says Tailscale serves; none when it cannot be read. */
+    readonly served: Effect.Effect<Option.Option<ReadonlyArray<ServedRoute>>>;
+    /** Runs `tailscale serve` in the background with these arguments; fails with Tailscale's words. */
+    readonly serve: (args: ReadonlyArray<string>) => Effect.Effect<void, string>;
   }
 >()("@hobbots/server/Tailscale") {}
 
@@ -128,6 +144,54 @@ export const readWhoIs = (json: string): Option.Option<TailnetPeer> =>
     }),
   );
 
+// The fields of `tailscale serve status --json` the hub reads (ipn.ServeConfig in Tailscale's source).
+const ServeJson = Schema.Struct({
+  Web: Schema.optional(
+    Schema.NullOr(
+      Schema.Record(
+        Schema.String,
+        Schema.Struct({
+          Handlers: Schema.optional(
+            Schema.NullOr(Schema.Record(Schema.String, Schema.Struct({ Proxy: Schema.optional(Schema.String) }))),
+          ),
+        }),
+      ),
+    ),
+  ),
+  AllowFunnel: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Boolean))),
+});
+const decodeServe = Schema.decodeUnknownOption(Schema.fromJsonString(ServeJson));
+
+/** Every web handler in `tailscale serve status --json`; none when the output is not a serve configuration. */
+export const readServeStatus = (json: string): Option.Option<ReadonlyArray<ServedRoute>> =>
+  Option.map(decodeServe(json), (raw) =>
+    Object.entries(raw.Web ?? {}).flatMap(([host, web]) =>
+      Object.entries(web.Handlers ?? {}).map(([path, handler]) => ({
+        host,
+        path,
+        proxy: handler.Proxy ?? "",
+        funnel: raw.AllowFunnel?.[host] === true,
+      })),
+    ),
+  );
+
+const LOOPBACK_TARGETS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * Whether Tailscale forwards HTTPS at its root to the hub's serve listener at `port`, however the
+ * target was spelled: `4318`, `localhost:4318` and `http://127.0.0.1:4318` all mean it.
+ */
+export const forwardsTo = (routes: ReadonlyArray<ServedRoute>, port: number): boolean =>
+  routes.some((route) => {
+    if (route.path !== "/" || !route.host.endsWith(":443")) return false;
+    try {
+      const target = new URL(route.proxy.includes("://") ? route.proxy : `http://${route.proxy}`);
+      return target.protocol === "http:" && LOOPBACK_TARGETS.has(target.hostname) && target.port === String(port);
+    } catch {
+      return false;
+    }
+  });
+
 /** Address ranges as a set a connection's address can be checked against. */
 export const addressRanges = (ranges: ReadonlyArray<string>) => {
   const list = new BlockList();
@@ -182,6 +246,19 @@ export const TailscaleLive = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv)
             Effect.map(Option.flatMap((result) => (result.code === 0 ? readWhoIs(result.out) : Option.none()))),
           ),
         isTailnetAddress,
+        served: tailscale(["serve", "status", "--json"]).pipe(
+          Effect.map(Option.flatMap((result) => (result.code === 0 ? readServeStatus(result.out) : Option.none()))),
+        ),
+        serve: (args) =>
+          tailscale(args).pipe(
+            Effect.flatMap(
+              Option.match({
+                onNone: () => Effect.fail("the tailscale command did not start"),
+                onSome: ({ out, code }) =>
+                  code === 0 ? Effect.void : Effect.fail(out.trim() || `tailscale exited with code ${code}`),
+              }),
+            ),
+          ),
       });
     }),
   );
@@ -208,6 +285,12 @@ export const FakeTailnet = Schema.Struct({
   self: Schema.optionalKey(FakeNode),
   peers: Schema.Record(Schema.String, FakeNode),
   ranges: Schema.Array(Schema.String),
+  /** Where `tailscale serve` forwards HTTPS on the MagicDNS name; absent while it serves nothing. */
+  serve: Schema.optionalKey(Schema.String),
+  /** Whether funnel is allowed on what it serves. */
+  funnel: Schema.optionalKey(Schema.Boolean),
+  /** What `tailscale serve` answers when it refuses to run, such as when HTTPS is off in the tailnet. */
+  serveRefuses: Schema.optionalKey(Schema.String),
 });
 export type FakeTailnet = typeof FakeTailnet.Type;
 
@@ -226,7 +309,24 @@ export const DEFAULT_FAKE_TAILNET: FakeTailnet = {
   ranges: ["127.0.0.0/8"],
 };
 
-const fakeFrom = (read: Effect.Effect<FakeTailnet>, ranges: ReadonlyArray<string>) =>
+/** What the fake `tailscale serve` does with the arguments the hub runs it with. */
+const fakeServe = (fake: FakeTailnet, args: ReadonlyArray<string>): FakeTailnet | string => {
+  if (fake.state !== "running" || fake.dnsName === null) return "Tailscale is not running";
+  if (fake.serveRefuses !== undefined) return fake.serveRefuses;
+  if (args.join(" ") === SERVE_OFF_ARGS.join(" ")) {
+    const { serve: _, funnel: __, ...rest } = fake;
+    return rest;
+  }
+  const target = args.at(-1);
+  if (args[0] !== "serve" || args[1] !== "--bg" || target === undefined) return `unknown arguments: ${args.join(" ")}`;
+  return { ...fake, serve: target };
+};
+
+const fakeFrom = (
+  read: Effect.Effect<FakeTailnet>,
+  write: (fake: FakeTailnet) => Effect.Effect<void>,
+  ranges: ReadonlyArray<string>,
+) =>
   Tailscale.of({
     snapshot: Effect.map(read, (fake) =>
       fake.state === "running"
@@ -242,13 +342,31 @@ const fakeFrom = (read: Effect.Effect<FakeTailnet>, ranges: ReadonlyArray<string
         fake.state === "running" ? Option.fromNullishOr(fake.peers[address]) : Option.none(),
       ),
     isTailnetAddress: addressRanges(ranges),
+    served: Effect.map(read, (fake) =>
+      fake.state === "notInstalled"
+        ? Option.none()
+        : Option.some(
+            fake.serve === undefined || fake.dnsName === null
+              ? []
+              : [{ host: `${fake.dnsName}:443`, path: "/", proxy: fake.serve, funnel: fake.funnel ?? false }],
+          ),
+    ),
+    serve: (args) =>
+      Effect.flatMap(read, (fake) => {
+        const next = fakeServe(fake, args);
+        return typeof next === "string" ? Effect.fail(next) : write(next);
+      }),
   });
 
 /** A fake Tailscale for tests, which the test changes through the `Ref`. */
 export const TailscaleFake = (
   tailnet: Ref.Ref<FakeTailnet>,
   ranges: ReadonlyArray<string> = DEFAULT_FAKE_TAILNET.ranges,
-) => Layer.succeed(Tailscale, fakeFrom(Ref.get(tailnet), ranges));
+) =>
+  Layer.succeed(
+    Tailscale,
+    fakeFrom(Ref.get(tailnet), (next) => Ref.set(tailnet, next), ranges),
+  );
 
 const decodeFake = Schema.decodeUnknownOption(Schema.fromJsonString(FakeTailnet));
 
@@ -256,6 +374,7 @@ const decodeFake = Schema.decodeUnknownOption(Schema.fromJsonString(FakeTailnet)
  * A fake Tailscale for development (`HOBBOTS_FAKE_TAILSCALE=on`). It reads `fake-tailscale.json`
  * in the data folder on every check, so editing the file turns the fake tailnet off or on while the
  * hub runs; without the file it is `DEFAULT_FAKE_TAILNET`, and a file it cannot read is not installed.
+ * Its `tailscale serve` writes the file.
  */
 export const TailscaleFakeFile = (dataDir: string) => {
   const file = join(dataDir, "fake-tailscale.json");
@@ -268,8 +387,9 @@ export const TailscaleFakeFile = (dataDir: string) => {
     }
     return Option.getOrElse(decodeFake(raw), () => ({ ...DEFAULT_FAKE_TAILNET, state: "notInstalled" as const }));
   });
+  const write = (next: FakeTailnet) => Effect.sync(() => writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`));
   return Layer.effect(
     Tailscale,
-    Effect.map(read, (start) => fakeFrom(read, start.ranges)),
+    Effect.map(read, (start) => fakeFrom(read, write, start.ranges)),
   );
 };

@@ -23,6 +23,7 @@ import { Base64Url } from "effect/encoding";
 import type { HttpServerRequest } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { RateLimiter } from "effect/persistence";
+import { throughServe } from "./arrival.ts";
 import { windowKeyFile } from "./window-key.ts";
 
 /** Who owns a tailnet node: a Tailscale user, or the tags a tagged node carries instead. */
@@ -40,21 +41,28 @@ export interface TailnetPeer {
 /**
  * Where a request came from (ADR 021): Some for a tailnet request, with the peer Tailscale names,
  * and None for a local one. Which listener a connection arrived on decides it, not the peer's
- * address: the fake Tailscale serves its tailnet on loopback addresses. A peer Tailscale does not
- * know never gets this far; the hub answers it `403` first. Without this service the hub has only
- * loopback listeners, and a request from any other address is refused.
+ * address: the fake Tailscale serves its tailnet on loopback addresses, and `tailscale serve`
+ * forwards from loopback. A peer Tailscale does not know never gets this far; the hub answers it
+ * `403` first. Without this service the hub has only loopback listeners, and a request from any
+ * other address is refused.
  */
 export class TailnetPeers extends Context.Service<
   TailnetPeers,
   {
     readonly peerOf: (request: HttpServerRequest.HttpServerRequest) => Effect.Effect<Option.Option<TailnetPeer>>;
+    /** Whether the request came in on a tailnet listener or through `tailscale serve`: never a local request. */
+    readonly remote: (request: HttpServerRequest.HttpServerRequest) => boolean;
     /** The hub's own Tailscale node, as Tailscale last reported it while remote access is on. */
     readonly hub: Effect.Effect<Option.Option<TailnetPeer>>;
   }
 >()("@hobbots/server/TailnetPeers") {}
 
 /** No request comes from the tailnet, as on a hub with only loopback listeners. */
-export const LocalPeers = Layer.succeed(TailnetPeers, { peerOf: () => Effect.succeedNone, hub: Effect.succeedNone });
+export const LocalPeers = Layer.succeed(TailnetPeers, {
+  peerOf: () => Effect.succeedNone,
+  remote: () => false,
+  hub: Effect.succeedNone,
+});
 
 /**
  * Whether a request with no peer address at all counts as local. Only tests that call the routes
@@ -72,12 +80,15 @@ const placeOf = (
   inProcess: boolean,
   request: HttpServerRequest.HttpServerRequest,
 ) => {
-  // A request no tailnet peer claims is local only when it came over loopback, so a failed lookup
-  // never makes a remote request local.
-  const loopback = Option.match(request.peerAddress, {
-    onNone: () => inProcess,
-    onSome: (address) => LOOPBACK_ADDRESSES.has(address),
-  });
+  // A request no tailnet peer claims is local only when it came over loopback, and not through a
+  // tailnet or serve listener, so a failed lookup never makes a remote request local.
+  const remote = Option.exists(peers, (tailnet) => tailnet.remote(request));
+  const loopback =
+    !remote &&
+    Option.match(request.peerAddress, {
+      onNone: () => inProcess,
+      onSome: (address) => LOOPBACK_ADDRESSES.has(address),
+    });
   const local = loopback ? Option.some<DevicePlace>(LOCAL) : Option.none<DevicePlace>();
   return Option.match(peers, {
     onSome: (tailnet) =>
@@ -172,9 +183,14 @@ const cookieCounts = (header: string | undefined) => {
   return counts;
 };
 
-/** The request's own origin: `http` and the `Host` it was sent to. */
+/**
+ * The request's own origin: the `Host` it was sent to, over `https` when it came through `tailscale
+ * serve` and `http` otherwise (ADR 021).
+ */
 export const ownOrigin = (request: HttpServerRequest.HttpServerRequest) =>
-  request.headers.host === undefined ? undefined : `http://${request.headers.host.toLowerCase()}`;
+  request.headers.host === undefined
+    ? undefined
+    : `${throughServe(request) ? "https" : "http"}://${request.headers.host.toLowerCase()}`;
 
 /**
  * Why a request carrying a cookie of the hub could have come from another page, or null when it
@@ -208,11 +224,12 @@ const DEVICE_COOKIE_MAX_AGE = "400 days";
 
 /**
  * Sets the browser's device cookie: `HttpOnly`, `SameSite=Strict`, for the whole host and no other.
- * Over plain HTTP it cannot be `Secure`; over HTTPS it is `__Host-hobbots_device` (#341).
+ * Over plain HTTP it cannot be `Secure`; over HTTPS, through `tailscale serve`, it is
+ * `__Host-hobbots_device` and `Secure` (ADR 021).
  */
-export const setDeviceCookie = (token: string) =>
-  HttpApiBuilder.securitySetCookie(DeviceCookie, Redacted.make(token), {
-    secure: false,
+export const setDeviceCookie = (token: string, secure: boolean) =>
+  HttpApiBuilder.securitySetCookie(secure ? SecureDeviceCookie : DeviceCookie, Redacted.make(token), {
+    secure,
     httpOnly: true,
     sameSite: "strict",
     path: "/",
@@ -261,7 +278,8 @@ export class DeviceGate extends Context.Service<
       const devices = yield* DeviceService;
       const peers = yield* Effect.serviceOption(TailnetPeers);
       const inProcess = yield* InProcessRequests;
-      // When each browser's cookie was last set, so it is set again at most once a day while used.
+      // When each browser's cookie was last set, over HTTP and over HTTPS, so it is set again at most
+      // once a day while used.
       const refreshed = new Map<string, number>();
 
       const refuse = <E>(request: HttpServerRequest.HttpServerRequest, why: string, error: E) =>
@@ -269,12 +287,18 @@ export class DeviceGate extends Context.Service<
 
       const required = new DeviceRequired({ message: "This device is not approved on this hub." });
 
-      const refresh = (device: Device, token: string) =>
+      /**
+       * Sets the cookie again at most once a day. A browser approved over HTTP that arrives over
+       * HTTPS with only its plain cookie moves to the secure one at once; it keeps the plain one, so
+       * the HTTP address still knows it should HTTPS be turned off.
+       */
+      const refresh = (device: Device, token: string, secure: boolean, moving: boolean) =>
         Effect.gen(function* () {
           const now = yield* Clock.currentTimeMillis;
-          if (now - (refreshed.get(device.id) ?? 0) < COOKIE_REFRESH_MS) return;
-          refreshed.set(device.id, now);
-          yield* setDeviceCookie(token);
+          const key = secure ? `${device.id}:https` : device.id;
+          if (!moving && now - (refreshed.get(key) ?? 0) < COOKIE_REFRESH_MS) return;
+          refreshed.set(key, now);
+          yield* setDeviceCookie(token, secure);
         });
 
       const admit = (request: HttpServerRequest.HttpServerRequest) =>
@@ -308,7 +332,10 @@ export class DeviceGate extends Context.Service<
                 ),
               ),
             );
-          if (bearer === "" && token.startsWith(DEVICE_TOKEN_PREFIX)) yield* refresh(device, token);
+          if (bearer === "" && token.startsWith(DEVICE_TOKEN_PREFIX)) {
+            const secure = throughServe(request);
+            yield* refresh(device, token, secure, secure && !counts.has(SecureDeviceCookie.key));
+          }
           return device;
         });
 

@@ -475,6 +475,26 @@ export const messages = {
       unavailable: ({ port, detail }: { port: number; detail: string }) =>
         `Hobbots could not open port ${port}: ${detail}. It still uses the old one.`,
     },
+    https: {
+      switchLabel: "Use HTTPS through Tailscale",
+      note: "Optional. Gives you an https:// address on your tailnet, set up by Tailscale. Never on the open internet.",
+      serving: "Tailscale serves Hobbots over HTTPS on your tailnet.",
+      notServing:
+        "Tailscale does not serve Hobbots over HTTPS yet. Run this on this computer, or let Hobbots run it for you:",
+      leftOver:
+        "Tailscale still forwards HTTPS to Hobbots. Remove it with this command on this computer, or let Hobbots run it for you:",
+      cannotListen: ({ detail }: { detail: string }) => `Hobbots could not open its HTTPS port: ${detail}.`,
+      run: "Run it for me…",
+      consentOn: ({ command }: { command: string }) =>
+        `Hobbots will run ${command} in the background on this computer. Tailscale then serves Hobbots to your tailnet only, never the internet.`,
+      consentOff: ({ command }: { command: string }) =>
+        `Hobbots will run ${command} on this computer. It removes everything Tailscale serves over HTTPS on this computer.`,
+      notNow: "Not now",
+      confirm: "Run it",
+      running: "Running…",
+      failed: ({ detail }: { detail: string }) => `Tailscale did not do it: ${detail}`,
+      failedPlain: "Hobbots could not run Tailscale. Run the command yourself, or try again in a moment.",
+    },
     devices: {
       heading: "Allowed devices",
       window: "This computer's Hobbots window",
