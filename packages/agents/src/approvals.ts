@@ -30,7 +30,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Duration, Effect, Layer, Option, Semaphore } from "effect";
 import { unguarded, type WriteGuard } from "./devices.ts";
-import { GrantService, ruleHolds, ruleOffered } from "./grants.ts";
+import { GrantService, isGitHubRule, ruleHolds, ruleOffered } from "./grants.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { ApprovalAction, ApprovalOutcome, PendingApproval, ToolAccess, TurnApprovals } from "./runtime.ts";
@@ -120,6 +120,8 @@ interface Waiter {
   /** The hob's tool access as it is now, read when a decision saves grants. */
   readonly currentAccess: Effect.Effect<ToolAccess | null>;
   readonly decision: Deferred.Deferred<ApprovalOutcome>;
+  /** For a GitHub write, the hob's GitHub identity when it asked; null for any other call. */
+  readonly githubIdentity: number | null;
 }
 
 type RefusedDecision = ApprovalActionChanged | ApprovalNotConfirmed | ApprovalNotGrantable | GrantRuleRefused;
@@ -388,6 +390,7 @@ export class ApprovalService extends Context.Service<
                       workingOn,
                       currentAccess,
                       decision,
+                      githubIdentity: yield* githubIdentityOf(owner.agentId, action),
                     });
                     return {
                       approvalId: saved.id,
@@ -452,6 +455,22 @@ export class ApprovalService extends Context.Service<
           (top) => top !== null && top === approval.rootTaskId,
         );
 
+      // The hob's GitHub identity now, for a call whose grant would be one for a GitHub write.
+      const githubIdentityOf = (agentId: AgentId, action: ApprovalAction) =>
+        Option.isSome(grants) && action.rules.some(isGitHubRule)
+          ? grants.value.githubIdentity(agentId)
+          : Effect.succeed(null);
+
+      const asksAsGitHub = (approval: ApprovalRequest) => (waiters.get(approval.id)?.githubIdentity ?? null) !== null;
+
+      // Whether the hob's GitHub identity changed since it asked, so a grant would go to the other one.
+      const identityChanged = (approval: ApprovalRequest) => {
+        const asked = waiters.get(approval.id)?.githubIdentity ?? null;
+        return asked === null || Option.isNone(grants)
+          ? Effect.succeed(false)
+          : Effect.map(grants.value.githubIdentity(approval.agentId), (now) => now !== asked);
+      };
+
       // Saves the decision with its grants only while the hob's access now still holds each rule, so
       // a narrowing since the request was asked, or one racing this decision, leaves no grant behind.
       // This Task binds to the Task the turn still works on, never to one it has left (ADR 018).
@@ -462,6 +481,8 @@ export class ApprovalService extends Context.Service<
         guarded: WriteGuard,
       ) =>
         Effect.gen(function* () {
+          // Asked as one GitHub identity, the hob now acts as the other (ADR 022): the request is void.
+          if (yield* identityChanged(approval)) return "identity-changed" as const;
           const access = yield* waiters.get(approval.id)?.currentAccess ?? Effect.succeed(null);
           if (!saving.every((grant) => ruleHolds(access, grant.rule))) return "narrowed" as const;
           if (saving.some((grant) => grant.taskId !== null) && !(yield* stillOn(approval))) return "narrowed" as const;
@@ -474,9 +495,29 @@ export class ApprovalService extends Context.Service<
         saving: ReadonlyArray<Grant>,
         guarded: WriteGuard,
       ) =>
-        saving.length === 0 || Option.isNone(grants)
+        // An approval of a GitHub write is checked against the hob's identity even when it saves no grant.
+        Option.isNone(grants) || (saving.length === 0 && !(next.state === "approved" && asksAsGitHub(approval)))
           ? settle(next, [], guarded)
           : grants.value.exclusive(saveGrants(approval, next, saving, guarded));
+
+      // What a decision answers once stored, or why it was not: the turn waiting on it goes on.
+      const stored = (
+        id: ApprovalId,
+        saved: "identity-changed" | "narrowed" | Option.Option<ApprovalRequest>,
+        lifetime: ApprovalLifetime | null,
+      ) =>
+        Effect.gen(function* () {
+          if (saved === "identity-changed") {
+            yield* expire(id);
+            return yield* new ApprovalClosed({ approvalId: id, state: "expired" });
+          }
+          if (saved === "narrowed") {
+            return yield* new ApprovalNotGrantable({ approvalId: id, lifetime: lifetime ?? "once" });
+          }
+          if (Option.isNone(saved)) return yield* new ApprovalClosed({ approvalId: id, state: "expired" });
+          yield* wake(saved.value);
+          return saved.value;
+        });
 
       const decide = Effect.fn("ApprovalService.decide")(function* (id: ApprovalId, input: ApprovalDecisionInput) {
         const session = yield* UserSession;
@@ -503,12 +544,7 @@ export class ApprovalService extends Context.Service<
             const denyReason = input.decision === "deny" ? input.reason?.trim() || null : null;
             const next = new ApprovalRequest({ ...approval, state, lifetime, denyReason, decidedAt: now });
             const saved = yield* store(approval, next, grantsFor(approval, input, now), session.whileApproved);
-            if (saved === "narrowed") {
-              return yield* new ApprovalNotGrantable({ approvalId: id, lifetime: lifetime ?? "once" });
-            }
-            if (Option.isNone(saved)) return yield* new ApprovalClosed({ approvalId: id, state: "expired" });
-            yield* wake(saved.value);
-            return saved.value;
+            return yield* stored(id, saved, lifetime);
           }).pipe(
             // A cancelled request must not store a decision without waking the turn that waits for it.
             Effect.uninterruptible,
