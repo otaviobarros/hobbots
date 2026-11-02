@@ -56,6 +56,7 @@ const MERRY = AgentId.make("merry");
 // A test names the Tailscale node a request comes from with this header; without it, it is local.
 const NODE_HEADER = "x-test-tailnet-node";
 const TestPeers = Layer.succeed(TailnetPeers, {
+  hub: Effect.succeedNone,
   peerOf: (request) =>
     Effect.succeed(
       Option.map(
