@@ -287,6 +287,12 @@ export interface TaskToolCall {
    */
   readonly input: string;
   readonly at: string;
+  /**
+   * The backpack claims the calling turn holds (ADR 019). The call is fenced by them: when any of
+   * them no longer holds, by owner, token and lease, it writes nothing and is refused. An item the
+   * turn carries without a claim, with no owner, fences nothing.
+   */
+  readonly fence?: ReadonlyArray<CarriedItem>;
 }
 
 /** What a call did, and the journal entries to announce; none when it was a retry. */
@@ -298,7 +304,8 @@ export interface TaskToolOutcome {
 /**
  * Makes each Task tool call happen once per hob and key (ADR 018). The call's writes and its
  * result are stored in one transaction, so a retried call returns the first result and never
- * writes again; a refused call stores nothing and can be retried.
+ * writes again; a refused call stores nothing and can be retried. A call from a turn whose
+ * backpack claim no longer holds is refused in that same transaction, as `claim-stale` (ADR 019).
  */
 export class TaskToolCalls extends Context.Service<
   TaskToolCalls,

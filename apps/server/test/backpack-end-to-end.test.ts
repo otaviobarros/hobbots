@@ -534,8 +534,8 @@ describe("the backpack end to end", () => {
     const refused = await run(Effect.flip(Backpack.use((backpack) => backpack.renew(claimed.id, first, "1 minute"))));
     expect(refused._tag).toBe("StaleBackpackClaim");
 
-    // The stalled turn goes on and finds its claim gone: the result it carried is no longer its to
-    // settle, so its completion is refused. The item is claimed again and consumed once.
+    // The stalled turn goes on, and its runtime accepts it with the claim gone: it stops there,
+    // spending nothing more, and makes no call (#375). The item is claimed again and consumed once.
     await unstall();
     const done = await run(launched);
     expect(done.tasks[0]?.result?.summary).toBe("The launch is ready");
@@ -544,10 +544,59 @@ describe("the backpack end to end", () => {
     expect(consumed.fencingToken).toBeGreaterThan(expired?.fencingToken ?? Number.POSITIVE_INFINITY);
     expect(consumed.deliveries).toHaveLength(2);
     expect(continuationsIn(requests)).toHaveLength(2);
-    // Only the second continuation's completion landed.
+    // Only the second continuation's completion landed; the stale one was stopped before it called anything.
     const all = await run(messagesWhen((each) => continuations(each).length === 2));
+    const [stopped, landed] = continuations(all).map(({ status, content }) => ({ status, content }));
+    expect(landed).toMatchObject({ status: "complete", content: expect.stringContaining("complete_task: ") });
+    expect(stopped?.status).not.toBe("complete");
+    expect(stopped?.content).not.toContain("complete_task:");
+    await run(nothingOpen);
+  }, 20_000);
+
+  // covers IN-002, IN-003, OR-001
+  it("[TC-IN-167] a claim that runs out while Aldric's accepted turn is mid-call fences the call: his late delegation brings nobody in", async () => {
+    const database = await sharedDatabase();
+    const lateReview = hub("delegate_task", { key: "late-review", hob: "Ada", brief: "Review the launch copy" });
+    const faults = makeFaults([
+      // The first continuation is accepted, then its delegation is held while its claim runs out.
+      { lines: [lateReview, wrapUp()] },
+      { lines: [wrapUp("wrap-again")] },
+    ]);
+    const { run, requests, releaseCall } = await start(database, faults, { ...LIMITS, lease: "300 millis" });
+    await run(party);
+    holdCall(faults, "copy-done");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, plan([quillDone]))));
+    await run(messagesWhen((all) => all.length === 2));
+    holdCall(faults, "late-review");
+    faults.freezeRenewals = true;
+    await releaseCall("copy-done");
+
+    const [claimed] = await run(itemsWhen("result", (item) => item.state === "processing" && item.claim !== null));
+    const first = claimed?.claim;
+    if (claimed === undefined || first === null || first === undefined) throw new Error("no claim held");
+    await run(
+      until(openItems(ALDRIC), (items) =>
+        items.some((item) => item.id === claimed.id && item.claim === null && item.fencingToken > first.token),
+      ),
+    );
+    faults.freezeRenewals = false;
+
+    // The held call goes on under the lost claim: it writes nothing, and so does the completion after it.
+    const before = await run(treeWhen(() => true));
+    await releaseCall("late-review");
+    const done = await run(launched);
+    expect(ownedBy(done, ADA)).toHaveLength(0);
+    expect(done.delegations.filter((each) => each.memberId === ADA)).toHaveLength(0);
+    expect(done.attempts.filter((each) => each.agentId === ADA)).toHaveLength(0);
+    expect(done.tasks).toHaveLength(before.tasks.length);
+    expect(requests.some((request) => request.prompt.startsWith("Review the launch copy"))).toBe(false);
+    const all = await run(messagesWhen((each) => continuations(each).length === 2));
+    expect(continuations(all)[0]?.content).toContain("delegate_task: Refused (claim-stale)");
+    expect(continuations(all)[0]?.content).toContain("complete_task: Refused (claim-stale)");
     expect(continuations(all)[1]?.content).toContain("complete_task: ");
-    expect(continuations(all)[0]?.content).toContain("complete_task: Refused (items-open)");
+    const consumed = await run(settled(claimed.id));
+    expect(consumed.disposition?._tag).toBe("consumed");
+    expect(consumed.deliveries).toHaveLength(2);
     await run(nothingOpen);
   }, 20_000);
 

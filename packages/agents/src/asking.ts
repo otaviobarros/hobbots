@@ -33,7 +33,7 @@ export type UserApproval =
 const ASKED = "Hobbots showed the user an approval request for this call before it ran.";
 const LIFETIMES: Record<ApprovalLifetime, string> = {
   once: "They approved it just this once, so a call like it asks again.",
-  quest: "They approved calls like it for this Quest.",
+  task: "They approved calls like it for the rest of this Task, so those run without asking until it ends.",
   always: "They approved calls like it always, so those run without asking from now on.",
 };
 
@@ -89,7 +89,7 @@ export interface AskedCall {
 
 export interface AskOptions<V extends AskableVerdict> {
   readonly call: AskedCall;
-  /** Asks the user; absent or null, a call the policy answers Ask for is refused. */
+  /** Asks the user; absent, null or unable to ask, a call the policy answers Ask for is refused. */
   readonly approvals: TurnApprovals | null | undefined;
   /**
    * Decides the call with the hob's live grants. `access` is the hob's tool access as it is now, after
@@ -135,7 +135,7 @@ export const askUntilDecided = <V extends AskableVerdict>(options: AskOptions<V>
     // The lifetime of the user's last approval of this call, once they approved it.
     let approved: ApprovalLifetime | null = null;
     while (verdict.decision === "ask") {
-      if (!approvals) return { _tag: "Refuse", verdict, reason: refusal(verdict) } as const;
+      if (!approvals?.request) return { _tag: "Refuse", verdict, reason: refusal(verdict) } as const;
       const asked: V = verdict;
       const pending = yield* approvals.request({
         stepId: call.id,

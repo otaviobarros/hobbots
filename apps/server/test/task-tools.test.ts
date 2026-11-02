@@ -6,18 +6,27 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  type CarriedItem,
   carriedFrom,
   EMPTY_HOB_POLICY,
   type EventEnvelope,
   type TaskId,
   TaskId as TaskIdSchema,
   type TaskToolDone,
+  type TaskToolName,
   TaskToolRefused,
   Thread,
   ThreadId,
 } from "@hobbots/domain";
+import { Backpack } from "@hobbots/inbox";
 import { TaskTools } from "@hobbots/orchestration";
-import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "@hobbots/persistence";
+import {
+  BackpackLive,
+  EventJournal,
+  HobbotsRepositoryLive,
+  TaskRepositoryLive,
+  TaskToolCallsLive,
+} from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, ManagedRuntime, Option, PubSub, Stream } from "effect";
@@ -61,6 +70,7 @@ const Persistence = Layer.mergeAll(
   HobbotsRepositoryLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
+  BackpackLive,
   EventJournal.layer,
 ).pipe(Layer.provideMerge(TestDatabase));
 const App = TaskTools.layer(sep === "\\" ? "\\" : "/", {
@@ -229,12 +239,8 @@ describe("hob tools for Tasks and Quests", () => {
     });
     const [delegation] = (await tree()).delegations;
     expect(delegation?.childTaskId).toBe(quill);
-    expect(delegation?.authority.overrides).toMatchObject({
-      push: "deny",
-      "run-commands": "ask",
-      "delete-files": "ask",
-      "edit-files": "allow",
-    });
+    // Only the answers given on purpose: the preset's own Asks, such as deleting files, are not copied.
+    expect(delegation?.authority.overrides).toEqual({ push: "deny", "run-commands": "ask" });
     expect(delegation?.authority.folders).toEqual([join(work, "copy")]);
 
     const wider = await refused(ALDRIC, TOP, "delegate_task", {
@@ -263,12 +269,14 @@ describe("hob tools for Tasks and Quests", () => {
     });
     expect(pass.reason).toBe("authority-wider");
     const pip = await delegate(QUILL, quill, "Pip", "pip");
-    // A member's own policy narrows what it is given: the intersection of the lead's and its own.
+    // Aldric gave Ada nothing on purpose, so her Delegation holds no answer: her own policy, with
+    // its web Deny, still narrows her when she runs.
     const ada = await delegate(ALDRIC, TOP, "Ada", "ada");
     const adas = (await tree()).delegations.find((each) => each.childTaskId === ada);
-    expect(adas?.authority.overrides).toMatchObject({ "use-web": "deny", "edit-files": "allow" });
+    expect(adas?.authority.overrides).toEqual({});
+    // What Quill was given passes on to Pip.
     const given = (await tree()).delegations.find((each) => each.childTaskId === pip);
-    expect(given?.authority.overrides).toMatchObject({ push: "deny", "run-commands": "ask" });
+    expect(given?.authority.overrides).toEqual({ push: "deny", "run-commands": "ask" });
     expect(given?.authority.folders).toEqual([join(work, "copy")]);
 
     // Only the hub's own separator divides folders: on macOS and Linux this one sits beside Quill's.
@@ -603,5 +611,67 @@ describe("hob tools for Tasks and Quests", () => {
       }).pipe(Effect.scoped),
     );
     expect(seen.map((entry) => entry.type)).toEqual(["CheckpointRecorded"]);
+  });
+
+  // covers IN-003, OR-001
+  it("[TC-IN-166] a turn whose backpack claim ran out or passed to another turn writes nothing through any hob tool", async () => {
+    await run(seed);
+    const quill = await delegate(ALDRIC, TOP, "Quill", "copy");
+    const [item] = await run(Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId: QUILL })));
+    if (item === undefined) throw new Error("expected Quill's Task in her backpack");
+    const claimFor = (owner: string) =>
+      run(Backpack.use((backpack) => backpack.claim(item.id, owner, "1 minute"))).then(
+        ({ value }): CarriedItem => ({ itemId: value.id, owner, token: value.fencingToken }),
+      );
+    const fenced = (held: CarriedItem, name: TaskToolName, input: object) =>
+      Effect.flatMap(Effect.service(TaskTools), (tools) =>
+        tools.call({ agentId: QUILL, taskId: quill, carried: [held] }, name, input),
+      );
+
+    // While the claim holds, the turn's calls go through.
+    const first = await claimFor("hub:turn-1");
+    await run(fenced(first, "report_checkpoint", { key: "live", kind: "progress", summary: "Drafting" }));
+
+    // The lease runs out: the item goes back to pending, with a new token.
+    await run(Backpack.use((backpack) => backpack.expireClaims({ all: true })));
+    const writes: Record<TaskToolName, object> = {
+      plan_steps: { key: "s-plan", steps: [{ brief: "Outline" }] },
+      start_quest: { key: "s-quest", goal: "Ship the copy" },
+      delegate_task: { key: "s-delegate", hob: "Ada", brief: "Review the copy" },
+      report_checkpoint: { key: "s-checkpoint", kind: "blocker", summary: "Stuck" },
+      ask: { key: "s-ask", question: "Which tone?" },
+      answer: { key: "s-answer", question_id: "q-1", answer: "Friendly" },
+      escalate: { key: "s-escalate", question_id: "q-1" },
+      hand_off: { key: "s-hand-off", artifact_id: "a-1", to_task_id: String(TOP) },
+      wait_for: { key: "s-wait", tasks: [String(TOP)] },
+      complete_task: { key: "s-complete", summary: "The copy is ready" },
+      cancel_task: { key: "s-cancel", task_id: String(TOP) },
+    };
+    const before = await head();
+    const tasksBefore = (await tree()).tasks;
+    for (const [name, input] of Object.entries(writes) as Array<[TaskToolName, object]>) {
+      const refusal = await run(Effect.flip(fenced(first, name, input)));
+      expect([name, refusal.reason]).toEqual([name, "claim-stale"]);
+      expect(refusal.message).toContain(String(item.id));
+    }
+    // A retried key is refused too: the stale turn no longer holds its work.
+    expect(
+      (
+        await run(
+          Effect.flip(fenced(first, "report_checkpoint", { key: "live", kind: "progress", summary: "Drafting" })),
+        )
+      ).reason,
+    ).toBe("claim-stale");
+
+    expect(await head()).toEqual(before);
+    expect((await tree()).tasks).toEqual(tasksBefore);
+    expect((await tree()).delegations).toHaveLength(1);
+
+    // Another turn claims the item: the first turn's claim stays stale, and the new one's calls go through.
+    const second = await claimFor("hub:turn-2");
+    expect((await run(Effect.flip(fenced(first, "delegate_task", writes.delegate_task)))).reason).toBe("claim-stale");
+    expect((await tree()).tasks).toEqual(tasksBefore);
+    await run(fenced(second, "delegate_task", writes.delegate_task));
+    expect((await tree()).tasks.map((task) => task.ownerId)).toEqual([ALDRIC, QUILL, ADA]);
   });
 });

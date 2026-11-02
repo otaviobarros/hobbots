@@ -4,20 +4,22 @@ import { type RefObject, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { Decision } from "../../api/approvals.ts";
 import { messages } from "../messages.ts";
-import { canNarrow, offersAlways, rulesToSave, ruleText, runnerNote } from "./approval-rules.ts";
+import { canNarrow, offersAlways, type RuleScope, rulesToSave, ruleText, runnerNote } from "./approval-rules.ts";
+import { useWorkScope } from "./use-work-scope.ts";
 
 const copy = messages.approval;
 
 // Stable, so it runs once when its element mounts rather than on every render.
 const focusOnMount = (element: HTMLElement | null) => element?.focus();
 
-type Mode = "choose" | "deny" | "always";
+type Mode = "choose" | "deny" | "always" | "work";
 
 /**
- * Allow once, Always for this site and Deny (ADR 015). A high-risk request (`onceOnly`) offers once
- * only and needs the confirmation box ticked first; the hub checks both too (PE-007). Always opens
- * the exact rule it saves, narrowable where the hub allows, before anything is sent. This Quest
- * stays hidden until Quests exist.
+ * Allow once, This Task, Always for this site and Deny (ADR 015, ADR 018). A high-risk request
+ * (`onceOnly`) offers once only and needs the confirmation box ticked first; the hub checks both too
+ * (PE-007). This Task and Always open the exact rule they save, narrowable where the hub allows,
+ * before anything is sent. This Task is offered for a request made in a Task, and reads This Quest
+ * once a party joins that Task.
  */
 export function ApprovalActions({
   approval,
@@ -35,6 +37,8 @@ export function ApprovalActions({
   const [reason, setReason] = useState("");
   const denyButton = useRef<HTMLButtonElement>(null);
   const alwaysButton = useRef<HTMLButtonElement>(null);
+  const workButton = useRef<HTMLButtonElement>(null);
+  const work = useWorkScope(approval);
   // The buttons stay enabled while a decision is sent, so they keep keyboard focus; repeats are ignored.
   const send = (decision: Decision) => {
     if (!pending) onDecide(decision);
@@ -57,13 +61,15 @@ export function ApprovalActions({
       />
     );
   }
-  if (mode === "always") {
+  if (mode === "always" || (mode === "work" && work !== null)) {
+    const scope: RuleScope = mode === "always" ? "always" : (work ?? "task");
     return (
-      <AlwaysForm
+      <RuleForm
         approval={approval}
         name={hob.name}
-        onSave={(rules) => send({ decision: "approve", lifetime: "always", rules })}
-        onCancel={() => back(alwaysButton)}
+        scope={scope}
+        onSave={(rules) => send({ decision: "approve", lifetime: mode === "always" ? "always" : "task", rules })}
+        onCancel={() => back(mode === "always" ? alwaysButton : workButton)}
       />
     );
   }
@@ -83,6 +89,11 @@ export function ApprovalActions({
         >
           {copy.allowOnce}
         </Button>
+        {work !== null && (
+          <Button ref={workButton} variant="outline" aria-disabled={pending} onClick={open("work")}>
+            {copy.forWork[work]}
+          </Button>
+        )}
         {always && (
           <Button ref={alwaysButton} variant="outline" aria-disabled={pending} onClick={open("always")}>
             {copy.always}
@@ -121,17 +132,19 @@ function ConfirmBox({
 }
 
 /**
- * The exact rule Always saves, in words, before it is saved (ADR 015). A folder rule can be narrowed
- * to the files of this action; the decision carries the rules as shown. Escape closes it.
+ * The exact rule This Task or Always saves, in words, before it is saved (ADR 015). A folder rule can
+ * be narrowed to the files of this action; the decision carries the rules as shown. Escape closes it.
  */
-function AlwaysForm({
+function RuleForm({
   approval,
   name,
+  scope,
   onSave,
   onCancel,
 }: {
   approval: ApprovalRequest;
   name: string;
+  scope: RuleScope;
   onSave: (rules: ReadonlyArray<GrantRule>) => void;
   onCancel: () => void;
 }) {
@@ -155,13 +168,15 @@ function AlwaysForm({
       }}
     >
       <span id={headingId} className="lbl text-xs text-label">
-        {copy.always}
+        {scope === "always" ? copy.always : copy.forWork[scope]}
       </span>
-      <p className="m-0 text-sm">{copy.alwaysIntro({ name })}</p>
+      <p className="m-0 text-sm">
+        {scope === "always" ? copy.alwaysIntro({ name }) : copy.forWorkIntro[scope]({ name })}
+      </p>
       <ul aria-label={copy.rulesLabel} className="m-0 flex list-none flex-col gap-1 p-0">
         {rules.map((rule) => (
-          <li key={ruleText(rule, name)} className="font-mono text-[13px] break-all text-moonlight">
-            {ruleText(rule, name)}
+          <li key={ruleText(rule, name, scope)} className="font-mono text-[13px] break-all text-moonlight">
+            {ruleText(rule, name, scope)}
           </li>
         ))}
       </ul>
@@ -169,7 +184,7 @@ function AlwaysForm({
       {canNarrow(approval) && <NarrowChoice narrow={narrow} onChange={setNarrow} />}
       <span className="flex flex-wrap gap-2">
         <Button ref={focusOnMount} type="submit" variant="approve">
-          {copy.saveRule}
+          {scope === "always" ? copy.saveRule : copy.saveForWork[scope]}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel}>
           {copy.cancel}

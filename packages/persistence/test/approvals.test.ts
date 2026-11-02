@@ -165,7 +165,7 @@ const grantFor = (approvalId: string, id: string) =>
     operation: "push",
     rule: { _tag: "Push", cwd: "/work", remote: "origin", branch: "feature" },
     lifetime: "always",
-    questId: null,
+    taskId: null,
     approvalId: ApprovalId.make(approvalId),
     grantedBy: "user",
     createdAt: now,

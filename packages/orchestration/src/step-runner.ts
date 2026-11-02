@@ -15,6 +15,7 @@ import {
   TaskTurns,
   type ToolAccess,
   type ToolStartedEvent,
+  type TurnApprovals,
 } from "@hobbots/agents";
 import {
   type Agent,
@@ -92,6 +93,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       const publisher = yield* EventPublisher;
       const adapters = yield* runtimeAdapters;
       const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
+      // Steps ask nothing, but the hob's grants answer their calls. Absent, nothing answers an Ask.
+      const approvalService = yield* Effect.serviceOption(ApprovalService);
       const fibers = yield* FiberMap.make<TaskId>();
       const scope = yield* Effect.scope;
       const running = new Map<TaskId, Running>();
@@ -164,6 +167,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
         access: ToolAccess | null,
         attemptId: AttemptId,
         carried: ReadonlyArray<CarriedItem>,
+        approvals: TurnApprovals | null,
       ) =>
         runSessionTurn(adapters, redactor, {
           agent,
@@ -172,8 +176,9 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           // A fresh session: nothing of the hob's chat or of other steps.
           sessionId: null,
           access,
-          // A call the policy answers Ask for is refused: a step has no conversation to ask in.
-          approvals: null,
+          // A call the policy answers Ask for is refused, since a step has no conversation to ask in,
+          // unless a grant answers it: This Task's cover every step of the Task (ADR 018).
+          approvals,
           recordToolStart: recordToolStart(step),
           hubTools: tools.forTurn({ agentId: agent.id, taskId: step.id, carried }, STEP_TOOLS),
           started: (sessionId) =>
@@ -364,10 +369,13 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                   stop: null,
                 };
                 running.set(step.id, run);
+                const grants = Option.isSome(approvalService)
+                  ? approvalService.value.forStep(step.ownerId, step.rootId, run.accessNow ?? Effect.succeed(access))
+                  : null;
                 yield* FiberMap.run(
                   fibers,
                   step.id,
-                  runSession(agent.value, config.value, step, shown, access, attemptId, carried).pipe(
+                  runSession(agent.value, config.value, step, shown, access, attemptId, carried, grants).pipe(
                     Effect.flatMap((ending) => settle(step.id, attemptId, ending, carried)),
                     Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
                     Effect.ensuring(
@@ -398,7 +406,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             admission,
             adapters,
             redactor,
-            approvals: yield* Effect.serviceOption(ApprovalService),
+            approvals: approvalService,
             continuations: memberContinuations.value,
             separator,
             running,

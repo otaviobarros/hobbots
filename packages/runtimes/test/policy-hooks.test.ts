@@ -410,7 +410,7 @@ describe("Claude Code tool calls under the policy hook", () => {
           operation: ruleOperation(rule),
           rule,
           lifetime: "always",
-          questId: null,
+          taskId: null,
           approvalId: null,
           grantedBy: "user",
           createdAt: "2026-11-01T00:00:00.000Z",

@@ -1,9 +1,10 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { ApprovalId } from "./approval.ts";
 import { GrantLifetime, GrantRule } from "./grant-rule.ts";
 import { AgentId } from "./ids.ts";
 import { PolicyOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
+import { TaskId } from "./task.ts";
 
 /**
  * Standing grants of ADR 015: an approval kept beyond one call, as a rule the user saw. A grant
@@ -16,14 +17,15 @@ export type GrantId = typeof GrantId.Type;
 
 /**
  * Why a grant stopped applying (ADR 015): the user removed it, a folder it relied on left the hob's
- * folders, its operation was narrowed to Ask or Never, its hob retired, or its Quest ended.
+ * folders, its operation was narrowed to Ask or Never, its hob retired, or the top Task it was bound
+ * to ended, or its hob's GitHub identity changed.
  */
 export const GrantRevokeReason = Schema.Literals([
   "removed",
   "folder-removed",
   "narrowed",
   "retired",
-  "quest-ended",
+  "task-ended",
   // The hob's GitHub identity changed, to its own app or back to the user's account (ADR 022).
   "github-identity",
 ]);
@@ -39,8 +41,12 @@ export class Grant extends Schema.Class<Grant>("Grant")({
   operation: PolicyOperation,
   rule: GrantRule,
   lifetime: GrantLifetime,
-  /** The Quest a `quest` grant is bound to; null for `always`. */
-  questId: Schema.NullOr(Schema.String),
+  /**
+   * The top Task a `task` grant is bound to (ADR 018): it applies only to work in that Task's tree,
+   * whether or not a party joined it, and ends with it. Null for `always`. Grants journaled before
+   * it existed carried an unused `questId` instead, and read as `always` grants with no Task.
+   */
+  taskId: Schema.NullOr(TaskId).pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
   /** The approval request it was saved from. */
   approvalId: Schema.NullOr(ApprovalId),
   grantedBy: GrantActor,

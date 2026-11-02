@@ -218,6 +218,21 @@ export const messages = {
     always: "Always for this site",
     alwaysIntro: ({ name }: { name: string }) =>
       `Hobbots saves this rule, and ${name} stops asking for what it covers. You can remove it later.`,
+    /** The middle lifetime (ADR 018): This Task, or This Quest once a party joins the Task. */
+    forWork: { task: "This Task", quest: "This Quest" },
+    forWorkIntro: {
+      task: ({ name }: { name: string }) =>
+        `Hobbots saves this rule for this Task only. ${name} stops asking for what it covers, in every step, until the Task ends.`,
+      quest: ({ name }: { name: string }) =>
+        `Hobbots saves this rule for this Quest only. ${name} stops asking for what it covers until the Quest ends. Other hobs on the Quest still ask.`,
+    },
+    saveForWork: { task: "Save for this Task and allow", quest: "Save for this Quest and allow" },
+    /** A rule in words, by how long it lasts. */
+    ruleFor: {
+      always: ({ rule }: { rule: string }) => `Always ${rule}`,
+      task: ({ rule }: { rule: string }) => `For this Task, ${rule}`,
+      quest: ({ rule }: { rule: string }) => `For this Quest, ${rule}`,
+    },
     rulesLabel: "The rule to save",
     narrowLabel: "What the rule covers",
     wholeFolder: "Every file directly in the folder",
@@ -227,27 +242,26 @@ export const messages = {
     rule: {
       folder: {
         "read-files": ({ name, folder }: { name: string; folder: string }) =>
-          `Always let ${name} read files directly in ${folder}`,
+          `let ${name} read files directly in ${folder}`,
         "edit-files": ({ name, folder }: { name: string; folder: string }) =>
-          `Always let ${name} create and edit files directly in ${folder}`,
+          `let ${name} create and edit files directly in ${folder}`,
         "delete-files": ({ name, folder }: { name: string; folder: string }) =>
-          `Always let ${name} delete files directly in ${folder}`,
+          `let ${name} delete files directly in ${folder}`,
       },
       paths: {
-        "read-files": ({ name, paths }: { name: string; paths: string }) => `Always let ${name} read ${paths}`,
-        "edit-files": ({ name, paths }: { name: string; paths: string }) =>
-          `Always let ${name} create and edit ${paths}`,
-        "delete-files": ({ name, paths }: { name: string; paths: string }) => `Always let ${name} delete ${paths}`,
+        "read-files": ({ name, paths }: { name: string; paths: string }) => `let ${name} read ${paths}`,
+        "edit-files": ({ name, paths }: { name: string; paths: string }) => `let ${name} create and edit ${paths}`,
+        "delete-files": ({ name, paths }: { name: string; paths: string }) => `let ${name} delete ${paths}`,
       },
       command: ({ name, command, folder }: { name: string; command: string; folder: string }) =>
-        `Always let ${name} run ${command} in ${folder}`,
-      host: ({ name, host }: { name: string; host: string }) => `Always let ${name} use ${host}`,
+        `let ${name} run ${command} in ${folder}`,
+      host: ({ name, host }: { name: string; host: string }) => `let ${name} use ${host}`,
       push: ({ name, branch, remote, folder }: { name: string; branch: string; remote: string; folder: string }) =>
-        `Always let ${name} push ${folder} to ${branch} on ${remote}`,
+        `let ${name} push ${folder} to ${branch} on ${remote}`,
       pullRequest: ({ name, repository, base }: { name: string; repository: string; base: string }) =>
-        `Always let ${name} open pull requests into ${base} in ${repository}`,
+        `let ${name} open pull requests into ${base} in ${repository}`,
       comment: ({ name, repository }: { name: string; repository: string }) =>
-        `Always let ${name} comment on issues and pull requests in ${repository}`,
+        `let ${name} comment on issues and pull requests in ${repository}`,
       runner: ({ name, command, file }: { name: string; command: string; file: string }) =>
         `${command} runs what this folder's ${file} says. If ${name} changes that file, the rule runs the new version.`,
     },
@@ -261,6 +275,8 @@ export const messages = {
     sending: "Sending your decision…",
     approved: ({ name }: { name: string }) => `✓ Allowed once. ${name} carries on.`,
     approvedAlways: ({ name }: { name: string }) => `✓ Allowed, and the rule is saved. ${name} carries on.`,
+    approvedForTask: ({ name }: { name: string }) =>
+      `✓ Allowed for the rest of this Task. ${name} carries on, and asks again once the Task ends.`,
     denied: ({ name }: { name: string }) => `✕ Denied. ${name} was told it may not.`,
     deniedWithReason: ({ name, reason }: { name: string; reason: string }) =>
       `✕ Denied: “${reason}”. ${name} was told why.`,
