@@ -1,9 +1,10 @@
-import type { RemoteAccessStatus } from "@hobbots/domain";
+import { httpsAddress, type RemoteAccessStatus } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Switch } from "@hobbots/ui/components/switch";
 import { useQuery } from "@tanstack/react-query";
 import { useId } from "react";
 import { remoteAccessQuery, useUpdateRemoteAccess } from "../api/remote-access.ts";
+import { HttpsSettings, ServeLeftOver } from "./devices/https-settings.tsx";
 import { PortField } from "./devices/port-field.tsx";
 import { RemoteAddress } from "./devices/remote-address.tsx";
 import { messages } from "./messages.ts";
@@ -32,10 +33,15 @@ export const remoteAccessWhy = (status: RemoteAccessStatus): string | null => {
   }
 };
 
-/** The address other devices type: the hub's MagicDNS name, or else its first tailnet address, at its port. */
+/**
+ * The address other devices type: the HTTPS address while Tailscale serves the hub there (ADR 021),
+ * else the hub's MagicDNS name, or else its first tailnet address, at its port.
+ */
 export const remoteAddress = (status: RemoteAccessStatus): string | null => {
   const host = status.tailscale?.dnsName ?? status.listening[0];
   if (host === undefined || status.listening.length === 0) return null;
+  const secure = httpsAddress(status);
+  if (secure !== null) return secure;
   return `http://${host.includes(":") ? `[${host}]` : host}:${status.port}`;
 };
 
@@ -150,12 +156,16 @@ export function RemoteAccessSettings() {
         </p>
       )}
       {status?.enabled && (
-        <RemoteAccessState
-          status={status}
-          resuming={change.isPending}
-          onResume={() => change.mutate({ paused: false })}
-        />
+        <>
+          <RemoteAccessState
+            status={status}
+            resuming={change.isPending}
+            onResume={() => change.mutate({ paused: false })}
+          />
+          <HttpsSettings status={status} />
+        </>
       )}
+      {status !== undefined && <ServeLeftOver status={status} />}
       {(access.isError || change.isError) && (
         <p role="alert" className="m-0 text-sm text-rose">
           {copy.failed}

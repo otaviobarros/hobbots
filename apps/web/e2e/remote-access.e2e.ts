@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
@@ -171,4 +171,63 @@ test("[TC-DP-126] Settings lists the allowed devices, and Revoke asks first and 
   // A device allowed elsewhere shows up without a reload.
   await allowAnotherDevice(current, "Firefox on Linux");
   await expect(allowed.getByRole("listitem").filter({ hasText: "Firefox on Linux" })).toBeVisible();
+});
+
+/** What the fake `tailscale serve` forwards to now, as the hub left it in the fake's file. */
+const servedTarget = (dir: string): string | undefined => {
+  try {
+    return (JSON.parse(readFileSync(join(dir, "fake-tailscale.json"), "utf8")) as { serve?: string }).serve;
+  } catch {
+    return undefined;
+  }
+};
+
+// covers DP-004
+test("[TC-DP-139] turns HTTPS on in Settings, runs tailscale serve after consent, and removes it again", async ({
+  page,
+}) => {
+  test.skip(!(await spareLoopback()), "needs 127.0.0.2 on loopback");
+  hub = await startHub(dataDir, { HOBBOTS_FAKE_TAILSCALE: "on" });
+  const current = hub;
+  const port = Number(new URL(current.url).port);
+  const servePort = port + 1000;
+  await finishSetup(current);
+
+  await page.goto(`${current.url}/#/settings`);
+  const devices = page.getByRole("region", { name: "Devices" });
+  await devices.getByRole("switch", { name: "Use Hobbots from my other devices" }).click();
+  const https = devices.getByRole("switch", { name: "Use HTTPS through Tailscale" });
+  await expect(https).not.toBeChecked();
+  await https.click();
+  await expect(https).toBeChecked();
+
+  // On, but Tailscale does not serve it yet: the command, which Hobbots runs only after asking.
+  await expect(devices.getByText("Tailscale does not serve Hobbots over HTTPS yet.", { exact: false })).toBeVisible();
+  await expect(devices.getByText(`tailscale serve --bg http://127.0.0.1:${servePort}`, { exact: true })).toBeVisible();
+  await devices.getByRole("button", { name: "Run it for me…" }).click();
+  const consent = devices.getByRole("group", { name: /^Hobbots will run tailscale serve --bg/ });
+  await expect(consent).toBeVisible();
+  await consent.getByRole("button", { name: "Not now" }).click();
+  await expect(devices.getByRole("button", { name: "Run it for me…" })).toBeFocused();
+  expect(servedTarget(dataDir)).toBeUndefined();
+
+  await devices.getByRole("button", { name: "Run it for me…" }).click();
+  await devices.getByRole("button", { name: "Run it", exact: true }).click();
+  const address = "https://hub.example.ts.net";
+  await expect(devices.getByText(address, { exact: true })).toBeVisible();
+  await expect(devices.getByRole("img", { name: `QR code for ${address}` })).toBeVisible();
+  await expect(devices.getByText("Tailscale serves Hobbots over HTTPS on your tailnet.")).toBeVisible();
+  expect(servedTarget(dataDir)).toBe(`http://127.0.0.1:${servePort}`);
+
+  // Off again: serve still forwards, so Settings offers the command that removes it.
+  await https.click();
+  await expect(https).not.toBeChecked();
+  await expect(devices.getByText(`http://hub.example.ts.net:${port}`, { exact: true })).toBeVisible();
+  await expect(devices.getByText("Tailscale still forwards HTTPS to Hobbots.", { exact: false })).toBeVisible();
+  const removal = devices.getByText("tailscale serve --https=443 off", { exact: true });
+  await expect(removal).toBeVisible();
+  await devices.getByRole("button", { name: "Run it for me…" }).click();
+  await devices.getByRole("button", { name: "Run it", exact: true }).click();
+  await expect(removal).toHaveCount(0);
+  expect(servedTarget(dataDir)).toBeUndefined();
 });

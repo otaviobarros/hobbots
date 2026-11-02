@@ -91,6 +91,7 @@ describe("following the hub's event stream", () => {
       listening: [],
       problem: "off",
       detail: null,
+      https: { enabled: false, port: 4318, listening: false, forwarding: null, detail: null },
     };
     hub.last().write(`event: remote-access\ndata: ${JSON.stringify({ _tag: "RemoteAccessChanged", status })}\n\n`);
     await expect.poll(() => hub.connections.length).toBe(2);
@@ -180,6 +181,7 @@ describe("the event stream model", () => {
       listening: [],
       problem: "paused",
       detail: null,
+      https: { enabled: false, port: 4318, listening: false, forwarding: null, detail: null },
     };
     expect(
       frameChange({ event: "remote-access", data: JSON.stringify({ _tag: "RemoteAccessChanged", status }) }),
