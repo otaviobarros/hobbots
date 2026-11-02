@@ -164,16 +164,36 @@ const questionAnswered: Rule<"QuestionAnswered"> = ({ question }, trees) => {
   ];
 };
 
+/**
+ * The Task a note is held under. A note's recipient holds it under the nearest Task, from the
+ * note's own up, that it owns; when that is one of its own steps, the session that coordinates
+ * the work is the one above its steps, so the note is held there and names the step it is about.
+ */
+const noteHeldUnder = (subject: Task, recipientId: AgentId, trees: Trees): Task => {
+  const nearest = [subject, ...ancestorsOf(subject, trees.all)].find((each) => each.ownerId === recipientId);
+  let held = nearest;
+  for (let parent = held && parentOf(held, trees); parent?.ownerId === recipientId; parent = parentOf(parent, trees)) {
+    held = parent;
+  }
+  return held === undefined || held === nearest ? subject : held;
+};
+
 /** Your note on a Task goes to the hob it was left for, its nearest lead, as a message about that Task. */
 const noteLeft: Rule<"NoteLeft"> = ({ note }, trees) => {
-  const task = trees.byId.get(note.taskId);
-  if (task === undefined) return [];
+  const subject = trees.byId.get(note.taskId);
+  if (subject === undefined) return [];
+  const task = noteHeldUnder(subject, note.recipientId, trees);
   return [
     {
       recipientId: note.recipientId,
       task,
       attemptId: null,
-      payload: { _tag: "message", senderId: null, text: note.text },
+      payload: {
+        _tag: "message",
+        senderId: null,
+        text: note.text,
+        ...(task === subject ? {} : { aboutTaskId: note.taskId }),
+      },
       record: `note:${note.id}`,
       version: null,
     },

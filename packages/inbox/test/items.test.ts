@@ -3,6 +3,7 @@ import {
   ArtifactId,
   ArtifactRef,
   AttemptId,
+  type BackpackItem,
   Checkpoint,
   CheckpointId,
   type CheckpointKind,
@@ -21,7 +22,14 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { backpackItemsFor, tasksTouched } from "../src/index.ts";
+import {
+  arrivalsText,
+  backpackItemsFor,
+  carryingThread,
+  continuationTask,
+  lateness,
+  tasksTouched,
+} from "../src/index.ts";
 
 const at = "2026-11-01T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
@@ -186,6 +194,36 @@ describe("backpackItemsFor", () => {
       { to: ALDRIC, kind: "message", task: "copy", quest: "q1", key: "note:n1:message" },
     ]);
     expect(tasksTouched([{ _tag: "NoteLeft", note }])).toEqual(["copy"]);
+  });
+
+  // covers IN-004, OR-004
+  it("[TC-IN-135] holds your note on a lead's own step under the Task it coordinates, so its chat hears it", () => {
+    const active = task("brief-step", ALDRIC, "campaign");
+    const done = task("plan-step", ALDRIC, "campaign", "completed");
+    const nested = task("plan-detail", ALDRIC, "plan-step", "completed");
+    const tasks = [campaign, copy, outline, active, done, nested];
+    for (const step of [active, done, nested]) {
+      const note = new TaskNote({
+        id: NoteId.make(`n-${step.id}`),
+        taskId: step.id,
+        recipientId: ALDRIC,
+        text: "Shorter",
+        createdAt: at,
+        revision: 4,
+      });
+      const [item] = backpackItemsFor([{ _tag: "NoteLeft", note }], { ...context, tasks });
+      expect(item).toMatchObject({
+        recipientId: ALDRIC,
+        taskId: "campaign",
+        payload: { _tag: "message", aboutTaskId: step.id, text: "Shorter" },
+      });
+      const held = { ...item, kind: "message", actionable: true } as unknown as BackpackItem;
+      // The step's session may be gone: the note continues the chat where Aldric runs the Quest.
+      expect(carryingThread(held, tasks)).toBe(threadId);
+      expect(continuationTask(held, tasks)).toBeUndefined();
+      expect(lateness(held, tasks)).toBeNull();
+      expect(arrivalsText([held], "prompt")).toContain(`The user left a note about Task ${step.id}: Shorter`);
+    }
   });
 
   it("keys an item from a tool call by the call's key and the item's role in it", () => {

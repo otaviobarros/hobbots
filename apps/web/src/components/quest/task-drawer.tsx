@@ -190,7 +190,7 @@ function Detail({
         <Section title={copy.notes}>
           <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-detail">
             {detail.notes.map((note) => (
-              <li key={note.id} className="flex flex-col gap-0.5 border-s-2 border-lantern ps-2">
+              <li key={note.id} className="flex flex-col gap-0.5 bg-deep px-2 py-1.5">
                 <span className="whitespace-pre-wrap">{note.text}</span>
                 <span className="text-xs text-label">
                   {copy.noteTo({ name: hobs(note.recipientId).name, time: formatTime(note.createdAt) })}

@@ -180,12 +180,12 @@ const applyWorkEvent = (
     case "QuestionEscalated":
     case "QuestionAnswered":
       applyTaskEvent(queryClient, event);
-      questionChanged(queryClient, event.question);
+      void questionChanged(queryClient, event.question);
       return;
     case "TaskStateChanged":
     case "TaskCompleted":
       applyTaskEvent(queryClient, event);
-      workEnded(queryClient, event.task);
+      void workEnded(queryClient, event.task);
       return;
     // The rest change Tasks and Quests (ADR 018).
     default:

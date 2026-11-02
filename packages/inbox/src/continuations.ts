@@ -59,9 +59,13 @@ const describeQuestion = (question: Question) =>
   `Hob ${question.askerId} asks, as question ${question.id} about Task ${question.taskId}: "${question.text}" Answer it with answer if you can; if only someone above you can decide, pass it up with escalate.`;
 
 /** A message: your note on a Task, or a hob's, with the Task it is about. */
-const describeMessage = (item: BackpackItem, message: { readonly senderId: string | null; readonly text: string }) => {
+const describeMessage = (
+  item: BackpackItem,
+  message: { readonly senderId: string | null; readonly text: string; readonly aboutTaskId?: string | undefined },
+) => {
   const from = message.senderId === null ? "The user left a note" : `Hob ${message.senderId} sent you a message`;
-  return `${from}${item.taskId === null ? "" : ` about Task ${item.taskId}`}: ${message.text}`;
+  const about = message.aboutTaskId ?? item.taskId;
+  return `${from}${about === null ? "" : ` about Task ${about}`}: ${message.text}`;
 };
 
 /** Who answered a question, as the hob that asked hears it. */

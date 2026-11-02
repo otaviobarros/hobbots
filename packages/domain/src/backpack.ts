@@ -52,8 +52,15 @@ export const BackpackPayload = Schema.Union([
   Schema.TaggedStruct("question", { question: Question }),
   Schema.TaggedStruct("answer", { question: Question }),
   Schema.TaggedStruct("hand-off", { handOff: HandOff, artifact: ArtifactRef }),
-  /** A note from you (`senderId` null) or between a lead and its member. */
-  Schema.TaggedStruct("message", { senderId: Schema.NullOr(AgentId), text: Schema.String }),
+  /**
+   * A note from you (`senderId` null) or between a lead and its member. `aboutTaskId` is the Task
+   * it is about when that is not the Task it is held under, as for a note on a lead's own step.
+   */
+  Schema.TaggedStruct("message", {
+    senderId: Schema.NullOr(AgentId),
+    text: Schema.String,
+    aboutTaskId: Schema.optional(TaskId),
+  }),
   Schema.TaggedStruct("approval-outcome", { approval: ApprovalRequest }),
   Schema.TaggedStruct("deadline", { taskId: TaskId, dueAt: Schema.String }),
   /** Routine progress, including the hub's started and waiting states. */
