@@ -18,7 +18,7 @@ import {
   TaskId,
   type Thread,
 } from "@hobbots/domain";
-import { DateTime, Duration, Effect, Layer, Option, Stream } from "effect";
+import { DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect";
 import { EventBus } from "./event-bus.ts";
 
 /**
@@ -116,7 +116,15 @@ const play = (cast: Cast, step: Duration.Input, bus: EventBus["Service"]) =>
             carried: carriedFrom(ledger, () => true),
           })
           .pipe(Effect.flatMap(announce));
-      });
+      }).pipe(
+        // A turn may still be reading what the backpack holds on the Task, as the lead's chat does
+        // with its party's results: the Task completes once that turn has handled them.
+        Effect.retry({
+          while: (error) => error._tag === "TaskRefused" && error.reason === "items-open",
+          schedule: Schedule.spaced(step),
+          times: 50,
+        }),
+      );
 
     // Aldric takes the request and brings in Quill and Ada.
     const campaign = yield* tasks
