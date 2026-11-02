@@ -16,6 +16,12 @@ import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
+  ACTION_PERMISSIONS,
+  GitHubApi,
+  GitHubApiLive,
+  GitHubConnection,
+  GitHubCredential,
+  GitHubCredentialPerHob,
   HOB_APP_PERMISSIONS,
   HobAppKeys,
   HobAppKeysLive,
@@ -46,6 +52,7 @@ afterAll(async () => {
 });
 afterEach(() => {
   github.answer = null;
+  github.installationTokenMs = 3_600_000;
 });
 
 const agent = (id: AgentId, name: string, status: "active" | "retired" = "active") =>
@@ -99,6 +106,32 @@ const world = (): World => ({
   redactor: makeRedactor(),
 });
 
+/** The hobs' apps in memory, as the database keeps them. */
+const appsOf = (w: World) =>
+  Layer.succeed(
+    HobGitHubApps,
+    HobGitHubApps.of({
+      get: (id) => Effect.sync(() => (w.leftOver.has(id) ? null : (w.apps.get(id) ?? null))),
+      leftOver: (id) =>
+        Effect.sync(() => {
+          const app = w.apps.get(id);
+          const problem = w.leftOver.get(id);
+          return app === undefined || problem === undefined ? null : { app, problem };
+        }),
+      save: (id, app) =>
+        Effect.sync(() => {
+          w.apps.set(id, app);
+          w.leftOver.delete(id);
+        }),
+      leave: (id, problem) => Effect.sync(() => void w.leftOver.set(id, problem)),
+      remove: (id) =>
+        Effect.sync(() => {
+          w.apps.delete(id);
+          w.leftOver.delete(id);
+        }),
+    }),
+  );
+
 const layer = (w: World, keys: Layer.Layer<HobAppKeys> = HobAppKeysMemory) =>
   HobGitHubAppLive(github.hosts).pipe(
     Layer.provideMerge(keys),
@@ -115,29 +148,7 @@ const layer = (w: World, keys: Layer.Layer<HobAppKeys> = HobAppKeysMemory) =>
       Layer.succeed(DeviceRepository, {
         find: (id: DeviceId) => Effect.succeed(Option.fromNullishOr(w.devices.get(id))),
       } as unknown as DeviceRepository["Service"]),
-      Layer.succeed(
-        HobGitHubApps,
-        HobGitHubApps.of({
-          get: (id) => Effect.sync(() => (w.leftOver.has(id) ? null : (w.apps.get(id) ?? null))),
-          leftOver: (id) =>
-            Effect.sync(() => {
-              const app = w.apps.get(id);
-              const problem = w.leftOver.get(id);
-              return app === undefined || problem === undefined ? null : { app, problem };
-            }),
-          save: (id, app) =>
-            Effect.sync(() => {
-              w.apps.set(id, app);
-              w.leftOver.delete(id);
-            }),
-          leave: (id, problem) => Effect.sync(() => void w.leftOver.set(id, problem)),
-          remove: (id) =>
-            Effect.sync(() => {
-              w.apps.delete(id);
-              w.leftOver.delete(id);
-            }),
-        }),
-      ),
+      appsOf(w),
     ]),
   );
 
@@ -475,6 +486,291 @@ describe("A hob's own GitHub App", () => {
     expect(outcome.usable).toBe(false);
     const refused = outcome.refused;
     expect(refused).toMatchObject({ reason: "no-keychain" });
+  });
+});
+
+/** The user's account behind `GitHubCredential`, which a hob with its own app must never use. */
+const userAccount = (calls: Array<string>) =>
+  Layer.mergeAll(
+    Layer.succeed(
+      GitHubCredential,
+      GitHubCredential.of({
+        connected: Effect.succeed(true),
+        bot: () => Effect.succeed(null),
+        tokenFor: () => Effect.sync(() => void calls.push("tokenFor")).pipe(Effect.as(Redacted.make("user-token"))),
+        refused: () => Effect.sync(() => void calls.push("refused")).pipe(Effect.as(Redacted.make("user-token"))),
+        revoked: () => Effect.sync(() => void calls.push("revoked")),
+        reaches: () => Effect.sync(() => void calls.push("reaches")),
+        onRepository: (_agentId, _repository, use) =>
+          Effect.andThen(
+            Effect.sync(() => calls.push("onRepository")),
+            use,
+          ),
+      }),
+    ),
+    Layer.succeed(GitHubConnection, {} as GitHubConnection["Service"]),
+  );
+
+/** The hob's app behind `GitHubCredential`, with GitHub's REST API over it, as the Charm sees them. */
+const charmLayer = (w: World, calls: Array<string>) =>
+  GitHubApiLive(github.hosts.api).pipe(
+    Layer.provideMerge(GitHubCredentialPerHob),
+    Layer.provide([userAccount(calls), appsOf(w)]),
+    Layer.provideMerge(layer(w)),
+    Layer.provide(FetchHttpClient.layer),
+  );
+
+type CharmServices = GitHubApi | GitHubCredential | HobGitHubAppService | HobAppKeys | RetiredHobGitHubApp;
+
+const runCharm = <A, E>(w: World, calls: Array<string>, effect: Effect.Effect<A, E, CharmServices>) =>
+  Effect.runPromise(Effect.provide(effect, charmLayer(w, calls)));
+
+/** A repository of the user's for one test, with one issue. */
+const repositoryFor = (name: string) => {
+  github.createRepository({ owner: "otaviobarros", name });
+  github.addItem(`otaviobarros/${name}`, { title: "Pick a name for the pony" });
+  return { owner: "otaviobarros", name };
+};
+
+/** Gives the hob its own app, installed on `repositories`. */
+const withApp = (agentId: AgentId, repositories: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const flow = yield* throughGitHub(agentId);
+    const made = yield* (yield* HobGitHubAppService).complete(flow.state, flow.code);
+    if (repositories.length > 0) github.installApp(made.app.slug, "selected", repositories);
+    return made.app;
+  });
+
+/** The claims of the JWTs the app signed in with, from what reached GitHub since `from`. */
+const jwtsSince = (from: number) =>
+  github.requests.slice(from).flatMap((request) => {
+    const parts = (request.authorization ?? "").replace(/^Bearer /, "").split(".");
+    if (parts.length !== 3) return [];
+    return [JSON.parse(Buffer.from(parts[1] ?? "", "base64url").toString("utf8")) as { iat: number; exp: number }];
+  });
+
+const tokensSince = (from: number) => github.installationTokens.slice(from);
+
+describe("A hob's own GitHub App's tokens", () => {
+  // covers ADR 022
+  it("[TC-GEN-059] acts as the hob's bot with a token for one repository and the action's permissions, never as you", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const repository = repositoryFor("pony-shed");
+    repositoryFor("other-shed");
+    const fromRequest = github.requests.length;
+    const fromToken = github.installationTokens.length;
+    const outcome = await runCharm(
+      w,
+      calls,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, ["otaviobarros/pony-shed", "otaviobarros/other-shed"]);
+        const api = yield* GitHubApi;
+        const credential = yield* GitHubCredential;
+        const read = yield* credential.onRepository(FRODO, repository, api.repository(FRODO, repository));
+        const comment = yield* credential.onRepository(FRODO, repository, api.comment(FRODO, repository, 1, "Pip."));
+        const viewer = yield* api.viewer(FRODO);
+        // The user's account still serves a hob without its own app.
+        yield* credential.tokenFor(SAM, { repository, action: "read" });
+        return { app, read, comment, viewer, connected: yield* credential.connected };
+      }),
+    );
+    expect(outcome.read.fullName).toBe("otaviobarros/pony-shed");
+    const bot = `${outcome.app.slug}[bot]`;
+    expect(outcome.comment).toMatchObject({ _tag: "Done", value: { author: bot } });
+    expect(outcome.viewer).toBe(bot);
+    expect(github.items("otaviobarros/pony-shed")[0]?.comments[0]?.author).toBe(bot);
+    // One token per action, each for the one repository and only the permissions that action needs.
+    expect(tokensSince(fromToken).map((token) => [token.repositories, token.permissions])).toEqual([
+      [["otaviobarros/pony-shed"], ACTION_PERMISSIONS.read],
+      [["otaviobarros/pony-shed"], ACTION_PERMISSIONS.comment],
+    ]);
+    expect(ACTION_PERMISSIONS.comment).toEqual({ metadata: "read", issues: "write", pull_requests: "write" });
+    // Every JWT lasted at most ten minutes, issued a minute back against clock drift.
+    const jwts = jwtsSince(fromRequest);
+    expect(jwts.length).toBeGreaterThan(0);
+    for (const jwt of jwts) expect(jwt.exp - jwt.iat).toBeLessThanOrEqual(600);
+    // Only Sam, who has no app, used the user's account.
+    expect(calls).toEqual(["tokenFor"]);
+    // Every token and JWT is redacted by value from then on.
+    for (const token of tokensSince(fromToken)) expect(w.redactor.text(token.token)).not.toContain(token.token);
+  });
+
+  // covers ADR 022
+  it("[TC-GEN-060] keeps a token until five minutes before it expires, then mints a new one, and mints one for two calls at once", async () => {
+    const w = world();
+    const repository = repositoryFor("pony-mill");
+    const fromToken = github.installationTokens.length;
+    const outcome = await runCharm(
+      w,
+      [],
+      Effect.gen(function* () {
+        yield* withApp(FRODO, ["otaviobarros/pony-mill"]);
+        const credential = yield* GitHubCredential;
+        const scope = { repository, action: "read" } as const;
+        const [first, second] = yield* Effect.all(
+          [credential.tokenFor(FRODO, scope), credential.tokenFor(FRODO, scope)],
+          { concurrency: 2 },
+        );
+        const again = yield* credential.tokenFor(FRODO, scope);
+        const minted = tokensSince(fromToken).length;
+        // A token GitHub gives with five minutes and a moment left is replaced on its next use.
+        github.installationTokenMs = 5 * 60_000 + 1_500;
+        yield* credential.tokenFor(FRODO, { repository, action: "comment" });
+        const short = yield* credential.tokenFor(FRODO, { repository, action: "comment" });
+        yield* Effect.sleep("1600 millis");
+        const replaced = yield* credential.tokenFor(FRODO, { repository, action: "comment" });
+        return { first, second, again, minted, short, replaced };
+      }),
+    );
+    expect(Redacted.value(outcome.first)).toBe(Redacted.value(outcome.second));
+    expect(Redacted.value(outcome.again)).toBe(Redacted.value(outcome.first));
+    expect(outcome.minted).toBe(1);
+    expect(Redacted.value(outcome.replaced)).not.toBe(Redacted.value(outcome.short));
+    expect(tokensSince(fromToken)).toHaveLength(4 - 1);
+  });
+
+  // covers ADR 022
+  it("[TC-GEN-061] refuses a repository the hob's app is not installed on, with where to install it, and never asks for a token", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const repository = repositoryFor("pony-barn");
+    const fromToken = github.installationTokens.length;
+    const outcome = await runCharm(
+      w,
+      calls,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, []);
+        const credential = yield* GitHubCredential;
+        const api = yield* GitHubApi;
+        const refused = yield* Effect.flip(
+          credential.onRepository(FRODO, repository, api.comment(FRODO, repository, 1, "Pip.")),
+        );
+        return { app, refused, status: yield* (yield* HobGitHubAppService).status(FRODO) };
+      }),
+    );
+    expect(outcome.refused).toMatchObject({ reason: "not-found" });
+    expect(outcome.refused.message).toContain(`${outcome.app.slug}[bot] is not installed on otaviobarros/pony-barn`);
+    expect(outcome.refused.message).toContain(`${github.base}/apps/${outcome.app.slug}/installations/new`);
+    expect(tokensSince(fromToken)).toEqual([]);
+    expect(github.items("otaviobarros/pony-barn")[0]?.comments).toEqual([]);
+    // Not installed on one repository is no reconnect, and never a reason to act as you.
+    expect(outcome.status).toMatchObject({ _tag: "Connected", needsReconnect: null });
+    expect(calls).toEqual([]);
+  });
+
+  // covers ADR 022
+  it("[TC-GEN-062] marks the hob's app as needing a new one when GitHub refuses its key, and sends nothing more until then", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const repository = repositoryFor("pony-forge");
+    const outcome = await runCharm(
+      w,
+      calls,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, ["otaviobarros/pony-forge"]);
+        const fake = github.apps.find((each) => each.slug === app.slug);
+        if (fake === undefined) return yield* Effect.die("no app");
+        fake.keyLive = false;
+        const credential = yield* GitHubCredential;
+        const api = yield* GitHubApi;
+        const first = yield* api.comment(FRODO, repository, 1, "Pip.");
+        const status = yield* (yield* HobGitHubAppService).status(FRODO);
+        const asked = github.requests.length;
+        const second = yield* Effect.flip(credential.tokenFor(FRODO, { repository, action: "read" }));
+        const sentAfter = github.requests.length - asked;
+        // The key works again, as after a clock problem: listing the installations clears the mark.
+        fake.keyLive = true;
+        yield* (yield* HobGitHubAppService).installations(FRODO);
+        const cleared = yield* (yield* HobGitHubAppService).status(FRODO);
+        const token = yield* credential.tokenFor(FRODO, { repository, action: "read" });
+        return { app, first, status, second, sentAfter, cleared, token };
+      }),
+    );
+    expect(outcome.first).toMatchObject({ _tag: "NotSent" });
+    expect(outcome.first._tag === "NotSent" && outcome.first.message).toContain(
+      `GitHub refused ${outcome.app.slug}[bot]'s key`,
+    );
+    expect(outcome.status).toMatchObject({ _tag: "Connected", needsReconnect: { reason: "key" } });
+    expect(outcome.second.message).toContain("Give the hob a new app");
+    expect(outcome.sentAfter).toBe(0);
+    expect(outcome.cleared).toMatchObject({ _tag: "Connected", needsReconnect: null });
+    expect(Redacted.value(outcome.token)).toMatch(/^ghs_/);
+    expect(github.items("otaviobarros/pony-forge")[0]?.comments).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  // covers ADR 022
+  it("[TC-GEN-063] mints once more when GitHub refuses a token, and marks the app for reinstalling when it refuses again", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const repository = repositoryFor("pony-yard");
+    const fromToken = github.installationTokens.length;
+    const outcome = await runCharm(
+      w,
+      calls,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, ["otaviobarros/pony-yard"]);
+        const api = yield* GitHubApi;
+        const service = yield* HobGitHubAppService;
+        // An expired token is refused once, and the call goes through with a new one.
+        yield* api.repository(FRODO, repository);
+        github.expireInstallationTokens();
+        const renewed = yield* api.repository(FRODO, repository);
+        const minted = tokensSince(fromToken).length;
+        // GitHub refuses every token of the app's: the call is not sent, and the app needs reinstalling.
+        github.answer = (request) =>
+          request.authorization?.startsWith("Bearer ghs_")
+            ? { status: 401, body: { message: "Bad credentials" } }
+            : undefined;
+        const refused = yield* api.comment(FRODO, repository, 1, "Pip.");
+        const status = yield* service.status(FRODO);
+        github.answer = null;
+        // Reinstalled on GitHub, the Charms tab lists the installations again, which clears the mark.
+        github.installApp(app.slug, "selected", ["otaviobarros/pony-yard"]);
+        yield* service.installations(FRODO);
+        return { renewed, minted, refused, status, cleared: yield* service.status(FRODO) };
+      }),
+    );
+    expect(outcome.renewed.fullName).toBe("otaviobarros/pony-yard");
+    expect(outcome.minted).toBe(2);
+    expect(outcome.refused).toMatchObject({ _tag: "NotSent" });
+    expect(outcome.refused._tag === "NotSent" && outcome.refused.message).toContain("Install it again at");
+    expect(outcome.status).toMatchObject({ _tag: "Connected", needsReconnect: { reason: "installation" } });
+    expect(outcome.cleared).toMatchObject({ _tag: "Connected", needsReconnect: null });
+    expect(github.items("otaviobarros/pony-yard")[0]?.comments).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  // covers ADR 022
+  it("[TC-GEN-064] stops a call checked under the hob's app once the app is disconnected, and the hob acts as you after", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const repository = repositoryFor("pony-gate");
+    const outcome = await runCharm(
+      w,
+      calls,
+      Effect.gen(function* () {
+        yield* withApp(FRODO, ["otaviobarros/pony-gate"]);
+        const credential = yield* GitHubCredential;
+        const stopped = yield* Effect.flip(
+          credential.onRepository(
+            FRODO,
+            repository,
+            Effect.gen(function* () {
+              yield* (yield* HobGitHubAppService).disconnect(FRODO);
+              return yield* credential.tokenFor(FRODO, { repository, action: "comment" });
+            }),
+          ),
+        );
+        const after = yield* credential.tokenFor(FRODO, { repository, action: "comment" });
+        return { stopped, after, bot: yield* credential.bot(FRODO) };
+      }),
+    );
+    expect(outcome.stopped.message).toContain("changed during this call");
+    expect(Redacted.value(outcome.after)).toBe("user-token");
+    expect(outcome.bot).toBeNull();
+    expect(calls).toEqual(["tokenFor"]);
   });
 });
 

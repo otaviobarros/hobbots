@@ -54,7 +54,7 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
               openIssuesAndPullRequests: 42,
             });
       },
-      search: (_agentId, query, limit) => {
+      search: (_agentId, _repository, query, limit) => {
         asked.push(`search ${query} (${limit})`);
         return Effect.succeed({
           query,
@@ -119,6 +119,7 @@ const fakeCredential = (connected: boolean) =>
     GitHubCredential,
     GitHubCredential.of({
       connected: Effect.succeed(connected),
+      bot: () => Effect.succeed(null),
       tokenFor: () => Effect.succeed(Redacted.make("token")),
       refused: () => Effect.succeed(Redacted.make("token")),
       revoked: () => Effect.void,
@@ -343,6 +344,7 @@ describe("GitHub API", () => {
               GitHubCredential,
               GitHubCredential.of({
                 connected: Effect.succeed(true),
+                bot: () => Effect.succeed(null),
                 tokenFor: (agentId) =>
                   Effect.sync(() => credential.push(`token for ${agentId}`)).pipe(Effect.as(Redacted.make(token))),
                 refused: () =>
@@ -371,7 +373,7 @@ describe("GitHub API", () => {
           { number: 2, title: "B", state: "open", user: { login: "o" }, updated_at: "t" },
         ],
       },
-      (api) => api.search(hob, "repo:o/r is:pr", 0),
+      (api) => api.search(hob, { owner: "o", name: "r" }, "repo:o/r is:pr", 0),
     );
     expect(result).toMatchObject({ _tag: "Success", success: { total: 2, items: [] } });
     expect(seen[0]?.auth).toBe(`Bearer ${token}`);
@@ -386,7 +388,7 @@ describe("GitHub API", () => {
           { number: 1, title: "A", state: "closed", user: null, updated_at: "t", pull_request: { merged_at: "m" } },
         ],
       },
-      (api) => api.search(hob, "q", 5),
+      (api) => api.search(hob, { owner: "o", name: "r" }, "q", 5),
     );
     expect(listed.result).toMatchObject({ success: { items: [{ number: 1, state: "merged", author: null }] } });
   });

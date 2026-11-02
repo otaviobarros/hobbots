@@ -20,6 +20,7 @@ import { sendToGitHub } from "./github-api.ts";
 import { appJwt } from "./github-app-jwt.ts";
 import { GitHubError } from "./github-error.ts";
 import { allPages, GITHUB_HOSTS, GITHUB_PAGE_SIZE, type GitHubHosts } from "./github-sign-in.ts";
+import { type HobAppReconnect, HobAppTokens, makeHobAppTokens } from "./hob-app-tokens.ts";
 import { HobAppKeys, type KeychainError } from "./keychain.ts";
 
 /**
@@ -27,7 +28,7 @@ import { HobAppKeys, type KeychainError } from "./keychain.ts";
  * settings or handles a key file. The hub page posts the manifest to GitHub, GitHub redirects back
  * to the hub with a code, and the hub exchanges it for the app's identity and private key. The key
  * goes to the OS keychain; GitHub's client and webhook secrets are dropped at once. The hub signs in
- * as the app with a JWT only to list and remove its installations: installation tokens are #224's.
+ * as the app with a JWT to list and remove its installations, and to mint its tokens (#224).
  */
 
 /** The repository permissions of the Hobbots GitHub App (ADR 020), and nothing else, by GitHub's names. */
@@ -70,6 +71,8 @@ export type HobAppStatus =
       readonly installUrl: string;
       /** Where the user deletes the app on GitHub, the only place it can be deleted. */
       readonly deleteUrl: string;
+      /** Why the app cannot act until the user fixes it, or null. */
+      readonly needsReconnect: HobAppReconnect | null;
     }
   | {
       /**
@@ -262,6 +265,7 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
             bot: hobAppBot(app),
             installUrl: installUrl(app),
             deleteUrl: deleteUrl(app.slug),
+            needsReconnect: tokens.reconnect(agentId, app),
           };
         });
 
@@ -402,6 +406,7 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               connectedAt: DateTime.formatIso(yield* DateTime.now),
             };
             yield* apps.save(open.agentId, app);
+            yield* tokens.forget(open.agentId);
             yield* Effect.logInfo("A hob's GitHub app was made", { agentId: open.agentId, slug: app.slug });
             return { hobName: open.hobName, app, installUrl: installUrl(app) };
           }),
@@ -456,20 +461,16 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           HttpClientRequest.bearerToken(Redacted.value(jwt)),
         );
 
-      const refusedKey = (app: HobGitHubApp) =>
-        new GitHubError({
-          reason: "signed-out",
-          message: `GitHub refused ${hobAppBot(app)}'s key: the app may have been deleted, or its key revoked. Give the hob a new app.`,
-        });
+      const tokens = yield* makeHobAppTokens({ hosts, send, read, jwtFor, remember, installUrl });
 
-      const listInstallations = (app: HobGitHubApp, jwt: Redacted.Redacted<string>) =>
+      const listInstallations = (agentId: AgentId, app: HobGitHubApp, jwt: Redacted.Redacted<string>) =>
         allPages((page) =>
           send(
             asApp("/app/installations", jwt, { per_page: String(GITHUB_PAGE_SIZE), page: String(page) }),
             "the app's installations",
           ).pipe(
             Effect.flatMap((response) => {
-              if (response.status === 401) return Effect.fail(refusedKey(app));
+              if (response.status === 401) return Effect.flip(tokens.keyRefused(agentId, app));
               if (response.status !== 200) {
                 return Effect.fail(
                   new GitHubError({
@@ -500,14 +501,19 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           yield* agentOf(agentId);
           const app = yield* apps.get(agentId);
           if (app === null) return [];
-          return yield* listInstallations(app, yield* jwtFor(agentId, app));
+          const listed = yield* listInstallations(agentId, app, yield* jwtFor(agentId, app));
+          yield* tokens.settled(
+            agentId,
+            listed.some((installation) => !installation.suspended),
+          );
+          return listed;
         });
 
       /** Removes every installation of the app, so it reaches no repository even with a leaked key. */
       const uninstall = (agentId: AgentId, app: HobGitHubApp) =>
         Effect.gen(function* () {
           const jwt = yield* jwtFor(agentId, app);
-          const listed = yield* listInstallations(app, jwt);
+          const listed = yield* listInstallations(agentId, app, jwt);
           const left = yield* Effect.forEach(listed, (installation) =>
             send(
               HttpClientRequest.delete(`${hosts.api}/app/installations/${installation.id}`).pipe(
@@ -536,6 +542,8 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
       const disconnectHob = (agentId: AgentId, dismiss: boolean) =>
         writing.withPermits(1)(
           Effect.gen(function* () {
+            // Its tokens are never used again, whatever is left to remove.
+            yield* tokens.forget(agentId);
             const app = yield* apps.get(agentId);
             if (app === null) {
               // A key without its app is removed too, so nothing is left behind.
@@ -579,7 +587,10 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           // Retiring again leaves it as it is.
           disconnectHob(agentId, false).pipe(Effect.asVoid),
       });
-      return Context.make(HobGitHubAppService, service).pipe(Context.add(RetiredHobGitHubApp, retired));
+      return Context.make(HobGitHubAppService, service).pipe(
+        Context.add(RetiredHobGitHubApp, retired),
+        Context.add(HobAppTokens, tokens),
+      );
     }),
   ).pipe(Layer.provide([SecureRandom.layerWebCrypto, Digest.layerWebCrypto]));
 

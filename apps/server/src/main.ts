@@ -18,6 +18,7 @@ import {
   GitHubAccountLive,
   GitHubApiNode,
   GitHubCharmTools,
+  GitHubCredentialPerHob,
   GitHubPushSettings,
   GitHubSignInFake,
   GitHubSignInNode,
@@ -172,6 +173,12 @@ const ServerLive = Layer.unwrap(
         ),
       ),
     );
+    // Each hob acts on GitHub as its own app when it has one, as the user's account otherwise (#224).
+    const GitHub = GitHubCredentialPerHob.pipe(
+      Layer.provide(Account),
+      Layer.provideMerge(HobApp),
+      Layer.provide(HobGitHubAppRepository.pipe(Layer.provide(Sqlite))),
+    );
     const charmFolder = join(dataDir, "charms", "github");
     const Charms = GitHubCharmTools.pipe(
       Layer.provide(
@@ -192,7 +199,7 @@ const ServerLive = Layer.unwrap(
           }),
         ),
       ),
-      Layer.provideMerge(Layer.merge(Account, HobApp)),
+      Layer.provideMerge(GitHub),
       Layer.provide(NodeServices.layer),
     );
     // The hub's own path separator, which alone divides the folders a hob may be given (STD-SEC-003).

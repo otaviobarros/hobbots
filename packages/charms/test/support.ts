@@ -87,6 +87,7 @@ export const fixedCredential = (token: string, fresh: string = token) => {
     GitHubCredential,
     GitHubCredential.of({
       connected: Effect.succeed(true),
+      bot: () => Effect.succeed(null),
       tokenFor: () => current.pipe(Effect.as(Redacted.make(token))),
       refused: () => current.pipe(Effect.as(Redacted.make(fresh))),
       revoked: (refused) => Effect.sync(() => void revoked.push(Redacted.value(refused))),

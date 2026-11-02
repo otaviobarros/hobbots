@@ -8,10 +8,10 @@ import {
   repositorySlug,
 } from "@hobbots/domain";
 import { PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
-import { Context, Data, Effect, Option, type Redacted } from "effect";
+import { Context, Data, Effect, Option, type Redacted, Result } from "effect";
 import type { CharmCallRunner, ReadBack, WriteOutcome } from "./charm-calls.ts";
-import { GitPush, type PushResult, type PushTransport } from "./git-push.ts";
-import { GitHubCredential } from "./github-account.ts";
+import { GitPush, type PushTransport } from "./git-push.ts";
+import { GitHubCredential, refusedTwice } from "./github-account.ts";
 import { GitHubApi, type GitHubError } from "./github-api.ts";
 import { branchNameCheck, decideCharmWrite } from "./github-writes.ts";
 
@@ -90,18 +90,23 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
         const viaSsh: PushTransport = { _tag: "Ssh", agentSocket: settings.agentSocket ?? process.env.SSH_AUTH_SOCK };
         const over = (token: Redacted.Redacted<string> | null) =>
           git.push(staged, target, token === null ? viaSsh : { _tag: "Https", token });
-        const signedOut = { _tag: "SignedOut" } as PushResult;
+        // Why the hub has no token for the push, such as a hob's app that needs a reconnect.
+        const noToken = (error: GitHubError) => ({ _tag: "NoToken", message: error.message }) as const;
         const once = Effect.gen(function* () {
-          if (settings.over === "ssh") return yield* over(null);
-          const token = yield* credential.tokenFor(agentId).pipe(Effect.option);
-          if (Option.isNone(token)) return signedOut;
-          const result = yield* over(token.value);
+          // A hob with its own app always pushes as its bot, never over the user's SSH key (ADR 022).
+          const viaApp = (yield* credential.bot(agentId)) !== null;
+          if (settings.over === "ssh" && !viaApp) return yield* over(null);
+          const scope = { repository, action: "push" } as const;
+          const token = yield* credential.tokenFor(agentId, scope).pipe(Effect.result);
+          if (Result.isFailure(token)) return noToken(token.failure);
+          const result = yield* over(token.success);
           if (result._tag !== "SignedOut") return result;
-          const fresh = yield* credential.refused(agentId, token.value).pipe(Effect.option);
-          if (Option.isNone(fresh)) return signedOut;
-          const again = yield* over(fresh.value);
-          if (again._tag === "SignedOut") yield* credential.revoked(fresh.value);
-          return again;
+          const fresh = yield* credential.refused(agentId, token.success).pipe(Effect.result);
+          if (Result.isFailure(fresh)) return noToken(fresh.failure);
+          const again = yield* over(fresh.success);
+          if (again._tag !== "SignedOut") return again;
+          const why = yield* refusedTwice(credential, agentId, scope, fresh.success);
+          return viaApp ? noToken(why) : again;
         });
         let result = yield* once;
         // Nothing reached GitHub, so trying once more cannot send it twice.
@@ -123,6 +128,8 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
             };
           case "Uncertain":
             return { _tag: "Uncertain", text: result.message };
+          case "NoToken":
+            return { _tag: "NotSent", text: `${result.message} Nothing was pushed.` };
         }
       });
 

@@ -134,7 +134,7 @@ export const GitHubCharmTools = Layer.effect(
             );
           }
           return api
-            .search(agentId, githubSearchQuery(repository, search), search.limit ?? 10)
+            .search(agentId, repository, githubSearchQuery(repository, search), search.limit ?? 10)
             .pipe(Effect.map(githubSearchText));
         }
         case "github_item": {
@@ -244,7 +244,9 @@ export const GitHubCharmTools = Layer.effect(
         Effect.gen(function* () {
           const access = yield* turn.currentAccess;
           if (access === null || access.policy.hob.githubCharm === false) return null;
-          if (!(yield* credential.connected)) return null;
+          // A hob with its own app reaches GitHub without the user's account (ADR 022).
+          const reachable = (yield* credential.connected) || (yield* credential.bot(turn.agentId)) !== null;
+          if (!reachable) return null;
           return {
             tools,
             call: (name: string, input: unknown, step?: HubCallStep) => call(turn, name, input, step),
