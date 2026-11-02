@@ -44,7 +44,7 @@ const app = (overrides: Partial<HobGitHubApp> = {}): HobGitHubApp => ({
 
 describe("HobGitHubApps", () => {
   // covers ADR 022
-  it("[TC-GEN-050] keeps one app per hob, by hob, with 64-bit IDs, and forgets it", async () => {
+  it("[TC-GEN-050] keeps one app per hob, by hob, with 64-bit IDs, keeps one left over, and forgets it", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed("frodo");
@@ -57,13 +57,29 @@ describe("HobGitHubApps", () => {
         yield* apps.save(AgentId.make("frodo"), app({ slug: "frodo-hobbots-2" }));
         const frodo = yield* apps.get(AgentId.make("frodo"));
         const sam = yield* apps.get(AgentId.make("sam"));
+        // An app left over after a failed removal is shown but no longer acts; a new app clears it.
+        yield* apps.leave(AgentId.make("sam"), "1 of the app's installations could not be removed.");
+        const samLeft = {
+          get: yield* apps.get(AgentId.make("sam")),
+          leftOver: yield* apps.leftOver(AgentId.make("sam")),
+        };
+        yield* apps.save(AgentId.make("sam"), app({ appId: 8, slug: "sam-hobbots-2", botUserId: null }));
+        const samAgain = yield* apps.leftOver(AgentId.make("sam"));
         yield* apps.remove(AgentId.make("frodo"));
-        return { before, frodo, sam, after: yield* apps.get(AgentId.make("frodo")) };
+        return { before, frodo, sam, samLeft, samAgain, after: yield* apps.get(AgentId.make("frodo")) };
       }),
     );
     expect(result.before).toBeNull();
     expect(result.frodo).toEqual(app({ slug: "frodo-hobbots-2" }));
     expect(result.sam).toEqual(app({ appId: 7, slug: "sam-hobbots", botUserId: null }));
+    expect(result.samLeft).toEqual({
+      get: null,
+      leftOver: {
+        app: app({ appId: 7, slug: "sam-hobbots", botUserId: null }),
+        problem: "1 of the app's installations could not be removed.",
+      },
+    });
+    expect(result.samAgain).toBeNull();
     expect(result.after).toBeNull();
   });
 });

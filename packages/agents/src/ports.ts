@@ -84,16 +84,24 @@ export class GitHubAccounts extends Context.Service<
 export class HobGitHubApps extends Context.Service<
   HobGitHubApps,
   {
+    /** The hob's connected app, or null; an app left over after a failed removal is not one. */
     readonly get: (agentId: AgentId) => Effect.Effect<HobGitHubApp | null>;
-    /** Saves the hob's app, replacing the one it had. */
+    /** The hob's app that was disconnected or retired but not fully removed, and why, or null. */
+    readonly leftOver: (
+      agentId: AgentId,
+    ) => Effect.Effect<{ readonly app: HobGitHubApp; readonly problem: string } | null>;
+    /** Saves the hob's app, replacing the one it had, left over or not. */
     readonly save: (agentId: AgentId, app: HobGitHubApp) => Effect.Effect<void>;
+    /** Keeps the hob's app as left over, with what could not be removed, until the user dismisses it. */
+    readonly leave: (agentId: AgentId, problem: string) => Effect.Effect<void>;
     readonly remove: (agentId: AgentId) => Effect.Effect<void>;
   }
 >()("@hobbots/agents/HobGitHubApps") {}
 
 /**
  * What retiring a hob does to its own GitHub App (ADR 022): removes its installations and its key.
- * The hub has it only when the GitHub Charm is wired in; it reports problems in its log and never fails.
+ * The hub has it only when the GitHub Charm is wired in. It never fails: what it could not remove is
+ * kept with the hob's app, which then shows as left over until the user dismisses it.
  */
 export class RetiredHobGitHubApp extends Context.Service<
   RetiredHobGitHubApp,

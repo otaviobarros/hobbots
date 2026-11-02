@@ -52,6 +52,7 @@ mkdirSync(dataDir, { recursive: true });
 const HUB = "localhost:4366";
 const FRODO = AgentId.make("frodo");
 const MERRY = AgentId.make("merry");
+const PIPPIN = AgentId.make("pippin");
 
 // A test names the Tailscale node a request comes from with this header; without it, it is local.
 const NODE_HEADER = "x-test-tailnet-node";
@@ -128,7 +129,11 @@ beforeAll(async () => {
   const runtime = ManagedRuntime.make(App);
   await runtime.runPromise(
     Effect.flatMap(HobbotsRepository, (repo) =>
-      Effect.andThen(repo.insertAgent(hob(FRODO, "Frodo")), repo.insertAgent(hob(MERRY, "Merry"))),
+      Effect.all([
+        repo.insertAgent(hob(FRODO, "Frodo")),
+        repo.insertAgent(hob(MERRY, "Merry")),
+        repo.insertAgent(hob(PIPPIN, "Pippin")),
+      ]),
     ),
   );
   readKey = (agentId) =>
@@ -322,6 +327,39 @@ describe("A hob's own GitHub App on a hub", () => {
     expect(github.apps.find((app) => app.slug === "merry-hobbots")?.installations).toEqual([]);
     expect(await readKey(MERRY)).toBeNull();
     expect((await api("GET", `/api/agents/${MERRY}/github-app`)).body).toEqual({ _tag: "None", cannotCreate: null });
+  });
+
+  // covers ADR 022
+  it("[TC-GEN-055] a retired hob's app that GitHub would not remove stays shown, with where to delete it", async () => {
+    const started = await api<Started>("POST", `/api/agents/${PIPPIN}/github-app/start`);
+    const flow = await throughGitHub((await send("GET", started.body.url, {})).text);
+    expect((await send("GET", flow.back, {})).status).toBe(200);
+    github.installApp("pippin-hobbots");
+    github.answer = (request) =>
+      request.method === "DELETE" && request.path.startsWith("/app/installations/")
+        ? { status: 500, body: {} }
+        : undefined;
+    try {
+      const retired = await api("POST", `/api/agents/${PIPPIN}/retire`, AS_WINDOW, { activeWork: "stop" });
+      expect(retired.status).toBe(200);
+    } finally {
+      github.answer = null;
+    }
+    expect(github.apps.find((app) => app.slug === "pippin-hobbots")?.installations.length).toBe(1);
+    expect(await readKey(PIPPIN)).toBeNull();
+    const deleteUrl = `${github.base}/settings/apps/pippin-hobbots/advanced`;
+    expect((await api("GET", `/api/agents/${PIPPIN}/github-app`)).body).toEqual({
+      _tag: "LeftOver",
+      app: expect.objectContaining({ slug: "pippin-hobbots" }),
+      problem: "1 of the app's installations could not be removed. Delete the app on GitHub to close them.",
+      deleteUrl,
+    });
+    // Dismissing it once the user has seen it.
+    expect((await api("POST", `/api/agents/${PIPPIN}/github-app/disconnect`)).body).toEqual({
+      deleteUrl,
+      problem: null,
+    });
+    expect((await api("GET", `/api/agents/${PIPPIN}/github-app`)).body).toEqual({ _tag: "None", cannotCreate: null });
   });
 
   // covers ADR 022

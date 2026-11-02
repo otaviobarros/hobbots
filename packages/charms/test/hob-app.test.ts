@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import {
   DeviceRepository,
   HobbotsRepository,
@@ -17,6 +18,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   HOB_APP_PERMISSIONS,
   HobAppKeys,
+  HobAppKeysLive,
   HobAppKeysMemory,
   HobGitHubAppLive,
   HobGitHubAppService,
@@ -78,6 +80,8 @@ interface World {
   readonly hobs: Map<AgentId, Agent>;
   readonly devices: Map<DeviceId, Device>;
   readonly apps: Map<AgentId, HobGitHubApp>;
+  /** What could not be removed from a hob's app, which is then left over. */
+  readonly leftOver: Map<AgentId, string>;
   readonly redactor: ReturnType<typeof makeRedactor>;
 }
 
@@ -91,6 +95,7 @@ const world = (): World => ({
     [PHONE, device(PHONE)],
   ]),
   apps: new Map(),
+  leftOver: new Map(),
   redactor: makeRedactor(),
 });
 
@@ -113,9 +118,24 @@ const layer = (w: World, keys: Layer.Layer<HobAppKeys> = HobAppKeysMemory) =>
       Layer.succeed(
         HobGitHubApps,
         HobGitHubApps.of({
-          get: (id) => Effect.sync(() => w.apps.get(id) ?? null),
-          save: (id, app) => Effect.sync(() => void w.apps.set(id, app)),
-          remove: (id) => Effect.sync(() => void w.apps.delete(id)),
+          get: (id) => Effect.sync(() => (w.leftOver.has(id) ? null : (w.apps.get(id) ?? null))),
+          leftOver: (id) =>
+            Effect.sync(() => {
+              const app = w.apps.get(id);
+              const problem = w.leftOver.get(id);
+              return app === undefined || problem === undefined ? null : { app, problem };
+            }),
+          save: (id, app) =>
+            Effect.sync(() => {
+              w.apps.set(id, app);
+              w.leftOver.delete(id);
+            }),
+          leave: (id, problem) => Effect.sync(() => void w.leftOver.set(id, problem)),
+          remove: (id) =>
+            Effect.sync(() => {
+              w.apps.delete(id);
+              w.leftOver.delete(id);
+            }),
         }),
       ),
     ]),
@@ -369,13 +389,78 @@ describe("A hob's own GitHub App", () => {
         if (app !== undefined) app.keyLive = false;
         const listing = yield* Effect.flip(service.installations(FRODO));
         const disconnected = yield* service.disconnect(FRODO);
-        return { listing, disconnected, key: yield* (yield* HobAppKeys).read(FRODO) };
+        const key = yield* (yield* HobAppKeys).read(FRODO);
+        // The problem stays shown, and no new app is made over it, until the user dismisses it.
+        const leftOver = yield* service.status(FRODO);
+        const restart = yield* Effect.flip(service.start(FRODO, WINDOW, HUB));
+        const dismissed = yield* service.disconnect(FRODO);
+        return { listing, disconnected, key, leftOver, restart, dismissed, after: yield* service.status(FRODO) };
       }),
     );
     expect(outcome.listing).toMatchObject({ reason: "signed-out" });
     expect(outcome.disconnected.problem).toContain("Delete the app on GitHub");
     expect(outcome.disconnected.deleteUrl).toContain("/advanced");
     expect(Option.isNone(outcome.key)).toBe(true);
+    expect(outcome.leftOver).toEqual({
+      _tag: "LeftOver",
+      app: expect.objectContaining({ slug: expect.stringMatching(/^frodo-hobbots/) }),
+      problem: outcome.disconnected.problem,
+      deleteUrl: outcome.disconnected.deleteUrl,
+    });
+    expect(outcome.restart).toMatchObject({ reason: "left-over" });
+    expect(outcome.dismissed).toEqual({ deleteUrl: outcome.disconnected.deleteUrl, problem: null });
+    expect(outcome.after).toEqual({ _tag: "None", cannotCreate: null });
+  });
+
+  // covers ADR 022
+  it("[TC-PE-256] keeps what retiring a hob could not remove from its app, and shows it with where to delete it", async () => {
+    const w = world();
+    const outcome = await run(
+      w,
+      Effect.gen(function* () {
+        const service = yield* HobGitHubAppService;
+        const flow = yield* throughGitHub(SAM);
+        const made = yield* service.complete(flow.state, flow.code);
+        github.installApp(made.app.slug);
+        // GitHub refuses to remove the installation.
+        github.answer = (request) =>
+          request.method === "DELETE" && request.path.startsWith("/app/installations/")
+            ? { status: 500, body: {} }
+            : undefined;
+        yield* (yield* RetiredHobGitHubApp).remove(SAM);
+        github.answer = null;
+        return {
+          slug: made.app.slug,
+          left: github.apps.find((each) => each.slug === made.app.slug)?.installations.length,
+          key: yield* (yield* HobAppKeys).read(SAM),
+          status: yield* service.status(SAM),
+        };
+      }),
+    );
+    expect(outcome.left).toBe(1);
+    expect(Option.isNone(outcome.key)).toBe(true);
+    expect(outcome.status).toEqual({
+      _tag: "LeftOver",
+      app: expect.objectContaining({ slug: outcome.slug }),
+      problem: "1 of the app's installations could not be removed. Delete the app on GitHub to close them.",
+      deleteUrl: `${github.base}/settings/apps/${outcome.slug}/advanced`,
+    });
+  });
+
+  // covers ADR 022
+  it("[TC-PE-257] counts a platform without a keychain Hobbots can use as having none", async () => {
+    const windows = HobAppKeysLive("win32", {}).pipe(Layer.provide(NodeServices.layer));
+    const outcome = await Effect.runPromise(
+      Effect.gen(function* () {
+        const usable = yield* (yield* HobAppKeys).usable;
+        // The hub then refuses to start, before GitHub makes an app whose key it could not keep.
+        const refused = yield* Effect.flip((yield* HobGitHubAppService).start(FRODO, WINDOW, HUB));
+        return { usable, refused };
+      }).pipe(Effect.provide(layer(world(), windows))),
+    );
+    expect(outcome.usable).toBe(false);
+    const refused = outcome.refused;
+    expect(refused).toMatchObject({ reason: "no-keychain" });
   });
 });
 

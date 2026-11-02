@@ -70,11 +70,23 @@ export type HobAppStatus =
       readonly installUrl: string;
       /** Where the user deletes the app on GitHub, the only place it can be deleted. */
       readonly deleteUrl: string;
+    }
+  | {
+      /**
+       * Disconnected or retired, but not fully removed: the app no longer acts and its key is gone,
+       * yet installations may remain. Shown until the user dismisses it by disconnecting again.
+       */
+      readonly _tag: "LeftOver";
+      readonly app: HobGitHubApp;
+      /** What the hub could not remove. */
+      readonly problem: string;
+      /** Where the user deletes the app on GitHub, which closes what is left. */
+      readonly deleteUrl: string;
     };
 
 /** Why making a hob's app did not start. */
 export class HobAppRefused extends Schema.TaggedError<HobAppRefused>()("HobAppRefused", {
-  reason: Schema.Literals(["not-found", "retired", "connected", "no-keychain"]),
+  reason: Schema.Literals(["not-found", "retired", "connected", "left-over", "no-keychain"]),
   message: Schema.String,
 }) {}
 
@@ -239,7 +251,11 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
         Effect.gen(function* (): Effect.fn.Return<HobAppStatus, HobAppRefused> {
           yield* agentOf(agentId);
           const app = yield* apps.get(agentId);
-          if (app === null) return { _tag: "None", cannotCreate: (yield* keys.usable) ? null : "no-keychain" };
+          if (app === null) {
+            const left = yield* apps.leftOver(agentId);
+            if (left !== null) return { _tag: "LeftOver", ...left, deleteUrl: deleteUrl(left.app.slug) };
+            return { _tag: "None", cannotCreate: (yield* keys.usable) ? null : "no-keychain" };
+          }
           return {
             _tag: "Connected",
             app,
@@ -259,6 +275,12 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
             return yield* new HobAppRefused({
               reason: "connected",
               message: `${agent.name} already has its own GitHub app. Disconnect it first.`,
+            });
+          }
+          if ((yield* apps.leftOver(agentId)) !== null) {
+            return yield* new HobAppRefused({
+              reason: "left-over",
+              message: `${agent.name}'s old GitHub app was not fully removed. Delete it on GitHub, then dismiss it.`,
             });
           }
           // Without a keychain the hub would have nowhere but a file for the key, so it makes no app.
@@ -513,7 +535,12 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
             if (app === null) {
               // A key without its app is removed too, so nothing is left behind.
               yield* keys.remove(agentId).pipe(Effect.ignore);
-              return { deleteUrl: null, problem: null };
+              // Disconnecting a left-over app dismisses it. Without its key the hub cannot try its
+              // installations again; only deleting the app on GitHub closes what is left.
+              const left = yield* apps.leftOver(agentId);
+              if (left === null) return { deleteUrl: null, problem: null };
+              yield* apps.remove(agentId);
+              return { deleteUrl: deleteUrl(left.app.slug), problem: null };
             }
             // Tried once and shown, never retried in a loop (ADR 022).
             const problem = yield* uninstall(agentId, app);
@@ -523,10 +550,17 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
                 Effect.succeed(`The hub's keychain did not delete the app's key: ${error.message}`),
               ),
             );
-            yield* apps.remove(agentId);
-            yield* Effect.logInfo("A hob's GitHub app was disconnected", { agentId, slug: app.slug });
             const problems = [problem, kept].filter((each) => each !== null);
-            return { deleteUrl: deleteUrl(app.slug), problem: problems.length === 0 ? null : problems.join(" ") };
+            if (problems.length === 0) {
+              yield* apps.remove(agentId);
+              yield* Effect.logInfo("A hob's GitHub app was disconnected", { agentId, slug: app.slug });
+              return { deleteUrl: deleteUrl(app.slug), problem: null };
+            }
+            // Kept as left over, so the problem and where to delete the app stay shown (ADR 022).
+            const left = problems.join(" ");
+            yield* apps.leave(agentId, left);
+            yield* Effect.logWarning("A hob's GitHub app was not fully removed", { agentId, slug: app.slug });
+            return { deleteUrl: deleteUrl(app.slug), problem: left };
           }),
         );
 
@@ -535,14 +569,8 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
       const service = HobGitHubAppService.of({ status, start, form, complete, installations, disconnect });
       const retired = RetiredHobGitHubApp.of({
         remove: (agentId) =>
-          disconnectHob(agentId).pipe(
-            Effect.tap(({ problem }) =>
-              problem === null
-                ? Effect.void
-                : Effect.logWarning("A retired hob's GitHub app was not fully removed", { agentId, problem }),
-            ),
-            Effect.asVoid,
-          ),
+          // What could not be removed stays with the hob's app as left over, shown by its status.
+          disconnectHob(agentId).pipe(Effect.asVoid),
       });
       return Context.make(HobGitHubAppService, service).pipe(Context.add(RetiredHobGitHubApp, retired));
     }),

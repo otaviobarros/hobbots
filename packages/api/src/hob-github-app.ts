@@ -23,6 +23,14 @@ export const HobGitHubAppStatus = Schema.Union([
     /** Where the user deletes the app on GitHub. */
     deleteUrl: Schema.String,
   }),
+  // Disconnected or retired but not fully removed: it no longer acts, and disconnecting again dismisses it.
+  Schema.TaggedStruct("LeftOver", {
+    app: HobGitHubApp,
+    /** What the hub could not remove, such as installations GitHub refused to remove. */
+    problem: Schema.String,
+    /** Where the user deletes the app on GitHub, which closes what is left. */
+    deleteUrl: Schema.String,
+  }),
 ]);
 export type HobGitHubAppStatus = typeof HobGitHubAppStatus.Type;
 
@@ -43,13 +51,14 @@ export const HobGitHubAppDisconnected = Schema.Struct({
 export type HobGitHubAppDisconnected = typeof HobGitHubAppDisconnected.Type;
 
 /**
- * Making the hob's app did not start: the hob is retired, already has one, the hub has no keychain,
- * or the request did not come from the hub's own computer, where GitHub's redirect can reach it.
+ * Making the hob's app did not start: the hob is retired, already has one, still shows an old one that
+ * was not fully removed, the hub has no keychain, or the request did not come from the hub's own
+ * computer, where GitHub's redirect can reach it.
  */
 export class HobGitHubAppRefused extends Schema.TaggedError<HobGitHubAppRefused>()(
   "HobGitHubAppRefused",
   {
-    reason: Schema.Literals(["retired", "connected", "no-keychain", "not-local"]),
+    reason: Schema.Literals(["retired", "connected", "left-over", "no-keychain", "not-local"]),
     message: Schema.String,
   },
   { httpApiStatus: 409 },
@@ -73,7 +82,7 @@ export class HobGitHubAppGroup extends HttpApiGroup.make("hobGitHubApp")
       success: Schema.Struct({ installations: Schema.Array(HobGitHubAppInstallation) }),
       error: [AgentNotFound, GitHubUnreachable],
     }),
-    // Removes the app's installations and its key; the hob acts as you again.
+    // Removes the app's installations and its key; the hob acts as you again. Dismisses a left-over app.
     HttpApiEndpoint.post("disconnect", "/agents/:agentId/github-app/disconnect", {
       params: { agentId: AgentId },
       success: HobGitHubAppDisconnected,
