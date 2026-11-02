@@ -431,6 +431,70 @@ describe("A hob's own GitHub App", () => {
     for (const request of github.requests) expect(request.body).not.toContain("PRIVATE KEY");
   });
 
+  // covers ADR 022, #227
+  it("[TC-GEN-084] names the repositories each installation reaches, with one metadata-only token an hour", async () => {
+    const w = world();
+    github.createRepository({ owner: "otaviobarros", name: "frodo-docs" });
+    github.createRepository({ owner: "otaviobarros", name: "frodo-site" });
+    const [docs, site] = ["otaviobarros/frodo-docs", "otaviobarros/frodo-site"];
+    const outcome = await run(
+      w,
+      Effect.gen(function* () {
+        const service = yield* HobGitHubAppService;
+        const frodo = yield* throughGitHub(FRODO);
+        const made = yield* service.complete(frodo.state, frodo.code);
+        github.installApp(made.app.slug, "selected", [docs]);
+        github.installApp(made.app.slug, "all");
+        const first = yield* service.installations(FRODO);
+        const again = yield* service.installations(FRODO);
+        const minted = github.installationTokens.filter((token) => token.appId === made.app.appId);
+        yield* service.disconnect(FRODO);
+        return { first, again, minted };
+      }),
+    );
+    const [selected, all] = outcome.first;
+    expect(selected?.repositories).toEqual([docs]);
+    expect(all?.repositories).toEqual(expect.arrayContaining([docs, site]));
+    expect(outcome.again).toEqual(outcome.first);
+    // One token for each installation, kept for the second read, reading names and nothing else.
+    expect(outcome.minted).toHaveLength(2);
+    for (const token of outcome.minted) expect(token.permissions).toEqual({ metadata: "read" });
+  });
+
+  // covers ADR 022, #227
+  it("[TC-GEN-085] still removes every installation on disconnect when GitHub will not name their repositories", async () => {
+    const w = world();
+    const outcome = await run(
+      w,
+      Effect.gen(function* () {
+        const service = yield* HobGitHubAppService;
+        const frodo = yield* throughGitHub(FRODO);
+        const made = yield* service.complete(frodo.state, frodo.code);
+        github.installApp(made.app.slug, "selected");
+        github.installApp(made.app.slug, "all");
+        // Neither a token for the names nor the names themselves come back.
+        github.answer = (request) =>
+          (request.method === "POST" && /^\/app\/installations\/\d+\/access_tokens$/.test(request.path)) ||
+          request.path === "/installation/repositories"
+            ? { status: 500 }
+            : undefined;
+        const listing = yield* Effect.flip(service.installations(FRODO));
+        const disconnected = yield* service.disconnect(FRODO);
+        github.answer = null;
+        return {
+          listing,
+          disconnected,
+          left: github.apps.find((each) => each.slug === made.app.slug)?.installations.length,
+          leftOver: w.leftOver.get(FRODO) ?? null,
+        };
+      }),
+    );
+    expect(outcome.listing.message).toContain("the names of the app's repositories");
+    expect(outcome.disconnected.problem).toBeNull();
+    expect(outcome.left).toBe(0);
+    expect(outcome.leftOver).toBeNull();
+  });
+
   // covers ADR 022
   it("[TC-PE-253] shows what it could not remove when GitHub refuses the key, and still deletes the key", async () => {
     const w = world();
