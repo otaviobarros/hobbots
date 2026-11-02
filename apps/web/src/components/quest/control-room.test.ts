@@ -1,4 +1,4 @@
-import { AgentId, Attempt, AttemptId, Quest, QuestId, type Task, TaskId, TaskWait } from "@hobbots/domain";
+import { AgentId, Attempt, AttemptId, Delegation, Quest, QuestId, type Task, TaskId, TaskWait } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import {
@@ -9,6 +9,7 @@ import {
   blackFriday,
   CAMPAIGN,
   COPY,
+  delegation,
   QUILL,
   quest,
   question,
@@ -27,6 +28,7 @@ const nth = (tasks: ReadonlyArray<Task>, index: number): Task => {
   return found;
 };
 const RESEARCH = TaskId.make("research");
+const NESTED = QuestId.make("quest-build");
 
 /** Ada leads a Quest of her own under Aldric's: Rook researches keywords for her. */
 const nested = () => {
@@ -34,9 +36,15 @@ const nested = () => {
   return tree({
     ...base,
     tasks: [...base.tasks, task(RESEARCH, { ownerId: ROOK, parentId: BUILD, brief: "Research keywords", second: 4 })],
-    quests: [
-      ...base.quests,
-      new Quest({ ...quest(), id: QuestId.make("quest-build"), taskId: BUILD, leadId: ADA, depth: 2 }),
+    quests: [...base.quests, new Quest({ ...quest(), id: NESTED, taskId: BUILD, leadId: ADA, depth: 2 })],
+    delegations: [
+      ...base.delegations,
+      new Delegation({
+        ...delegation(ROOK, RESEARCH, "Research keywords"),
+        questId: NESTED,
+        leadId: ADA,
+        parentTaskId: BUILD,
+      }),
     ],
   });
 };
@@ -50,6 +58,8 @@ describe("roomRows", () => {
       [BUILD, 1, ADA],
       [RESEARCH, 2, null],
     ]);
+    // The member that leads a nested Quest names its own party; the Task you asked for never does.
+    expect(rows.map((row) => row.party)).toEqual([[], [], [ROOK], []]);
   });
 
   it("says who each Task waits on: the hobs it depends on and whoever holds its question", () => {

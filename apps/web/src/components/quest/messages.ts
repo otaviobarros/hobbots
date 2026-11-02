@@ -127,6 +127,8 @@ export const messages = {
     row: ({ name, title }: { name: string; title: string }) => `${name} · ${title}`,
     you: "you",
     leads: "Leads a quest",
+    /** A member that brought in hobs of its own: the party it leads under the Quest. */
+    leadsParty: ({ names }: { names: string }) => `Leads ${names}`,
     pick: "Pick a Task to retry, reassign or cancel it.",
     controls: ({ title }: { title: string }) => `Controls for ${title}`,
     attempt: ({ count }: { count: number }) => `Attempt ${formatCount(count)}`,

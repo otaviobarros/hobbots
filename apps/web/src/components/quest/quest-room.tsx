@@ -147,6 +147,7 @@ function Row({
   const owner = hobs(row.task.ownerId);
   const title = taskTitle(row.task);
   const waits = row.waitingOn.map((each) => (each.kind === "you" ? copy.you : hobs(each.id).name));
+  const party = row.party.map((id) => hobs(id).name);
   return (
     <button
       type="button"
@@ -164,7 +165,11 @@ function Row({
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm">{copy.row({ name: owner.name, title })}</span>
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-label">
-          {row.quest !== null && <span className="shrink-0 bg-line px-1.5 font-bold text-moonlight">{copy.leads}</span>}
+          {row.quest !== null && (
+            <span className="max-w-1/2 shrink-0 truncate bg-line px-1.5 font-bold text-moonlight">
+              {party.length > 0 ? copy.leadsParty({ names: messages.names(party) }) : copy.leads}
+            </span>
+          )}
           {waits.length > 0 && (
             <span className="truncate text-lantern">{messages.card.waitingOn({ names: messages.names(waits) })}</span>
           )}

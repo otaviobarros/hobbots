@@ -60,6 +60,8 @@ const now = "2026-11-02T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
+const ROOK = AgentId.make("rook");
+const PIP = AgentId.make("pip");
 const threadId = ThreadId.make("campaign");
 /** A prompt with this line of its own waits, before it does anything, until the test lets it go on. */
 const HOLD = "fake:hold";
@@ -145,7 +147,8 @@ const scripted = (gates: Gates, requests: Array<PromptRequest>) =>
 const Party = Layer.effectDiscard(
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
-    for (const each of [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(ADA, "Ada")]) yield* repo.insertAgent(each);
+    const party = [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(ADA, "Ada"), hob(ROOK, "Rook"), hob(PIP, "Pip")];
+    for (const each of party) yield* repo.insertAgent(each);
     yield* repo.upsertThread(
       new Thread({ id: threadId, agentId: ALDRIC, title: "Black Friday", createdAt: now, updatedAt: now }),
     );
@@ -277,6 +280,34 @@ const questUnderWay = (quillBrief: ReadonlyArray<string> = [HOLD]) =>
 
 const underWay = (tree: TaskTree) =>
   ownedBy(tree, ADA)?.state === "waiting" && tree.attempts.some((each) => each.agentId === QUILL && isLive(each.state));
+
+/** Aldric brings in Rook, who brings in Pip under his own Quest; Pip's turn is held while Rook waits on her. */
+const nestedUnderWay = [
+  "Plan the Black Friday campaign",
+  hub("delegate_task", {
+    key: "ads",
+    hob: "Rook",
+    brief: [
+      "Run the ads",
+      hub("delegate_task", {
+        key: "keywords",
+        hob: "Pip",
+        brief: [
+          "Research the keywords",
+          HOLD,
+          hub("complete_task", { key: "keywords-done", summary: "Keywords" }),
+        ].join("\n"),
+      }),
+      hub("wait_for", { key: "rook-wait", tasks: ["$keywords.task_id"] }),
+    ].join("\n"),
+  }),
+  hub("wait_for", { key: "wait", tasks: ["$ads.task_id"] }),
+].join("\n");
+
+const nestedRunning = (tree: TaskTree) =>
+  ownedBy(tree, ROOK)?.state === "waiting" &&
+  tree.attempts.some((each) => each.agentId === PIP && isLive(each.state)) &&
+  !tree.attempts.some((each) => each.agentId === ROOK && isLive(each.state));
 
 /** Your request in the thread, its step done and every reply ended: the Task the next message works on. */
 const requestDone = Effect.gen(function* () {
@@ -434,6 +465,68 @@ describe("cancelling with confirmed outcomes", () => {
     expect(after.artifacts).toEqual([]);
     expect(ownedBy(after, QUILL)?.revision).toBe(ownedBy(cancelled, QUILL)?.revision);
   }, 20_000);
+  // covers OR-006, OR-004
+  it("[TC-OR-164] cancelling the Quest reaches every level of a nested one, each Task confirmed, and starts nothing after", async () => {
+    const { run, requests } = setUp();
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, nestedUnderWay)));
+    const before = await run(treeWhen(nestedRunning));
+    const quest = before.quests.find((each) => each.depth === 1);
+    if (quest === undefined) throw new Error("no Quest");
+
+    await run(controls((each) => each.cancelQuest(quest.id)));
+    const done = await run(treeWhen((tree) => tree.tasks.every((task) => task.state === "cancelled")));
+    expect(done.tasks.map((task) => task.ownerId)).toEqual([ALDRIC, ROOK, PIP]);
+    expect(done.quests.map((each) => [each.leadId, each.state])).toEqual([
+      [ALDRIC, "cancelled"],
+      [ROOK, "cancelled"],
+    ]);
+    // Pip's turn was stopped and confirmed; Rook's had ended while he waited on her.
+    expect(attemptsOf(done, ownedBy(done, PIP))).toEqual([[PIP, "cancelled"]]);
+    expect(attemptsOf(done, ownedBy(done, ROOK))).toEqual([[ROOK, "completed"]]);
+    expect(done.attempts.some((each) => isLive(each.state))).toBe(false);
+
+    const sent = requests.length;
+    await run(Effect.sleep("200 millis"));
+    expect(requests).toHaveLength(sent);
+    expect(continuations(await run(messages()))).toEqual([]);
+  }, 20_000);
+
+  // covers OR-006, OR-004
+  it("[TC-OR-165] cancelling Rook's Task cancels Pip's under it and leaves Aldric's Quest going; neither changes hands across levels", async () => {
+    const { run } = setUp();
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, nestedUnderWay)));
+    const before = await run(treeWhen(nestedRunning));
+    const rook = ownedBy(before, ROOK);
+    const pip = ownedBy(before, PIP);
+    if (rook === undefined || pip === undefined) throw new Error("no Tasks");
+
+    // Rook's Task leads a Quest of its own, and Pip cannot take on work above her.
+    const refused = (taskId: Task["id"], agentId: AgentId) =>
+      run(controls((each) => each.reassign(taskId, agentId)).pipe(Effect.flip));
+    expect(await refused(rook.id, QUILL)).toMatchObject({ _tag: "TaskNotControllable", reason: "children-open" });
+    expect(await refused(pip.id, ALDRIC)).toMatchObject({ reason: "lineage-owner" });
+
+    await run(controls((each) => each.cancel(rook.id)));
+    const cancelled = await run(
+      treeWhen((tree) => [ROOK, PIP].every((agentId) => ownedBy(tree, agentId)?.state === "cancelled")),
+    );
+    expect(attemptsOf(cancelled, ownedBy(cancelled, PIP))).toEqual([[PIP, "cancelled"]]);
+    expect(cancelled.quests.map((each) => [each.leadId, each.state])).toEqual([
+      [ALDRIC, "active"],
+      [ROOK, "cancelled"],
+    ]);
+    expect(cancelled.tasks[0]?.state).toBe("waiting");
+    // Aldric hears that Rook's Task ended; Pip's is Rook's to hear about, not his.
+    const all = await run(
+      messagesWhen((each) => continuations(each).some((reply) => reply.content.includes("ended as cancelled."))),
+    );
+    const told = continuations(all)
+      .map((reply) => reply.content)
+      .join("\n");
+    expect(told).toContain(`Task ${rook.id}`);
+    expect(told).not.toContain(`Task ${pip.id} ended`);
+  }, 20_000);
+
   // covers OR-006
   it("[TC-OR-150] cancelling the Task you asked for waits for a later reply working on it to stop, and starts nothing in its place", async () => {
     const { run, release, requests } = setUp();
