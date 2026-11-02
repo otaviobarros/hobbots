@@ -233,6 +233,56 @@ describe("pushing from the hub's staging repository", () => {
     expect(sh(remote, "rev-parse", "refs/heads/feat/x")).toBe(results.rewritten.commit);
   });
 
+  // covers PE-005
+  it("[TC-PE-159] pushes over SSH through the user's agent to the resolved repository, whatever the hob's folder sets", async () => {
+    const folder = await makeFolder("over-ssh");
+    const remote = await makeRemote("octo/ssh");
+    const ran = path.join(root, "ran-folder-ssh-command");
+    sh(folder, "config", "core.sshCommand", `touch ${quote(ran)}`);
+    sh(folder, "config", "url.git@evil.example:.insteadOf", "git@github.com:");
+    // A stand-in for ssh on the hub's PATH: it records how it was called and serves the push from the fake GitHub.
+    const bin = path.join(root, "ssh-bin");
+    const calls = path.join(root, "ssh-calls");
+    await fs.mkdir(bin, { recursive: true });
+    await fs.writeFile(
+      path.join(bin, "ssh"),
+      [
+        "#!/bin/sh",
+        `{ printf '%s\\n' "$@"; echo "agent=$SSH_AUTH_SOCK"; } > ${quote(calls)}`,
+        "for last; do :; done",
+        `cd ${quote(path.join(root, "github"))} && exec sh -c "$last"`,
+        "",
+      ].join("\n"),
+      { mode: 0o755 },
+    );
+    const sshLayer = GitPushLive({
+      folder: path.join(root, "data", "charms", "github-ssh"),
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+    }).pipe(Layer.provide(Layer.mergeAll(directSandbox, NodeServices.layer)));
+    const pushed = await Effect.gen(function* () {
+      const git = yield* GitPush;
+      const staged = yield* git.stage([folder], folder, "feat/x");
+      const result = yield* git.push(staged, target(staged.commit, { repository: { owner: "octo", name: "ssh" } }), {
+        _tag: "Ssh",
+        agentSocket: "/run/user/agent.sock",
+      });
+      return { result, commit: staged.commit };
+    }).pipe(Effect.scoped, Effect.provide(sshLayer), Effect.runPromise);
+
+    expect(pushed.result).toEqual({ _tag: "Pushed", created: true, forced: false });
+    expect(sh(remote, "rev-parse", "refs/heads/feat/x")).toBe(pushed.commit);
+    const args = (await fs.readFile(calls, "utf8")).split("\n");
+    expect(args).toEqual(
+      expect.arrayContaining(["BatchMode=yes", "StrictHostKeyChecking=yes", "HostKeyAlias=github.com"]),
+    );
+    expect(args).toContain("git@github.com");
+    expect(args.some((arg) => /^git-receive-pack 'octo\/ssh\.git'$/.test(arg))).toBe(true);
+    expect(args).toContain("agent=/run/user/agent.sock");
+    const knownHosts = args.find((arg) => arg.startsWith("UserKnownHostsFile="))?.slice("UserKnownHostsFile=".length);
+    expect(await fs.readFile(knownHosts ?? "", "utf8")).toMatch(/^github\.com ssh-ed25519 /m);
+    await expect(fs.access(ran)).rejects.toThrow();
+  });
+
   // covers EX-003, EX-004
   it("[TC-PE-154] reads an unclear end as uncertain, and only an unreachable GitHub as not sent", () => {
     const ref = "refs/heads/feat/x";
