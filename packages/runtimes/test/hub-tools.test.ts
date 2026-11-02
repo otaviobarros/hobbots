@@ -9,7 +9,7 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { policyHooks, toolOptions, toolTurn } from "../src/claude-code.ts";
-import { HUB_SERVER, hubToolOf, inputShape, withHubTools } from "../src/hub-tools.ts";
+import { AnnouncedCalls, HUB_SERVER, hubToolOf, inputShape, withHubTools } from "../src/hub-tools.ts";
 
 const calls: Array<{ readonly name: string; readonly input: unknown }> = [];
 const hub: HubTools = {
@@ -35,6 +35,19 @@ describe("hub tools on Claude Code's control channel", () => {
     const plan = z.object(inputShape(taskToolJsonSchema("plan_steps")));
     expect(plan.safeParse({ key: "k", steps: [{ brief: "Research" }] }).success).toBe(true);
     expect(plan.safeParse({ key: "k" }).success).toBe(false);
+  });
+
+  // covers PE-003
+  it("[TC-OR-073] gives each hub tool call the step Claude Code announced it as", () => {
+    const announced = new AnnouncedCalls();
+    announced.announce("toolu_a", "github_push", { branch: "a", key: "1" });
+    announced.announce("toolu_b", "github_push", { key: "2", branch: "b" });
+    announced.announce("toolu_c", "plan", {});
+    // The same input in another key order, then the oldest of its tool when the input was changed.
+    expect(announced.take("github_push", { branch: "b", key: "2" })).toBe("toolu_b");
+    expect(announced.take("github_push", { branch: "a", key: "1", extra: true })).toBe("toolu_a");
+    expect(announced.take("plan", {}, { "claudecode/toolUseId": "toolu_c" })).toBe("toolu_c");
+    expect(announced.take("plan", {})).toBeNull();
   });
 
   it("tells hub tools apart from every other tool", () => {

@@ -191,6 +191,57 @@ describe("Claude Code tool calls under the policy hook", () => {
     expect(result.events[0]?._tag === "ToolDenied" && result.events[0].reason).toContain("cannot ask you");
   });
 
+  // covers PE-003, PE-005
+  it("[TC-PE-158] points a git push in a folder the GitHub Charm pushes from to github_push, in any preset", async () => {
+    const steered: Array<string> = [];
+    const hubTools = {
+      tools: [{ name: "github_push", description: "", inputSchema: {}, label: "Pushing to GitHub" }],
+      call: () => Effect.succeed({ text: "", refused: false }),
+      steersPush: (cwd: string) =>
+        Effect.sync(() => {
+          steered.push(cwd);
+          return cwd === project ? "github_push" : null;
+        }),
+    };
+    const hook = async (turn: NonNullable<ReturnType<typeof toolTurn>>, command: string, cwd: string) => {
+      const events: Array<RuntimeEvent> = [];
+      const { hooks } = policyHooks(engine, turn, (event) => events.push(event));
+      const [pre] = hooks.PreToolUse?.[0]?.hooks ?? [];
+      await pre?.(
+        {
+          session_id: "s",
+          transcript_path: "",
+          cwd,
+          tool_name: "Bash",
+          tool_input: { command },
+          tool_use_id: "t1",
+          hook_event_name: "PreToolUse",
+        } as HookInput,
+        "t1",
+        { signal: new AbortController().signal },
+      );
+      return events;
+    };
+    for (const preset of ["careful", "balanced", "trusting"] as const) {
+      const turn = toolTurn({ ...access(), policy: { ...access().policy, preset } }, "on", hubTools);
+      if (turn === null) throw new Error("expected a tool turn");
+      const events = await hook(turn, "pnpm test && git push origin feature", project);
+      expect(events[0]).toMatchObject({ _tag: "ToolDenied", reason: expect.stringContaining("github_push tool") });
+    }
+    expect(steered).toContain(project);
+    // A push the Charm does not make, such as from a folder whose origin is not on GitHub, is decided as Push.
+    const turn = toolTurn(access(), "on", { ...hubTools, steersPush: () => Effect.succeed(null) });
+    if (turn === null) throw new Error("expected a tool turn");
+    expect((await hook(turn, "git push origin feature", project))[0]).toMatchObject({
+      _tag: "ToolDenied",
+      operation: "push",
+    });
+    // Without the Charm, a push is decided as Push, as before.
+    expect(toolTurn(access(), "on")?.steersPush).toBeUndefined();
+    const plain = await call("Bash", { command: "git push origin feature" });
+    expect(plain.events[0]).toMatchObject({ _tag: "ToolDenied", operation: "push" });
+  });
+
   it("[#209] decides a push behind a wrapper as a push, and a delete after cd in the folder moved to", async () => {
     for (const command of [
       "env -i git push origin main",

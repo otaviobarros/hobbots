@@ -27,6 +27,7 @@ import tasksAndQuests from "./0024_tasks_and_quests.ts";
 import taskToolCalls from "./0025_task_tool_calls.ts";
 import backpackItems from "./0026_backpack_items.ts";
 import githubCharm from "./0027_github_charm.ts";
+import charmCalls from "./0028_charm_calls.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -61,4 +62,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0025_task_tool_calls": taskToolCalls,
   "0026_backpack_items": backpackItems,
   "0027_github_charm": githubCharm,
+  "0028_charm_calls": charmCalls,
 };

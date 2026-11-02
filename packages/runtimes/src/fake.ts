@@ -151,7 +151,7 @@ export const scriptedToolEvents = (
   sandbox: "on" | "unavailable" = "on",
 ): Stream.Stream<RuntimeEvent> => {
   // Commands are decided as on a hub where the sandbox started, or where it cannot start.
-  const turn = engine ? toolTurn(request.tools, sandbox) : null;
+  const turn = engine ? toolTurn(request.tools, sandbox, request.hubTools) : null;
   if (engine === undefined || turn === null) return Stream.empty;
   const calls = request.prompt
     .split("\n")
@@ -182,6 +182,7 @@ export const scriptedToolEvents = (
             call,
             (event) => Queue.offerUnsafe(queue, event),
             request.redaction,
+            turn.steersPush,
           );
           const label = toolLabel(call.tool, call.input, request.redaction?.text);
           const ran =
@@ -257,22 +258,20 @@ export const scriptedHubEvents = (request: PromptRequest, answers: Array<string>
     });
   return Stream.fromIterable(calls).pipe(
     Stream.flatMap((call) =>
-      Stream.make<Array<RuntimeEvent>>({
-        _tag: "StepStarted",
-        id: call.id,
-        kind: "tool",
-        label: hub.tools.find((tool) => tool.name === call.name)?.label ?? call.name,
-      }).pipe(
-        Stream.concat(
-          Stream.fromEffect(
-            hub.call(call.name, call.input).pipe(
-              Effect.map((answer): RuntimeEvent => {
-                answers.push(`${call.name}: ${answer.text}`);
-                return { _tag: "StepEnded", id: call.id };
-              }),
-            ),
-          ),
-        ),
+      Stream.callback<RuntimeEvent>((queue) =>
+        Effect.gen(function* () {
+          const report = (event: RuntimeEvent) => Queue.offerUnsafe(queue, event);
+          report({
+            _tag: "StepStarted",
+            id: call.id,
+            kind: "tool",
+            label: hub.tools.find((tool) => tool.name === call.name)?.label ?? call.name,
+          });
+          const answer = yield* hub.call(call.name, call.input, { id: call.id, report });
+          answers.push(`${call.name}: ${answer.text}`);
+          yield* Queue.offer(queue, { _tag: "StepEnded", id: call.id });
+          yield* Queue.end(queue);
+        }),
       ),
     ),
   );

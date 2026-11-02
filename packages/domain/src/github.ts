@@ -101,6 +101,108 @@ export const GitHubToolInputs = {
   }),
 } as const;
 
+/** Why a branch name is refused: the hub passes names to Git, so none may read as an option or another ref. */
+export const branchNameProblem = (name: string): string | null => {
+  if (name.startsWith("-")) return `${name} starts with "-", so it could read as an option.`;
+  if (name === "HEAD" || name.startsWith("refs/")) return `${name} names a ref, not a branch.`;
+  return null;
+};
+
+const branchName = (description: string) =>
+  Schema.String.check(
+    Schema.isNonEmpty(),
+    Schema.isMaxLength(255),
+    Schema.makeFilter((name: string) => branchNameProblem(name) ?? undefined),
+  ).annotate({ description });
+
+/** Every write carries a key, so a retried call returns the first result and is sent once (ADR 020). */
+const writeKey = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(200)).annotate({
+  description:
+    "A key you choose for this call, unique among your calls. Send the same key when you retry the same call, so it is sent once.",
+});
+
+export const GitHubWriteInputs = {
+  github_push: Schema.Struct({
+    folder: Schema.optionalKey(
+      Schema.String.check(Schema.isNonEmpty()).annotate({
+        description:
+          "An absolute folder of yours whose repository to push. Leave it out to push from your first folder that has one on GitHub.",
+      }),
+    ),
+    branch: branchName("Your local branch to push. The hub pushes the commit it points to when the call is decided."),
+    remote_branch: Schema.optionalKey(branchName("The branch on GitHub to update. Defaults to the same name.")),
+    force: Schema.optionalKey(
+      Schema.Boolean.annotate({
+        description:
+          "Replace the branch on GitHub even when your branch does not build on it. Always asks the user, once only.",
+      }),
+    ),
+    key: writeKey,
+  }),
+} as const;
+
+export type GitHubWriteToolName = keyof typeof GitHubWriteInputs;
+export type GitHubWriteInput<N extends GitHubWriteToolName> = (typeof GitHubWriteInputs)[N]["Type"];
+
+export const isGitHubWriteToolName = (name: string): name is GitHubWriteToolName =>
+  Object.hasOwn(GitHubWriteInputs, name);
+
+/** The JSON Schema a runtime advertises for a GitHub write tool's input. */
+export const githubWriteToolJsonSchema = (name: GitHubWriteToolName): Record<string, unknown> =>
+  toolInputJsonSchema(GitHubWriteInputs[name]);
+
+/** The tool a hob pushes with, which the policy hook points a `git push` command to. */
+export const GITHUB_PUSH_TOOL = "github_push";
+
+export const GITHUB_WRITE_TOOLS: ReadonlyArray<{
+  readonly name: GitHubWriteToolName;
+  readonly description: string;
+  readonly label: string;
+}> = [
+  {
+    name: "github_push",
+    description:
+      "Push a branch of your folder's repository to GitHub, as the user. Use this instead of `git push`, which cannot sign in from your sandbox. The hub pushes the commit your branch points to when the call is decided; under most policies the user approves it first. Without force, GitHub refuses a push when its branch moved.",
+    label: "Pushing to GitHub",
+  },
+];
+
+/** What a push sends and where, as the hub fixed it when deciding, and what the approval card shows. */
+export interface GitHubPushPlan {
+  readonly repository: string;
+  readonly folder: string;
+  readonly branch: string;
+  readonly remoteBranch: string;
+  readonly commit: string;
+  readonly force: boolean;
+  /** The commit the branch on GitHub was at when deciding, or null when it did not exist. */
+  readonly replaces: string | null;
+  readonly defaultBranch: string;
+  readonly toDefaultBranch: boolean;
+  /** The commits the push adds beyond what GitHub's branches have, and the first of their subjects. */
+  readonly commits: number;
+  readonly subjects: ReadonlyArray<string>;
+  /** Who acts on GitHub: the login of the account the hub signs in with, when it knows it. */
+  readonly actingAs: string | null;
+  readonly over: "https" | "ssh";
+}
+
+const short = (commit: string) => commit.slice(0, 12);
+
+/** The push in words, as the approval card shows it and its digest covers it. */
+export const githubPushSummary = (plan: GitHubPushPlan): string =>
+  [
+    `Push ${short(plan.commit)} from ${plan.branch} to ${plan.repository} branch ${plan.remoteBranch}${plan.toDefaultBranch ? " (the default branch)" : ""}`,
+    plan.replaces === null
+      ? "Creates the branch on GitHub."
+      : plan.force
+        ? `Force: replaces ${short(plan.replaces)}, even where the branch does not build on it.`
+        : `Updates the branch from ${short(plan.replaces)}.`,
+    `${plan.commits} commit${plan.commits === 1 ? "" : "s"} GitHub's branches do not have${plan.subjects.length > 0 ? ":" : "."}`,
+    ...plan.subjects.map((subject) => `  ${subject}`),
+    `${plan.over === "ssh" ? "Over SSH with your agent, " : ""}as you${plan.actingAs === null ? "" : ` (@${plan.actingAs})`}.`,
+  ].join("\n");
+
 export type GitHubToolName = keyof typeof GitHubToolInputs;
 export type GitHubToolInput<N extends GitHubToolName> = (typeof GitHubToolInputs)[N]["Type"];
 

@@ -8,6 +8,7 @@ import { HobSprite } from "./hob-sprite.tsx";
 import { ReplyMarkdown } from "./markdown/reply-markdown.tsx";
 import { messages } from "./messages.ts";
 import { ReplySteps } from "./reply-steps.tsx";
+import { SettleCharmCall } from "./settle-charm-call.tsx";
 
 const copy = messages.reply;
 
@@ -94,6 +95,7 @@ function ReplyRow({
           steps={message.steps}
           inProgress={streaming}
           logUrl={(stepId) => toolLogUrl(message.threadId, message.id, stepId)}
+          settle={(stepId) => <SettleCharmCall threadId={message.threadId} messageId={message.id} stepId={stepId} />}
         />
         {children}
         {writing && message.content.length === 0 ? (

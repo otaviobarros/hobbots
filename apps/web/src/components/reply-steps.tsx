@@ -1,6 +1,7 @@
 import type { ReplyStep, ToolCall, ToolOutput } from "@hobbots/domain";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@hobbots/ui/components/collapsible";
 import { cn } from "@hobbots/ui/lib/utils";
+import type { ReactNode } from "react";
 import { formatBytes, operationLabel, shownSteps } from "../lib/reply-steps.ts";
 import { formatTime } from "../lib/time.ts";
 import { messages } from "./messages.ts";
@@ -32,10 +33,13 @@ export function ReplySteps({
   steps,
   inProgress,
   logUrl,
+  settle,
 }: {
   steps: ReadonlyArray<ReplyStep>;
   inProgress: boolean;
   logUrl: LogUrl;
+  /** What an uncertain tool step offers to settle it, such as a Charm call's (ADR 020). */
+  settle?: (stepId: string) => ReactNode;
 }) {
   const shown = shownSteps(steps, inProgress);
   if (shown.length === 0) return null;
@@ -47,7 +51,13 @@ export function ReplySteps({
       {shown.map((step) => (
         <li key={step.id} data-state={step.state}>
           {step.kind === "tool" && step.call ? (
-            <ToolStep step={step} call={step.call} outcome={step.state} logUrl={logUrl} />
+            <ToolStep
+              step={step}
+              call={step.call}
+              outcome={step.state}
+              logUrl={logUrl}
+              settle={step.state === "uncertain" ? settle?.(step.id) : undefined}
+            />
           ) : (
             <StepLine step={step} outcome={step.state} />
           )}
@@ -85,7 +95,7 @@ const stepNote = (step: ReplyStep, outcome: StepState): string | null => {
     case "unfinished":
       return copy.unfinished;
     case "uncertain":
-      return copy.uncertain;
+      return step.reason ?? copy.uncertain;
     case "denied":
       return DENIED[step.decidedBy ?? "policy"]({ reason: step.reason ?? "" });
     default:
@@ -98,11 +108,13 @@ function ToolStep({
   call,
   outcome,
   logUrl,
+  settle,
 }: {
   step: ReplyStep;
   call: ToolCall;
   outcome: StepState;
   logUrl: LogUrl;
+  settle?: ReactNode;
 }) {
   const note = stepNote(step, outcome);
   return (
@@ -120,6 +132,7 @@ function ToolStep({
           {note}
         </span>
       )}
+      {settle}
       <CollapsibleContent>
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 ps-5.5 pt-0.5 text-xs text-secondary-text">
           <dt className="text-label">{copy.tool}</dt>

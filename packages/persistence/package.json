@@ -20,6 +20,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@hobbots/api": "workspace:*",
     "@types/node": "26.6.5",
     "vitest": "5.0.5"
   }

@@ -36,6 +36,14 @@ export class GitHubApi extends Context.Service<
       number: number,
       comments: number,
     ) => Effect.Effect<GitHubItem, GitHubError>;
+    /** The commit a branch on GitHub points to, or null when the branch is not there (#323). */
+    readonly branchHead: (
+      agentId: AgentId,
+      repository: GitHubRepository,
+      branch: string,
+    ) => Effect.Effect<string | null, GitHubError>;
+    /** The login the hob's sign-in acts as, which a push card shows. */
+    readonly viewer: (agentId: AgentId) => Effect.Effect<string, GitHubError>;
   }
 >()("@hobbots/charms/GitHubApi") {}
 
@@ -72,6 +80,9 @@ const FullItemJson = Schema.Struct({
 const CommentsJson = Schema.Array(
   Schema.Struct({ user: User, created_at: Schema.String, body: Schema.optionalKey(Schema.NullOr(Schema.String)) }),
 );
+
+const RefJson = Schema.Struct({ ref: Schema.String, object: Schema.Struct({ sha: Schema.String }) });
+const ViewerJson = Schema.Struct({ login: Schema.String });
 
 /** The longest body or comment a hob reads, so one long thread does not fill its context. */
 export const MAX_TEXT = 4000;
@@ -176,7 +187,25 @@ export const GitHubApiLive = Layer.effect(
         );
       });
 
+    // Each part of a branch name is encoded on its own, so `feat/x` stays a path GitHub reads.
+    const refPath = (branch: string) => branch.split("/").map(encodeURIComponent).join("/");
+
     return GitHubApi.of({
+      branchHead: (agentId, repository, branch) =>
+        read(
+          agentId,
+          `/repos/${repositorySlug(repository)}/git/ref/heads/${refPath(branch)}`,
+          RefJson,
+          `branch ${branch} in ${repositorySlug(repository)}`,
+        ).pipe(
+          Effect.map((json) => (json.ref === `refs/heads/${branch}` ? json.object.sha : null)),
+          Effect.catchIf(
+            (error) => error.reason === "not-found",
+            () => Effect.succeed(null),
+          ),
+        ),
+      viewer: (agentId) =>
+        read(agentId, "/user", ViewerJson, "the account the hub signs in as").pipe(Effect.map((json) => json.login)),
       repository: (agentId, repository) =>
         read(
           agentId,
