@@ -422,7 +422,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
       });
 
       // Today every hob uses the user's own account; a hob's own identity (#221) would be chosen here.
-      const tokenFor = (agentId: AgentId | null): Effect.Effect<Redacted.Redacted<string>, GitHubError> =>
+      const tokenFor = (_agentId: AgentId | null): Effect.Effect<Redacted.Redacted<string>, GitHubError> =>
         Effect.gen(function* () {
           if (config.environmentToken !== null) return config.environmentToken;
           const started = yield* signInOfCall;
@@ -433,7 +433,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
           return (yield* issueIf(started, token)) ? token : yield* changed;
         });
 
-      const refused = (agentId: AgentId | null, token: Redacted.Redacted<string>) =>
+      const refused = (_agentId: AgentId | null, token: Redacted.Redacted<string>) =>
         config.environmentToken !== null
           ? Effect.fail(
               new GitHubError({
