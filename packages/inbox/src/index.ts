@@ -6,7 +6,7 @@ export {
   blockRetiredWork,
   decideBlocker,
 } from "./blockers.ts";
-export { arrivalsText, continuationTask, continuationThread } from "./continuations.ts";
+export { arrivalsText, carryingThread, continuationTask, continuationThread } from "./continuations.ts";
 export {
   BackpackTurnFailed,
   type BatchTurn,

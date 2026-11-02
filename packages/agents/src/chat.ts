@@ -56,15 +56,15 @@ interface Reply {
   readonly stepsFrom: number;
   /** The text the reply already had when Continue resumed it; the runtime's final text comes after it. */
   readonly prefix: string;
-  /** Whether the turn carries backpack items, so a stop holds them back until you write again. */
+  /** Whether the turn carries work that needs the hob, so a stop holds it back until you write again. */
   readonly carries: boolean;
 }
 
 /** Backpack items a turn carries (ADR 019): told to it, held under its claims, and accepted with its session. */
-type Carry = Pick<CarriedWork, "holding" | "accepted">;
+type Carry = Pick<CarriedWork, "holding" | "accepted" | "routineOnly">;
 
 /** What a turn carries when it carries no backpack items. */
-const NOTHING_CARRIED: Carry = { holding: [], accepted: () => Effect.void };
+const NOTHING_CARRIED: Carry = { holding: [], accepted: () => Effect.void, routineOnly: true };
 
 /** How a turn starts: its reply's id, what it carries, and whether its end starts what waits next. */
 interface TurnStart {
@@ -709,7 +709,8 @@ export class ChatService extends Context.Service<
             lock: yield* Semaphore.make(1),
             stepsFrom: saved.steps.length,
             prefix: saved.content,
-            carries: start.carry != null,
+            // Only work that needs the hob is held back when you stop the turn; progress waits anyway.
+            carries: start.carry != null && !start.carry.routineOnly,
           };
           replies.set(thread.id, reply);
           // The drain is forked outside the turn: it waits for the hob's lock, which a retirement
@@ -814,12 +815,17 @@ export class ChatService extends Context.Service<
         Effect.gen(function* () {
           const ran = yield* service
             .deliver(threadId, agentId, {
-              plan: admission.withHob(
-                agentId,
-                Effect.map(workable(threadId), (found) =>
-                  found === null || holdBack.has(threadId) ? null : MessageId.make(crypto.randomUUID()),
+              // Routine progress alone starts no turn: it waits to ride along a message of yours.
+              plan: (routineOnly) =>
+                admission.withHob(
+                  agentId,
+                  Effect.gen(function* () {
+                    const found = yield* workable(threadId);
+                    if (found === null || holdBack.has(threadId)) return null;
+                    if (routineOnly && Option.isNone(yield* repo.nextQueuedMessage(threadId))) return null;
+                    return MessageId.make(crypto.randomUUID());
+                  }),
                 ),
-              ),
               run: (replyId, work) => carryingTurn(threadId, agentId, replyId, work),
             })
             .pipe(
@@ -854,6 +860,8 @@ export class ChatService extends Context.Service<
               if (found === null || holdBack.has(threadId)) return null;
               const queued = yield* startQueued(threadId, { ...start, context: work.text("context") });
               if (queued !== null) return queued.turn;
+              // The message it was to ride along is gone: routine progress waits for the next one.
+              if (work.routineOnly) return null;
               const continued = yield* beginTurn(found.thread, found.agent, work.text("prompt"), saveMessage, start);
               return continued?.turn ?? null;
             }),
@@ -922,11 +930,15 @@ export class ChatService extends Context.Service<
           );
         });
 
-      // Whether work you stopped in the thread still waits there, so your next message carries it.
-      const stoppedWorkWaits = (threadId: ThreadId, agentId: AgentId) =>
-        holdBack.has(threadId) && Option.isSome(continuations)
-          ? Effect.map(continuations.value.waiting(agentId), (threadIds) => threadIds.includes(threadId))
-          : Effect.succeed(false);
+      // Whether your next message carries work: work you stopped in the thread, or routine
+      // progress, which reaches the hob only as a digest along its next turn (IN-005).
+      const workRidesAlong = (threadId: ThreadId, agentId: AgentId) =>
+        Effect.gen(function* () {
+          if (Option.isNone(continuations)) return false;
+          const service = continuations.value;
+          if (holdBack.has(threadId) && (yield* service.waiting(agentId)).includes(threadId)) return true;
+          return yield* service.progressWaits(threadId, agentId);
+        });
 
       const sendPrompt = Effect.fn("ChatService.sendPrompt")(function* (threadId: ThreadId, content: string) {
         // The status check and the turn's registration happen under the hob's lock, so a turn is
@@ -940,8 +952,9 @@ export class ChatService extends Context.Service<
             // already waiting, so the thread's messages start in the order they were sent (CH-008).
             const waits =
               agent.status === "paused" || busy.has(threadId) || Option.isSome(yield* repo.nextQueuedMessage(threadId));
-            // Work you stopped here rides along: the message starts through the dispatcher, under its claims.
-            const carries = !waits && (yield* stoppedWorkWaits(threadId, agent.id));
+            // Work you stopped here, and routine progress, ride along: the message starts through the
+            // dispatcher, under their claims.
+            const carries = !waits && (yield* workRidesAlong(threadId, agent.id));
             const userMessage = new Message({
               id: MessageId.make(crypto.randomUUID()),
               threadId,
@@ -953,6 +966,9 @@ export class ChatService extends Context.Service<
               createdAt: yield* nowIso,
             });
             const saved = yield* saveMessage(userMessage);
+            // A message that waits behind a busy thread has the thread look at its work again once it
+            // is free, so a dispatch that already found nothing does not start it without its progress.
+            if (busy.has(threadId)) rewake.add(threadId);
             // Work you stopped in this thread may start again once this message is answered.
             holdBack.delete(threadId);
             if (carries) yield* startNext(threadId);

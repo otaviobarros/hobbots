@@ -5,8 +5,8 @@ import {
   Backpack,
   type BackpackScope,
   BackpackTurnFailed,
+  carryingThread,
   continuationTask,
-  continuationThread,
   type Delivery,
   Dispatcher,
   DispatcherHost,
@@ -21,13 +21,19 @@ const makeCarrier = Effect.gen(function* () {
   const dispatcher = yield* Dispatcher;
   const host = yield* DispatcherHost;
 
-  /** Each open item that waits for a turn now, with the Task tree it is routed by. */
-  const routed = (scope: BackpackScope) =>
+  /**
+   * Each open item that waits for a turn now, with the Task tree it is routed by. Routine progress
+   * is among them only with `routine`: it rides along a turn but never starts one (IN-005).
+   */
+  const routed = (scope: BackpackScope, routine = false) =>
     Effect.gen(function* () {
       const now = DateTime.formatIso(yield* DateTime.now);
       const open = yield* backpack.listOpen(scope);
       const waiting = open.filter(
-        (item) => item.state === "pending" && item.actionable && (item.notBefore === null || item.notBefore <= now),
+        (item) =>
+          item.state === "pending" &&
+          (routine || item.actionable) &&
+          (item.notBefore === null || item.notBefore <= now),
       );
       return yield* Effect.forEach(waiting, (item) =>
         Effect.map(
@@ -41,6 +47,7 @@ const makeCarrier = Effect.gen(function* () {
     const items: ReadonlyArray<BackpackItem> = deliveries.map((delivery) => delivery.item);
     return {
       text: (as) => arrivalsText(items, as),
+      routineOnly: !items.some((item) => item.actionable),
       holding: deliveries.map(({ item, held }) => ({ itemId: item.id, owner: held.owner, token: held.token })),
       // A claim lost meanwhile is found when the turn ends, which then drops its outcome.
       accepted: (sessionId) =>
@@ -63,8 +70,9 @@ const makeCarrier = Effect.gen(function* () {
       let ran = false;
       yield* dispatcher.dispatchAll(
         items.map((item) => item.id),
-        () =>
-          Effect.map(turn.plan, (turnId) =>
+        // Planned again after an early end, the turn sees only the items still waiting.
+        (found) =>
+          Effect.map(turn.plan(!found.some((item) => item.actionable)), (turnId) =>
             turnId === null
               ? null
               : {
@@ -89,15 +97,16 @@ const makeCarrier = Effect.gen(function* () {
 
 /**
  * The dispatcher's continuation branch (ADR 019): which threads have backpack work waiting for
- * their hob, and putting that work into one turn there under the dispatcher's claims.
+ * their hob, and putting that work into one turn there under the dispatcher's claims. Routine
+ * progress rides along that turn as one digest, and never starts a turn on its own (IN-005).
  */
 export const ContinuationsLive = Layer.effect(
   Continuations,
   Effect.gen(function* () {
     const { routed, carry } = yield* makeCarrier;
-    const threaded = (scope: BackpackScope) =>
-      Effect.map(routed(scope), (all) =>
-        all.map(({ item, tree }) => ({ item, threadId: continuationThread(item, tree) })),
+    const threaded = (scope: BackpackScope, routine = false) =>
+      Effect.map(routed(scope, routine), (all) =>
+        all.map(({ item, tree }) => ({ item, threadId: carryingThread(item, tree) })),
       );
 
     const waiting: Continuations["Service"]["waiting"] = (agentId) =>
@@ -105,9 +114,14 @@ export const ContinuationsLive = Layer.effect(
         ...new Set(items.flatMap(({ threadId }) => (threadId === null ? [] : [threadId]))),
       ]);
 
+    const progressWaits: Continuations["Service"]["progressWaits"] = (threadId, agentId) =>
+      Effect.map(threaded({ _tag: "Hob", agentId }, true), (items) =>
+        items.some(({ item, threadId: carried }) => !item.actionable && carried === threadId),
+      );
+
     const deliver: Continuations["Service"]["deliver"] = (threadId: ThreadId, agentId: AgentId, turn) =>
       Effect.gen(function* () {
-        const items = (yield* threaded({ _tag: "Hob", agentId })).filter((each) => each.threadId === threadId);
+        const items = (yield* threaded({ _tag: "Hob", agentId }, true)).filter((each) => each.threadId === threadId);
         return yield* carry(
           items.map(({ item }) => item),
           `thread:${threadId}`,
@@ -115,7 +129,7 @@ export const ContinuationsLive = Layer.effect(
         );
       });
 
-    return Continuations.of({ waiting, deliver });
+    return Continuations.of({ waiting, progressWaits, deliver });
   }),
 );
 

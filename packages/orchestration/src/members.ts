@@ -278,14 +278,16 @@ export const makeMemberRunner = (deps: MemberDeps) => {
 
   /** One turn of the member's session on its Task, carrying the work that waits there. */
   const turnOn = (taskId: TaskId, agent: Agent, config: AgentConfiguration, run: Running): CarryingTurn<AttemptId> => ({
-    plan: Effect.gen(function* () {
-      const found = yield* read(taskId);
-      if (Option.isNone(found) || found.value.task.state === "cancelling") return null;
-      const hob = yield* repo.findAgent(agent.id);
-      if (Option.isNone(hob) || hob.value.status !== "active") return null;
-      // A Task that ended still takes the turn's claims, so the dispatcher settles its items as late.
-      return AttemptIdSchema.make(newId());
-    }),
+    // A member's session carries only work that needs it, so the plan never sees routine progress alone.
+    plan: () =>
+      Effect.gen(function* () {
+        const found = yield* read(taskId);
+        if (Option.isNone(found) || found.value.task.state === "cancelling") return null;
+        const hob = yield* repo.findAgent(agent.id);
+        if (Option.isNone(hob) || hob.value.status !== "active") return null;
+        // A Task that ended still takes the turn's claims, so the dispatcher settles its items as late.
+        return AttemptIdSchema.make(newId());
+      }),
     run: (attemptId, work) =>
       Effect.gen(function* () {
         const found = yield* read(taskId);

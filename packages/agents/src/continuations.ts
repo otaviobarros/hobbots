@@ -9,6 +9,8 @@ export interface CarriedWork {
   readonly holding: ReadonlyArray<CarriedItem>;
   /** Records the adapter's evidence that the runtime accepted the turn: its session. */
   readonly accepted: (sessionId: string) => Effect.Effect<void>;
+  /** True when the work is routine progress only: it rides along a message of yours and starts no turn alone (IN-005). */
+  readonly routineOnly: boolean;
 }
 
 /**
@@ -22,8 +24,11 @@ export type CarriedEnd = { readonly _tag: "Handled" } | ({ readonly _tag: "Ended
  * replies, or a member's Task, whose turns are Attempts.
  */
 export interface CarryingTurn<Id extends string = MessageId> {
-  /** The id the next turn will have, or null when no turn can start now: the work stays pending. */
-  readonly plan: Effect.Effect<Id | null>;
+  /**
+   * The id the next turn will have, or null when no turn can start now: the work stays pending.
+   * With `routineOnly`, only routine progress waits, so a turn starts only for a message of yours.
+   */
+  readonly plan: (routineOnly: boolean) => Effect.Effect<Id | null>;
   /** Runs that turn with the work put into it, and returns once it has ended. */
   readonly run: (turnId: Id, work: CarriedWork) => Effect.Effect<CarriedEnd>;
 }
@@ -38,10 +43,12 @@ export class Continuations extends Context.Service<
   {
     /** The threads where work waits for their hob: of one hob, or of every hob. */
     readonly waiting: (agentId?: AgentId) => Effect.Effect<ReadonlyArray<ThreadId>>;
+    /** Whether routine progress waits for the hob in the thread, to ride along its next turn as a digest. */
+    readonly progressWaits: (threadId: ThreadId, agentId: AgentId) => Effect.Effect<boolean>;
     /**
-     * Puts every item waiting for the hob in the thread into one turn, and runs it with `turn`. A
-     * turn that ends early is planned and run again with backoff, until its items run out of
-     * deliveries. Returns whether any turn ran.
+     * Puts every item waiting for the hob in the thread into one turn, and runs it with `turn`,
+     * routine progress folded in as one digest. A turn that ends early is planned and run again
+     * with backoff, until its items run out of deliveries. Returns whether any turn ran.
      */
     readonly deliver: (threadId: ThreadId, agentId: AgentId, turn: CarryingTurn) => Effect.Effect<boolean>;
   }

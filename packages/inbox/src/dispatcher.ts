@@ -262,11 +262,19 @@ export class Dispatcher extends Context.Service<
               const resolved = yield* step(backpack.resolve(item.id, held, { _tag: "late", ...late }));
               return { _tag: "Late", item: resolved } as Dispatched;
             }
-            if (deliveriesSinceRetry(item) >= limits.maxDeliveries) {
+            if (outOfDeliveries(item)) {
               return yield* fail(held, item, last.ending);
             }
             return null;
           });
+
+        /**
+         * Whether the item was delivered as often as the limit allows since it was last retried.
+         * Routine progress never runs out: it only rides along turns, so a turn that ended early
+         * leaves it for the next (IN-005).
+         */
+        const outOfDeliveries = (item: BackpackItem) =>
+          item.actionable && deliveriesSinceRetry(item) >= limits.maxDeliveries;
 
         /**
          * The turn ended early for this item: it fails on its last delivery, or goes back to pending
@@ -274,7 +282,7 @@ export class Dispatcher extends Context.Service<
          */
         const endedEarly = ({ item, held }: Claimed, ending: BackpackTurnEnding) =>
           Effect.gen(function* () {
-            if (deliveriesSinceRetry(item) >= limits.maxDeliveries) {
+            if (outOfDeliveries(item)) {
               return yield* fail(held, item, ending);
             }
             yield* step(backpack.requeue(item.id, held));
@@ -418,10 +426,17 @@ export class Dispatcher extends Context.Service<
             );
             const ending = yield* runTurn(turn, delivered);
             let requeued = false;
+            const progressBack: Array<BackpackItemId> = [];
             for (const each of delivered) {
               const settled = ending === null ? yield* afterTurn(each, turn.turnId) : yield* endedEarly(each, ending);
-              if (settled === null) requeued = true;
-              else outcomes.set(each.item.id, settled);
+              if (settled !== null) outcomes.set(each.item.id, settled);
+              else if (each.item.actionable) requeued = true;
+              else progressBack.push(each.item.id);
+            }
+            // Routine progress sent back rides along the retry that work needing the hob plans, but
+            // never plans one itself: alone, it waits for the next turn.
+            if (!requeued) {
+              for (const id of progressBack) outcomes.set(id, { _tag: "Skipped", reason: "not-ready" });
             }
             if (requeued) {
               last.ending = ending ?? NOT_ACCEPTED;
