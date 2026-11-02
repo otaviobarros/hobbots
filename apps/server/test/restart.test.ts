@@ -335,7 +335,9 @@ describe("recovering after a restart", () => {
     expect(all[2]?.content).toContain("ended as failed.");
     const [tree] = await second.run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
     expect(tree?.tasks.find((task) => task.brief.startsWith("Walk"))?.state).toBe("failed");
-    expect(await second.run(TaskRepository.use((tasks) => tasks.listLiveAttempts))).toEqual([]);
+    // The continuation's own Attempt ends just after its reply is saved, so this waits for it.
+    const live = TaskRepository.use((tasks) => tasks.listLiveAttempts);
+    expect(await second.run(until(live, (attempts) => attempts.length === 0))).toEqual([]);
   });
 
   // covers EX-004, IN-004
