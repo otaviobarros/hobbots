@@ -9,6 +9,7 @@ import { ArchivedHobs } from "./archived-hobs.tsx";
 import { GeneralSettings } from "./general-settings.tsx";
 import { GitHubSettings } from "./github-settings.tsx";
 import { messages } from "./messages.ts";
+import { WaitingDevices } from "./pairing/waiting-devices.tsx";
 import { RemoteAccessSettings } from "./remote-access-settings.tsx";
 import { RuntimeCard } from "./runtime.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
@@ -131,6 +132,7 @@ export function SettingsPage() {
       </Panel>
       <Panel label={messages.remoteAccess.heading} id="devices">
         <RemoteAccessSettings />
+        <WaitingDevices />
       </Panel>
       <Panel label="Archived hobs">
         <ArchivedHobs />

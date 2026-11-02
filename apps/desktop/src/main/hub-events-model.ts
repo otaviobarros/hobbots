@@ -15,6 +15,7 @@ import type { Event } from "effect/encoding/Sse";
  */
 export type HubChange =
   | { readonly _tag: "Approvals" }
+  | { readonly _tag: "Pairing" }
   | { readonly _tag: "Activity" }
   | ({ readonly _tag: "RemoteAccess" } & RemoteAccessView);
 
@@ -61,6 +62,10 @@ export const frameChange = (frame: Pick<Event, "event" | "data">): HubChange | H
         case "ApprovalRequested":
         case "ApprovalResolved":
           return { _tag: "Approvals" };
+        // A device asked to pair, or its request changed (ADR 021).
+        case "PairingRequested":
+        case "PairingChanged":
+          return { _tag: "Pairing" };
         default:
           return null;
       }

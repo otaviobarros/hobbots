@@ -7,6 +7,7 @@ import { DeviceRemoved } from "./device-removed.tsx";
 import { HobJump } from "./hob-jump.tsx";
 import { useOpenRequests } from "./inbox/use-open-requests.ts";
 import { messages } from "./messages.ts";
+import { DevicePrompt } from "./pairing/device-prompt.tsx";
 import { Rail } from "./rail.tsx";
 
 const copy = messages.deviceAccess;
@@ -70,6 +71,7 @@ export function AppShell() {
         <Outlet />
       </div>
       <HobJump />
+      <DevicePrompt />
     </>
   );
 }

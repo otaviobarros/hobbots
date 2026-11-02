@@ -21,6 +21,7 @@ import { grantsChanged } from "./grants.ts";
 import type { ConnectionState } from "./live.ts";
 import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
+import { pairingChanged } from "./pairing.ts";
 import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
@@ -140,17 +141,13 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "TurnStarted":
     case "TurnEnded":
       return;
-    // Any list of devices is read again. This device's own removal shows when the hub refuses it.
-    case "DeviceRevoked":
-      void queryClient.invalidateQueries({ queryKey: ["devices"] });
-      return;
     default:
       applyWorkEvent(queryClient, event);
       return;
   }
 };
 
-/** Approvals, grants, backpack items, and the events that change Tasks and Quests. */
+/** Approvals, grants, backpack items, devices, and the events that change Tasks and Quests. */
 const applyWorkEvent = (
   queryClient: QueryClient,
   event:
@@ -164,7 +161,10 @@ const applyWorkEvent = (
             | "GrantCreated"
             | "GrantRevoked"
             | "BackpackItemRecorded"
-            | "BackpackItemChanged";
+            | "BackpackItemChanged"
+            | "PairingRequested"
+            | "PairingChanged"
+            | "DeviceRevoked";
         }
       >,
 ) => {
@@ -181,6 +181,15 @@ const applyWorkEvent = (
     case "BackpackItemRecorded":
     case "BackpackItemChanged":
       storeBackpackItem(queryClient, event.item);
+      return;
+    // A device asked to pair, or its request was decided (ADR 021).
+    case "PairingRequested":
+    case "PairingChanged":
+      void pairingChanged(queryClient);
+      return;
+    // Any list of devices is read again. This device's own removal shows when the hub refuses it.
+    case "DeviceRevoked":
+      void queryClient.invalidateQueries({ queryKey: ["devices"] });
       return;
     // A question that reaches you, or leaves you, also changes what waits in your Inbox.
     case "QuestionAsked":

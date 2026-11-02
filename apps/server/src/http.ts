@@ -1,5 +1,7 @@
+import { hostname } from "node:os";
 import {
   ChatService,
+  DeviceService,
   foundAgent,
   HobbotsRepository,
   HobLifecycle,
@@ -25,7 +27,7 @@ import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { Installation } from "./installation.ts";
-import { PairingHandlers, PairingRequestsHandlers } from "./pairing.ts";
+import { PairingHandlers, PairingRequestsHandlers, withRetryAfter } from "./pairing.ts";
 import { PermissionsHandlers } from "./permissions.ts";
 import { RemoteAccessHandlers } from "./remote-access.ts";
 import { SearchHandlers } from "./search.ts";
@@ -150,19 +152,25 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
   }),
 );
 
+/** The hub's name for the waiting screen: the computer's own, without the `.local` macOS adds. */
+const hubName = (host: string = hostname()): string => host.replace(/\.local$/i, "");
+
 // Answers without a device, so a client can tell this hub from another program first (ADR 012).
 // Only a local request learns the installation ID and data folder (ADR 021).
 const HealthHandlers = HttpApiBuilder.group(HobbotsApi, "health", (handlers) =>
   Effect.gen(function* () {
     const installation = yield* Installation;
     const gate = yield* DeviceGate;
+    const devices = yield* DeviceService;
+    const name = hubName();
     return handlers.handleAll({
       health: () =>
         Effect.gen(function* () {
           const place = yield* gate.placeOf(yield* HttpServerRequest.HttpServerRequest);
+          if (Option.isSome(place)) yield* devices.throttleAnonymous(place.value);
           const local = Option.exists(place, (where) => where._tag === "Local");
-          return local ? installation : { app: installation.app, version: installation.version };
-        }),
+          return local ? { ...installation, name } : { app: installation.app, name, version: installation.version };
+        }).pipe(withRetryAfter),
     });
   }),
 );

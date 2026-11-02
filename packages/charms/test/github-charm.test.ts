@@ -336,7 +336,7 @@ describe("GitHub API", () => {
       return yield* use(yield* GitHubApi);
     }).pipe(
       Effect.provide(
-        GitHubApiLive.pipe(
+        GitHubApiLive().pipe(
           Layer.provide(respond(status, body, seen, headers)),
           Layer.provide(
             Layer.succeed(

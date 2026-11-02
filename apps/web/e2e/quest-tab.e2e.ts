@@ -188,3 +188,31 @@ test("[TC-CH-192] the Quest tab cancels a Task, retries a failed one and gives a
   await expect(emailControls.getByRole("alert")).toHaveCount(0);
   await expect(page.getByText("Aldric's party: Quill", { exact: true })).toBeVisible();
 });
+
+// covers CH-005, OR-004
+test("[TC-CH-191] a nested Quest shows under its member in the Quest tab, and the member names the party it leads", async ({
+  page,
+}) => {
+  const { url, aldric } = await questHub({ nested: true });
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill("Plan a Black Friday campaign for the shop");
+  await composer.press("Enter");
+
+  await page.getByRole("tab", { name: "Quest" }).click();
+  const room = page.getByRole("region", { name: "Control room for Plan the Black Friday campaign" });
+  const tasks = room.getByRole("list", { name: "Tasks of Plan the Black Friday campaign" });
+  const rook = tasks.getByRole("button", { name: /Rook · Run the ads/ });
+  const pip = tasks.getByRole("button", { name: /Pip · Research the keywords/ });
+  await expect(rook).toContainText("Leads Pip");
+  await expect(pip).toBeVisible();
+  // Pip sits under Rook, one level further in than Rook sits under Aldric.
+  const left = async (row: typeof rook) =>
+    (await row.evaluate((each) => getComputedStyle(each).paddingInlineStart)) ?? "";
+  const top = tasks.getByRole("button", { name: /Aldric · Plan the Black Friday campaign/ });
+  const [aldricPad, rookPad, pipPad] = await Promise.all([left(top), left(rook), left(pip)]);
+  expect(Number.parseFloat(rookPad)).toBeGreaterThan(Number.parseFloat(aldricPad));
+  expect(Number.parseFloat(pipPad)).toBeGreaterThan(Number.parseFloat(rookPad));
+  await expect(pip).toContainText("Done", { timeout: 30_000 });
+  await expect(rook).toContainText("Done", { timeout: 30_000 });
+});
