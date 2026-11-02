@@ -20,7 +20,7 @@ Hobbots is a modern AI chat app with a pixel-folklore character: small hobs that
 | Mint | `#7fd1b9` (deep `#3f8a75`) | Working, done, approve |
 | Rose | `#ee9292` | Deny, stop, error |
 
-Status tags: Working (mint on ground), Running (mint deep), Waiting and Needs you (lantern), Queued (line 2), Cancelled (line 2 with secondary text), Archived (line 2 with secondary text), Failed (rose). Unsandboxed (rose outline on ground) marks a hob running without the sandbox; Needs the sandbox (line 2 with secondary text) marks an action blocked because the sandbox is unavailable. Workbench view labels: Live (mint), Screenshot (`#8fb4f0`, with age), History, Unavailable (with reason), Later. Provider tiles: Claude C `#e39a74`, ChatGPT G `#8fd3a8`, Gemini G `#8fb4f0`, Grok X `#c9c3e8`, Local L `#f3e9b5`, Other + `#b79be8`.
+Status tags: Working (mint on ground), Running (mint deep), Waiting and Needs you (lantern), Queued (line 2), Cancelled (line 2 with secondary text), Archived (line 2 with secondary text), Failed (rose). Unsandboxed (rose outline on ground) marks a hob running without the sandbox; Needs the sandbox (line 2 with secondary text) marks an action blocked because the sandbox is unavailable. Workbench view labels: Live (mint), History, Unavailable (with reason), Not used in this Task (the tab greyed out), Coming soon, Later; Screenshot (`#8fb4f0`, with age) arrives with the Browser view (#382). Provider tiles: Claude C `#e39a74`, ChatGPT G `#8fd3a8`, Gemini G `#8fb4f0`, Grok X `#c9c3e8`, Local L `#f3e9b5`, Other + `#b79be8`.
 
 All text passes WCAG AA; the lowest pair is 5.6:1. Control borders are at least 3:1.
 
@@ -60,7 +60,7 @@ The component sheet defines: buttons (primary, approve, secondary, deny, quiet, 
 ## Behavior rules
 
 - Durable server records drive every status; persuasive assistant text never does.
-- Workbench labels are honest: Live, Screenshot (with age), History, Unavailable (and why). Computer control is shown as Later.
+- Workbench labels are honest: Live, History, Unavailable (and why), Not used in this Task, and Coming soon for the Browser tab. The Workbench opens on Summary, built from the hub's records with no model call. Computer control is shown as Later ([ADR 023](../decisions/023-workbench.md)).
 - Approvals show the exact action, target, who asked (for example You → Pip → Tinker), why now, risk and expiry. Lifetimes: once, This Task (This Quest once a party joins), always for this site; high-risk actions offer once only and need a check box. Deny takes an optional reason. Expired requests cannot be approved late.
 - Retire asks what happens to a hob's work (hand it off, let it finish, stop it now). Nothing is deleted; the hob moves to Settings › Archived hobs.
 - Archiving a thread never asks first and never deletes: a toast offers Undo, and Restore brings it back at any time. An archived thread leaves the hob panel, stays in search with an Archived tag, and opens read-only with no composer. Archive is disabled, with its reason, while the thread has a running or queued reply or a pending approval, so it never interrupts work. The hub's archived time drives the Archived state on every device.
