@@ -14,14 +14,15 @@ const NOTE = "m-0 px-4 py-5 text-detail text-secondary-text";
  * plain text. A file with no preview, a secret one, one too large and one no longer there each say
  * so in a sentence, under its name, size and kind.
  */
-export function FilePreview({ attemptId, file, stamp }: { attemptId: AttemptId; file: TaskFile; stamp: string }) {
+export function FilePreview({ attemptId, file }: { attemptId: AttemptId; file: TaskFile }) {
   const view = fileView(file);
   const name = fileName(file);
   if (view.kind === "gone") return <p className={NOTE}>{messages.gone}</p>;
   if (view.kind === "secret") return <p className={NOTE}>{messages.secret}</p>;
   if (view.kind === "too-large") return <p className={NOTE}>{messages.tooLarge}</p>;
   if (view.kind === "no-preview") return <p className={NOTE}>{messages.noPreview}</p>;
-  const src = taskFileUrl(attemptId, file.id);
+  // Versioned by what the file holds now, so a live update that changes it loads the new one.
+  const src = taskFileUrl(attemptId, file.id, { version: file.hash });
   switch (view.preview) {
     case "image":
       return (
@@ -34,22 +35,12 @@ export function FilePreview({ attemptId, file, stamp }: { attemptId: AttemptId; 
         <iframe src={src} title={messages.preview({ name })} className="min-h-[480px] w-full flex-1 border-0 bg-deep" />
       );
     default:
-      return <TextPreview attemptId={attemptId} file={file} stamp={stamp} markdown={view.preview === "markdown"} />;
+      return <TextPreview attemptId={attemptId} file={file} markdown={view.preview === "markdown"} />;
   }
 }
 
-function TextPreview({
-  attemptId,
-  file,
-  stamp,
-  markdown,
-}: {
-  attemptId: AttemptId;
-  file: TaskFile;
-  stamp: string;
-  markdown: boolean;
-}) {
-  const read = useQuery(taskFileTextQuery(attemptId, file.id, `${stamp}|${file.now}|${file.size}`));
+function TextPreview({ attemptId, file, markdown }: { attemptId: AttemptId; file: TaskFile; markdown: boolean }) {
+  const read = useQuery(taskFileTextQuery(attemptId, file.id, file.hash));
   if (read.isPending) return <p className={NOTE}>{messages.previewLoading}</p>;
   if (read.isError) {
     return (

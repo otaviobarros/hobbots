@@ -11,6 +11,18 @@ const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",
 );
+/** A two-by-one PNG. */
+const WIDE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAADklEQVR4nGP4z8DwH4QBEfcD/ePF9e8AAAAASUVORK5CYII=",
+  "base64",
+);
+
+/** Leaving the app's window and coming back to it, as the browser tells the page. */
+const comeBack = (page: Page) =>
+  page.evaluate(() => {
+    window.dispatchEvent(new Event("blur"));
+    window.dispatchEvent(new Event("focus"));
+  });
 const PDF = "%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n";
 
 /**
@@ -115,7 +127,7 @@ test("[TC-UX-041] the Files tab previews images, PDF and text, with each kind an
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-042] a file changed or deleted since the Task says so, and one no longer there offers no download", async ({
+test("[TC-UX-042] a file changed or deleted since the Task says so, one no longer there offers no download, and a preview left open shows each new version", async ({
   page,
 }) => {
   const { files, folder } = await finishedTask(page);
@@ -135,6 +147,24 @@ test("[TC-UX-042] a file changed or deleted since the Task says so, and one no l
   const sales = files.getByRole("region", { name: "sales.csv" });
   await expect(sales).toContainText("This file is no longer there.");
   await expect(sales.getByRole("link", { name: /Download/ })).toHaveCount(0);
+
+  // An image, edited while it stays open, is loaded again.
+  await list.getByRole("button", { name: /^Sales chart/ }).click();
+  const image = files.getByRole("img", { name: "Preview of chart.png" });
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+  writeFileSync(join(folder, "chart.png"), WIDE_PNG);
+  await comeBack(page);
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(2);
+
+  // A text, edited twice while it stays open, shows each version.
+  await list.getByRole("button", { name: /^notes\.md/ }).click();
+  const notes = files.getByRole("region", { name: "notes.md" });
+  await expect(notes).toContainText("Edited by you.");
+  for (const edit of ["First edit.", "Second edit."]) {
+    writeFileSync(join(folder, "notes.md"), `# Notes\n\n${edit}\n`);
+    await comeBack(page);
+    await expect(notes).toContainText(edit);
+  }
 });
 
 // covers PE-005

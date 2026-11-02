@@ -68,18 +68,31 @@ export const attemptFilesQuery = (attemptId: AttemptId, stamp: string) =>
     queryKey: ["workbench", "files", attemptId, stamp] as const,
     queryFn: () => call((c) => c.workbench.files({ params: { attemptId } })),
     placeholderData: keepPreviousData,
+    // A file can change outside the Task too: coming back to the app looks at the files again.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
 /** Where the hub serves one of an Attempt's files: a preview, or the file itself as a download. */
-export const taskFileUrl = (attemptId: AttemptId, fileId: TaskFileId, download = false): string =>
-  `${API_URL}/api/attempts/${encodeURIComponent(attemptId)}/files/${encodeURIComponent(fileId)}${download ? "?download=1" : ""}`;
+export const taskFileUrl = (
+  attemptId: AttemptId,
+  fileId: TaskFileId,
+  { download = false, version = null }: { download?: boolean; version?: string | null } = {},
+): string => {
+  const query = new URLSearchParams();
+  if (download) query.set("download", "1");
+  // What the file holds now, so a preview loads again when the file changes under the same id.
+  if (version !== null) query.set("v", version);
+  const search = query.size === 0 ? "" : `?${query.toString()}`;
+  return `${API_URL}/api/attempts/${encodeURIComponent(attemptId)}/files/${encodeURIComponent(fileId)}${search}`;
+};
 
 /** A text file's preview, as the hub serves it: redacted and cut to its first MiB. */
-export const taskFileTextQuery = (attemptId: AttemptId, fileId: TaskFileId, stamp: string) =>
+export const taskFileTextQuery = (attemptId: AttemptId, fileId: TaskFileId, version: string | null) =>
   queryOptions({
-    queryKey: ["workbench", "file-text", attemptId, fileId, stamp] as const,
+    queryKey: ["workbench", "file-text", attemptId, fileId, version] as const,
     queryFn: async ({ signal }) => {
-      const response = await fetch(taskFileUrl(attemptId, fileId), { signal, credentials: "same-origin" });
+      const response = await fetch(taskFileUrl(attemptId, fileId, { version }), { signal, credentials: "same-origin" });
       if (!response.ok) throw new Error(`The hub answered ${response.status}`);
       return response.text();
     },

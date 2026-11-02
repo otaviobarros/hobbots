@@ -56,7 +56,7 @@ function Files({ activity, focus }: { activity: AttemptActivity; focus: string |
         <FileGroup title={messages.made} files={made} shown={shown} onPick={setPicked} />
         <FileGroup title={messages.touched} files={touched} shown={shown} onPick={setPicked} />
       </nav>
-      <FileDetail key={shown.id} activity={activity} file={shown} stamp={stamp} />
+      <FileDetail key={shown.id} activity={activity} file={shown} />
     </div>
   );
 }
@@ -117,7 +117,7 @@ function FileRow({ file, on, onPick }: { file: TaskFile; on: boolean; onPick: ()
   );
 }
 
-function FileDetail({ activity, file, stamp }: { activity: AttemptActivity; file: TaskFile; stamp: string }) {
+function FileDetail({ activity, file }: { activity: AttemptActivity; file: TaskFile }) {
   const name = fileName(file);
   const meta = [messages.kind[file.preview], file.size === null ? null : formatBytes(file.size), messages.now[file.now]]
     .filter((part) => part !== null)
@@ -133,7 +133,7 @@ function FileDetail({ activity, file, stamp }: { activity: AttemptActivity; file
         </div>
         <FileActions attemptId={activity.attempt.id} file={file} name={name} />
       </header>
-      <FilePreview attemptId={activity.attempt.id} file={file} stamp={stamp} />
+      <FilePreview attemptId={activity.attempt.id} file={file} />
     </section>
   );
 }
@@ -172,7 +172,7 @@ function FileActions({
   if (!canDownload(file)) return null;
   return (
     <a
-      href={taskFileUrl(attemptId, file.id, true)}
+      href={taskFileUrl(attemptId, file.id, { download: true, version: file.hash })}
       download={name}
       aria-label={messages.downloadFor({ name })}
       className={buttonVariants({ variant: "chip", size: "xs", className: "no-underline" })}
