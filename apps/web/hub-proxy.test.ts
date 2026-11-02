@@ -25,7 +25,7 @@ describe("web dev server", () => {
       dev = await createServer({
         configFile: fileURLToPath(new URL("vite.config.ts", import.meta.url)),
         logLevel: "silent",
-        server: { host: "127.0.0.1", port: 0, strictPort: false, hmr: false, ws: false },
+        server: { port: 0, strictPort: false, hmr: false, ws: false },
       });
       await dev.listen();
     } finally {
@@ -47,6 +47,12 @@ describe("web dev server", () => {
     expect(response.headers.get("content-type")).toContain("application/json");
     return (await response.json()) as { hub: boolean; url: string; host: string };
   };
+
+  // covers DP-001, ADR 022
+  it("[TC-GEN-122] listens on 127.0.0.1, where the hub's links to its own pages point", () => {
+    // `localhost` would resolve to ::1 alone on macOS, and those links would reach nothing.
+    expect(dev.config.server.host).toBe("127.0.0.1");
+  });
 
   // covers DP-001, ADR 021
   it("[TC-GEN-119] forwards the API to the hub without changing the Host", async () => {

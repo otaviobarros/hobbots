@@ -35,7 +35,7 @@ app.setAboutPanelOptions({
 
 // The port the user chose in Settings, kept in the data folder, unless HOBBOTS_PORT overrides it.
 const hub = hubAddress(hubPort(app.getPath("userData"), process.env));
-const devWebUrl = process.env.HOBBOTS_WEB_URL ?? "http://localhost:5173";
+const devWebUrl = process.env.HOBBOTS_WEB_URL ?? "http://127.0.0.1:5173";
 
 // A packaged app carries the web client in its resources folder; a checkout uses the web build.
 // The server serves it, and the window loads it from there like any browser on the hub (ADR 012).

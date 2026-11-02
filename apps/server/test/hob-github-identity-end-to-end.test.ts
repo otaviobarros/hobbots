@@ -597,7 +597,7 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
   }, 30_000);
 
   // covers ADR 022
-  it("[TC-GEN-115] fails clearly when the hob's app is uninstalled, never acts as the user, and works again once reinstalled", async () => {
+  it("[TC-GEN-115] fails clearly when the hob's app is uninstalled, marks it for reinstalling, never acts as the user, and works again once reinstalled", async () => {
     const hob = await frodo();
     const installation = frodoApp().installations[0]?.id;
     github.uninstallApp("frodo-hobbots");
@@ -606,19 +606,26 @@ describe("A hob's own GitHub identity, end to end against a fake GitHub", () => 
     expect(refused.pending).toBeUndefined();
     expect(refused.reply?.content).toContain(`${BOT} is not installed on ${SLUG}`);
     expect(refused.reply?.content).toContain(`${github.base}/apps/frodo-hobbots/installations/new`);
-    // GitHub refused the lapsed installation's token, the hub minted once more and GitHub would not:
-    // one retry, then nothing more, and nothing as the user.
+    // GitHub refused the lapsed installation's token and the hub minted once more, which GitHub would not
+    // do. The hub then asked where the app is still installed: nowhere. One retry, then nothing more, and
+    // nothing as the user.
     expect(github.requests.slice(fromRequest).map((sent) => `${sent.method} ${sent.path}`)).toEqual([
       `GET /repos/${SLUG}`,
       `POST /app/installations/${installation}/access_tokens`,
+      "GET /app/installations",
     ]);
     expect(asTheUser(fromRequest)).toEqual([]);
-    // Not proven yet: the Charms tab marking the app for reinstalling (#419). It still shows it connected.
-    expect(await appStatus(hob)).toMatchObject({ _tag: "Connected", needsReconnect: null });
+    // The Charms tab marks the app for reinstalling (#419), and the hob's next action reaches GitHub no more.
+    expect(await appStatus(hob)).toMatchObject({ _tag: "Connected", needsReconnect: { reason: "installation" } });
+    const sentBefore = github.requests.length;
+    const blocked = await turn(hob, call("github_repository", {}));
+    expect(blocked.reply?.content).toContain(`${github.base}/apps/frodo-hobbots/installations/new`);
+    expect(github.requests.length).toBe(sentBefore);
 
-    // Reinstalled on GitHub, the Charms tab lists it again and the hob reads as its bot.
+    // Reinstalled on GitHub, the Charms tab lists it again, which clears the mark, and the hob reads as its bot.
     github.installApp("frodo-hobbots", "selected", [SLUG]);
     await request("GET", `/api/agents/${hob.id}/github-app/installations`);
+    expect(await appStatus(hob)).toMatchObject({ _tag: "Connected", needsReconnect: null });
     const again = await turn(hob, call("github_repository", {}));
     expect(again.reply?.content).toContain(SLUG);
     expect(await appStatus(hob)).toMatchObject({ _tag: "Connected", needsReconnect: null });

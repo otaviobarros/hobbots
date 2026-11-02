@@ -59,7 +59,7 @@ Requirements: Node.js 26.13 (the current LTS) or later, pnpm, and [Claude Code](
 ```sh
 pnpm install
 pnpm dev:desktop   # Electron app with the local server
-pnpm dev           # server and web client, open http://localhost:5173
+pnpm dev           # server and web client, open http://127.0.0.1:5173
 pnpm check         # Biome, typecheck and tests
 pnpm package:mac   # unsigned .dmg installers for Apple silicon and Intel in apps/desktop/release
 ```
