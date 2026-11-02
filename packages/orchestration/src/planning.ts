@@ -1,9 +1,8 @@
 import type { TaskRepository } from "@hobbots/agents";
 import {
   ArtifactId,
-  ancestorsOf,
+  cancelMoves,
   descendantsOf,
-  isLiveAttempt,
   isTerminalTask,
   MilestoneId,
   QuestId,
@@ -38,13 +37,6 @@ interface Deps {
 
 const newMilestones = (titles: ReadonlyArray<string> | undefined) =>
   (titles ?? []).map((title) => ({ id: MilestoneId.make(newId()), title }));
-
-/** The Tasks under `task` that a cancel moves, deepest first, so a Task ends only after what is under it. */
-const deepestFirst = (task: Task, tree: ReadonlyArray<Task>) =>
-  [task, ...descendantsOf(task, tree)]
-    .map((each) => ({ each, depth: ancestorsOf(each, tree).length }))
-    .sort((a, b) => b.depth - a.depth)
-    .map(({ each }) => each);
 
 /**
  * Tools a Task's owner runs its own work with: steps, a Quest, waits, the result, and cancelling
@@ -183,32 +175,22 @@ export const makePlanning = ({ tasks, capacity, limits }: Deps) => ({
   cancel_task: (scope: CallScope, input: Omit<TaskToolInput<"cancel_task">, "key">) =>
     Effect.gen(function* () {
       const target = yield* ledTask(scope, input.task_id);
-      const tree = scope.tree.tasks;
-      const live = new Set(scope.tree.attempts.filter((a) => isLiveAttempt(a.state)).map((a) => a.id as string));
-      const states = new Map(tree.map((each) => [each.id, each.state]));
       const journal = journalOf();
-      const cancelled: Array<string> = [];
-      const cancelling: Array<string> = [];
-      for (const task of deepestFirst(target, tree)) {
-        const state = states.get(task.id) as TaskState;
-        if (isTerminalTask(state) || state === "cancelling") continue;
-        // Nothing runs in a queued Task with nothing open under it, so its cancel is confirmed at once.
-        const quiet =
-          state === "queued" &&
-          (task.currentAttemptId === null || !live.has(task.currentAttemptId)) &&
-          descendantsOf(task, tree).every((each) => isTerminalTask(states.get(each.id) as TaskState));
-        const to = quiet ? "cancelled" : "cancelling";
+      const moves = cancelMoves(target, scope.tree);
+      for (const { task, to } of moves) {
         journal.keep(yield* fromRecords(tasks.moveTask(task.id, task.revision, to, scope.at)));
-        states.set(task.id, to);
-        (quiet ? cancelled : cancelling).push(task.id);
       }
+      const cancelling = moves.filter((move) => move.to === "cancelling").map((move) => move.task.id as string);
       return {
         done: {
           message:
             cancelling.length === 0
               ? `Task ${target.id} is cancelled.`
               : `Cancel requested for Task ${target.id}; Hobbots confirms each Task as it stops.`,
-          details: { cancelled, cancelling },
+          details: {
+            cancelled: moves.filter((move) => move.to === "cancelled").map((move) => move.task.id as string),
+            cancelling,
+          },
         },
         entries: journal.entries,
       };

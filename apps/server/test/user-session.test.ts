@@ -555,6 +555,27 @@ describe("only the user decides approvals and manages grants", () => {
     expect(await grants()).toEqual([]);
   });
 
+  // covers PE-006, OR-006
+  it("[TC-PE-230] refuses and records a Cancel, Retry or Reassign that is not from an approved device", async () => {
+    await setupDone();
+    const thread = await hobThread("Pip");
+    const task = "00000000-0000-4000-8000-000000000000";
+    refusals = [];
+    const attempts = [
+      await request(SCRIPT, "POST", `/api/tasks/${task}/cancel`),
+      await request({ origin: "https://attacker.example" }, "POST", `/api/quests/${task}/cancel`),
+      await request(SCRIPT, "POST", `/api/tasks/${task}/retry`),
+      await request(SCRIPT, "POST", `/api/tasks/${task}/reassign`, { agentId: thread.agentId }),
+    ];
+    for (const attempt of attempts) expect(attempt).toMatchObject({ status: 401, body: REQUIRED });
+    expect(refusals).toHaveLength(attempts.length);
+    // The user reaches them, and is told there is no such Task.
+    expect(await request(APP, "POST", `/api/tasks/${task}/cancel`)).toMatchObject({
+      status: 404,
+      body: { _tag: "TaskNotFound", taskId: task },
+    });
+  });
+
   // covers PE-006
   it("[TC-PE-112] only the hub's device middleware provides a user session, and every route but health and pairing carries it", () => {
     // Every route, including any added later, sits behind the middleware, except the two a device
@@ -592,6 +613,7 @@ describe("only the user decides approvals and manages grants", () => {
         join("packages", "agents", "src", "approvals.ts"),
         join("packages", "agents", "src", "charm-calls.ts"),
         join("packages", "agents", "src", "devices.ts"),
+        join("packages", "agents", "src", "controls.ts"),
         join("packages", "agents", "src", "grants.ts"),
         join("packages", "agents", "src", "questions.ts"),
         join("packages", "api", "src", "user-session.ts"),
@@ -600,7 +622,14 @@ describe("only the user decides approvals and manages grants", () => {
     // The services only require it: they import it, name it in a signature or a comment, and read it.
     const requiring =
       /^\s*(UserSession,|import .*\bUserSession\b.*|(const session = )?yield\* UserSession;|.*, UserSession>;?|\s*\*.*|\) => Effect\.Effect<.*UserSession>;|\s*UserSession$)$/;
-    for (const service of ["approvals.ts", "charm-calls.ts", "devices.ts", "grants.ts", "questions.ts"]) {
+    for (const service of [
+      "approvals.ts",
+      "charm-calls.ts",
+      "controls.ts",
+      "devices.ts",
+      "grants.ts",
+      "questions.ts",
+    ]) {
       const lines = readFileSync(join(root, "packages", "agents", "src", service), "utf8")
         .split("\n")
         .filter((line) => /\bUserSession\b/.test(line));

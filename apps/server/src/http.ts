@@ -29,7 +29,7 @@ import { PermissionsHandlers } from "./permissions.ts";
 import { RemoteAccessHandlers } from "./remote-access.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
-import { QuestionsHandlers, TasksHandlers } from "./tasks.ts";
+import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
 import { DeviceSessionLive } from "./user-session.ts";
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
@@ -196,6 +196,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     GrantsHandlers,
     CharmCallsHandlers,
     TasksHandlers,
+    TaskControlsHandlers,
     QuestionsHandlers,
     BackpackHandlers,
     BlockersHandlers,
