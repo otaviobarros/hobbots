@@ -418,12 +418,17 @@ export class Dispatcher extends Context.Service<
             );
             const reason = yield* runTurn(turn, delivered);
             let requeued = false;
+            const progressBack: Array<BackpackItemId> = [];
             for (const each of delivered) {
               const settled = reason === null ? yield* afterTurn(each, turn.turnId) : yield* endedEarly(each, reason);
               if (settled !== null) outcomes.set(each.item.id, settled);
-              // Routine progress sent back waits for the next turn: it never plans one again itself.
-              else if (!each.item.actionable) outcomes.set(each.item.id, { _tag: "Skipped", reason: "not-ready" });
-              else requeued = true;
+              else if (each.item.actionable) requeued = true;
+              else progressBack.push(each.item.id);
+            }
+            // Routine progress sent back rides along the retry that work needing the hob plans, but
+            // never plans one itself: alone, it waits for the next turn.
+            if (!requeued) {
+              for (const id of progressBack) outcomes.set(id, { _tag: "Skipped", reason: "not-ready" });
             }
             if (requeued) {
               const why = reason ?? "The runtime never accepted the turn.";

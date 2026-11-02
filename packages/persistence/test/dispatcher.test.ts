@@ -577,4 +577,71 @@ describe("The dispatcher", () => {
       { _tag: "consumed", by: "batch-2" },
     ]);
   });
+
+  // covers IN-005
+  it("[TC-IN-071] progress rides along the retry that work needing the hob plans, and alone plans none", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { copy } = yield* campaign;
+        const tasks = yield* TaskRepository;
+        const dispatcher = yield* Dispatcher;
+        const report = (id: string, kind: "finding" | "progress") =>
+          tasks
+            .recordCheckpoint({
+              id: CheckpointId.make(id),
+              taskId: copy.id,
+              source: "unplanned",
+              kind,
+              milestoneId: null,
+              summary: `A ${kind}`,
+              createdAt: now,
+            })
+            .pipe(Effect.map(recorded));
+        const finding = yield* report("c-finding", "finding");
+        const progress = yield* report("c-progress", "progress");
+
+        /** Runs turns that the runtime never accepts until the `accepting`th, and records what each carried. */
+        const turnsUntil = (ids: ReadonlyArray<BackpackItem["id"]>, accepting: number) =>
+          Effect.gen(function* () {
+            const turns: Array<ReadonlyArray<string>> = [];
+            const outcomes = yield* dispatcher.dispatchAll(ids, () =>
+              Effect.succeed({
+                target: "thread:t1",
+                turnId: `batch-${turns.length + 1}`,
+                run: (deliveries: ReadonlyArray<Delivery>) =>
+                  Effect.gen(function* () {
+                    turns.push(deliveries.map((delivery) => delivery.item.id));
+                    if (turns.length < accepting) return;
+                    yield* Effect.forEach(deliveries, (delivery) => delivery.accepted(`session-${turns.length}`));
+                  }),
+              }),
+            );
+            return { turns, outcomes };
+          });
+
+        // Alone, progress whose turn was never accepted goes back to pending and plans no second turn.
+        const alone = yield* turnsUntil([progress.id], 99);
+        const afterAlone = yield* Backpack.use((backpack) => backpack.find(progress.id));
+        // Mixed, the finding's retry carries the progress too, and the turn that runs consumes both.
+        const mixed = yield* turnsUntil([finding.id, progress.id], 2);
+        return { finding, progress, alone, afterAlone, mixed };
+      }),
+    );
+
+    expect(result.finding.actionable).toBe(true);
+    expect(result.progress.actionable).toBe(false);
+    expect(result.alone.turns).toEqual([[result.progress.id]]);
+    expect(result.alone.outcomes).toEqual([{ _tag: "Skipped", reason: "not-ready" }]);
+    expect([result.afterAlone.state, result.afterAlone.deliveries.length]).toEqual(["pending", 1]);
+    expect(result.mixed.turns).toEqual([
+      [result.finding.id, result.progress.id],
+      [result.finding.id, result.progress.id],
+    ]);
+    expect(result.mixed.outcomes.map((each) => (each._tag === "Consumed" ? each.item.disposition : each._tag))).toEqual(
+      [
+        { _tag: "consumed", by: "batch-2" },
+        { _tag: "consumed", by: "batch-2" },
+      ],
+    );
+  });
 });
