@@ -348,6 +348,8 @@ describe("A hob's own GitHub App on a hub", () => {
     expect(github.apps.find((app) => app.slug === "pippin-hobbots")?.installations.length).toBe(1);
     expect(await readKey(PIPPIN)).toBeNull();
     const deleteUrl = `${github.base}/settings/apps/pippin-hobbots/advanced`;
+    // Retiring again, as a repeated request would, does not dismiss it.
+    expect((await api("POST", `/api/agents/${PIPPIN}/retire`, AS_WINDOW, { activeWork: "stop" })).status).toBe(200);
     expect((await api("GET", `/api/agents/${PIPPIN}/github-app`)).body).toEqual({
       _tag: "LeftOver",
       app: expect.objectContaining({ slug: "pippin-hobbots" }),

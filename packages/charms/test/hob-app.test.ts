@@ -394,7 +394,16 @@ describe("A hob's own GitHub App", () => {
         const leftOver = yield* service.status(FRODO);
         const restart = yield* Effect.flip(service.start(FRODO, WINDOW, HUB));
         const dismissed = yield* service.disconnect(FRODO);
-        return { listing, disconnected, key, leftOver, restart, dismissed, after: yield* service.status(FRODO) };
+        const after = yield* service.status(FRODO);
+        // A flow already on its way back from GitHub when an app is left over, as when it was started
+        // while an earlier one was being completed: it does not replace the left-over app, and links
+        // to delete the one GitHub just made.
+        const second = yield* throughGitHub(FRODO);
+        w.apps.set(FRODO, made.app);
+        w.leftOver.set(FRODO, "1 of the app's installations could not be removed.");
+        const late = yield* Effect.flip(service.complete(second.state, second.code));
+        const stillLeft = yield* service.status(FRODO);
+        return { listing, disconnected, key, late, stillLeft, leftOver, restart, dismissed, after };
       }),
     );
     expect(outcome.listing).toMatchObject({ reason: "signed-out" });
@@ -407,13 +416,16 @@ describe("A hob's own GitHub App", () => {
       problem: outcome.disconnected.problem,
       deleteUrl: outcome.disconnected.deleteUrl,
     });
+    expect(outcome.late).toMatchObject({ reason: "failed", message: expect.stringContaining("not fully removed") });
+    expect(outcome.late.deleteUrl).toMatch(/\/settings\/apps\/frodo-hobbots-\w+\/advanced$/);
     expect(outcome.restart).toMatchObject({ reason: "left-over" });
+    expect(outcome.stillLeft).toMatchObject({ _tag: "LeftOver", problem: expect.any(String) });
     expect(outcome.dismissed).toEqual({ deleteUrl: outcome.disconnected.deleteUrl, problem: null });
     expect(outcome.after).toEqual({ _tag: "None", cannotCreate: null });
   });
 
   // covers ADR 022
-  it("[TC-PE-256] keeps what retiring a hob could not remove from its app, and shows it with where to delete it", async () => {
+  it("[TC-PE-256] keeps what retiring a hob could not remove from its app, even when retired again, with where to delete it", async () => {
     const w = world();
     const outcome = await run(
       w,
@@ -429,6 +441,8 @@ describe("A hob's own GitHub App", () => {
             : undefined;
         yield* (yield* RetiredHobGitHubApp).remove(SAM);
         github.answer = null;
+        // Retiring again, as a repeated request would, leaves it shown.
+        yield* (yield* RetiredHobGitHubApp).remove(SAM);
         return {
           slug: made.app.slug,
           left: github.apps.find((each) => each.slug === made.app.slug)?.installations.length,

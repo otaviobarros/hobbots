@@ -421,6 +421,10 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           if ((yield* apps.get(open.agentId)) !== null) {
             return `${open.hobName} already has its own GitHub app, so the hub did not keep this one.`;
           }
+          // An old app not fully removed stays shown until dismissed; a new one would replace it.
+          if ((yield* apps.leftOver(open.agentId)) !== null) {
+            return `${open.hobName}'s old GitHub app was not fully removed, so the hub did not keep this one.`;
+          }
           return null;
         });
 
@@ -528,7 +532,8 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           ),
         );
 
-      const disconnectHob = (agentId: AgentId) =>
+      /** `dismiss`: whether a left-over app is dismissed, which only the user's disconnect does. */
+      const disconnectHob = (agentId: AgentId, dismiss: boolean) =>
         writing.withPermits(1)(
           Effect.gen(function* () {
             const app = yield* apps.get(agentId);
@@ -539,6 +544,7 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               // installations again; only deleting the app on GitHub closes what is left.
               const left = yield* apps.leftOver(agentId);
               if (left === null) return { deleteUrl: null, problem: null };
+              if (!dismiss) return { deleteUrl: deleteUrl(left.app.slug), problem: left.problem };
               yield* apps.remove(agentId);
               return { deleteUrl: deleteUrl(left.app.slug), problem: null };
             }
@@ -564,13 +570,14 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           }),
         );
 
-      const disconnect = (agentId: AgentId) => Effect.andThen(agentOf(agentId), disconnectHob(agentId));
+      const disconnect = (agentId: AgentId) => Effect.andThen(agentOf(agentId), disconnectHob(agentId, true));
 
       const service = HobGitHubAppService.of({ status, start, form, complete, installations, disconnect });
       const retired = RetiredHobGitHubApp.of({
         remove: (agentId) =>
           // What could not be removed stays with the hob's app as left over, shown by its status.
-          disconnectHob(agentId).pipe(Effect.asVoid),
+          // Retiring again leaves it as it is.
+          disconnectHob(agentId, false).pipe(Effect.asVoid),
       });
       return Context.make(HobGitHubAppService, service).pipe(Context.add(RetiredHobGitHubApp, retired));
     }),
