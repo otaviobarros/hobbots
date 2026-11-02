@@ -78,7 +78,9 @@ export const ContinuationsLive = Layer.effect(
                       Effect.gen(function* () {
                         ran = true;
                         const ended = yield* turn.run(replyId, workOf(deliveries));
-                        if (ended._tag === "EndedEarly") return yield* new BackpackTurnFailed({ reason: ended.reason });
+                        if (ended._tag === "EndedEarly") {
+                          return yield* new BackpackTurnFailed({ end: ended.end, diagnostic: ended.diagnostic });
+                        }
                       }),
                   },
             ),

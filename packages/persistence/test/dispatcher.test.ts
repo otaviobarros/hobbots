@@ -370,7 +370,7 @@ describe("The dispatcher", () => {
           turnId: `turn-${tries + 1}`,
           run: (delivery) =>
             ++tries === 1
-              ? Effect.fail(new BackpackTurnFailed({ reason: "The runtime could not start." }))
+              ? Effect.fail(new BackpackTurnFailed({ end: "failed", diagnostic: "The runtime could not start." }))
               : delivery.accepted("session-2"),
         });
         const recovered = yield* dispatcher.dispatch(item.id, flaky);
@@ -415,7 +415,9 @@ describe("The dispatcher", () => {
     // The runtime never accepted a turn, so it said nothing to keep: the blocker's reason and its
     // count of deliveries explain the failure (STD-I18N-005).
     expect(result.stored.error).toBeNull();
-    expect(result.stored.blockers).toMatchObject([{ reason: "retries-exhausted", afterDeliveries: 3 }]);
+    expect(result.stored.blockers).toMatchObject([
+      { reason: "retries-exhausted", lastEnd: "not-accepted", diagnostic: null, afterDeliveries: 3 },
+    ]);
   });
 
   // covers IN-002, IN-003
@@ -559,7 +561,8 @@ describe("The dispatcher", () => {
               Effect.gen(function* () {
                 turns.push(deliveries.map((delivery) => delivery.item.id));
                 yield* Effect.forEach(deliveries, (delivery) => delivery.accepted(`session-${turns.length}`));
-                if (turns.length === 1) return yield* new BackpackTurnFailed({ reason: "The runtime failed" });
+                if (turns.length === 1)
+                  return yield* new BackpackTurnFailed({ end: "failed", diagnostic: "The runtime failed" });
               }),
           }),
         );
@@ -745,7 +748,9 @@ describe("Blockers", () => {
     // The runtime said nothing, so there is nothing to diagnose: the client explains the blocker
     // from its reason and its count of deliveries (STD-I18N-005).
     expect(result.outcome.item.error).toBeNull();
-    expect(result.outcome.item.blockers).toMatchObject([{ reason: "retries-exhausted", diagnostic: null }]);
+    expect(result.outcome.item.blockers).toMatchObject([
+      { reason: "retries-exhausted", lastEnd: "not-accepted", diagnostic: null },
+    ]);
   });
 
   // covers IN-007

@@ -5,6 +5,7 @@ import {
   BackpackItemNotBlocked,
   BackpackItemUnclaimable,
   type BackpackStep,
+  type BackpackTurnEnding,
   type BlockerReason,
   backpackStep,
   blockerNextAction,
@@ -164,12 +165,14 @@ export const BackpackLive = Layer.effect(
       );
 
     /** Records a blocker for the item that just failed, inside the failing write's transaction. */
-    const raiseBlocker = (itemId: BackpackItemId, reason: BlockerReason, diagnostic: string | null) =>
+    const raiseBlocker = (itemId: BackpackItemId, reason: BlockerReason, ending: BackpackTurnEnding | null) =>
       isoNow.pipe(
         Effect.flatMap(
           (at) => sql`INSERT INTO backpack_blockers
-              (item_id, number, reason, next_action, diagnostic, after_deliveries, raised_at, decision, decided_at)
-            SELECT ${itemId}, COALESCE(MAX(number), 0) + 1, ${reason}, ${blockerNextAction(reason)}, ${diagnostic},
+              (item_id, number, reason, next_action, diagnostic, last_end, after_deliveries, raised_at,
+                decision, decided_at)
+            SELECT ${itemId}, COALESCE(MAX(number), 0) + 1, ${reason}, ${blockerNextAction(reason)},
+              ${ending?.diagnostic ?? null}, ${ending?.end ?? null},
               (SELECT COUNT(*) FROM backpack_deliveries WHERE item_id = ${itemId}), ${at}, NULL, NULL
             FROM backpack_blockers WHERE item_id = ${itemId}`,
         ),
@@ -295,11 +298,11 @@ export const BackpackLive = Layer.effect(
       requeue: (itemId, held) => guarded(itemId, held, "requeue", { ends: true }),
       resolve: (itemId, held, disposition) =>
         guarded(itemId, held, "resolve", { ends: true, columns: { disposition: dispositionColumn(disposition) } }),
-      fail: (itemId, held, diagnostic) =>
+      fail: (itemId, held, ending) =>
         guarded(itemId, held, "fail", {
           ends: true,
-          columns: { error: diagnostic },
-          also: raiseBlocker(itemId, "retries-exhausted", diagnostic),
+          columns: { error: ending?.diagnostic ?? null },
+          also: raiseBlocker(itemId, "retries-exhausted", ending),
         }),
       abandon,
       decide,

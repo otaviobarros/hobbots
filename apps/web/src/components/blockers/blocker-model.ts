@@ -18,11 +18,12 @@ export const blockerWhat = (item: BackpackItem): string => {
   }
 };
 
-/** Why it is stuck, in words. */
-export const blockerWhy = (item: BackpackItem, blocker: BackpackBlocker, hobName: string): string =>
-  blocker.reason === "retries-exhausted"
-    ? copy.why["retries-exhausted"]({ count: blocker.afterDeliveries - previousDeliveries(item, blocker) })
-    : copy.why["recipient-retired"]({ name: hobName });
+/** Why it is stuck, in words, with how its last try ended when the hub said. */
+export const blockerWhy = (item: BackpackItem, blocker: BackpackBlocker, hobName: string): string => {
+  if (blocker.reason === "recipient-retired") return copy.why["recipient-retired"]({ name: hobName });
+  const tries = copy.why["retries-exhausted"]({ count: blocker.afterDeliveries - previousDeliveries(item, blocker) });
+  return blocker.lastEnd === null ? tries : `${tries} ${copy.lastEnd[blocker.lastEnd]}`;
+};
 
 /** The deliveries the item had used before this blocker's round of tries. */
 const previousDeliveries = (item: BackpackItem, blocker: BackpackBlocker) =>

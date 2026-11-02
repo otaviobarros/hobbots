@@ -26,8 +26,17 @@ export const messages = {
       }),
     "recipient-retired": ({ name }: { name: string }) => `${name} retired, so nobody can take it.`,
   },
-  /** Before what the runtime last said, shown as it said it. */
-  diagnostic: "The runtime last said:",
+  /** How the last try ended, from the hub's code. */
+  lastEnd: {
+    "not-accepted": "The last try never started.",
+    unavailable: "The last try found the hob or its chat no longer taking work.",
+    stopped: "You stopped the last try.",
+    interrupted: "The last try was cut off.",
+    failed: "The last try failed.",
+    limited: "The last try ran into the provider's usage limit.",
+  },
+  /** Before the error the last try recorded, shown as it was recorded. */
+  diagnostic: "Details:",
   next: { retry: "Next: retry it", reassign: "Next: reassign it", dismiss: "Next: dismiss it" },
   retry: "Retry",
   reassign: "Reassign",

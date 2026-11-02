@@ -13,6 +13,7 @@ import {
   type Agent,
   type AgentConfiguration,
   type AgentId,
+  type BackpackTurnEnd,
   type Brain,
   type Committed,
   DEFAULT_THREAD_TITLE,
@@ -99,6 +100,10 @@ const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 /** How a turn ended, for the Attempt it may have started on a Task: a reply still running was interrupted. */
 const turnOutcome = (status: MessageStatus): ChatTurnOutcome =>
   status === "complete" ? "completed" : status === "failed" || status === "limited" ? "failed" : "interrupted";
+
+/** How a turn that carried work ended early, as a code: a reply still running was interrupted. */
+const turnEnd = (status: MessageStatus): BackpackTurnEnd =>
+  status === "failed" || status === "stopped" || status === "limited" ? status : "interrupted";
 
 /** The brain a thread's turn thinks with: the thread's own, else the hob's configuration's. */
 const brainFor = (thread: Thread, config: AgentConfiguration): Brain =>
@@ -853,13 +858,14 @@ export class ChatService extends Context.Service<
               return continued?.turn ?? null;
             }),
           );
-          if (begun === null) return { _tag: "EndedEarly", reason: "Its hob or thread no longer takes work." };
+          if (begun === null) return { _tag: "EndedEarly", end: "unavailable", diagnostic: null };
           // A dispatch that stops waiting, as when the turn's claim is lost, stops the turn too, so
           // no second turn starts over it.
           yield* Fiber.await(begun.turn).pipe(Effect.onInterrupt(() => FiberMap.remove(turns, threadId)));
           const ended = yield* Ref.get(begun.reply.current);
           if (ended.status === "complete") return { _tag: "Handled" };
-          return { _tag: "EndedEarly", reason: ended.error ?? `The turn ended as ${ended.status}.` };
+          // The reply's error is what the runtime said; how the turn ended is a code the client words.
+          return { _tag: "EndedEarly", end: turnEnd(ended.status), diagnostic: ended.error ?? null };
         });
 
       // After a turn ends, frees its thread and starts what queued behind it.

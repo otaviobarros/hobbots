@@ -1,4 +1,4 @@
-import type { AgentId, CarriedItem, MessageId, ThreadId } from "@hobbots/domain";
+import type { AgentId, BackpackTurnEnding, CarriedItem, MessageId, ThreadId } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 
 /** What arrived for a hob in a thread, put into one turn there under the claims the turn holds (ADR 019). */
@@ -11,8 +11,11 @@ export interface CarriedWork {
   readonly accepted: (sessionId: string) => Effect.Effect<void>;
 }
 
-/** How a turn that carried work ended: it ran to its end, or ended early, and why. */
-export type CarriedEnd = { readonly _tag: "Handled" } | { readonly _tag: "EndedEarly"; readonly reason: string };
+/**
+ * How a turn that carried work ended: it ran to its end, or ended early, how as a code, and what the
+ * runtime said about it, raw, when it said anything.
+ */
+export type CarriedEnd = { readonly _tag: "Handled" } | ({ readonly _tag: "EndedEarly" } & BackpackTurnEnding);
 
 /** The turn a thread's chat runs for the work that waits there. */
 export interface CarryingTurn {

@@ -488,7 +488,14 @@ describe("blockers", () => {
     const [blocked] = await run(settledItems([failure.id]));
     expect(blocked).toMatchObject({ state: "failed" });
     expect(blocked?.blockers).toMatchObject([
-      { number: 1, reason: "retries-exhausted", nextAction: "retry", afterDeliveries: 3, decision: null },
+      {
+        number: 1,
+        reason: "retries-exhausted",
+        nextAction: "retry",
+        lastEnd: "interrupted",
+        afterDeliveries: 3,
+        decision: null,
+      },
     ]);
     // What the runtime said is kept raw for diagnosis; the client writes the explanation.
     expect(blocked?.blockers[0]?.diagnostic).toBe(blocked?.error);
@@ -528,7 +535,11 @@ describe("blockers", () => {
     await release();
     const [blocked] = await run(settledItems([failure.id]));
     expect(blocked).toMatchObject({ state: "failed" });
-    expect(blocked?.blockers).toMatchObject([{ reason: "retries-exhausted", nextAction: "retry" }]);
+    // You stopped it: a code the client words, and nothing the runtime said (STD-I18N-005).
+    expect(blocked?.blockers).toMatchObject([
+      { reason: "retries-exhausted", nextAction: "retry", lastEnd: "stopped", diagnostic: null },
+    ]);
+    expect(blocked?.error).toBeNull();
 
     holdContinuations = false;
     await run(choose(failure.id, "retry"));
@@ -548,7 +559,9 @@ describe("blockers", () => {
     await run(HobLifecycle.use((hobs) => hobs.retire(FRODO, "stop")));
     const [blocked] = await run(settledItems([failure.id]));
     expect(blocked).toMatchObject({ state: "failed", error: null });
-    expect(blocked?.blockers).toMatchObject([{ reason: "recipient-retired", nextAction: "dismiss", diagnostic: null }]);
+    expect(blocked?.blockers).toMatchObject([
+      { reason: "recipient-retired", nextAction: "dismiss", diagnostic: null, lastEnd: null },
+    ]);
 
     const refused = await run(Effect.flip(choose(failure.id, "retry")));
     expect(refused).toMatchObject({ _tag: "BlockerRecipientRetired", agentId: FRODO });

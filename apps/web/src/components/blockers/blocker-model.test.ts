@@ -19,6 +19,7 @@ const blocker = (number: number, afterDeliveries: number, decision: "retry" | nu
     reason: retired ? "recipient-retired" : "retries-exhausted",
     nextAction: retired ? "dismiss" : "retry",
     diagnostic: "The runtime stopped.",
+    lastEnd: retired ? null : "failed",
     afterDeliveries,
     raisedAt: at,
     decision,
@@ -76,7 +77,7 @@ describe("blockers", () => {
     const again = item("a", { blockers: [blocker(1, 3, "retry"), blocker(2, 6, null)] });
     expect(blockerWhat(again)).toBe("Reading a message");
     expect(blockerWhy(again, again.blockers[1] as BackpackBlocker, "Aldric")).toBe(
-      "It was tried 3 times, and every turn ended early.",
+      "It was tried 3 times, and every turn ended early. The last try failed.",
     );
     const retired = item("b", { blockers: [blocker(1, 0, null, true)] });
     expect(blockerWhy(retired, retired.blockers[0] as BackpackBlocker, "Quill")).toBe(

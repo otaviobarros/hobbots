@@ -68,7 +68,7 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck on its Task card and
   const card = page.getByRole("region", { name: "Aldric's work on Plan the spring launch" });
   const stuck = card.getByRole("region", { name: /^Aldric's work is stuck/ });
   await expect(stuck).toContainText('Reading the result of "Outline the launch"', { timeout: 20_000 });
-  await expect(stuck).toContainText("It was tried 1 time, and the turn ended early.");
+  await expect(stuck).toContainText("It was tried 1 time, and the turn ended early. The last try was cut off.");
   await expect(stuck).toContainText("Next: retry it");
   await expect(stuck.getByRole("button", { name: "Reassign" })).toBeDisabled();
   await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible();

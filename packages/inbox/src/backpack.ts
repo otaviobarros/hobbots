@@ -6,6 +6,7 @@ import type {
   BackpackItemMissing,
   BackpackItemNotBlocked,
   BackpackItemUnclaimable,
+  BackpackTurnEnding,
   Committed,
   IllegalBackpackTransition,
   QuestId,
@@ -60,7 +61,7 @@ export class Backpack extends Context.Service<
     readonly requeue: (itemId: BackpackItemId, held: HeldClaim) => Guarded;
     readonly resolve: (itemId: BackpackItemId, held: HeldClaim, disposition: BackpackDisposition) => Guarded;
     /** Its deliveries ran out: the item fails as a blocker whose next action is to retry it (IN-007). */
-    readonly fail: (itemId: BackpackItemId, held: HeldClaim, diagnostic: string | null) => Guarded;
+    readonly fail: (itemId: BackpackItemId, held: HeldClaim, ending: BackpackTurnEnding | null) => Guarded;
     /**
      * Its hob retired: an actionable pending item no claim holds fails as a blocker, since nobody
      * can take it. Its value is null otherwise: a claimed item comes back to pending once its turn

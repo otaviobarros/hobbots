@@ -139,6 +139,27 @@ export const blockerNextAction = (reason: BlockerReason): BlockerAction =>
  * A failed item as a blocker with its next action (IN-007, ADR 019). An item can block more than
  * once: a retry gives it a fresh set of deliveries, and running out again raises another blocker.
  */
+/**
+ * How a turn that carried an item ended early, as a code the client words (STD-I18N-005): the
+ * runtime never accepted it, its hob or thread no longer took work, you stopped it, it was cut off,
+ * it failed, or the provider's usage limit ended it.
+ */
+export const BackpackTurnEnd = Schema.Literals([
+  "not-accepted",
+  "unavailable",
+  "stopped",
+  "interrupted",
+  "failed",
+  "limited",
+]);
+export type BackpackTurnEnd = typeof BackpackTurnEnd.Type;
+
+/** How a turn ended early, and what the runtime said about it, raw, when it said anything. */
+export interface BackpackTurnEnding {
+  readonly end: BackpackTurnEnd;
+  readonly diagnostic: string | null;
+}
+
 export class BackpackBlocker extends Schema.Class<BackpackBlocker>("BackpackBlocker")({
   /** 1 for the item's first blocker, one more for each later one. */
   number: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
@@ -149,6 +170,8 @@ export class BackpackBlocker extends Schema.Class<BackpackBlocker>("BackpackBloc
    * when it said nothing. Never display text: the client explains a blocker from its reason and counts.
    */
   diagnostic: Schema.NullOr(Schema.String),
+  /** How the item's last try ended, for a blocker whose tries ran out; null otherwise. */
+  lastEnd: Schema.NullOr(BackpackTurnEnd),
   /** How many deliveries the item had when it failed: a retry counts its new ones from here. */
   afterDeliveries: Schema.Int,
   raisedAt: Schema.String,

@@ -31,6 +31,7 @@ const blocker = (number: number, afterDeliveries: number, decision: "retry" | "d
     reason: "retries-exhausted",
     nextAction: "retry",
     diagnostic: "The runtime stopped.",
+    lastEnd: "failed",
     afterDeliveries,
     raisedAt: at,
     decision,
