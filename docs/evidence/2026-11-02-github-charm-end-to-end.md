@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-02
 - **Issue:** [#325](https://github.com/otaviobarros/hobbots/issues/325)
-- **Pull request:** to be opened from `claude/project-thread-ohjncx`
+- **Pull request:** [#365](https://github.com/otaviobarros/hobbots/pull/365)
 - **Commit:** not yet on `main` (ran on the pull request branch, based on `cf040ae`)
 - **Setup:** Automated only. The hub's own composition over the HTTP API, with the fake runtime making the scripted GitHub Charm calls, and a fake GitHub on a local port (`@hobbots/charms/testing`) serving the device flow, the REST API the Charm calls and Git over HTTP through `git http-backend`. The hub's real sign-in, API client and push code talk to it; only their addresses change. The keychain is the in-memory one, and the hob's sandbox is a stand-in that runs Git's `upload-pack` as it is and records the environment it gets. Linux x86_64, Node 22.23.4, Git 2.43, on SQLite in memory and on PostgreSQL 16; CI runs the suite on SQLite and PostgreSQL 18.
 - **Result:** Passed with gaps. A hob connected through the device flow reads its repository's counts, pushes after an approval, force pushes once only, opens a draft pull request and comments; a repository outside its folders, or one the app is not installed on, is refused before anything is asked or sent; and no token GitHub issued appears in the sandbox's environment, any file on the hub, the database or anything the API answers. Real GitHub and real Claude Code were not part of this run.
