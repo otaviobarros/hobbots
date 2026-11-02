@@ -44,7 +44,7 @@ Decided in [ADR 008](../decisions/008-design.md). Each row is one MVP screen. Th
 1. First launch: Welcome → Where Hobbots runs (run here) → Onboarding with a connected provider → first hob → Home.
 2. Open a hob from Home; chat opens on its last thread. Start a new thread from the fresh page.
 3. Ask a hob for a long Task and watch the card show its steps. Ask for work that needs two more hobs; follow the Quest from the card, strip and drawer, answer an escalated question, and open the Quest tab and a Task's Workbench without leaving the lead's chat. Check that a party member shows "On <lead>'s quest" on Home. Pin the Quest and switch threads.
-4. Approve once, for this Quest and always for this site; deny with a reason; confirm an expired request cannot be approved late.
+4. Approve once, for This Task (This Quest once a party joins) and always for this site; deny with a reason; confirm an expired request cannot be approved late.
 5. Stop a reply versus Cancel a Quest; show their different scopes and outcomes.
 6. Disconnect and restart at a controlled point; the reconnecting banner shows, queued messages send, durable history and waits are intact.
 7. Retire a busy hob with each work option; its history remains inspectable.

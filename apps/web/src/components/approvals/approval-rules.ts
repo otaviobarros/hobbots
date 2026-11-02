@@ -1,4 +1,4 @@
-import type { ApprovalRequest, GrantRule } from "@hobbots/domain";
+import type { ApprovalRequest, GrantRule, TaskTree } from "@hobbots/domain";
 import { messages } from "../messages.ts";
 
 const copy = messages.approval.rule;
@@ -9,6 +9,15 @@ const copy = messages.approval.rule;
  */
 export const offersAlways = (approval: ApprovalRequest): boolean =>
   approval.grantable && !approval.onceOnly && approval.rules.length > 0;
+
+/**
+ * How the card names the middle lifetime (ADR 018): This Quest once a party joined the request's top
+ * Task, which then holds the Quest, and This Task before. Both bind the grant to that Task.
+ */
+export const workScope = (
+  approval: Pick<ApprovalRequest, "rootTaskId">,
+  tree: TaskTree | undefined,
+): "task" | "quest" => (tree?.quests.some((quest) => quest.taskId === approval.rootTaskId) === true ? "quest" : "task");
 
 const parentOf = (path: string) => {
   const index = path.lastIndexOf("/");
@@ -43,8 +52,17 @@ const shellWord = (word: string) =>
 /** A command's literal words, as one line. */
 export const commandText = (words: ReadonlyArray<string>): string => words.map(shellWord).join(" ");
 
-/** One rule in words, as it will be saved: "Always let Pip run `pnpm test` in /code/app". */
-export const ruleText = (rule: GrantRule, name: string): string => {
+/** How long a rule lasts, as the card names it: This Task and This Quest are the same lifetime (ADR 018). */
+export type RuleScope = "always" | "task" | "quest";
+
+/**
+ * One rule in words, as it will be saved: "Always let Pip run `pnpm test` in /code/app", or "For
+ * this Task, let Pip…" for the middle lifetime.
+ */
+export const ruleText = (rule: GrantRule, name: string, scope: RuleScope = "always"): string =>
+  messages.approval.ruleFor[scope]({ rule: rulePhrase(rule, name) });
+
+const rulePhrase = (rule: GrantRule, name: string): string => {
   switch (rule._tag) {
     case "Folder":
       return copy.folder[rule.operation]({ name, folder: rule.folder });

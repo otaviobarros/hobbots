@@ -110,6 +110,15 @@ export const makeChatResolver = (
         return Option.isNone(started) ? null : { attemptId, entries: started.value.entries, was: task.state };
       }),
 
+    /**
+     * The top Task the turn works on now, read again each time: the one it was briefed on, or one a
+     * call of its started. Null while it works on none, or once its Task ended (ADR 018).
+     */
+    workingOn: Effect.map(
+      tasks.readThreadTrees(turn.threadId),
+      (trees) => openThreadTask(trees, turn.agentId)?.top.id ?? null,
+    ),
+
     /** `ownAttempt` is the Attempt this turn already started, if any. */
     resolve: (
       name: TaskToolName,

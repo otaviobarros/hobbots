@@ -4,15 +4,7 @@ import { Effect, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { makeJournaled } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
-
-interface GrantRowShape {
-  readonly rule?: unknown;
-  readonly revision?: unknown;
-}
-
-// The rule is JSON text and the revision a bigint on PostgreSQL (migration 0022).
-const grantRows = (rows: ReadonlyArray<GrantRowShape>) =>
-  rows.map((row) => ({ ...row, rule: JSON.parse(String(row.rule)), revision: Number(row.revision) }));
+import { grantRows } from "./task-grants.ts";
 
 /** A grant at its journal revision, and the columns it is stored with. */
 export const grantRow = (input: Grant, revision: number) => {
@@ -25,7 +17,7 @@ export const grantRow = (input: Grant, revision: number) => {
       operation: grant.operation,
       rule: JSON.stringify(grant.rule),
       lifetime: grant.lifetime,
-      quest_id: grant.questId,
+      task_id: grant.taskId,
       approval_id: grant.approvalId,
       granted_by: grant.grantedBy,
       created_at: grant.createdAt,

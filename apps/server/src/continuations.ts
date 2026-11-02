@@ -4,6 +4,7 @@ import {
   type Attempt,
   type BackpackItem,
   isLiveAttempt,
+  type StaleBackpackClaim,
   type Task,
   type TaskId,
   type ThreadId,
@@ -20,7 +21,7 @@ import {
   DispatcherHost,
 } from "@hobbots/inbox";
 import { TaskSignal } from "@hobbots/orchestration";
-import { DateTime, Effect, Layer, Option, Stream } from "effect";
+import { DateTime, Deferred, Effect, Layer, Option, Stream } from "effect";
 import { EventBus } from "./event-bus.ts";
 
 /** What the continuation branches share: the backpack's waiting work, and putting it into one turn. */
@@ -51,17 +52,23 @@ const makeCarrier = Effect.gen(function* () {
       );
     });
 
-  const workOf = (deliveries: ReadonlyArray<Delivery>): CarriedWork => {
+  /** What the turn is handed; a claim found lost as its runtime accepts it fails `lost`, which stops the turn. */
+  const workOf = (
+    deliveries: ReadonlyArray<Delivery>,
+    lost: Deferred.Deferred<never, StaleBackpackClaim>,
+  ): CarriedWork => {
     const items: ReadonlyArray<BackpackItem> = deliveries.map((delivery) => delivery.item);
     return {
       text: (as) => arrivalsText(items, as),
       routineOnly: !items.some((item) => item.actionable),
       holding: deliveries.map(({ item, held }) => ({ itemId: item.id, owner: held.owner, token: held.token })),
-      // A claim lost meanwhile is found when the turn ends, which then drops its outcome.
       accepted: (sessionId) =>
         Effect.forEach(deliveries, (delivery) => delivery.accepted(sessionId), { discard: true }).pipe(
-          Effect.catchTag("StaleBackpackClaim", () =>
-            Effect.logWarning("A turn's backpack claim expired before its runtime accepted it"),
+          Effect.catchTag("StaleBackpackClaim", (stale) =>
+            Effect.logWarning("A turn's backpack claim expired before its runtime accepted it; stopping the turn").pipe(
+              Effect.andThen(Deferred.fail(lost, stale)),
+              Effect.asVoid,
+            ),
           ),
         ),
     };
@@ -89,7 +96,13 @@ const makeCarrier = Effect.gen(function* () {
                   run: (deliveries: ReadonlyArray<Delivery>) =>
                     Effect.gen(function* () {
                       ran = true;
-                      const ended = yield* turn.run(turnId, workOf(deliveries));
+                      // A turn whose claim is lost spends no more of the model's budget: it stops,
+                      // and the dispatcher drops its outcome (ADR 019).
+                      const lost = yield* Deferred.make<never, StaleBackpackClaim>();
+                      const ended = yield* Effect.raceFirst(
+                        turn.run(turnId, workOf(deliveries, lost)),
+                        Deferred.await(lost),
+                      );
                       if (ended._tag === "EndedEarly") {
                         return yield* new BackpackTurnFailed({ end: ended.end, diagnostic: ended.diagnostic });
                       }

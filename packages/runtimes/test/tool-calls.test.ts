@@ -539,7 +539,7 @@ describe("grants from command lines", () => {
           operation: ruleOperation(rule),
           rule,
           lifetime: "always",
-          questId: null,
+          taskId: null,
           approvalId: null,
           grantedBy: "user",
           createdAt: "2026-11-01T00:00:00.000Z",

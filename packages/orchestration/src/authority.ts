@@ -11,12 +11,18 @@ import {
 /** What a hob may do on a Task: an answer for every operation, and the folders it may use. */
 export interface Authority {
   readonly decisions: Record<PolicyOperation, PolicyDecision>;
+  /**
+   * The operations whose answer someone gave on purpose: a hob's override, a restriction or a
+   * Delegation that asks or refuses. The rest follow the safety preset, which every hob shares.
+   */
+  readonly fixed: ReadonlyArray<PolicyOperation>;
   readonly folders: ReadonlyArray<string>;
 }
 
 /** Nothing at all: what a hob without readable policy works with, closed and never open. */
 export const NO_AUTHORITY: Authority = {
   decisions: Object.fromEntries(POLICY_OPERATIONS.map((operation) => [operation, "deny"])) as Authority["decisions"],
+  fixed: POLICY_OPERATIONS,
   folders: [],
 };
 
@@ -58,6 +64,9 @@ export const narrowBy = (
       return [operation, given === undefined ? own : narrowest(own, given)];
     }),
   ) as Authority["decisions"],
+  fixed: POLICY_OPERATIONS.filter(
+    (operation) => authority.fixed.includes(operation) || (delegation.overrides[operation] ?? "allow") !== "allow",
+  ),
   folders:
     delegation.folders === null ? authority.folders : sharedFolders(authority.folders, delegation.folders, separator),
 });
@@ -71,6 +80,11 @@ export type Narrowed =
  * The authority a lead gives a member: the lead's own, narrowed by what the brief asks for. A
  * request for anything the lead does not have is refused, never trimmed silently, so the lead
  * knows what the member can do. The member's own policy narrows it again when it runs.
+ *
+ * It holds an answer only where someone gave one on purpose: the lead's own override or
+ * restriction, a Delegation above it, or the brief. Where the lead only follows the safety
+ * preset, which the member follows too, it holds none, so the member's preset Ask stays one a
+ * grant can answer, while an Ask given on purpose stays a restriction no grant answers (ADR 015).
  */
 export const delegatedAuthority = (
   lead: Authority,
@@ -96,10 +110,11 @@ export const delegatedAuthority = (
     _tag: "Narrowed",
     authority: {
       overrides: Object.fromEntries(
-        POLICY_OPERATIONS.map((operation) => {
+        POLICY_OPERATIONS.flatMap((operation) => {
           const want = asked[operation];
           const own = lead.decisions[operation];
-          return [operation, want === undefined ? own : narrowest(own, want)];
+          if (want === undefined) return lead.fixed.includes(operation) ? [[operation, own]] : [];
+          return [[operation, narrowest(own, want)]];
         }),
       ),
       folders: requested?.folders === undefined ? [...lead.folders] : [...requested.folders],

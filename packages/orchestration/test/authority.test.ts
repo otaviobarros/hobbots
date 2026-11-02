@@ -15,6 +15,8 @@ const lead: Authority = {
     "comment-github": "ask",
     "outside-folders": "deny",
   },
+  // Its own override asks before a push; the other Asks are the preset's.
+  fixed: ["push"],
   folders: ["/work/campaign", "/work/site"],
 };
 
@@ -54,13 +56,23 @@ describe("authority only narrows", () => {
     expect(narrowed).toEqual({
       _tag: "Narrowed",
       authority: {
-        overrides: { ...lead.decisions, push: "deny", "edit-files": "ask" },
+        overrides: { push: "deny", "edit-files": "ask" },
         folders: ["/work/site/blog"],
       },
     });
+  });
+
+  it("passes on the lead's answers given on purpose, and leaves the preset's to the member", () => {
+    // The lead's own push Ask stays a restriction no grant answers; its preset Asks are not copied.
     expect(delegatedAuthority(lead, undefined, "/")).toEqual({
       _tag: "Narrowed",
-      authority: { overrides: lead.decisions, folders: lead.folders },
+      authority: { overrides: { push: "ask" }, folders: lead.folders },
+    });
+    const below = narrowBy(lead, { overrides: { "edit-files": "ask", "use-web": "allow" }, folders: null }, "/");
+    expect(below.fixed).toEqual(["edit-files", "push"]);
+    expect(delegatedAuthority(below, undefined, "/")).toEqual({
+      _tag: "Narrowed",
+      authority: { overrides: { "edit-files": "ask", push: "ask" }, folders: lead.folders },
     });
   });
 

@@ -23,6 +23,16 @@ export const operationDecision = (
   );
 
 /**
+ * Whether the hob's override or a restriction answers the operation with Ask or Never: an answer
+ * someone gave on purpose, which no grant answers (ADR 015).
+ */
+export const explicitlyNarrowed = (
+  context: Pick<ToolPolicy, "hob" | "restrictions">,
+  operation: PolicyOperation,
+): boolean =>
+  [context.hob.overrides, ...context.restrictions].some((layer) => (layer[operation] ?? "allow") !== "allow");
+
+/**
  * Whether `after` takes away anything `before` gave: a folder, the tools altogether, the user's
  * signing agent (`signCommits`), or an operation whose answer gets narrower. A turn granted `before`
  * must then stop, since its calls and commands already run under what it was given (PE-008).

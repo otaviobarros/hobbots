@@ -1,6 +1,26 @@
-import { AgentId, ApprovalId, ApprovalRequest, type GrantRule, MessageId, ThreadId } from "@hobbots/domain";
+import {
+  AgentId,
+  ApprovalId,
+  ApprovalRequest,
+  type GrantRule,
+  MessageId,
+  offersThisTask,
+  Quest,
+  QuestId,
+  TaskId,
+  TaskTree,
+  ThreadId,
+} from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { canNarrow, commandText, offersAlways, rulesToSave, ruleText, runnerNote } from "./approval-rules.ts";
+import {
+  canNarrow,
+  commandText,
+  offersAlways,
+  rulesToSave,
+  ruleText,
+  runnerNote,
+  workScope,
+} from "./approval-rules.ts";
 
 const request = (fields: Partial<ApprovalRequest> = {}) =>
   new ApprovalRequest({
@@ -74,6 +94,12 @@ describe("ruleText", () => {
     );
   });
 
+  it("says a This Task rule for the Task, or for the Quest once a party joins", () => {
+    const host = { _tag: "Host", host: "example.com" } as const;
+    expect(ruleText(host, "Pip", "task")).toBe("For this Task, let Pip use example.com");
+    expect(ruleText(host, "Pip", "quest")).toBe("For this Quest, let Pip use example.com");
+  });
+
   it("quotes words the shell would not read back as written", () => {
     expect(commandText(["rm", "*.tmp"])).toBe("rm '*.tmp'");
     expect(commandText(["echo", "it's here", ""])).toBe(`echo 'it'\\''s here' ''`);
@@ -87,5 +113,55 @@ describe("runnerNote", () => {
       "pnpm test runs what this folder's package.json says. If Pip changes that file, the rule runs the new version.",
     );
     expect(runnerNote([{ ...test, words: ["ls", "-la"] }], "Pip")).toBeNull();
+  });
+});
+
+describe("This Task", () => {
+  const TOP = TaskId.make("top");
+  const tree = (quests: ReadonlyArray<Quest>) =>
+    new TaskTree({
+      tasks: [],
+      quests,
+      delegations: [],
+      attempts: [],
+      milestones: [],
+      checkpoints: [],
+      questions: [],
+      artifacts: [],
+      handOffs: [],
+      notes: [],
+      waits: [],
+    });
+  const quest = (taskId: TaskId) =>
+    new Quest({
+      id: QuestId.make(`q-${taskId}`),
+      taskId,
+      leadId: AgentId.make("aldric"),
+      parentQuestId: null,
+      threadId: ThreadId.make("t1"),
+      goal: "Launch",
+      acceptance: [],
+      limits: { maxDepth: 2, deadline: null },
+      depth: 1,
+      state: "active",
+      createdAt: "2026-11-02T00:00:00.000Z",
+      endedAt: null,
+      revision: 1,
+    });
+
+  it("is offered only for a request made in a Task that a rule could answer", () => {
+    expect(offersThisTask(request({ rootTaskId: TOP }))).toBe(true);
+    expect(offersThisTask(request())).toBe(false);
+    expect(offersThisTask(request({ rootTaskId: TOP, onceOnly: true }))).toBe(false);
+    expect(offersThisTask(request({ rootTaskId: TOP, grantable: false }))).toBe(false);
+  });
+
+  it("reads This Quest once a party joins the request's top Task, and This Task before", () => {
+    const asked = request({ rootTaskId: TOP });
+    expect(workScope(asked, undefined)).toBe("task");
+    expect(workScope(asked, tree([]))).toBe("task");
+    // A member's own nested Quest sits on another Task: the top Task still has no party.
+    expect(workScope(asked, tree([quest(TaskId.make("member"))]))).toBe("task");
+    expect(workScope(asked, tree([quest(TOP)]))).toBe("quest");
   });
 });

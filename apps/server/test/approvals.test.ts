@@ -29,6 +29,7 @@ import { ApprovalRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persiste
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Deferred, Effect, Exit, Fiber, Layer, PubSub, Schedule, type Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
 import { type BusEvent, EventBus } from "../src/event-bus.ts";
 
@@ -459,8 +460,9 @@ describe("Ask decisions", () => {
         const turn = yield* approvals.forTurn(
           { agentId: HOB_ID, threadId: thread.id, messageId },
           Effect.succeed(null),
+          Effect.succeed(null),
         );
-        const pending = yield* turn.approvals.request({
+        const pending = yield* (turn.approvals.request as NonNullable<typeof turn.approvals.request>)({
           stepId: "s1",
           tool: "Bash",
           operation: "push",
@@ -507,8 +509,9 @@ describe("Ask decisions", () => {
         const turn = yield* approvals.forTurn(
           { agentId: HOB_ID, threadId: thread.id, messageId },
           Effect.succeed(null),
+          Effect.succeed(null),
         );
-        yield* turn.approvals.request({
+        yield* (turn.approvals.request as NonNullable<typeof turn.approvals.request>)({
           stepId: "s1",
           tool: "Bash",
           operation: "push",
@@ -534,5 +537,44 @@ describe("Ask decisions", () => {
     expect(result.before.map((a) => a.state)).toEqual(["pending"]);
     expect(result.after.map((a) => a.state)).toEqual(["expired"]);
     expect(result.after[0]?.decidedAt).not.toBeNull();
+  });
+
+  // covers PE-007
+  it("[TC-PE-262] a request expires a day after it was asked, however late its turn starts waiting", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const thread = yield* chat.createThread(HOB_ID);
+      const sent = yield* chat.sendPrompt(thread.id, "hello");
+      yield* settled(thread.id);
+      const messageId = (sent.assistantMessage as Message).id;
+      return yield* Effect.gen(function* () {
+        const approvals = yield* ApprovalService;
+        const turn = yield* approvals.forTurn(
+          { agentId: HOB_ID, threadId: thread.id, messageId },
+          Effect.succeed(null),
+        );
+        const pending = yield* turn.approvals.request({
+          stepId: "s1",
+          tool: "Bash",
+          operation: "push",
+          targets: ["origin main"],
+          arguments: { command: "git push origin main" },
+          label: "Running git push origin main",
+          reason: "Pushing asks first.",
+          policyVersion: "r1-test",
+          onceOnly: false,
+          grantable: false,
+          rules: [],
+        });
+        // The request is stored and shown, and a day less a minute passes before the turn waits on it.
+        yield* TestClock.adjust("1439 minutes");
+        const waiting = yield* Effect.forkChild(pending.decision);
+        yield* TestClock.adjust("2 minutes");
+        // Real time, so a wait still counting a full day from its start fails here instead of hanging.
+        return yield* Fiber.join(waiting).pipe(Effect.timeout("2 seconds"), TestClock.withLive);
+      }).pipe(Effect.provide(Layer.mergeAll(Layer.fresh(ApprovalService.layer), Layer.fresh(TestClock.layer()))));
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    expect(result).toEqual({ _tag: "Expired" });
   });
 });

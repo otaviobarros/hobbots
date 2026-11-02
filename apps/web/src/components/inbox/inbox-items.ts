@@ -67,7 +67,8 @@ export const statusText = (approval: ApprovalRequest, now: Date = new Date()): s
       return expiry === "" ? copy.status.pendingNoExpiry : copy.status.pending({ expiry });
     }
     case "approved":
-      return approval.lifetime === "always" ? copy.status.approvedAlways : copy.status.approved;
+      if (approval.lifetime === "always") return copy.status.approvedAlways;
+      return approval.lifetime === "task" ? copy.status.approvedForTask : copy.status.approved;
     case "denied":
       return copy.status.denied;
     default:
