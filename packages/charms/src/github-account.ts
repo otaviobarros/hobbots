@@ -289,8 +289,12 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
       });
 
       const stored: Effect.Effect<UserTokens, GitHubError> = Effect.gen(function* () {
-        if (yield* Ref.get(unsaved)) yield* saveCached.pipe(committing.withPermits(1), Effect.uninterruptible);
-        const cached = yield* Ref.get(cache);
+        // The cache is read under the lock, after any pair the keychain refused is saved, so a pair
+        // that is not in the keychain is never handed out.
+        const cached = yield* Effect.gen(function* () {
+          yield* saveCached;
+          return yield* Ref.get(cache);
+        }).pipe(committing.withPermits(1), Effect.uninterruptible);
         if (Option.isSome(cached)) return cached.value;
         // The keychain is read outside the lock, so what it gave back is kept only if no disconnect
         // or new connection happened meanwhile; otherwise the current sign-in is read again.
@@ -316,9 +320,9 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
           Effect.gen(function* () {
             if ((yield* Ref.get(generation)) !== started) return Option.none<UserTokens>();
             // Another read, or a refresh, may have filled the cache meanwhile: that pair is newer
-            // than this snapshot, whose refresh token may already be retired.
-            const meanwhile = yield* Ref.get(cache);
-            if (Option.isSome(meanwhile)) return meanwhile;
+            // than this snapshot, whose refresh token may already be retired. It is read again
+            // through the cache, which saves it first.
+            if (Option.isSome(yield* Ref.get(cache))) return Option.none<UserTokens>();
             yield* Ref.set(cache, Option.some(tokens));
             return Option.some(tokens);
           }),

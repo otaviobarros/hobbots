@@ -756,63 +756,79 @@ describe("Edge cases of the hub's sign-in", () => {
     expect(result.switched).toMatchObject({ _tag: "Failure", failure: { reason: "signed-out" } });
     expect(result.now).toMatchObject({ _tag: "Failure", failure: { reason: "not-found" } });
   });
-  it("[TC-GEN-037] keeps a refreshed pair when a slower cold read of the old one finishes after it", async () => {
-    const script: Script = { polls: [], refreshes: [tokens("ghu_b", 20 * HOUR)], asked: [] };
-    // After a restart the keychain holds pair A, close to expiry. The first read is slow, so it
-    // finishes after the second call has read A and refreshed it into B.
-    const items = new Map([
-      [
-        "item",
-        Redacted.make(
-          Buffer.from(
-            JSON.stringify({
-              accessToken: "ghu_a",
-              refreshToken: "ghr_ghu_a",
-              expiresAt: 60_000,
-              refreshExpiresAt: null,
-            }),
-          ).toString("base64url"),
-        ),
-      ],
-    ]);
-    const delays = [5, 1];
-    const keychain = Layer.succeed(
-      Keychain,
-      Keychain.of({
-        read: Effect.gen(function* () {
-          const found = Option.fromNullishOr(items.get("item"));
-          yield* Effect.sleep(`${delays.shift() ?? 0} seconds`);
-          return found;
+  /** Two cold reads of an expiring pair A, the first slower; the second call refreshes A into B. */
+  const coldReadsAroundRefresh = (saves: "accepted" | "refused") =>
+    Effect.gen(function* () {
+      const script: Script = { polls: [], refreshes: [tokens("ghu_b", 20 * HOUR)], asked: [] };
+      const items = new Map([
+        [
+          "item",
+          Redacted.make(
+            Buffer.from(
+              JSON.stringify({
+                accessToken: "ghu_a",
+                refreshToken: "ghr_ghu_a",
+                expiresAt: 60_000,
+                refreshExpiresAt: null,
+              }),
+            ).toString("base64url"),
+          ),
+        ],
+      ]);
+      const delays = [5, 1];
+      let refuse = saves === "refused";
+      const keychain = Layer.succeed(
+        Keychain,
+        Keychain.of({
+          read: Effect.gen(function* () {
+            const found = Option.fromNullishOr(items.get("item"));
+            yield* Effect.sleep(`${delays.shift() ?? 0} seconds`);
+            return found;
+          }),
+          write: (secret) =>
+            refuse
+              ? Effect.fail(new KeychainError({ reason: "failed", message: "The keychain is locked." }))
+              : Effect.sync(() => void items.set("item", secret)),
+          remove: Effect.sync(() => void items.delete("item")),
         }),
-        write: (secret) => Effect.sync(() => void items.set("item", secret)),
-        remove: Effect.sync(() => void items.delete("item")),
-      }),
-    );
-    const result = await run(
-      Effect.gen(function* () {
-        const { row, layer } = yield* setup(script, { keychain });
-        yield* Ref.set(row, { source: "app" as const, login: "otaviobarros", connectedAt: "2026-11-01T00:00:00.000Z" });
-        return yield* Effect.gen(function* () {
-          const credential = yield* GitHubCredential;
-          // Both start cold: the first read takes 5 seconds, the second 1.
-          const slow = yield* Effect.forkChild(credential.tokenFor(HOB));
-          yield* Effect.yieldNow;
-          const fast = yield* Effect.forkChild(credential.tokenFor(HOB));
-          yield* Effect.yieldNow;
-          yield* wait(6);
-          const quick = Redacted.value(yield* Fiber.join(fast));
-          const late = Redacted.value(yield* Fiber.join(slow));
-          return {
-            quick,
-            late,
-            next: Redacted.value(yield* credential.tokenFor(HOB)),
-            connected: yield* credential.connected,
-          };
-        }).pipe(Effect.provide(layer), Effect.scoped);
-      }),
-    );
-    expect(result).toEqual({ quick: "ghu_b", late: "ghu_b", next: "ghu_b", connected: true });
+      );
+      const { row, layer } = yield* setup(script, { keychain });
+      yield* Ref.set(row, { source: "app" as const, login: "otaviobarros", connectedAt: "2026-11-01T00:00:00.000Z" });
+      const answer = (call: Effect.Effect<Redacted.Redacted<string>, unknown>) =>
+        Effect.result(call).pipe(Effect.map((r) => (r._tag === "Success" ? Redacted.value(r.success) : "failed")));
+      const result = yield* Effect.gen(function* () {
+        const credential = yield* GitHubCredential;
+        const slow = yield* Effect.forkChild(answer(credential.tokenFor(HOB)));
+        yield* Effect.yieldNow;
+        const fast = yield* Effect.forkChild(answer(credential.tokenFor(HOB)));
+        yield* Effect.yieldNow;
+        yield* wait(6);
+        const quick = yield* Fiber.join(fast);
+        const late = yield* Fiber.join(slow);
+        // The keychain takes the pair again.
+        refuse = false;
+        return {
+          quick,
+          late,
+          next: yield* answer(credential.tokenFor(HOB)),
+          connected: yield* credential.connected,
+        };
+      }).pipe(Effect.provide(layer), Effect.scoped);
+      const held = Buffer.from(Redacted.value(items.get("item") ?? Redacted.make("")), "base64url").toString();
+      return { ...result, held, refreshes: script.asked.filter((asked) => asked.startsWith("refresh")) };
+    });
+
+  it("[TC-GEN-037] keeps a refreshed pair when a slower cold read of the old one finishes after it, and uses it only once saved", async () => {
+    const saved = await run(coldReadsAroundRefresh("accepted"));
+    expect(saved).toMatchObject({ quick: "ghu_b", late: "ghu_b", next: "ghu_b", connected: true });
+    expect(saved.held).toContain("ghr_ghu_b");
     // A's refresh token was used once; the slow read never brought it back.
-    expect(script.asked.filter((asked) => asked.startsWith("refresh"))).toEqual(["refresh ghr_ghu_a"]);
+    expect(saved.refreshes).toEqual(["refresh ghr_ghu_a"]);
+
+    // The keychain refuses B: neither call gets it until the keychain has saved it.
+    const unsaved = await run(coldReadsAroundRefresh("refused"));
+    expect(unsaved).toMatchObject({ quick: "failed", late: "failed", next: "ghu_b", connected: true });
+    expect(unsaved.held).toContain("ghr_ghu_b");
+    expect(unsaved.refreshes).toEqual(["refresh ghr_ghu_a"]);
   });
 });
