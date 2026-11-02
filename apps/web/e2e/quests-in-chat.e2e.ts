@@ -55,7 +55,8 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await asks.getByRole("textbox", { name: "Your answer to Ada" }).fill("Yes, Dec 12 for international orders.");
   await asks.getByRole("button", { name: "Send answer" }).click();
   await expect(asks).toContainText("You answered: Yes, Dec 12 for international orders.");
-  await expect(card).toContainText("Aldric finished this", { timeout: 15_000 });
+  // Aldric finishes only once his chat has read each member's result, a paced fake reply apiece.
+  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
   await expect(strip).toBeHidden();
   await expect(page.getByText("The Black Friday campaign is ready.")).toBeVisible();
 

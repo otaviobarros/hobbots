@@ -58,7 +58,8 @@ test("[TC-CH-190] the Quest tab shows the whole tree live, holds its controls an
   await expect(tasks.getByRole("button", { name: /Ada · Build the campaign/ })).toContainText("Done", {
     timeout: 15_000,
   });
-  await expect(room.getByRole("button", { name: "Cancel Quest" })).toHaveCount(0, { timeout: 15_000 });
+  // The Quest ends only once Aldric's chat has read each member's result, a paced fake reply apiece.
+  await expect(room.getByRole("button", { name: "Cancel Quest" })).toHaveCount(0, { timeout: 30_000 });
 
   // Unpinned, it leaves the other thread's tab.
   await room.getByRole("button", { name: "Pin" }).click();
