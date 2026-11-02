@@ -46,6 +46,8 @@ export class TaskFile extends Schema.Class<TaskFile>("TaskFile")({
   /** Its size now, or the size the Task left when it is gone. */
   size: Schema.NullOr(Schema.Number),
   now: TaskFileNow,
+  /** The SHA-256 of what it holds now, a preview's version: null when it is gone. */
+  hash: Schema.NullOr(Schema.String),
   /** Why its contents are not served, or null when they are. */
   notServed: Schema.NullOr(FileNotServed),
 }) {}
@@ -286,6 +288,7 @@ export const taskFile = (candidate: FileCandidate, found: FileNow | null): TaskF
     preview: notServed === "secret" ? "none" : previewOf(candidate.path),
     size,
     now,
+    hash: found?.hash ?? null,
     notServed,
   });
 };
