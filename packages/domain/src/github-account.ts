@@ -39,3 +39,39 @@ export const GitHubReachableRepository = Schema.Struct({
   private: Schema.Boolean,
 });
 export type GitHubReachableRepository = typeof GitHubReachableRepository.Type;
+
+/**
+ * A hob's own GitHub App (ADR 022): made for one hob from a manifest, owned by the user's personal
+ * account, so the hob acts on GitHub as its bot, `<slug>[bot]`. Only its identity is kept here; its
+ * private key lives in the OS keychain on the hub, and GitHub's other secrets are never kept.
+ */
+export const HobGitHubApp = Schema.Struct({
+  /** GitHub's app ID. */
+  appId: Schema.Number,
+  /** The app's client ID, which signs the hub's JSON Web Tokens for it. */
+  clientId: Schema.String,
+  /** The app's name in its `github.com/apps/<slug>` address. */
+  slug: Schema.String,
+  /** The personal account that owns the app, and the only one it can be installed on. */
+  owner: Schema.String,
+  /** The bot's user ID, for its commit email; null when GitHub did not give it when the app was made. */
+  botUserId: Schema.NullOr(Schema.Number),
+  /** The app's page on GitHub. */
+  htmlUrl: Schema.String,
+  connectedAt: Schema.String,
+});
+export type HobGitHubApp = typeof HobGitHubApp.Type;
+
+/** The bot account GitHub gives an app, such as `frodo-hobbots[bot]`. */
+export const hobAppBot = (app: Pick<HobGitHubApp, "slug">) => `${app.slug}[bot]`;
+
+/** Where a hob's app is installed: the account, and whether it reaches all of its repositories or some. */
+export const HobGitHubAppInstallation = Schema.Struct({
+  id: Schema.Number,
+  account: Schema.String,
+  repositorySelection: Schema.Literals(["all", "selected"]),
+  /** Where the user changes which repositories it reaches. */
+  htmlUrl: Schema.String,
+  suspended: Schema.Boolean,
+});
+export type HobGitHubAppInstallation = typeof HobGitHubAppInstallation.Type;

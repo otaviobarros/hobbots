@@ -255,6 +255,27 @@ const summary = (item: typeof ItemJson.Type): GitHubItemSummary => ({
   updatedAt: item.updated_at,
 });
 
+/** Sends one request to GitHub's REST API with the headers GitHub asks for, giving up after 20 seconds. */
+export const sendToGitHub = (
+  http: HttpClient.HttpClient,
+  request: HttpClientRequest.HttpClientRequest,
+  what: string,
+): Effect.Effect<HttpClientResponse.HttpClientResponse, GitHubError> =>
+  http
+    .execute(
+      request.pipe(
+        HttpClientRequest.setHeaders({
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": "Hobbots",
+        }),
+      ),
+    )
+    .pipe(
+      Effect.timeout("20 seconds"),
+      Effect.mapError(() => new GitHubError({ reason: "failed", message: `GitHub did not answer for ${what}.` })),
+    );
+
 /** GitHub's REST API over `fetch` at `api`, signed in as the hob's GitHub credential. */
 export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
   Layer.effect(
@@ -264,21 +285,13 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
       const http = yield* HttpClient.HttpClient;
 
       const send = (token: Redacted.Redacted<string>, path: string, params: Record<string, string>, what: string) =>
-        http
-          .execute(
-            HttpClientRequest.get(`${api}${path}`, { urlParams: params }).pipe(
-              HttpClientRequest.bearerToken(Redacted.value(token)),
-              HttpClientRequest.setHeaders({
-                Accept: "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-                "User-Agent": "Hobbots",
-              }),
-            ),
-          )
-          .pipe(
-            Effect.timeout("20 seconds"),
-            Effect.mapError(() => new GitHubError({ reason: "failed", message: `GitHub did not answer for ${what}.` })),
-          );
+        sendToGitHub(
+          http,
+          HttpClientRequest.get(`${api}${path}`, { urlParams: params }).pipe(
+            HttpClientRequest.bearerToken(Redacted.value(token)),
+          ),
+          what,
+        );
 
       const read = <S extends Schema.Constraint>(
         agentId: AgentId,
