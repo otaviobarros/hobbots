@@ -34,6 +34,7 @@ import { Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
 import { ServerConfig } from "./config.ts";
+import { ContinuationsLive, WakeOnArrival } from "./continuations.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
@@ -104,8 +105,8 @@ const ServerLive = Layer.unwrap(
             HobService.layer,
             PermissionSummary.layer,
             JournalCompaction,
-            // At start, it expires the claims an earlier process held on backpack items (ADR 019).
-            Dispatcher.layer().pipe(Layer.provide(DispatcherHostLive)),
+            // Work that arrives for a hob wakes its thread (ADR 019).
+            WakeOnArrival,
             config.runtime === "fake" && config.fakeQuest === "black-friday"
               ? FakeQuestLive(FAKE_QUEST_STEP)
               : Layer.empty,
@@ -113,6 +114,13 @@ const ServerLive = Layer.unwrap(
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))
+      // Before the chat service: every turn you did not start with Send starts from the backpack, and
+      // at start the dispatcher expires the claims an earlier process held (ADR 019).
+      .pipe(
+        Layer.provideMerge(
+          ContinuationsLive.pipe(Layer.provideMerge(Dispatcher.layer()), Layer.provideMerge(DispatcherHostLive)),
+        ),
+      )
       // Before the chat service: its turns offer the Task tools (the hub checks every call), and a
       // Task's steps run in their own sessions while the hob keeps chatting (ADR 018).
       .pipe(

@@ -2,6 +2,7 @@ import { ApprovalRepository } from "@hobbots/agents";
 import { ApprovalRequest, type ApprovalState, type Grant } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
+import { UnwaitedApprovals } from "./backpack-rows.ts";
 import { grantRow } from "./grants.ts";
 import { makeJournaled } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
@@ -111,7 +112,12 @@ export const ApprovalRepositoryLive = Layer.effect(
 
     // The state check lets a decision and an expiry race safely: only one moves it out of `from`,
     // and only that one saves the decision's grants (ADR 015).
-    const resolve = (input: ApprovalRequest, from: ApprovalState, grants: ReadonlyArray<Grant> = []) =>
+    const resolve = (
+      input: ApprovalRequest,
+      from: ApprovalState,
+      grants: ReadonlyArray<Grant> = [],
+      options: { readonly unwaited?: boolean } = {},
+    ) =>
       journaled(1 + grants.length, (revision) =>
         Effect.gen(function* () {
           const approval = new ApprovalRequest({ ...input, revision });
@@ -135,7 +141,7 @@ export const ApprovalRepositoryLive = Layer.effect(
             ],
           };
         }),
-      );
+      ).pipe(Effect.provideService(UnwaitedApprovals, options.unwaited === true));
 
     return ApprovalRepository.of({
       find: (id) => find(id).pipe(Effect.orDie),

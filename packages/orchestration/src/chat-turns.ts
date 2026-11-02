@@ -51,6 +51,16 @@ export const makeChatResolver = (
 ) => {
   /** The Task the turn was briefed on, and the backpack items the briefing showed it. */
   let briefed: { readonly taskId: TaskId; readonly carried: ReadonlyArray<CarriedItem> } | null = null;
+  /**
+   * What the turn carries on its Task: the items it holds claims on, and those its briefing showed
+   * unclaimed, a held claim winning over the same item shown.
+   */
+  const carriedBy = (taskId: TaskId): ReadonlyArray<CarriedItem> => {
+    const holding = turn.holding ?? [];
+    const shown = briefed?.taskId === taskId ? briefed.carried : [];
+    const held = new Set(holding.map((each) => each.itemId));
+    return [...holding, ...shown.filter((each) => !held.has(each.itemId))];
+  };
   return {
     /**
      * What the turn's session is told of the open Task, read as the turn starts. The briefing shows
@@ -108,11 +118,7 @@ export const makeChatResolver = (
             ),
           );
         }
-        const caller = {
-          agentId: turn.agentId,
-          taskId: task.id,
-          carried: briefed?.taskId === task.id ? briefed.carried : [],
-        };
+        const caller = { agentId: turn.agentId, taskId: task.id, carried: carriedBy(task.id) };
         const own = ownAttempt !== null && task.currentAttemptId === ownAttempt;
         if (own || !NEEDS_ATTEMPT.has(name) || (name !== "complete_task" && task.currentAttemptId !== null)) {
           return { caller, entries: journal.entries, attemptId: null };

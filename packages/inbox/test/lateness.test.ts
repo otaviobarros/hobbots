@@ -34,11 +34,12 @@ const task = (id: string, ownerId: AgentId, parentId: string | null, state: Task
     revision,
   });
 
-const item = (recipientId: AgentId, taskId: string | null) =>
+/** A result reports up to the Task above; a message is about the recipient's own Task. */
+const item = (recipientId: AgentId, taskId: string | null, kind: "result" | "message" = "result") =>
   new BackpackItem({
     id: BackpackItemId.make("i1"),
     recipientId,
-    kind: "result",
+    kind,
     actionable: true,
     priority: 1,
     state: "pending",
@@ -64,22 +65,28 @@ describe("lateness", () => {
 
   it("checks a lead's item against the nearest Task it owns, and finds it current while that Task runs", () => {
     expect(lateness(item(ALDRIC, "copy"), [task("campaign", ALDRIC, null), copy])).toBeNull();
-    expect(lateness(item(QUILL, "copy"), [task("campaign", ALDRIC, null), task("copy", QUILL, "campaign")])).toBeNull();
+    expect(
+      lateness(item(QUILL, "copy", "message"), [task("campaign", ALDRIC, null), task("copy", QUILL, "campaign")]),
+    ).toBeNull();
   });
 
   it("finds an item late once the Task it is checked against has ended, at that Task's version", () => {
     expect(lateness(item(ALDRIC, "copy"), [task("campaign", ALDRIC, null, "cancelled", 7), copy])).toEqual({
       taskRevision: 7,
     });
-    expect(lateness(item(QUILL, "copy"), [task("campaign", ALDRIC, null), copy])).toEqual({ taskRevision: 4 });
+    expect(lateness(item(QUILL, "copy", "message"), [task("campaign", ALDRIC, null), copy])).toEqual({
+      taskRevision: 4,
+    });
   });
 
   it("finds an item late once its recipient no longer owns any Task on its way up, as after a reassignment", () => {
     const reassigned = task("copy", ADA, "campaign", "active", 5);
-    expect(lateness(item(QUILL, "copy"), [task("campaign", ALDRIC, null), reassigned])).toEqual({ taskRevision: 5 });
+    expect(lateness(item(QUILL, "copy", "message"), [task("campaign", ALDRIC, null), reassigned])).toEqual({
+      taskRevision: 5,
+    });
   });
 
   it("never finds an item outside any Task late", () => {
-    expect(lateness(item(QUILL, null), [])).toBeNull();
+    expect(lateness(item(QUILL, null, "message"), [])).toBeNull();
   });
 });

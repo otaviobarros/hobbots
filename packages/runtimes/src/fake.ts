@@ -278,6 +278,22 @@ export const scriptedHubEvents = (request: PromptRequest, answers: Array<string>
   );
 };
 
+/**
+ * A prompt line `fake:then <line>` keeps `<line>` for the session's next turn, which runs it as if
+ * its own prompt began with it. So a continuation, whose prompt Hobbots writes (ADR 019), can be
+ * scripted from the turn before it: `fake:then fake:hub complete_task {…}` completes the Task in
+ * the turn that the work arriving starts. Nested, `fake:then fake:then …` reaches further turns.
+ */
+export const FAKE_THEN_DIRECTIVE = "fake:then";
+
+/** The lines a prompt keeps for its session's next turn. */
+const keptForNext = (prompt: string) =>
+  prompt
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith(`${FAKE_THEN_DIRECTIVE} `))
+    .map((line) => line.slice(FAKE_THEN_DIRECTIVE.length + 1).trim());
+
 /** How a directive in the prompt makes the fake end its reply. */
 const fakeEnding = (prompt: string) =>
   prompt.startsWith(FAKE_DIRECTIVES.cutOff)
@@ -309,7 +325,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   const availability = options.availability ?? "ready";
   const sandbox = options.sandbox ?? "on";
   const enforcement = fakeEnforcement(sandbox);
-  const sessions = new Map<string, string>();
+  // Each session's instructions, and the lines its previous turn kept for its next.
+  const sessions = new Map<string, { readonly instructions: string; readonly later: ReadonlyArray<string> }>();
   const sendPrompt = (request: PromptRequest): Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached> => {
     // A brain that is not ready cannot start a turn, as with the real runtime.
     if (availability !== "ready") {
@@ -318,12 +335,15 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     const sessionId =
       request.sessionId ?? `fake-${runtime === "claude-code" ? "" : `${runtime}-`}${crypto.randomUUID()}`;
     const known = sessions.get(sessionId);
-    const followed = known === undefined || request.instructionsChanged ? request.instructions : known;
-    sessions.set(sessionId, followed);
+    const followed = known === undefined || request.instructionsChanged ? request.instructions : known.instructions;
+    // What the previous turn kept runs ahead of this turn's own prompt.
+    const later = known?.later ?? [];
+    const scripted = [...later, request.prompt].join("\n");
+    sessions.set(sessionId, { instructions: followed, later: keptForNext(scripted) });
     // A briefing is echoed ahead of the prompt, so a test can see what the session was told.
     const told = request.briefing ? `${request.briefing}\n\n${request.prompt}` : request.prompt;
     const echo = request.prompt === fakeInstructionsPrompt ? followed : `Echo: ${told}`;
-    const ending = fakeEnding(request.prompt);
+    const ending = fakeEnding(scripted);
     const answers: Array<string> = [];
     // The reply ends with what the hub answered its scripted calls, known once they are made.
     const written = Stream.suspend(() => {
@@ -344,8 +364,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
       { _tag: "StepStarted", id: "thinking-1", kind: "thinking", label: "Thinking" },
       { _tag: "StepEnded", id: "thinking-1" },
     ]).pipe(
-      Stream.concat(scriptedToolEvents(request, options.engine, sandbox)),
-      Stream.concat(scriptedHubEvents(request, answers)),
+      Stream.concat(scriptedToolEvents({ ...request, prompt: scripted }, options.engine, sandbox)),
+      Stream.concat(scriptedHubEvents({ ...request, prompt: scripted }, answers)),
       Stream.concat(written),
       Stream.concat(failure),
     );

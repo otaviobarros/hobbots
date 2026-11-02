@@ -1,4 +1,4 @@
-import type { AgentId, MessageId, RuntimeKind, ThreadId } from "@hobbots/domain";
+import type { AgentId, CarriedItem, MessageId, RuntimeKind, ThreadId } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 import type { HubTools } from "./runtime.ts";
 
@@ -12,6 +12,11 @@ export interface ChatTurn {
   readonly prompt: string;
   readonly runtime: RuntimeKind;
   readonly configVersion: number;
+  /**
+   * The backpack items the turn was given under claims it holds (ADR 019), as a continuation is:
+   * its `complete_task` consumes them with the items its briefing shows.
+   */
+  readonly holding?: ReadonlyArray<CarriedItem>;
 }
 
 /** How a chat turn ended, for the Attempt it may have started on its Task. */
