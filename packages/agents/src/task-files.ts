@@ -3,6 +3,7 @@ import {
   type AttemptActivity,
   AttemptFiles,
   type AttemptId,
+  type FileCandidate,
   type FileNow,
   fileCandidates,
   type PlacedArtifact,
@@ -53,6 +54,21 @@ export interface ServedFile {
 export type FilePurpose = "preview" | "download";
 
 const encoder = new TextEncoder();
+
+/** How much more than a preview shows is read and redacted with it: longer than any credential. */
+const REDACTION_MARGIN = 64 * 1024;
+
+/**
+ * Redacted text cut to what a preview shows: at most its first MiB, ending at a line break when
+ * there is one, so the cut never falls inside what redaction left of a secret.
+ */
+export const previewText = (redacted: string): string => {
+  const bytes = encoder.encode(redacted);
+  if (bytes.length <= PREVIEW_TEXT_BYTES) return redacted;
+  const cut = new TextDecoder().decode(bytes.subarray(0, PREVIEW_TEXT_BYTES)).replace(/\uFFFD$/, "");
+  const line = cut.lastIndexOf("\n");
+  return line < 0 ? cut : cut.slice(0, line + 1);
+};
 const decoder = new TextDecoder();
 
 /** Whether `location` is `folder` or inside it, by spelling: both are canonical. */
@@ -107,44 +123,55 @@ export class TaskFiles extends Context.Service<
             ),
         ).pipe(Effect.map((placed) => placed.flatMap((each) => (Option.isSome(each) ? [each.value] : []))));
 
-      const listFor = (activity: AttemptActivity) =>
+      /** The files the Attempt names that are inside the hob's folders now, before any is looked at. */
+      const candidatesOf = (activity: AttemptActivity) =>
         Effect.gen(function* () {
           const folders = yield* foldersOf(activity);
           const placed = yield* placedArtifacts(activity, folders);
           // A change recorded in a folder the hob no longer works in is not listed.
-          const candidates = fileCandidates(activity, placed).filter((candidate) =>
+          return fileCandidates(activity, placed).filter((candidate) =>
             folders.some((folder) => within(candidate.folder, folder)),
           );
-          const listed = yield* Effect.forEach(
-            candidates,
-            (candidate) =>
-              Effect.map(files.look(candidate.folder, candidate.path), (found) =>
-                taskFile(candidate, Option.getOrNull(found)),
-              ),
-            { concurrency: 8 },
-          );
-          return new AttemptFiles({ attemptId: activity.attempt.id, files: listed });
         });
 
-      const list = (attemptId: AttemptId) => Effect.flatMap(readAttemptActivity(activities, attemptId), listFor);
+      const fileOf = (candidate: FileCandidate) =>
+        Effect.map(files.look(candidate.folder, candidate.path), (found) =>
+          taskFile(candidate, Option.getOrNull(found)),
+        );
+
+      const list = (attemptId: AttemptId) =>
+        Effect.gen(function* () {
+          const activity = yield* readAttemptActivity(activities, attemptId);
+          const candidates = yield* candidatesOf(activity);
+          const listed = yield* Effect.forEach(candidates, fileOf, { concurrency: 8 });
+          return new AttemptFiles({ attemptId, files: listed });
+        });
 
       const serve = (attemptId: AttemptId, fileId: TaskFileId, purpose: FilePurpose) =>
         Effect.gen(function* () {
           const missing = new ActivityDetailNotFound({ attemptId });
-          const listed = yield* list(attemptId).pipe(Effect.mapError(() => missing));
-          const file = listed.files.find((each) => each.id === fileId);
-          if (file === undefined || file.notServed !== null || file.now === "gone" || file.size === null) {
-            return yield* missing;
-          }
+          const activity = yield* readAttemptActivity(activities, attemptId).pipe(Effect.mapError(() => missing));
+          // Only the file asked for is looked at: serving one never reads every other.
+          const candidate = (yield* candidatesOf(activity)).find((each) => each.id === fileId);
+          if (candidate === undefined) return yield* missing;
+          const file = yield* fileOf(candidate);
+          if (file.notServed !== null || file.now === "gone" || file.size === null) return yield* missing;
           const mediaType = purpose === "preview" ? previewMediaType(file.path) : "application/octet-stream";
           if (mediaType === null) return yield* missing;
           const text = file.preview === "text" || file.preview === "markdown";
-          const limit = purpose === "preview" && text ? Math.min(file.size, PREVIEW_TEXT_BYTES) : file.size;
-          const bytes = yield* files.read(file.folder, file.path, limit);
+          if (purpose === "download" || !text) {
+            const bytes = yield* files.read(file.folder, file.path, file.size);
+            return Option.isNone(bytes) ? yield* missing : { file, bytes: bytes.value, mediaType };
+          }
+          // Text is shown redacted, as a tool's output is (ADR 023). It is redacted before it is cut,
+          // over more than is shown, so a secret that runs across the cut is never shown in part.
+          const bytes = yield* files.read(
+            file.folder,
+            file.path,
+            Math.min(file.size, PREVIEW_TEXT_BYTES + REDACTION_MARGIN),
+          );
           if (Option.isNone(bytes)) return yield* missing;
-          if (purpose === "download" || !text) return { file, bytes: bytes.value, mediaType };
-          // Text is shown redacted, as a tool's output is (ADR 023).
-          return { file, bytes: encoder.encode(redactor.text(decoder.decode(bytes.value))), mediaType };
+          return { file, bytes: encoder.encode(previewText(redactor.text(decoder.decode(bytes.value)))), mediaType };
         });
 
       return TaskFiles.of({ list, serve });

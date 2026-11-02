@@ -15,6 +15,7 @@ import {
   FileChange,
   FileChangeId,
   type FileChangeKind,
+  PREVIEW_TEXT_BYTES,
   TaskId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive, SetupRepository } from "@hobbots/persistence";
@@ -47,6 +48,11 @@ const ATTEMPT = AttemptId.make("a1");
 const HUB_SECRET = "hub-credential-0123456789";
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 const PDF = "%PDF-1.4\n%%EOF\n";
+/** A log longer than a preview shows, with the hub's credential across the point where the preview is cut. */
+const LONG = `${"x".repeat(99)}\n`
+  .repeat(Math.floor((PREVIEW_TEXT_BYTES - 30) / 100))
+  .padEnd(PREVIEW_TEXT_BYTES - 20, "y");
+const LONG_LOG = `${LONG}\ntoken ${HUB_SECRET}\nmore\n`;
 
 const sha256 = (data: string | Uint8Array) => createHash("sha256").update(data).digest("hex");
 
@@ -104,6 +110,7 @@ const activity = new AttemptActivity({
     change(".env", "edited", "API_TOKEN=x\n"),
     change("escape.txt", "added", "outside\n"),
     change("old.txt", "added", "old\n", former),
+    change("long.log", "added", LONG_LOG),
   ],
   scans: [],
   artifacts: [
@@ -173,6 +180,7 @@ beforeAll(async () => {
   write(project, ".env", "API_TOKEN=x\n");
   write(outside, "secret.txt", "Not for hobs.\n");
   write(former, "old.txt", "old\n");
+  write(project, "long.log", LONG_LOG);
   // A link the Task left in its folder, to a file outside every folder of the hob's.
   symlinkSync(join(outside, "secret.txt"), join(project, "escape.txt"));
   runtime = ManagedRuntime.make(App);
@@ -221,12 +229,16 @@ describe("a Task's files", () => {
       // A file the Task left that is now a link leading out of the folder is not read: it is gone.
       { path: "escape.txt", label: null, origin: "added", preview: "text", now: "gone" },
       { path: "later.txt", label: null, origin: "added", preview: "text", now: "gone" },
+      { path: "long.log", label: null, origin: "added", preview: "text", now: "same" },
       { path: "notes.txt", label: null, origin: "edited", preview: "text", now: "changed" },
       { path: "page.html", label: null, origin: "added", preview: "text", now: "same" },
     ]);
     const report = listed.files[0];
     expect(report).toMatchObject({ folder: project, location: join(project, "report.md"), notServed: null });
     expect(report?.size).toBe(`# Report\n\nUsed ${HUB_SECRET}.\n`.length);
+    // What it holds now versions its preview; a file no longer there has none.
+    expect(report?.hash).toBe(sha256(`# Report\n\nUsed ${HUB_SECRET}.\n`));
+    expect(listed.files.find((file) => file.path === "later.txt")?.hash).toBeNull();
     // A file the Task deleted is not one it made or touched to show.
     expect(listed.files.some((file) => file.path === "removed.txt")).toBe(false);
   });
@@ -246,6 +258,12 @@ describe("a Task's files", () => {
     expect(text.headers.get("content-type")).toBe("text/plain; charset=utf-8");
     expect(text.headers.get("x-content-type-options")).toBe("nosniff");
     expect(await text.text()).toBe("# Report\n\nUsed [redacted: HUB_TOKEN].\n");
+
+    // A long text is redacted before it is cut, so no part of a credential across the cut is shown.
+    const long = await (await get("long.log")).text();
+    expect(new TextEncoder().encode(long).length).toBeLessThanOrEqual(PREVIEW_TEXT_BYTES);
+    expect(long.startsWith(LONG.slice(0, 1000))).toBe(true);
+    for (let end = 4; end <= HUB_SECRET.length; end += 1) expect(long).not.toContain(HUB_SECRET.slice(0, end));
 
     const download = await get("report.md", { download: true });
     expect(download.headers.get("content-type")).toBe("application/octet-stream");
