@@ -700,17 +700,60 @@ describe("Edge cases of the hub's sign-in", () => {
         return yield* Effect.gen(function* () {
           const connection = yield* GitHubConnection;
           const credential = yield* GitHubCredential;
-          const reading = yield* Effect.forkChild(credential.tokenFor(HOB));
+          const reading = yield* Effect.forkChild(Effect.result(credential.tokenFor(HOB)));
           yield* wait(1);
           yield* connection.disconnect;
           yield* connection.connect;
           // B connects at its first poll, 5 seconds on; A's read finishes after that.
           yield* wait(10);
-          const during = Redacted.value(yield* Fiber.join(reading));
+          const during = yield* Fiber.join(reading);
           return { during, after: Redacted.value(yield* credential.tokenFor(HOB)) };
         }).pipe(Effect.provide(layer), Effect.scoped);
       }),
     );
-    expect(result).toEqual({ during: "ghu_b", after: "ghu_b" });
+    // The call that began under A gets neither A's token nor B's; the next call gets B's.
+    expect(result.during).toMatchObject({ _tag: "Failure", failure: { reason: "signed-out" } });
+    expect(result.after).toBe("ghu_b");
+  });
+  it("[TC-GEN-036] never lets a call checked under one sign-in act with another", async () => {
+    const script: Script = {
+      polls: [{ _tag: "Granted", tokens: tokens("ghu_app") }],
+      refreshes: [],
+      asked: [],
+      installed: ["otaviobarros/hobbots"],
+    };
+    const result = await run(
+      Effect.gen(function* () {
+        const { layer } = yield* setup(script, { local: { gh: "gho_fromTheCli0000000000000" } });
+        return yield* Effect.gen(function* () {
+          const connection = yield* GitHubConnection;
+          const credential = yield* GitHubCredential;
+          yield* connection.use("gh");
+          // The gh sign-in reaches every repository, so a public one the app is not installed on
+          // passes; the call then waits while the user switches to the app.
+          const call = yield* Effect.forkChild(
+            Effect.result(
+              credential.onRepository(
+                HOB,
+                { owner: "torvalds", name: "linux" },
+                Effect.sleep("10 seconds").pipe(Effect.andThen(credential.tokenFor(HOB))),
+              ),
+            ),
+          );
+          yield* wait(1);
+          yield* connection.connect;
+          yield* wait(12);
+          const switched = yield* Fiber.join(call);
+          // Under the app, the same repository is refused before anything runs.
+          const now = yield* Effect.result(
+            credential.onRepository(HOB, { owner: "torvalds", name: "linux" }, credential.tokenFor(HOB)),
+          );
+          return { switched, now, state: yield* connection.state };
+        }).pipe(Effect.provide(layer), Effect.scoped);
+      }),
+    );
+    expect(result.state).toMatchObject({ _tag: "Connected", account: { source: "app" } });
+    expect(result.switched).toMatchObject({ _tag: "Failure", failure: { reason: "signed-out" } });
+    expect(result.now).toMatchObject({ _tag: "Failure", failure: { reason: "not-found" } });
   });
 });

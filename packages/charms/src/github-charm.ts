@@ -137,11 +137,15 @@ export const GitHubCharmTools = Layer.effect(
         if (verdict.decision === "ask")
           return yield* new Refused({ message: `${verdict.reason.message} ${GITHUB_UNASKABLE}` });
         if (verdict.decision === "deny") return yield* new Refused({ message: verdict.reason.message });
-        // The app's sign-in also reads public repositories it is not installed on (ADR 020).
-        return yield* credential.reaches(turn.agentId, repository).pipe(
-          Effect.andThen(() => read(turn.agentId, name, input, repository)),
-          Effect.mapError((error) => new Refused({ message: error.message })),
-        );
+        // The app's sign-in also reads public repositories it is not installed on (ADR 020), and
+        // the read must use the sign-in that check was made for.
+        return yield* credential
+          .onRepository(
+            turn.agentId,
+            repository,
+            Effect.suspend(() => read(turn.agentId, name, input, repository)),
+          )
+          .pipe(Effect.mapError((error) => new Refused({ message: error.message })));
       }).pipe(
         Effect.match({
           onFailure: (refused): HubToolAnswer => ({ text: turn.redactor.text(refused.message), refused: true }),

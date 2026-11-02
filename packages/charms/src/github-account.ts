@@ -108,6 +108,16 @@ export class GitHubCredential extends Context.Service<
      * listed them within the last minute. The other sign-ins reach every repository they can see.
      */
     readonly reaches: (agentId: AgentId, repository: GitHubRepository) => Effect.Effect<void, GitHubError>;
+    /**
+     * Runs `use` on `repository` only if the sign-in reaches it, and pins `use` to that sign-in:
+     * if the user disconnects or connects another one meanwhile, every token `use` asks for fails
+     * `signed-out`, so a check made for one sign-in never lets another act.
+     */
+    readonly onRepository: <A, E, R>(
+      agentId: AgentId,
+      repository: GitHubRepository,
+      use: Effect.Effect<A, E, R>,
+    ) => Effect.Effect<A, E | GitHubError, R>;
   }
 >()("@hobbots/charms/GitHubCredential") {}
 
@@ -188,6 +198,16 @@ interface Pending {
   readonly expiresAt: number;
   readonly fiber: Fiber.Fiber<void>;
 }
+
+/** The sign-in a call was checked under, by its generation; null outside `onRepository`. */
+const PinnedGeneration = Context.Reference<number | null>("@hobbots/charms/PinnedGeneration", {
+  defaultValue: () => null,
+});
+
+const changed = new GitHubError({
+  reason: "signed-out",
+  message: "The hub's GitHub sign-in changed during this call, so it did not run. Try again.",
+});
 
 /** The connected account, its keychain item and the device flow, as both services. */
 export const GitHubAccountLive = (config: GitHubAppConfig) =>
@@ -389,16 +409,24 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
           ),
         );
 
+      /** The generation a call runs under: the one it was pinned to, which must still be current. */
+      const signInOfCall = Effect.gen(function* () {
+        const pinned = yield* PinnedGeneration;
+        const current = yield* Ref.get(generation);
+        if (pinned !== null && pinned !== current) return yield* changed;
+        return current;
+      });
+
       // Today every hob uses the user's own account; a hob's own identity (#221) would be chosen here.
       const tokenFor = (agentId: AgentId | null): Effect.Effect<Redacted.Redacted<string>, GitHubError> =>
         Effect.gen(function* () {
           if (config.environmentToken !== null) return config.environmentToken;
-          const started = yield* Ref.get(generation);
+          const started = yield* signInOfCall;
           const account = yield* accounts.get;
           if (account === null) return yield* disconnected;
           const token = yield* account.source === "app" ? appToken : localToken(account.source);
-          // A token read across a disconnect or a new connection belongs to the old sign-in.
-          return (yield* issueIf(started, token)) ? token : yield* tokenFor(agentId);
+          // A token read across a disconnect or a new connection belongs to neither sign-in.
+          return (yield* issueIf(started, token)) ? token : yield* changed;
         });
 
       const refused = (agentId: AgentId | null, token: Redacted.Redacted<string>) =>
@@ -410,9 +438,9 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
               }),
             )
           : Effect.gen(function* () {
-              const started = yield* Ref.get(generation);
-              // A token of a sign-in since replaced: the call is tried again with the current one.
-              if (!(yield* Ref.get(issued)).has(Redacted.value(token))) return yield* tokenFor(agentId);
+              const started = yield* signInOfCall;
+              // A token of a sign-in since replaced is never renewed into the current one's.
+              if (!(yield* Ref.get(issued)).has(Redacted.value(token))) return yield* changed;
               const account = yield* accounts.get;
               if (account === null) return yield* disconnected;
               // The hub cannot renew a sign-in it does not own; the user signs in again where they keep it.
@@ -429,7 +457,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
                   return (yield* refresh(current, started)).accessToken;
                 }),
               );
-              return (yield* issueIf(started, fresh)) ? fresh : yield* tokenFor(agentId);
+              return (yield* issueIf(started, fresh)) ? fresh : yield* changed;
             });
 
       const revoked = (token: Redacted.Redacted<string>) =>
@@ -667,6 +695,13 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         refused,
         revoked,
         reaches,
+        onRepository: (agentId, repository, use) =>
+          Effect.gen(function* () {
+            const started = yield* signInOfCall;
+            yield* reaches(agentId, repository);
+            if ((yield* Ref.get(generation)) !== started) return yield* changed;
+            return yield* Effect.provideService(use, PinnedGeneration, started);
+          }),
       });
 
       const connection = GitHubConnection.of({

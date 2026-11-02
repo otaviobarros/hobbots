@@ -100,6 +100,11 @@ const access = (folders: ReadonlyArray<string>, readGitHub?: PolicyDecision, git
   runtimeFolder: path.join(root, "runtimes", "hob"),
 });
 
+const reaches = (repository: GitHubRepository) =>
+  repository.owner === "otaviobarros"
+    ? Effect.void
+    : Effect.fail(new GitHubError({ reason: "not-found", message: "The Hobbots app is not installed there." }));
+
 /** GitHub connected on the hub, or not; the Charm never reads the token itself. */
 const fakeCredential = (connected: boolean) =>
   Layer.succeed(
@@ -109,10 +114,8 @@ const fakeCredential = (connected: boolean) =>
       tokenFor: () => Effect.succeed(Redacted.make("token")),
       refused: () => Effect.succeed(Redacted.make("token")),
       revoked: () => Effect.void,
-      reaches: (_agentId, repository) =>
-        repository.owner === "otaviobarros"
-          ? Effect.void
-          : Effect.fail(new GitHubError({ reason: "not-found", message: "The Hobbots app is not installed there." })),
+      reaches: (_agentId, repository) => reaches(repository),
+      onRepository: (_agentId, repository, use) => reaches(repository).pipe(Effect.andThen(use)),
     }),
   );
 
@@ -298,6 +301,7 @@ describe("GitHub API", () => {
                   Effect.sync(() => credential.push("refused")).pipe(Effect.as(Redacted.make(`${token}2`))),
                 revoked: () => Effect.sync(() => void credential.push("revoked")),
                 reaches: () => Effect.void,
+                onRepository: (_agentId, _repository, use) => use,
               }),
             ),
           ),
