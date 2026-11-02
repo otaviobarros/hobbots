@@ -41,8 +41,10 @@ export function BlockerCard({ item, hobs, inChat = false }: { item: BackpackItem
         <Badge variant="failed">{copy.heading}</Badge>
       </div>
       <p className="m-0 text-detail leading-snug">{blockerWhy(item, blocker, hob.name)}</p>
-      {blocker.reason === "retries-exhausted" && (
-        <p className="m-0 font-mono text-xs break-words text-label">{blocker.error}</p>
+      {blocker.diagnostic !== null && (
+        <p className="m-0 text-xs break-words text-label">
+          {copy.diagnostic} <span className="font-mono">{blocker.diagnostic}</span>
+        </p>
       )}
       <p className="m-0 text-detail font-bold text-lantern">{copy.next[next]}</p>
       <div className="flex flex-wrap items-center gap-2">
@@ -51,7 +53,7 @@ export function BlockerCard({ item, hobs, inChat = false }: { item: BackpackItem
             size="xs"
             variant={next === "retry" ? "default" : "outline"}
             disabled={decide.isPending}
-            onClick={() => decide.mutate("retry")}
+            onClick={() => decide.mutate({ blocker: blocker.number, action: "retry" })}
           >
             {copy.retry}
           </Button>
@@ -63,7 +65,7 @@ export function BlockerCard({ item, hobs, inChat = false }: { item: BackpackItem
           size="xs"
           variant={next === "dismiss" ? "default" : "outline"}
           disabled={decide.isPending}
-          onClick={() => decide.mutate("dismiss")}
+          onClick={() => decide.mutate({ blocker: blocker.number, action: "dismiss" })}
         >
           {copy.dismiss}
         </Button>

@@ -26,6 +26,8 @@ export const messages = {
       }),
     "recipient-retired": ({ name }: { name: string }) => `${name} retired, so nobody can take it.`,
   },
+  /** Before what the runtime last said, shown as it said it. */
+  diagnostic: "The runtime last said:",
   next: { retry: "Next: retry it", reassign: "Next: reassign it", dismiss: "Next: dismiss it" },
   retry: "Retry",
   reassign: "Reassign",
@@ -35,6 +37,8 @@ export const messages = {
   failed: "Hobbots could not save that. The blocker is read again.",
   retired: ({ name }: { name: string }) => `${name} retired, so this cannot be retried. Dismiss it instead.`,
   section: "Stuck work",
+  loading: "Reading stuck work…",
+  loadFailed: "Hobbots could not read stuck work, so something may still need you.",
   count: ({ count }: { count: number }) =>
     plural(count, {
       one: `${formatCount(count)} piece of work is stuck`,

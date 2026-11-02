@@ -18,7 +18,7 @@ const blocker = (number: number, afterDeliveries: number, decision: "retry" | nu
     number,
     reason: retired ? "recipient-retired" : "retries-exhausted",
     nextAction: retired ? "dismiss" : "retry",
-    error: "Delivered 3 times, and every turn ended early.",
+    diagnostic: "The runtime stopped.",
     afterDeliveries,
     raisedAt: at,
     decision,

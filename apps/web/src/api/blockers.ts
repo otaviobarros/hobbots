@@ -38,12 +38,15 @@ export const withBlocker = (
   return openBlocker(kept) === undefined ? rest : [...rest, kept];
 };
 
-/** Retry or Dismiss a blocker. A refused choice, most likely made elsewhere first, reads the list again. */
+/**
+ * Retry or Dismiss the blocker you saw, by its number, so the choice never reaches a newer one. A
+ * refused choice, most likely made elsewhere first or overtaken by a newer blocker, reads the list again.
+ */
 export const useDecideBlocker = (item: BackpackItem) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (action: "retry" | "dismiss") =>
-      call((c) => c.blockers.decide({ params: { itemId: item.id }, payload: { action } })),
+    mutationFn: (choice: { readonly blocker: number; readonly action: "retry" | "dismiss" }) =>
+      call((c) => c.blockers.decide({ params: { itemId: item.id }, payload: choice })),
     onSuccess: (decided) => storeBlocker(queryClient, decided),
     onError: () => queryClient.invalidateQueries({ queryKey: blockersKey, exact: true }),
   });
@@ -51,5 +54,11 @@ export const useDecideBlocker = (item: BackpackItem) => {
 
 const NONE: ReadonlyArray<BackpackItem> = [];
 
-/** The work that failed as a blocker and waits for the user's choice, oldest first. */
-export const useBlockers = (): ReadonlyArray<BackpackItem> => useQuery(blockersQuery).data ?? NONE;
+/**
+ * The read of the blockers, with its loading and failure states, for a view that must not say
+ * nothing waits while it does not know (the Inbox's Needs you).
+ */
+export const useBlockersQuery = () => useQuery(blockersQuery);
+
+/** The work that failed as a blocker and waits for the user's choice, oldest first; none until read. */
+export const useBlockers = (): ReadonlyArray<BackpackItem> => useBlockersQuery().data ?? NONE;

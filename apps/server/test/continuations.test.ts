@@ -23,7 +23,7 @@ import {
   Thread,
   ThreadId,
 } from "@hobbots/domain";
-import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher, type DispatchLimits } from "@hobbots/inbox";
+import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher, type DispatchLimits, decideBlocker } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import {
   ApprovalRepositoryLive,
@@ -38,7 +38,7 @@ import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Deferred, Effect, Layer, ManagedRuntime, Schedule, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { DispatcherHostLive } from "../src/backpack.ts";
-import { BlockOnRetirement, decideBlocker } from "../src/blockers.ts";
+import { BlockersHostLive, BlockOnRetirement } from "../src/blockers.ts";
 import { ContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
@@ -474,6 +474,10 @@ describe("continuing a hob when work arrives", () => {
 });
 
 describe("blockers", () => {
+  /** Your choice for the item's blocker numbered `blocker`, through the hub's host. */
+  const choose = (itemId: BackpackItem["id"], action: "retry" | "dismiss", blocker = 1) =>
+    decideBlocker(itemId, blocker, action).pipe(Effect.provide(BlockersHostLive));
+
   // covers IN-007
   it("[TC-OR-120] work whose every turn is cut off becomes a blocker instead of disappearing, and Retry starts it again", async () => {
     cutContinuations = true;
@@ -486,12 +490,14 @@ describe("blockers", () => {
     expect(blocked?.blockers).toMatchObject([
       { number: 1, reason: "retries-exhausted", nextAction: "retry", afterDeliveries: 3, decision: null },
     ]);
-    expect(blocked?.error).toContain("Delivered 3 times, and every turn ended early.");
+    // What the runtime said is kept raw for diagnosis; the client writes the explanation.
+    expect(blocked?.blockers[0]?.diagnostic).toBe(blocked?.error);
+    expect(blocked?.error ?? "").not.toContain("Delivered");
     const listed = await run(Backpack.use((backpack) => backpack.listBlocked({ _tag: "Workspace" })));
     expect(listed.map((each) => each.id)).toEqual([failure.id]);
 
     cutContinuations = false;
-    const retried = await run(decideBlocker(failure.id, "retry"));
+    const retried = await run(choose(failure.id, "retry"));
     expect(retried.state).not.toBe("failed");
     const all = await run(messagesWhen((each) => each.at(-1)?.status === "complete"));
     expect(all.map((m) => m.status)).toEqual(["interrupted", "interrupted", "interrupted", "complete"]);
@@ -499,7 +505,7 @@ describe("blockers", () => {
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[3]?.id });
     expect(settled?.blockers).toMatchObject([{ decision: "retry" }]);
     // Choosing Retry again finds it made.
-    expect((await run(decideBlocker(failure.id, "retry"))).state).toBe("resolved");
+    expect((await run(choose(failure.id, "retry"))).state).toBe("resolved");
   });
 
   // covers IN-007
@@ -525,7 +531,7 @@ describe("blockers", () => {
     expect(blocked?.blockers).toMatchObject([{ reason: "retries-exhausted", nextAction: "retry" }]);
 
     holdContinuations = false;
-    await run(decideBlocker(failure.id, "retry"));
+    await run(choose(failure.id, "retry"));
     const all = await run(messagesWhen((each) => each.at(-1)?.status === "complete"));
     expect(all.map((m) => [m.role, m.status])).toEqual([
       ["assistant", "stopped"],
@@ -541,15 +547,15 @@ describe("blockers", () => {
     if (failure === undefined) throw new Error("no Failure recorded");
     await run(HobLifecycle.use((hobs) => hobs.retire(FRODO, "stop")));
     const [blocked] = await run(settledItems([failure.id]));
-    expect(blocked).toMatchObject({ state: "failed", error: "Its hob retired, so nobody can take it." });
-    expect(blocked?.blockers).toMatchObject([{ reason: "recipient-retired", nextAction: "dismiss" }]);
+    expect(blocked).toMatchObject({ state: "failed", error: null });
+    expect(blocked?.blockers).toMatchObject([{ reason: "recipient-retired", nextAction: "dismiss", diagnostic: null }]);
 
-    const refused = await run(Effect.flip(decideBlocker(failure.id, "retry")));
-    expect(refused).toMatchObject({ _tag: "HobUnavailable", status: "retired" });
-    const dismissed = await run(decideBlocker(failure.id, "dismiss"));
+    const refused = await run(Effect.flip(choose(failure.id, "retry")));
+    expect(refused).toMatchObject({ _tag: "BlockerRecipientRetired", agentId: FRODO });
+    const dismissed = await run(choose(failure.id, "dismiss"));
     expect(dismissed).toMatchObject({ state: "resolved", disposition: { _tag: "dismissed", by: null } });
-    const closed = await run(Effect.flip(decideBlocker(failure.id, "retry")));
-    expect(closed).toMatchObject({ _tag: "BlockerClosed", state: "resolved" });
+    const closed = await run(Effect.flip(choose(failure.id, "retry")));
+    expect(closed).toMatchObject({ _tag: "BackpackItemNotBlocked", blocker: 1, state: "resolved" });
     expect(await run(messages())).toEqual([]);
   });
 });

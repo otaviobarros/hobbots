@@ -109,3 +109,41 @@ test("[TC-IN-097] Dismiss takes stuck work off the card and out of Needs you", a
   await expect(page.getByText("Nothing needs you")).toBeVisible();
   await expect(page.getByRole("region", { name: "Stuck work" })).toBeHidden();
 });
+
+/** The read of the blockers, without the decision endpoint under it. */
+const blockersList = /\/api\/blockers(\?.*)?$/;
+
+// covers IN-007, UX-004
+test("[TC-IN-098] Needs you never says nothing needs you while stuck work is still being read, or could not be read", async ({
+  page,
+}) => {
+  const { url } = await aldricHub();
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let failing = true;
+  await page.route(blockersList, async (route) => {
+    await held;
+    if (failing) await route.fulfill({ status: 500, body: "" });
+    else await route.continue();
+  });
+  await page.goto(`${url}/#/inbox`);
+
+  const list = page.getByRole("complementary", { name: "Inbox" });
+  // Approvals are read, stuck work is not yet: no all-clear.
+  await expect(list.getByText("Reading stuck work…")).toBeVisible();
+  await expect(list.getByText("Nothing needs you")).toHaveCount(0);
+
+  // The read fails: it says so, with a way to read again, and still no all-clear.
+  release();
+  // The client asks again a few times before it gives up.
+  const failed = list.getByRole("alert");
+  await expect(failed).toContainText("could not read stuck work", { timeout: 20_000 });
+  await expect(list.getByText("Nothing needs you")).toHaveCount(0);
+
+  failing = false;
+  await failed.getByRole("button", { name: "Try again" }).click();
+  await expect(list.getByText("Nothing needs you")).toBeVisible();
+  await expect(list.getByRole("alert")).toHaveCount(0);
+});
