@@ -54,4 +54,19 @@ export const messages = {
   },
   comingSoon: "Watching a hob use a browser comes in a later update.",
   names: (names: ReadonlyArray<string>) => formatList(names),
+  chat: {
+    open: ({ name }: { name: string }) => `Talk to ${name}`,
+    hide: "Hide the chat",
+    label: ({ title }: { title: string }) => `Talk about ${title}`,
+    heading: ({ name }: { name: string }) => `Talk to ${name}`,
+    about: ({ title }: { title: string }) => `About “${title}”`,
+    close: "Close the chat",
+    notes: "Your notes on this task",
+    empty: ({ name }: { name: string }) => `Nothing sent about this task yet. ${name} reads what you send here.`,
+    hintOwner: ({ name }: { name: string }) => `Goes to ${name} as a note on this task.`,
+    hintLead: ({ lead, owner }: { lead: string; owner: string }) =>
+      `Goes to ${lead}, who leads this work and passes it on to ${owner}.`,
+    // Each nudge is a note sent with one tap. The set is copy, not a decision (ADR 023).
+    nudges: ["Looks good", "Explain what you did", "Keep going"],
+  },
 };

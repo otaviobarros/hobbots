@@ -8,6 +8,7 @@ import { readStored, writeStored } from "../lib/storage.ts";
 import { ArchiveProvider } from "./archive/archive-context.tsx";
 import { ThreadMain, type WorkspaceMainProps } from "./archived-threads/archived-threads.tsx";
 import { HobList } from "./hob-list.tsx";
+import { useNoteDrafts } from "./quest/note-box.tsx";
 import { TaskDrawer } from "./quest/task-drawer.tsx";
 import { usePins } from "./quest/use-work.ts";
 import { SidePanel } from "./side-panel.tsx";
@@ -60,6 +61,8 @@ function Workspace({
   const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
   // Pinned Quests show in the Quest tab of every thread and open in its drawer.
   const pins = usePins();
+  // The drawer and the Workbench show the same unsent note for a Task, and both outlive each other.
+  const drafts = useNoteDrafts();
   useThreadKeys(hobId, threadId);
   const benchOpen = threadId !== undefined && workbench !== undefined;
 
@@ -84,11 +87,18 @@ function Workspace({
         {/* The drawer also stays mounted under the Workbench, so Back to the task finds its unsent notes. */}
         {threadId !== undefined && taskId !== undefined && (
           <div className={cn(benchOpen && "invisible")} inert={benchOpen}>
-            <TaskDrawer key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} pinned={pins.pinned} />
+            <TaskDrawer
+              key={threadId}
+              hobId={hobId}
+              threadId={threadId}
+              taskId={taskId}
+              pinned={pins.pinned}
+              drafts={drafts}
+            />
           </div>
         )}
         {threadId !== undefined && workbench !== undefined && (
-          <Workbench hobId={hobId} threadId={threadId} view={workbench} pinned={pins.pinned} />
+          <Workbench hobId={hobId} threadId={threadId} view={workbench} pinned={pins.pinned} drafts={drafts} />
         )}
       </div>
       {panelOpen && <SidePanel hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />}
