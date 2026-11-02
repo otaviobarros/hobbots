@@ -10,6 +10,7 @@ import {
   DelegationId,
   type EventEnvelope,
   isLiveAttempt,
+  isTerminalTask,
   Message,
   MessageId,
   MilestoneId,
@@ -173,7 +174,9 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
         // A turn may still be reading what the backpack holds on the Task, as the lead's chat does
         // with its party's results: the Task completes once that turn has handled them.
         Effect.retry({
-          while: (error) => error._tag === "TaskRefused" && error.reason === "items-open",
+          // A Task under it that you cancelled still has to confirm it stopped.
+          while: (error) =>
+            error._tag === "TaskRefused" && (error.reason === "items-open" || error.reason === "children-open"),
           schedule: Schedule.spaced(step),
           times: 50,
         }),
@@ -272,55 +275,92 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       [],
       [copy.id],
     );
-    yield* tasks.moveTask(build.id, build.revision, "waiting", yield* iso).pipe(Effect.flatMap(announce));
+    yield* whileOpen(build.id, tasks.moveTask(build.id, build.revision, "waiting", yield* iso)).pipe(
+      Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: announce })),
+    );
     yield* pause;
 
     // Quill asks Aldric, who answers without bothering you.
-    yield* report(copy.id, "milestone", "Three headlines drafted", "copy-0");
-    const discount = yield* ask("q-discount", copy.id, cast.quill, "Which discount should the headline lead with?");
-    yield* pause;
-    yield* tasks
-      .answerQuestion(discount.id, { _tag: "Lead", agentId: cast.lead }, "Lead with 20% off everything.", yield* iso)
-      .pipe(Effect.flatMap(announce));
-    yield* report(build.id, "progress", "Keyword research done while waiting on Quill", null);
+    yield* whileOpen(
+      copy.id,
+      Effect.gen(function* () {
+        yield* report(copy.id, "milestone", "Three headlines drafted", "copy-0");
+        const discount = yield* ask("q-discount", copy.id, cast.quill, "Which discount should the headline lead with?");
+        yield* pause;
+        yield* tasks
+          .answerQuestion(
+            discount.id,
+            { _tag: "Lead", agentId: cast.lead },
+            "Lead with 20% off everything.",
+            yield* iso,
+          )
+          .pipe(Effect.flatMap(announce));
+      }),
+    );
+    yield* whileOpen(build.id, report(build.id, "progress", "Keyword research done while waiting on Quill", null));
     yield* pause;
 
     // Ada's question needs a call only you can make: Aldric passes it up to you.
-    const cutoff = yield* ask(
-      "q-cutoff",
+    const cutoff = yield* whileOpen(
       build.id,
-      cast.ada,
-      "Carriers stop international deliveries on Dec 10. Should international orders get an earlier cutoff, Dec 12, while everything else stays Dec 18?",
+      Effect.gen(function* () {
+        const asked = yield* ask(
+          "q-cutoff",
+          build.id,
+          cast.ada,
+          "Carriers stop international deliveries on Dec 10. Should international orders get an earlier cutoff, Dec 12, while everything else stays Dec 18?",
+        );
+        yield* tasks.escalateQuestion(asked.id, cast.lead).pipe(Effect.flatMap(announce));
+        return asked;
+      }),
     );
-    yield* tasks.escalateQuestion(cutoff.id, cast.lead).pipe(Effect.flatMap(announce));
     yield* pause;
 
     // Quill finishes; Aldric checks the copy and hands it to Ada.
-    yield* report(copy.id, "milestone", "Landing copy written", "copy-1");
-    yield* complete(copy.id, "a-copy", "Landing copy ready", [
-      "Landing copy",
-      "Black Friday: 20% off everything, this weekend only.",
-    ]);
-    yield* tasks.handOff(ArtifactId.make(`art-a-copy-${key}`), build.id, yield* iso).pipe(Effect.flatMap(announce));
-    const waiting = Option.getOrThrow(yield* tasks.readTree(build.id)).tasks[0];
-    if (waiting !== undefined) {
-      yield* tasks.moveTask(build.id, waiting.revision, "active", yield* iso).pipe(Effect.flatMap(announce));
+    yield* whileOpen(
+      copy.id,
+      Effect.gen(function* () {
+        yield* report(copy.id, "milestone", "Landing copy written", "copy-1");
+        yield* complete(copy.id, "a-copy", "Landing copy ready", [
+          "Landing copy",
+          "Black Friday: 20% off everything, this weekend only.",
+        ]);
+      }),
+    );
+    if ((yield* stateOf(copy.id)) === "completed") {
+      yield* whileOpen(
+        build.id,
+        Effect.gen(function* () {
+          yield* tasks
+            .handOff(ArtifactId.make(`art-a-copy-${key}`), build.id, yield* iso)
+            .pipe(Effect.flatMap(announce));
+          const waiting = Option.getOrThrow(yield* tasks.readTree(build.id)).tasks[0];
+          if (waiting !== undefined) {
+            yield* tasks.moveTask(build.id, waiting.revision, "active", yield* iso).pipe(Effect.flatMap(announce));
+          }
+        }),
+      );
     }
 
-    // Once you answer, Ada finishes and Aldric wraps up in your chat.
-    yield* answered(cutoff.id, build.id, step);
+    // Once you answer, Ada finishes and Aldric wraps up in your chat. Work you cancelled is skipped.
+    if (Option.isSome(cutoff)) yield* answered(cutoff.value.id, build.id, step);
     yield* pause;
-    yield* complete(build.id, "a-build", "Campaign scheduled", ["Launch email", "Scheduled for Friday 6:00"]);
+    yield* whileOpen(
+      build.id,
+      complete(build.id, "a-build", "Campaign scheduled", ["Launch email", "Scheduled for Friday 6:00"]),
+    );
     yield* pause;
     yield* complete(campaign.id, "a-campaign", "Black Friday campaign ready", null);
+    const scheduled = (yield* stateOf(build.id)) === "completed";
     yield* repo
       .upsertMessage(
         new Message({
           id: MessageId.make(crypto.randomUUID()),
           threadId: cast.thread.id,
           role: "assistant",
-          content:
-            "The Black Friday campaign is ready. Quill wrote the landing copy, leading with 20% off everything, and Ada scheduled the launch email for Friday. International orders follow the cutoff you chose.",
+          content: scheduled
+            ? "The Black Friday campaign is ready. Quill wrote the landing copy, leading with 20% off everything, and Ada scheduled the launch email for Friday. International orders follow the cutoff you chose."
+            : "The Black Friday campaign is wrapped up without Ada's part, which you cancelled: the launch email is not scheduled.",
           status: "complete",
           error: null,
           configVersion: null,
@@ -330,7 +370,24 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       .pipe(Effect.flatMap(announce));
   });
 
-/** Waits until you answer the question, looking again every `step`. */
+/** Where a played Task stands now, or null once the hub no longer has it. */
+const stateOf = (taskId: TaskId) =>
+  Effect.flatMap(TaskRepository, (tasks) =>
+    Effect.map(tasks.readTree(taskId), (tree) => Option.getOrUndefined(tree)?.tasks[0]?.state ?? null),
+  );
+
+/**
+ * Plays a step on a Task only while it is open: once you cancel a member's Task, the play skips
+ * what that Task would have done and goes on with the rest of the Quest.
+ */
+const whileOpen = <A, E, R>(taskId: TaskId, step: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const state = yield* stateOf(taskId);
+    const open = state !== null && state !== "cancelling" && !isTerminalTask(state);
+    return open ? Option.some(yield* step) : Option.none<A>();
+  });
+
+/** Waits until you answer the question, or its Task ends, looking again every `step`. */
 const answered = (questionId: QuestionId, taskId: TaskId, step: Duration.Input) =>
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
@@ -338,7 +395,11 @@ const answered = (questionId: QuestionId, taskId: TaskId, step: Duration.Input) 
       Effect.map((tree) =>
         Option.match(tree, {
           onNone: () => true,
-          onSome: (read) => read.questions.some((each) => each.id === questionId && each.state === "answered"),
+          // A Task you cancelled has nobody left to hear the answer.
+          onSome: (read) =>
+            read.questions.some((each) => each.id === questionId && each.state === "answered") ||
+            read.tasks[0]?.state === "cancelling" ||
+            (read.tasks[0] !== undefined && isTerminalTask(read.tasks[0].state)),
         }),
       ),
     );
