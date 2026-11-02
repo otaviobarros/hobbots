@@ -51,12 +51,17 @@ export const ServerConfig = Config.all({
     ),
   }),
   // How many steps run at once (ADR 018): per hob, and per request's tree; the rest wait their turn.
+  // A cancel's sessions get a time limit to stop with them.
   stepLimits: Config.all({
     maxRunningStepsPerHob: Config.Int("HOBBOTS_MAX_RUNNING_STEPS_PER_HOB").pipe(
       Config.withDefault(DEFAULT_STEP_LIMITS.maxRunningStepsPerHob),
     ),
     maxRunningStepsPerTree: Config.Int("HOBBOTS_MAX_RUNNING_STEPS_PER_TREE").pipe(
       Config.withDefault(DEFAULT_STEP_LIMITS.maxRunningStepsPerTree),
+    ),
+    // How long a session asked to stop for a cancel has to end before the cancel is left unresolved.
+    cancelTimeoutMs: Config.Int("HOBBOTS_CANCEL_TIMEOUT_MS").pipe(
+      Config.withDefault(DEFAULT_STEP_LIMITS.cancelTimeoutMs),
     ),
   }),
   // How many times a backpack item is put into a turn before it fails as a blocker (ADR 019); at least once.

@@ -5,6 +5,7 @@ import {
   type BackpackItemKind,
   type BackpackPayload,
   type CheckpointKind,
+  type Delegation,
   type JournaledEvent,
   leadsAbove,
   type NewBackpackItem,
@@ -66,8 +67,8 @@ type Rule<Tag extends JournaledEvent["_tag"]> = (
   trees: Trees,
 ) => ReadonlyArray<Draft>;
 
-/** A Task delegated to a member or planned as a step goes to its owner. The Task you asked for starts from your message. */
-const taskCreated: Rule<"TaskCreated"> = ({ task, delegation }) =>
+/** The work a Task under another one is for its owner, at the version that gave it: the Task you asked for starts from your message. */
+const workFor = (task: Task, delegation: Delegation | null): ReadonlyArray<Draft> =>
   task.parentId === null
     ? []
     : [
@@ -80,6 +81,9 @@ const taskCreated: Rule<"TaskCreated"> = ({ task, delegation }) =>
           version: task.revision,
         },
       ];
+
+/** A Task delegated to a member or planned as a step goes to its owner. */
+const taskCreated: Rule<"TaskCreated"> = ({ task, delegation }) => workFor(task, delegation);
 
 /** A finished Task's result goes to its parent's owner. */
 const taskCompleted: Rule<"TaskCompleted"> = ({ task, artifacts }, trees) => {
@@ -97,8 +101,12 @@ const taskCompleted: Rule<"TaskCompleted"> = ({ task, artifacts }, trees) => {
   ];
 };
 
-/** A Task that failed, was blocked or was cancelled goes to its parent's owner as a Failure. */
-const taskStateChanged: Rule<"TaskStateChanged"> = ({ task, attempt }, trees) => {
+/**
+ * A Task that failed, was blocked or was cancelled goes to its parent's owner as a Failure. One you
+ * retried or reassigned goes to its owner again, as the work it now has to do.
+ */
+const taskStateChanged: Rule<"TaskStateChanged"> = ({ task, attempt, control }, trees) => {
+  if (control !== undefined) return workFor(task, control.delegation);
   const parent = parentOf(task, trees);
   // An Attempt moving on repeats the Task's state; only a move of the Task itself is news.
   if (parent === undefined || attempt !== null || !FAILURE_STATES.includes(task.state)) return [];

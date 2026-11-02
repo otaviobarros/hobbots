@@ -1,9 +1,10 @@
 import { DeviceRepository } from "@hobbots/agents";
 import { Device, DeviceId, PairingRequest, WINDOW_DEVICE_ID } from "@hobbots/domain";
-import { Effect, Exit, Layer, Option } from "effect";
+import { Effect, Exit, Fiber, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { DeviceRepositoryLive } from "../src/index.ts";
+import { makeJournaled } from "../src/journal.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 const TestLayer = DeviceRepositoryLive.pipe(Layer.provideMerge(TestDatabase));
@@ -160,17 +161,37 @@ describe("DeviceRepository", () => {
             expires_at: NOW,
           })}`;
         const before = yield* Effect.exit(repo.whileApproved(DeviceId.make("d1"))(mark("while-approved")));
-        const revoked = yield* repo.revoke(DeviceId.make("d1"), EXPIRED);
-        const revokedAgain = yield* repo.revoke(DeviceId.make("d1"), EXPIRED);
+        yield* repo.ensureWindow(NOW);
+        const revoked = yield* repo.revoke(DeviceId.make("d1"), WINDOW_DEVICE_ID, EXPIRED);
+        const revokedAgain = yield* repo.revoke(DeviceId.make("d1"), WINDOW_DEVICE_ID, EXPIRED);
+        const windowRevoked = yield* repo.revoke(WINDOW_DEVICE_ID, WINDOW_DEVICE_ID, EXPIRED);
+        // A revoked device revokes nothing more.
+        const byRevoked = yield* Effect.exit(repo.revoke(WINDOW_DEVICE_ID, DeviceId.make("d1"), EXPIRED));
         const after = yield* Effect.exit(repo.whileApproved(DeviceId.make("d1"))(mark("after-revoke")));
         const unknown = yield* Effect.exit(repo.whileApproved(DeviceId.make("nobody"))(mark("unknown")));
         const marks = yield* sql<{ id: string }>`SELECT id FROM pairing_requests WHERE id <> 'p1' ORDER BY id`;
-        return { before, revoked, revokedAgain, after, unknown, marks: marks.map((row) => row.id) };
+        return {
+          before,
+          revoked,
+          revokedAgain,
+          windowRevoked,
+          byRevoked,
+          after,
+          unknown,
+          marks: marks.map((row) => row.id),
+        };
       }),
     );
     expect(Exit.isSuccess(result.before)).toBe(true);
-    expect(Option.getOrThrow(result.revoked)).toMatchObject({ id: "d1", revokedAt: EXPIRED });
+    // The Revoke is journaled with the device, so every approved client hears of it (ADR 021).
+    const revoked = Option.getOrThrow(result.revoked);
+    expect(revoked.value).toMatchObject({ id: "d1", revokedAt: EXPIRED });
+    expect(revoked.entries.map((entry) => entry.payload)).toMatchObject([
+      { _tag: "DeviceRevoked", device: { id: "d1", revokedAt: EXPIRED } },
+    ]);
     expect(Option.isNone(result.revokedAgain)).toBe(true);
+    expect(Option.isNone(result.windowRevoked)).toBe(true);
+    expect(JSON.stringify(result.byRevoked)).toContain("DeviceRevoked");
     expect(result.after).toMatchObject({ _tag: "Failure" });
     expect(JSON.stringify(result.after)).toContain("DeviceRevoked");
     expect(JSON.stringify(result.unknown)).toContain("DeviceRevoked");
@@ -211,4 +232,48 @@ describe("DeviceRepository", () => {
     expect(payloads).not.toContain("secret-hash");
     expect(payloads).not.toContain("token-hash");
   });
+
+  // covers DP-004
+  it("[TC-DP-101] lets a Revoke wait for a decision its device already started, without a deadlock", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* DeviceRepository;
+        const sql = yield* SqlClient.SqlClient;
+        const journaled = makeJournaled(sql);
+        for (const [code, id] of [
+          ["p1", "d1"],
+          ["p2", "d2"],
+        ] as const) {
+          const request = asking(code);
+          yield* repo.openPairing(request, code);
+          yield* repo.allowPairing(code, deviceFor(request, id), LATER);
+        }
+        const phone = DeviceId.make("d1");
+        const laptop = DeviceId.make("d2");
+        // A decision from the phone: it holds the phone's row, then journals, as a grant or an answer does.
+        const decision = repo.whileApproved(phone)(
+          Effect.gen(function* () {
+            yield* Effect.sleep("300 millis");
+            return yield* journaled(1, () =>
+              Effect.succeed({
+                value: "decided",
+                events: [{ _tag: "DeviceRevoked", device: deviceFor(asking("p9"), "d9") } as const],
+              }),
+            );
+          }),
+        );
+        const deciding = yield* Effect.forkChild(Effect.exit(decision));
+        yield* Effect.sleep("100 millis");
+        // Meanwhile the laptop revokes the phone.
+        const revoked = yield* Effect.exit(repo.revoke(phone, laptop, EXPIRED));
+        const decided = yield* Fiber.join(deciding);
+        const late = yield* Effect.exit(decision);
+        return { revoked, decided, late };
+      }),
+    );
+    // The decision started first, so it is saved; the Revoke then lands, and the next one is refused.
+    expect(result.decided).toMatchObject({ _tag: "Success", value: { _tag: "Some", value: { value: "decided" } } });
+    expect(result.revoked).toMatchObject({ _tag: "Success", value: { _tag: "Some", value: { value: { id: "d1" } } } });
+    expect(JSON.stringify(result.late)).toContain("DeviceRevoked");
+  }, 15_000);
 });

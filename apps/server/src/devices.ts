@@ -220,6 +220,21 @@ export const setDeviceCookie = (token: string) =>
   });
 
 /**
+ * Drops a revoked device's cookie from the browser (ADR 021), under whichever name it came: the
+ * browser shows the removed screen once, and asking again starts pairing without the old token.
+ */
+const clearDeviceCookies = (counts: ReadonlyMap<string, number>) =>
+  Effect.gen(function* () {
+    const expired = { httpOnly: true, sameSite: "strict", path: "/", maxAge: "0 seconds" } as const;
+    if (counts.has(DeviceCookie.key)) {
+      yield* HttpApiBuilder.securitySetCookie(DeviceCookie, "", { ...expired, secure: false });
+    }
+    if (counts.has(SecureDeviceCookie.key)) {
+      yield* HttpApiBuilder.securitySetCookie(SecureDeviceCookie, "", { ...expired, secure: true });
+    }
+  });
+
+/**
  * The check every route but health and pairing runs before its handler (ADR 021): the request must
  * carry an approved device's token or the window key, from where it was approved, and a cookie
  * request must come from the hub's own page.
@@ -285,7 +300,14 @@ export class DeviceGate extends Context.Service<
           }
           const device = yield* devices
             .authenticate(token, place.value)
-            .pipe(Effect.tapError((error) => logRefusal(request, `its device token was refused (${error._tag})`)));
+            .pipe(
+              Effect.tapError((error) =>
+                Effect.andThen(
+                  logRefusal(request, `its device token was refused (${error._tag})`),
+                  bearer === "" && error._tag === "DeviceRevoked" ? clearDeviceCookies(counts) : Effect.void,
+                ),
+              ),
+            );
           if (bearer === "" && token.startsWith(DEVICE_TOKEN_PREFIX)) yield* refresh(device, token);
           return device;
         });

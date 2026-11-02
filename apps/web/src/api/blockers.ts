@@ -2,7 +2,7 @@ import { type BackpackItem, openBlocker } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
-import { newer, recordBackpackItem, syncedBlockers } from "./sync.ts";
+import { recordBackpackItem, syncedBlockers, withNewer } from "./sync.ts";
 
 const blockersKey = ["blockers"] as const;
 
@@ -29,14 +29,7 @@ export const storeBlocker = (queryClient: QueryClient, item: BackpackItem) => {
 export const withBlocker = (
   old: ReadonlyArray<BackpackItem> | undefined,
   item: BackpackItem,
-): ReadonlyArray<BackpackItem> | undefined => {
-  if (old === undefined) return old;
-  const known = old.find((each) => each.id === item.id);
-  const kept = newer(known, item);
-  if (kept === known) return old;
-  const rest = old.filter((each) => each.id !== item.id);
-  return openBlocker(kept) === undefined ? rest : [...rest, kept];
-};
+): ReadonlyArray<BackpackItem> | undefined => withNewer(old, item, (kept) => openBlocker(kept) !== undefined);
 
 /**
  * Retry or Dismiss the blocker you saw, by its number, so the choice never reaches a newer one. A

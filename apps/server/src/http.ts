@@ -21,6 +21,7 @@ import { ApprovalsHandlers } from "./approvals.ts";
 import { BackpackHandlers } from "./backpack.ts";
 import { BlockersHandlers } from "./blockers.ts";
 import { CharmCallsHandlers } from "./charm-calls.ts";
+import { DevicesHandlers } from "./device-handlers.ts";
 import { DeviceGate } from "./devices.ts";
 import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
@@ -31,7 +32,7 @@ import { PermissionsHandlers } from "./permissions.ts";
 import { RemoteAccessHandlers } from "./remote-access.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
-import { QuestionsHandlers, TasksHandlers } from "./tasks.ts";
+import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
 import { DeviceSessionLive } from "./user-session.ts";
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
@@ -193,6 +194,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     HealthHandlers,
     PairingHandlers,
     PairingRequestsHandlers,
+    DevicesHandlers,
     AgentsHandlers,
     ThreadsHandlers,
     SystemHandlers,
@@ -204,6 +206,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     GrantsHandlers,
     CharmCallsHandlers,
     TasksHandlers,
+    TaskControlsHandlers,
     QuestionsHandlers,
     BackpackHandlers,
     BlockersHandlers,

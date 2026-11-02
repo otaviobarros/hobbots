@@ -1,12 +1,9 @@
-import { type BackpackItem, openBlocker } from "@hobbots/domain";
+import type { BackpackItem } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
-import { Button } from "@hobbots/ui/components/button";
 import { Link } from "@tanstack/react-router";
-import { useId } from "react";
-import { useDecideBlocker } from "../../api/blockers.ts";
-import { ApiError } from "../../api/client.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
+import { BlockerChoices, blockerChoice } from "./blocker-choices.tsx";
 import { blockerWhat, blockerWhy } from "./blocker-model.ts";
 import { messages } from "./messages.ts";
 
@@ -18,14 +15,9 @@ const copy = messages;
  * out the link to the chat, for a card already shown there.
  */
 export function BlockerCard({ item, hobs, inChat = false }: { item: BackpackItem; hobs: HobLookup; inChat?: boolean }) {
-  const decide = useDecideBlocker(item);
-  const held = useId();
-  const blocker = openBlocker(item);
-  if (blocker === undefined) return null;
   const hob = hobs(item.recipientId);
-  // Nobody can take it again once its hob retired, whatever ended its tries.
-  const retired = blocker.reason === "recipient-retired" || ("status" in hob && hob.status === "retired");
-  const next = retired ? "dismiss" : blocker.nextAction;
+  const choice = blockerChoice(item, hob);
+  if (choice === null) return null;
   const what = blockerWhat(item);
   return (
     <section
@@ -40,35 +32,14 @@ export function BlockerCard({ item, hobs, inChat = false }: { item: BackpackItem
         </span>
         <Badge variant="failed">{copy.heading}</Badge>
       </div>
-      <p className="m-0 text-detail leading-snug">{blockerWhy(item, blocker, hob.name)}</p>
-      {blocker.diagnostic !== null && (
+      <p className="m-0 text-detail leading-snug">{blockerWhy(item, choice.blocker, hob.name)}</p>
+      {choice.blocker.diagnostic !== null && (
         <p className="m-0 text-xs break-words text-label">
-          {copy.diagnostic} <span className="font-mono">{blocker.diagnostic}</span>
+          {copy.diagnostic} <span className="font-mono">{choice.blocker.diagnostic}</span>
         </p>
       )}
-      <p className="m-0 text-detail font-bold text-lantern">{copy.next[next]}</p>
-      <div className="flex flex-wrap items-center gap-2">
-        {!retired && (
-          <Button
-            size="xs"
-            variant={next === "retry" ? "default" : "outline"}
-            disabled={decide.isPending}
-            onClick={() => decide.mutate({ blocker: blocker.number, action: "retry" })}
-          >
-            {copy.retry}
-          </Button>
-        )}
-        <Button size="xs" variant="outline" disabled aria-describedby={held}>
-          {copy.reassign}
-        </Button>
-        <Button
-          size="xs"
-          variant={next === "dismiss" ? "default" : "outline"}
-          disabled={decide.isPending}
-          onClick={() => decide.mutate({ blocker: blocker.number, action: "dismiss" })}
-        >
-          {copy.dismiss}
-        </Button>
+      <p className="m-0 text-detail font-bold text-lantern">{copy.next[choice.next]}</p>
+      <BlockerChoices item={item} hob={hob}>
         {!inChat && item.threadId !== null && (
           <Link
             to="/hobs/$hobId/threads/$threadId"
@@ -78,17 +49,7 @@ export function BlockerCard({ item, hobs, inChat = false }: { item: BackpackItem
             {copy.openChat}
           </Link>
         )}
-      </div>
-      <p id={held} className="m-0 text-xs text-label">
-        {copy.reassignHeld}
-      </p>
-      {decide.isError && (
-        <p role="alert" className="m-0 text-xs text-rose">
-          {decide.error instanceof ApiError && decide.error.tag === "HobUnavailable"
-            ? copy.retired({ name: hob.name })
-            : copy.failed}
-        </p>
-      )}
+      </BlockerChoices>
     </section>
   );
 }

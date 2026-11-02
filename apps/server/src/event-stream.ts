@@ -1,7 +1,21 @@
-import { ChatService } from "@hobbots/agents";
-import { EventEnvelope, STREAM_FRAME, type StreamReady } from "@hobbots/domain";
+import { ChatService, DeviceRepository } from "@hobbots/agents";
+import { type DeviceId, EventEnvelope, STREAM_FRAME, type StreamReady } from "@hobbots/domain";
 import { EventJournal, type JournalHead } from "@hobbots/persistence";
-import { type Cause, Context, Effect, Exit, Fiber, Layer, PubSub, Queue, Result, Schema, Scope, Stream } from "effect";
+import {
+  type Cause,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Option,
+  PubSub,
+  Queue,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { DeviceGate } from "./devices.ts";
 import { type BusEvent, EventBus, type HubTransientEvent } from "./event-bus.ts";
@@ -77,8 +91,11 @@ export const encodeFrame = (frame: StreamFrame): string => {
 export class EventStream extends Context.Service<
   EventStream,
   {
-    /** Frames for a connection resuming after `cursor`; a cursor that cannot resume starts fresh. */
-    readonly connect: (cursor: string | undefined) => Stream.Stream<StreamFrame>;
+    /**
+     * Frames for a connection resuming after `cursor`; a cursor that cannot resume starts fresh. The
+     * connection of `deviceId` ends as soon as that device is revoked (ADR 021).
+     */
+    readonly connect: (cursor: string | undefined, deviceId?: DeviceId) => Stream.Stream<StreamFrame>;
   }
 >()("@hobbots/server/EventStream") {
   static readonly layer = Layer.effect(
@@ -87,8 +104,16 @@ export class EventStream extends Context.Service<
       const journal = yield* EventJournal;
       const bus = yield* EventBus;
       const chat = yield* ChatService;
+      const devices = yield* Effect.serviceOption(DeviceRepository);
 
-      const connect = (cursor: string | undefined) =>
+      // The device's DeviceRevoked entry, which ends its connections ahead of anything still buffered.
+      const revokes = (deviceId: DeviceId | undefined) => (event: BusEvent) =>
+        deviceId !== undefined &&
+        event._tag === "Journaled" &&
+        event.entry.payload._tag === "DeviceRevoked" &&
+        event.entry.payload.device.id === deviceId;
+
+      const connect = (cursor: string | undefined, deviceId?: DeviceId) =>
         Stream.unwrap(
           Effect.gen(function* () {
             // The fiber writing this connection's response, ended at once when the client falls behind.
@@ -102,20 +127,27 @@ export class EventStream extends Context.Service<
             // A client that falls this far behind is disconnected and resumes from its cursor. The
             // keep-alives share the buffer, so nothing downstream reads ahead of the client.
             const buffer = yield* Queue.dropping<BusEvent | KeepAlive, Cause.Done>(CONNECTION_BUFFER);
-            const overflow = Effect.gen(function* () {
+            const revoked = revokes(deviceId);
+            // Ends the connection now: the client fell behind, or its device was revoked.
+            const disconnect = Effect.gen(function* () {
               yield* Scope.close(subscriptionScope, Exit.void);
               yield* Queue.clear(buffer);
               // Interrupting the writer destroys the response even while it waits for the client.
               yield* Fiber.interrupt(writer).pipe(Effect.forkDetach);
             });
             yield* PubSub.take(subscription).pipe(
-              Effect.flatMap((event) => Queue.offer(buffer, event)),
+              Effect.flatMap((event) => (revoked(event) ? Effect.succeed(false) : Queue.offer(buffer, event))),
               Effect.repeat({ while: (offered) => offered }),
-              Effect.andThen(overflow),
+              Effect.andThen(disconnect),
               // Also when the bus shuts down, so a stopping server has no endless response to wait for.
               Effect.ensuring(Queue.end(buffer)),
               Effect.forkScoped,
             );
+            // A Revoke that landed after the device check but before the subscription is read here.
+            if (deviceId !== undefined && Option.isSome(devices)) {
+              const device = yield* devices.value.find(deviceId);
+              if (Option.isNone(device) || device.value.revokedAt !== null) yield* disconnect;
+            }
             yield* Queue.offer(buffer, keepAlive).pipe(
               Effect.delay(KEEP_ALIVE_INTERVAL),
               Effect.forever,
@@ -208,7 +240,9 @@ export const EventStreamRoute = HttpRouter.add(
       request.headers["last-event-id"] ??
       new URL(request.url, "http://localhost").searchParams.get("after") ??
       undefined;
-    const frames = events.connect(cursor === "" ? undefined : cursor).pipe(Stream.map(encodeFrame));
+    const frames = events
+      .connect(cursor === "" ? undefined : cursor, admitted.success.id)
+      .pipe(Stream.map(encodeFrame));
     // Browsers wait a second before reconnecting.
     return HttpServerResponse.stream(Stream.succeed("retry: 1000\n\n").pipe(Stream.concat(frames), Stream.encodeText), {
       contentType: "text/event-stream",

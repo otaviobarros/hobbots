@@ -208,7 +208,7 @@ const noticesOn = (open: (requestId: string) => void) => {
  * polling: they read the hub again only when the stream connects, is lost, or reports a change.
  */
 const followHubFor = (
-  menuBar: Pick<ReturnType<typeof startMenuBar>, "recheck" | "activityChanged">,
+  menuBar: Pick<ReturnType<typeof startMenuBar>, "recheck" | "activityChanged" | "remoteAccessChanged">,
   notices: ReturnType<typeof noticesOn>,
 ) => {
   const events = followHub({
@@ -221,8 +221,10 @@ const followHubFor = (
       void notices.devices.check();
     },
     onChange: (change) => {
-      if (change._tag === "Port") moveHub(change.port);
-      else if (change._tag === "Approvals") void notices.requests.check();
+      if (change._tag === "RemoteAccess") {
+        menuBar.remoteAccessChanged(change);
+        moveHub(change.port);
+      } else if (change._tag === "Approvals") void notices.requests.check();
       else if (change._tag === "Pairing") void notices.devices.check();
       else void menuBar.activityChanged();
     },

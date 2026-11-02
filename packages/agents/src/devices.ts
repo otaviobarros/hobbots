@@ -1,4 +1,6 @@
 import {
+  CannotRevokeWindow,
+  DeviceNotFound,
   DeviceRequired,
   DeviceRevoked,
   type OpenPairingPayload,
@@ -55,8 +57,17 @@ export class DeviceRepository extends Context.Service<
     /** Adds the hub's window when the installation has none yet; it keeps one for good. */
     readonly ensureWindow: (at: string) => Effect.Effect<void>;
     readonly touch: (id: DeviceId, at: string) => Effect.Effect<void>;
-    /** Marks a device revoked; none when there is no such device or it was already revoked. */
-    readonly revoke: (id: DeviceId, at: string) => Effect.Effect<Option.Option<Device>>;
+    /**
+     * Marks a device revoked with its DeviceRevoked event, in one transaction that first checks, and
+     * on PostgreSQL locks, the revoking device `by` and the target's rows, in one order, before the
+     * journal: a decision the target already started is saved first. None when there is no such
+     * device, it was already revoked, or it is the hub's window, which is never revoked.
+     */
+    readonly revoke: (
+      id: DeviceId,
+      by: DeviceId,
+      at: string,
+    ) => Effect.Effect<Option.Option<Committed<Device>>, DeviceRevoked>;
     /**
      * Runs `write` in one transaction that first checks, and on PostgreSQL locks, the device's row,
      * so a Revoke either lands before and refuses it, or waits until it is saved.
@@ -245,19 +256,29 @@ export class DeviceService extends Context.Service<
     readonly later: (
       id: string,
     ) => Effect.Effect<PairingRequest, PairingNotFound | PairingClosed | DeviceRevoked, UserSession>;
+    /** Every device, the hub's window first and then oldest first, revoked ones included. */
+    readonly list: Effect.Effect<ReadonlyArray<Device>>;
+    /**
+     * Revokes a device for good (ADR 021): its next request is refused as revoked, and its open event
+     * streams close. Only the user does it (PE-006), from any approved device, the one in use
+     * included. A device already revoked is answered as it is. The hub's window cannot be revoked.
+     */
+    readonly revoke: (
+      id: DeviceId,
+    ) => Effect.Effect<Device, DeviceNotFound | CannotRevokeWindow | DeviceRevoked, UserSession>;
   }
 >()("@hobbots/agents/DeviceService") {
   static readonly layer = Layer.effect(
     DeviceService,
     Effect.gen(function* () {
       const repo = yield* DeviceRepository;
+      const publisher = yield* EventPublisher;
       const secrets = yield* DeviceSecrets;
       const window = yield* WindowKey;
-      const bus = yield* EventPublisher;
       const limiter = yield* PairingLimiter;
       // When each key may ask again after a Deny, in milliseconds.
       const deniedUntil = new Map<string, number>();
-      const announce = <A>(committed: Committed<A>) => Effect.as(bus.publish(committed.entries), committed.value);
+      const announce = <A>(committed: Committed<A>) => Effect.as(publisher.publish(committed.entries), committed.value);
       const consume = (key: string, limit: number, window: Duration.Input) =>
         limiter.consume(key, limit, Duration.fromInputUnsafe(window));
       yield* repo.ensureWindow(yield* nowIso);
@@ -448,6 +469,20 @@ export class DeviceService extends Context.Service<
           return yield* announce(saved.value);
         });
 
+      const revoke = (id: DeviceId) =>
+        Effect.gen(function* () {
+          const session = yield* UserSession;
+          if (id === WINDOW_DEVICE_ID) return yield* new CannotRevokeWindow();
+          const found = yield* repo.find(id);
+          if (Option.isNone(found)) return yield* new DeviceNotFound();
+          if (found.value.revokedAt !== null) return found.value;
+          // Checked in the same transaction, so a device revoked meanwhile revokes nothing.
+          const saved = yield* repo.revoke(id, session.deviceId, yield* nowIso);
+          if (Option.isNone(saved)) return Option.getOrElse(yield* repo.find(id), () => found.value);
+          yield* publisher.publish(saved.value.entries);
+          return saved.value.value;
+        });
+
       return DeviceService.of({
         authenticate,
         openPairing,
@@ -461,6 +496,8 @@ export class DeviceService extends Context.Service<
         allow: (id) => decide(id, "allow"),
         deny: (id) => decide(id, "deny"),
         later: (id) => decide(id, "later"),
+        list: repo.list,
+        revoke,
       });
     }),
   );

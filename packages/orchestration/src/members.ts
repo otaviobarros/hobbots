@@ -18,10 +18,12 @@ import {
 import {
   type Agent,
   type AgentConfiguration,
+  type AgentId,
   type AttemptId,
   AttemptId as AttemptIdSchema,
   ancestorsOf,
   type Committed,
+  isLiveAttempt,
   isTerminalTask,
   ledgerRefusal,
   ResponsibilityLedger,
@@ -60,11 +62,16 @@ export interface MemberDeps {
   readonly recordToolStart: (task: Task) => (event: ToolStartedEvent) => Effect.Effect<boolean>;
   /** Records why a Task cannot go on as a blocker on it. */
   readonly explain: (taskId: TaskId, reason: string, at: string) => Effect.Effect<unknown>;
-  readonly confirmCancelsAbove: (task: Task) => Effect.Effect<void>;
+  /** Confirms every cancel asked for that nothing runs in any more. */
+  readonly settleCancels: Effect.Effect<void>;
   readonly notify: Effect.Effect<void>;
 }
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
+
+/** Whether the Task's current Attempt is still starting or running. */
+const liveAttemptOn = (task: Task, tree: TaskTree): boolean =>
+  tree.attempts.some((attempt) => attempt.id === task.currentAttemptId && isLiveAttempt(attempt.state));
 
 /**
  * A member's tools, narrowed by every Delegation on the way down to its Task (ADR 018): each adds
@@ -108,11 +115,16 @@ const awaitsHandOff = (task: Task, tree: TaskTree): boolean =>
   (task.dependsOn.some((id) => tree.tasks.find((each) => each.id === id)?.state !== "completed") ||
     !tree.handOffs.some((each) => each.toTaskId === task.id));
 
-/** The session the member's last turn on the Task ran in, to resume, or null before its first. */
-const lastSession = (task: Task, tree: TaskTree): string | null =>
-  tree.attempts
-    .filter((each) => each.taskId === task.id && each.agentId === task.ownerId && each.sessionId !== null)
-    .reduce<string | null>((_, each) => each.sessionId, null);
+/**
+ * The session the member's last turn on the Task ran in, to resume, or null before its first. Only
+ * the Task's current Attempt counts, and only when its owner ran it: a reassignment leaves it none,
+ * so a hob the Task comes back to starts afresh rather than in the session it had before. Each turn
+ * starts in the session it resumes, so the current Attempt carries it even if it ended early.
+ */
+const lastSession = (task: Task, tree: TaskTree): string | null => {
+  const current = tree.attempts.find((each) => each.id === task.currentAttemptId);
+  return current !== undefined && current.agentId === task.ownerId ? current.sessionId : null;
+};
 
 /**
  * Runs party members' Tasks (ADR 018, ADR 019). A member works on its Task in a session of its
@@ -229,10 +241,12 @@ export const makeMemberRunner = (deps: MemberDeps) => {
    * A member's Task its hob can no longer work on, since the hob was retired: it fails with a
    * blocker that says why, so its lead hears of it and can hand the work to another hob.
    */
-  const retire = (taskId: TaskId, at: string) =>
+  const retire = (taskId: TaskId, agentId: AgentId, at: string) =>
     Effect.gen(function* () {
       const found = yield* read(taskId);
-      if (Option.isNone(found) || isTerminalTask(found.value.task.state)) return;
+      // A Task given to another hob meanwhile is no longer the retired hob's to fail.
+      if (Option.isNone(found) || found.value.task.ownerId !== agentId || isTerminalTask(found.value.task.state))
+        return;
       if (found.value.task.state === "cancelling") {
         const task = found.value.task;
         yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
@@ -265,9 +279,9 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         "end a stopped member's turn",
       );
       const hob = yield* repo.findAgent(run.agentId);
-      if (Option.isNone(hob) || hob.value.status === "retired") return yield* retire(taskId, at);
+      if (Option.isNone(hob) || hob.value.status === "retired") return yield* retire(taskId, run.agentId, at);
       const latest = yield* read(taskId);
-      if (Option.isNone(latest)) return;
+      if (Option.isNone(latest) || latest.value.task.ownerId !== run.agentId) return;
       const task = latest.value.task;
       if (task.state === "cancelling") {
         yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
@@ -283,6 +297,9 @@ export const makeMemberRunner = (deps: MemberDeps) => {
       Effect.gen(function* () {
         const found = yield* read(taskId);
         if (Option.isNone(found) || found.value.task.state === "cancelling") return null;
+        // One that went live since the turn was started: a second could not start, so the work
+        // waits for that one to end instead of spending its tries (ADR 019).
+        if (liveAttemptOn(found.value.task, found.value.tree)) return null;
         const hob = yield* repo.findAgent(agent.id);
         if (Option.isNone(hob) || hob.value.status !== "active") return null;
         // A Task that ended still takes the turn's claims, so the dispatcher settles its items as late.
@@ -356,14 +373,20 @@ export const makeMemberRunner = (deps: MemberDeps) => {
     deps.admission.withHob(
       agentId,
       Effect.gen(function* () {
+        const found = yield* read(taskId);
+        // Work left for a hob that no longer owns the Task, as after a reassignment, is not its to do.
+        if (Option.isNone(found) || found.value.task.ownerId !== agentId) return;
         const agent = yield* repo.findAgent(agentId);
         // A paused hob's work waits until it wakes; a retired hob's Task fails, so its lead hears.
-        if (Option.isNone(agent) || agent.value.status === "retired") return yield* retire(taskId, yield* nowIso);
+        if (Option.isNone(agent) || agent.value.status === "retired")
+          return yield* retire(taskId, agentId, yield* nowIso);
         if (agent.value.status !== "active") return;
         const config = yield* repo.findAgentConfig(agent.value.id, agent.value.configVersion);
-        const found = yield* read(taskId);
-        if (Option.isNone(config) || Option.isNone(found)) return;
+        if (Option.isNone(config)) return;
         const { task, tree } = found.value;
+        // An Attempt still live on the Task holds it: no turn starts until that one ends, which
+        // wakes the runner again (ADR 019).
+        if (liveAttemptOn(task, tree)) return;
         const narrowed = (own: ToolAccess | null) => delegatedAccess(own, task, tree, deps.separator);
         // Registered and forked under one permit, so a narrower policy either sees neither or can
         // stop the fiber it finds (PE-008).
@@ -385,7 +408,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 Effect.catchCause((cause) => Effect.logWarning("Could not run a member's turn", cause)),
                 Effect.ensuring(
                   Effect.sync(() => running.delete(taskId)).pipe(
-                    Effect.andThen(deps.confirmCancelsAbove(task)),
+                    Effect.andThen(deps.settleCancels),
                     Effect.andThen(deps.notify),
                   ),
                 ),
