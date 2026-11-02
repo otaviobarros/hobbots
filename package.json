@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "turbo run dev --filter=@hobbots/server --filter=@hobbots/web",
-    "dev:desktop": "turbo run dev --filter=@hobbots/desktop --filter=@hobbots/web",
+    "dev": "turbo run dev --ui=tui --filter=@hobbots/server --filter=@hobbots/web",
+    "dev:desktop": "turbo run dev --ui=tui --filter=@hobbots/desktop --filter=@hobbots/web",
     "build": "turbo run build",
     "package:mac": "turbo run build --filter=@hobbots/web --filter=@hobbots/desktop && pnpm --filter @hobbots/desktop package:mac",
     "typecheck": "turbo run typecheck",

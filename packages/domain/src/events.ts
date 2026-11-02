@@ -82,8 +82,21 @@ export const MessageDelta = Schema.TaggedStruct("MessageDelta", {
   delta: Schema.String,
 });
 
+/**
+ * A turn joined the hub's running turns, so `GET /api/activity` reports its hob working. Transient:
+ * the running turns live in the hub's process, so a replay could name a turn a restart already ended.
+ */
+export const TurnStarted = Schema.TaggedStruct("TurnStarted", { threadId: ThreadId, agentId: AgentId });
+/**
+ * A turn left the hub's running turns, after its runtime exited, so `GET /api/activity` no longer
+ * reports it. Transient, like `TurnStarted`.
+ */
+export const TurnEnded = Schema.TaggedStruct("TurnEnded", { threadId: ThreadId, agentId: AgentId });
+export type TurnStarted = typeof TurnStarted.Type;
+export type TurnEnded = typeof TurnEnded.Type;
+
 /** A transient event: delivered live, never journaled. */
-export type TransientEvent = MessageDelta;
+export type TransientEvent = MessageDelta | TurnStarted | TurnEnded;
 
 /** State events: each is written to the event journal in the transaction that makes its change (ADR 013). */
 export const JournaledEvent = Schema.Union([
@@ -114,7 +127,7 @@ export const JournaledEvent = Schema.Union([
 export type JournaledEvent = typeof JournaledEvent.Type;
 
 /** Events pushed to clients over SSE after the matching state change is committed. */
-export const HobbotsEvent = Schema.Union([...JournaledEvent.members, MessageDelta]);
+export const HobbotsEvent = Schema.Union([...JournaledEvent.members, MessageDelta, TurnStarted, TurnEnded]);
 export type HobbotsEvent = typeof HobbotsEvent.Type;
 export type MessageDelta = typeof MessageDelta.Type;
 
@@ -203,5 +216,8 @@ export const messageEvents = (message: Message): ReadonlyArray<JournaledEvent> =
 export const StreamReady = Schema.Struct({ cursor: Schema.String, resumed: Schema.Boolean });
 export type StreamReady = typeof StreamReady.Type;
 
-/** The SSE event names on the event stream; a journaled entry is a plain `message` frame (ADR 013). */
-export const STREAM_FRAME = { ready: "ready", delta: "delta" } as const;
+/**
+ * The SSE event names on the event stream; a journaled entry is a plain `message` frame (ADR 013).
+ * `turn` carries `TurnStarted` and `TurnEnded`.
+ */
+export const STREAM_FRAME = { ready: "ready", delta: "delta", turn: "turn" } as const;

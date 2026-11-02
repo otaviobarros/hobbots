@@ -5,7 +5,7 @@ import { type Cause, Context, Effect, Exit, Fiber, Layer, PubSub, Queue, Schema,
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { type BusEvent, EventBus } from "./event-bus.ts";
 
-/** What a connection sends, in order: `Ready`, journal entries by sequence, transient reply events, keep-alives (ADR 013). */
+/** What a connection sends, in order: `Ready`, journal entries by sequence, transient reply and turn events, keep-alives (ADR 013). */
 export type StreamFrame =
   | ({ readonly _tag: "Ready" } & StreamReady)
   | { readonly _tag: "Entry"; readonly cursor: string; readonly entry: EventEnvelope }
@@ -51,7 +51,7 @@ export const encodeFrame = (frame: StreamFrame): string => {
     case "Entry":
       return `id: ${frame.cursor}\ndata: ${JSON.stringify(encodeEnvelope(frame.entry))}\n\n`;
     case "Transient":
-      return `event: ${STREAM_FRAME.delta}\ndata: ${JSON.stringify(frame.event)}\n\n`;
+      return `event: ${frame.event._tag === "MessageDelta" ? STREAM_FRAME.delta : STREAM_FRAME.turn}\ndata: ${JSON.stringify(frame.event)}\n\n`;
     case "KeepAlive":
       return ": keep-alive\n\n";
   }

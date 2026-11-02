@@ -3,12 +3,19 @@
  * does, the Dock icon only while a window is open, and Quit stopping the server before the app exits.
  */
 import { app, type BrowserWindow, dialog, Menu, nativeImage, Tray } from "electron";
+import { coalesce } from "./coalesce.ts";
 import { keepsRunning } from "./keep-running.ts";
 import { closeAction, quitWhileWorkingDialog, renderTrayIcon, TRAY_SIZE, trayModel } from "./menu-bar-model.ts";
+import { readUntil } from "./read-until.ts";
 import type { ServerState, ServerSupervisor } from "./server.ts";
 import type { SettingsStore } from "./settings.ts";
 import { reveal } from "./single-instance.ts";
-import { type WorkingHob, workingHobs } from "./working-hobs.ts";
+
+/** A hob with a turn in progress, and the thread it runs in. */
+interface WorkingHob {
+  readonly threadId: string;
+  readonly name: string;
+}
 
 export interface MenuBarOptions {
   readonly supervisor: ServerSupervisor;
@@ -95,32 +102,24 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
 
   const checkHealth = () => supervisor.check();
   const names = (hobs: ReadonlyArray<WorkingHob>) => hobs.map((hob) => hob.name);
-  // Read again when a reply starts or ends, until the read agrees with the event.
-  const workingReads = workingHobs({
-    read: fetchWorking,
-    onRead: (hobs) => {
-      working = names(hobs);
-      refresh();
-    },
+  /**
+   * Reads which hobs are working. The hub announces a turn only once `/api/activity` reports it, so
+   * one read per announcement is enough; a read that did not answer is made again until one does.
+   */
+  const readWorking = coalesce(async () => {
+    working = names(await readUntil(fetchWorking));
+    refresh();
   });
 
   /**
-   * The event stream connected. Unless it resumed, events may have been missed, so which hobs are
-   * working starts from a new snapshot. The open stream shows the server is alive, so nothing is
-   * checked on a timer.
+   * The event stream connected, ended or could not connect: the server is checked, then which hobs
+   * are working is read again. Turn announcements are not replayed, so a resumed connection reads
+   * again too. The open stream shows the server is alive, so nothing is checked on a timer.
    */
-  const serverConnected = (resumed: boolean) =>
-    resumed ? workingReads.recheck(checkHealth) : workingReads.startOver(checkHealth);
-
-  /**
-   * The event stream ended or could not connect. A server that stopped runs no turns, so what
-   * events said about them is forgotten; otherwise the stream's replay brings what is missed.
-   */
-  const serverLost = () =>
-    workingReads.recheck(async () => {
-      await checkHealth();
-      if (!supervisor.mayAnswer) workingReads.forget();
-    });
+  const recheck = async () => {
+    await checkHealth();
+    await readWorking();
+  };
 
   const guard = (window: BrowserWindow) => {
     windows.add(window);
@@ -209,5 +208,5 @@ export const startMenuBar = ({ supervisor, settings, apiUrl, port, createWindow 
     });
   });
 
-  return { startServer, showWindow, serverConnected, serverLost, activityChanged: workingReads.changed };
+  return { startServer, showWindow, recheck, activityChanged: readWorking };
 };
