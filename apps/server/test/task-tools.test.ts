@@ -6,6 +6,7 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  carriedFrom,
   EMPTY_HOB_POLICY,
   type EventEnvelope,
   type TaskId,
@@ -145,6 +146,17 @@ const done = (agentId: AgentId, taskId: TaskId, name: string, input: Record<stri
 
 const refused = (agentId: AgentId, taskId: TaskId, name: string, input: Record<string, unknown>) =>
   run(Effect.flip(call(agentId, taskId, name, input)));
+
+/**
+ * A call from a turn that carries what its Task's ledger holds in its hob's backpack, as a step's
+ * brief carries its Task item and a continuation carries what arrived.
+ */
+const carrying = (agentId: AgentId, taskId: TaskId, name: string, input: Record<string, unknown>) =>
+  Effect.gen(function* () {
+    const ledger = Option.getOrThrow(yield* (yield* TaskRepository).readLedger(taskId));
+    const tools = yield* TaskTools;
+    return yield* tools.call({ agentId, taskId, carried: carriedFrom(ledger, () => true) }, name, input);
+  });
 
 const tree = () =>
   run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readTree(TOP))).then((found) =>
@@ -450,11 +462,13 @@ describe("hob tools for Tasks and Quests", () => {
       }),
     );
     expect(started.value.task.state).toBe("active");
-    const finished = await done(QUILL, quill, "complete_task", {
-      key: "c",
-      summary: "Copy drafted",
-      artifacts: [{ kind: "text", label: "Copy", value: "Shop the deals" }],
-    });
+    const finished = (await run(
+      carrying(QUILL, quill, "complete_task", {
+        key: "c",
+        summary: "Copy drafted",
+        artifacts: [{ kind: "text", label: "Copy", value: "Shop the deals" }],
+      }),
+    )) as TaskToolDone;
     const [artifact] = finished.details.artifacts as Array<string>;
     const handed = await done(ALDRIC, TOP, "hand_off", { key: "h", artifact_id: artifact, to_task_id: ada });
     expect(handed.message).toContain("Copy");
@@ -467,6 +481,46 @@ describe("hob tools for Tasks and Quests", () => {
     const cancelled = await done(ALDRIC, TOP, "cancel_task", { key: "x", task_id: ada });
     expect(cancelled.details).toEqual({ cancelled: [ada], cancelling: [] });
     expect((await refused(ADA, ada, "ask", { key: "q2", question: "Still there?" })).reason).toBe("task-ended");
+  });
+
+  // covers IN-006, EX-006
+  it("[TC-OR-050] completing a Quest with a member's result still unread is refused and names that result", async () => {
+    await run(seed);
+    await done(ALDRIC, TOP, "start_quest", { key: "quest", goal: "Launch the campaign" });
+    const quill = await delegate(ALDRIC, TOP, "Quill", "copy");
+    const tasks = await run(Effect.service(TaskRepository));
+    const member = (await tree()).tasks.find((each) => each.id === quill);
+    await run(
+      tasks.startAttempt(quill, member?.revision ?? 0, {
+        id: AttemptId.make("quill-1"),
+        runtime: "claude-code",
+        sessionId: null,
+        configVersion: 1,
+        policyVersion: null,
+        startedAt: now,
+      }),
+    );
+    // A turn that never took up Quill's Task item cannot finish it either.
+    const untaken = await refused(QUILL, quill, "complete_task", { key: "c0", summary: "Copy drafted" });
+    expect(untaken.reason).toBe("items-open");
+    await run(carrying(QUILL, quill, "complete_task", { key: "c", summary: "Copy drafted" }));
+
+    // Quill's result sits in Aldric's backpack, unread: a final sentence alone does not close the Quest.
+    const unread = await refused(ALDRIC, TOP, "complete_task", { key: "done-1", summary: "Campaign launched" });
+    expect(unread.reason).toBe("items-open");
+    expect(unread.message).toContain(`the result of Task ${quill} (Work for Quill) is in your backpack, not yet read`);
+    const ledger = Option.getOrThrow(await run(tasks.readLedger(TOP)));
+    expect(ledger.open).toEqual([
+      expect.objectContaining({ _tag: "Item", item: expect.objectContaining({ kind: "result", taskId: quill }) }),
+    ]);
+    expect((await tree()).quests[0]?.state).toBe("active");
+
+    // The turn that carries the result completes the Quest and consumes the result with it.
+    await run(carrying(ALDRIC, TOP, "complete_task", { key: "done-2", summary: "Campaign launched" }));
+    const after = await tree();
+    expect(after.tasks[0]?.state).toBe("completed");
+    expect(after.quests[0]?.state).toBe("completed");
+    expect(Option.getOrThrow(await run(tasks.readLedger(TOP))).open).toEqual([]);
   });
 
   // covers OR-001

@@ -22,13 +22,25 @@ describe("holdBackPartialTable", () => {
     expect(holdBackPartialTable("Hello\n\nworld")).toBe("Hello\n\nworld");
   });
 
-  it("reads a table line full of spaces in linear time", () => {
-    const started = performance.now();
-    const text = `| a | b |\n|-${" ".repeat(100_000)}x |\n`;
-    expect(holdBackPartialTable(text)).toBe("");
+  // covers no MVP requirement; guards the linear-time pattern rule STD-SEC-005.
+  it("[TC-GEN-022] reads a table line full of spaces in linear time", () => {
+    // Timed against a line of the same length with no run of spaces, so the budget follows the
+    // runner's speed. A pattern that backtracks takes about 40 times as long on the spaces.
+    const hostile = `| a | b |\n|-${" ".repeat(30_000)}x |\n`;
+    const baseline = `| a | b |\n|-${"a".repeat(30_000)}x |\n`;
+    const fastest = (text: string) => {
+      let best = Number.POSITIVE_INFINITY;
+      for (let run = 0; run < 2; run += 1) {
+        const started = performance.now();
+        expect(holdBackPartialTable(text)).toBe("");
+        best = Math.min(best, performance.now() - started);
+      }
+      return best;
+    };
+    fastest(baseline);
+    expect(fastest(hostile)).toBeLessThan(fastest(baseline) * 10 + 20);
     expect(holdBackPartialTable("| a | b |\n  |  --- | :-: |  \n")).toBe("| a | b |\n  |  --- | :-: |  \n");
-    expect(performance.now() - started).toBeLessThan(500);
-  });
+  }, 20_000);
 });
 
 describe("streamingMarkdown", () => {
