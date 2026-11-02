@@ -5,13 +5,17 @@ import { Option, Schema } from "effect";
 
 /**
  * Where the hub can be reached (ADR 021), kept in `network.json` in the Hobbots data folder: whether
- * remote access is on, whether it is paused, and the port the user chose. The desktop app reads the port from the same
+ * remote access is on, whether it is paused, the port the user chose, and whether HTTPS through
+ * `tailscale serve` is on with the serve listener's port. The desktop app reads the port from the same
  * file before it starts or finds the hub. A setting never chosen is absent, so it keeps its default.
  */
 export interface NetworkSettings {
   readonly remoteAccess?: boolean;
   readonly remoteAccessPaused?: boolean;
   readonly port?: number;
+  readonly https?: boolean;
+  /** Kept once HTTPS is first turned on, so `tailscale serve` keeps forwarding to the same port. */
+  readonly servePort?: number;
 }
 
 const settingsFile = (dataDir: string) => join(dataDir, "network.json");
@@ -28,7 +32,7 @@ export const readNetworkSettings = (dataDir: string): NetworkSettings => {
     return {};
   }
   if (typeof value !== "object" || value === null) return {};
-  const { remoteAccess, remoteAccessPaused, port } = value as Record<string, unknown>;
+  const { remoteAccess, remoteAccessPaused, port, https, servePort } = value as Record<string, unknown>;
   return {
     ...Option.match(decodeRemoteAccess(remoteAccess), { onNone: () => ({}), onSome: (on) => ({ remoteAccess: on }) }),
     ...Option.match(decodeRemoteAccess(remoteAccessPaused), {
@@ -36,6 +40,8 @@ export const readNetworkSettings = (dataDir: string): NetworkSettings => {
       onSome: (paused) => ({ remoteAccessPaused: paused }),
     }),
     ...Option.match(decodePort(port), { onNone: () => ({}), onSome: (chosen) => ({ port: chosen }) }),
+    ...Option.match(decodeRemoteAccess(https), { onNone: () => ({}), onSome: (on) => ({ https: on }) }),
+    ...Option.match(decodePort(servePort), { onNone: () => ({}), onSome: (chosen) => ({ servePort: chosen }) }),
   };
 };
 

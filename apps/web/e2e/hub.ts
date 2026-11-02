@@ -46,6 +46,8 @@ export const startHub = async (dataDir: string, env: Record<string, string> = {}
     env: {
       ...process.env,
       HOBBOTS_PORT: String(port),
+      // The serve listener's port for HTTPS through the fake `tailscale serve`, apart from every hub port.
+      HOBBOTS_SERVE_PORT: String(port + 1000),
       HOBBOTS_DATA_DIR: dataDir,
       HOBBOTS_WEB_DIR: join(web, "dist"),
       HOBBOTS_RUNTIME: "fake",

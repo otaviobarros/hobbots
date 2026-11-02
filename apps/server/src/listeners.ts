@@ -1,21 +1,16 @@
 import type { Server } from "node:http";
 import { createServer as createNetServer, type Server as NetServer, type Socket } from "node:net";
 import { Context, Effect, Layer } from "effect";
+import { markServed, markTailnet } from "./arrival.ts";
 import { Tailscale } from "./tailscale.ts";
 
 /**
  * Where the hub listens (ADR 021): `127.0.0.1` at its port through the HTTP server, `::1` beside
- * it, and each tailnet address while remote access is on. Every listener hands its connections to
- * the one HTTP server, so every route, and every check on a route, serves them all alike. The hub
- * never listens on `0.0.0.0`, `::` or any other interface.
+ * it, each tailnet address while remote access is on, and the serve listener on `127.0.0.1` at its
+ * own port while HTTPS is on. Every listener hands its connections to the one HTTP server, so every
+ * route, and every check on a route, serves them all alike. The hub never listens on `0.0.0.0`, `::`
+ * or any other interface.
  */
-
-/** Connections a tailnet listener accepted. A request on one is a tailnet request, never a local one. */
-const tailnetSockets = new WeakSet<Socket>();
-
-/** Whether a connection came in on a tailnet listener. */
-export const arrivedOnTailnet = (socket: Socket | undefined): boolean =>
-  socket !== undefined && tailnetSockets.has(socket);
 
 /** A tailnet address the hub could not listen on, in the system's words. */
 export interface ListenFailure {
@@ -43,6 +38,15 @@ export class HubListeners extends Context.Service<
     readonly listenOnTailnet: (addresses: ReadonlyArray<string>) => Effect.Effect<{
       readonly listening: ReadonlyArray<string>;
       readonly failed: ReadonlyArray<ListenFailure>;
+    }>;
+    /**
+     * Opens the serve listener on `127.0.0.1` at `port`, which `tailscale serve` forwards HTTPS to,
+     * or closes it with every connection it accepted when `port` is null. Answers whether it
+     * listens, and why it could not open.
+     */
+    readonly serveOn: (port: number | null) => Effect.Effect<{
+      readonly listening: boolean;
+      readonly detail: string | null;
     }>;
   }
 >()("@hobbots/server/HubListeners") {}
@@ -115,7 +119,7 @@ export const HubListenersLive = (server: Server, initialPort: number) =>
             return;
           }
           const sockets = connectionsAt(address);
-          tailnetSockets.add(socket);
+          markTailnet(socket);
           sockets.add(socket);
           socket.once("close", () => sockets.delete(socket));
           hand(socket);
@@ -135,10 +139,28 @@ export const HubListenersLive = (server: Server, initialPort: number) =>
         });
       const tailnetAddresses = () => [...new Set([...relays.keys(), ...connections.keys()])];
 
+      // The serve listener, its port, and the connections `tailscale serve` opened on it.
+      let serve: { readonly relay: NetServer; readonly port: number } | undefined;
+      const served = new Set<Socket>();
+      const closeServe = Effect.suspend(() => {
+        const open = serve;
+        serve = undefined;
+        for (const socket of served) socket.destroy();
+        served.clear();
+        return open === undefined ? Effect.void : stopListening(open.relay);
+      });
+      const openServe = (at: number) =>
+        listen("127.0.0.1", at, (socket) => {
+          markServed(socket);
+          served.add(socket);
+          socket.once("close", () => served.delete(socket));
+          hand(socket);
+        });
+
       yield* Effect.addFinalizer(() =>
         Effect.andThen(
           Effect.suspend(() => Effect.forEach(tailnetAddresses(), dropTailnet, { discard: true })),
-          loopback6 === undefined ? Effect.void : stopListening(loopback6),
+          Effect.andThen(closeServe, loopback6 === undefined ? Effect.void : stopListening(loopback6)),
         ),
       );
 
@@ -206,6 +228,17 @@ export const HubListenersLive = (server: Server, initialPort: number) =>
               else failed.push({ address, detail: describe(opened.failure) });
             }
             return { listening: [...relays.keys()], failed };
+          }),
+        serveOn: (at) =>
+          Effect.gen(function* () {
+            if (at !== null && serve?.port === at) return { listening: true, detail: null };
+            yield* closeServe;
+            if (at === null) return { listening: false, detail: null };
+            const opened = yield* openServe(at).pipe(Effect.result);
+            if (opened._tag === "Failure")
+              return { listening: false, detail: `127.0.0.1:${at}: ${describe(opened.failure)}` };
+            serve = { relay: opened.success, port: at };
+            return { listening: true, detail: null };
           }),
       });
     }),

@@ -1,7 +1,8 @@
 import type { RemoteAccessStatus } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
+import { serveAsk } from "../components/devices/https-settings.tsx";
 import { remoteAccessWhy, remoteAddress } from "../components/remote-access-settings.tsx";
-import { movedPage } from "./remote-access.ts";
+import { movedPage, securePage } from "./remote-access.ts";
 
 const status = (change: Partial<RemoteAccessStatus>): RemoteAccessStatus => ({
   enabled: true,
@@ -11,6 +12,7 @@ const status = (change: Partial<RemoteAccessStatus>): RemoteAccessStatus => ({
   listening: ["100.101.102.103"],
   problem: null,
   detail: null,
+  https: { enabled: false, port: 4318, listening: false, forwarding: null, detail: null },
   ...change,
 });
 
@@ -67,5 +69,49 @@ describe("remote access in Settings", () => {
       ),
     ).toBe("http://[fd7a:115c:a1e0::1]:4317");
     expect(remoteAddress(status({ listening: [] }))).toBeNull();
+  });
+});
+
+describe("HTTPS through tailscale serve in Settings", () => {
+  const serving = { enabled: true, port: 4318, listening: true, forwarding: true, detail: null } as const;
+
+  // covers DP-004
+  it("[TC-DP-137] gives the HTTPS address only while Tailscale serves the hub there, and moves the page there", () => {
+    expect(remoteAddress(status({ https: serving }))).toBe("https://studio-desk.example.ts.net");
+    // On but not forwarded yet, or forwarded with HTTPS off: the HTTP address stays.
+    expect(remoteAddress(status({ https: { ...serving, forwarding: false } }))).toBe(
+      "http://studio-desk.example.ts.net:4317",
+    );
+    expect(remoteAddress(status({ https: { ...serving, enabled: false, listening: false } }))).toBe(
+      "http://studio-desk.example.ts.net:4317",
+    );
+    // Not on the tailnet at all: no address.
+    expect(remoteAddress(status({ https: serving, listening: [] }))).toBeNull();
+  });
+
+  // covers DP-004
+  it("[TC-DP-138] asks to run tailscale serve while it does not match the switch, and to remove what is left over", () => {
+    const off = { enabled: false, port: 4318, listening: false, forwarding: false, detail: null } as const;
+    expect(serveAsk(status({ https: off }))).toBeNull();
+    expect(serveAsk(status({ https: { ...serving, forwarding: false } }))).toBe("forward");
+    expect(serveAsk(status({ https: serving }))).toBeNull();
+    // The hub could not read serve: it asks nothing.
+    expect(serveAsk(status({ https: { ...serving, forwarding: null } }))).toBeNull();
+    // HTTPS or remote access off while serve still forwards: remove it.
+    expect(serveAsk(status({ https: { ...off, forwarding: true } }))).toBe("remove");
+    expect(serveAsk(status({ enabled: false, https: { ...serving, listening: false } }))).toBe("remove");
+    // Paused: the listener is closed for now, and nothing is asked.
+    expect(serveAsk(status({ paused: true, https: { ...serving, listening: false, forwarding: false } }))).toBeNull();
+
+    // A page on the tailnet's HTTP address moves to the HTTPS one once Tailscale serves it.
+    const page = new URL("http://studio-desk.example.ts.net:4317/#/settings");
+    expect(securePage(page, page.origin, status({ https: serving }))).toBe(
+      "https://studio-desk.example.ts.net/#/settings",
+    );
+    expect(securePage(page, page.origin, status({}))).toBeNull();
+    const local = new URL("http://127.0.0.1:4317/#/settings");
+    expect(securePage(local, local.origin, status({ https: serving }))).toBeNull();
+    const secure = new URL("https://studio-desk.example.ts.net/#/settings");
+    expect(securePage(secure, secure.origin, status({ https: serving }))).toBeNull();
   });
 });
