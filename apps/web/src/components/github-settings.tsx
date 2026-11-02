@@ -9,6 +9,9 @@ import {
   githubFoundQuery,
   githubRepositoriesQuery,
   githubStatusQuery,
+  REPOSITORY_WATCH,
+  type RepositoryWatch,
+  stillWatching,
   useGitHubChange,
 } from "../api/github.ts";
 import { formatDay } from "../lib/format.ts";
@@ -130,8 +133,21 @@ function Connected({
 
 /** The repositories the app reaches, where to add more, and the permissions it holds there. */
 function AppReach({ login }: { login: string }) {
-  const repositories = useQuery(githubRepositoriesQuery(login));
+  // After the person goes to GitHub to choose repositories, the list is read again every few
+  // seconds until it changes, so it updates even with both windows side by side.
+  const [watch, setWatch] = useState<RepositoryWatch | null>(null);
+  const repositories = useQuery(githubRepositoriesQuery(login, watch !== null));
   const listed = repositories.data?.repositories;
+  const names = listed?.map((repository) => repository.fullName).join("\n") ?? "";
+  useEffect(() => {
+    if (watch === null) return;
+    if (!stillWatching(watch, names, Date.now())) {
+      setWatch(null);
+      return;
+    }
+    const timer = setTimeout(() => setWatch(null), watch.until - Date.now());
+    return () => clearTimeout(timer);
+  }, [watch, names]);
   const queryClient = useQueryClient();
   // A listing GitHub refused may mean the hub disconnected, so the connection is read again.
   useEffect(() => {
@@ -157,6 +173,7 @@ function AppReach({ login }: { login: string }) {
           href={repositories.data.installUrl}
           target="_blank"
           rel="noreferrer"
+          onClick={() => setWatch({ until: Date.now() + REPOSITORY_WATCH.forMs, seen: names })}
           className="text-[13px] text-lantern no-underline hover:underline"
         >
           {copy.chooseRepositories}
