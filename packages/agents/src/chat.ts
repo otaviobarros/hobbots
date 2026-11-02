@@ -948,6 +948,9 @@ export class ChatService extends Context.Service<
               createdAt: yield* nowIso,
             });
             const saved = yield* saveMessage(userMessage);
+            // A message that waits behind a busy thread has the thread look at its work again once it
+            // is free, so a dispatch that already found nothing does not start it without its progress.
+            if (busy.has(threadId)) rewake.add(threadId);
             // Work you stopped in this thread may start again once this message is answered.
             holdBack.delete(threadId);
             if (carries) yield* startNext(threadId);

@@ -588,34 +588,48 @@ describe("coalescing routine progress", () => {
     const cook = await run(samsTask);
     const progress = await run(reportProgress(2));
 
-    // Three of your messages are cut off, each carrying the progress: it goes back to pending every time.
-    for (let round = 1; round <= 3; round++) {
-      await run(ChatService.use((chat) => chat.sendPrompt(threadId, `fake:cut-off try ${round}`)));
-      await run(messagesWhen((each) => each.length === round * 2));
-    }
-    const after = await run(
+    /** The progress once it is back to pending, delivered `count` times. */
+    const pendingAfter = (count: number) =>
       retry(
         Effect.flatMap(itemsOf(progress.map((item) => item.id)), (items) =>
-          items.every((item) => item.state === "pending" && item.deliveries.length === 3)
+          items.every((item) => item.state === "pending" && item.deliveries.length === count)
             ? Effect.succeed(items)
             : Effect.fail("not yet" as const),
         ),
-      ),
-    );
+      );
+
+    // Three of your messages are cut off, each carrying the progress: it goes back to pending every
+    // time. Each waits for the last to send it back, so every one of them carries it.
+    for (let round = 1; round <= 3; round++) {
+      await run(ChatService.use((chat) => chat.sendPrompt(threadId, `fake:cut-off try ${round}`)));
+      await run(messagesWhen((each) => each.length === round * 2));
+      await run(pendingAfter(round));
+    }
+    const after = await run(pendingAfter(3));
     expect(after.every((item) => item.error === null)).toBe(true);
 
     // You stop the next one: that holds back nothing, so work that needs Frodo still starts at once.
     holdPrompt = "Stew?";
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, "Stew?")));
+    // Its runtime has the prompt, so the turn is registered and the stop reaches it.
     await run(
       retry(
         Effect.flatMap(messages(), (all) =>
-          all.length === 8 && all.at(-1)?.status === "streaming" ? Effect.void : Effect.fail("not yet" as const),
+          all.length === 8 && all.at(-1)?.status === "streaming" && requests.some((r) => r.prompt === "Stew?")
+            ? Effect.void
+            : Effect.fail("not yet" as const),
         ),
       ),
     );
-    await run(ChatService.use((chat) => chat.stop(threadId)));
-    await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
+    // A stop sent in the instant the turn starts can miss it (seen on PostgreSQL), so it is sent again until it lands.
+    await run(
+      retry(
+        ChatService.use((chat) => chat.stop(threadId)).pipe(
+          Effect.andThen(messages()),
+          Effect.flatMap((all) => (all.at(-1)?.status === "stopped" ? Effect.void : Effect.fail("not yet" as const))),
+        ),
+      ),
+    );
     await release();
     await run(TaskRepository.use((tasks) => tasks.moveTask(cook.id, cook.revision, "failed", now)));
     await run(ChatService.use((chat) => chat.wake(threadId)));
