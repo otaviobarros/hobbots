@@ -1,4 +1,4 @@
-import { AgentId, TaskId, ThreadId } from "@hobbots/domain";
+import { AgentId, AttemptId, TaskId, ThreadId } from "@hobbots/domain";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createHashHistory,
@@ -29,6 +29,8 @@ import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
 import { Summon } from "./components/summon.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
+import type { WorkbenchSearch } from "./components/workbench/use-workbench.ts";
+import { isWorkbenchTab } from "./components/workbench/workbench-model.ts";
 import { readStored, writeStored } from "./lib/storage.ts";
 
 const lastHobKey = "lastHob";
@@ -187,13 +189,19 @@ const archivedThreadsRoute = createRoute({
 });
 
 // `?message=` names a message to scroll to, as a search result does; `?task=` a Task to open in
-// the drawer beside the chat.
+// the drawer beside the chat; `?bench=` a Task whose Workbench shows in the chat's place, with its
+// `tab` and `attempt` (ADR 023).
 const threadRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId/threads/$threadId",
-  validateSearch: (search: Record<string, unknown>): { message?: string | undefined; task?: string | undefined } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { message?: string | undefined; task?: string | undefined } & WorkbenchSearch => ({
     message: typeof search.message === "string" ? search.message : undefined,
     task: typeof search.task === "string" ? search.task : undefined,
+    bench: typeof search.bench === "string" ? search.bench : undefined,
+    tab: isWorkbenchTab(search.tab) ? search.tab : undefined,
+    attempt: typeof search.attempt === "string" ? search.attempt : undefined,
   }),
   beforeLoad: ({ params }) => {
     writeStored(lastHobKey, params.hobId);
@@ -201,13 +209,23 @@ const threadRoute = createRoute({
   },
   component: function ThreadPage() {
     const params = threadRoute.useParams();
-    const { message, task } = threadRoute.useSearch();
+    const { message, task, bench, tab, attempt } = threadRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
         threadId={ThreadId.make(params.threadId)}
         focusMessageId={message}
         taskId={task === undefined ? undefined : TaskId.make(task)}
+        workbench={
+          bench === undefined
+            ? undefined
+            : {
+                taskId: TaskId.make(bench),
+                tab: tab ?? "summary",
+                attemptId: attempt === undefined ? undefined : AttemptId.make(attempt),
+                from: task === bench ? "drawer" : "chat",
+              }
+        }
       />
     );
   },

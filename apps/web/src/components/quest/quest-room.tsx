@@ -30,6 +30,7 @@ export function QuestRoom({
   pinned,
   onPin,
   onOpen,
+  onWorkbench,
 }: {
   tree: TaskTree;
   /** Whether the tree started in this thread; a pinned one from elsewhere links to its own. */
@@ -40,9 +41,11 @@ export function QuestRoom({
   onPin: (taskId: TaskId) => void;
   /** Opens a Task in the drawer beside this chat; without one, a Task opens in its own thread. */
   onOpen: ((taskId: TaskId) => void) | undefined;
+  /** Opens a Task's Workbench in this chat's place; without one, in its own thread's. */
+  onWorkbench: ((taskId: TaskId) => void) | undefined;
 }) {
-  const navigate = useNavigate();
   const now = useNow();
+  const { open, workbench } = useOpeners(tree.tasks[0], onOpen, onWorkbench);
   const card = workCard(tree);
   if (card === null) return null;
   const { top } = card;
@@ -53,11 +56,6 @@ export function QuestRoom({
   const { done, total } = card.progress;
   const whose = card.quest === null ? messages.strip.task({ name: lead }) : messages.strip.quest({ name: lead });
   const ownThread = top.threadId === null ? null : { hobId: top.ownerId, threadId: top.threadId };
-  const open =
-    onOpen ??
-    ((taskId: TaskId) =>
-      ownThread !== null &&
-      void navigate({ to: "/hobs/$hobId/threads/$threadId", params: ownThread, search: { task: taskId } }));
 
   return (
     <section aria-label={copy.label({ title })} className="flex flex-col border-b-4 border-line">
@@ -99,10 +97,40 @@ export function QuestRoom({
         ))}
       </ul>
       <RoomBackpack tree={tree} hobs={hobs} onOpen={open} />
-      <RoomControls tree={tree} task={chosen?.task ?? null} hobs={hobs} cancel={topCancel(tree)} quest={card.quest} />
+      <RoomControls
+        tree={tree}
+        task={chosen?.task ?? null}
+        hobs={hobs}
+        cancel={topCancel(tree)}
+        quest={card.quest}
+        onWorkbench={workbench}
+      />
     </section>
   );
 }
+
+/**
+ * Opens a Task in the drawer and in its Workbench beside this chat; without a chat to open them
+ * beside, they open in the tree's own thread.
+ */
+const useOpeners = (
+  top: Task | undefined,
+  onOpen: ((taskId: TaskId) => void) | undefined,
+  onWorkbench: ((taskId: TaskId) => void) | undefined,
+) => {
+  const navigate = useNavigate();
+  const inOwnThread = (search: { task: TaskId } | { bench: TaskId }) =>
+    top?.threadId != null &&
+    void navigate({
+      to: "/hobs/$hobId/threads/$threadId",
+      params: { hobId: top.ownerId, threadId: top.threadId },
+      search,
+    });
+  return {
+    open: onOpen ?? ((taskId: TaskId) => inOwnThread({ task: taskId })),
+    workbench: onWorkbench ?? ((taskId: TaskId) => inOwnThread({ bench: taskId })),
+  };
+};
 
 /** One block per Task under the top one, filled as each is done. */
 function Segments({ rows }: { rows: ReadonlyArray<RoomRow> }) {

@@ -1,4 +1,5 @@
 import type { AgentId, TaskId, ThreadId } from "@hobbots/domain";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useState } from "react";
@@ -10,6 +11,8 @@ import { HobList } from "./hob-list.tsx";
 import { TaskDrawer } from "./quest/task-drawer.tsx";
 import { usePins } from "./quest/use-work.ts";
 import { SidePanel } from "./side-panel.tsx";
+import type { WorkbenchView } from "./workbench/use-workbench.ts";
+import { Workbench } from "./workbench/workbench.tsx";
 
 const usePersistentToggle = (key: string) => {
   const [open, setOpen] = useState(() => readStored(key, true));
@@ -28,6 +31,8 @@ interface WorkspaceProps {
   /** A Task to show in the drawer beside the chat. */
   taskId?: TaskId | undefined;
   main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
+  /** A Task's Workbench to show in the chat's place (ADR 023). */
+  workbench?: WorkbenchView | undefined;
 }
 
 /**
@@ -49,29 +54,38 @@ function Workspace({
   focusMessageId,
   taskId,
   main = (props) => <ThreadMain {...props} />,
+  workbench,
 }: WorkspaceProps) {
   const [navOpen, setNavOpen] = usePersistentToggle("layout.navOpen");
   const [panelOpen, setPanelOpen] = usePersistentToggle("layout.panelOpen");
   // Pinned Quests show in the Quest tab of every thread and open in its drawer.
   const pins = usePins();
   useThreadKeys(hobId, threadId);
+  const benchOpen = threadId !== undefined && workbench !== undefined;
 
   return (
     <div className="flex min-w-0 flex-1">
       {navOpen && <HobList hobId={hobId} threadId={threadId} onHide={() => setNavOpen(false)} />}
       {/* The drawer opens over the end of the chat, so the conversation keeps its width. */}
       <div className="relative flex min-w-0 flex-1">
-        {main({
-          hobId,
-          threadId,
-          focusMessageId,
-          navOpen,
-          panelOpen,
-          onShowNav: () => setNavOpen(true),
-          onTogglePanel: () => setPanelOpen(!panelOpen),
-        })}
-        {threadId !== undefined && taskId !== undefined && (
+        {/* The Workbench covers the chat without unmounting it, so going back finds the same scroll
+            position and unsent message; meanwhile the chat is hidden from sight and focus. */}
+        <div className={cn("flex min-w-0 flex-1", benchOpen && "invisible")} inert={benchOpen}>
+          {main({
+            hobId,
+            threadId,
+            focusMessageId,
+            navOpen,
+            panelOpen,
+            onShowNav: () => setNavOpen(true),
+            onTogglePanel: () => setPanelOpen(!panelOpen),
+          })}
+        </div>
+        {threadId !== undefined && taskId !== undefined && !benchOpen && (
           <TaskDrawer key={threadId} hobId={hobId} threadId={threadId} taskId={taskId} pinned={pins.pinned} />
+        )}
+        {threadId !== undefined && workbench !== undefined && (
+          <Workbench hobId={hobId} threadId={threadId} view={workbench} pinned={pins.pinned} />
         )}
       </div>
       {panelOpen && <SidePanel hobId={hobId} threadId={threadId} taskId={taskId} pins={pins} />}

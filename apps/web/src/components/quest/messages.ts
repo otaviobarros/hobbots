@@ -21,6 +21,7 @@ export const messages = {
     showAll: "Show all",
     details: "Show details",
     open: ({ title }: { title: string }) => `Look inside ${title}`,
+    workbench: "Open in Workbench",
   },
   status: {
     "needs-you": "Needs you",
@@ -70,6 +71,7 @@ export const messages = {
     label: ({ title }: { title: string }) => `${title}, Task details`,
     close: "Close",
     back: ({ title }: { title: string }) => `Back to ${title}`,
+    workbench: "Open in Workbench",
     from: ({ name }: { name: string }) => `${name} gave it`,
     brief: "Brief",
     expected: ({ text }: { text: string }) => `Expected: ${text}`,
@@ -132,6 +134,7 @@ export const messages = {
     /** A member that brought in hobs of its own: the party it leads under the Quest. */
     leadsParty: ({ names }: { names: string }) => `Leads ${names}`,
     pick: "Pick a Task to retry, reassign or cancel it.",
+    workbench: "Open in Workbench",
     controls: ({ title }: { title: string }) => `Controls for ${title}`,
     attempt: ({ count }: { count: number }) => `Attempt ${formatCount(count)}`,
     notStarted: "Not started yet",

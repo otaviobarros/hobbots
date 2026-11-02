@@ -29,7 +29,7 @@ const TILES: Record<RuntimeKind, { readonly mark: string; readonly className: st
 };
 
 /** The runtime's square mark, as the chat header and the picker show it. */
-const RuntimeTile = ({ runtime }: { runtime: RuntimeKind }) => (
+export const RuntimeTile = ({ runtime }: { runtime: RuntimeKind }) => (
   <span
     aria-hidden
     className={cn("grid size-5 flex-none place-items-center text-xs font-bold text-ground", TILES[runtime].className)}
@@ -47,7 +47,7 @@ const STATE_WORDS: Record<RuntimeHealth["availability"], string> = {
 };
 
 /** "Claude Code · Sonnet", with the model's own name when the runtime lists it. */
-const useBrainLabel = (brain: { readonly runtime: RuntimeKind; readonly model: string | null }) => {
+export const useBrainLabel = (brain: { readonly runtime: RuntimeKind; readonly model: string | null }) => {
   const models = useQuery(modelsQuery(brain.runtime));
   return brainLabel(brain.runtime, modelName(models.data, brain.model));
 };

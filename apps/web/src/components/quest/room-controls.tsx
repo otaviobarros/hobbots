@@ -35,6 +35,7 @@ export function RoomControls({
   hobs,
   cancel,
   quest,
+  onWorkbench,
 }: {
   tree: TaskTree;
   /** The Task open in the drawer, when it is in this tree. */
@@ -42,6 +43,8 @@ export function RoomControls({
   hobs: HobLookup;
   cancel: TopCancel;
   quest: Quest | null;
+  /** Opens a Task's Workbench (ADR 023). */
+  onWorkbench: (taskId: Task["id"]) => void;
 }) {
   const top = tree.tasks[0];
   return (
@@ -50,7 +53,7 @@ export function RoomControls({
         <p className="m-0 text-xs text-label">{copy.pick}</p>
       ) : (
         // A new Task starts with nothing asked and nothing open.
-        <TaskControlsFor key={task.id} tree={tree} task={task} hobs={hobs} />
+        <TaskControlsFor key={task.id} tree={tree} task={task} hobs={hobs} onWorkbench={onWorkbench} />
       )}
       {top !== undefined && (
         <TopControls key={top.id} tree={tree} top={top} hobs={hobs} cancel={cancel} quest={quest} />
@@ -123,7 +126,17 @@ function ConfirmCancel({
 }
 
 /** The open Task's owner, title and attempt, with the controls that apply to it. */
-function TaskControlsFor({ tree, task, hobs }: { tree: TaskTree; task: Task; hobs: HobLookup }) {
+function TaskControlsFor({
+  tree,
+  task,
+  hobs,
+  onWorkbench,
+}: {
+  tree: TaskTree;
+  task: Task;
+  hobs: HobLookup;
+  onWorkbench: (taskId: Task["id"]) => void;
+}) {
   const [open, setOpen] = useState<"reassign" | "cancel" | null>(null);
   const [target, setTarget] = useState<Agent | null>(null);
   const control = useTaskControl();
@@ -142,6 +155,9 @@ function TaskControlsFor({ tree, task, hobs }: { tree: TaskTree; task: Task; hob
       <span className="truncate text-detail">{copy.row({ name: owner, title })}</span>
       <span className="text-xs text-label">{attempts === 0 ? copy.notStarted : copy.attempt({ count: attempts })}</span>
       <span className="flex flex-wrap gap-1.5 empty:hidden">
+        <Button variant="outline" size="xs" onClick={() => onWorkbench(task.id)}>
+          {copy.workbench}
+        </Button>
         {controls.retry && (
           <Button
             variant="outline"

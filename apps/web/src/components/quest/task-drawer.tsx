@@ -3,6 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { formatTime } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
+import { useOpenWorkbench } from "../workbench/use-workbench.ts";
 import { roomStatus, roomStatusLabel, roomTone } from "./control-room.ts";
 import { messages } from "./messages.ts";
 import { emptyNote, NoteBox, type NoteDraft } from "./note-box.tsx";
@@ -34,6 +35,7 @@ export function TaskDrawer({
   const trees = [...followed.thread, ...followed.elsewhere];
   const hobs = useHobLookup();
   const open = useOpenTask(hobId, threadId);
+  const openWorkbench = useOpenWorkbench(hobId, threadId);
   const heading = useRef<HTMLHeadingElement>(null);
   // Each Task keeps its own unsent note, so moving between Tasks never sends one about another.
   const [drafts, setDrafts] = useState<ReadonlyMap<TaskId, NoteDraft>>(new Map());
@@ -73,6 +75,11 @@ export function TaskDrawer({
             {found === null ? copy.notFound : title}
           </h2>
         </span>
+        {found !== null && (
+          <Button variant="chip" size="xs" onClick={() => openWorkbench(found.task.id, "drawer")}>
+            {copy.workbench}
+          </Button>
+        )}
       </header>
       {found !== null && <Detail tree={found.tree} task={found.task} hobs={hobs} onOpen={open} />}
       {/* Once the work has ended nobody is left to read a note: talk to the lead in the chat. */}
