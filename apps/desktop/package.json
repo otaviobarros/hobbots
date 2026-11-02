@@ -1,6 +1,6 @@
 {
   "name": "@hobbots/desktop",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "Hobbots desktop app",
   "private": true,
   "type": "module",
