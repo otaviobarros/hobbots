@@ -30,8 +30,8 @@ export class HubListeners extends Context.Service<
     readonly port: Effect.Effect<number>;
     /**
      * Moves the loopback listeners to `port` and closes the tailnet ones, which the caller opens
-     * again at the new port. Connections already open stay, on loopback and on the tailnet, so
-     * clients hear where the hub went. Fails with the system's words when the port cannot be opened
+     * again at the new port. Requests under way, such as event streams, stay, on loopback and on the
+     * tailnet, so clients hear where the hub went; Node closes idle connections. Fails with the system's words when the port cannot be opened
      * on loopback, and then changes nothing.
      */
     readonly movePort: (port: number) => Effect.Effect<void, string>;

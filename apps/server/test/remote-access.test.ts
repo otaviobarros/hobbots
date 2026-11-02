@@ -100,6 +100,17 @@ afterEach(async () => {
   stop = undefined;
 });
 
+/** Holds every `/hold` request until a test releases it. */
+const latch = () => {
+  let resolve = () => {};
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+};
+let held = latch();
+let holding = 0;
+
 /**
  * A hub with the real listeners, checks and remote access over a fake Tailscale, serving one route
  * that answers who sent the request.
@@ -129,9 +140,19 @@ const startHub = async (
       return HttpServerResponse.text(Option.match(peer, { onNone: () => "local", onSome: (p) => p.nodeId }));
     }),
   );
+  // Answers once the test lets it, as a request still under way, such as the event stream, would.
+  const HoldRoute = HttpRouter.add(
+    "GET",
+    "/hold",
+    Effect.sync(() => (holding += 1)).pipe(
+      Effect.andThen(Effect.promise(() => held.promise)),
+      Effect.as(HttpServerResponse.text("held")),
+    ),
+  );
   const Checks = Layer.mergeAll(OwnHostsOnly, KnownTailnetPeersOnly);
   const Routes = Layer.mergeAll(
     PeerRoute,
+    HoldRoute,
     options.untilPairing ? Layer.merge(Checks, TailnetClosedUntilPairing) : Checks,
   );
   const hub = HttpRouter.serve(Routes, {
@@ -312,9 +333,12 @@ describe("remote access over a fake Tailscale", () => {
     const before = hub.port();
     const next = await freePort();
 
-    // A connection a tailnet client already has open stays, so it hears where the hub went.
-    const open = connect({ host: "127.0.0.2", port: before, localAddress: "127.0.0.1" });
-    await new Promise((done) => open.once("connect", done));
+    // A tailnet request still under way, as the event stream or the change itself is, stays and is
+    // answered, so its client hears where the hub went. Node closes idle connections.
+    held = latch();
+    holding = 0;
+    const underWay = ask("127.0.0.2", before, { from: "127.0.0.1", path: "/hold" });
+    await vi.waitFor(() => expect(holding).toBe(1));
 
     const moved = await hub.update({ port: next });
     expect(moved).toMatchObject({ port: next, listening: ["127.0.0.2"], problem: null });
@@ -324,10 +348,8 @@ describe("remote access over a fake Tailscale", () => {
     expect(await ask("127.0.0.2", next, { from: "127.0.0.1" })).toEqual({ status: 200, body: "nFAKEHUB" });
     expect(await refusal("127.0.0.1", before)).toBe("ECONNREFUSED");
     expect(await refusal("127.0.0.2", before, "127.0.0.1")).toBe("ECONNREFUSED");
-    const answer = new Promise<string>((done) => open.once("data", (chunk) => done(String(chunk))));
-    open.write(`GET /peer HTTP/1.1\r\nHost: 127.0.0.2:${before}\r\nConnection: close\r\n\r\n`);
-    expect(await answer).toMatch(/^HTTP\/1\.1 200 /);
-    open.destroy();
+    held.resolve();
+    expect(await underWay).toEqual({ status: 200, body: "held" });
   });
 
   // covers DP-004
