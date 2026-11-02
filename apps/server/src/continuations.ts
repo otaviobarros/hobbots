@@ -4,6 +4,7 @@ import {
   type Attempt,
   type BackpackItem,
   isLiveAttempt,
+  isTerminalTask,
   type StaleBackpackClaim,
   type Task,
   type TaskId,
@@ -192,7 +193,8 @@ export const MemberContinuationsLive = Layer.effect(
 
 /**
  * Wakes a thread when work arrives for its hob (ADR 019): after a commit that records an
- * actionable item, or sends one back to pending, as an expired claim does. The announcement only
+ * actionable item, or sends one back to pending, as an expired claim does. Once a Task ends, or
+ * its cancel is asked for, it resolves the work still waiting about its tree as late. The announcement only
  * wakes the chat, and the runner of members' Tasks when the hub has one; the stored items decide
  * what runs.
  */
@@ -202,6 +204,9 @@ export const WakeOnArrival = Layer.effectDiscard(
     const chat = yield* ChatService;
     const continuations = yield* Continuations;
     const signal = yield* Effect.serviceOption(TaskSignal);
+    const backpack = yield* Backpack;
+    const dispatcher = yield* Dispatcher;
+    const host = yield* DispatcherHost;
     const subscription = yield* bus.subscribe;
     const wake = (item: BackpackItem) =>
       item.state !== "pending" || !item.actionable
@@ -213,13 +218,33 @@ export const WakeOnArrival = Layer.effectDiscard(
     // An Attempt that ended frees its Task: a member's work that waited behind it can start now.
     const freed = (attempt: Attempt | null) =>
       attempt === null || isLiveAttempt(attempt.state) || Option.isNone(signal) ? Effect.void : signal.value.notify;
+    // A Task that is over for good leaves the work about it with nothing to do: what waits in any
+    // backpack about its tree and is late by now resolves as late, routine progress too, instead
+    // of waiting for a turn that may never come (ADR 019). That is a Task cancelled or being
+    // cancelled, or the one you asked for once it ended. A member's failed Task can be retried, so
+    // the work about it waits for that.
+    const over = (task: Task) =>
+      task.state === "cancelled" ||
+      task.state === "cancelling" ||
+      (task.parentId === null && isTerminalTask(task.state));
+    const settleEnded = (task: Task) =>
+      over(task)
+        ? Effect.gen(function* () {
+            const tree = new Set((yield* host.treeOf(task.id)).map((each) => each.id));
+            const open = yield* backpack.listOpen({ _tag: "Workspace" });
+            const about = open.filter((item) => item.taskId !== null && tree.has(item.taskId));
+            if (about.length > 0) yield* dispatcher.settleLate(about.map((item) => item.id));
+          })
+        : Effect.void;
     yield* Stream.fromSubscription(subscription).pipe(
       Stream.runForEach((event) => {
         if (event._tag !== "Journaled") return Effect.void;
         const payload = event.entry.payload;
         if (payload._tag === "BackpackItemRecorded" || payload._tag === "BackpackItemChanged")
           return wake(payload.item);
-        return payload._tag === "TaskStateChanged" ? freed(payload.attempt) : Effect.void;
+        return payload._tag === "TaskStateChanged"
+          ? Effect.andThen(settleEnded(payload.task), freed(payload.attempt))
+          : Effect.void;
       }),
       Effect.forkScoped,
     );

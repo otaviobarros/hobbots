@@ -206,6 +206,14 @@ const count = (table: string) =>
     return Number(row?.count);
   });
 
+/** Cancels Quill's copy Task, which nothing runs, from wherever it is now. */
+const cancelCopy = Effect.gen(function* () {
+  const tasks = yield* TaskRepository;
+  const copy = Option.getOrThrow(yield* tasks.readTree(TaskId.make("copy"))).tasks[0];
+  if (copy === undefined) return yield* Effect.die("no copy Task");
+  yield* tasks.moveTask(copy.id, copy.revision, "cancelled", now);
+});
+
 describe("The dispatcher", () => {
   // covers IN-003
   it("[TC-IN-027] delivers an item once however often it is dispatched, and a redelivered item applies its effect once", async () => {
@@ -522,6 +530,97 @@ describe("The dispatcher", () => {
     ]);
     expect(tree.attempts.map((each) => each.id)).toEqual(["a1"]);
   });
+  // covers IN-003, OR-006
+  it("[TC-OR-181] resolves as late the items of a turn stopped by its Task's cancel, instead of sending them back to pending", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const tasks = yield* TaskRepository;
+        const dispatcher = yield* Dispatcher;
+        let runs = 0;
+        // Quill's Task is cancelled while his turn reads the item, and the cancel stops the turn.
+        // Like a thread whose turn you stopped, the session then holds its work back: no turn is
+        // planned again, so only the stopped turn's own end can settle the item.
+        const [outcome] = yield* dispatcher.dispatchAll([item.id], () =>
+          Effect.succeed(
+            runs > 0
+              ? null
+              : {
+                  target: "thread:t1",
+                  turnId: "turn-1",
+                  run: ([delivery]: ReadonlyArray<Delivery>) =>
+                    Effect.gen(function* () {
+                      runs++;
+                      yield* delivery?.accepted("session-1") ?? Effect.void;
+                      yield* cancelCopy.pipe(Effect.provideService(TaskRepository, tasks), Effect.orDie);
+                      return yield* new BackpackTurnFailed({ end: "stopped", diagnostic: null });
+                    }),
+                },
+          ),
+        );
+        return { outcome, runs, copy: Option.getOrThrow(yield* tasks.readTree(TaskId.make("copy"))).tasks[0] };
+      }),
+    );
+
+    expect(result.outcome).toMatchObject({
+      _tag: "Late",
+      item: { state: "resolved", claim: null, disposition: { _tag: "late", taskRevision: result.copy?.revision } },
+    });
+    expect(result.outcome?._tag === "Late" && result.outcome.item.deliveries).toHaveLength(1);
+    // Nothing is delivered again.
+    expect(result.runs).toBe(1);
+  });
+
+  // covers IN-003, OR-006
+  it("[TC-OR-182] resolves as late the items of an interrupted turn whose Task was cancelled meanwhile", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const dispatcher = yield* Dispatcher;
+        const backpack = yield* Backpack;
+        const reading = yield* Deferred.make<void>();
+        const fiber = yield* Effect.forkChild(
+          dispatcher.dispatch(item.id, () => ({
+            target: "thread:t1",
+            turnId: "turn-1",
+            run: (delivery) =>
+              delivery
+                .accepted("session-1")
+                .pipe(Effect.andThen(Deferred.succeed(reading, undefined)), Effect.andThen(Effect.never)),
+          })),
+        );
+        yield* Deferred.await(reading);
+        yield* cancelCopy;
+        yield* Fiber.interrupt(fiber);
+        return yield* backpack.find(item.id);
+      }),
+    );
+
+    expect(result).toMatchObject({ state: "resolved", claim: null, disposition: { _tag: "late" } });
+  });
+
+  // covers IN-003, OR-006
+  it("[TC-OR-183] resolves a late item even when no turn can start, and plans no turn for it", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const dispatcher = yield* Dispatcher;
+        yield* cancelCopy;
+        let planned = 0;
+        const outcomes = yield* dispatcher.dispatchAll([item.id], () =>
+          Effect.sync(() => {
+            planned++;
+            return null;
+          }),
+        );
+        return { outcomes, planned };
+      }),
+    );
+
+    expect(result.outcomes).toMatchObject([{ _tag: "Late", item: { state: "resolved", deliveries: [] } }]);
+    expect(result.planned).toBe(0);
+  });
+
   // covers IN-003, IN-004
   it("[TC-IN-060] puts every waiting item into one turn, plans it again after an early end, and leaves items alone when no turn can start", async () => {
     const result = await run(

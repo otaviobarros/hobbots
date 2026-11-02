@@ -190,6 +190,13 @@ export class Dispatcher extends Context.Service<
       itemIds: ReadonlyArray<BackpackItemId>,
       plan: (items: ReadonlyArray<BackpackItem>) => Effect.Effect<BatchTurn | null>,
     ) => Effect.Effect<ReadonlyArray<Dispatched>>;
+    /**
+     * Resolves as late each of the items that waits with no claim while its Task has ended or its
+     * cancel was asked for, and starts no turn: what waits for a turn, and routine progress that
+     * none will carry, once its Task is over. The others are skipped. Each item's outcome, in the
+     * order given.
+     */
+    readonly settleLate: (itemIds: ReadonlyArray<BackpackItemId>) => Effect.Effect<ReadonlyArray<Dispatched>>;
     /** Ends claims whose lease ran out, so their items wait for a new claim. */
     readonly expireLapsed: Effect.Effect<void>;
   }
@@ -252,22 +259,38 @@ export class Dispatcher extends Context.Service<
             }),
           );
 
+        /** How late the item is against its Task as the Task stands now, or null when it is not. */
+        const lateNow = (item: BackpackItem) =>
+          item.taskId === null
+            ? Effect.succeed(null)
+            : Effect.map(host.treeOf(item.taskId), (tree) => lateness(item, tree));
+
         /**
-         * Checks a claimed item before it goes into the turn: late against its Task, or failed once
-         * it was delivered as often as the limit allows. Null when it goes in.
+         * Resolves a claimed item as late when its Task has ended or its cancel was asked for, so it
+         * starts nothing (OR-006). Null when it is not late.
          */
-        const check = ({ item, held }: Claimed, last: { ending: BackpackTurnEnding | null }) =>
+        const resolveIfLate = ({ item, held }: Claimed) =>
           Effect.gen(function* () {
-            const late = item.taskId === null ? null : lateness(item, yield* host.treeOf(item.taskId));
-            if (late !== null) {
-              const resolved = yield* step(backpack.resolve(item.id, held, { _tag: "late", ...late }));
-              return { _tag: "Late", item: resolved } as Dispatched;
-            }
-            if (outOfDeliveries(item)) {
-              return yield* fail(held, item, last.ending);
-            }
-            return null;
+            const late = yield* lateNow(item);
+            if (late === null) return null;
+            const resolved = yield* step(backpack.resolve(item.id, held, { _tag: "late", ...late }));
+            return { _tag: "Late", item: resolved } as Dispatched;
           });
+
+        /**
+         * Settles a claimed item that has nowhere to go: late against its Task, or failed once it was
+         * delivered as often as the limit allows, with `ending` as the reason. Null when it goes on.
+         */
+        const settleSpent = (claimed: Claimed, ending: BackpackTurnEnding | null) =>
+          Effect.gen(function* () {
+            const late = yield* resolveIfLate(claimed);
+            if (late !== null) return late;
+            return outOfDeliveries(claimed.item) ? yield* fail(claimed.held, claimed.item, ending) : null;
+          });
+
+        /** Checks a claimed item before it goes into the turn, as `settleSpent` does. Null when it goes in. */
+        const check = (claimed: Claimed, last: { ending: BackpackTurnEnding | null }) =>
+          settleSpent(claimed, last.ending);
 
         /**
          * Whether the item was delivered as often as the limit allows since it was last retried.
@@ -278,15 +301,16 @@ export class Dispatcher extends Context.Service<
           item.actionable && deliveriesSinceRetry(item) >= limits.maxDeliveries;
 
         /**
-         * The turn ended early for this item: it fails on its last delivery, or goes back to pending
-         * (null), keeping how its turn ended.
+         * The turn ended early for this item: it resolves as late once its Task has ended or its
+         * cancel was asked for, fails on its last delivery, or goes back to pending (null), keeping
+         * how its turn ended.
          */
-        const endedEarly = ({ item, held }: Claimed, ending: BackpackTurnEnding) =>
+        const endedEarly = (claimed: Claimed, ending: BackpackTurnEnding) =>
           Effect.gen(function* () {
-            if (outOfDeliveries(item)) {
-              return yield* fail(held, item, ending);
-            }
-            yield* step(backpack.requeue(item.id, held));
+            // A turn stopped because its Task was cancelled leaves nothing to deliver again.
+            const settled = yield* settleSpent(claimed, ending);
+            if (settled !== null) return settled;
+            yield* step(backpack.requeue(claimed.item.id, claimed.held));
             return null;
           });
 
@@ -350,6 +374,24 @@ export class Dispatcher extends Context.Service<
             return waiting;
           });
 
+        /**
+         * Resolves the waiting items that are late already, so they wait for no turn: a late item
+         * starts nothing, and needs none to settle, even where no turn can start now, as in a
+         * thread whose turn you stopped. Returns the rest.
+         */
+        const settleLateWaiting = (waiting: ReadonlyArray<BackpackItem>, outcomes: Map<BackpackItemId, Dispatched>) =>
+          Effect.filter(waiting, (item) =>
+            Effect.gen(function* () {
+              if ((yield* lateNow(item)) === null) return true;
+              const claimed = yield* claimOne(item.id, `${hub}:late`);
+              // Its Task moved on between the two reads, as a retry does: the claim lapses, and the
+              // sweep sends the item back to pending for a later dispatch.
+              const settled = "_tag" in claimed ? claimed : yield* resolveIfLate(claimed);
+              outcomes.set(item.id, settled ?? { _tag: "Skipped", reason: "claimed" });
+              return false;
+            }),
+          );
+
         /** Claims each waiting item for the turn and checks it; returns those that go into the turn. */
         const claimAll = (
           waiting: ReadonlyArray<BackpackItem>,
@@ -374,7 +416,8 @@ export class Dispatcher extends Context.Service<
 
         /**
          * Runs the turn with every delivered item while their leases are renewed. A turn that dies or
-         * is interrupted sends its items back to pending before the cause goes on. Returns why it
+         * is interrupted sends its items back to pending before the cause goes on, except those
+         * that are late by then. Returns why it
          * ended early, or null when it ran to its end.
          */
         const runTurn = (turn: BatchTurn, delivered: ReadonlyArray<Claimed>) =>
@@ -386,7 +429,15 @@ export class Dispatcher extends Context.Service<
               Exit.isFailure(exit) && !Cause.hasFails(exit.cause)
                 ? Effect.forEach(
                     delivered,
-                    ({ item, held }) => backpack.requeue(item.id, held).pipe(Effect.flatMap(announce), Effect.ignore),
+                    (claimed) =>
+                      resolveIfLate(claimed).pipe(
+                        Effect.flatMap((late) =>
+                          late === null
+                            ? backpack.requeue(claimed.item.id, claimed.held).pipe(Effect.flatMap(announce))
+                            : Effect.void,
+                        ),
+                        Effect.ignore,
+                      ),
                     { discard: true },
                   )
                 : Effect.void,
@@ -410,7 +461,8 @@ export class Dispatcher extends Context.Service<
           last: { ending: BackpackTurnEnding | null },
         ) =>
           Effect.gen(function* () {
-            const waiting = yield* findWaiting(itemIds, outcomes);
+            const found = yield* findWaiting(itemIds, outcomes);
+            const waiting = yield* settleLateWaiting(found, outcomes);
             if (waiting.length === 0) return;
             const turn = yield* plan(waiting);
             if (turn === null) {
@@ -488,7 +540,20 @@ export class Dispatcher extends Context.Service<
         );
         yield* Effect.forkScoped(sweep.pipe(Effect.repeat(Schedule.spaced(lease))));
 
-        return Dispatcher.of({ dispatch, dispatchAll, expireLapsed: expire(false) });
+        const settleLate: Dispatcher["Service"]["settleLate"] = (itemIds) =>
+          Effect.suspend(() => {
+            const outcomes = new Map<BackpackItemId, Dispatched>();
+            return findWaiting(itemIds, outcomes).pipe(
+              Effect.map((found) => found.filter((item) => item.claim === null)),
+              Effect.flatMap((found) => settleLateWaiting(found, outcomes)),
+              Effect.catchCause((cause) => Effect.logWarning("Could not settle late backpack items", cause)),
+              Effect.map(() =>
+                itemIds.map((id): Dispatched => outcomes.get(id) ?? { _tag: "Skipped", reason: "not-ready" }),
+              ),
+            );
+          });
+
+        return Dispatcher.of({ dispatch, dispatchAll, settleLate, expireLapsed: expire(false) });
       }),
     );
 }
