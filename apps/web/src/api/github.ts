@@ -39,6 +39,8 @@ export const githubRepositoriesQuery = (login: string, watching = false) =>
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchInterval: watching ? REPOSITORY_WATCH.everyMs : false,
+    // The person is on GitHub, so Hobbots is not focused, though it may be beside the browser.
+    refetchIntervalInBackground: watching,
   });
 
 /** A watch on the repository list, started when the person goes to choose repositories. */

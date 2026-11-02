@@ -10,7 +10,11 @@ describe("the repositories the app reaches", () => {
     expect(stillWatching(watch, "octohob/workshop", watch.until)).toBe(false);
     expect(stillWatching(null, "octohob/workshop", 2_000)).toBe(false);
 
-    expect(githubRepositoriesQuery("octohob", true).refetchInterval).toBe(REPOSITORY_WATCH.everyMs);
+    // Hobbots has lost focus to GitHub while it watches, so the watch goes on in the background.
+    expect(githubRepositoriesQuery("octohob", true)).toMatchObject({
+      refetchInterval: REPOSITORY_WATCH.everyMs,
+      refetchIntervalInBackground: true,
+    });
     expect(githubRepositoriesQuery("octohob").refetchInterval).toBe(false);
     // Coming back to the window always reads it again, however recent the last read.
     expect(githubRepositoriesQuery("octohob")).toMatchObject({ staleTime: 0, refetchOnWindowFocus: true });
