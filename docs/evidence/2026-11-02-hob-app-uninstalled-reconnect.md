@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-02
 - **Issue:** [#419](https://github.com/otaviobarros/hobbots/issues/419)
-- **Pull request:** not yet opened
+- **Pull request:** [#423](https://github.com/otaviobarros/hobbots/pull/423)
 - **Commit:** not yet on `main` (ran on the pull request branch, based on `af93ddf`)
 - **Setup:** Automated only. The end-to-end case runs the hub as `main.ts` composes it, over its HTTP API, with the fake runtime and the fake GitHub on a local port (`@hobbots/charms/testing`), as the [#228 record](2026-11-02-hob-github-identity-end-to-end.md) describes. The other cases run the hob's app service against the same fake GitHub. The keychain is the in-memory one. Linux x86_64, Node 22.23.4, Git 2.43, on SQLite in memory. CI runs the suites on SQLite and PostgreSQL.
 - **Result:** Passed. An app uninstalled on GitHub fails the hob's next action with where to install it again, is marked for reinstalling on the Charms tab, and reaches GitHub no more until it is reinstalled and listed again. An app still installed elsewhere is not marked. Real GitHub was not part of this run.
