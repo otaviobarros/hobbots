@@ -37,8 +37,10 @@ const PAIR_PATH = "/pair";
 
 // A browser without a device on the hub asks for one before anything else (ADR 021).
 const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  beforeLoad: async ({ location }) => {
-    if (location.pathname !== PAIR_PATH && (await needsPairing())) throw redirect({ to: PAIR_PATH });
+  beforeLoad: async ({ location, context }) => {
+    if (location.pathname !== PAIR_PATH && (await needsPairing(context.queryClient))) {
+      throw redirect({ to: PAIR_PATH });
+    }
   },
   component: AppWindow,
 });
@@ -47,8 +49,8 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
 const pairRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "pair",
-  beforeLoad: async () => {
-    if (!(await needsPairing())) throw redirect({ to: "/" });
+  beforeLoad: async ({ context }) => {
+    if (!(await needsPairing(context.queryClient))) throw redirect({ to: "/" });
   },
   component: PairingScreen,
 });

@@ -2,6 +2,7 @@ import type { PairingStatus, WaitingDevice } from "@hobbots/api";
 import { type PairingRequest, pairingDeferred } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
+import { noteRefusal } from "./live.ts";
 import { followsEvents } from "./queries.ts";
 
 /**
@@ -191,9 +192,10 @@ let admitted = false;
 
 /**
  * Whether this page has no device on the hub, so it shows the pairing screen (ADR 021). The desktop
- * app's window always has one: it sets the window key again itself after the hub restarts.
+ * app's window always has one: it sets the window key again itself after the hub restarts. A device
+ * the hub says was revoked is marked removed, since only that first answer says so.
  */
-export const needsPairing = async (): Promise<boolean> => {
+export const needsPairing = async (queryClient: QueryClient): Promise<boolean> => {
   if (admitted || globalThis.window?.hobbots !== undefined) return false;
   try {
     await call((c) => c.setup.get());
@@ -201,6 +203,7 @@ export const needsPairing = async (): Promise<boolean> => {
     return false;
   } catch (error) {
     // Any other failure, such as a hub that is restarting, is left to the page to show.
+    noteRefusal(queryClient, error);
     return error instanceof ApiError && error.tag === "DeviceRequired";
   }
 };
