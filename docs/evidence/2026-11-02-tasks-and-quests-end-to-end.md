@@ -16,7 +16,7 @@
 | `[TC-OR-172]` | A hub stops while Quill's turn runs and Ada's question, passed up by Aldric, waits for you. The next start ends Quill's Attempt as interrupted and resumes his session, without sending his brief again. The Tasks, Quest, delegations and question are the same records, and the question still waits for you. Your answer reaches Ada once, and the hand-off reaches her once. The Quest completes with three Tasks, one question, one hand-off and Ada's three turns, your four messages are each kept once, and no Attempt is left live. | ✅ SQLite, PostgreSQL |
 | `[TC-PE-263]` | Aldric approves a push in his chat for This Task while Quill works. After a restart, his next push runs without asking you, with the grant marked used. Quill's own push in his turn after the restart asks you, bound to the same top Task. Cancelling the Quest revokes the grant as `task-ended`. | ✅ SQLite, PostgreSQL |
 
-The four cases passed 10 of 10 runs on each database, alone. The full server suite passed on each database, once in `pnpm check` and once in `pnpm test:pg`.
+The four cases passed 10 of 10 runs alone on each database. The persistence and server suites passed in full on each database, except `[TC-DP-008]`, which needs IPv6 and fails in this container on `main` too.
 
 ## Gaps
 
