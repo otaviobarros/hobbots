@@ -11,14 +11,16 @@ import { PAIRING_SECRET_PREFIX } from "@hobbots/domain";
 import { type Duration, Effect, Option, Redacted } from "effect";
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
+import { throughServe } from "./arrival.ts";
 import { DeviceGate, foreignOrigin, ownOrigin, setDeviceCookie } from "./devices.ts";
 
 /** A waiting browser keeps its pairing secret for as long as a deferred request lasts (ADR 021). */
 const PAIRING_COOKIE_MAX_AGE = "24 hours";
 
-const pairingCookie = (secret: string, maxAge: Duration.Input) =>
+/** Over HTTPS, through `tailscale serve`, the pairing cookie is `Secure` too. */
+const pairingCookie = (secret: string, maxAge: Duration.Input, secure: boolean) =>
   HttpApiBuilder.securitySetCookie(PairingCookie, Redacted.make(secret), {
-    secure: false,
+    secure,
     httpOnly: true,
     sameSite: "strict",
     path: "/api/pairing",
@@ -89,7 +91,7 @@ export const PairingHandlers = HttpApiBuilder.group(HobbotsApi, "pairing", (hand
           if (Option.isNone(place)) return yield* foreign;
           const opened = yield* open(place.value, payload);
           if (payload.kind === "browser") {
-            yield* pairingCookie(opened.secret, PAIRING_COOKIE_MAX_AGE);
+            yield* pairingCookie(opened.secret, PAIRING_COOKIE_MAX_AGE, throughServe(request));
             return { status: opened.status };
           }
           return opened;
@@ -103,8 +105,9 @@ export const PairingHandlers = HttpApiBuilder.group(HobbotsApi, "pairing", (hand
           const status = yield* devices.pairingStatus(secret, place);
           if (status.token === undefined || !viaCookie) return status;
           // A browser takes its token as the device cookie, never in the body, and drops the pairing secret.
-          yield* setDeviceCookie(status.token);
-          yield* pairingCookie("", "0 seconds");
+          const secure = throughServe(request);
+          yield* setDeviceCookie(status.token, secure);
+          yield* pairingCookie("", "0 seconds", secure);
           const { token: _, ...rest } = status;
           return rest;
         }).pipe(withRetryAfter),
