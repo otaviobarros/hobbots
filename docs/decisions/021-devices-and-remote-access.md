@@ -73,7 +73,7 @@ Only the hub's window is trusted without asking. No setting or variable makes th
     - at most 5 new requests per key in 10 minutes, and none for a minute after a Deny;
     - at most 20 open requests on the hub;
     - at most one status check per second per request;
-    - at most 60 requests a minute without a device from one tailnet node, pairing and health included.
+    - at most 60 requests a minute without a device from one tailnet node, pairing and health included. Status checks that present a valid pairing secret count only toward their own limit, so three waiting screens on one node are never throttled.
 
     Anything over a limit gets `429` with `Retry-After` and creates nothing, so no prompt or notification. The waiting screen says how long to wait, and that requests still waiting can be decided in Settings › Devices on the hub. The pairing body is at most 1 KB.
 11. Pairing changes go into the event journal (a device asked, was allowed, denied or revoked), so every approved client updates live. No token or pairing secret goes in, only the code and the device's details.
