@@ -7,12 +7,17 @@ import { ancestorsOf, isTerminalTask, type Task, type TaskTree } from "@hobbots/
  * session.
  */
 
-/** Longest text kept from one result or checkpoint, so a long one cannot fill a session. */
+/** Longest text the owner's briefing keeps from one result, checkpoint or artifact, so its own context stays small. */
 const SUMMARY_LIMIT = 600;
 /** Longest brief kept when a chat prompt becomes a Task's brief. */
 export const BRIEF_LIMIT = 2_000;
-/** Longest result the hub keeps from a step's final reply when the step did not return one itself. */
+/**
+ * Longest result the hub keeps from a step's final reply when the step did not return one itself,
+ * and the longest result or artifact a later step is given to work from.
+ */
 export const RESULT_LIMIT = 4_000;
+/** Longest text a step is given from the steps it comes after and what was handed to it, all together. */
+const STEP_INPUT_LIMIT = 16_000;
 
 /** `text` trimmed and cut to `limit` characters, marked when it was cut. */
 export const cut = (text: string, limit: number): string => clip(text.trim(), limit);
@@ -39,14 +44,19 @@ const endedBefore = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<Task>
     return before !== undefined && isTerminalTask(before.state) && before.state !== "completed" ? [before] : [];
   });
 
-const artifactLines = (tree: TaskTree, taskId: string) =>
-  tree.artifacts
-    .filter((artifact) => artifact.taskId === taskId)
-    .map((artifact) => `  - ${artifact.label} (${artifact.kind}): ${cut(artifact.value, SUMMARY_LIMIT)}`);
+/** An artifact as a line, its value cut to `limit`. */
+const artifactLine = (artifact: TaskTree["artifacts"][number], limit: number) =>
+  `  - ${artifact.label} (${artifact.kind}): ${cut(artifact.value, limit)}`;
+
+/** The artifacts `taskId` made, cut to `limit`: short for the owner's briefing, whole for a step that builds on them. */
+const artifactLines = (tree: TaskTree, taskId: string, limit = SUMMARY_LIMIT) =>
+  tree.artifacts.filter((artifact) => artifact.taskId === taskId).map((artifact) => artifactLine(artifact, limit));
 
 /**
  * The prompt a step's fresh session starts from: its brief first, then the results of the steps it
  * comes after and anything handed to it, then how to report. Nothing else of the Task reaches it.
+ * The step works from what it is given, so each result and handed value is kept up to `RESULT_LIMIT`,
+ * not cut to a summary, and all of them together up to `STEP_INPUT_LIMIT`, so many cannot fill its session.
  */
 export const stepPrompt = (step: Task, tree: TaskTree): string => {
   const { index, total } = stepPlace(step, tree);
@@ -54,15 +64,20 @@ export const stepPrompt = (step: Task, tree: TaskTree): string => {
     const done = tree.tasks.find((each) => each.id === id);
     if (done?.result == null) return [];
     const place = stepPlace(done, tree).index;
-    return [`Step ${place} returned: ${cut(done.result.summary, SUMMARY_LIMIT)}`, ...artifactLines(tree, done.id)];
+    return [
+      `Step ${place} returned: ${cut(done.result.summary, RESULT_LIMIT)}`,
+      ...artifactLines(tree, done.id, RESULT_LIMIT),
+    ];
   });
   const handed = tree.handOffs.flatMap((handOff) => {
     if (handOff.toTaskId !== step.id) return [];
     const artifact = tree.artifacts.find((each) => each.id === handOff.artifactId);
-    return artifact === undefined
-      ? []
-      : [`  - ${artifact.label} (${artifact.kind}): ${cut(artifact.value, SUMMARY_LIMIT)}`];
+    return artifact === undefined ? [] : [artifactLine(artifact, RESULT_LIMIT)];
   });
+  const inputs = [
+    ...(before.length === 0 ? [] : ["What the steps before it returned:", ...before]),
+    ...(handed.length === 0 ? [] : ["Handed to this step:", ...handed]),
+  ];
   const milestones = tree.milestones
     .filter((milestone) => milestone.taskId === step.id && milestone.reachedAt === null)
     .map((milestone) => `  - ${milestone.title} (milestone_id ${milestone.id})`);
@@ -70,8 +85,7 @@ export const stepPrompt = (step: Task, tree: TaskTree): string => {
     step.brief,
     "---",
     `This is step ${index} of ${total} of a Task you own, running in a fresh session with only its brief and what it refers to.`,
-    ...(before.length === 0 ? [] : ["What the steps before it returned:", ...before]),
-    ...(handed.length === 0 ? [] : ["Handed to this step:", ...handed]),
+    ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...(milestones.length === 0
       ? []
       : ["Milestones to report with report_checkpoint as you reach them:", ...milestones]),
