@@ -12,7 +12,14 @@ import {
   PermissionSummary,
   SecretRedaction,
 } from "@hobbots/agents";
-import { GitHubApiNode, GitHubCharmTools, GitHubToken, GitRemotes } from "@hobbots/charms";
+import {
+  GitHubApiNode,
+  GitHubCharmTools,
+  GitHubPushSettings,
+  GitHubToken,
+  GitPushLive,
+  GitRemotes,
+} from "@hobbots/charms";
 import { secretsFromEnv } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -20,6 +27,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  CharmCallsLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -29,7 +37,13 @@ import {
   TaskRepositoryLive,
   TaskToolCallsLive,
 } from "@hobbots/persistence";
-import { ClaudeCodeLayer, FakeAdditionalRuntimesLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
+import {
+  ClaudeCodeLayer,
+  FakeAdditionalRuntimesLayer,
+  FakeRuntimeLayer,
+  FolderSandboxLive,
+  ProcessSandbox,
+} from "@hobbots/runtimes";
 import { Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
@@ -71,6 +85,7 @@ const ServerLive = Layer.unwrap(
       GrantRepositoryLive,
       TaskRepositoryLive,
       TaskToolCallsLive,
+      CharmCallsLive,
       BackpackLive,
       EventJournal.layer,
       SetupRepository.layer,
@@ -90,9 +105,29 @@ const ServerLive = Layer.unwrap(
             executable: Option.getOrUndefined(config.claudeExecutable),
           }).pipe(Layer.provide(ProcessSandbox.layer))
     ).pipe(Layer.provide(PolicyEngine.node));
-    // The GitHub Charm reads with the user's sign-in on the hub, outside the sandbox (#317).
+    // The GitHub Charm reads and pushes with the user's sign-in on the hub, outside the sandbox
+    // (ADR 020). A push reads the hob's branch with Git in the hob's sandbox, which the hub starts
+    // once and shares with Claude Code's turns.
+    const charmFolder = join(dataDir, "charms", "github");
     const Charms = GitHubCharmTools.pipe(
-      Layer.provide(Layer.mergeAll(GitHubApiNode, GitRemotes.layer, PolicyEngine.node)),
+      Layer.provide(
+        Layer.mergeAll(
+          GitHubApiNode,
+          GitRemotes.layer,
+          PolicyEngine.node,
+          GitPushLive({ folder: charmFolder }).pipe(
+            Layer.provide(
+              FolderSandboxLive({ dataFolder: dataDir, stateFolder: join(charmFolder, "sandbox") }).pipe(
+                Layer.provide(ProcessSandbox.layer),
+              ),
+            ),
+          ),
+          Layer.succeed(GitHubPushSettings, {
+            over: config.githubPush,
+            agentSocket: Option.getOrUndefined(config.githubSshAgent),
+          }),
+        ),
+      ),
       Layer.provide(GitHubToken.layer(process.env)),
       Layer.provide(NodeServices.layer),
     );
@@ -128,6 +163,8 @@ const ServerLive = Layer.unwrap(
       // Before approvals, so a decision can save grants and every call reads the hob's live ones.
       .pipe(Layer.provideMerge(GrantService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
+      // Before the chat service, whose turns offer it; after the database, which keeps its call records.
+      .pipe(Layer.provideMerge(Charms))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
       .pipe(Layer.provideMerge(CanonicalSharedFolders))
       .pipe(
@@ -138,7 +175,6 @@ const ServerLive = Layer.unwrap(
             HobAdmission.layer,
             NodeFolderChecks,
             Runtime,
-            Charms,
             identity,
             // The hub's credentials, provider keys included, are redacted by value from what tools report.
             SecretRedaction.layer(secretsFromEnv(process.env)),
