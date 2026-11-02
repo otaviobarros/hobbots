@@ -1,6 +1,7 @@
 import {
   type ApprovalId,
   type ApprovalLifetime,
+  type CommitIdentity,
   type Effort,
   type Grant,
   type GrantId,
@@ -127,6 +128,11 @@ export interface ToolAccess {
    * parent holds every hob's and stays closed to the others.
    */
   readonly runtimeFolder: string;
+  /**
+   * Who the hob's commits are made as when it has its own GitHub App: its bot (ADR 022). Absent for a
+   * hob on the user's account, which keeps the user's own Git identity.
+   */
+  readonly commitAs?: CommitIdentity;
 }
 
 /** A tool call the policy answered Ask for, as an adapter asks the user about it (PE-003). */

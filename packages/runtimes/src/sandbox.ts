@@ -4,7 +4,7 @@ import { homedir, platform, tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
 import { RuntimeError } from "@hobbots/agents";
-import type { SandboxState } from "@hobbots/domain";
+import type { CommitIdentity, SandboxState } from "@hobbots/domain";
 import { Context, Effect, Layer } from "effect";
 import { gitConfigAccess } from "./git-config.ts";
 
@@ -67,6 +67,8 @@ export interface SandboxScope {
    * The agent also answers SSH logins, so this opens those too.
    */
   readonly signingAgent?: string;
+  /** The hob's bot, when it has its own GitHub App: its commands commit as it, unsigned. */
+  readonly commitAs?: CommitIdentity;
   readonly home?: string;
   readonly path?: string;
   /** The closed places outside the home folder; USER_DATA_ROOTS that exist by default. */
@@ -246,14 +248,61 @@ const COMMAND_VARIABLE = "HOBBOTS_SANDBOXED_COMMAND";
  */
 export const TEMP_BASE = platform() === "darwin" ? "/tmp" : tmpdir();
 
+/**
+ * Git settings for a turn's commands, through `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n` and
+ * `GIT_CONFIG_VALUE_n`, which Claude Code's scrub keeps and which win over the user's Git config and
+ * the repository's.
+ */
+export const gitConfigEnv = (settings: ReadonlyArray<readonly [string, string]>): Record<string, string> => {
+  const env: Record<string, string> = { GIT_CONFIG_COUNT: String(settings.length) };
+  for (const [index, [key, value]] of settings.entries()) {
+    env[`GIT_CONFIG_KEY_${index}`] = key;
+    env[`GIT_CONFIG_VALUE_${index}`] = value;
+  }
+  return env;
+};
+
+const UNSIGNED: ReadonlyArray<readonly [string, string]> = [
+  ["commit.gpgsign", "false"],
+  ["tag.gpgsign", "false"],
+];
+
 /** Turns commit and tag signing off for commands, through variables Claude Code's scrub keeps. */
-export const UNSIGNED_GIT = {
-  GIT_CONFIG_COUNT: "2",
-  GIT_CONFIG_KEY_0: "commit.gpgsign",
-  GIT_CONFIG_VALUE_0: "false",
-  GIT_CONFIG_KEY_1: "tag.gpgsign",
-  GIT_CONFIG_VALUE_1: "false",
-} as const;
+export const UNSIGNED_GIT = gitConfigEnv(UNSIGNED);
+
+/** Variables that would name a commit's author or committer over any Git setting. */
+export const GIT_IDENTITY_VARIABLES = [
+  "GIT_AUTHOR_NAME",
+  "GIT_AUTHOR_EMAIL",
+  "GIT_COMMITTER_NAME",
+  "GIT_COMMITTER_EMAIL",
+  "EMAIL",
+] as const;
+
+/**
+ * A hob with its own GitHub App commits as its bot (ADR 022): its name and noreply address as the
+ * user, author and committer, unsigned, since the user's key never vouches for a bot's commits. The
+ * identity variables are removed, since they would win over these settings. A hob on the user's
+ * account keeps the environment as it is.
+ */
+export const withCommitIdentity = (env: NodeJS.ProcessEnv, commitAs: CommitIdentity | undefined): NodeJS.ProcessEnv => {
+  if (commitAs === undefined) return env;
+  const kept = Object.fromEntries(
+    Object.entries(env).filter(([key]) => !(GIT_IDENTITY_VARIABLES as ReadonlyArray<string>).includes(key)),
+  );
+  return {
+    ...kept,
+    ...gitConfigEnv([
+      ...["user", "author", "committer"].flatMap(
+        (role): Array<readonly [string, string]> => [
+          [`${role}.name`, commitAs.name],
+          [`${role}.email`, commitAs.email],
+        ],
+      ),
+      ...UNSIGNED,
+    ]),
+  };
+};
 
 // sandbox-runtime puts `TMPDIR=` ahead of the sandbox in the wrapped command line, from the hub's own
 // environment (`/tmp/claude` when it has no CLAUDE_CODE_TMPDIR), which overrides the turn's. That folder
@@ -385,22 +434,25 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                 spawnArgs: (command, args, env) => ({
                   command: shell as string,
                   args: shellArgs,
-                  env: {
-                    ...sandboxEnv(env),
-                    ...added,
-                    // The runtime keeps its state for this hob there, never in the user's own.
-                    CLAUDE_CONFIG_DIR: scope.runtimeFolder,
-                    TMPDIR: tempFolder,
-                    // Claude Code keeps its own temporary files under /tmp otherwise, outside the sandbox's reach.
-                    CLAUDE_CODE_TMPDIR: tempFolder,
-                    // Claude Code keeps its sign-in to itself: commands, hooks and MCP servers start without it.
-                    CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
-                    // Signing cannot reach the user's keys or agent inside the sandbox, so a config that
-                    // asks for it (`commit.gpgsign`) would stop every commit. The scrub keeps these.
-                    // A turn given the user's signing agent signs as the config asks.
-                    ...(scope.signingAgent ? {} : UNSIGNED_GIT),
-                    [COMMAND_VARIABLE]: [command, ...args].map(shellQuote).join(" "),
-                  },
+                  env: withCommitIdentity(
+                    {
+                      ...sandboxEnv(env),
+                      ...added,
+                      // The runtime keeps its state for this hob there, never in the user's own.
+                      CLAUDE_CONFIG_DIR: scope.runtimeFolder,
+                      TMPDIR: tempFolder,
+                      // Claude Code keeps its own temporary files under /tmp otherwise, outside the sandbox's reach.
+                      CLAUDE_CODE_TMPDIR: tempFolder,
+                      // Claude Code keeps its sign-in to itself: commands, hooks and MCP servers start without it.
+                      CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
+                      // Signing cannot reach the user's keys or agent inside the sandbox, so a config that
+                      // asks for it (`commit.gpgsign`) would stop every commit. The scrub keeps these.
+                      // A turn given the user's signing agent signs as the config asks.
+                      ...(scope.signingAgent ? {} : UNSIGNED_GIT),
+                      [COMMAND_VARIABLE]: [command, ...args].map(shellQuote).join(" "),
+                    },
+                    scope.commitAs,
+                  ),
                 }),
                 release,
               };

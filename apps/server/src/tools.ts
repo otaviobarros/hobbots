@@ -1,8 +1,9 @@
 import { realpathSync } from "node:fs";
 import { basename, dirname, join, sep } from "node:path";
-import { effectiveFolders, FolderChecks, HobTools } from "@hobbots/agents";
+import { effectiveFolders, FolderChecks, HobGitHubApps, HobTools } from "@hobbots/agents";
+import { hobAppCommitIdentity } from "@hobbots/domain";
 import { SetupRepository } from "@hobbots/persistence";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { Installation } from "./installation.ts";
 
 /**
@@ -22,11 +23,14 @@ export const HobToolsLive = Layer.effect(
     const setup = yield* SetupRepository;
     const folderChecks = yield* FolderChecks;
     const { dataDir } = yield* Installation;
+    // A hob's own GitHub App, on a hub with the GitHub Charm (ADR 022), makes the hob commit as its bot.
+    const apps = yield* Effect.serviceOption(HobGitHubApps);
     return HobTools.of({
       access: (agent) =>
         Effect.gen(function* () {
           const { safetyPreset, approvedFolders } = yield* setup.get;
           const folders = yield* effectiveFolders(folderChecks, approvedFolders, agent.policy);
+          const app = Option.isSome(apps) ? yield* apps.value.get(agent.id) : null;
           // A folder that holds every hob's runtime state would open one hob's sessions to another,
           // since the sandbox cannot close that state inside a folder it opens for writing. The turn
           // then gets no folders, so it is chat-only but still resumes the hob's latest session.
@@ -45,6 +49,7 @@ export const HobToolsLive = Layer.effect(
             },
             folders: holder === undefined ? folders : [],
             runtimeFolder: join(runtimeFolders(dataDir), agent.id),
+            ...(app === null ? {} : { commitAs: hobAppCommitIdentity(app) }),
           };
         }).pipe(
           // Without its policy the hob gets no tools: closed, never open.

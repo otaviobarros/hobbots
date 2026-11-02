@@ -187,10 +187,11 @@ const ServerLive = Layer.unwrap(
       ),
     );
     // Each hob acts on GitHub as its own app when it has one, as the user's account otherwise (#224).
+    // The hobs' apps are given on, so a hob with its own app commits as its bot (ADR 022).
     const GitHub = GitHubCredentialPerHob.pipe(
       Layer.provide(Account),
       Layer.provideMerge(HobApp),
-      Layer.provide(HobGitHubAppRepository.pipe(Layer.provide(Sqlite))),
+      Layer.provideMerge(HobGitHubAppRepository.pipe(Layer.provide(Sqlite))),
     );
     const charmFolder = join(dataDir, "charms", "github");
     const Charms = GitHubCharmTools.pipe(
