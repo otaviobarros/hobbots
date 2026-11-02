@@ -1,5 +1,5 @@
 import type { AttemptActivityRead } from "@hobbots/api";
-import type { AttemptId, HobbotsEvent } from "@hobbots/domain";
+import type { AttemptId, CommandId, CommandOutput, HobbotsEvent } from "@hobbots/domain";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { syncState } from "./sync.ts";
@@ -12,6 +12,7 @@ import { syncState } from "./sync.ts";
 const workbenchKeys = {
   all: ["workbench"] as const,
   activity: (attemptId: AttemptId) => ["workbench", "activity", attemptId] as const,
+  output: (attemptId: AttemptId) => ["workbench", "output", attemptId] as const,
 };
 
 /**
@@ -56,4 +57,55 @@ export const activityChanged = async (queryClient: QueryClient, attemptId: Attem
   const queryKey = workbenchKeys.activity(attemptId);
   await queryClient.cancelQueries({ queryKey, exact: true });
   await queryClient.invalidateQueries({ queryKey, exact: true });
+};
+
+/** Nothing on the hub to read a running command's output again from, so a resync leaves it. */
+const LOCAL = { local: true } as const;
+
+/**
+ * What a running command printed so far, as it came. `missed` is set when a piece started past
+ * what this client had, as after a reconnect: what came before it was not seen live, and the whole
+ * output shows once the command ends.
+ */
+export interface LiveOutput {
+  readonly text: string;
+  readonly missed: boolean;
+}
+
+/** The output of each of an Attempt's commands still running, by command. */
+export type LiveOutputs = Readonly<Record<CommandId, LiveOutput>>;
+
+/**
+ * Adds a piece of a running command's output by its offset, so a repeated piece changes nothing. A
+ * piece past the end of what is known starts the text again from it and marks the gap.
+ */
+export const addOutput = (outputs: LiveOutputs, event: CommandOutput): LiveOutputs => {
+  const known = outputs[event.commandId] ?? { text: "", missed: false };
+  const end = known.text.length;
+  if (event.offset > end) {
+    return { ...outputs, [event.commandId]: { text: event.delta, missed: true } };
+  }
+  const fresh = event.delta.slice(end - event.offset);
+  return fresh.length === 0 ? outputs : { ...outputs, [event.commandId]: { ...known, text: known.text + fresh } };
+};
+
+/**
+ * The output an Attempt's running commands printed, learned from the event stream only: it is
+ * transient, so nothing reads it from the hub. A command's record carries its whole output once
+ * it ends.
+ */
+export const liveOutputQuery = (attemptId: AttemptId) =>
+  queryOptions({
+    queryKey: workbenchKeys.output(attemptId),
+    queryFn: (): LiveOutputs => ({}),
+    staleTime: Number.POSITIVE_INFINITY,
+    meta: LOCAL,
+  });
+
+/** Applies a piece of a running command's output to its Attempt's live output. */
+export const applyCommandOutput = (queryClient: QueryClient, event: CommandOutput) => {
+  // Built with its options first, so a resync knows to leave it even before the Terminal reads it.
+  const queryKey = workbenchKeys.output(event.attemptId);
+  queryClient.getQueryCache().build(queryClient, { queryKey, meta: LOCAL });
+  queryClient.setQueryData<LiveOutputs>(queryKey, (old = {}) => addOutput(old, event));
 };
