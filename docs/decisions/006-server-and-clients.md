@@ -24,4 +24,4 @@ The scenarios that would show this decision holds. Each names the test case or e
 
 - The browser and the desktop app use the same server and the same API: `[TC-OP-015]`, `[TC-AG-098]` (browser) and `[TC-EX-008]` (desktop).
 - The server answers on loopback only by default and serves the web client next to the API: `[TC-DP-008]`, `[TC-DP-005]`.
-- A remote device reaches the hub only after it is approved, and a revoked device is refused at once. Not proven yet: [#14](https://github.com/otaviobarros/hobbots/issues/14).
+- A remote device reaches the hub only after it is approved, and a revoked device is refused at once: `[TC-DP-145]`, `[TC-DP-146]`, `[TC-DP-150]`, `[TC-DP-155]`, with a fake Tailscale. On a real tailnet, not proven yet: [#416](https://github.com/otaviobarros/hobbots/issues/416).
