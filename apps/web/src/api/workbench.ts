@@ -1,5 +1,5 @@
 import type { AttemptActivityRead } from "@hobbots/api";
-import type { AttemptId, HobbotsEvent } from "@hobbots/domain";
+import type { AttemptId, ContentId, HobbotsEvent } from "@hobbots/domain";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { syncState } from "./sync.ts";
@@ -12,6 +12,7 @@ import { syncState } from "./sync.ts";
 const workbenchKeys = {
   all: ["workbench"] as const,
   activity: (attemptId: AttemptId) => ["workbench", "activity", attemptId] as const,
+  content: (attemptId: AttemptId, contentId: ContentId) => ["workbench", "content", attemptId, contentId] as const,
 };
 
 /**
@@ -57,3 +58,16 @@ export const activityChanged = async (queryClient: QueryClient, attemptId: Attem
   await queryClient.cancelQueries({ queryKey, exact: true });
   await queryClient.invalidateQueries({ queryKey, exact: true });
 };
+
+/**
+ * Kept contents a file change of an Attempt names: text redacted, images as they were. Contents are
+ * kept once per hash, so what an id names never changes and is never read again; a read that fails
+ * because the contents were cleared says so through its error.
+ */
+export const attemptContentQuery = (attemptId: AttemptId, contentId: ContentId) =>
+  queryOptions({
+    queryKey: workbenchKeys.content(attemptId, contentId),
+    queryFn: () => call((c) => c.workbench.content({ params: { attemptId, contentId } })),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });

@@ -19,6 +19,7 @@
     "@hobbots/ui": "workspace:*",
     "@tanstack/react-query": "5.105.0",
     "@tanstack/react-router": "1.170.46",
+    "diff": "9.0.0",
     "effect": "catalog:",
     "react": "19.3.1",
     "react-dom": "19.3.1",
