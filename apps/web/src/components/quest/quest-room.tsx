@@ -5,21 +5,14 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { formatWhen } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
-import { type RoomRow, type RoomStatus, roomRows, topCancel } from "./control-room.ts";
+import { type RoomRow, roomRows, roomStatusLabel, roomTone, topCancel } from "./control-room.ts";
 import { messages } from "./messages.ts";
 import { RoomControls } from "./room-controls.tsx";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import type { HobLookup } from "./use-work.ts";
-import { type RowStatus, taskTitle, workCard } from "./work-model.ts";
+import { taskTitle, workCard } from "./work-model.ts";
 
 const copy = messages.room;
-
-/** A cancel shows in the waiting tone: nothing runs, and nothing is done either. */
-const toneOf = (status: RoomStatus): RowStatus =>
-  status === "cancelling" || status === "cancelled" ? "waiting" : status;
-
-const statusLabel = (status: RoomStatus): string =>
-  status === "cancelling" || status === "cancelled" ? copy.status[status] : messages.status[status];
 
 /** Indents a row by its depth in the tree; deeper Tasks keep the last indent. */
 const INDENT = ["ps-2", "ps-6", "ps-10", "ps-14", "ps-18"] as const;
@@ -104,13 +97,7 @@ export function QuestRoom({
           </li>
         ))}
       </ul>
-      <RoomControls
-        tree={tree}
-        task={chosen?.task ?? null}
-        hobs={hobs}
-        cancel={topCancel(tree)}
-        hasQuest={card.quest !== null}
-      />
+      <RoomControls tree={tree} task={chosen?.task ?? null} hobs={hobs} cancel={topCancel(tree)} quest={card.quest} />
     </section>
   );
 }
@@ -157,7 +144,7 @@ function Row({
       )}
     >
       {row.depth > 0 && <span aria-hidden className="h-0.5 w-2.5 shrink-0 bg-line-2" />}
-      <StatusDot status={toneOf(row.status)} />
+      <StatusDot status={roomTone(row.status)} />
       <HobSprite hob={owner} size={20} state={row.status === "running" ? "working" : "idle"} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm">{copy.row({ name: owner.name, title })}</span>
@@ -169,7 +156,7 @@ function Row({
           <Age task={row.task} now={now} />
         </span>
       </span>
-      <StatusTag status={toneOf(row.status)}>{statusLabel(row.status)}</StatusTag>
+      <StatusTag status={roomTone(row.status)}>{roomStatusLabel(row.status)}</StatusTag>
     </button>
   );
 }

@@ -6,6 +6,7 @@ import {
   type Quest,
   type Question,
   type Task,
+  type TaskControl,
   type TaskId,
   TaskTree,
   type TaskWait,
@@ -83,6 +84,20 @@ const withWait = (
   return { waits: [...tree.waits.filter((each) => each.taskId !== wait.taskId), wait] };
 };
 
+/**
+ * A retry or reassignment from the Quest tab carries the Task's Delegation as it now is: after a
+ * reassignment it names the new member, so the party follows.
+ */
+const withControl = (
+  tree: TaskTree,
+  event: { readonly task: Task; readonly control?: TaskControl | undefined },
+): Partial<TaskTree> => {
+  const delegation = event.control?.delegation ?? null;
+  const known = tree.tasks.find((each) => each.id === event.task.id);
+  if (delegation === null || (known !== undefined && event.task.revision < known.revision)) return {};
+  return { delegations: upsert(tree.delegations, delegation) };
+};
+
 const withQuest = (tree: TaskTree, quest: Quest | null, ids: ReadonlySet<TaskId>): Partial<TaskTree> =>
   quest !== null && ids.has(quest.taskId) ? { quests: upsertNewer(tree.quests, quest) } : {};
 
@@ -117,7 +132,12 @@ const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
       : null,
   TaskStateChanged: (tree, event, ids) =>
     ids.has(event.task.id)
-      ? { ...withTask(tree, event.task, event.attempt), ...withQuest(tree, event.quest, ids), ...withWait(tree, event) }
+      ? {
+          ...withTask(tree, event.task, event.attempt),
+          ...withQuest(tree, event.quest, ids),
+          ...withWait(tree, event),
+          ...withControl(tree, event),
+        }
       : null,
   TaskCompleted: (tree, event, ids) =>
     ids.has(event.task.id)

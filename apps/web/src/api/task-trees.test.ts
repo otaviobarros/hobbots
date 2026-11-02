@@ -139,6 +139,33 @@ describe("applyToTree", () => {
   });
 });
 
+describe("applyToTree with your controls", () => {
+  it("moves a reassigned Task's party member to its new hob, and ignores an older copy", () => {
+    const base = blackFriday();
+    const given = delegation(QUILL, BUILD, "Build the campaign");
+    const reassigned: TaskEvent = {
+      _tag: "TaskStateChanged",
+      task: task(BUILD, { ownerId: QUILL, state: "queued", revision: 5 }),
+      attempt: null,
+      quest: null,
+      wait: null,
+      control: { _tag: "Reassigned", from: ADA, delegation: given },
+    };
+    const next = applyToTree(base, reassigned);
+    expect(next.tasks.find((each) => each.id === BUILD)?.ownerId).toBe(QUILL);
+    expect(next.delegations.map((each) => [each.childTaskId, each.memberId])).toEqual([
+      [COPY, QUILL],
+      [BUILD, QUILL],
+    ]);
+    const older: TaskEvent = {
+      ...reassigned,
+      task: task(BUILD, { ownerId: ADA, revision: 4 }),
+      control: { _tag: "Reassigned", from: QUILL, delegation: delegation(ADA, BUILD, "Build the campaign") },
+    };
+    expect(applyToTree(next, older)).toEqual(next);
+  });
+});
+
 describe("applyToTree with notes", () => {
   it("adds your note on a Task in the tree once, and leaves another tree's alone", () => {
     const start = blackFriday();

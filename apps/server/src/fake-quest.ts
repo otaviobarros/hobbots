@@ -1,4 +1,4 @@
-import { HobbotsRepository, TaskRepository } from "@hobbots/agents";
+import { HobbotsRepository, TaskRepository, TaskTurns } from "@hobbots/agents";
 import {
   type AgentId,
   ArtifactId,
@@ -9,6 +9,7 @@ import {
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   type EventEnvelope,
+  isLiveAttempt,
   Message,
   MessageId,
   MilestoneId,
@@ -18,7 +19,7 @@ import {
   TaskId,
   type Thread,
 } from "@hobbots/domain";
-import { DateTime, Duration, Effect, Layer, Option, Schedule, Stream } from "effect";
+import { DateTime, Duration, Effect, FiberMap, Layer, Option, Schedule, Stream } from "effect";
 import { EventBus } from "./event-bus.ts";
 
 /**
@@ -26,7 +27,9 @@ import { EventBus } from "./event-bus.ts";
  * card, strip, drawer and questions can be followed end to end before hobs lead Quests themselves.
  * Asking a hob for a Black Friday campaign starts it, with that hob as the lead and the hobs named
  * Quill and Ada as its party. Ada's question climbs to you; the Quest finishes once you answer it.
- * Only `HOBBOTS_FAKE_QUEST=black-friday` with the fake runtime turns it on.
+ * Cancelling it stops the play, and each of its Attempts ends as a session would when told to stop,
+ * so every Task confirms its cancel. Only `HOBBOTS_FAKE_QUEST=black-friday` with the fake runtime
+ * turns it on.
  */
 
 const TRIGGER = /black friday/i;
@@ -49,12 +52,46 @@ const requestThread = (entry: EventEnvelope) =>
     ? entry.payload.message.threadId
     : null;
 
+/** The ids the play gives its records in a thread, so each thread's Quest has its own. */
+const idsFor = (threadId: Thread["id"]) => {
+  const key = threadId.slice(0, 8);
+  return { key, id: (name: string) => `${name}-${key}` };
+};
+
+/** The top Task of the Quest played in a thread. */
+const campaignOf = (threadId: Thread["id"]) => TaskId.make(idsFor(threadId).id("campaign"));
+
+/** A Task being cancelled, from an event that moved it there. */
+const cancellingTask = (entry: EventEnvelope) =>
+  entry.payload._tag === "TaskStateChanged" && entry.payload.task.state === "cancelling" ? entry.payload.task : null;
+
+/**
+ * Ends the Attempt of a played Task being cancelled, as its session would once told to stop, and
+ * asks the hub to confirm the cancels that nothing runs in any more.
+ */
+const stopAttempt = (task: Task) =>
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const turns = yield* Effect.serviceOption(TaskTurns);
+    const tree = yield* tasks.readTree(task.id);
+    const live = Option.getOrUndefined(tree)?.attempts.find(
+      (each) => each.id === task.currentAttemptId && isLiveAttempt(each.state),
+    );
+    if (live !== undefined) {
+      yield* tasks.updateAttempt(live.id, {
+        state: "cancelled",
+        outcome: "Stopped when you cancelled it.",
+        at: yield* iso,
+      });
+    }
+    if (Option.isSome(turns)) yield* turns.value.reviewTasks;
+  });
+
 const play = (cast: Cast, step: Duration.Input, bus: EventBus["Service"]) =>
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
     const repo = yield* HobbotsRepository;
-    const key = cast.thread.id.slice(0, 8);
-    const id = (name: string) => `${name}-${key}`;
+    const { key, id } = idsFor(cast.thread.id);
     const announce = <A>(committed: Committed<A>) => Effect.as(bus.publish(committed.entries), committed.value);
     const pause = Effect.sleep(step);
     const start = (task: Task, attempt: string) =>
@@ -285,28 +322,46 @@ const castFor = (threadId: Thread["id"]) =>
     return Option.some({ thread: thread.value, lead: thread.value.agentId, quill: quill.id, ada: ada.id });
   });
 
-/** Plays the Black Friday Quest for each request that asks for one, `step` apart. */
+/** Plays the Black Friday Quest for each request that asks for one, `step` apart, until it is cancelled. */
 export const FakeQuestLive = (step: Duration.Input) =>
   Layer.effectDiscard(
     Effect.gen(function* () {
       const bus = yield* EventBus;
+      // Each play runs under its top Task's id; the roots played stay known after a play ends.
+      const plays = yield* FiberMap.make<TaskId>();
+      const played = new Set<TaskId>();
+      const start = (threadId: Thread["id"]) =>
+        castFor(threadId).pipe(
+          Effect.flatMap(
+            Option.match({
+              onNone: () => Effect.void,
+              onSome: (cast) => {
+                played.add(campaignOf(threadId));
+                return FiberMap.run(
+                  plays,
+                  campaignOf(threadId),
+                  play(cast, step, bus).pipe(
+                    Effect.catchCause((cause) => Effect.logError("The Black Friday Quest stopped", cause)),
+                  ),
+                ).pipe(Effect.asVoid);
+              },
+            }),
+          ),
+        );
+      const cancel = (task: Task) =>
+        played.has(task.rootId)
+          ? FiberMap.remove(plays, task.rootId).pipe(
+              Effect.andThen(stopAttempt(task)),
+              Effect.catchCause((cause) => Effect.logWarning("Could not stop a cancelled fake Task", cause)),
+            )
+          : Effect.void;
       yield* bus.stream.pipe(
         Stream.runForEach((event) => {
-          const threadId = event._tag === "Journaled" ? requestThread(event.entry) : null;
-          return threadId === null
-            ? Effect.void
-            : castFor(threadId).pipe(
-                Effect.flatMap(
-                  Option.match({
-                    onNone: () => Effect.void,
-                    onSome: (cast) =>
-                      play(cast, step, bus).pipe(
-                        Effect.catchCause((cause) => Effect.logError("The Black Friday Quest stopped", cause)),
-                        Effect.forkDetach,
-                      ),
-                  }),
-                ),
-              );
+          if (event._tag !== "Journaled") return Effect.void;
+          const threadId = requestThread(event.entry);
+          if (threadId !== null) return start(threadId);
+          const cancelling = cancellingTask(event.entry);
+          return cancelling === null ? Effect.void : cancel(cancelling);
         }),
         Effect.forkScoped,
       );
