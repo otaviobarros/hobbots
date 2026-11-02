@@ -470,7 +470,7 @@ describe("cancelling with confirmed outcomes", () => {
   }, 20_000);
 
   // covers OR-006, EX-003
-  it("[TC-OR-152] a later reply that does not stop in time leaves the cancel of the Task you asked for unresolved", async () => {
+  it("[TC-OR-154] a later reply that does not stop in time leaves the cancel of the Task you asked for unresolved", async () => {
     const { run, unstick, requests } = setUp();
     const top = await run(requestDone);
     await run(laterReply(STUCK, requests));
