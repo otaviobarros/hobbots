@@ -86,6 +86,7 @@ export const ApprovalRepositoryLive = Layer.effect(
             agent_id: approval.agentId,
             thread_id: approval.threadId,
             message_id: approval.messageId,
+            task_id: approval.taskId,
             step_id: approval.stepId,
             tool: approval.tool,
             operation: approval.operation,

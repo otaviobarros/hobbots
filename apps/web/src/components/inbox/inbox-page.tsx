@@ -131,7 +131,15 @@ function Selected({
   }
   const hob = directory.hob(request.agentId);
   if (hob === undefined) return <p className="m-0 px-7 py-6 text-label">{copy.loadingRequest}</p>;
-  return <InboxDetail request={request} hob={hob} threadTitle={directory.threadTitle(request.threadId)} now={now} />;
+  return (
+    <InboxDetail
+      request={request}
+      hob={hob}
+      threadTitle={directory.threadTitle(request.threadId)}
+      threadHob={directory.threadHob(request.threadId)}
+      now={now}
+    />
+  );
 }
 
 /**

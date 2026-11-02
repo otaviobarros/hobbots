@@ -16,6 +16,19 @@ export const continuationThread = (item: BackpackItem, tree: ReadonlyArray<Task>
   return held !== undefined && held.parentId === null ? held.threadId : null;
 };
 
+/**
+ * The member's Task whose session a backpack item continues (ADR 019), or undefined when it goes to
+ * a thread or wakes nobody: an actionable item its recipient holds under a Task another hob gave
+ * it, such as the Task itself, a hand-off, an answer or a result of its own steps. Items held
+ * under a step go to the step's own session, which starts from its brief.
+ */
+export const continuationTask = (item: BackpackItem, tree: ReadonlyArray<Task>): Task | undefined => {
+  if (!item.actionable || item.taskId === null) return undefined;
+  const held = heldUnder(item, tree);
+  const parent = held === undefined ? undefined : tree.find((each) => each.id === held.parentId);
+  return held !== undefined && parent !== undefined && parent.ownerId !== held.ownerId ? held : undefined;
+};
+
 const firstLine = (text: string) => text.split("\n", 1)[0]?.trim() ?? "";
 
 const about = (task: Task) => `Task ${task.id} (${firstLine(task.brief)})`;

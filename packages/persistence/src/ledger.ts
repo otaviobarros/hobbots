@@ -59,16 +59,21 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
     });
 
   /**
-   * Approval requests still pending on the Task's work and not past their expiry. A request belongs
-   * to a chat turn, and a chat turn works on the request's top Task in its thread; a step's session
-   * never asks.
+   * Approval requests still pending on the Task's work and not past their expiry. A chat turn works
+   * on the request's top Task in its thread; a party member's turn names its own Task; a step's
+   * session never asks.
    */
   const pendingApprovals = (task: Task, now: string) =>
-    task.threadId === null || task.parentId !== null
+    task.threadId === null
       ? Effect.succeed([])
-      : sql<Row>`SELECT * FROM approval_requests WHERE state = 'pending' AND thread_id = ${task.threadId}
-          AND agent_id = ${task.ownerId} AND (expires_at IS NULL OR expires_at > ${now})
-          ORDER BY created_at, id`.pipe(Effect.map(approvalRows), Effect.flatMap(decodeApprovals), Effect.orDie);
+      : (task.parentId === null
+          ? sql<Row>`SELECT * FROM approval_requests WHERE state = 'pending' AND thread_id = ${task.threadId}
+              AND agent_id = ${task.ownerId} AND task_id IS NULL AND (expires_at IS NULL OR expires_at > ${now})
+              ORDER BY created_at, id`
+          : sql<Row>`SELECT * FROM approval_requests WHERE state = 'pending' AND task_id = ${task.id}
+              AND (expires_at IS NULL OR expires_at > ${now})
+              ORDER BY created_at, id`
+        ).pipe(Effect.map(approvalRows), Effect.flatMap(decodeApprovals), Effect.orDie);
 
   /** The ledger of `task`, less the items in `carried` that the completing turn really carries. */
   const readFor = (task: Task, carried: ReadonlyArray<CarriedItem> = []) =>

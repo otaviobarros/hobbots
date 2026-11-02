@@ -1,4 +1,4 @@
-import type { Agent, ApprovalRequest } from "@hobbots/domain";
+import type { Agent, AgentId, ApprovalRequest } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Link } from "@tanstack/react-router";
@@ -18,11 +18,14 @@ export function InboxDetail({
   request,
   hob,
   threadTitle,
+  threadHob,
   now,
 }: {
   request: ApprovalRequest;
   hob: Agent;
   threadTitle: string;
+  /** The hob whose chat the request's thread is: its lead's, for a party member's request. */
+  threadHob: AgentId | undefined;
   now: Date;
 }) {
   const pending = request.state === "pending";
@@ -60,8 +63,8 @@ export function InboxDetail({
           <Button asChild variant="outline">
             <Link
               to="/hobs/$hobId/threads/$threadId"
-              params={{ hobId: request.agentId, threadId: request.threadId }}
-              search={{ message: request.messageId }}
+              params={{ hobId: threadHob ?? request.agentId, threadId: request.threadId }}
+              search={request.messageId === null ? {} : { message: request.messageId }}
             >
               {copy.detail.openChat}
             </Link>

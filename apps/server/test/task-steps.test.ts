@@ -391,7 +391,7 @@ describe("a Task's steps in fresh sessions", () => {
 
     const second = stepsAsked()[1]?.prompt ?? "";
     expect(second).toContain(`Step 1 returned: ${outline}`);
-    expect(second).toContain(`Draft (text): ${draft}`);
+    expect(second).toMatch(new RegExp(`Draft \\(text, artifact [0-9a-f-]+\\): ${draft}`));
 
     // The owner's briefing still keeps each result short, so its own context stays small.
     await run(send(thread.id, "How did it go?"));
@@ -772,7 +772,7 @@ describe("a Task's steps in fresh sessions", () => {
     const ended = await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
     expect(ended.handOffs).toHaveLength(1);
     const prompt = control.requests.find((request) => request.prompt.startsWith("Publish"))?.prompt ?? "";
-    expect(prompt).toContain("Handed to this step:\n  - Doc (text): The draft");
+    expect(prompt).toMatch(/Handed to this step:\n  - Doc \(text, artifact [0-9a-f-]+\): The draft/);
   });
 
   // covers IN-006, OR-003

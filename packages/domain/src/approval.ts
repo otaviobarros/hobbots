@@ -3,6 +3,7 @@ import { ApprovalLifetime, GrantRule } from "./grant-rule.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { PolicyOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
+import { TaskId } from "./task.ts";
 
 export const ApprovalId = Schema.String.pipe(Schema.brand("ApprovalId"));
 export type ApprovalId = typeof ApprovalId.Type;
@@ -27,8 +28,16 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   id: ApprovalId,
   agentId: AgentId,
   threadId: ThreadId,
-  /** The reply whose turn is paused. */
-  messageId: MessageId,
+  /** The reply whose turn is paused, or null for a party member's turn, which runs outside the chat (ADR 018). */
+  messageId: Schema.NullOr(MessageId),
+  /**
+   * The member's Task whose turn is paused, for a turn outside the chat; null for a chat turn, and
+   * for requests from before party members ran.
+   */
+  taskId: Schema.NullOr(TaskId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /** The reply step of the tool call, the runtime's own id for it. */
   stepId: Schema.String,
   /** The runtime's name for the tool, such as `Bash`. */
