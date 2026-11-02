@@ -392,7 +392,7 @@ describe("a retired party member", () => {
 
 describe("a member Task already being worked", () => {
   // covers IN-003
-  it("[TC-OR-150] a member Task whose Attempt runs elsewhere keeps its work pending, spends no tries and raises no blocker, and the work settles once the Task ends", async () => {
+  it("[TC-OR-152] a member Task whose Attempt runs elsewhere keeps its work pending, spends no tries and raises no blocker, and the work settles once the Task ends", async () => {
     const { run, requests } = setUp();
     const at = () => new Date().toISOString();
     // Started the way the fake Quest starts its party: the Task and its Attempt come from outside a session.
