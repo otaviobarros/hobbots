@@ -1,9 +1,8 @@
 import { type BackpackBlocker, type BackpackItem, openBlocker } from "@hobbots/domain";
+import { firstLine } from "../../lib/format.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages;
-
-const firstLine = (text: string) => text.split("\n", 1)[0]?.trim() ?? "";
 
 /** What the stuck work was, in words: the kind of item and the Task it names. */
 export const blockerWhat = (item: BackpackItem): string => {
