@@ -29,13 +29,13 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { GitHubApi, GitHubCharmTools, GitPushLive, GitRemotes } from "../src/index.ts";
-import { type FakeGitHubGit, startFakeGitHubGit } from "./fake-github-git.ts";
+import { type FakeGitHub, startFakeGitHub } from "../src/testing.ts";
 import { directSandbox, fixedCredential, memoryCharmCalls } from "./support.ts";
 
 const TOKEN = "ghu_pushtoken0123456789abcdefghijklmnopqrstuv";
 
 let root = "";
-let github: FakeGitHubGit;
+let github: FakeGitHub;
 
 const git = (cwd: string, ...args: Array<string>) =>
   execFileSync("git", args, {
@@ -207,7 +207,7 @@ const push = (folder: string, repository: GitHubRepository, turn: Turn, input: R
 
 beforeAll(async () => {
   root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "hobbots-github-push-")));
-  github = await startFakeGitHubGit(path.join(root, "github"), TOKEN);
+  github = await startFakeGitHub({ folder: path.join(root, "github"), tokens: [TOKEN] });
 });
 afterAll(async () => {
   await github.close();
@@ -410,21 +410,21 @@ describe("the GitHub Charm's Push", () => {
     const asked: Array<ApprovalAction> = [];
     const turn = { access: accessFor(folder), asked, rows };
     const first = await push(folder, repository, turn, { branch: "feat/x", key: "same" });
-    const before = github.requests();
+    const before = github.requests.length;
     const again = await push(folder, repository, turn, { branch: "feat/x", key: "same" });
     const other = await push(folder, repository, turn, { branch: "main", key: "same" });
     expect(first.refused).toBe(false);
     expect(again.text).toContain("You made this call before, so it was not sent again.");
     expect(other.text).toContain("You already used the key same for another call.");
     expect(asked).toHaveLength(1);
-    expect(github.requests()).toBe(before);
+    expect(github.requests.length).toBe(before);
   });
 
   // covers EX-003, EX-004
   it("[TC-OR-070] settles a push whose answer was lost as applied when GitHub shows its commit", async () => {
     const { folder, repository, remote, commit } = await setUp("lost-applied");
     const rows = new Map<string, CharmCall>();
-    github.drop = { after: github.requests(), when: "after" };
+    github.drop = { after: github.requests.length, when: "after" };
     const events: Array<RuntimeEvent> = [];
     const answer = await push(
       folder,
@@ -447,7 +447,7 @@ describe("the GitHub Charm's Push", () => {
   it("[TC-OR-071] keeps a push uncertain when its effect is not found, and refuses another push to that branch", async () => {
     const { folder, repository, remote } = await setUp("lost-unknown");
     const rows = new Map<string, CharmCall>();
-    github.drop = { after: github.requests(), when: "before" };
+    github.drop = { after: github.requests.length, when: "before" };
     const events: Array<RuntimeEvent> = [];
     const turn = { access: accessFor(folder, "trusting"), rows, events };
     const answer = await push(folder, repository, turn, { branch: "feat/x", key: "lost-2" }).finally(() => {

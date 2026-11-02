@@ -74,7 +74,7 @@ const run = <A>(
   return Effect.gen(function* () {
     return yield* use(yield* GitHubApi);
   }).pipe(
-    Effect.provide(GitHubApiLive.pipe(Layer.provide(http), Layer.provide(signIn))),
+    Effect.provide(GitHubApiLive().pipe(Layer.provide(http), Layer.provide(signIn))),
     Effect.provide(Layer.fresh(TestClock.layer())),
     Effect.runPromise,
     (result) => result.then((value) => ({ value, seen, credential })),
