@@ -1,4 +1,4 @@
-import { HobbotsRepository, HobTools, operationDecision, TaskRepository } from "@hobbots/agents";
+import { explicitlyNarrowed, HobbotsRepository, HobTools, operationDecision, TaskRepository } from "@hobbots/agents";
 import {
   type AgentId,
   ancestorsOf,
@@ -236,6 +236,7 @@ export const makeAuthorityOf = (separator: PathSeparator) =>
                 decisions: Object.fromEntries(
                   POLICY_OPERATIONS.map((operation) => [operation, operationDecision(access.policy, operation)]),
                 ) as Authority["decisions"],
+                fixed: POLICY_OPERATIONS.filter((operation) => explicitlyNarrowed(access.policy, operation)),
                 folders: access.folders,
               };
         return own;

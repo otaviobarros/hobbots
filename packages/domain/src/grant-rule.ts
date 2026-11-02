@@ -3,12 +3,15 @@ import type { PolicyOperation } from "./policy.ts";
 
 /** The sites a standing grant can name, and the lifetimes a decision can carry (ADR 015). */
 
-/** How long a decision lasts: this one call, the request's Quest, or until the user removes it. */
-export const ApprovalLifetime = Schema.Literals(["once", "quest", "always"]);
+/**
+ * How long a decision lasts: this one call, the request's top Task (This Task, or This Quest once a
+ * party joins it; ADR 018), or until the user removes it.
+ */
+export const ApprovalLifetime = Schema.Literals(["once", "task", "always"]);
 export type ApprovalLifetime = typeof ApprovalLifetime.Type;
 
 /** The lifetimes that save a grant. */
-export const GrantLifetime = Schema.Literals(["quest", "always"]);
+export const GrantLifetime = Schema.Literals(["task", "always"]);
 export type GrantLifetime = typeof GrantLifetime.Type;
 
 const GrantFileOperation = Schema.Literals(["read-files", "edit-files", "delete-files"]);

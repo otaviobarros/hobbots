@@ -28,6 +28,7 @@ import {
   type RuntimeKind,
   sameBrain,
   systemInstructions,
+  type TaskId,
   Thread,
   ThreadCheckpoint,
   ThreadId,
@@ -45,7 +46,7 @@ import { HobbotsRepository } from "./repository.ts";
 import { type RuntimeEvent, runtimeAdapters, type ToolAccess, type ToolStartedEvent } from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
 import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
-import { type ChatTurnOutcome, TaskTurns } from "./task-turns.ts";
+import { type ChatTaskTurn, type ChatTurnOutcome, TaskTurns } from "./task-turns.ts";
 import { keepToolOutput } from "./tool-output.ts";
 import { accessNow, HobTools, narrows } from "./tools.ts";
 
@@ -544,12 +545,16 @@ export class ChatService extends Context.Service<
             }
           };
 
+          // The top Task the turn works on, once the turn below knows it: This Task binds to it (ADR 018).
+          let onTask: ChatTaskTurn | null = null;
+          const workingOn = Effect.suspend(() => onTask?.workingOn ?? Effect.succeed<TaskId | null>(null));
           // A request still pending when the turn ends expires: a stopped reply is never approvable late.
           const turnApprovals = Option.isSome(approvals)
             ? yield* Effect.acquireRelease(
                 approvals.value.forTurn(
                   { agentId: agent.id, threadId: thread.id, messageId: (yield* Ref.get(reply.current)).id },
                   currentAccess(agent.id),
+                  workingOn,
                 ),
                 (handle) => handle.close,
               )
@@ -571,6 +576,7 @@ export class ChatService extends Context.Service<
                   Ref.get(reply.current).pipe(Effect.flatMap((m) => turn.end(turnOutcome(m.status), turnSession))),
               )
             : null;
+          onTask = taskTurn;
           yield* adapter
             .sendPrompt({
               prompt,

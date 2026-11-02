@@ -6,6 +6,7 @@ import {
   ancestorsOf,
   DelegationId,
   MilestoneId,
+  POLICY_OPERATIONS,
   type Quest,
   QuestId,
   questsAbove,
@@ -118,7 +119,13 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
       if (narrowed._tag === "Wider") return yield* refuse("authority-wider", narrowed.message);
       const own = yield* authority.own(member.id);
       const both = narrowBy(own, narrowed.authority, separator);
-      return { overrides: both.decisions, folders: [...both.folders] };
+      // Only the answers the Delegation gives: the member's own preset answers stay its own.
+      const overrides = Object.fromEntries(
+        POLICY_OPERATIONS.flatMap((operation) =>
+          narrowed.authority.overrides[operation] === undefined ? [] : [[operation, both.decisions[operation]]],
+        ),
+      );
+      return { overrides, folders: [...both.folders] };
     });
 
   return {

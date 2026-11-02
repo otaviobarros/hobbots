@@ -32,6 +32,9 @@ describe("resultText", () => {
     expect(resultText(request({ state: "approved", lifetime: "always" }), "Pip")).toBe(
       "✓ Allowed, and the rule is saved. Pip carries on.",
     );
+    expect(resultText(request({ state: "approved", lifetime: "task" }), "Pip")).toBe(
+      "✓ Allowed for the rest of this Task. Pip carries on, and asks again once the Task ends.",
+    );
     expect(resultText(request({ state: "denied" }), "Pip")).toBe("✕ Denied. Pip was told it may not.");
     expect(resultText(request({ state: "denied", denyReason: "Not on Fridays" }), "Pip")).toBe(
       "✕ Denied: “Not on Fridays”. Pip was told why.",
