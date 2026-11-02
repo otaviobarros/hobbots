@@ -25,6 +25,7 @@ import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-saf
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
 import { ArchivedHobsPage, SettingsPage, UsagePage } from "./components/pages.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
+import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
 import { Summon } from "./components/summon.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
@@ -56,7 +57,7 @@ const pairRoute = createRoute({
 });
 
 // A new installation opens on Welcome, outside the app shell, until setup is done:
-// Welcome → Where Hobbots runs → providers → first hob → safety → folders → summon → Home.
+// Welcome → Where Hobbots runs → other devices → providers → first hob → safety → folders → summon → Home.
 // Once setup is done, each of them opens Home.
 const leaveSetupWhenDone = async ({ context }: { context: { queryClient: QueryClient } }) => {
   if (setupDone(await readSetup(context.queryClient))) throw redirect({ to: "/" });
@@ -74,6 +75,14 @@ const setupWhereRoute = createRoute({
   path: "setup/where",
   beforeLoad: leaveSetupWhenDone,
   component: WhereHobbotsRuns,
+});
+
+// Run Hobbots on this computer asks next whether other devices may use it too (ADR 021).
+const setupRemoteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "setup/remote",
+  beforeLoad: leaveSetupWhenDone,
+  component: SetupRemoteAccess,
 });
 
 const providersRoute = createRoute({
@@ -280,6 +289,7 @@ const routeTree = rootRoute.addChildren([
   pairRoute,
   welcomeRoute,
   setupWhereRoute,
+  setupRemoteRoute,
   providersRoute,
   firstHobRoute,
   safetyRoute,

@@ -28,7 +28,7 @@ import {
   LocalGitHubSignInsFake,
   LocalGitHubSignInsLive,
 } from "@hobbots/charms";
-import { secretsFromEnv } from "@hobbots/domain";
+import { DEFAULT_HUB_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -69,7 +69,7 @@ import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
-import { DEFAULT_PORT, readNetworkSettings } from "./network-settings.ts";
+import { readNetworkSettings } from "./network-settings.ts";
 import { HubHostsLive, KnownTailnetPeersOnly, RemoteAccessLive, RemoteAccessStateLive } from "./remote-access.ts";
 import { QuietRoutineReads } from "./request-log.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
@@ -92,7 +92,7 @@ const ServerLive = Layer.unwrap(
     });
     // The port and remote access as the user last chose them (ADR 021); HOBBOTS_PORT overrides the port.
     const network = readNetworkSettings(dataDir);
-    const port = Option.getOrElse(config.port, () => network.port ?? DEFAULT_PORT);
+    const port = Option.getOrElse(config.port, () => network.port ?? DEFAULT_HUB_PORT);
     const Remote = HubHostsLive.pipe(
       Layer.provideMerge(
         RemoteAccessStateLive({

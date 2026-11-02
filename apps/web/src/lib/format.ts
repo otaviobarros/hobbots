@@ -24,3 +24,19 @@ export const firstLine = (text: string): string => text.split("\n", 1)[0]?.trim(
 /** Names joined as a list in the reader's locale: "Quill, Ada and Pip". */
 export const formatList = (items: ReadonlyArray<string>, locale?: string): string =>
   new Intl.ListFormat(locale, { type: "conjunction" }).format(items);
+
+const AGO_UNITS: ReadonlyArray<readonly [Intl.RelativeTimeFormatUnit, number]> = [
+  ["day", 24 * 60 * 60_000],
+  ["hour", 60 * 60_000],
+  ["minute", 60_000],
+];
+
+/** A time past, relative to now, in the reader's locale: "2 hours ago", "yesterday", "now" under a minute. */
+export const formatAgo = (iso: string, now: Date = new Date(), locale?: string): string => {
+  const elapsed = Math.max(0, now.getTime() - new Date(iso).getTime());
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  for (const [unit, size] of AGO_UNITS) {
+    if (elapsed >= size) return format.format(-Math.floor(elapsed / size), unit);
+  }
+  return format.format(0, "second");
+};

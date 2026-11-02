@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { HubPort } from "@hobbots/domain";
+import { DEFAULT_HUB_PORT, HubPort } from "@hobbots/domain";
 import { Option, Schema } from "effect";
 
 /**
@@ -13,9 +13,6 @@ export interface NetworkSettings {
   readonly remoteAccessPaused?: boolean;
   readonly port?: number;
 }
-
-/** The port the hub listens on unless the user chose another. */
-export const DEFAULT_PORT = 4317;
 
 const settingsFile = (dataDir: string) => join(dataDir, "network.json");
 
@@ -59,5 +56,5 @@ export const writeNetworkSettings = (dataDir: string, change: NetworkSettings): 
 export const hubPort = (dataDir: string, env: Readonly<Record<string, string | undefined>>): number => {
   const fromEnv = Number(env.HOBBOTS_PORT);
   if (env.HOBBOTS_PORT !== undefined && Number.isInteger(fromEnv) && fromEnv > 0 && fromEnv <= 65535) return fromEnv;
-  return readNetworkSettings(dataDir).port ?? DEFAULT_PORT;
+  return readNetworkSettings(dataDir).port ?? DEFAULT_HUB_PORT;
 };
