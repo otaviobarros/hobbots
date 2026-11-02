@@ -244,15 +244,6 @@ const ServerLive = Layer.unwrap(
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))
-      // Before the chat service and the step runner: every turn records what it ran and changed for
-      // the Workbench (ADR 023), its details kept in the data folder, out of every hob's reach.
-      .pipe(
-        Layer.provideMerge(
-          ActivityRecorder.layer().pipe(
-            Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity")))),
-          ),
-        ),
-      )
       // Before the chat service: every turn you did not start with Send starts from the backpack, and
       // at start the dispatcher expires the claims an earlier process held (ADR 019).
       .pipe(Layer.provideMerge(ContinuationsLive))
@@ -265,6 +256,16 @@ const ServerLive = Layer.unwrap(
             Layer.provideMerge(MemberContinuationsLive),
             Layer.provideMerge(TaskTools.layer(separator, config.taskLimits)),
             Layer.provideMerge(TaskSignal.layer),
+          ),
+        ),
+      )
+      // Before the chat service and the step runner: every turn, a step's and a party member's too,
+      // records what it ran and changed for the Workbench (ADR 023), its details kept in the data
+      // folder, out of every hob's reach.
+      .pipe(
+        Layer.provideMerge(
+          ActivityRecorder.layer().pipe(
+            Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity")))),
           ),
         ),
       )

@@ -500,3 +500,54 @@ test("[TC-UX-033] Still open says nothing is open only once it could read what w
   await expect(open).toContainText("Nothing is waiting on you or anyone else.");
   await expect(open.getByRole("alert")).toBeHidden();
 });
+
+// covers UX-002, UX-006, OR-007
+test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the work, past a retry that did nothing", async ({
+  page,
+}) => {
+  const { url, aldric } = await aldricHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  // The step tidies the notes and then fails. Retried from the same brief, it does nothing this
+  // time, and fails again.
+  const steps = [
+    {
+      brief: ["Tidy the notes file", 'fake:once fake:write notes.md "# Notes\\n\\nTidied.\\n"', "fake:fail"].join("\n"),
+    },
+  ];
+  await composer.fill(["Tidy the notes", script("plan_steps", { key: "plan", steps })].join("\n"));
+  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Quest" }).click();
+  const room = page.getByRole("region", { name: "Control room for Tidy the notes" });
+  const step = room.getByRole("button", { name: /^Aldric · Tidy the notes file/ });
+  await expect(step).toContainText("Failed", { timeout: 30_000 });
+  await step.click();
+  const controls = room.getByRole("region", { name: "Controls for Tidy the notes file" });
+  await controls.getByRole("button", { name: "Retry" }).click();
+  await expect(controls).toContainText("Attempt 2", { timeout: 15_000 });
+  await expect(step).toContainText("Failed", { timeout: 30_000 });
+
+  // With no Attempt chosen, the Workbench settles on the first, which changed the notes.
+  await controls.getByRole("button", { name: "Open in Workbench" }).click();
+  const bench = page.getByRole("region", { name: "Workbench for Tidy the notes file" });
+  const attempts = bench.getByRole("group", { name: "Attempts" });
+  await expect(attempts.getByRole("button", { name: "Attempt 1" })).toHaveAttribute("aria-pressed", "true");
+  await expect(attempts.getByRole("button", { name: "Attempt 2" })).toHaveAttribute("aria-pressed", "false");
+  const summary = bench.getByRole("tabpanel", { name: /^Summary/ });
+  const made = summary.getByRole("region", { name: "What it made" });
+  await expect(made.getByRole("button", { name: "See the change to notes.md in Changes" })).toBeVisible();
+  await expect(summary.getByRole("region", { name: "What happened" })).toContainText("This attempt failed.");
+  await expect(page).not.toHaveURL(/attempt=/);
+
+  // Choosing the retry shows it, with nothing made, and the choice stays in the address.
+  await attempts.getByRole("button", { name: "Attempt 2" }).click();
+  await expect(attempts.getByRole("button", { name: "Attempt 2" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page).toHaveURL(/attempt=/);
+  await expect(made).toContainText("Aldric did not make or change anything in this attempt.");
+  await page.reload();
+  await expect(attempts.getByRole("button", { name: "Attempt 2" })).toHaveAttribute("aria-pressed", "true");
+  await expect(made).toContainText("Aldric did not make or change anything in this attempt.");
+});

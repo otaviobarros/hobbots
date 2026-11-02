@@ -105,6 +105,33 @@ export const FAKE_DIRECTIVES = {
   limit: "fake:limit",
 } as const;
 
+/**
+ * A prompt line `fake:fail`, anywhere in it, makes the fake cut its reply off once its scripted calls
+ * are made, so the turn fails after doing its work. Unlike `fake:cut-off` it need not lead, so a
+ * step or member brief, whose first line is its title, can fail (and fail again when retried).
+ */
+export const FAKE_FAIL_DIRECTIVE = "fake:fail";
+
+/**
+ * A prompt line `fake:once <line>` runs `<line>` the first time this fake sees it, in any session,
+ * and is dropped after: a retried step that starts from the same brief then does less than the try
+ * before it, as a retry can.
+ */
+export const FAKE_ONCE_DIRECTIVE = "fake:once";
+
+/** The prompt with each `fake:once` line run the first time and dropped after, remembering it in `seen`. */
+const onceOnly = (prompt: string, seen: Set<string>) =>
+  prompt
+    .split("\n")
+    .flatMap((line) => {
+      const once = afterDirective(line.trim(), FAKE_ONCE_DIRECTIVE);
+      if (once === undefined) return [line];
+      if (seen.has(once)) return [];
+      seen.add(once);
+      return [once];
+    })
+    .join("\n");
+
 /** What the fake says when it cuts a reply off. */
 export const fakeCutOffError = "Claude stopped responding";
 
@@ -430,7 +457,7 @@ const keptForNext = (prompt: string) =>
 
 /** How a directive in the prompt makes the fake end its reply. */
 const fakeEnding = (prompt: string) =>
-  prompt.startsWith(FAKE_DIRECTIVES.cutOff)
+  prompt.startsWith(FAKE_DIRECTIVES.cutOff) || prompt.split("\n").some((line) => line.trim() === FAKE_FAIL_DIRECTIVE)
     ? "cutOff"
     : prompt.startsWith(FAKE_DIRECTIVES.limit)
       ? "limit"
@@ -463,6 +490,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   const sessions = new Map<string, { readonly instructions: string; readonly later: ReadonlyArray<string> }>();
   // What scripted hub calls gave back, by key, for later calls in any session to refer to.
   const details = new Map<string, unknown>();
+  // The `fake:once` lines already run, in any session.
+  const ran = new Set<string>();
   const sendPrompt = (request: PromptRequest): Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached> => {
     // A brain that is not ready cannot start a turn, as with the real runtime.
     if (availability !== "ready") {
@@ -474,7 +503,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     const followed = known === undefined || request.instructionsChanged ? request.instructions : known.instructions;
     // What the previous turn kept runs ahead of this turn's own prompt.
     const later = known?.later ?? [];
-    const scripted = [...later, request.prompt].join("\n");
+    const scripted = onceOnly([...later, request.prompt].join("\n"), ran);
     sessions.set(sessionId, { instructions: followed, later: keptForNext(scripted) });
     // A briefing is echoed ahead of the prompt, so a test can see what the session was told.
     const told = request.briefing ? `${request.briefing}\n\n${request.prompt}` : request.prompt;
