@@ -684,6 +684,113 @@ describe("Task records", () => {
     expect(result.answer).toMatchObject({ _tag: "TaskRefused", reason: "task-ended" });
   });
 
+  // covers OR-004, OR-006, IN-006
+  it("[TC-OR-167] withdraws a question that waits for you when its Task is cancelled, so the lead can still complete", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-cutoff"),
+          taskId: TaskId.make("build"),
+          askerId: ADA,
+          text: "Which cutoff date?",
+          createdAt: now,
+        });
+        yield* tasks.escalateQuestion(QuestionId.make("q-cutoff"), ALDRIC);
+        const before = yield* tasks.listWaitingQuestions;
+        const build = yield* latest("build");
+        const cancelled = yield* tasks.moveTask(build.id, build.revision, "cancelled", later);
+        const tree = Option.getOrThrow(yield* tasks.readTree(TaskId.make("campaign")));
+        const after = yield* tasks.listWaitingQuestions;
+        const answer = yield* tasks
+          .answerQuestion(QuestionId.make("q-cutoff"), { _tag: "User" }, "Friday", later)
+          .pipe(Effect.flip);
+        const copy = yield* latest("copy");
+        yield* tasks.moveTask(copy.id, copy.revision, "cancelled", later);
+        const top = yield* latest("campaign");
+        const started = yield* tasks.startAttempt(top.id, top.revision, attempt("a-top"));
+        const done = yield* tasks.completeTask(top.id, started.value.task.revision, {
+          summary: "Called off",
+          attemptId: AttemptId.make("a-top"),
+          artifacts: [],
+          at: later,
+          carried: yield* carryAll("campaign"),
+        });
+        return { before, cancelled, journal: yield* journaled(cancelled), tree, after, answer, done };
+      }),
+    );
+    expect(result.before.map(({ question }) => question.id)).toEqual(["q-cutoff"]);
+    // Aldric's copy of the question he passed up resolves as late, and the cancel reaches him as a failure item.
+    expect(tags(result.cancelled.entries)).toEqual([
+      "TaskStateChanged",
+      "CheckpointRecorded",
+      "QuestionWithdrawn",
+      "BackpackItemChanged",
+      "BackpackItemRecorded",
+    ]);
+    expect(result.cancelled.entries[2]?.payload).toMatchObject({
+      question: { id: "q-cutoff", state: "withdrawn", answer: null, recipientId: null, chain: [ALDRIC] },
+    });
+    expect(result.journal.stored).toEqual(result.journal.returned);
+    expect(result.tree.questions.map((each) => [each.id, each.state])).toEqual([["q-cutoff", "withdrawn"]]);
+    expect(result.after).toEqual([]);
+    expect(result.answer).toMatchObject({ _tag: "TaskRefused", reason: "task-ended" });
+    expect(result.done.value.state).toBe("completed");
+  });
+
+  // covers OR-004, IN-006
+  it("[TC-OR-168] withdraws a question still with its lead when its Task fails, resolving the lead's copy as late", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const sql = yield* SqlClient.SqlClient;
+        const ask = (id: string) =>
+          tasks.askQuestion({
+            id: QuestionId.make(id),
+            taskId: TaskId.make("build"),
+            askerId: ADA,
+            text: id,
+            createdAt: now,
+          });
+        yield* ask("q-tone");
+        yield* ask("q-done");
+        yield* tasks.answerQuestion(QuestionId.make("q-done"), { _tag: "Lead", agentId: ALDRIC }, "Playful", now);
+        const ledgerBefore = Option.getOrThrow(yield* tasks.readLedger(TaskId.make("campaign")));
+        const build = yield* latest("build");
+        const failed = yield* tasks.moveTask(build.id, build.revision, "failed", later);
+        const ledgerAfter = Option.getOrThrow(yield* tasks.readLedger(TaskId.make("campaign")));
+        const tree = Option.getOrThrow(yield* tasks.readTree(TaskId.make("build")));
+        const items = yield* sql<{
+          readonly kind: string;
+          readonly state: string;
+          readonly disposition: string | null;
+        }>`
+          SELECT kind, state, disposition FROM backpack_items WHERE task_id = 'build' AND kind = 'question'
+          ORDER BY recorded_sequence`;
+        return { ledgerBefore, failed, ledgerAfter, tree, items };
+      }),
+    );
+    expect(result.ledgerBefore.open.filter((entry) => entry._tag === "Question")).toHaveLength(1);
+    expect(tags(result.failed.entries)).toEqual([
+      "TaskStateChanged",
+      "CheckpointRecorded",
+      "QuestionWithdrawn",
+      "BackpackItemChanged",
+      "BackpackItemChanged",
+      "BackpackItemRecorded",
+    ]);
+    // An answered question stays answered; only the open one is withdrawn.
+    expect(Object.fromEntries(result.tree.questions.map((each) => [each.id, each.state]))).toEqual({
+      "q-tone": "withdrawn",
+      "q-done": "answered",
+    });
+    expect(result.ledgerAfter.open.map((entry) => entry._tag)).not.toContain("Question");
+    expect(result.items.map((each) => each.state)).toEqual(["resolved", "resolved"]);
+    expect(JSON.parse(result.items[0]?.disposition ?? "null")).toMatchObject({ _tag: "late" });
+  });
+
   // covers OR-003, OR-004
   it("[TC-OR-005] records milestones and reports by their source, and hands an artifact to a Task in the same tree once", async () => {
     const result = await run(

@@ -137,6 +137,12 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     sql<Row>`SELECT * FROM attempts WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("attempt")));
   const question = (id: string) =>
     sql<Row>`SELECT * FROM questions WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("question")));
+
+  /** The questions about a Task that nobody answered yet, oldest first. */
+  const openQuestionsOn = (taskId: string) =>
+    sql<Row>`SELECT * FROM questions WHERE task_id = ${taskId} AND state = 'open' ORDER BY ${oldest}`.pipe(
+      Effect.flatMap(decodeRows("question")),
+    );
   const note = (id: string) =>
     sql<Row>`SELECT * FROM task_notes WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("note")));
   /** The questions that climbed every lead and wait for you, oldest first, each with the Task it asks about. */
@@ -292,6 +298,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     question,
     note,
     waitingQuestions,
+    openQuestionsOn,
     artifact,
     readTree,
     threadTrees,

@@ -166,11 +166,20 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
       return (yield* items.toItems(rows)).map((item) => ({ item, taskRevision: task.revision }));
     });
 
+  /** The question items about `task` still waiting unclaimed for a lead, once its questions are withdrawn. Late at the version it ended at. */
+  const questionItems = (task: Task) =>
+    Effect.gen(function* () {
+      const rows = yield* sql<Row>`SELECT * FROM backpack_items
+        WHERE task_id = ${task.id} AND kind = 'question' AND state = 'pending' AND claim_owner IS NULL
+        ORDER BY recorded_sequence`;
+      return (yield* items.toItems(rows)).map((item) => ({ item, taskRevision: task.revision }));
+    });
+
   /** Who consumed the items: the `complete_task` call the change runs in, or else the Attempt that produced the result. */
   const consumer = (attemptId: string) =>
     Effect.map(CurrentToolCall, (call) =>
       call === null ? `attempt:${attemptId}` : `tool:${call.agentId}:${call.key}`,
     );
 
-  return { readFor, consume, retire, staleItems, consumer };
+  return { readFor, consume, retire, staleItems, questionItems, consumer };
 };

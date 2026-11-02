@@ -5,7 +5,7 @@ import { SqlClient } from "effect/sql";
 
 const decodeApp = Schema.decodeUnknownEffect(HobGitHubApp);
 
-/** Each hob's own GitHub App (migration 0033): its identity, never a secret, and what
+/** Each hob's own GitHub App (migration 0034): its identity, never a secret, and what
  * could not be removed when it was disconnected or its hob retired. */
 export const HobGitHubAppRepository = Layer.effect(
   HobGitHubApps,

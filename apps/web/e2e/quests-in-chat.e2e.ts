@@ -104,3 +104,50 @@ test("[TC-IN-132] a question no lead could answer waits in the Inbox's Needs you
   await page.goto(chat);
   await expect(asksInChat).toContainText("You answered: Yes, Dec 12 for international orders.");
 });
+
+// covers OR-004, OR-006, IN-002
+test("[TC-IN-154] cancelling the work a question waits on withdraws it from the Inbox, the chat and the drawer, and the lead still finishes", async ({
+  page,
+}) => {
+  const { url, aldric } = await questHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill("Plan a Black Friday campaign for the shop");
+  await composer.press("Enter");
+  const asks = page.getByRole("region", { name: "Ada asks you" });
+  const answer = asks.getByRole("textbox", { name: "Your answer to Ada" });
+  await expect(answer).toBeVisible({ timeout: 15_000 });
+  const chat = page.url();
+
+  // You cancel Ada's Task from the Quest tab before answering her.
+  await page.getByRole("tab", { name: "Quest" }).click();
+  const room = page.getByRole("region", { name: "Control room for Plan the Black Friday campaign" });
+  await room.getByRole("button", { name: /Ada · Build the campaign/ }).click();
+  const controls = room.getByRole("region", { name: "Controls for Build the campaign" });
+  await controls.getByRole("button", { name: "Cancel Task" }).click();
+  await controls.getByRole("button", { name: "Yes, cancel" }).click();
+  await expect(controls.getByRole("status")).toHaveText("Cancelled: the Task confirmed it stopped.", {
+    timeout: 15_000,
+  });
+
+  // Nobody is left to hear the answer: the card says so instead of asking, and so does the drawer.
+  const withdrawn = "Withdrawn: the work it was about ended before anyone answered.";
+  await expect(asks).toContainText(withdrawn);
+  await expect(answer).toHaveCount(0);
+  const drawer = page.getByRole("complementary", { name: "Build the campaign, Task details" });
+  await expect(drawer).toContainText("Withdrawn when this Task ended.");
+
+  // The question no longer holds Aldric's work open: he wraps up without Ada's part.
+  await expect(page.getByText("The Black Friday campaign is wrapped up without Ada's part")).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // It no longer waits for you in the Inbox, and the chat still shows it withdrawn after a reload.
+  await page.goto(`${url}/#/inbox?tab=needs`);
+  await expect(page.getByText("Nothing needs you")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Questions for you" })).toBeHidden();
+  await page.goto(chat);
+  await page.reload();
+  await expect(asks).toContainText(withdrawn);
+  await expect(answer).toHaveCount(0);
+});
