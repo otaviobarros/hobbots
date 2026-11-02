@@ -288,8 +288,8 @@ export const makeMemberRunner = (deps: MemberDeps) => {
       Effect.gen(function* () {
         const found = yield* read(taskId);
         if (Option.isNone(found) || found.value.task.state === "cancelling") return null;
-        // An Attempt still live on the Task holds it: a second could not start, so the work waits
-        // for that one to end instead of spending its tries (ADR 019).
+        // One that went live since the turn was started: a second could not start, so the work
+        // waits for that one to end instead of spending its tries (ADR 019).
         if (liveAttemptOn(found.value.task, found.value.tree)) return null;
         const hob = yield* repo.findAgent(agent.id);
         if (Option.isNone(hob) || hob.value.status !== "active") return null;
@@ -372,6 +372,9 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         const found = yield* read(taskId);
         if (Option.isNone(config) || Option.isNone(found)) return;
         const { task, tree } = found.value;
+        // An Attempt still live on the Task holds it: no turn starts until that one ends, which
+        // wakes the runner again (ADR 019).
+        if (liveAttemptOn(task, tree)) return;
         const narrowed = (own: ToolAccess | null) => delegatedAccess(own, task, tree, deps.separator);
         // Registered and forked under one permit, so a narrower policy either sees neither or can
         // stop the fiber it finds (PE-008).
