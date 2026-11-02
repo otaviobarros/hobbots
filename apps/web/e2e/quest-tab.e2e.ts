@@ -130,3 +130,61 @@ test("[TC-CH-191] the Quest tab says why a Reassign is refused, and cancels the 
     "Cancelled",
   );
 });
+
+// covers CH-005, OR-006, EX-001, UX-001
+test("[TC-CH-192] the Quest tab cancels a Task, retries a failed one and gives another to a new hob, each live", async ({
+  page,
+}) => {
+  const { url, aldric } = await questHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill("Plan a spring sale for the shop");
+  await composer.press("Enter");
+  await page.getByRole("tab", { name: "Quest" }).click();
+  const room = page.getByRole("region", { name: "Control room for Plan the spring sale" });
+  const tasks = room.getByRole("list", { name: "Tasks of Plan the spring sale" });
+  const signs = tasks.getByRole("button", { name: /Quill · Order the sale signs/ });
+  const banner = tasks.getByRole("button", { name: /Quill · Write the sale banner/ });
+  const email = tasks.getByRole("button", { name: /· Schedule the sale email/ });
+  await expect(signs).toContainText("Running", { timeout: 15_000 });
+  await expect(banner).toContainText("Failed");
+  await expect(email).toContainText("Ada");
+  await expect(page.getByText("Aldric's party: Quill and Ada")).toBeVisible();
+
+  // Cancel Task asks first, then the Task confirms it stopped; the drawer follows.
+  await signs.click();
+  const signsControls = room.getByRole("region", { name: "Controls for Order the sale signs" });
+  await expect(signsControls.getByRole("button", { name: "Retry" })).toHaveCount(0);
+  await signsControls.getByRole("button", { name: "Cancel Task" }).click();
+  await expect(signsControls).toContainText("Cancel Order the sale signs and everything under it?");
+  await signsControls.getByRole("button", { name: "Yes, cancel" }).click();
+  await expect(signsControls.getByRole("status")).toHaveText("Cancelled: the Task confirmed it stopped.", {
+    timeout: 15_000,
+  });
+  await expect(signs).toContainText("Cancelled");
+  await expect(page.getByRole("complementary", { name: "Order the sale signs, Task details" })).toContainText(
+    "Cancelled",
+  );
+  await expect(signsControls.getByRole("button", { name: "Cancel Task" })).toHaveCount(0);
+
+  // Retry queues the failed Task again for a new Attempt of the same Task.
+  await banner.click();
+  const bannerControls = room.getByRole("region", { name: "Controls for Write the sale banner" });
+  await expect(bannerControls).toContainText("Attempt 1");
+  await bannerControls.getByRole("button", { name: "Retry" }).click();
+  await expect(bannerControls).toContainText(/Queued: waiting for Quill to start Attempt 2\.|Attempt 2/);
+  await expect(bannerControls).toContainText("Attempt 2", { timeout: 15_000 });
+  await expect(banner).not.toContainText("Failed");
+
+  // Reassign gives Ada's failed Task to Quill, the only hob it can go to, and the party follows.
+  await email.click();
+  const emailControls = room.getByRole("region", { name: "Controls for Schedule the sale email" });
+  await emailControls.getByRole("button", { name: "Reassign" }).click();
+  const picker = emailControls.getByRole("group", { name: "Give Schedule the sale email to" });
+  await expect(picker.getByRole("button")).toHaveText(["Quill", "Keep it"]);
+  await picker.getByRole("button", { name: "Quill" }).click();
+  await expect(picker).toBeHidden();
+  await expect(tasks.getByRole("button", { name: /Quill · Schedule the sale email/ })).toBeVisible();
+  await expect(emailControls.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByText("Aldric's party: Quill", { exact: true })).toBeVisible();
+});

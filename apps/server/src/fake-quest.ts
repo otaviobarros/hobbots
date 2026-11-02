@@ -28,11 +28,25 @@ import { EventBus } from "./event-bus.ts";
  * Asking a hob for a Black Friday campaign starts it, with that hob as the lead and the hobs named
  * Quill and Ada as its party. Ada's question climbs to you; the Quest finishes once you answer it.
  * Cancelling it stops the play, and each of its Attempts ends as a session would when told to stop,
- * so every Task confirms its cancel. Only `HOBBOTS_FAKE_QUEST=black-friday` with the fake runtime
- * turns it on.
+ * so every Task confirms its cancel.
+ *
+ * Asking for a spring sale sets up the same party with work for the Quest tab's controls instead:
+ * Quill's banner and Ada's email have failed, so they can be retried or given to another hob, and
+ * Quill's signs are under way, so they can be cancelled. Only `HOBBOTS_FAKE_QUEST=black-friday`
+ * with the fake runtime turns either on.
  */
 
-const TRIGGER = /black friday/i;
+/** The scripted requests, each found by what you ask for. */
+const SCRIPTS = { "black-friday": /black friday/i, "spring-sale": /spring sale/i } as const;
+type Script = keyof typeof SCRIPTS;
+
+const BRIEFS: Record<Script, { readonly title: string; readonly goal: string }> = {
+  "black-friday": {
+    title: "Plan the Black Friday campaign",
+    goal: "A Black Friday campaign: landing copy and a launch email, live by Friday",
+  },
+  "spring-sale": { title: "Plan the spring sale", goal: "A spring sale: a banner, an email and window signs" },
+};
 
 const iso = Effect.map(DateTime.now, DateTime.formatIso);
 
@@ -43,14 +57,15 @@ interface Cast {
   readonly ada: AgentId;
 }
 
-/** The thread of a request for a Black Friday campaign, or null for any other event. */
-const requestThread = (entry: EventEnvelope) =>
-  entry.payload._tag === "MessageUpserted" &&
-  entry.payload.message.role === "user" &&
-  entry.payload.message.status !== "queued" &&
-  TRIGGER.test(entry.payload.message.content)
-    ? entry.payload.message.threadId
-    : null;
+/** The thread of a scripted request and which script it asks for, or null for any other event. */
+const requestThread = (entry: EventEnvelope) => {
+  const { payload } = entry;
+  if (payload._tag !== "MessageUpserted" || payload.message.role !== "user" || payload.message.status === "queued") {
+    return null;
+  }
+  const script = (Object.keys(SCRIPTS) as Array<Script>).find((each) => SCRIPTS[each].test(payload.message.content));
+  return script === undefined ? null : { threadId: payload.message.threadId, script };
+};
 
 /** The ids the play gives its records in a thread, so each thread's Quest has its own. */
 const idsFor = (threadId: Thread["id"]) => {
@@ -69,7 +84,7 @@ const cancellingTask = (entry: EventEnvelope) =>
  * Ends the Attempt of a played Task being cancelled, as its session would once told to stop, and
  * asks the hub to confirm the cancels that nothing runs in any more.
  */
-const stopAttempt = (task: Task) =>
+const stopAttempt = (task: Task, bus: EventBus["Service"]) =>
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
     const turns = yield* Effect.serviceOption(TaskTurns);
@@ -78,16 +93,17 @@ const stopAttempt = (task: Task) =>
       (each) => each.id === task.currentAttemptId && isLiveAttempt(each.state),
     );
     if (live !== undefined) {
-      yield* tasks.updateAttempt(live.id, {
+      const stopped = yield* tasks.updateAttempt(live.id, {
         state: "cancelled",
         outcome: "Stopped when you cancelled it.",
         at: yield* iso,
       });
+      yield* bus.publish(stopped.entries);
     }
     if (Option.isSome(turns)) yield* turns.value.reviewTasks;
   });
 
-const play = (cast: Cast, step: Duration.Input, bus: EventBus["Service"]) =>
+const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["Service"]) =>
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
     const repo = yield* HobbotsRepository;
@@ -171,7 +187,7 @@ const play = (cast: Cast, step: Duration.Input, bus: EventBus["Service"]) =>
           ownerId: cast.lead,
           parentId: null,
           threadId: cast.thread.id,
-          brief: "Plan the Black Friday campaign",
+          brief: BRIEFS[script].title,
           dependsOn: [],
           createdAt: yield* iso,
         },
@@ -185,7 +201,7 @@ const play = (cast: Cast, step: Duration.Input, bus: EventBus["Service"]) =>
       .startQuest({
         id: QuestId.make(id("quest")),
         taskId: campaign.id,
-        goal: "A Black Friday campaign: landing copy and a launch email, live by Friday",
+        goal: BRIEFS[script].goal,
         acceptance: ["Landing copy approved", "Campaign scheduled"],
         limits: DEFAULT_QUEST_LIMITS,
         createdAt: yield* iso,
@@ -216,6 +232,31 @@ const play = (cast: Cast, step: Duration.Input, bus: EventBus["Service"]) =>
           .pipe(Effect.flatMap(announce));
         return (yield* start(task, `a-${name}`)).task;
       });
+    // The spring sale stops here, with work in each state the Quest tab's controls act on.
+    if (script === "spring-sale") {
+      const failed = (name: string, owner: AgentId, brief: string, why: string) =>
+        Effect.gen(function* () {
+          const started = yield* member(name, owner, brief, [], []);
+          const ended = yield* tasks
+            .updateAttempt(AttemptId.make(id(`a-${name}`)), { state: "failed", outcome: why, at: yield* iso })
+            .pipe(Effect.flatMap(announce));
+          yield* tasks.moveTask(started.id, ended.task.revision, "failed", yield* iso).pipe(Effect.flatMap(announce));
+        });
+      yield* failed(
+        "banner",
+        cast.quill,
+        "Write the sale banner\nA banner for the shop's home page.",
+        "The image service timed out.",
+      );
+      yield* failed(
+        "email",
+        cast.ada,
+        "Schedule the sale email\nSchedule the spring sale email for Monday.",
+        "The mailing tool rejected the sign-in.",
+      );
+      yield* member("signs", cast.quill, "Order the sale signs\nOrder window signs for the shop.", [], []);
+      return;
+    }
     const copy = yield* member(
       "copy",
       cast.quill,
@@ -330,7 +371,7 @@ export const FakeQuestLive = (step: Duration.Input) =>
       // Each play runs under its top Task's id; the roots played stay known after a play ends.
       const plays = yield* FiberMap.make<TaskId>();
       const played = new Set<TaskId>();
-      const start = (threadId: Thread["id"]) =>
+      const start = (threadId: Thread["id"], script: Script) =>
         castFor(threadId).pipe(
           Effect.flatMap(
             Option.match({
@@ -340,7 +381,7 @@ export const FakeQuestLive = (step: Duration.Input) =>
                 return FiberMap.run(
                   plays,
                   campaignOf(threadId),
-                  play(cast, step, bus).pipe(
+                  play(cast, script, step, bus).pipe(
                     Effect.catchCause((cause) => Effect.logError("The Black Friday Quest stopped", cause)),
                   ),
                 ).pipe(Effect.asVoid);
@@ -348,18 +389,19 @@ export const FakeQuestLive = (step: Duration.Input) =>
             }),
           ),
         );
+      // Cancelling the request stops its play; cancelling a member's Task stops only that Task.
       const cancel = (task: Task) =>
         played.has(task.rootId)
-          ? FiberMap.remove(plays, task.rootId).pipe(
-              Effect.andThen(stopAttempt(task)),
+          ? (task.id === task.rootId ? FiberMap.remove(plays, task.rootId) : Effect.void).pipe(
+              Effect.andThen(stopAttempt(task, bus)),
               Effect.catchCause((cause) => Effect.logWarning("Could not stop a cancelled fake Task", cause)),
             )
           : Effect.void;
       yield* bus.stream.pipe(
         Stream.runForEach((event) => {
           if (event._tag !== "Journaled") return Effect.void;
-          const threadId = requestThread(event.entry);
-          if (threadId !== null) return start(threadId);
+          const request = requestThread(event.entry);
+          if (request !== null) return start(request.threadId, request.script);
           const cancelling = cancellingTask(event.entry);
           return cancelling === null ? Effect.void : cancel(cancelling);
         }),
