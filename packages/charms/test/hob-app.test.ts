@@ -1,17 +1,39 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import {
+  type ApprovalAction,
+  actionDigest,
+  CharmTools,
   DeviceRepository,
   GrantService,
   HobbotsRepository,
   HobGitHubApps,
   makeRedactor,
   RetiredHobGitHubApp,
+  type RuntimeEvent,
   SecretRedaction,
+  type ToolAccess,
 } from "@hobbots/agents";
-import { Agent, AgentId, Device, DeviceId, type HobGitHubApp } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  ApprovalId,
+  type CharmCall,
+  Device,
+  DeviceId,
+  EMPTY_HOB_POLICY,
+  type GitHubRepository,
+  type HobGitHubApp,
+  hobAppBot,
+  MessageId,
+  type PolicyDecision,
+  type SafetyPreset,
+  ThreadId,
+} from "@hobbots/domain";
+import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Option, Redacted } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { TestClock } from "effect/testing";
@@ -20,9 +42,12 @@ import {
   ACTION_PERMISSIONS,
   GitHubApi,
   GitHubApiLive,
+  GitHubCharmTools,
   GitHubConnection,
   GitHubCredential,
   GitHubCredentialPerHob,
+  GitPushLive,
+  GitRemotes,
   HOB_APP_PERMISSIONS,
   HobAppKeys,
   HobAppKeysLive,
@@ -33,6 +58,7 @@ import {
   KeychainError,
 } from "../src/index.ts";
 import { type FakeGitHub, startFakeGitHub } from "../src/testing.ts";
+import { directSandbox, memoryCharmCalls } from "./support.ts";
 
 // A hob's own GitHub App (#223, ADR 022) against the fake GitHub of #325: the manifest, the state,
 // the code exchange, the key in the keychain, the installations and removing it all again.
@@ -45,7 +71,8 @@ const HUB = "http://127.0.0.1:4242";
 
 let github: FakeGitHub;
 beforeAll(async () => {
-  github = await startFakeGitHub({ folder: join(temp, "github"), login: "otaviobarros" });
+  // The user's account signs in with `user-token`, which the hob's app must never use.
+  github = await startFakeGitHub({ folder: join(temp, "github"), login: "otaviobarros", tokens: ["user-token"] });
 });
 afterAll(async () => {
   await github.close();
@@ -93,6 +120,8 @@ interface World {
   readonly redactor: ReturnType<typeof makeRedactor>;
   /** Every change of GitHub identity that revoked a hob's GitHub grants, in order. */
   readonly revokedGitHub: Array<AgentId>;
+  /** The Charm's call records, by hob and key. */
+  readonly calls: Map<string, CharmCall>;
 }
 
 const world = (): World => ({
@@ -108,6 +137,7 @@ const world = (): World => ({
   leftOver: new Map(),
   redactor: makeRedactor(),
   revokedGitHub: [],
+  calls: new Map(),
 });
 
 /** The hobs' apps in memory, as the database keeps them. */
@@ -136,19 +166,19 @@ const appsOf = (w: World) =>
     }),
   );
 
+/** The hobs, of which only reading one is used here. */
+const hobsOf = (w: World) =>
+  Layer.succeed(HobbotsRepository, {
+    findAgent: (id: AgentId) => Effect.succeed(Option.fromNullishOr(w.hobs.get(id))),
+  } as unknown as HobbotsRepository["Service"]);
+
 const layer = (w: World, keys: Layer.Layer<HobAppKeys> = HobAppKeysMemory) =>
   HobGitHubAppLive(github.hosts).pipe(
     Layer.provideMerge(keys),
     Layer.provide([
       FetchHttpClient.layer,
       Layer.succeed(SecretRedaction, w.redactor),
-      Layer.succeed(
-        HobbotsRepository,
-        // Only reading a hob is used here.
-        {
-          findAgent: (id: AgentId) => Effect.succeed(Option.fromNullishOr(w.hobs.get(id))),
-        } as unknown as HobbotsRepository["Service"],
-      ),
+      hobsOf(w),
       Layer.succeed(DeviceRepository, {
         find: (id: DeviceId) => Effect.succeed(Option.fromNullishOr(w.devices.get(id))),
       } as unknown as DeviceRepository["Service"]),
@@ -574,7 +604,7 @@ const userAccount = (calls: Array<string>) =>
       GitHubCredential,
       GitHubCredential.of({
         connected: Effect.succeed(true),
-        bot: () => Effect.succeed(null),
+        hobApp: () => Effect.succeed(null),
         tokenFor: () => Effect.sync(() => void calls.push("tokenFor")).pipe(Effect.as(Redacted.make("user-token"))),
         refused: () => Effect.sync(() => void calls.push("refused")).pipe(Effect.as(Redacted.make("user-token"))),
         revoked: () => Effect.sync(() => void calls.push("revoked")),
@@ -593,7 +623,7 @@ const userAccount = (calls: Array<string>) =>
 const charmLayer = (w: World, calls: Array<string>) =>
   GitHubApiLive(github.hosts.api).pipe(
     Layer.provideMerge(GitHubCredentialPerHob),
-    Layer.provide([userAccount(calls), appsOf(w), grantsOf(w)]),
+    Layer.provide([userAccount(calls), appsOf(w), grantsOf(w), hobsOf(w)]),
     Layer.provideMerge(layer(w)),
     Layer.provide(FetchHttpClient.layer),
   );
@@ -843,7 +873,7 @@ describe("A hob's own GitHub App's tokens", () => {
           ),
         );
         const after = yield* credential.tokenFor(FRODO, { repository, action: "comment" });
-        return { revokedOnConnect, stopped, after, bot: yield* credential.bot(FRODO) };
+        return { revokedOnConnect, stopped, after, bot: yield* credential.hobApp(FRODO) };
       }),
     );
     // Grants approved under one GitHub identity never carry over to the other: both switches revoke them.
@@ -881,6 +911,342 @@ describe("A hob's own GitHub App's tokens", () => {
     expect(new Set(values).size).toBe(1);
     expect(values[0]).not.toBe(Redacted.value(outcome.stale));
     expect(outcome.minted).toBe(1);
+  });
+});
+
+/** A folder of the user's with `main`, `feat/x` and `feat/y`, and its repository on the fake GitHub with one issue. */
+const projectFor = (name: string) => {
+  const folder = join(temp, "projects", name);
+  mkdirSync(folder, { recursive: true });
+  const git = (...args: Array<string>) => execFileSync("git", args, { cwd: folder, stdio: "pipe" });
+  git("init", "--quiet", "--initial-branch=main");
+  writeFileSync(join(folder, "README.md"), "Ponies\n");
+  git("add", "README.md");
+  git("-c", "user.name=Otavio", "-c", "user.email=o@example.com", "commit", "--quiet", "--no-gpg-sign", "-m", "Start");
+  git("branch", "feat/x");
+  git("branch", "feat/y");
+  github.createRepository({ owner: "otaviobarros", name, from: folder });
+  github.addItem(`otaviobarros/${name}`, { title: "Pick a name for the pony" });
+  const repository: GitHubRepository = { owner: "otaviobarros", name };
+  return { folder, repository, slug: `otaviobarros/${name}` };
+};
+
+const accessIn = (
+  folder: string,
+  preset: SafetyPreset,
+  overrides: Record<string, PolicyDecision> = {},
+): ToolAccess => ({
+  policy: {
+    preset,
+    sharedFolders: [folder],
+    hob: { ...EMPTY_HOB_POLICY, overrides },
+    dataFolder: join(temp, "data"),
+    restrictions: [],
+  },
+  folders: [folder],
+  runtimeFolder: join(temp, "runtimes", "frodo"),
+});
+
+/** The GitHub Charm's tools over the hob's app and GitHub's REST API, for hobs working in `folder`. */
+const writesLayer = (w: World, calls: Array<string>, folder: string, repository: GitHubRepository) =>
+  GitHubCharmTools.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.succeed(
+          GitRemotes,
+          GitRemotes.of({ repositoryOf: (f) => Effect.succeed(f === folder ? repository : null) }),
+        ),
+        PolicyEngine.node,
+        memoryCharmCalls(w.calls),
+        GitPushLive({ folder: join(temp, "charm", repository.name) }).pipe(
+          Layer.provide(Layer.mergeAll(directSandbox, NodeServices.layer)),
+        ),
+      ),
+    ),
+    Layer.provideMerge(charmLayer(w, calls)),
+  );
+
+interface WriteTurn {
+  readonly preset?: SafetyPreset;
+  readonly overrides?: Record<string, PolicyDecision>;
+  readonly answer?: "approve" | "deny";
+  /** Runs while the card waits, before the user answers it. */
+  readonly whileAsking?: Effect.Effect<void>;
+}
+
+/** One hob tool call in a turn of `agentId`'s, with the user answering its card as `turn` says; what was asked and reported. */
+const callAs = (agentId: AgentId, w: World, folder: string, tool: string, input: object, turn: WriteTurn = {}) =>
+  Effect.gen(function* () {
+    const asked: Array<ApprovalAction> = [];
+    const events: Array<RuntimeEvent> = [];
+    const access = accessIn(folder, turn.preset ?? "balanced", turn.overrides);
+    const tools = yield* (yield* CharmTools).forTurn({
+      agentId,
+      threadId: ThreadId.make("t1"),
+      messageId: MessageId.make("m1"),
+      currentAccess: Effect.succeed(access),
+      redactor: w.redactor,
+      approvals: {
+        request: (action) =>
+          Effect.gen(function* () {
+            asked.push(action);
+            if (turn.whileAsking !== undefined) yield* turn.whileAsking;
+            const digest = yield* actionDigest(action);
+            return {
+              approvalId: ApprovalId.make(`approval-${asked.length}`),
+              decision: Effect.succeed(
+                (turn.answer ?? "approve") === "approve"
+                  ? ({
+                      _tag: "Approved",
+                      actionDigest: digest,
+                      policyVersion: action.policyVersion,
+                      lifetime: "once",
+                    } as const)
+                  : ({ _tag: "Denied", reason: "Not yet." } as const),
+              ),
+            };
+          }),
+        currentAccess: Effect.succeed(access),
+        grants: Effect.succeed([]),
+        used: () => Effect.void,
+      },
+    });
+    if (tools === null) return yield* Effect.die("the turn was offered no GitHub tools");
+    const answer = yield* tools.call(tool, input, { id: `step-${tool}`, report: (event) => events.push(event) });
+    const labels = events.flatMap((event) => ("label" in event ? [event.label] : []));
+    return { answer, asked, labels, summary: asked.map((card) => String(card.arguments.summary)) };
+  });
+
+type WriteServices = CharmTools | CharmServices;
+
+const runWrites = <A, E>(
+  w: World,
+  calls: Array<string>,
+  project: { readonly folder: string; readonly repository: GitHubRepository },
+  effect: Effect.Effect<A, E, WriteServices>,
+) => Effect.runPromise(Effect.provide(effect, writesLayer(w, calls, project.folder, project.repository)));
+
+describe("A hob's own GitHub App's pull requests and comments", () => {
+  // covers ADR 022, PE-003, PE-007
+  it("[TC-GEN-092] opens a draft pull request as the hob's bot, with a card and a step that name the bot", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const project = projectFor("pr-shed");
+    const fromToken = github.installationTokens.length;
+    const outcome = await runWrites(
+      w,
+      calls,
+      project,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, [project.slug]);
+        const opened = yield* callAs(FRODO, w, project.folder, "github_open_pull_request", {
+          head: "feat/x",
+          title: "Name the pony",
+          body: "Picks Bill.",
+          key: "pr-1",
+        });
+        return { app, ...opened };
+      }),
+    );
+    const bot = `${outcome.app.slug}[bot]`;
+    expect(outcome.answer).toMatchObject({
+      refused: false,
+      text: expect.stringContaining("Opened draft pull request #2"),
+    });
+    expect(outcome.asked).toHaveLength(1);
+    expect(outcome.asked[0]).toMatchObject({ tool: "github_open_pull_request", operation: "open-pull-request" });
+    expect(outcome.asked[0]?.arguments.actingAs).toEqual({ _tag: "HobApp", hob: "Frodo", bot });
+    expect(outcome.summary[0]?.split("\n").at(-1)).toBe(`As Frodo's app, ${bot}.`);
+    expect(outcome.labels).toContain(`Opening a pull request from feat/x as Frodo's app, ${bot}`);
+    const pull = github.items(project.slug).find((item) => item.pullRequest !== null);
+    expect(pull).toMatchObject({
+      author: bot,
+      title: "Name the pony",
+      pullRequest: { head: "feat/x", base: "main", draft: true },
+    });
+    // Read and open each with a token for this repository and only that action's permissions.
+    expect(tokensSince(fromToken).map((token) => [token.repositories, token.permissions])).toEqual([
+      [[project.slug], ACTION_PERMISSIONS.read],
+      [[project.slug], ACTION_PERMISSIONS["open-pull-request"]],
+    ]);
+    // The user's account was never asked for a token.
+    expect(calls).toEqual([]);
+    expect([...w.calls.values()].map((call) => call.state)).toEqual(["applied"]);
+  });
+
+  // covers ADR 022, PE-003, PE-007
+  it("[TC-GEN-093] comments as the hob's bot, with the hidden marker, after a card that names the bot", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const project = projectFor("comment-shed");
+    const outcome = await runWrites(
+      w,
+      calls,
+      project,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, [project.slug]);
+        const commented = yield* callAs(FRODO, w, project.folder, "github_comment", {
+          number: 1,
+          body: "Bill is a fine name.",
+          key: "c-1",
+        });
+        return { app, ...commented };
+      }),
+    );
+    const bot = `${outcome.app.slug}[bot]`;
+    expect(outcome.answer).toMatchObject({ refused: false, text: expect.stringContaining("Commented on issue #1") });
+    expect(outcome.summary[0]).toBe(
+      `Comment on issue #1 in ${project.slug}: Pick a name for the pony\n\nBill is a fine name.\n\nAs Frodo's app, ${bot}.`,
+    );
+    expect(outcome.labels).toContain(`Commenting on #1 as Frodo's app, ${bot}`);
+    const [comment] = github.items(project.slug)[0]?.comments ?? [];
+    expect(comment?.author).toBe(bot);
+    expect(comment?.body).toMatch(/^Bill is a fine name\.\n\n<!-- hobbots-call: [0-9a-f-]{36} -->$/);
+    expect(github.installationTokens.at(-1)?.permissions).toEqual(ACTION_PERMISSIONS.comment);
+    expect(calls).toEqual([]);
+  });
+
+  // covers ADR 022, PE-003, PE-005
+  it("[TC-GEN-094] keeps the hob's policy: runs under Trusting without asking, sends nothing under Never or when denied", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const project = projectFor("policy-shed");
+    const outcome = await runWrites(
+      w,
+      calls,
+      project,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, [project.slug]);
+        const never = yield* callAs(
+          FRODO,
+          w,
+          project.folder,
+          "github_comment",
+          { number: 1, body: "Never.", key: "p-1" },
+          { overrides: { "comment-github": "deny" } },
+        );
+        const denied = yield* callAs(
+          FRODO,
+          w,
+          project.folder,
+          "github_comment",
+          { number: 1, body: "Denied.", key: "p-2" },
+          { answer: "deny" },
+        );
+        const trusting = yield* callAs(
+          FRODO,
+          w,
+          project.folder,
+          "github_comment",
+          { number: 1, body: "Trusted.", key: "p-3" },
+          { preset: "trusting" },
+        );
+        return { app, never, denied, trusting };
+      }),
+    );
+    const bot = `${outcome.app.slug}[bot]`;
+    expect(outcome.never).toMatchObject({ answer: { refused: true }, asked: [] });
+    expect(outcome.denied.answer.refused).toBe(true);
+    expect(outcome.denied.asked).toHaveLength(1);
+    expect(outcome.trusting).toMatchObject({ answer: { refused: false }, asked: [] });
+    // Without a card, the step alone says who acts.
+    expect(outcome.trusting.labels).toContain(`Commenting on #1 as Frodo's app, ${bot}`);
+    expect(
+      github.items(project.slug)[0]?.comments.map((comment) => [comment.author, comment.body.split("\n")[0]]),
+    ).toEqual([[bot, "Trusted."]]);
+    expect(calls).toEqual([]);
+  });
+
+  // covers ADR 022, PE-005
+  it("[TC-GEN-095] does not send when the hob's app is disconnected while the card waits, and asks again as you", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const project = projectFor("switch-shed");
+    const outcome = await runWrites(
+      w,
+      calls,
+      project,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, [project.slug]);
+        const service = yield* HobGitHubAppService;
+        const switched = yield* callAs(
+          FRODO,
+          w,
+          project.folder,
+          "github_open_pull_request",
+          { head: "feat/x", title: "Name the pony", key: "s-1" },
+          { whileAsking: service.disconnect(FRODO).pipe(Effect.asVoid, Effect.orDie) },
+        );
+        const again = yield* callAs(
+          FRODO,
+          w,
+          project.folder,
+          "github_open_pull_request",
+          { head: "feat/x", title: "Name the pony", key: "s-1" },
+          { answer: "deny" },
+        );
+        return { app, switched, again };
+      }),
+    );
+    expect(outcome.switched.summary[0]).toContain(`As Frodo's app, ${outcome.app.slug}[bot].`);
+    expect(outcome.switched.answer).toMatchObject({
+      refused: true,
+      text: expect.stringContaining("changed during this call"),
+    });
+    expect(github.items(project.slug).filter((item) => item.pullRequest !== null)).toEqual([]);
+    // Calling again asks again, now naming the user's account, which acts for the hob from then on.
+    expect(outcome.again.asked).toHaveLength(1);
+    expect(outcome.again.asked[0]?.arguments.actingAs).toMatchObject({ _tag: "You" });
+    expect(outcome.again.summary[0]).toMatch(/\nAs you( \(@[^)]+\))?\.$/);
+    expect(w.revokedGitHub).toEqual([FRODO, FRODO]);
+  });
+
+  // covers ADR 022, IN-003, EX-004
+  it("[TC-GEN-096] reads a lost pull request back as the bot's, and never takes the user's own for it", async () => {
+    const w = world();
+    const calls: Array<string> = [];
+    const project = projectFor("lost-shed");
+    /**
+     * GitHub gets the request but its answer never arrives. Meanwhile the user opens their own pull
+     * request from that head, and, when `bot` is given, GitHub opened the hob's as that bot.
+     */
+    const loseAnswer = (head: string, bot?: string) => {
+      github.answer = (request) => {
+        if (request.method !== "POST" || !request.path.endsWith("/pulls")) return undefined;
+        const pullRequest = { head, base: "main" };
+        github.addItem(project.slug, { title: "Theirs", author: "otaviobarros", pullRequest });
+        if (bot !== undefined) github.addItem(project.slug, { title: "Name the pony", author: bot, pullRequest });
+        return "drop";
+      };
+    };
+    const outcome = await runWrites(
+      w,
+      calls,
+      project,
+      Effect.gen(function* () {
+        const app = yield* withApp(FRODO, [project.slug]);
+        const open = (head: string, key: string) =>
+          callAs(FRODO, w, project.folder, "github_open_pull_request", { head, title: "Name the pony", key });
+        loseAnswer("feat/x");
+        const lost = yield* open("feat/x", "l-1");
+        loseAnswer("feat/y", hobAppBot(app));
+        const found = yield* open("feat/y", "l-2");
+        github.answer = null;
+        return { app, lost, found };
+      }),
+    );
+    // Only the user's pull request is there: it is not this call's, so the call stays uncertain.
+    expect(outcome.lost.answer.refused).toBe(true);
+    expect(w.calls.get(`${FRODO} l-1`)?.state).toBe("uncertain");
+    // The bot's own is found and settles the call with its link.
+    const ours = github.items(project.slug).find((item) => item.author === hobAppBot(outcome.app));
+    expect(ours?.pullRequest?.head).toBe("feat/y");
+    expect(outcome.found.answer).toMatchObject({
+      refused: false,
+      text: expect.stringContaining(`pull request #${ours?.number} from feat/y`),
+    });
+    expect(w.calls.get(`${FRODO} l-2`)?.state).toBe("applied");
+    expect(calls).toEqual([]);
   });
 });
 

@@ -12,6 +12,7 @@ import { Context, Data, Effect, Option, type Redacted, Result } from "effect";
 import type { CharmCallRunner, ReadBack, WriteOutcome } from "./charm-calls.ts";
 import { GitPush, type PushTransport } from "./git-push.ts";
 import { GitHubCredential, refusedTwice } from "./github-account.ts";
+import { githubActor } from "./github-actor.ts";
 import { GitHubApi, type GitHubError } from "./github-api.ts";
 import { branchNameCheck, decideCharmWrite } from "./github-writes.ts";
 
@@ -96,9 +97,9 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
           // A hob with its own app always pushes as its bot, never over the user's SSH key (ADR 022).
           // Asked on every attempt, retries included: a source other than the one the push was
           // checked under stops it rather than sending it as someone else.
-          const bot = yield* credential.bot(agentId).pipe(Effect.result);
-          if (Result.isFailure(bot)) return noToken(bot.failure);
-          const viaApp = bot.success !== null;
+          const app = yield* credential.hobApp(agentId).pipe(Effect.result);
+          if (Result.isFailure(app)) return noToken(app.failure);
+          const viaApp = app.success !== null;
           if (settings.over === "ssh" && !viaApp) return yield* over(null);
           const scope = { repository, action: "push" } as const;
           const token = yield* credential.tokenFor(agentId, scope).pipe(Effect.result);
@@ -172,7 +173,7 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
             info.defaultBranch === remoteBranch
               ? replaces
               : yield* github(api.branchHead(agentId, repository, info.defaultBranch));
-          const actingAs = yield* api.viewer(agentId).pipe(Effect.option, Effect.map(Option.getOrNull));
+          const actingAs = yield* github(githubActor(credential, api, agentId));
           const commits = yield* git.commits(staged, [replaces, defaultHead]);
           const settings = yield* GitHubPushSettings;
           const plan: GitHubPushPlan = {

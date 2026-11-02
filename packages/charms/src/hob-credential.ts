@@ -1,6 +1,12 @@
-import { GitHubIdentityPin, GrantService, HobGitHubApps } from "@hobbots/agents";
-import { type AgentId, type GitHubRepository, hobAppBot } from "@hobbots/domain";
-import { Context, Effect, Layer, type Redacted } from "effect";
+import { GitHubIdentityPin, GrantService, HobbotsRepository, HobGitHubApps } from "@hobbots/agents";
+import {
+  type AgentId,
+  type GitHubHobAppActor,
+  type GitHubRepository,
+  type HobGitHubApp,
+  hobAppBot,
+} from "@hobbots/domain";
+import { Context, Effect, Layer, Option, type Redacted } from "effect";
 import { GitHubConnection, GitHubCredential, type GitHubTokenScope } from "./github-account.ts";
 import { GitHubError } from "./github-error.ts";
 import { HobAppTokens } from "./hob-app-tokens.ts";
@@ -9,7 +15,7 @@ import { HobAppTokens } from "./hob-app-tokens.ts";
  * `GitHubCredential` chosen per hob (ADR 022): the hob's own GitHub App when it has one, the user's
  * account otherwise. When the hob's app cannot act, the call fails and says why; it never runs as
  * the user instead. Wraps the account's services, so it is given `GitHubAccountLive`'s layer and
- * gives back both of them.
+ * gives back both of them. Reads the hob's name for who acts.
  */
 
 /** The source a call was checked under: the hob's app by its ID, or the user's account. */
@@ -39,6 +45,18 @@ export const GitHubCredentialPerHob = Layer.effectContext(
     const apps = yield* HobGitHubApps;
     const hobApps = yield* HobAppTokens;
     const grants = yield* GrantService;
+    const hobs = yield* HobbotsRepository;
+
+    /** Who acts for the hob's app: the hob by its current name, or the app's own name once the hob is gone. */
+    const actorOf = (agentId: AgentId, app: HobGitHubApp) =>
+      Effect.map(
+        hobs.findAgent(agentId),
+        (hob): GitHubHobAppActor => ({
+          _tag: "HobApp",
+          hob: Option.match(hob, { onNone: () => app.slug, onSome: (found) => found.name }),
+          bot: hobAppBot(app),
+        }),
+      );
 
     /** The hob's app, failing when the call was checked under another source. */
     const sourceOf = (agentId: AgentId) =>
@@ -77,7 +95,8 @@ export const GitHubCredentialPerHob = Layer.effectContext(
 
     const credential = GitHubCredential.of({
       connected: account.connected,
-      bot: (agentId) => Effect.map(sourceOf(agentId), (app) => (app === null ? null : hobAppBot(app))),
+      hobApp: (agentId) =>
+        Effect.flatMap(sourceOf(agentId), (app) => (app === null ? Effect.succeed(null) : actorOf(agentId, app))),
       tokenFor,
       refused,
       revoked: (token) => (hobApps.owns(token) ? hobApps.revoked(token) : account.revoked(token)),

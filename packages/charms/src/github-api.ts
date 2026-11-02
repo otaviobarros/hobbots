@@ -516,8 +516,8 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
         viewer: (agentId) =>
           Effect.gen(function* () {
             // An app's installation token cannot read `/user`; the hob acts as the app's bot.
-            const bot = yield* credential.bot(agentId);
-            if (bot !== null) return bot;
+            const app = yield* credential.hobApp(agentId);
+            if (app !== null) return app.bot;
             const json = yield* read(agentId, null, "/user", ViewerJson, "the account the hub signs in as");
             return json.login;
           }),

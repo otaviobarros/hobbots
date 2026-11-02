@@ -415,7 +415,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
       operation: "push",
       onceOnly: false,
       grantable: true,
-      arguments: { commit: pushed, commits: 1, subjects: ["Add b"], actingAs: "otaviobarros" },
+      arguments: { commit: pushed, commits: 1, subjects: ["Add b"], actingAs: { _tag: "You", login: "otaviobarros" } },
     });
     expect(github.headOf("octo/workshop", "feat/x")).toBeNull();
 
