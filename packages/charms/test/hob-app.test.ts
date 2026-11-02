@@ -992,7 +992,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
     expect(outcome.asked).toHaveLength(1);
     expect(outcome.asked[0]).toMatchObject({ tool: "github_open_pull_request", operation: "open-pull-request" });
     expect(outcome.asked[0]?.arguments.actingAs).toEqual({ _tag: "HobApp", hob: "Frodo", bot });
-    expect(outcome.summary[0]).toMatch(new RegExp(`\\nAs Frodo's app, ${bot.replace(/[[\]]/g, "\\$&")}\\.$`));
+    expect(outcome.summary[0]?.split("\n").at(-1)).toBe(`As Frodo's app, ${bot}.`);
     expect(outcome.labels).toContain(`Opening a pull request from feat/x as Frodo's app, ${bot}`);
     const pull = github.items(project.slug).find((item) => item.pullRequest !== null);
     expect(pull).toMatchObject({
