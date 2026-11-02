@@ -60,22 +60,21 @@ export class Backpack extends Context.Service<
     readonly requeue: (itemId: BackpackItemId, held: HeldClaim) => Guarded;
     readonly resolve: (itemId: BackpackItemId, held: HeldClaim, disposition: BackpackDisposition) => Guarded;
     /** Its deliveries ran out: the item fails as a blocker whose next action is to retry it (IN-007). */
-    readonly fail: (itemId: BackpackItemId, held: HeldClaim, error: string) => Guarded;
+    readonly fail: (itemId: BackpackItemId, held: HeldClaim, diagnostic: string | null) => Guarded;
     /**
      * Its hob retired: an actionable pending item no claim holds fails as a blocker, since nobody
      * can take it. Its value is null otherwise: a claimed item comes back to pending once its turn
      * ends and is abandoned then, and routine progress never needs your choice.
      */
-    readonly abandon: (
-      itemId: BackpackItemId,
-      error: string,
-    ) => Effect.Effect<Committed<BackpackItem | null>, BackpackItemMissing>;
+    readonly abandon: (itemId: BackpackItemId) => Effect.Effect<Committed<BackpackItem | null>, BackpackItemMissing>;
     /**
-     * Records what you chose for an item's open blocker: `retry` puts it back to pending with a
-     * fresh set of deliveries, `dismiss` resolves it as dismissed by you. The blocker keeps the choice.
+     * Records what you chose for the item's blocker numbered `blocker`, while it is the item's open
+     * one: `retry` puts the item back to pending with a fresh set of deliveries, `dismiss` resolves
+     * it as dismissed by you. The blocker keeps the choice. Any other blocker is NotBlocked.
      */
     readonly decide: (
       itemId: BackpackItemId,
+      blocker: number,
       action: "retry" | "dismiss",
     ) => Effect.Effect<Committed<BackpackItem>, BackpackItemMissing | BackpackItemNotBlocked>;
     /**

@@ -37,15 +37,24 @@ export class BackpackItemNotFound extends Schema.TaggedError<BackpackItemNotFoun
   { httpApiStatus: 404 },
 ) {}
 
-/** The item has no blocker waiting for a choice: it is not failed, or another choice was made first. */
+/**
+ * The blocker named takes no choice: another choice was made for it first, or the item failed
+ * again since and a newer blocker took its place.
+ */
 export class BlockerClosed extends Schema.TaggedError<BlockerClosed>()(
   "BlockerClosed",
-  { itemId: BackpackItemId, state: BackpackItemState },
+  { itemId: BackpackItemId, blocker: Schema.Int, state: BackpackItemState },
   { httpApiStatus: 409 },
 ) {}
 
-/** Retry puts the item back to pending with a fresh set of deliveries; Dismiss resolves it as dismissed by you. */
-export const DecideBlockerPayload = Schema.Struct({ action: Schema.Literals(["retry", "dismiss"]) });
+/**
+ * Your choice for the item's blocker numbered `blocker`, the one you saw. Retry puts the item back
+ * to pending with a fresh set of deliveries; Dismiss resolves it as dismissed by you.
+ */
+export const DecideBlockerPayload = Schema.Struct({
+  blocker: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  action: Schema.Literals(["retry", "dismiss"]),
+});
 export type DecideBlockerPayload = typeof DecideBlockerPayload.Type;
 
 /**

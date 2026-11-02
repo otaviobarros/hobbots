@@ -18,10 +18,12 @@ import {
 import {
   Backpack,
   BackpackTurnFailed,
+  BlockersHost,
   type Delivery,
   Dispatcher,
   DispatcherHost,
   type DispatchLimits,
+  decideBlocker,
   type Turn,
 } from "@hobbots/inbox";
 import { Deferred, Effect, Fiber, Layer, Option } from "effect";
@@ -410,7 +412,10 @@ describe("The dispatcher", () => {
     expect(result.silent).toBe(3);
     expect(result.stored).toMatchObject({ state: "failed", claim: null });
     expect(result.stored.deliveries.map((each) => each.acknowledgedSessionId)).toEqual([null, null, null]);
-    expect(result.stored.error).toContain("The runtime never accepted the turn.");
+    // The runtime never accepted a turn, so it said nothing to keep: the blocker's reason and its
+    // count of deliveries explain the failure (STD-I18N-005).
+    expect(result.stored.error).toBeNull();
+    expect(result.stored.blockers).toMatchObject([{ reason: "retries-exhausted", afterDeliveries: 3 }]);
   });
 
   // covers IN-002, IN-003
@@ -601,7 +606,7 @@ describe("Blockers", () => {
         const runs = { count: 0 };
         const first = yield* dispatcher.dispatch(item.id, silentTurn(runs));
         const blocked = yield* backpack.listBlocked({ _tag: "Workspace" });
-        const retried = yield* backpack.decide(item.id, "retry");
+        const retried = yield* backpack.decide(item.id, 1, "retry");
         const again = yield* dispatcher.dispatch(item.id, silentTurn(runs));
         return {
           first,
@@ -643,10 +648,12 @@ describe("Blockers", () => {
         const dispatcher = yield* Dispatcher;
         const backpack = yield* Backpack;
         yield* dispatcher.dispatch(item.id, silentTurn({ count: 0 }));
-        const dismissed = yield* backpack.decide(item.id, "dismiss");
-        const second = yield* Effect.flip(backpack.decide(item.id, "retry"));
-        const pending = yield* Effect.flip(backpack.decide(item.id, "dismiss"));
+        const unknown = yield* Effect.flip(backpack.decide(item.id, 2, "dismiss"));
+        const dismissed = yield* backpack.decide(item.id, 1, "dismiss");
+        const second = yield* Effect.flip(backpack.decide(item.id, 1, "retry"));
+        const pending = yield* Effect.flip(backpack.decide(item.id, 1, "dismiss"));
         return {
+          unknown,
           dismissed: dismissed.value,
           entries: dismissed.entries.map((entry) => entry.type),
           second,
@@ -656,6 +663,7 @@ describe("Blockers", () => {
       }),
     );
 
+    expect(result.unknown).toMatchObject({ _tag: "BackpackItemNotBlocked", blocker: 2, state: "failed" });
     expect(result.dismissed).toMatchObject({ state: "resolved", disposition: { _tag: "dismissed", by: null } });
     expect(result.dismissed.blockers).toMatchObject([{ decision: "dismiss" }]);
     expect(result.dismissed.blockers[0]?.decidedAt).not.toBeNull();
@@ -672,13 +680,13 @@ describe("Blockers", () => {
         const { item } = yield* campaign;
         const backpack = yield* Backpack;
         const held = yield* backpack.claim(item.id, "worker", "1 minute");
-        const whileHeld = yield* backpack.abandon(item.id, "Its hob retired, so nobody can take it.");
+        const whileHeld = yield* backpack.abandon(item.id);
         const claim = { owner: "worker", token: held.value.fencingToken };
         yield* backpack.deliver(item.id, claim, { target: "thread:t1", turnId: "turn-1" });
         // The turn ends once the hob retired, and the item comes back to pending.
         yield* backpack.requeue(item.id, claim);
-        const abandoned = yield* backpack.abandon(item.id, "Its hob retired, so nobody can take it.");
-        const again = yield* backpack.abandon(item.id, "Its hob retired, so nobody can take it.");
+        const abandoned = yield* backpack.abandon(item.id);
+        const again = yield* backpack.abandon(item.id);
         // Routine progress for Aldric never needs your choice, so it is not abandoned.
         const progress = recorded(
           yield* (yield* TaskRepository).recordCheckpoint({
@@ -691,7 +699,7 @@ describe("Blockers", () => {
             createdAt: now,
           }),
         );
-        const routine = yield* backpack.abandon(progress.id, "Its hob retired, so nobody can take it.");
+        const routine = yield* backpack.abandon(progress.id);
         return {
           whileHeld: whileHeld.value,
           abandoned: abandoned.value,
@@ -703,9 +711,16 @@ describe("Blockers", () => {
     );
 
     expect(result.whileHeld).toBeNull();
-    expect(result.abandoned).toMatchObject({ state: "failed", error: "Its hob retired, so nobody can take it." });
+    expect(result.abandoned).toMatchObject({ state: "failed", error: null });
     expect(result.abandoned?.blockers).toMatchObject([
-      { number: 1, reason: "recipient-retired", nextAction: "dismiss", afterDeliveries: 1, decision: null },
+      {
+        number: 1,
+        reason: "recipient-retired",
+        nextAction: "dismiss",
+        diagnostic: null,
+        afterDeliveries: 1,
+        decision: null,
+      },
     ]);
     expect(result.again).toBeNull();
     expect(result.routine).toBeNull();
@@ -727,8 +742,53 @@ describe("Blockers", () => {
     expect(result.outcome._tag).toBe("Failed");
     expect(result.runs).toBe(1);
     if (result.outcome._tag !== "Failed") throw new Error("not failed");
-    expect(result.outcome.item.error).toBe(
-      "Delivered once, and the turn ended early. The last: The runtime never accepted the turn.",
+    // The runtime said nothing, so there is nothing to diagnose: the client explains the blocker
+    // from its reason and its count of deliveries (STD-I18N-005).
+    expect(result.outcome.item.error).toBeNull();
+    expect(result.outcome.item.blockers).toMatchObject([{ reason: "retries-exhausted", diagnostic: null }]);
+  });
+
+  // covers IN-007
+  it("[TC-IN-094] binds a choice to the blocker it was made for, so a late one never reaches a newer blocker", async () => {
+    const retired = new Set<string>();
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const dispatcher = yield* Dispatcher;
+        const backpack = yield* Backpack;
+        const resumed: Array<string> = [];
+        const host = BlockersHost.of({
+          isRetired: (agentId) => Effect.succeed(retired.has(agentId)),
+          announce: () => Effect.void,
+          resume: (threadId) => Effect.sync(() => void resumed.push(threadId)),
+        });
+        const decide = (blocker: number, action: "retry" | "dismiss") =>
+          decideBlocker(item.id, blocker, action).pipe(Effect.provideService(BlockersHost, host));
+        const runs = { count: 0 };
+        yield* dispatcher.dispatch(item.id, silentTurn(runs));
+        yield* decide(1, "retry");
+        // Made again for the same blocker, as a client retrying its request: found made.
+        const duplicate = yield* decide(1, "retry");
+        yield* dispatcher.dispatch(item.id, silentTurn(runs));
+        // Late choices for the first blocker, after the item failed again as the second.
+        const lateRetry = yield* decide(1, "retry");
+        const lateDismiss = yield* Effect.flip(decide(1, "dismiss"));
+        const stillOpen = yield* backpack.find(item.id);
+        retired.add(item.recipientId);
+        const refused = yield* Effect.flip(decide(2, "retry"));
+        const dismissed = yield* decide(2, "dismiss");
+        return { duplicate, lateRetry, lateDismiss, stillOpen, refused, dismissed, resumed, runs: runs.count };
+      }),
     );
+
+    expect(result.duplicate).toMatchObject({ state: "pending", deliveries: { length: 3 } });
+    expect(result.lateRetry).toMatchObject({ state: "failed", deliveries: { length: 6 } });
+    expect(result.lateDismiss).toMatchObject({ _tag: "BackpackItemNotBlocked", blocker: 1, state: "failed" });
+    expect(openBlocker(result.stillOpen)).toMatchObject({ number: 2, decision: null });
+    expect(result.refused).toMatchObject({ _tag: "BlockerRecipientRetired" });
+    expect(result.dismissed.blockers.map((each) => each.decision)).toEqual(["retry", "dismiss"]);
+    // One resume for the one Retry that was taken; the duplicate and the late one change nothing.
+    expect(result.resumed).toEqual(["t1"]);
+    expect(result.runs).toBe(6);
   });
 });

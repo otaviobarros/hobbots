@@ -853,7 +853,7 @@ describe("0029_backpack_blockers", () => {
         number: 1,
         reason: "retries-exhausted",
         nextAction: "retry",
-        error: "Delivered 2 times, and every turn ended early.",
+        diagnostic: "Delivered 2 times, and every turn ended early.",
         afterDeliveries: 2,
         raisedAt: "2026-10-29T00:00:00.000Z",
         decision: null,

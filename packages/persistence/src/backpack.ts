@@ -164,23 +164,23 @@ export const BackpackLive = Layer.effect(
       );
 
     /** Records a blocker for the item that just failed, inside the failing write's transaction. */
-    const raiseBlocker = (itemId: BackpackItemId, reason: BlockerReason, error: string) =>
+    const raiseBlocker = (itemId: BackpackItemId, reason: BlockerReason, diagnostic: string | null) =>
       isoNow.pipe(
         Effect.flatMap(
           (at) => sql`INSERT INTO backpack_blockers
-              (item_id, number, reason, next_action, error, after_deliveries, raised_at, decision, decided_at)
-            SELECT ${itemId}, COALESCE(MAX(number), 0) + 1, ${reason}, ${blockerNextAction(reason)}, ${error},
+              (item_id, number, reason, next_action, diagnostic, after_deliveries, raised_at, decision, decided_at)
+            SELECT ${itemId}, COALESCE(MAX(number), 0) + 1, ${reason}, ${blockerNextAction(reason)}, ${diagnostic},
               (SELECT COUNT(*) FROM backpack_deliveries WHERE item_id = ${itemId}), ${at}, NULL, NULL
             FROM backpack_blockers WHERE item_id = ${itemId}`,
         ),
         Effect.asVoid,
       );
 
-    const abandon: Backpack["Service"]["abandon"] = (itemId, error) =>
+    const abandon: Backpack["Service"]["abandon"] = (itemId) =>
       change((revision) =>
         Effect.gen(function* () {
           const { from, to } = backpackStep("abandon");
-          const updated = yield* sql`UPDATE backpack_items SET state = ${to}, error = ${error},
+          const updated = yield* sql`UPDATE backpack_items SET state = ${to}, error = NULL,
               updated_at = ${yield* isoNow}, revision = ${revision}
             WHERE id = ${itemId} AND ${sql.in("state", from)} AND claim_owner IS NULL AND actionable = 1
             RETURNING id`;
@@ -189,26 +189,27 @@ export const BackpackLive = Layer.effect(
             if (row === undefined) return yield* new BackpackItemMissing({ itemId });
             return { value: null, events: [] };
           }
-          yield* raiseBlocker(itemId, "recipient-retired", error);
+          yield* raiseBlocker(itemId, "recipient-retired", null);
           return yield* changed(itemId);
         }),
       );
 
-    const decide: Backpack["Service"]["decide"] = (itemId, action) =>
+    const decide: Backpack["Service"]["decide"] = (itemId, blocker, action) =>
       change((revision) =>
         Effect.gen(function* () {
           const at = yield* isoNow;
-          // Only a failed item's open blocker takes a choice, and only once: the first choice wins.
+          // Only the blocker named takes the choice, while it is the failed item's open one, and only
+          // once: the first choice wins, and a choice made for an older blocker never reaches a newer one.
           const { from, to } = backpackStep(action);
           const decided = yield* sql`UPDATE backpack_blockers SET decision = ${action}, decided_at = ${at}
-            WHERE item_id = ${itemId} AND decision IS NULL
+            WHERE item_id = ${itemId} AND number = ${blocker} AND decision IS NULL
               AND number = (SELECT MAX(number) FROM backpack_blockers WHERE item_id = ${itemId})
               AND EXISTS (SELECT 1 FROM backpack_items WHERE id = ${itemId} AND ${sql.in("state", from)})
             RETURNING item_id`;
           if (decided.length === 0) {
             const [row] = yield* sql<{ readonly state: string }>`SELECT state FROM backpack_items WHERE id = ${itemId}`;
             if (row === undefined) return yield* new BackpackItemMissing({ itemId });
-            return yield* new BackpackItemNotBlocked({ itemId, state: row.state as BackpackItem["state"] });
+            return yield* new BackpackItemNotBlocked({ itemId, blocker, state: row.state as BackpackItem["state"] });
           }
           const columns =
             action === "retry"
@@ -294,11 +295,11 @@ export const BackpackLive = Layer.effect(
       requeue: (itemId, held) => guarded(itemId, held, "requeue", { ends: true }),
       resolve: (itemId, held, disposition) =>
         guarded(itemId, held, "resolve", { ends: true, columns: { disposition: dispositionColumn(disposition) } }),
-      fail: (itemId, held, error) =>
+      fail: (itemId, held, diagnostic) =>
         guarded(itemId, held, "fail", {
           ends: true,
-          columns: { error },
-          also: raiseBlocker(itemId, "retries-exhausted", error),
+          columns: { error: diagnostic },
+          also: raiseBlocker(itemId, "retries-exhausted", diagnostic),
         }),
       abandon,
       decide,

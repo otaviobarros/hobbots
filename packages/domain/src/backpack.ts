@@ -144,8 +144,11 @@ export class BackpackBlocker extends Schema.Class<BackpackBlocker>("BackpackBloc
   number: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   reason: BlockerReason,
   nextAction: BlockerAction,
-  /** The item's error when it failed. */
-  error: Schema.String,
+  /**
+   * What the runtime said when the item's last try ended, kept as it said it for diagnosis, or null
+   * when it said nothing. Never display text: the client explains a blocker from its reason and counts.
+   */
+  diagnostic: Schema.NullOr(Schema.String),
   /** How many deliveries the item had when it failed: a retry counts its new ones from here. */
   afterDeliveries: Schema.Int,
   raisedAt: Schema.String,
@@ -277,8 +280,18 @@ export class BackpackItemUnclaimable extends Schema.TaggedError<BackpackItemUncl
   reason: Schema.Literals(["not-pending", "claimed"]),
 }) {}
 
-/** The item has no blocker waiting for a choice: it is not failed, or the choice was made already. */
+/**
+ * The blocker named takes no choice: it is not the item's open blocker, because a choice was made
+ * for it already, or the item failed again since and a newer blocker took its place.
+ */
 export class BackpackItemNotBlocked extends Schema.TaggedError<BackpackItemNotBlocked>()("BackpackItemNotBlocked", {
   itemId: BackpackItemId,
+  blocker: Schema.Int,
   state: BackpackItemState,
+}) {}
+
+/** Retry was asked for a blocker whose hob is retired: nobody could take the work. */
+export class BlockerRecipientRetired extends Schema.TaggedError<BlockerRecipientRetired>()("BlockerRecipientRetired", {
+  itemId: BackpackItemId,
+  agentId: AgentId,
 }) {}

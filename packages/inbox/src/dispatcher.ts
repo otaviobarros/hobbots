@@ -138,14 +138,6 @@ export const lateness = (item: BackpackItem, tree: ReadonlyArray<Task>): { reado
   return isTerminalTask(held.state) ? { taskRevision: held.revision } : null;
 };
 
-/** Why an item ran out of deliveries: how many it used since its last retry, and why the last ended early. */
-const exhausted = (item: BackpackItem, last: string | null) => {
-  const count = deliveriesSinceRetry(item);
-  const tries =
-    count === 1 ? "Delivered once, and the turn ended early." : `Delivered ${count} times, and every turn ended early.`;
-  return `${tries}${last === null ? "" : ` The last: ${last}`}`;
-};
-
 /** What the dispatcher needs from the hub around it. */
 export class DispatcherHost extends Context.Service<
   DispatcherHost,
@@ -212,8 +204,8 @@ export class Dispatcher extends Context.Service<
         /** Takes one step under the claim and announces it; a lost claim is refused as stale. */
         const step = <E>(write: Effect.Effect<Committed<BackpackItem>, E>) => write.pipe(Effect.flatMap(announce));
 
-        const fail = (held: HeldClaim, item: BackpackItem, error: string) =>
-          step(backpack.fail(item.id, held, error)).pipe(
+        const fail = (held: HeldClaim, item: BackpackItem, diagnostic: string | null) =>
+          step(backpack.fail(item.id, held, diagnostic)).pipe(
             Effect.map((failed): Dispatched => ({ _tag: "Failed", item: failed })),
           );
 
@@ -262,16 +254,19 @@ export class Dispatcher extends Context.Service<
               return { _tag: "Late", item: resolved } as Dispatched;
             }
             if (deliveriesSinceRetry(item) >= limits.maxDeliveries) {
-              return yield* fail(held, item, exhausted(item, last.reason));
+              return yield* fail(held, item, last.reason);
             }
             return null;
           });
 
-        /** The turn ended early for this item: it fails on its last delivery, or goes back to pending (null). */
-        const endedEarly = ({ item, held }: Claimed, reason: string) =>
+        /**
+         * The turn ended early for this item: it fails on its last delivery, or goes back to pending
+         * (null). `diagnostic` is what the runtime said, kept raw; null when it said nothing.
+         */
+        const endedEarly = ({ item, held }: Claimed, diagnostic: string | null) =>
           Effect.gen(function* () {
             if (deliveriesSinceRetry(item) >= limits.maxDeliveries) {
-              return yield* fail(held, item, exhausted(item, reason));
+              return yield* fail(held, item, diagnostic);
             }
             yield* step(backpack.requeue(item.id, held));
             return null;
@@ -290,7 +285,7 @@ export class Dispatcher extends Context.Service<
             const current = yield* backpack.find(item.id).pipe(Effect.orDie);
             if (settledUnder(current, held)) return { _tag: "Consumed", item: current } as Dispatched;
             if (current.state === "delivered" && current.claim?.token === held.token) {
-              return yield* endedEarly({ item: current, held }, "The runtime never accepted the turn.");
+              return yield* endedEarly({ item: current, held }, null);
             }
             const resolved = yield* step(backpack.resolve(item.id, held, { _tag: "consumed", by: turnId }));
             return { _tag: "Consumed", item: resolved } as Dispatched;
@@ -418,9 +413,8 @@ export class Dispatcher extends Context.Service<
               else outcomes.set(each.item.id, settled);
             }
             if (requeued) {
-              const why = reason ?? "The runtime never accepted the turn.";
-              last.reason = why;
-              return yield* new BackpackTurnFailed({ reason: why });
+              last.reason = reason;
+              return yield* new BackpackTurnFailed({ reason: reason ?? "The runtime never accepted the turn." });
             }
           });
 
