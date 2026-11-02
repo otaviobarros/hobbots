@@ -1,7 +1,7 @@
 import { GitHubAccount, GitHubReachableRepository } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { UserSessionOnly } from "./user-session.ts";
+import { DeviceSession } from "./user-session.ts";
 
 /**
  * The GitHub account the hub connects for the GitHub Charm (ADR 020), as Settings shows it. No
@@ -86,5 +86,5 @@ export class GitHubGroup extends HttpApiGroup.make("github")
       error: GitHubUnreachable,
     }),
   )
-  .middleware(UserSessionOnly)
+  .middleware(DeviceSession)
   .prefix("/api") {}

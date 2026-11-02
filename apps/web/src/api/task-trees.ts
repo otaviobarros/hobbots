@@ -24,6 +24,7 @@ export type TaskEvent = Extract<
       | "QuestionAsked"
       | "QuestionAnswered"
       | "QuestionEscalated"
+      | "NoteLeft"
       | "HandedOff"
       | "TaskCompleted"
       | "QuestCompleted";
@@ -134,6 +135,7 @@ const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
   QuestionAsked: questionChange,
   QuestionAnswered: questionChange,
   QuestionEscalated: questionChange,
+  NoteLeft: (tree, { note }, ids) => (ids.has(note.taskId) ? { notes: upsertNewer(tree.notes, note) } : null),
   HandedOff: (tree, { handOff, artifact }, ids) => {
     if (!ids.has(handOff.toTaskId) && !ids.has(artifact.taskId)) return null;
     const known = tree.handOffs.some(
@@ -169,6 +171,7 @@ const newTree = (task: Task, milestones: ReadonlyArray<Milestone>): TaskTree =>
     questions: [],
     artifacts: [],
     handOffs: [],
+    notes: [],
     waits: [],
   });
 

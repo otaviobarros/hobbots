@@ -13,20 +13,24 @@ import {
 import { HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
 import { RuntimeKind, type ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
+import { HttpServerRequest } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { ApprovalsHandlers } from "./approvals.ts";
 import { BackpackHandlers } from "./backpack.ts";
 import { BlockersHandlers } from "./blockers.ts";
 import { CharmCallsHandlers } from "./charm-calls.ts";
+import { DeviceGate } from "./devices.ts";
 import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
 import { Installation } from "./installation.ts";
+import { PairingHandlers, PairingRequestsHandlers } from "./pairing.ts";
 import { PermissionsHandlers } from "./permissions.ts";
 import { RemoteAccessHandlers } from "./remote-access.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
-import { QuestionsHandlers, TasksHandlers } from "./tasks.ts";
+import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
+import { DeviceSessionLive } from "./user-session.ts";
 
 // The create and update endpoints' middleware is read when the group is built, so it is provided here.
 const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
@@ -105,7 +109,6 @@ const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =
 const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
   Effect.gen(function* () {
     const adapters = yield* runtimeAdapters;
-    const installation = yield* Installation;
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
 
@@ -132,7 +135,6 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     );
 
     return handlers.handleAll({
-      health: () => Effect.succeed(installation),
       activity: () => activity,
       // Every runtime, Claude Code first; one the hub has no adapter for is listed as unavailable.
       runtimes: () =>
@@ -147,6 +149,23 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
   }),
 );
 
+// Answers without a device, so a client can tell this hub from another program first (ADR 012).
+// Only a local request learns the installation ID and data folder (ADR 021).
+const HealthHandlers = HttpApiBuilder.group(HobbotsApi, "health", (handlers) =>
+  Effect.gen(function* () {
+    const installation = yield* Installation;
+    const gate = yield* DeviceGate;
+    return handlers.handleAll({
+      health: () =>
+        Effect.gen(function* () {
+          const place = yield* gate.placeOf(yield* HttpServerRequest.HttpServerRequest);
+          const local = Option.exists(place, (where) => where._tag === "Local");
+          return local ? installation : { app: installation.app, version: installation.version };
+        }),
+    });
+  }),
+);
+
 // A runtime the hub has no adapter for offers no models.
 const RuntimesHandlers = HttpApiBuilder.group(HobbotsApi, "runtimes", (handlers) =>
   Effect.gen(function* () {
@@ -157,8 +176,15 @@ const RuntimesHandlers = HttpApiBuilder.group(HobbotsApi, "runtimes", (handlers)
   }),
 );
 
+/**
+ * Every API route. All but health and pairing sit behind the device middleware (ADR 021), which
+ * needs `DeviceGate` and the device store.
+ */
 export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
   Layer.provide([
+    HealthHandlers,
+    PairingHandlers,
+    PairingRequestsHandlers,
     AgentsHandlers,
     ThreadsHandlers,
     SystemHandlers,
@@ -170,10 +196,12 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     GrantsHandlers,
     CharmCallsHandlers,
     TasksHandlers,
+    TaskControlsHandlers,
     QuestionsHandlers,
     BackpackHandlers,
     BlockersHandlers,
     GitHubHandlers,
     RemoteAccessHandlers,
   ]),
+  Layer.provide(DeviceSessionLive),
 );

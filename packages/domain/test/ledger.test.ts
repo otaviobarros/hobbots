@@ -51,6 +51,7 @@ const tree = (tasks: ReadonlyArray<Task>, records: Partial<ConstructorParameters
     questions: [],
     artifacts: [],
     handOffs: [],
+    notes: [],
     waits: [],
     ...records,
   });

@@ -1,8 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -30,13 +29,13 @@ const spareLoopback = () =>
  * it, or the error code of a connection it refuses.
  */
 const onTailnet = (port: number) =>
-  fetch(`http://127.0.0.2:${port}/api/health`, { signal: AbortSignal.timeout(1000) }).then(
-    async (response) => ({ status: response.status, body: await response.text() }),
+  fetch(`http://127.0.0.2:${port}/api/agents`, { signal: AbortSignal.timeout(1000) }).then(
+    async (response) => ({ status: response.status, tag: ((await response.json()) as { _tag?: unknown })._tag }),
     (error: Error & { cause?: { code?: string } }) => error.cause?.code ?? error.name,
   );
 
-/** Until devices can pair, the hub answers every tailnet request so. */
-const notPaired = { status: 403, body: "This device is not paired with Hobbots yet." };
+/** A tailnet device that has not paired is refused like any other (ADR 021). */
+const notPaired = { status: 401, tag: "DeviceRequired" };
 
 // covers DP-004
 test("[TC-DP-072] turns remote access on in Settings, and says why once Tailscale turns off", async ({ page }) => {
@@ -46,7 +45,7 @@ test("[TC-DP-072] turns remote access on in Settings, and says why once Tailscal
   const port = Number(new URL(current.url).port);
   await fetch(`${current.url}/api/setup`, {
     method: "PATCH",
-    headers: { origin: current.url, "content-type": "application/json" },
+    headers: { ...current.headers, "content-type": "application/json" },
     body: JSON.stringify({ completed: true, connectedProviders: ["claude-code"] }),
   });
 

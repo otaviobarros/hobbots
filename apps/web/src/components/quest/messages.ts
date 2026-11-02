@@ -1,5 +1,5 @@
 import type { CheckpointKind } from "@hobbots/domain";
-import { formatCount, plural } from "../../lib/format.ts";
+import { formatCount, formatList, plural } from "../../lib/format.ts";
 import type { RowStatus } from "./work-model.ts";
 
 /** Copy for the Task and Quest card, strip and drawer in the chat (STD-I18N-001). */
@@ -90,8 +90,9 @@ export const messages = {
     send: "Send",
     sent: ({ name }: { name: string }) => `Sent to ${name}.`,
     noteFailed: "Your note could not be sent. Try again.",
-    /** The message the note becomes in the lead's chat. */
-    note: ({ title, note }: { title: string; note: string }) => `About “${title}”: ${note}`,
+    noteRefused: ({ name }: { name: string }) => `This work has ended. Tell ${name} in the chat instead.`,
+    notes: "Your notes",
+    noteTo: ({ name, time }: { name: string; time: string }) => `To ${name} · ${time}`,
   },
   checkpoint: {
     milestone: "Milestone",
@@ -141,5 +142,5 @@ export const messages = {
   },
   someHob: "A hob",
   /** Names joined as a list in the reader's language: "Quill and Ada". */
-  names: (names: ReadonlyArray<string>) => new Intl.ListFormat(undefined, { type: "conjunction" }).format(names),
+  names: (names: ReadonlyArray<string>) => formatList(names),
 };

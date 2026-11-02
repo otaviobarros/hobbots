@@ -11,6 +11,7 @@ import {
   DelegationId,
   type EventEnvelope,
   MilestoneId,
+  NoteId,
   partyOf,
   QuestId,
   QuestionId,
@@ -37,6 +38,16 @@ const carryAll = (id: string) =>
     const tasks = yield* TaskRepository;
     return carriedFrom(Option.getOrThrow(yield* tasks.readLedger(TaskId.make(id))), () => true);
   });
+
+/** The Task as it is stored now. */
+const latest = (id: string) =>
+  TaskRepository.use((tasks) => tasks.readTree(TaskId.make(id))).pipe(
+    Effect.map((tree) => {
+      const task = Option.getOrThrow(tree).tasks[0];
+      if (task === undefined) throw new Error(`no Task ${id}`);
+      return task;
+    }),
+  );
 
 const now = "2026-11-01T00:00:00.000Z";
 const later = "2026-11-01T01:00:00.000Z";
@@ -529,6 +540,150 @@ describe("Task records", () => {
     expect(result.topAsk.value.recipientId).toBeNull();
   });
 
+  // covers OR-002, OR-004
+  it("[TC-OR-135] gives your note to the Task's nearest lead once, keeps it on the tree, and lists only the questions that wait for you", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        yield* tasks.startQuest({
+          id: QuestId.make("q2"),
+          taskId: TaskId.make("build"),
+          goal: "Keywords",
+          acceptance: [],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        yield* tasks.createTask({ task: newTask("keywords", PIP, "build"), delegation: brief("d-k"), milestones: [] });
+        yield* tasks.createTask({ task: newTask("keyword-step", PIP, "keywords"), delegation: null, milestones: [] });
+        const note = (id: string, taskId: string, text = "Keep it short") =>
+          tasks.leaveNote({ id: NoteId.make(id), taskId: TaskId.make(taskId), text, createdAt: now });
+        const onStep = yield* note("n-step", "keyword-step");
+        const onBuild = yield* note("n-build", "build");
+        const onTop = yield* note("n-top", "campaign");
+        const again = yield* note("n-step", "keyword-step");
+        const reused = yield* note("n-step", "keyword-step", "Make it long").pipe(Effect.flip);
+        const missing = yield* note("n-none", "nope").pipe(Effect.flip);
+        const tree = Option.getOrThrow(yield* tasks.readTree(TaskId.make("campaign")));
+
+        for (const [id, asker, taskId] of [
+          ["q-open", PIP, "keywords"],
+          ["q-yours", PIP, "keywords"],
+          ["q-done", PIP, "keywords"],
+        ] as const) {
+          yield* tasks.askQuestion({
+            id: QuestionId.make(id),
+            taskId: TaskId.make(taskId),
+            askerId: asker,
+            text: id,
+            createdAt: now,
+          });
+        }
+        for (const id of ["q-yours", "q-done"]) {
+          yield* tasks.escalateQuestion(QuestionId.make(id), ADA);
+          yield* tasks.escalateQuestion(QuestionId.make(id), ALDRIC);
+        }
+        yield* tasks.answerQuestion(QuestionId.make("q-done"), { _tag: "User" }, "Yes", later);
+        const waiting = yield* tasks.listWaitingQuestions;
+        return { onStep, onBuild, onTop, again, reused, missing, tree, waiting };
+      }),
+    );
+
+    // You talk only to the lead: Pip's step goes to Ada, who leads Pip; Ada's Task to Aldric; the top to Aldric.
+    expect(result.onStep.value.recipientId).toBe(ADA);
+    expect(tags(result.onStep.entries)).toEqual(["NoteLeft", "BackpackItemRecorded"]);
+    expect(result.onStep.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
+    expect(result.onStep.entries[1]?.payload).toMatchObject({
+      item: { recipientId: ADA, kind: "message", taskId: "keyword-step", payload: { senderId: null } },
+    });
+    expect(result.onBuild.value.recipientId).toBe(ALDRIC);
+    expect(result.onTop.value.recipientId).toBe(ALDRIC);
+    // The same note sent again is the first one, and writes nothing.
+    expect(result.again.value).toEqual(result.onStep.value);
+    expect(result.again.entries).toEqual([]);
+    expect(result.reused).toMatchObject({ _tag: "TaskRefused", reason: "note-key-reused" });
+    expect(result.missing).toMatchObject({ _tag: "TaskRefused", reason: "task-missing" });
+    expect(result.tree.notes.map((each) => each.id)).toEqual(["n-step", "n-build", "n-top"]);
+    // Only what climbed every lead and is still open waits for you, with its Task.
+    expect(result.waiting.map(({ question, task }) => [question.id, task.id])).toEqual([["q-yours", "keywords"]]);
+  });
+
+  // covers OR-004
+  it("[TC-OR-136] refuses a note once the work it is about has ended, and takes one on a member's ended Task while it goes on", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const note = (id: string, taskId: string) =>
+          tasks.leaveNote({ id: NoteId.make(id), taskId: TaskId.make(taskId), text: "Hi", createdAt: now });
+        const copy = Option.getOrThrow(yield* tasks.readTree(TaskId.make("copy"))).tasks[0];
+        if (copy === undefined) throw new Error("no copy Task");
+        yield* tasks.moveTask(copy.id, copy.revision, "cancelled", now);
+        const onEnded = yield* note("n-copy", "copy");
+        const build = Option.getOrThrow(yield* tasks.readTree(TaskId.make("build"))).tasks[0];
+        if (build === undefined) throw new Error("no build Task");
+        yield* tasks.moveTask(build.id, build.revision, "cancelled", now);
+        const top = Option.getOrThrow(yield* tasks.readTree(TaskId.make("campaign"))).tasks[0];
+        if (top === undefined) throw new Error("no top Task");
+        yield* tasks.moveTask(top.id, top.revision, "cancelled", now);
+        const afterTop = yield* note("n-late", "copy").pipe(Effect.flip);
+        return { onEnded, afterTop };
+      }),
+    );
+    expect(result.onEnded.value.recipientId).toBe(ALDRIC);
+    expect(result.afterTop).toMatchObject({ _tag: "TaskRefused", reason: "task-ended" });
+  });
+
+  // covers OR-002, OR-004
+  it("[TC-OR-137] passes a note over a lead whose Task ended, and drops a question about ended work from what waits for you", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        yield* tasks.startQuest({
+          id: QuestId.make("q2"),
+          taskId: TaskId.make("build"),
+          goal: "Keywords",
+          acceptance: [],
+          limits: DEFAULT_QUEST_LIMITS,
+          createdAt: now,
+        });
+        yield* tasks.createTask({ task: newTask("keywords", PIP, "build"), delegation: brief("d-k"), milestones: [] });
+        yield* tasks.askQuestion({
+          id: QuestionId.make("q-late"),
+          taskId: TaskId.make("keywords"),
+          askerId: PIP,
+          text: "Which market?",
+          createdAt: now,
+        });
+        yield* tasks.escalateQuestion(QuestionId.make("q-late"), ADA);
+        yield* tasks.escalateQuestion(QuestionId.make("q-late"), ALDRIC);
+        const before = yield* tasks.listWaitingQuestions;
+        for (const id of ["keywords", "build"]) {
+          const task = Option.getOrThrow(yield* tasks.readTree(TaskId.make(id))).tasks[0];
+          if (task === undefined) throw new Error(`no ${id} Task`);
+          yield* tasks.moveTask(task.id, task.revision, "cancelled", now);
+        }
+        const note = yield* tasks.leaveNote({
+          id: NoteId.make("n-pip"),
+          taskId: TaskId.make("keywords"),
+          text: "Hi",
+          createdAt: now,
+        });
+        const after = yield* tasks.listWaitingQuestions;
+        const answer = yield* tasks
+          .answerQuestion(QuestionId.make("q-late"), { _tag: "User" }, "EU", later)
+          .pipe(Effect.flip);
+        return { before, note, after, answer };
+      }),
+    );
+    expect(result.before.map(({ question }) => question.id)).toEqual(["q-late"]);
+    // Ada's build ended, so she would never read it: the note goes up to Aldric, still at work.
+    expect(result.note.value.recipientId).toBe(ALDRIC);
+    expect(result.after).toEqual([]);
+    expect(result.answer).toMatchObject({ _tag: "TaskRefused", reason: "task-ended" });
+  });
+
   // covers OR-003, OR-004
   it("[TC-OR-005] records milestones and reports by their source, and hands an artifact to a Task in the same tree once", async () => {
     const result = await run(
@@ -892,5 +1047,140 @@ describe("waits and Task tool calls", () => {
         expect(runs).toBe(runsBefore + 1);
       }),
     );
+  });
+
+  // covers EX-001, OR-006
+  it("[TC-OR-140] a retry queues a failed member's Task for a new Attempt of the same Task, never under a cancel", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = TaskId.make("copy");
+        yield* tasks.startAttempt(copy, (yield* latest("copy")).revision, attempt("a1"));
+        yield* tasks.updateAttempt(AttemptId.make("a1"), { state: "failed", outcome: "It broke.", at: now });
+        const failed = yield* tasks.moveTask(copy, (yield* latest("copy")).revision, "failed", now);
+        const notFailed = yield* tasks
+          .retryTask(TaskId.make("build"), (yield* latest("build")).revision, now)
+          .pipe(Effect.flip);
+        const top = yield* tasks
+          .retryTask(TaskId.make("campaign"), (yield* latest("campaign")).revision, now)
+          .pipe(Effect.flip);
+        const retried = yield* tasks.retryTask(copy, failed.value.revision, later);
+        const again = yield* tasks.startAttempt(copy, retried.value.revision, attempt("a2"));
+        return { notFailed, top, retried, again, tree: Option.getOrThrow(yield* tasks.readTree(copy)) };
+      }),
+    );
+
+    expect(result.notFailed).toMatchObject({ _tag: "IllegalTaskTransition", from: "queued", to: "queued" });
+    expect(result.top).toMatchObject({ _tag: "TaskRefused", reason: "top-task" });
+    expect(result.retried.value).toMatchObject({ id: "copy", state: "queued", ownerId: QUILL });
+    expect(result.retried.entries[0]?.payload).toMatchObject({
+      _tag: "TaskStateChanged",
+      control: { _tag: "Retried", delegation: { childTaskId: "copy", memberId: QUILL } },
+    });
+    expect(result.again.value.attempt.number).toBe(2);
+    expect(result.tree.attempts.map((each) => [each.number, each.state])).toEqual([
+      [1, "failed"],
+      [2, "starting"],
+    ]);
+  });
+
+  // covers OR-006
+  it("[TC-OR-141] nothing new starts under a Task being cancelled, and it reports and asks nothing more", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = TaskId.make("copy");
+        yield* tasks.moveTask(copy, (yield* latest("copy")).revision, "failed", now);
+        const top = yield* latest("campaign");
+        const activeTop = yield* tasks.startAttempt(top.id, top.revision, attempt("a-top"));
+        yield* tasks.moveTask(top.id, activeTop.value.task.revision, "cancelling", now);
+        const child = yield* tasks
+          .createTask({ task: newTask("late", PIP, "campaign"), delegation: brief("d-late"), milestones: [] })
+          .pipe(Effect.flip);
+        const retry = yield* tasks.retryTask(copy, (yield* latest("copy")).revision, now).pipe(Effect.flip);
+        const build = TaskId.make("build");
+        const start = yield* tasks
+          .startAttempt(build, (yield* latest("build")).revision, attempt("a-b"))
+          .pipe(Effect.flip);
+        const report = yield* tasks
+          .recordCheckpoint({
+            id: CheckpointId.make("c-late"),
+            taskId: top.id,
+            source: "unplanned",
+            kind: "finding",
+            milestoneId: null,
+            summary: "Found something",
+            createdAt: now,
+          })
+          .pipe(Effect.flip);
+        const ask = yield* tasks
+          .askQuestion({
+            id: QuestionId.make("q-late"),
+            taskId: top.id,
+            askerId: ALDRIC,
+            text: "Go on?",
+            createdAt: now,
+          })
+          .pipe(Effect.flip);
+        return { child, retry, start, report, ask, cancelling: yield* tasks.listCancellingTasks };
+      }),
+    );
+
+    expect(result.child).toMatchObject({ _tag: "TaskRefused", reason: "parent-cancelling" });
+    expect(result.retry).toMatchObject({ _tag: "TaskRefused", reason: "parent-cancelling" });
+    expect(result.start).toMatchObject({ _tag: "TaskRefused", reason: "parent-cancelling" });
+    // What a Task being cancelled reports or asks would only wake its lead about work that is ending.
+    expect(result.report).toMatchObject({ _tag: "TaskRefused", reason: "task-cancelling" });
+    expect(result.ask).toMatchObject({ _tag: "TaskRefused", reason: "task-cancelling" });
+    expect(result.cancelling.map((each) => each.id)).toEqual(["campaign"]);
+  });
+
+  // covers OR-006
+  it("[TC-OR-142] a reassignment gives a member's Task to another hob and keeps its id and Attempts", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const copy = TaskId.make("copy");
+        const started = yield* tasks.startAttempt(copy, (yield* latest("copy")).revision, attempt("a1"));
+        const reassign = (ownerId: AgentId) =>
+          Effect.flatMap(latest("copy"), (task) => tasks.reassignTask(copy, task.revision, ownerId, later));
+        const live = yield* reassign(PIP).pipe(Effect.flip);
+        yield* tasks.updateAttempt(AttemptId.make("a1"), { state: "completed", at: now });
+        const toLead = yield* reassign(ALDRIC).pipe(Effect.flip);
+        const toSelf = yield* reassign(QUILL).pipe(Effect.flip);
+        const top = yield* tasks
+          .reassignTask(TaskId.make("campaign"), (yield* latest("campaign")).revision, PIP, later)
+          .pipe(Effect.flip);
+        const moved = yield* reassign(PIP);
+        return {
+          started,
+          live,
+          toLead,
+          toSelf,
+          top,
+          moved,
+          tree: Option.getOrThrow(yield* tasks.readTree(copy)),
+          pipWork: yield* tasks.listMemberWork(PIP),
+          quillWork: yield* tasks.listMemberWork(QUILL),
+        };
+      }),
+    );
+
+    expect(result.live).toMatchObject({ _tag: "TaskRefused", reason: "attempt-live" });
+    expect(result.toLead).toMatchObject({ _tag: "TaskRefused", reason: "lineage-owner" });
+    expect(result.toSelf).toMatchObject({ _tag: "TaskRefused", reason: "same-owner" });
+    expect(result.top).toMatchObject({ _tag: "TaskRefused", reason: "not-delegated" });
+    expect(result.moved.value).toMatchObject({ id: "copy", ownerId: PIP, state: "queued" });
+    expect(result.moved.entries[0]?.payload).toMatchObject({
+      control: { _tag: "Reassigned", from: QUILL, delegation: { memberId: PIP, brief: "Delegated d-copy" } },
+    });
+    // The Attempt Quill ran stays his; the Delegation now names Pip, so the work shows as Pip's.
+    expect(result.tree.attempts.map((each) => each.agentId)).toEqual([QUILL]);
+    expect(result.tree.delegations.map((each) => each.memberId)).toEqual([PIP]);
+    expect(result.pipWork.map((each) => each.task.id)).toEqual(["copy"]);
+    expect(result.quillWork).toEqual([]);
   });
 });

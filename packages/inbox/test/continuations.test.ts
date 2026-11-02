@@ -11,6 +11,8 @@ import {
   type BackpackPayload,
   HandOff,
   MessageId,
+  Question,
+  QuestionId,
   Task,
   TaskId,
   type TaskState,
@@ -197,6 +199,42 @@ describe("which thread a backpack item continues", () => {
     expect(arrivalsText([result], "prompt")).toContain("Hobbots wrote this, not the user.");
     expect(arrivalsText([result], "prompt")).toContain("Task pass (Brief for pass) finished. Its result: pass done.");
     expect(arrivalsText([result], "context")).toContain("Answer the user's message first");
+  });
+
+  // covers IN-004
+  it("[TC-IN-131] tells a lead how to deal with a question, the asker who answered it, and which Task your note is about", () => {
+    const asked = new Question({
+      id: QuestionId.make("tone"),
+      taskId: TaskId.make("stew"),
+      askerId: SAM,
+      recipientId: FRODO,
+      chain: [],
+      text: "Rabbit or taters?",
+      state: "open",
+      answer: null,
+      answeredBy: null,
+      createdAt: at,
+      answeredAt: null,
+      revision: 1,
+    });
+    const answered = (answeredBy: Question["answeredBy"]) =>
+      new Question({ ...asked, state: "answered", answer: "Both", answeredBy, answeredAt: at });
+    const prompt = arrivalsText(
+      [
+        item(FRODO, "stew", "question", { _tag: "question", question: asked }),
+        item(SAM, "stew", "answer", { _tag: "answer", question: answered({ _tag: "Lead", agentId: FRODO }) }),
+        item(SAM, "stew", "answer", { _tag: "answer", question: answered({ _tag: "User" }) }),
+        item(FRODO, "stew", "message", { _tag: "message", senderId: null, text: "No salt" }),
+      ],
+      "prompt",
+    );
+    expect(prompt).toContain('Hob sam asks, as question tone about Task stew: "Rabbit or taters?"');
+    expect(prompt).toContain(
+      "Answer it with answer if you can; if only someone above you can decide, pass it up with escalate.",
+    );
+    expect(prompt).toContain('Your question tone was answered by hob frodo: "Both"');
+    expect(prompt).toContain('Your question tone was answered by the user: "Both"');
+    expect(prompt).toContain("The user left a note about Task stew: No salt");
   });
 });
 

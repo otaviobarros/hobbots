@@ -10,7 +10,15 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
-import { Agent, AgentId, type ApprovalRequest, EMPTY_HOB_POLICY, isInProgress, type Message } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  type ApprovalRequest,
+  EMPTY_HOB_POLICY,
+  isInProgress,
+  type Message,
+  WINDOW_DEVICE_ID,
+} from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { ApprovalRepositoryLive, EventJournal, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -81,7 +89,12 @@ const TestLayer = ChatService.layer.pipe(
       Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(Persistence)),
       EventBus.layer,
       // The decisions these cases make are the user's, as the hub's user-session middleware provides.
-      Layer.succeed(UserSession, { origin: "http://localhost:4317" }),
+      Layer.succeed(UserSession, {
+        deviceId: WINDOW_DEVICE_ID,
+        name: "This computer's Hobbots window",
+        kind: "window",
+        whileApproved: (write) => write,
+      }),
       HobAdmission.layer,
       FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)),
       SecretRedaction.layer([

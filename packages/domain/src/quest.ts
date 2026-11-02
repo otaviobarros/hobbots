@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { AgentId, ThreadId } from "./ids.ts";
 import { PolicyOverrides } from "./policy.ts";
 import { Revision } from "./revision.ts";
-import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
+import { Attempt, AttemptId, isTerminalTask, Task, TaskId } from "./task.ts";
 
 /**
  * The records around Tasks in ADR 018: the Quest added to a Task that brings in other hobs, the
@@ -21,6 +21,8 @@ export const QuestionId = Schema.String.pipe(Schema.brand("QuestionId"));
 export type QuestionId = typeof QuestionId.Type;
 export const ArtifactId = Schema.String.pipe(Schema.brand("ArtifactId"));
 export type ArtifactId = typeof ArtifactId.Type;
+export const NoteId = Schema.String.pipe(Schema.brand("NoteId"));
+export type NoteId = typeof NoteId.Type;
 
 /** A Quest ends with the Task it sits on. */
 export const QuestState = Schema.Literals(["active", "completed", "failed", "cancelled"]);
@@ -170,6 +172,21 @@ export class Question extends Schema.Class<Question>("Question")({
   revision: Revision,
 }) {}
 
+/**
+ * A note you left on a Task (ADR 018). You talk only to the lead, so it goes to the Task's nearest
+ * lead as a message about that Task, or to the Task's own owner when nobody leads it. Its id is the
+ * idempotency key of the command that left it, so leaving it again changes nothing.
+ */
+export class TaskNote extends Schema.Class<TaskNote>("TaskNote")({
+  id: NoteId,
+  taskId: TaskId,
+  /** The hob the note goes to. */
+  recipientId: AgentId,
+  text: Schema.String,
+  createdAt: Schema.String,
+  revision: Revision,
+}) {}
+
 export const ArtifactKind = Schema.Literals(["file", "link", "text"]);
 export type ArtifactKind = typeof ArtifactKind.Type;
 
@@ -226,6 +243,13 @@ export const TaskRefusal = Schema.Literals([
   "question-answered",
   "artifact-outside-tree",
   "wait-outside-subtree",
+  "note-key-reused",
+  "parent-cancelling",
+  "task-cancelling",
+  "top-task",
+  "not-delegated",
+  "same-owner",
+  "lineage-owner",
 ]);
 export type TaskRefusal = typeof TaskRefusal.Type;
 
@@ -260,9 +284,26 @@ export class TaskTree extends Schema.Class<TaskTree>("TaskTree")({
   questions: Schema.Array(Question),
   artifacts: Schema.Array(ArtifactRef),
   handOffs: Schema.Array(HandOff),
+  /** The notes you left on its Tasks, oldest first. */
+  notes: Schema.Array(TaskNote),
   /** The latest wait of each Task in the tree that has one. */
   waits: Schema.Array(TaskWait),
 }) {}
+
+/**
+ * The Task a hob's chat turns work on in a thread, with its tree: the latest Task asked of the hob
+ * there that has not ended. `trees` are the thread's, oldest first.
+ */
+export const openThreadTask = (
+  trees: ReadonlyArray<TaskTree>,
+  agentId: AgentId,
+): { readonly top: Task; readonly tree: TaskTree } | undefined =>
+  trees
+    .flatMap((tree) => {
+      const top = tree.tasks[0];
+      return top !== undefined && top.ownerId === agentId && !isTerminalTask(top.state) ? [{ top, tree }] : [];
+    })
+    .at(-1);
 
 /** The hobs a Quest brought in, in the order they joined: its party. */
 export const partyOf = (quest: Quest, delegations: ReadonlyArray<Delegation>): ReadonlyArray<AgentId> => [
