@@ -36,7 +36,7 @@ import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semapho
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing } from "./briefing.ts";
-import { CharmTools, combineHubTools } from "./charms.ts";
+import { CharmTools, type CharmTurn, combineHubTools } from "./charms.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -200,6 +200,7 @@ export class ChatService extends Context.Service<
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
       // Without Charms, turns offer only the Task tools.
       const charms = yield* Effect.serviceOption(CharmTools);
+      const charmsFor = (turn: CharmTurn) => (Option.isSome(charms) ? charms.value.forTurn(turn) : null);
       const turns = yield* FiberMap.make<ThreadId>();
       const scope = yield* Effect.scope;
       // The reply each running turn is writing, so a stop request can reach it.
@@ -535,16 +536,14 @@ export class ChatService extends Context.Service<
               recordToolStart,
               hubTools: combineHubTools(
                 taskTurn?.hubTools ?? null,
-                Option.isSome(charms)
-                  ? charms.value.forTurn({
-                      agentId: agent.id,
-                      threadId: thread.id,
-                      messageId: (yield* Ref.get(reply.current)).id,
-                      currentAccess: currentAccess(agent.id),
-                      redactor,
-                      approvals: turnApprovals?.approvals ?? null,
-                    })
-                  : null,
+                charmsFor({
+                  agentId: agent.id,
+                  threadId: thread.id,
+                  messageId: (yield* Ref.get(reply.current)).id,
+                  currentAccess: currentAccess(agent.id),
+                  redactor,
+                  approvals: turnApprovals?.approvals ?? null,
+                }),
               ),
             })
             .pipe(

@@ -119,16 +119,24 @@ export const GitHubCharmTools = Layer.effect(
       }
     };
 
+    /** The call's input, or a refusal saying what is wrong with it. */
+    const decoded = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, raw: unknown) =>
+      Schema.decodeUnknownEffect(schema)(raw).pipe(
+        Effect.mapError((error) => new Refused({ message: describe(error) })),
+      );
+
+    /** The turn's access, and the folder and repository a call names, or a refusal when the turn has no tools. */
+    const resolved = (turn: CharmTurn, named: string | undefined, otherwise: string) =>
+      Effect.gen(function* () {
+        const access = yield* turn.currentAccess;
+        if (access === null) return yield* new Refused({ message: `You have no tools this turn, so ${otherwise}.` });
+        return { access, ...(yield* repositoryFor(access, named)) };
+      });
+
     const write = (turn: CharmTurn, name: "github_push", raw: unknown, step: HubCallStep | undefined) =>
       Effect.gen(function* () {
-        const input = yield* Schema.decodeUnknownEffect(GitHubWriteInputs[name])(raw).pipe(
-          Effect.mapError((error) => new Refused({ message: describe(error) })),
-        );
-        const access = yield* turn.currentAccess;
-        if (access === null) {
-          return yield* new Refused({ message: "You have no tools this turn, so nothing can be pushed." });
-        }
-        const { folder, repository } = yield* repositoryFor(access, input.folder);
+        const input = yield* decoded(GitHubWriteInputs[name], raw);
+        const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be pushed");
         return yield* github.push(turn, access, folder, repository, input, step);
       });
 
@@ -136,14 +144,8 @@ export const GitHubCharmTools = Layer.effect(
       Effect.gen(function* () {
         if (isGitHubWriteToolName(name)) return yield* write(turn, name, raw, step);
         if (!isGitHubToolName(name)) return yield* new Refused({ message: `Hobbots has no ${name} tool.` });
-        const input = yield* Schema.decodeUnknownEffect(GitHubToolInputs[name])(raw).pipe(
-          Effect.mapError((error) => new Refused({ message: describe(error) })),
-        );
-        const access = yield* turn.currentAccess;
-        if (access === null) {
-          return yield* new Refused({ message: "You have no tools this turn, so GitHub cannot be read." });
-        }
-        const { folder, repository } = yield* repositoryFor(access, input.folder);
+        const input = yield* decoded(GitHubToolInputs[name], raw);
+        const { access, folder, repository } = yield* resolved(turn, input.folder, "GitHub cannot be read");
         const verdict = yield* engine.decide(policyContext(access), {
           _tag: "GitHub",
           folder,

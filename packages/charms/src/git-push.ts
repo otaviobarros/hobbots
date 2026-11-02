@@ -172,45 +172,53 @@ const NOT_SENT = [
   "Host key verification failed",
 ];
 
-/**
- * How a push ended, from Git's exit, its porcelain output and its messages. Anything Git did not say
- * clearly is uncertain, never assumed not sent.
- */
-export const pushResult = (exit: number, stdout: string, stderr: string, ref: string): PushResult => {
+/** What GitHub said about the ref in Git's porcelain output, when it said anything. */
+const fromPorcelain = (exit: number, stdout: string, ref: string): PushResult | null => {
   const line = porcelainLine(stdout, ref);
-  if (line !== null) {
-    if (line.flag === "!") {
-      return {
-        _tag: "Rejected",
-        message: `GitHub refused the push: ${line.summary}.${line.summary.includes("fetch first") || line.summary.includes("non-fast-forward") || line.summary.includes("stale info") ? " The branch on GitHub moved since you last had it, and you cannot fetch it yet: ask the user to bring your branch up to date." : ""}${line.summary.includes("workflow") ? " Hobbots cannot push changes to GitHub Actions workflows." : ""}`,
-      };
-    }
-    if (exit === 0 || line.flag === "=" || line.flag === " " || line.flag === "+" || line.flag === "*") {
-      return { _tag: "Pushed", created: line.flag === "*", forced: line.flag === "+" };
-    }
+  if (line === null) return null;
+  if (line.flag === "!") {
+    const moved = ["fetch first", "non-fast-forward", "stale info"].some((words) => line.summary.includes(words));
+    const notes = [
+      moved
+        ? "The branch on GitHub moved since you last had it, and you cannot fetch it yet: ask the user to bring your branch up to date."
+        : "",
+      line.summary.includes("workflow") ? "Hobbots cannot push changes to GitHub Actions workflows." : "",
+    ].filter((note) => note !== "");
+    return { _tag: "Rejected", message: [`GitHub refused the push: ${line.summary}.`, ...notes].join(" ") };
   }
+  if (exit === 0 || ["=", " ", "+", "*"].includes(line.flag)) {
+    return { _tag: "Pushed", created: line.flag === "*", forced: line.flag === "+" };
+  }
+  return null;
+};
+
+/** What Git's messages say when the porcelain output said nothing about the ref. */
+const fromMessages = (stderr: string): PushResult => {
   const said = stderr.trim();
-  if (said.includes("Authentication failed") || said.includes("returned error: 401")) return { _tag: "SignedOut" };
-  if (said.includes("returned error: 403") || said.includes("Permission to") || said.includes("Permission denied")) {
+  const has = (...words: ReadonlyArray<string>) => words.some((word) => said.includes(word));
+  if (has("Authentication failed", "returned error: 401")) return { _tag: "SignedOut" };
+  if (has("returned error: 403", "Permission to", "Permission denied")) {
     return {
       _tag: "Rejected",
       message: "GitHub refused the push: the sign-in the hub uses may not push to this repository.",
     };
   }
-  if (said.includes("Repository not found") || said.includes("returned error: 404")) {
-    return {
-      _tag: "Rejected",
-      message: "GitHub has no such repository, or the sign-in the hub uses cannot see it.",
-    };
+  if (has("Repository not found", "returned error: 404")) {
+    return { _tag: "Rejected", message: "GitHub has no such repository, or the sign-in the hub uses cannot see it." };
   }
-  if (NOT_SENT.some((words) => said.includes(words))) {
-    return { _tag: "NotSent", message: "The hub could not reach GitHub, so nothing was sent." };
-  }
+  if (has(...NOT_SENT)) return { _tag: "NotSent", message: "The hub could not reach GitHub, so nothing was sent." };
   return {
     _tag: "Uncertain",
     message: "The push ended without a clear answer from GitHub, so it may or may not have taken effect.",
   };
 };
+
+/**
+ * How a push ended, from Git's exit, its porcelain output and its messages. Anything Git did not say
+ * clearly is uncertain, never assumed not sent.
+ */
+export const pushResult = (exit: number, stdout: string, stderr: string, ref: string): PushResult =>
+  fromPorcelain(exit, stdout, ref) ?? fromMessages(stderr);
 
 const folderKey = (folder: string) => createHash("sha256").update(folder).digest("hex").slice(0, 24);
 
