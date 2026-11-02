@@ -1,7 +1,7 @@
 import type { AttemptActivityRead } from "@hobbots/api";
 import type { AttemptId, ContentId, HobbotsEvent } from "@hobbots/domain";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
-import { call } from "./client.ts";
+import { API_URL, call } from "./client.ts";
 import { syncState } from "./sync.ts";
 
 /**
@@ -71,3 +71,7 @@ export const attemptContentQuery = (attemptId: AttemptId, contentId: ContentId) 
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
   });
+
+/** Where the hub serves kept contents, for an image to load them itself. */
+export const attemptContentUrl = (attemptId: AttemptId, contentId: ContentId): string =>
+  `${API_URL}/api/attempts/${encodeURIComponent(attemptId)}/contents/${encodeURIComponent(contentId)}`;
