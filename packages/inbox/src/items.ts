@@ -28,6 +28,11 @@ export interface BackpackContext {
   readonly quests: ReadonlyArray<Quest>;
   /** The tool call the change was made by, or null for a change the hub or you made. */
   readonly toolCall: ToolCallSource | null;
+  /**
+   * Whether the approval requests the change decides or expires have no live turn waiting for
+   * them, so each outcome goes to its hob's backpack (ADR 019), as when Hobbots restarted.
+   */
+  readonly approvalOutcomes?: boolean;
 }
 
 /** One item a rule makes, before the source and its key are added. */
@@ -196,7 +201,11 @@ const drafts = (event: JournaledEvent, trees: Trees): ReadonlyArray<Draft> => {
  * and record at its version, so one call that makes several items keeps them apart. From any other change: the
  * source record and the version that caused the item.
  */
-const dedupeKey = (draft: Draft, kind: BackpackItemKind, toolCall: ToolCallSource | null) => {
+const dedupeKey = (
+  draft: Pick<Draft, "record" | "version">,
+  kind: BackpackItemKind,
+  toolCall: ToolCallSource | null,
+) => {
   const version = draft.version === null ? "" : `:v${draft.version}`;
   return toolCall === null
     ? `${draft.record}${version}:${kind}`
@@ -214,6 +223,29 @@ const questAbove = (task: Task, trees: Trees, quests: ReadonlyArray<Quest>): Que
 };
 
 /**
+ * The outcome of an approval request no live turn waits for, for the hob that asked, in the thread
+ * it asked in. It is about no Task, so it continues that thread's chat.
+ */
+const approvalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolCallSource | null) =>
+  events.flatMap((event): ReadonlyArray<NewBackpackItem> => {
+    if (event._tag !== "ApprovalResolved" || event.approval.state === "pending") return [];
+    const { approval } = event;
+    const draft = { record: `approval:${approval.id}`, version: null };
+    return [
+      {
+        recipientId: approval.agentId,
+        taskId: null,
+        questId: null,
+        attemptId: null,
+        threadId: approval.threadId,
+        dedupeKey: dedupeKey(draft, "approval-outcome", toolCall),
+        payload: { _tag: "approval-outcome", approval },
+        notBefore: null,
+      },
+    ];
+  });
+
+/**
  * The backpack items a change's journal events call for (ADR 019). Pure: the repository writes
  * the result in the same transaction as the change and its events, so an item exists exactly when
  * the change committed. Routine progress is recorded too; it simply never wakes its hob.
@@ -223,7 +255,8 @@ export const backpackItemsFor = (
   context: BackpackContext,
 ): ReadonlyArray<NewBackpackItem> => {
   const trees: Trees = { byId: new Map(context.tasks.map((task) => [task.id, task])), all: context.tasks };
-  return events.flatMap((event) =>
+  const outcomes = context.approvalOutcomes === true ? approvalOutcomes(events, context.toolCall) : [];
+  const fromTasks = events.flatMap((event) =>
     drafts(event, trees).map((draft) => ({
       recipientId: draft.recipientId,
       taskId: draft.task.id,
@@ -235,6 +268,7 @@ export const backpackItemsFor = (
       notBefore: null,
     })),
   );
+  return [...fromTasks, ...outcomes];
 };
 
 /** The Tasks a change's events touch, so the repository knows which trees to read for `backpackItemsFor`. */

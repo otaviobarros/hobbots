@@ -22,6 +22,14 @@ export const CurrentToolCall = Context.Reference<ToolCallSource | null>("@hobbot
 });
 
 /**
+ * Whether the approval requests the current change decides or expires have no live turn waiting
+ * for them, so their outcomes are recorded in their hobs' backpacks (ADR 019).
+ */
+export const UnwaitedApprovals = Context.Reference<boolean>("@hobbots/persistence/UnwaitedApprovals", {
+  defaultValue: () => false,
+});
+
+/**
  * Leases are timed by the database's clock, so every hub process that shares a database agrees on
  * when one runs out (ADR 019). Times are ISO 8601 text to the millisecond, as the app writes them.
  */
@@ -98,13 +106,15 @@ export const makeItemReads = (sql: SqlClient.SqlClient) => {
 const contextOf = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEvent>) =>
   Effect.gen(function* () {
     const touched = tasksTouched(events);
-    if (touched.length === 0) return null;
+    const approvalOutcomes = yield* UnwaitedApprovals;
+    const toolCall = yield* CurrentToolCall;
+    if (touched.length === 0) return approvalOutcomes ? { tasks: [], quests: [], toolCall, approvalOutcomes } : null;
     const read = makeTaskReads(sql);
     const roots = yield* sql<{ readonly rootId: string }>`SELECT DISTINCT root_id FROM tasks
       WHERE ${sql.in("id", touched)}`;
     const tasks = (yield* Effect.forEach(roots, (root) => read.treeOf(root.rootId))).flat();
     const quests = tasks.length === 0 ? [] : yield* read.questsOn(tasks.map((task) => task.id));
-    return { tasks, quests, toolCall: yield* CurrentToolCall };
+    return { tasks, quests, toolCall, approvalOutcomes };
   });
 
 /** Leaves out the items whose recipient already holds one with the same key. */
