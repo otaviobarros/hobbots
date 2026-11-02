@@ -312,26 +312,31 @@ describe("a Task's activity", () => {
       { path: "src/new.ts", kind: "added", settled: true },
       { path: "untouched.md", kind: "deleted", settled: true },
     ]);
-    const change = (path: string) => activity.changes.find((each) => each.path === path);
-    expect(await inHub(textOf(attempt.id, change("notes.md")?.before?.contentId))).toBe("# Notes\n");
-    expect(await inHub(textOf(attempt.id, change("notes.md")?.after?.contentId))).toBe("# Notes\n\nTidied.\n");
-    expect(await inHub(textOf(attempt.id, change("src/app.ts")?.after?.contentId))).toBe("export const app = 2;\n");
-    expect(await inHub(textOf(attempt.id, change("untouched.md")?.before?.contentId))).toBe("Leave me\n");
+    const change = (path: string) => {
+      const found = activity.changes.find((each) => each.path === path);
+      if (found === undefined) throw new Error(`no change to ${path}`);
+      return found;
+    };
+    const kept = (path: string, side: "before" | "after") => change(path)[side]?.contentId;
+    expect(await inHub(textOf(attempt.id, kept("notes.md", "before")))).toBe("# Notes\n");
+    expect(await inHub(textOf(attempt.id, kept("notes.md", "after")))).toBe("# Notes\n\nTidied.\n");
+    expect(await inHub(textOf(attempt.id, kept("src/app.ts", "after")))).toBe("export const app = 2;\n");
+    expect(await inHub(textOf(attempt.id, kept("untouched.md", "before")))).toBe("Leave me\n");
     // A file whose name marks it as secret keeps no contents.
-    expect(change(".env")?.before).toMatchObject({ contentId: null, notKept: "secret" });
-    expect(change(".env")?.after).toMatchObject({ contentId: null, notKept: "secret" });
+    expect(change(".env").before).toMatchObject({ contentId: null, notKept: "secret" });
+    expect(change(".env").after).toMatchObject({ contentId: null, notKept: "secret" });
     // The image's earlier version is kept as it was.
-    expect(change("logo.png")?.before).toMatchObject({ kind: "image", notKept: null });
+    expect(change("logo.png").before).toMatchObject({ kind: "image", notKept: null });
     const earlier = await inHub(
       Effect.gen(function* () {
         const repo = yield* ActivityRepository;
         const store = yield* ActivityStore;
-        return yield* readActivityContent(repo, store, attempt.id, change("logo.png")?.before?.contentId as never);
+        return yield* readActivityContent(repo, store, attempt.id, kept("logo.png", "before") as never);
       }),
     );
     expect(earlier).toEqual(PNG);
     // One past the size limit says why its earlier version is not kept.
-    expect(change("banner.png")?.before).toMatchObject({ kind: "image", contentId: null, notKept: "too-large" });
+    expect(change("banner.png").before).toMatchObject({ kind: "image", contentId: null, notKept: "too-large" });
 
     // The scans the changes were found by, and the journal entries each record committed with.
     expect(activity.scans.map(({ folder, phase, stopped }) => ({ folder, phase, stopped }))).toEqual([
