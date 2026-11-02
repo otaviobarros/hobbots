@@ -444,10 +444,7 @@ describe("cancelling with confirmed outcomes", () => {
     // Your next message there works on the same Task, as an Attempt of its own.
     await run(laterReply(HOLD_STARTED, requests));
     await run(controls((each) => each.cancel(top.id)));
-    const asked = await run(treeWhen(() => true));
-    expect(asked.tasks[0]?.state).toBe("cancelling");
-    expect((await run(messages())).at(-1)?.status).toBe("stopping");
-
+    // The reply's stop may land at once or once it goes on; either way the cancel waits for it.
     await release();
     const all = await run(messagesWhen(() => true));
     expect(all.at(-1)?.status).toBe("stopped");
@@ -459,6 +456,10 @@ describe("cancelling with confirmed outcomes", () => {
       [ALDRIC, "completed"],
       [ALDRIC, "interrupted"],
     ]);
+    // Confirmed only once the reply's Attempt had ended.
+    const reply = done.attempts.filter((each) => each.taskId === top.id).at(-1);
+    expect(reply?.endedAt).not.toBeNull();
+    expect(Date.parse(done.tasks[0]?.updatedAt ?? "")).toBeGreaterThanOrEqual(Date.parse(reply?.endedAt ?? ""));
 
     const answer = await run(stray.hubTools.call("plan_steps", { key: "stray", steps: [{ brief: "Draft the ads" }] }));
     expect(answer).toMatchObject({ refused: true });
