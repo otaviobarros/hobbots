@@ -38,6 +38,7 @@ import {
 } from "./errors.ts";
 import { GitHubGroup } from "./github.ts";
 import { PermissionsGroup } from "./permissions.ts";
+import { RemoteAccessGroup } from "./remote-access.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
 import { QuestionsGroup, TasksGroup } from "./tasks.ts";
@@ -297,4 +298,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(QuestionsGroup)
   .add(BackpackGroup)
   .add(BlockersGroup)
-  .add(GitHubGroup) {}
+  .add(GitHubGroup)
+  .add(RemoteAccessGroup) {}

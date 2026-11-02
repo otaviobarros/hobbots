@@ -6,6 +6,7 @@ import {
   isInProgress,
   type Message,
   MessageDelta,
+  RemoteAccessChanged,
   STREAM_FRAME,
   StreamReady,
 } from "@hobbots/domain";
@@ -23,6 +24,7 @@ import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
+import { applyRemoteAccess } from "./remote-access.ts";
 import {
   newer,
   recordAgent,
@@ -38,6 +40,7 @@ import { applyTaskEvent } from "./tasks.ts";
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
 const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady));
 const decodeDelta = Schema.decodeUnknownSync(Schema.fromJsonString(MessageDelta));
+const decodeRemoteAccess = Schema.decodeUnknownSync(Schema.fromJsonString(RemoteAccessChanged));
 
 /** Replaces an entity in a list unless the list already holds a newer version of it. */
 const upsertNewer = <T extends { readonly id: string; readonly revision: number }>(
@@ -246,6 +249,13 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
     source.addEventListener(STREAM_FRAME.delta, (frame) => {
       try {
         applyDelta(queryClient, decodeDelta(frame.data));
+      } catch (error) {
+        console.warn("Ignoring malformed event", error);
+      }
+    });
+    source.addEventListener(STREAM_FRAME.remoteAccess, (frame) => {
+      try {
+        applyRemoteAccess(queryClient, decodeRemoteAccess(frame.data).status);
       } catch (error) {
         console.warn("Ignoring malformed event", error);
       }
