@@ -38,6 +38,7 @@ import {
   ToolLogNotFound,
 } from "./errors.ts";
 import { GitHubGroup } from "./github.ts";
+import { HobGitHubAppGroup } from "./hob-github-app.ts";
 import { PermissionsGroup } from "./permissions.ts";
 import { RemoteAccessGroup } from "./remote-access.ts";
 import { SearchGroup } from "./search.ts";
@@ -328,4 +329,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(BackpackGroup)
   .add(BlockersGroup)
   .add(GitHubGroup)
+  .add(HobGitHubAppGroup)
   .add(RemoteAccessGroup) {}

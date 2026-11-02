@@ -6,7 +6,7 @@ import { ApprovalService } from "./approvals.ts";
 import { ChatService } from "./chat.ts";
 import { GrantService } from "./grants.ts";
 import { foundAgent } from "./hobs.ts";
-import { EventPublisher } from "./ports.ts";
+import { EventPublisher, RetiredHobGitHubApp } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 
 /** Pauses, wakes and retires hobs (AG-006). Nothing here deletes a hob or its threads. */
@@ -27,6 +27,7 @@ export class HobLifecycle extends Context.Service<
       const admission = yield* HobAdmission;
       const approvals = yield* Effect.serviceOption(ApprovalService);
       const grants = yield* Effect.serviceOption(GrantService);
+      const hobApp = yield* Effect.serviceOption(RetiredHobGitHubApp);
 
       const findAgent = (agentId: AgentId) => repo.findAgent(agentId).pipe(Effect.flatMap(foundAgent(agentId)));
 
@@ -62,7 +63,7 @@ export class HobLifecycle extends Context.Service<
       // Under the hob's lock, every turn admitted before the retirement is already registered and
       // none can be admitted until the hob is retired, so "stop" reaches all of its running replies.
       const retire = Effect.fn("HobLifecycle.retire")(function* (agentId: AgentId, activeWork: RetireWork) {
-        return yield* admission.withHob(
+        const retired = yield* admission.withHob(
           agentId,
           Effect.gen(function* () {
             const at = DateTime.formatIso(yield* DateTime.now);
@@ -78,6 +79,10 @@ export class HobLifecycle extends Context.Service<
             return retired;
           }),
         );
+        // Outside the hob's lock, since it waits on GitHub: a retired hob keeps no app that reaches
+        // your repositories, and no key (ADR 022).
+        if (Option.isSome(hobApp)) yield* hobApp.value.remove(agentId);
+        return retired;
       });
 
       return HobLifecycle.of({ pause, wake, retire });

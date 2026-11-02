@@ -1,7 +1,9 @@
 import type { InvalidFolder } from "@hobbots/api";
 import type {
+  AgentId,
   EventEnvelope,
   GitHubAccount,
+  HobGitHubApp,
   InstallationSetup,
   MessageId,
   ThreadId,
@@ -74,3 +76,26 @@ export class GitHubAccounts extends Context.Service<
     readonly clear: Effect.Effect<void>;
   }
 >()("@hobbots/agents/GitHubAccounts") {}
+
+/**
+ * Each hob's own GitHub App, by hob (ADR 022): its identity only. Its private key is kept in the OS
+ * keychain, never here.
+ */
+export class HobGitHubApps extends Context.Service<
+  HobGitHubApps,
+  {
+    readonly get: (agentId: AgentId) => Effect.Effect<HobGitHubApp | null>;
+    /** Saves the hob's app, replacing the one it had. */
+    readonly save: (agentId: AgentId, app: HobGitHubApp) => Effect.Effect<void>;
+    readonly remove: (agentId: AgentId) => Effect.Effect<void>;
+  }
+>()("@hobbots/agents/HobGitHubApps") {}
+
+/**
+ * What retiring a hob does to its own GitHub App (ADR 022): removes its installations and its key.
+ * The hub has it only when the GitHub Charm is wired in; it reports problems in its log and never fails.
+ */
+export class RetiredHobGitHubApp extends Context.Service<
+  RetiredHobGitHubApp,
+  { readonly remove: (agentId: AgentId) => Effect.Effect<void> }
+>()("@hobbots/agents/RetiredHobGitHubApp") {}

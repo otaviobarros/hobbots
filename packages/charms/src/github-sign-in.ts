@@ -83,21 +83,21 @@ const InstallationRepositoriesJson = Schema.Struct({
   repositories: Schema.Array(Schema.Struct({ full_name: Schema.String, private: Schema.Boolean })),
 });
 
-const PAGE = 100;
+export const GITHUB_PAGE_SIZE = 100;
 // Enough for any person's installations; GitHub would keep paging past a mistake.
 const MAX_PAGES = 50;
 
-/** Every item of a listing GitHub pages, read page by page until a short page. */
-const allPages = <A, E>(page: (n: number) => Effect.Effect<ReadonlyArray<A>, E>) =>
+/** Every item of a listing GitHub pages, `GITHUB_PAGE_SIZE` at a time, read page by page until a short page. */
+export const allPages = <A, E>(page: (n: number) => Effect.Effect<ReadonlyArray<A>, E>) =>
   Effect.gen(function* () {
     const items: Array<A> = [];
     for (let n = 1; n <= MAX_PAGES; n++) {
       const next = yield* page(n);
       items.push(...next);
-      if (next.length < PAGE) return items;
+      if (next.length < GITHUB_PAGE_SIZE) return items;
     }
     // Past the cap the rest is left out, so a repository there is refused, never wrongly reached.
-    yield* Effect.logWarning(`GitHub listed more than ${MAX_PAGES * PAGE} items; the rest were not read.`);
+    yield* Effect.logWarning(`GitHub listed more than ${MAX_PAGES * GITHUB_PAGE_SIZE} items; the rest were not read.`);
     return items;
   });
 
@@ -241,7 +241,7 @@ export const GitHubSignInLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           Effect.gen(function* () {
             const installations = yield* allPages((page) =>
               send(
-                authorized("/user/installations", token, { per_page: String(PAGE), page: String(page) }),
+                authorized("/user/installations", token, { per_page: String(GITHUB_PAGE_SIZE), page: String(page) }),
                 InstallationsJson,
                 "the app's installations",
               ).pipe(Effect.map((json) => json.installations)),
@@ -250,7 +250,7 @@ export const GitHubSignInLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               allPages((page) =>
                 send(
                   authorized(`/user/installations/${installation.id}/repositories`, token, {
-                    per_page: String(PAGE),
+                    per_page: String(GITHUB_PAGE_SIZE),
                     page: String(page),
                   }),
                   InstallationRepositoriesJson,
