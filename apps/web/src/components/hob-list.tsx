@@ -10,6 +10,7 @@ import { agentsQuery, threadsQuery } from "../api/queries.ts";
 import { formatWhen } from "../lib/time.ts";
 import { ThreadRowMenu } from "./archive/thread-menu.tsx";
 import { ArchivedEntry } from "./archived-threads/archived-threads.tsx";
+import { HobBackpack } from "./backpack/hob-backpack.tsx";
 import { HobSprite, hobState, stateLabel } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
 import { HobQuestWork } from "./quest-work/quest-work.tsx";
@@ -111,6 +112,7 @@ function HobEntry({ hob, open, threadId }: { hob: Agent; open: boolean; threadId
         </span>
       </Link>
       <HobQuestWork hob={hob} />
+      <HobBackpack hob={hob} open={open} />
       {open && (
         <div className="flex animate-hb-in flex-col pt-0.5 pb-1.5">
           {threads.data?.map((thread) => (

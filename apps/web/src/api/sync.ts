@@ -97,6 +97,24 @@ export const newer = <T extends { readonly revision: number }>(known: T | undefi
 };
 
 /**
+ * A cached list with the arriving version of an entity in place of an older one, at the end when it
+ * is new to the list, or out of the list when the version kept no longer `keeps` it. An older
+ * arriving version leaves the list as it is.
+ */
+export const withNewer = <T extends { readonly id: string; readonly revision: number }>(
+  old: ReadonlyArray<T> | undefined,
+  item: T,
+  keeps: (kept: T) => boolean,
+): ReadonlyArray<T> | undefined => {
+  if (old === undefined) return old;
+  const known = old.find((each) => each.id === item.id);
+  const kept = newer(known, item);
+  if (kept === known) return old;
+  const rest = old.filter((each) => each.id !== item.id);
+  return keeps(kept) ? [...rest, kept] : rest;
+};
+
+/**
  * A response's rows with the generation's overlay on top, applied as the events were: a newer
  * version replaces its row through `upsert` (so a queued message that started moves to the end, as
  * it does live), a newer tombstone removes it, and an entity that belongs to the query but is
@@ -209,3 +227,11 @@ export const syncedInbox = (fetch: () => Promise<ReadonlyArray<ApprovalRequest>>
 /** The items whose blocker waits for the user (IN-007): one leaves once its blocker is decided. */
 export const syncedBlockers = (fetch: () => Promise<ReadonlyArray<BackpackItem>>) =>
   synced(fetch, "backpack", (item) => openBlocker(item) !== undefined);
+
+/**
+ * Every hob's backpack items that have not failed: the open ones the hub read, and the ones that
+ * changed since during this generation, resolved ones too, so a view can say how one was handled.
+ * A failed item is a blocker and lives in the blocker list instead.
+ */
+export const syncedBackpack = (fetch: () => Promise<ReadonlyArray<BackpackItem>>) =>
+  synced(fetch, "backpack", (item) => item.state !== "failed");

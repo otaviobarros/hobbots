@@ -15,7 +15,7 @@ import { Schema } from "effect";
 import { useEffect, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
 import { storeApproval } from "./approvals.ts";
-import { storeBlocker } from "./blockers.ts";
+import { storeBackpackItem } from "./backpack.ts";
 import { API_URL } from "./client.ts";
 import { grantsChanged } from "./grants.ts";
 import type { ConnectionState } from "./live.ts";
@@ -169,10 +169,10 @@ const applyWorkEvent = (
     case "GrantRevoked":
       void grantsChanged(queryClient);
       return;
-    // Only blockers show from a hob's backpack so far (ADR 019, IN-007).
+    // What hobs are waiting on, and what is stuck (ADR 019, IN-007).
     case "BackpackItemRecorded":
     case "BackpackItemChanged":
-      storeBlocker(queryClient, event.item);
+      storeBackpackItem(queryClient, event.item);
       return;
     // The rest change Tasks and Quests (ADR 018).
     default:

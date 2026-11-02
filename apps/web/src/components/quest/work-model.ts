@@ -10,6 +10,7 @@ import {
   type TaskId,
   type TaskTree,
 } from "@hobbots/domain";
+import { firstLine } from "../../lib/format.ts";
 
 /**
  * How the chat shows a request's work (ADR 018, screen 17): the card under the request, the strip
@@ -266,4 +267,4 @@ const workRowsAll = (tree: TaskTree, task: Task): ReadonlyArray<WorkRow> =>
   }));
 
 /** The first line of a brief, as a Task's title. */
-export const taskTitle = (task: Pick<Task, "brief">): string => task.brief.split("\n", 1)[0]?.trim() ?? "";
+export const taskTitle = (task: Pick<Task, "brief">): string => firstLine(task.brief);
