@@ -1,4 +1,5 @@
-import { Effect, Layer } from "effect";
+import { BackpackDisposition } from "@hobbots/domain";
+import { Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, migrations } from "../src/index.ts";
@@ -17,6 +18,8 @@ import githubCharm from "../src/migrations/0027_github_charm.ts";
 import backpackBlockers from "../src/migrations/0029_backpack_blockers.ts";
 import withdrawnQuestions from "../src/migrations/0033_withdrawn_questions.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+
+const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
 const migrationsBefore = (id: string) =>
@@ -867,7 +870,7 @@ describe("0029_backpack_blockers", () => {
 
 describe("0033_withdrawn_questions", () => {
   // covers DP-003, OR-004
-  it("[TC-OR-169] withdraws the questions left open on Tasks that ended as cancelled or failed, and keeps the rest", async () => {
+  it("[TC-OR-169] withdraws the questions left open on Tasks that ended as cancelled or failed, resolves their pending copies as late, and keeps the rest", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const at = "2026-11-01T00:00:00.000Z";
@@ -898,15 +901,59 @@ describe("0033_withdrawn_questions", () => {
       yield* question("on-failed", "failed", "open");
       yield* question("answered", "cancelled", "answered");
       yield* question("on-active", "active", "open");
+      yield* sql`UPDATE tasks SET revision = 7 WHERE id = 'cancelled'`;
+      // The lead's copies: only one still pending and unclaimed about ended work can wake the lead.
+      const item = (id: string, kind: string, taskId: string, state: string, claimOwner: string | null) =>
+        sql`INSERT INTO backpack_items ${sql.insert({
+          id,
+          recipientId: "ada",
+          kind,
+          actionable: 1,
+          priority: 1,
+          state,
+          taskId,
+          dedupeKey: id,
+          payload: "{}",
+          claimOwner,
+          createdAt: at,
+          updatedAt: at,
+          recordedSequence: 1,
+        })}`;
+      yield* item("i-stale", "question", "cancelled", "pending", null);
+      yield* item("i-held", "question", "cancelled", "pending", "worker-1");
+      yield* item("i-delivered", "question", "failed", "delivered", null);
+      yield* item("i-live", "question", "active", "pending", null);
+      yield* item("i-failure", "failure", "cancelled", "pending", null);
       yield* withdrawnQuestions;
-      return yield* sql<{ readonly id: string; readonly state: string }>`SELECT id, state FROM questions ORDER BY id`;
+      return {
+        questions: yield* sql<{
+          readonly id: string;
+          readonly state: string;
+        }>`SELECT id, state FROM questions ORDER BY id`,
+        items: yield* sql<{ readonly id: string; readonly state: string; readonly disposition: string | null }>`
+          SELECT id, state, disposition FROM backpack_items ORDER BY id`,
+      };
     }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0033"))), Effect.runPromise);
 
-    expect(result.map((row) => [row.id, row.state])).toEqual([
+    expect(result.questions.map((row) => [row.id, row.state])).toEqual([
       ["answered", "answered"],
       ["on-active", "open"],
       ["on-cancelled", "withdrawn"],
       ["on-failed", "withdrawn"],
+    ]);
+    // Resolved, it is never claimed for a turn again; late at the version its Task ended at.
+    expect(
+      result.items.map((row) => [
+        row.id,
+        row.state,
+        row.disposition === null ? null : decodeDisposition(row.disposition),
+      ]),
+    ).toEqual([
+      ["i-delivered", "delivered", null],
+      ["i-failure", "pending", null],
+      ["i-held", "pending", null],
+      ["i-live", "pending", null],
+      ["i-stale", "resolved", { _tag: "late", taskRevision: 7 }],
     ]);
   });
 });
