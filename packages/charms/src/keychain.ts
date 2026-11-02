@@ -164,6 +164,9 @@ const secretService = (run: Runner, item: Item): ItemAccess => {
   };
 };
 
+/** Whether the hub's platform has a keychain Hobbots can use: macOS Keychain, or the Secret Service on Linux. */
+const hasKeychain = (platform: NodeJS.Platform) => platform === "darwin" || platform === "linux";
+
 /** Where an item lives on the hub's platform: macOS Keychain, the Secret Service on Linux, else nowhere. */
 const platformItems =
   (platform: NodeJS.Platform, run: Runner) =>
@@ -245,7 +248,8 @@ const encodeKey = (pem: Redacted.Redacted<string>) =>
 const decodeKey = (stored: Redacted.Redacted<string>) =>
   Redacted.make(Buffer.from(Redacted.value(stored), "base64url").toString("utf8"));
 
-const hobAppKeys = (items: (item: Item) => ItemAccess) => {
+/** `supported`: false on a platform with no keychain Hobbots can use, where nothing can be kept. */
+const hobAppKeys = (items: (item: Item) => ItemAccess, supported: boolean) => {
   const itemFor = (agentId: AgentId): Effect.Effect<ItemAccess, KeychainError> =>
     SAFE_ACCOUNT.test(agentId)
       ? Effect.succeed(items(hobAppItem(agentId)))
@@ -254,10 +258,12 @@ const hobAppKeys = (items: (item: Item) => ItemAccess) => {
         );
   return HobAppKeys.of({
     // A read the keychain cannot run means there is none; a locked one still counts as usable.
-    usable: items(hobAppItem("probe" as AgentId)).read.pipe(
-      Effect.as(true),
-      Effect.catch((error) => Effect.succeed(error.reason !== "unavailable")),
-    ),
+    usable: supported
+      ? items(hobAppItem("probe" as AgentId)).read.pipe(
+          Effect.as(true),
+          Effect.catch((error) => Effect.succeed(error.reason !== "unavailable")),
+        )
+      : Effect.succeed(false),
     read: (agentId) =>
       itemFor(agentId).pipe(
         Effect.flatMap((item) => item.read),
@@ -273,17 +279,23 @@ export const HobAppKeysLive = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv
   Layer.effect(
     HobAppKeys,
     Effect.gen(function* () {
-      return hobAppKeys(platformItems(platform, runner(yield* ChildProcessSpawner.ChildProcessSpawner, env)));
+      return hobAppKeys(
+        platformItems(platform, runner(yield* ChildProcessSpawner.ChildProcessSpawner, env)),
+        hasKeychain(platform),
+      );
     }),
   );
 
 /** The hobs' app keys held in memory, for tests and a hub started with `HOBBOTS_FAKE_GITHUB=on`. */
 export const HobAppKeysMemory = Layer.sync(HobAppKeys, () => {
   const kept = new Map<string, Redacted.Redacted<string>>();
-  return hobAppKeys((item) => ({
-    read: Effect.sync(() => Option.fromNullishOr(kept.get(item.account))),
-    write: (secret) =>
-      checkSafe(item, secret).pipe(Effect.andThen(Effect.sync(() => void kept.set(item.account, secret)))),
-    remove: Effect.sync(() => void kept.delete(item.account)),
-  }));
+  return hobAppKeys(
+    (item) => ({
+      read: Effect.sync(() => Option.fromNullishOr(kept.get(item.account))),
+      write: (secret) =>
+        checkSafe(item, secret).pipe(Effect.andThen(Effect.sync(() => void kept.set(item.account, secret)))),
+      remove: Effect.sync(() => void kept.delete(item.account)),
+    }),
+    true,
+  );
 });
