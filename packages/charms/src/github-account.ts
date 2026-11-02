@@ -33,10 +33,14 @@ import { LocalGitHubSignIns, type LocalSource } from "./local-sign-ins.ts";
  */
 
 /**
- * The Hobbots GitHub App every hub signs in through unless told otherwise. A client ID is public,
- * so it ships in the source; null until the app is registered, which leaves connecting off.
+ * The Hobbots GitHub App every hub signs in through unless told otherwise (github.com/apps/hobbots).
+ * A client ID is public and the device flow needs no secret, so it ships in the source. A null ID
+ * leaves connecting off.
  */
-export const HOBBOTS_GITHUB_APP = { clientId: null as string | null, slug: "hobbots" } as const;
+export const HOBBOTS_GITHUB_APP: { readonly clientId: string | null; readonly slug: string } = {
+  clientId: "Iv23liNCNbnssyGtfWjI",
+  slug: "hobbots",
+};
 
 /** Which GitHub App the hub signs in through. The client ID is public; the hub holds no secret. */
 export interface GitHubAppConfig {
