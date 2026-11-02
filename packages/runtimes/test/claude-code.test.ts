@@ -20,6 +20,7 @@ import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   APPROVAL_NOTE,
+  baseOptions,
   botCommitNote,
   brainOptions,
   type ClaudeCodeConfig,
@@ -472,6 +473,15 @@ describe("the sandbox note", () => {
     expect(turnInstructions("", true)).toBe(SANDBOX_NOTE);
     expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
     expect(SANDBOX_NOTE).toContain("could not write config file .git/config: Operation not permitted");
+  });
+});
+
+describe("the runtime settings", () => {
+  // covers ADR 022
+  it("[TC-CH-201] adds no Claude attribution to a hob's commits or pull requests", () => {
+    const options = baseOptions({ workspaceDir: "/w" } as ClaudeCodeConfig, "/bin/claude");
+    expect(options.settingSources).toEqual([]);
+    expect(options.settings).toEqual({ attribution: false });
   });
 });
 
