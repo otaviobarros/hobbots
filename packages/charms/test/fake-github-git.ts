@@ -10,8 +10,13 @@ import type { AddressInfo } from "node:net";
 export interface FakeGitHubGit {
   readonly base: string;
   readonly authorizations: Array<string>;
-  /** Answers every request after this one with no response, to stand in for a dropped connection. */
-  dropAfter: number | null;
+  /**
+   * Drops the connection of every push after this many requests, to stand in for a lost answer:
+   * `before` GitHub takes it in, or `after` it has applied the push.
+   */
+  drop: { readonly after: number; readonly when: "before" | "after" } | null;
+  /** How many requests reached it so far. */
+  readonly requests: () => number;
   readonly close: () => Promise<void>;
 }
 
@@ -21,7 +26,8 @@ export const startFakeGitHubGit = (projectRoot: string, token: string): Promise<
     const fake: { -readonly [K in keyof FakeGitHubGit]: FakeGitHubGit[K] } = {
       base: "",
       authorizations: [],
-      dropAfter: null,
+      drop: null,
+      requests: () => requests,
       close: async () => {},
     };
     const expected = `Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`;
@@ -34,7 +40,8 @@ export const startFakeGitHubGit = (projectRoot: string, token: string): Promise<
         return;
       }
       fake.authorizations.push(authorization);
-      if (fake.dropAfter !== null && requests > fake.dropAfter) {
+      const dropping = fake.drop !== null && requests > fake.drop.after && request.method === "POST";
+      if (dropping && fake.drop?.when === "before") {
         // Takes the request in, then drops the connection without answering.
         request.resume();
         request.on("end", () => request.socket.destroy());
@@ -61,6 +68,10 @@ export const startFakeGitHubGit = (projectRoot: string, token: string): Promise<
       const chunks: Array<Buffer> = [];
       backend.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
       backend.on("close", () => {
+        if (dropping) {
+          request.socket.destroy();
+          return;
+        }
         const output = Buffer.concat(chunks);
         const split = output.indexOf("\r\n\r\n");
         const head = output.subarray(0, split).toString("utf8");

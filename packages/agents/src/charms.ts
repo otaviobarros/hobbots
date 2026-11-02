@@ -1,4 +1,4 @@
-import type { AgentId } from "@hobbots/domain";
+import type { AgentId, MessageId, ThreadId } from "@hobbots/domain";
 import { Context, type Effect, Schema, type Scope } from "effect";
 import type { HubTools, ToolAccess, TurnApprovals } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
@@ -6,6 +6,9 @@ import type { Redactor } from "./secrets.ts";
 /** A turn that may offer Charm tools: its hob, and how to read the hob's tool access now. */
 export interface CharmTurn {
   readonly agentId: AgentId;
+  /** The thread and reply the turn writes, so a Charm call's record names the step it showed as. */
+  readonly threadId: ThreadId | null;
+  readonly messageId: MessageId | null;
   /** The hob's tool access now, read again for every call so a narrower policy applies to the next (PE-008). */
   readonly currentAccess: Effect.Effect<ToolAccess | null>;
   /** Redacts secrets from what a call returns, before the hob reads it. */

@@ -74,6 +74,8 @@ export class GitPush extends Context.Service<
     /** The commits a push of `commit` adds beyond `known`, the remote commits the staging repository has. */
     readonly commits: (staged: StagedBranch, known: ReadonlyArray<string | null>) => Effect.Effect<CommitSummary>;
     readonly push: (staged: StagedBranch, target: PushTarget, transport: PushTransport) => Effect.Effect<PushResult>;
+    /** Whether Git takes the name as a branch name (`git check-ref-format --branch`). */
+    readonly isBranchName: (name: string) => Effect.Effect<boolean>;
   }
 >()("@hobbots/charms/GitPush") {}
 
@@ -439,6 +441,12 @@ export const GitPushLive = (config: GitPushConfig) =>
           ),
         );
 
-      return GitPush.of({ stage, commits, push });
+      const isBranchName = (name: string) =>
+        run(["-C", home, "check-ref-format", "--branch", name]).pipe(
+          Effect.map((out) => out.exit === 0 && out.stdout.trim() === name),
+          Effect.orElseSucceed(() => false),
+        );
+
+      return GitPush.of({ stage, commits, push, isBranchName });
     }),
   );

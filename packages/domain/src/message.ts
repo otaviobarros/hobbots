@@ -44,7 +44,8 @@ export const isResumable = (status: MessageStatus): boolean => status === "inter
  * - `unfinished`: its turn ended before it finished: a thinking step, or a tool call still awaiting
  *   approval, which never ran. Steps saved before `uncertain` existed may also be tool calls that ran.
  * - `uncertain`: its turn ended (a crash, a restart, a stop or a runtime failure) while the tool call
- *   was running, so it may or may not have taken effect. Hobbots never runs it again on its own.
+ *   was running, or a Charm's write ended without a clear answer (ADR 020), so it may or may not
+ *   have taken effect. Hobbots never runs it again on its own.
  *
  * `unfinished` and `uncertain` are final: Continue starts new steps and never revives them.
  */
@@ -83,7 +84,7 @@ export const ReplyStep = Schema.Struct({
   startedAt: Schema.optionalKey(Schema.String),
   /** For an `awaiting` step: the approval it waits on. */
   approvalId: Schema.optionalKey(Schema.String),
-  /** For a `denied` step: why the call was refused. */
+  /** For a `denied` step: why the call was refused. For an `uncertain` one: what is known of its outcome. */
   reason: Schema.optionalKey(Schema.String),
   /** For a `denied` step: the policy hook refused it, the user denied its Ask, or the OS sandbox did. */
   decidedBy: Schema.optionalKey(Schema.Literals(["policy", "user", "sandbox"])),

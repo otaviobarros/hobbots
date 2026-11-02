@@ -1,21 +1,27 @@
-import { CharmTools, type CharmTurn, type HubToolAnswer, type ToolAccess } from "@hobbots/agents";
+import { CharmTools, type CharmTurn, type HubCallStep, type HubToolAnswer, type ToolAccess } from "@hobbots/agents";
 import {
   GITHUB_TOOLS,
+  GITHUB_WRITE_TOOLS,
   type GitHubRepository,
   GitHubToolInputs,
   type GitHubToolName,
+  GitHubWriteInputs,
   githubItemText,
   githubRepositoryText,
   githubSearchQuery,
   githubSearchText,
   githubToolJsonSchema,
+  githubWriteToolJsonSchema,
   isGitHubToolName,
+  isGitHubWriteToolName,
   repositorySlug,
   trimTrailingSlashes,
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine } from "@hobbots/permissions";
 import { Data, Effect, Layer, Schema } from "effect";
+import { makeCharmCallRunner } from "./charm-calls.ts";
 import { GitHubApi, type GitHubError } from "./github-api.ts";
+import { makeGitHubPush, pushReadBack } from "./github-push.ts";
 import { GitRemotes } from "./remotes.ts";
 
 /**
@@ -50,7 +56,12 @@ export const GitHubCharmTools = Layer.effect(
     const engine = yield* PolicyEngine;
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
-    const tools = GITHUB_TOOLS.map((tool) => ({ ...tool, inputSchema: githubToolJsonSchema(tool.name) }));
+    const runner = yield* makeCharmCallRunner({ github_push: pushReadBack(api) });
+    const github = yield* makeGitHubPush(runner);
+    const tools = [
+      ...GITHUB_TOOLS.map((tool) => ({ ...tool, inputSchema: githubToolJsonSchema(tool.name) })),
+      ...GITHUB_WRITE_TOOLS.map((tool) => ({ ...tool, inputSchema: githubWriteToolJsonSchema(tool.name) })),
+    ];
 
     /** The folder to read and its repository: the one named, which must be the hob's, or the first that has one. */
     const repositoryFor = (access: ToolAccess, named: string | undefined) =>
@@ -108,8 +119,22 @@ export const GitHubCharmTools = Layer.effect(
       }
     };
 
-    const call = (turn: CharmTurn, name: string, raw: unknown) =>
+    const write = (turn: CharmTurn, name: "github_push", raw: unknown, step: HubCallStep | undefined) =>
       Effect.gen(function* () {
+        const input = yield* Schema.decodeUnknownEffect(GitHubWriteInputs[name])(raw).pipe(
+          Effect.mapError((error) => new Refused({ message: describe(error) })),
+        );
+        const access = yield* turn.currentAccess;
+        if (access === null) {
+          return yield* new Refused({ message: "You have no tools this turn, so nothing can be pushed." });
+        }
+        const { folder, repository } = yield* repositoryFor(access, input.folder);
+        return yield* github.push(turn, access, folder, repository, input, step);
+      });
+
+    const call = (turn: CharmTurn, name: string, raw: unknown, step: HubCallStep | undefined) =>
+      Effect.gen(function* () {
+        if (isGitHubWriteToolName(name)) return yield* write(turn, name, raw, step);
         if (!isGitHubToolName(name)) return yield* new Refused({ message: `Hobbots has no ${name} tool.` });
         const input = yield* Schema.decodeUnknownEffect(GitHubToolInputs[name])(raw).pipe(
           Effect.mapError((error) => new Refused({ message: describe(error) })),
@@ -138,14 +163,14 @@ export const GitHubCharmTools = Layer.effect(
         // A defect becomes an answer; an interrupted turn stays interrupted.
         Effect.catchDefect((defect) =>
           Effect.logError("A GitHub Charm call failed", defect).pipe(
-            Effect.as({ text: "Hobbots could not read GitHub this time. Try again.", refused: true }),
+            Effect.as({ text: "Hobbots could not reach GitHub this time.", refused: true }),
           ),
         ),
         Effect.provideContext(context),
       );
 
     return CharmTools.of({
-      forTurn: (turn) => ({ tools, call: (name, input) => call(turn, name, input) }),
+      forTurn: (turn) => ({ tools, call: (name, input, step) => call(turn, name, input, step) }),
     });
   }),
 );

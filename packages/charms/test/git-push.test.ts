@@ -3,11 +3,11 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { FolderSandbox } from "@hobbots/agents";
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Layer, Redacted, type Scope } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { GitPush, GitPushLive, type PushTarget, pushResult } from "../src/index.ts";
 import { type FakeGitHubGit, startFakeGitHubGit } from "./fake-github-git.ts";
+import { directSandbox } from "./support.ts";
 
 const TOKEN = "ghu_faketoken0123456789abcdefghijklmnopqrstuv";
 const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
@@ -55,24 +55,12 @@ const makeRemote = async (slug: string) => {
   return remote;
 };
 
-/**
- * Stands in for the hob's sandbox: runs the program as it is, so these tests check the hub's own
- * fence. Like the sandbox's launcher, it drops the arguments Git appends.
- */
-const directSandbox = Layer.succeed(
-  FolderSandbox,
-  FolderSandbox.of({
-    readOnly: (_folders, program, args) =>
-      Effect.succeed({ commandLine: `sh -c ${quote([program, ...args].map(quote).join(" "))}`, env: {} }),
-  }),
-);
-
 const layer = () =>
   GitPushLive({ folder: path.join(root, "data", "charms", "github"), httpsBase: github.base }).pipe(
     Layer.provide(Layer.mergeAll(directSandbox, NodeServices.layer)),
   );
 
-const run = <A, E>(effect: Effect.Effect<A, E, GitPush>) =>
+const run = <A, E>(effect: Effect.Effect<A, E, GitPush | Scope.Scope>) =>
   effect.pipe(Effect.scoped, Effect.provide(layer()), Effect.runPromise);
 
 const target = (commit: string, overrides: Partial<PushTarget> = {}): PushTarget => ({

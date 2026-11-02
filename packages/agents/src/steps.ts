@@ -64,6 +64,12 @@ export const nextSteps = (
     }
     case "ToolFinished":
       return end(steps, own(event.id), event.failed ? "failed" : "done", output);
+    case "ToolUncertain": {
+      const id = own(event.id);
+      const index = steps.findIndex((step) => step.id === id && step.state === "running");
+      if (index === -1) return null;
+      return steps.map((step, i) => (i === index ? { ...step, state: "uncertain", reason: event.reason } : step));
+    }
     default:
       return null;
   }

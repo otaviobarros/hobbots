@@ -538,6 +538,8 @@ export class ChatService extends Context.Service<
                 Option.isSome(charms)
                   ? charms.value.forTurn({
                       agentId: agent.id,
+                      threadId: thread.id,
+                      messageId: (yield* Ref.get(reply.current)).id,
                       currentAccess: currentAccess(agent.id),
                       redactor,
                       approvals: turnApprovals?.approvals ?? null,

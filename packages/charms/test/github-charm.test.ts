@@ -16,8 +16,10 @@ import {
   GitHubCharmTools,
   GitHubError,
   GitHubToken,
+  GitPushLive,
   GitRemotes,
 } from "../src/index.ts";
+import { directSandbox, fixedToken, memoryCharmCalls } from "./support.ts";
 
 let root = "";
 let project = "";
@@ -62,6 +64,8 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
           ],
         });
       },
+      branchHead: () => Effect.succeed(null),
+      viewer: Effect.succeed("otaviobarros"),
       item: (repository, number, comments) => {
         asked.push(`item ${repository.owner}/${repository.name}#${number} (${comments})`);
         return Effect.succeed({
@@ -106,6 +110,8 @@ const callWith = (
     const charms = yield* CharmTools;
     const tools = charms.forTurn({
       agentId: AgentId.make("hob"),
+      threadId: null,
+      messageId: null,
       currentAccess: Effect.succeed(current),
       redactor: makeRedactor(),
       approvals: null,
@@ -119,6 +125,11 @@ const callWith = (
             fakeApi(layers.asked, layers.failWith),
             fakeRemotes({ [project]: HOBBOTS, [other]: { owner: "someone", name: "secret" } }),
             PolicyEngine.node,
+            memoryCharmCalls(),
+            fixedToken("ghu_unused"),
+            GitPushLive({ folder: path.join(root, "data", "charms", "github") }).pipe(
+              Layer.provide(Layer.mergeAll(directSandbox, NodeServices.layer)),
+            ),
           ),
         ),
       ),
@@ -130,7 +141,7 @@ describe("GitHub Charm", () => {
   it("[TC-PE-131] reads the repository of the hob's own folder, on the hub", async () => {
     const asked: Array<string> = [];
     const { names, answer } = await callWith({ asked }, access([project]), "github_search", { kind: "issue" });
-    expect(names).toEqual(["github_repository", "github_search", "github_item"]);
+    expect(names).toEqual(["github_repository", "github_search", "github_item", "github_push"]);
     expect(answer.refused).toBe(false);
     expect(answer.text).toContain("37 matches for `repo:otaviobarros/hobbots is:issue is:open`.");
     expect(asked).toEqual(["search repo:otaviobarros/hobbots is:issue is:open (10)"]);

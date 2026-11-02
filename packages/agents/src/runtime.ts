@@ -78,6 +78,11 @@ export type RuntimeEvent =
       /** Who refused it: the policy hook, the user answering an Ask, or the OS sandbox around the runtime. */
       readonly decidedBy: "policy" | "user" | "sandbox";
     }
+  /**
+   * A started call ended without a clear result: it may or may not have taken effect, so it must not
+   * run again until it is settled (ADR 020). Hub tools report it; `reason` says what is known.
+   */
+  | { readonly _tag: "ToolUncertain"; readonly id: string; readonly reason: string }
   | {
       readonly _tag: "Completed";
       readonly sessionId: string;

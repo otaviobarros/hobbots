@@ -33,6 +33,10 @@ export class GitHubApi extends Context.Service<
       number: number,
       comments: number,
     ) => Effect.Effect<GitHubItem, GitHubError>;
+    /** The commit a branch is at on GitHub, or null when there is no such branch. */
+    readonly branchHead: (repository: GitHubRepository, branch: string) => Effect.Effect<string | null, GitHubError>;
+    /** The login of the account the hub signs in with. */
+    readonly viewer: Effect.Effect<string, GitHubError>;
   }
 >()("@hobbots/charms/GitHubApi") {}
 
@@ -119,6 +123,8 @@ const FullItemJson = Schema.Struct({
   labels: Schema.Array(Schema.Union([Schema.String, Schema.Struct({ name: Schema.String })])),
   comments: Schema.Number,
 });
+const RefJson = Schema.Struct({ ref: Schema.String, object: Schema.Struct({ sha: Schema.String }) });
+const ViewerJson = Schema.Struct({ login: Schema.String });
 const CommentsJson = Schema.Array(
   Schema.Struct({ user: User, created_at: Schema.String, body: Schema.optionalKey(Schema.NullOr(Schema.String)) }),
 );
@@ -213,7 +219,23 @@ export const GitHubApiLive = Layer.effect(
         );
       });
 
+    // Each part of a branch name is its own path segment, so no name reaches another endpoint.
+    const refPath = (branch: string) => branch.split("/").map(encodeURIComponent).join("/");
+
     return GitHubApi.of({
+      branchHead: (repository, branch) =>
+        read(
+          `/repos/${repositorySlug(repository)}/git/ref/heads/${refPath(branch)}`,
+          RefJson,
+          `branch ${branch} in ${repositorySlug(repository)}`,
+        ).pipe(
+          Effect.map((json) => (json.ref === `refs/heads/${branch}` ? json.object.sha : null)),
+          Effect.catchIf(
+            (error) => error.reason === "not-found",
+            () => Effect.succeed(null),
+          ),
+        ),
+      viewer: read("/user", ViewerJson, "the hub's own account").pipe(Effect.map((json) => json.login)),
       repository: (repository) =>
         read(`/repos/${repositorySlug(repository)}`, RepositoryJson, `repository ${repositorySlug(repository)}`).pipe(
           Effect.map(
