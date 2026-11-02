@@ -22,6 +22,7 @@ import { describe, expect, it } from "vitest";
 import {
   arrivalsText,
   backpackItemsFor,
+  carryingTask,
   carryingThread,
   continuationTask,
   continuationThread,
@@ -31,6 +32,7 @@ import {
 const at = "2026-11-02T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
 const SAM = AgentId.make("sam");
+const ROSIE = AgentId.make("rosie");
 const threadId = ThreadId.make("shire");
 
 const task = (id: string, ownerId: AgentId, parentId: string | null, state: TaskState = "active") =>
@@ -170,6 +172,20 @@ describe("which thread a backpack item continues", () => {
     expect(continuationThread(item(FRODO, null, "message", { _tag: "message", senderId: null, text: "Hi" }), [])).toBe(
       threadId,
     );
+  });
+
+  // covers IN-005, OR-004
+  it("[TC-OR-187] carries progress from a member that a member leads along the leader's own session, and never wakes it", () => {
+    // Sam leads a nested Quest under Frodo's: Rosie works on a Task under Sam's.
+    const samsWork = task("stew", SAM, "quest", "waiting");
+    const rosies = task("herbs", ROSIE, "stew");
+    const all = [...tree, samsWork, rosies];
+    const progress = new BackpackItem({ ...progressOn("herbs", "Picked the thyme", 1), recipientId: SAM });
+    expect(carryingTask(progress, all)?.id).toBe("stew");
+    expect(continuationTask(progress, all)).toBeUndefined();
+    expect(carryingThread(progress, all)).toBeNull();
+    // Frodo's own routine progress still rides along his thread, never a member's session.
+    expect(carryingTask(progressOn("cook", "Stirring", 2), tree)).toBeUndefined();
   });
 
   // covers IN-005

@@ -773,4 +773,67 @@ describe("The responsibility ledger", () => {
     expect(result.item).toMatchObject({ state: "pending", claim: { owner: "hub-2:turn-1" } });
     expect(result.done.value.state).toBe("completed");
   });
+
+  // covers IN-005, IN-006
+  it("[TC-OR-186] routine progress never blocks a lead's completion, which resolves what no turn carried as late and leaves a claimed one to its turn", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const backpack = yield* Backpack;
+        yield* startOn("campaign", "a-root");
+        // Each member's turn starting records its "started" for Aldric, as routine progress.
+        const copyStarted = recorded(yield* startOn("copy", "a-copy"));
+        const buildStarted = recorded(yield* startOn("build", "a-build"));
+        // A turn of Aldric's takes up Ada's progress, and is still running.
+        yield* backpack.claim(buildStarted.id, "hub-1:turn-1", "1 minute");
+        yield* finish(
+          "copy",
+          "a-copy",
+          carriedFrom(yield* ledgerOf("copy"), () => true),
+        );
+        yield* finish(
+          "build",
+          "a-build",
+          carriedFrom(yield* ledgerOf("build"), () => true),
+        );
+        const ledger = yield* ledgerOf("campaign");
+        const done = yield* finish(
+          "campaign",
+          "a-root",
+          carriedFrom(ledger, () => true),
+        );
+        const tree = Option.getOrThrow(yield* (yield* TaskRepository).readTree(TaskId.make("campaign")));
+        return {
+          copyStarted,
+          ledger,
+          done,
+          tree,
+          copyItem: yield* backpack.find(copyStarted.id),
+          buildItem: yield* backpack.find(buildStarted.id),
+        };
+      }),
+    );
+
+    expect(result.copyStarted).toMatchObject({ kind: "progress", recipientId: ALDRIC, actionable: false });
+    // Only the members' results keep Aldric's Task open; their progress never does.
+    expect(
+      result.ledger.open.map((entry) =>
+        entry._tag === "Item" ? `${entry.item.kind}:${entry.item.taskId}` : entry._tag,
+      ),
+    ).toEqual(["result:copy", "result:build"]);
+    expect(result.done.value.state).toBe("completed");
+    // Quill's progress waited unclaimed: the completion resolves it as late, at the version copy ended.
+    const copy = result.tree.tasks.find((each) => each.id === "copy");
+    expect(result.copyItem).toMatchObject({
+      state: "resolved",
+      disposition: { _tag: "late", taskRevision: copy?.revision },
+    });
+    const changed = result.done.entries.flatMap((entry) =>
+      entry.payload._tag === "BackpackItemChanged" ? [entry.payload.item.id] : [],
+    );
+    expect(changed).toContain(result.copyItem.id);
+    // Ada's is held by the turn that took it up: that turn settles it, not the completion.
+    expect(result.buildItem).toMatchObject({ claim: { owner: "hub-1:turn-1" }, disposition: null });
+    expect(changed).not.toContain(result.buildItem.id);
+  });
 });
