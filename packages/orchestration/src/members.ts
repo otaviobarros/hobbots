@@ -22,6 +22,7 @@ import {
   AttemptId as AttemptIdSchema,
   ancestorsOf,
   type Committed,
+  isLiveAttempt,
   isTerminalTask,
   ledgerRefusal,
   ResponsibilityLedger,
@@ -65,6 +66,10 @@ export interface MemberDeps {
 }
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
+
+/** Whether the Task's current Attempt is still starting or running. */
+const liveAttemptOn = (task: Task, tree: TaskTree): boolean =>
+  tree.attempts.some((attempt) => attempt.id === task.currentAttemptId && isLiveAttempt(attempt.state));
 
 /**
  * A member's tools, narrowed by every Delegation on the way down to its Task (ADR 018): each adds
@@ -283,6 +288,9 @@ export const makeMemberRunner = (deps: MemberDeps) => {
       Effect.gen(function* () {
         const found = yield* read(taskId);
         if (Option.isNone(found) || found.value.task.state === "cancelling") return null;
+        // An Attempt still live on the Task holds it: a second could not start, so the work waits
+        // for that one to end instead of spending its tries (ADR 019).
+        if (liveAttemptOn(found.value.task, found.value.tree)) return null;
         const hob = yield* repo.findAgent(agent.id);
         if (Option.isNone(hob) || hob.value.status !== "active") return null;
         // A Task that ended still takes the turn's claims, so the dispatcher settles its items as late.

@@ -18,9 +18,16 @@ import {
   Agent,
   AgentId,
   type ApprovalRequest,
+  AttemptId,
+  type Committed,
+  carriedFrom,
+  DEFAULT_QUEST_LIMITS,
+  DelegationId,
   EMPTY_HOB_POLICY,
   type Message,
+  QuestId,
   type Task,
+  TaskId,
   type TaskTree,
   Thread,
   ThreadId,
@@ -380,6 +387,141 @@ describe("a retired party member", () => {
     expect(blocker?.summary).toContain("retired");
     expect(tree.attempts.find((each) => each.taskId === quill?.id)?.state).toBe("interrupted");
     await run(messagesWhen((each) => continuations(each).some((reply) => reply.content.includes("ended as failed."))));
+  }, 20_000);
+});
+
+describe("a member Task already being worked", () => {
+  // covers IN-003
+  it("[TC-OR-150] a member Task whose Attempt runs elsewhere keeps its work pending, spends no tries and raises no blocker, and the work settles once the Task ends", async () => {
+    const { run, requests } = setUp();
+    const at = () => new Date().toISOString();
+    // Started the way the fake Quest starts its party: the Task and its Attempt come from outside a session.
+    const memberTask = await run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        const bus = yield* EventBus;
+        const announce = <A>(committed: Committed<A>) => Effect.as(bus.publish(committed.entries), committed.value);
+        const lead = yield* tasks
+          .createTask({
+            task: {
+              id: TaskId.make("held-lead"),
+              ownerId: ALDRIC,
+              parentId: null,
+              threadId,
+              brief: "Plan the campaign",
+              dependsOn: [],
+              createdAt: at(),
+            },
+            delegation: null,
+            milestones: [],
+          })
+          .pipe(Effect.flatMap(announce));
+        yield* tasks
+          .startAttempt(lead.id, lead.revision, {
+            id: AttemptId.make("held-a-lead"),
+            runtime: "claude-code",
+            sessionId: null,
+            configVersion: 1,
+            policyVersion: null,
+            startedAt: at(),
+          })
+          .pipe(Effect.flatMap(announce));
+        yield* tasks
+          .startQuest({
+            id: QuestId.make("held-quest"),
+            taskId: lead.id,
+            goal: "A campaign",
+            acceptance: [],
+            limits: DEFAULT_QUEST_LIMITS,
+            createdAt: at(),
+          })
+          .pipe(Effect.flatMap(announce));
+        const task = yield* tasks
+          .createTask({
+            task: {
+              id: TaskId.make("held-copy"),
+              ownerId: QUILL,
+              parentId: lead.id,
+              threadId: null,
+              brief: "Draft the copy",
+              dependsOn: [],
+              createdAt: at(),
+            },
+            delegation: {
+              id: DelegationId.make("held-d-copy"),
+              brief: "Draft the copy",
+              expectedOutput: null,
+              authority: { overrides: {}, folders: null },
+              timeoutMs: null,
+            },
+            milestones: [],
+          })
+          .pipe(Effect.flatMap(announce));
+        return (yield* tasks
+          .startAttempt(task.id, task.revision, {
+            id: AttemptId.make("held-a-copy"),
+            runtime: "claude-code",
+            sessionId: null,
+            configVersion: 1,
+            policyVersion: null,
+            startedAt: at(),
+          })
+          .pipe(Effect.flatMap(announce))).task;
+      }),
+    );
+    const quill = { _tag: "Hob", agentId: QUILL } as const;
+
+    // Quill's work on the Task waits: the live Attempt holds it, so no session tries a second one.
+    const waiting = await run(
+      retry(
+        Effect.flatMap(
+          Backpack.use((backpack) => backpack.listOpen(quill)),
+          (open) => {
+            const found = open.find((item) => item.taskId === memberTask.id);
+            return found === undefined ? Effect.fail("not yet" as const) : Effect.succeed(found);
+          },
+        ),
+      ),
+    );
+    await run(Effect.sleep("1 second"));
+    const held = await run(TaskRepository.use((tasks) => tasks.readTree(memberTask.id)));
+    const tree = Option.getOrThrow(held);
+    expect(tree.tasks[0]?.state).toBe("active");
+    expect(tree.attempts.map((each) => each.id)).toEqual(["held-a-copy"]);
+    expect(tree.checkpoints.filter((each) => each.kind === "blocker")).toEqual([]);
+    expect(await run(Backpack.use((backpack) => backpack.listBlocked(quill)))).toEqual([]);
+    const still = await run(Backpack.use((backpack) => backpack.find(waiting.id)));
+    expect(still.state).toBe("pending");
+    expect(still.deliveries).toEqual([]);
+    expect(promptsTo(requests, memberTask)).toEqual([]);
+
+    // The Attempt that held it finishes the Task and carries what waited for Quill: no session starts.
+    await run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        const bus = yield* EventBus;
+        const current = Option.getOrThrow(yield* tasks.readTree(memberTask.id)).tasks[0];
+        const ledger = Option.getOrThrow(yield* tasks.readLedger(memberTask.id));
+        const done = yield* tasks.completeTask(memberTask.id, current?.revision ?? 0, {
+          summary: "Copy drafted",
+          attemptId: AttemptId.make("held-a-copy"),
+          artifacts: [],
+          at: at(),
+          carried: carriedFrom(ledger, () => true),
+        });
+        yield* bus.publish(done.entries);
+      }),
+    );
+    const settled = await run(
+      retry(
+        Effect.flatMap(
+          Backpack.use((backpack) => backpack.find(waiting.id)),
+          (item) => (item.state === "resolved" ? Effect.succeed(item) : Effect.fail("not yet" as const)),
+        ),
+      ),
+    );
+    expect(settled.disposition).toEqual({ _tag: "consumed", by: "attempt:held-a-copy" });
+    expect(promptsTo(requests, memberTask)).toEqual([]);
   }, 20_000);
 });
 
