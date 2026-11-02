@@ -3,6 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { formatTime } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
+import { roomStatus, roomStatusLabel, roomTone } from "./control-room.ts";
 import { messages } from "./messages.ts";
 import { emptyNote, NoteBox, type NoteDraft } from "./note-box.tsx";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
@@ -101,10 +102,12 @@ function Detail({
   onOpen: (taskId: TaskId) => void;
 }) {
   const detail = taskDetail(tree, task);
+  // The Task itself shows a cancel as it is: asked for, confirmed, or never confirmed (OR-006).
+  const status = roomStatus(tree, task);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-3.5 py-3">
       <span className="flex items-center gap-2">
-        <StatusTag status={detail.status}>{messages.status[detail.status]}</StatusTag>
+        <StatusTag status={roomTone(status)}>{roomStatusLabel(status)}</StatusTag>
         <span className="text-detail text-label">{hobs(task.ownerId).name}</span>
       </span>
       <Section title={detail.from === null ? copy.brief : copy.from({ name: hobs(detail.from).name })}>
@@ -138,10 +141,12 @@ function Detail({
                   onClick={() => onOpen(row.task.id)}
                   className="flex w-full cursor-pointer items-center gap-2 border-0 bg-card px-2.5 py-1.5 text-start text-detail text-text hover:bg-hover"
                 >
-                  <StatusDot status={row.status} />
+                  <StatusDot status={roomTone(roomStatus(tree, row.task))} />
                   <HobSprite hob={hobs(row.task.ownerId)} size={16} />
                   <span className="min-w-0 flex-1 truncate">{taskTitle(row.task)}</span>
-                  <StatusTag status={row.status}>{messages.status[row.status]}</StatusTag>
+                  <StatusTag status={roomTone(roomStatus(tree, row.task))}>
+                    {roomStatusLabel(roomStatus(tree, row.task))}
+                  </StatusTag>
                 </button>
               </li>
             ))}
