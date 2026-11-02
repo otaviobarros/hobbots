@@ -11,6 +11,9 @@ const defaultDataDir = () =>
 export const ServerConfig = Config.all({
   // Overrides the port the user chose in Settings (network.json in the data folder), and 4317 without one.
   port: Config.Port("HOBBOTS_PORT").pipe(Config.option),
+  // Overrides the serve listener's port, which `tailscale serve` forwards HTTPS to (ADR 021): the
+  // one kept in network.json, and 4318 without one.
+  servePort: Config.Port("HOBBOTS_SERVE_PORT").pipe(Config.option),
   dataDir: Config.String("HOBBOTS_DATA_DIR").pipe(Config.withDefault(defaultDataDir())),
   // Reported by the health endpoint. The desktop app passes its own version; a checkout has none.
   version: Config.String("HOBBOTS_VERSION").pipe(Config.withDefault("development")),

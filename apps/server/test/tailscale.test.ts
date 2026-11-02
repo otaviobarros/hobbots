@@ -1,7 +1,7 @@
 import { Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { remoteAccessStatus } from "../src/remote-access.ts";
-import { addressRanges, readStatus, readWhoIs, TAILNET_RANGES } from "../src/tailscale.ts";
+import { addressRanges, forwardsTo, readServeStatus, readStatus, readWhoIs, TAILNET_RANGES } from "../src/tailscale.ts";
 
 // Shaped like `tailscale status --json` (ipnstate.Status), trimmed to a few of its fields.
 const runningStatus = JSON.stringify({
@@ -92,6 +92,44 @@ describe("readWhoIs", () => {
   });
 });
 
+describe("readServeStatus", () => {
+  // Shaped like `tailscale serve status --json` (ipn.ServeConfig) after `tailscale serve --bg http://127.0.0.1:4318`.
+  const serving = JSON.stringify({
+    TCP: { "443": { HTTPS: true } },
+    Web: { "studio-desk.example.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:4318" } } } },
+  });
+
+  // covers DP-004
+  it("[TC-DP-136] reads where serve forwards, and whether it forwards HTTPS at its root to the serve port", () => {
+    const routes = Option.getOrThrow(readServeStatus(serving));
+    expect(routes).toEqual([
+      { host: "studio-desk.example.ts.net:443", path: "/", proxy: "http://127.0.0.1:4318", funnel: false },
+    ]);
+    expect(forwardsTo(routes, 4318)).toBe(true);
+    expect(forwardsTo(routes, 4317)).toBe(false);
+    // However the target was spelled, and only at the root of port 443.
+    const route = (proxy: string, host = "hub.example.ts.net:443", path = "/") => [
+      { host, path, proxy, funnel: false },
+    ];
+    expect(forwardsTo(route("localhost:4318"), 4318)).toBe(true);
+    expect(forwardsTo(route("http://localhost:4318/"), 4318)).toBe(true);
+    expect(forwardsTo(route("http://192.168.1.4:4318"), 4318)).toBe(false);
+    expect(forwardsTo(route("https+insecure://127.0.0.1:4318"), 4318)).toBe(false);
+    expect(forwardsTo(route("http://127.0.0.1:4318", "hub.example.ts.net:8443"), 4318)).toBe(false);
+    expect(forwardsTo(route("http://127.0.0.1:4318", undefined, "/hobbots"), 4318)).toBe(false);
+    // Funnel allowed on the host is read too.
+    const funneled = Option.getOrThrow(
+      readServeStatus(
+        JSON.stringify({ ...JSON.parse(serving), AllowFunnel: { "studio-desk.example.ts.net:443": true } }),
+      ),
+    );
+    expect(funneled[0]?.funnel).toBe(true);
+    // Nothing served, and output that is not a serve configuration.
+    expect(readServeStatus("{}")).toEqual(Option.some([]));
+    expect(readServeStatus("serve: not running")).toEqual(Option.none());
+  });
+});
+
 describe("addressRanges", () => {
   it("accepts Tailscale's CGNAT and IPv6 ranges and nothing else", () => {
     const tailnet = addressRanges(TAILNET_RANGES);
@@ -113,6 +151,7 @@ describe("remoteAccessStatus", () => {
     tailscale: running,
     listening: ["100.101.102.103"],
     failed: [],
+    https: { enabled: false, port: 4318, listening: false, forwarding: null, detail: null },
   };
 
   it("has no problem while it listens on every address Tailscale gave it", () => {

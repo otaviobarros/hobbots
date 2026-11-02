@@ -455,6 +455,9 @@ describe("Task records", () => {
       ["result", "build", "consumed"],
       // Copy's milestone report has nothing left to act on once copy ended: it resolves as late.
       ["checkpoint", "copy", "late"],
+      // So has the routine progress no turn of Aldric's carried: its Tasks ended (#397).
+      ["progress", "copy", "late"],
+      ["progress", "build", "late"],
     ]);
     expect(result.done.value).toMatchObject({
       state: "completed",

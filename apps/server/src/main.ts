@@ -32,7 +32,7 @@ import {
   LocalGitHubSignInsFake,
   LocalGitHubSignInsLive,
 } from "@hobbots/charms";
-import { DEFAULT_HUB_PORT, secretsFromEnv } from "@hobbots/domain";
+import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -76,7 +76,13 @@ import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
 import { readNetworkSettings } from "./network-settings.ts";
-import { HubHostsLive, KnownTailnetPeersOnly, RemoteAccessLive, RemoteAccessStateLive } from "./remote-access.ts";
+import {
+  HubHostsLive,
+  KnownTailnetPeersOnly,
+  NoFunnelRequests,
+  RemoteAccessLive,
+  RemoteAccessStateLive,
+} from "./remote-access.ts";
 import { QuietRoutineReads } from "./request-log.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
@@ -99,12 +105,19 @@ const ServerLive = Layer.unwrap(
     // The port and remote access as the user last chose them (ADR 021); HOBBOTS_PORT overrides the port.
     const network = readNetworkSettings(dataDir);
     const port = Option.getOrElse(config.port, () => network.port ?? DEFAULT_HUB_PORT);
+    // The serve listener's port, which `tailscale serve` forwards HTTPS to; HOBBOTS_SERVE_PORT overrides it.
+    const servePort = Option.getOrElse(
+      config.servePort,
+      () => network.servePort ?? (port === DEFAULT_SERVE_PORT ? DEFAULT_SERVE_PORT + 1 : DEFAULT_SERVE_PORT),
+    );
     const Remote = HubHostsLive.pipe(
       Layer.provideMerge(
         RemoteAccessStateLive({
           enabled: network.remoteAccess ?? false,
           paused: network.remoteAccessPaused ?? false,
           port,
+          https: network.https ?? false,
+          servePort,
         }),
       ),
     );
@@ -296,6 +309,7 @@ const ServerLive = Layer.unwrap(
             WebClientRoutes(config.webDir),
             OwnHostsOnly,
             KnownTailnetPeersOnly,
+            NoFunnelRequests,
             QuietRoutineReads,
           ),
         ),

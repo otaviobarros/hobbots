@@ -305,6 +305,8 @@ export const messages = {
       name: "GitHub",
       reads: ({ name }: { name: string }) =>
         `Reads, pushes to, opens pull requests in and comments on the repository of ${name}'s folders, as you. The hub reaches GitHub with the account you connected in Settings, so no key reaches ${name}.`,
+      readsAsBot: ({ name, bot }: { name: string; bot: string }) =>
+        `Reads, pushes to, opens pull requests in and comments on the repository of ${name}'s folders, as ${bot}. The hub keeps the app's key, so no key reaches ${name}.`,
       read: "Read",
       push: "Push",
       pullRequests: "Pull requests",
@@ -314,6 +316,57 @@ export const messages = {
       notConnected: "GitHub is not connected on this hub yet, so no hob can use it.",
       connectInSettings: "Connect GitHub in Settings",
       saveFailed: "Hobbots could not save this. Try again.",
+      /** The hob's own GitHub App (ADR 022). */
+      app: {
+        label: "Acts on GitHub as",
+        failed: "Hobbots could not read who this hob acts as on GitHub.",
+        retry: "Try again",
+        asYou: ({ name }: { name: string }) =>
+          `${name} acts as you, with the account connected in Settings. Its commits, pull requests and comments carry your name.`,
+        give: ({ name }: { name: string }) => `Give ${name} its own GitHub app`,
+        giveNote: ({ name }: { name: string }) =>
+          `GitHub opens in your browser, where you name the app and pick its repositories. ${name}'s work then shows on GitHub as its own bot, never as you.`,
+        noKeychain: "This hub has no keychain Hobbots can use, so it cannot keep a hob's own GitHub app.",
+        finishOnGitHub: ({ name }: { name: string }) =>
+          `Finish on GitHub, in the browser that just opened. This updates once ${name}'s app is made.`,
+        openAgain: "Open GitHub again",
+        restartNote:
+          "Each start works once. If GitHub said the app was not kept, or the page stopped working, start again.",
+        restart: "Start again",
+        expired: "The last start ran out before the app was made. Start again when you're ready.",
+        startFailed: "Hobbots could not start making the app. Try again.",
+        actsAs: "Acts as",
+        since: ({ since }: { since: string }) => `Since ${since}.`,
+        installedLabel: "Installed on",
+        installation: ({ account, all }: { account: string; all: boolean }) =>
+          all ? `@${account}: every repository` : `@${account}: the repositories you picked`,
+        suspended: "suspended",
+        change: "Change on GitHub",
+        reaches: ({ account }: { account: string }) => `Repositories @${account} lets it reach`,
+        noRepositories: "No repositories yet",
+        moreRepositories: ({ count }: { count: number }) => `and ${count} more`,
+        notInstalled: ({ name }: { name: string }) =>
+          `Not installed on any repository yet, so ${name} can't act on GitHub. Install it on the repositories ${name} should reach.`,
+        install: "Install on GitHub",
+        installationsFailed: "Hobbots could not ask GitHub where the app is installed.",
+        reconnectTitle: "Needs a reconnect",
+        reconnectKey: ({ name }: { name: string }) =>
+          `GitHub no longer accepts the app's key: it was revoked, or the app was deleted. ${name}'s GitHub actions fail until it has a new app. They never run as you instead.`,
+        reconnectInstallation: ({ name }: { name: string }) =>
+          `GitHub no longer lets the app into its repositories: it was uninstalled or suspended. ${name}'s GitHub actions fail until you reinstall it. They never run as you instead.`,
+        newApp: ({ name }: { name: string }) => `Give ${name} a new app`,
+        reinstall: "Reinstall on GitHub",
+        disconnect: "Disconnect",
+        confirmDisconnect: ({ name }: { name: string }) =>
+          `Disconnect ${name}'s app? The hub removes it from your repositories and deletes its key. ${name} then acts as you again.`,
+        cancel: "Cancel",
+        disconnected: ({ name }: { name: string }) =>
+          `Disconnected. ${name} acts as you again. The app itself stays on GitHub until you delete it there.`,
+        deleteOnGitHub: "Delete the app on GitHub",
+        leftOver: ({ name }: { name: string }) => `${name}'s old app was not fully removed. It no longer acts.`,
+        dismiss: "Dismiss",
+        changeFailed: "Hobbots could not change the app. Try again.",
+      },
     },
   },
   github: {
@@ -421,6 +474,26 @@ export const messages = {
       invalid: "Pick a port from 1024 to 65535.",
       unavailable: ({ port, detail }: { port: number; detail: string }) =>
         `Hobbots could not open port ${port}: ${detail}. It still uses the old one.`,
+    },
+    https: {
+      switchLabel: "Use HTTPS through Tailscale",
+      note: "Optional. Gives you an https:// address on your tailnet, set up by Tailscale. Never on the open internet.",
+      serving: "Tailscale serves Hobbots over HTTPS on your tailnet.",
+      notServing:
+        "Tailscale does not serve Hobbots over HTTPS yet. Run this on this computer, or let Hobbots run it for you:",
+      leftOver:
+        "Tailscale still forwards HTTPS to Hobbots. Remove it with this command on this computer, or let Hobbots run it for you:",
+      cannotListen: ({ detail }: { detail: string }) => `Hobbots could not open its HTTPS port: ${detail}.`,
+      run: "Run it for me…",
+      consentOn: ({ command }: { command: string }) =>
+        `Hobbots will run ${command} in the background on this computer. Tailscale then serves Hobbots to your tailnet only, never the internet.`,
+      consentOff: ({ command }: { command: string }) =>
+        `Hobbots will run ${command} on this computer. It removes everything Tailscale serves over HTTPS on this computer.`,
+      notNow: "Not now",
+      confirm: "Run it",
+      running: "Running…",
+      failed: ({ detail }: { detail: string }) => `Tailscale did not do it: ${detail}`,
+      failedPlain: "Hobbots could not run Tailscale. Run the command yourself, or try again in a moment.",
     },
     devices: {
       heading: "Allowed devices",
