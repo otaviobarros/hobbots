@@ -147,6 +147,8 @@ Reads have no effect, so a failed read is reported and the hob may simply call a
 
 ### A hob's own GitHub identity later (#221)
 
+[ADR 022](022-hob-github-app.md) decides it.
+
 - **One credential service.** The Charm asks a `GitHubCredential` service for a token for each call, keyed by the hob. In this ADR it always answers with your account. A hob's own GitHub App is a second source behind the same service, chosen per hob.
 - **Nothing else changes.** The actions, the policy, the repository resolution, the redaction and the failure handling stay the same for either credential.
 - **Push changes inside.** With a hob's own app, Push creates commits through GitHub's API so GitHub marks them Verified ([#225](https://github.com/otaviobarros/hobbots/issues/225)). It stays the same action with the same approval.
