@@ -32,7 +32,8 @@ import backpackBlockers from "./0029_backpack_blockers.ts";
 import memberApprovals from "./0030_member_approvals.ts";
 import devices from "./0031_devices.ts";
 import taskNotes from "./0032_task_notes.ts";
-import taskGrants from "./0033_task_grants.ts";
+import withdrawnQuestions from "./0033_withdrawn_questions.ts";
+import taskGrants from "./0035_task_grants.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -72,5 +73,6 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0030_member_approvals": memberApprovals,
   "0031_devices": devices,
   "0032_task_notes": taskNotes,
-  "0033_task_grants": taskGrants,
+  "0033_withdrawn_questions": withdrawnQuestions,
+  "0035_task_grants": taskGrants,
 };

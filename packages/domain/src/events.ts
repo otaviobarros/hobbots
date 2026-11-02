@@ -90,6 +90,8 @@ const QuestionAsked = Schema.TaggedStruct("QuestionAsked", { question: Question 
 const QuestionAnswered = Schema.TaggedStruct("QuestionAnswered", { question: Question });
 /** A lead passed a question up: to the next lead, or to the user when `recipientId` is null. */
 const QuestionEscalated = Schema.TaggedStruct("QuestionEscalated", { question: Question });
+/** A question's Task ended as cancelled or failed before anyone answered it, so it was withdrawn. */
+const QuestionWithdrawn = Schema.TaggedStruct("QuestionWithdrawn", { question: Question });
 /** You left a note on a Task; it goes to the Task's nearest lead (ADR 018). */
 const NoteLeft = Schema.TaggedStruct("NoteLeft", { note: TaskNote });
 /** A lead gave one Task's artifact to another Task. */
@@ -150,6 +152,7 @@ export const JournaledEvent = Schema.Union([
   QuestionAsked,
   QuestionAnswered,
   QuestionEscalated,
+  QuestionWithdrawn,
   NoteLeft,
   HandedOff,
   TaskCompleted,
@@ -192,6 +195,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   QuestionAsked: 1,
   QuestionAnswered: 1,
   QuestionEscalated: 1,
+  QuestionWithdrawn: 1,
   NoteLeft: 1,
   HandedOff: 1,
   TaskCompleted: 1,

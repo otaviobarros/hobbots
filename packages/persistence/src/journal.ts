@@ -53,6 +53,7 @@ type TaskEvent = Extract<
       | "QuestionAsked"
       | "QuestionAnswered"
       | "QuestionEscalated"
+      | "QuestionWithdrawn"
       | "NoteLeft"
       | "HandedOff";
   }

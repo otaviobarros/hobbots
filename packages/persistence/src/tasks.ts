@@ -436,15 +436,32 @@ export const TaskRepositoryLive = Layer.effect(
           const task = new Task({ ...(yield* orFail(TaskTransitions.moveTo(before, to, at))), revision });
           yield* saveTask(task);
           const quest = yield* endQuest(task, at, revision);
-          return {
-            value: task,
-            events: [
-              { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null } as const,
-              ...(yield* automatic(task, at, revision + 1)),
-            ],
-          };
+          const events: Array<JournaledEvent> = [
+            { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null },
+            ...(yield* automatic(task, at, revision + 1)),
+          ];
+          if (isTerminalTask(task.state)) events.push(...(yield* withdrawQuestions(task, revision + events.length)));
+          return { value: task, events };
         }),
       );
+
+    /**
+     * Withdraws the questions still open about `task` once it ended as cancelled or failed: nobody
+     * is left to hear their answers, so they no longer hold its lead's ledger open or wait for you.
+     * Recorded from sequence `first` on, with the lead's copies still pending and unclaimed resolved as late.
+     */
+    const withdrawQuestions = (task: Task, first: number) =>
+      Effect.gen(function* () {
+        const open = yield* read.openQuestionsOn(task.id);
+        const events: Array<JournaledEvent> = [];
+        for (const before of open) {
+          const question = new Question({ ...before, state: "withdrawn", revision: first + events.length });
+          yield* saveQuestion(question);
+          events.push({ _tag: "QuestionWithdrawn", question });
+        }
+        if (open.length === 0) return events;
+        return [...events, ...(yield* ledger.retire(yield* ledger.questionItems(task), first + events.length))];
+      });
 
     const retryTask: TaskRepository["Service"]["retryTask"] = (taskId, expected, at) =>
       change((revision) =>
@@ -659,6 +676,9 @@ export const TaskRepositoryLive = Layer.effect(
       Effect.gen(function* () {
         const [question] = yield* read.question(questionId);
         if (question === undefined) return yield* refuse("question-missing", `No question ${questionId}`);
+        if (question.state === "withdrawn") {
+          return yield* refuse("task-ended", `Question ${questionId} was withdrawn when its Task ended`);
+        }
         if (question.state !== "open") return yield* refuse("question-answered", `Question ${questionId} is answered`);
         // A question about work that ended has nobody left to hear its answer.
         const task = yield* loadTask(question.taskId);
