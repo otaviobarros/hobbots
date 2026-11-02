@@ -1,7 +1,7 @@
 import { type Device, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { approvedDevices, devicesQuery, useRevokeDevice } from "../../api/devices.ts";
 import { useNow } from "../inbox/use-now.ts";
 import { messages } from "../messages.ts";
@@ -91,22 +91,26 @@ function DeviceRow({ device, now }: { device: Device; now: Date }) {
 export function DeviceList() {
   const devices = useQuery(devicesQuery);
   const now = useNow();
+  const headingId = useId();
+  // A group rather than a region of its own, so the Devices panel stays the one region named for devices.
   return (
-    <section aria-label={copy.heading} className="flex flex-col gap-1 pt-2">
-      <span className="lbl text-xs text-label">{copy.heading}</span>
+    <div className="flex flex-col gap-1 pt-2">
+      <span id={headingId} className="lbl text-xs text-label">
+        {copy.heading}
+      </span>
       {devices.isError && (
         <p role="alert" className="m-0 text-sm text-rose">
           {copy.failed}
         </p>
       )}
       {devices.data && (
-        <ul className="m-0 flex list-none flex-col p-0">
+        <ul aria-labelledby={headingId} className="m-0 flex list-none flex-col p-0">
           {approvedDevices(devices.data).map((device) => (
             <DeviceRow key={device.id} device={device} now={now} />
           ))}
         </ul>
       )}
       <span className="pt-1.5 text-[13px] text-label">{copy.footer}</span>
-    </section>
+    </div>
   );
 }

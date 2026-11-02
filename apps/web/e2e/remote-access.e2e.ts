@@ -141,7 +141,7 @@ test("[TC-DP-126] Settings lists the allowed devices, and Revoke asks first and 
   await allowAnotherDevice(current, "Safari on iPhone");
 
   await page.goto(`${current.url}/#/settings`);
-  const allowed = page.getByRole("region", { name: "Allowed devices" });
+  const allowed = page.getByRole("list", { name: "Allowed devices" });
   await expect(allowed.getByRole("listitem")).toHaveCount(3);
   const window = allowed.getByRole("listitem").filter({ hasText: "This computer's Hobbots window" });
   await expect(window).toContainText("The hub · hobs work here");
