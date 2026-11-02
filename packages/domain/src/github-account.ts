@@ -27,6 +27,10 @@ export const GITHUB_APP_PERMISSIONS: ReadonlyArray<{ readonly name: string; read
   { name: "Contents", access: "write" },
   { name: "Issues", access: "write" },
   { name: "Pull requests", access: "write" },
+  { name: "Checks", access: "read" },
+  { name: "Actions", access: "read" },
+  { name: "Commit statuses", access: "read" },
+  { name: "Workflows", access: "write" },
 ];
 
 /** A repository the connected account reaches through the app, as GitHub lists it. */
