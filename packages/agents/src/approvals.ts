@@ -355,12 +355,22 @@ export class ApprovalService extends Context.Service<
                     return {
                       approvalId: saved.id,
                       // A wait given up (the call was aborted) or past the request's expiry expires it.
-                      decision: Deferred.await(decision).pipe(
-                        Effect.onInterrupt(() => Semaphore.withPermit(lock, expire(saved.id))),
-                        Effect.timeoutOrElse({
-                          duration: APPROVAL_TTL,
-                          orElse: () => Effect.succeed<ApprovalOutcome>({ _tag: "Expired" }),
-                        }),
+                      // The wait ends at the stored expiry, not a day after it began: the request is
+                      // stored and shown before its turn starts waiting, and that gap must not
+                      // stretch its life.
+                      decision: DateTime.now.pipe(
+                        Effect.flatMap((waitFrom) =>
+                          Deferred.await(decision).pipe(
+                            Effect.onInterrupt(() => Semaphore.withPermit(lock, expire(saved.id))),
+                            Effect.timeoutOrElse({
+                              duration: Duration.max(
+                                DateTime.distance(waitFrom, DateTime.addDuration(at, APPROVAL_TTL)),
+                                Duration.zero,
+                              ),
+                              orElse: () => Effect.succeed<ApprovalOutcome>({ _tag: "Expired" }),
+                            }),
+                          ),
+                        ),
                       ),
                     } satisfies PendingApproval;
                   }).pipe(
