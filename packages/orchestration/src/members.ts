@@ -1,4 +1,5 @@
 import {
+  type ActivityRecorder,
   type ApprovalService,
   accessNow,
   type CarriedEnd,
@@ -47,6 +48,8 @@ export interface MemberDeps {
   readonly admission: HobAdmission["Service"];
   readonly adapters: Effect.Success<typeof runtimeAdapters>;
   readonly redactor: Redactor;
+  /** Records what each turn runs and changes for the Workbench (ADR 023). */
+  readonly recorder: Option.Option<ActivityRecorder["Service"]>;
   readonly approvals: Option.Option<ApprovalService["Service"]>;
   readonly continuations: MemberContinuations["Service"];
   readonly separator: PathSeparator;
@@ -345,30 +348,36 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 // A member's This Task binds to the top of its lead's tree, so it ends with the Quest (ADR 018).
                 Effect.succeed(task.rootId),
               );
-        const ending = yield* runSessionTurn(deps.adapters, deps.redactor, {
-          agent,
-          config,
-          prompt:
-            previous === null
-              ? memberPrompt(task, tree, lead)
-              : `${work.text("prompt")}\n\n${memberReminder(task, lead)}`,
-          sessionId: previous,
-          access: run.access,
-          approvals: handle?.approvals ?? null,
-          recordToolStart: deps.recordToolStart(task),
-          hubTools: deps.tools.forTurn({ agentId: agent.id, taskId: task.id, carried: work.holding }),
-          started: (sessionId) =>
-            work.accepted(sessionId).pipe(
-              Effect.andThen(nowIso),
-              Effect.flatMap((at) =>
-                deps.attempt(
-                  tasks.updateAttempt(attemptId, { state: "running", sessionId, at }),
-                  "record a member's session",
+        const ending = yield* runSessionTurn(
+          deps.adapters,
+          deps.redactor,
+          {
+            agent,
+            config,
+            attemptId,
+            prompt:
+              previous === null
+                ? memberPrompt(task, tree, lead)
+                : `${work.text("prompt")}\n\n${memberReminder(task, lead)}`,
+            sessionId: previous,
+            access: run.access,
+            approvals: handle?.approvals ?? null,
+            recordToolStart: deps.recordToolStart(task),
+            hubTools: deps.tools.forTurn({ agentId: agent.id, taskId: task.id, carried: work.holding }),
+            started: (sessionId) =>
+              work.accepted(sessionId).pipe(
+                Effect.andThen(nowIso),
+                Effect.flatMap((at) =>
+                  deps.attempt(
+                    tasks.updateAttempt(attemptId, { state: "running", sessionId, at }),
+                    "record a member's session",
+                  ),
                 ),
+                Effect.asVoid,
               ),
-              Effect.asVoid,
-            ),
-        }).pipe(Effect.ensuring(handle === null ? Effect.void : handle.close));
+          },
+          deps.recorder,
+        ).pipe(Effect.ensuring(handle === null ? Effect.void : handle.close));
         return yield* settle(task.id, attemptId, ending, work, previous === null);
       }).pipe(Effect.onInterrupt(() => stopped(taskId, attemptId, run))),
   });

@@ -45,6 +45,7 @@ import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
 import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
 import { DeviceSession } from "./user-session.ts";
+import { WorkbenchGroup } from "./workbench.ts";
 
 // Short enough for a name tag and a tile; trimmed so "  " is not a name.
 const Label = Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(40));
@@ -339,4 +340,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(BlockersGroup)
   .add(GitHubGroup)
   .add(HobGitHubAppGroup)
-  .add(RemoteAccessGroup) {}
+  .add(RemoteAccessGroup)
+  .add(WorkbenchGroup) {}

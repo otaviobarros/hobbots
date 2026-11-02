@@ -64,6 +64,8 @@ const transientFrame = (event: HubTransientEvent) => {
       return STREAM_FRAME.delta;
     case "RemoteAccessChanged":
       return STREAM_FRAME.remoteAccess;
+    case "CommandOutput":
+      return STREAM_FRAME.commandOutput;
     default:
       return STREAM_FRAME.turn;
   }

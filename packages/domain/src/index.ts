@@ -1,3 +1,4 @@
+export * from "./activity.ts";
 export * from "./agent.ts";
 export * from "./approval.ts";
 export * from "./backpack.ts";

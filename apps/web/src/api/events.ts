@@ -99,12 +99,26 @@ const applyAgent = (queryClient: QueryClient, hob: Agent) => {
   }
 };
 
+type WorkbenchEvent = Extract<
+  HobbotsEvent,
+  { readonly _tag: "CommandRecorded" | "FileChangesRecorded" | "FolderScanned" | "CommandOutput" }
+>;
+const WORKBENCH_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set<WorkbenchEvent["_tag"]>([
+  "CommandRecorded",
+  "FileChangesRecorded",
+  "FolderScanned",
+  "CommandOutput",
+]);
+const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent => WORKBENCH_EVENTS.has(event._tag);
+
 /**
  * Applies an event to the Query cache and records what it changed in the sync generation's overlay.
  * Lists are only patched once loaded; creating a partial list here would hide the rest of it.
  */
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   applyQuestWork(queryClient, event);
+  // An Attempt's commands, file changes and scans (ADR 023): the Workbench reads them, not this client yet.
+  if (isWorkbenchEvent(event)) return;
   switch (event._tag) {
     case "AgentUpserted":
       applyAgent(queryClient, event.agent);

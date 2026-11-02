@@ -1,4 +1,4 @@
-import type { AgentId, CarriedItem, MessageId, RuntimeKind, TaskId, ThreadId } from "@hobbots/domain";
+import type { AgentId, AttemptId, CarriedItem, MessageId, RuntimeKind, TaskId, ThreadId } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 import type { HubTools } from "./runtime.ts";
 
@@ -36,6 +36,8 @@ export interface ChatTaskTurn {
    * works on none. A call that starts a Task changes it partway through the turn.
    */
   readonly workingOn: Effect.Effect<TaskId | null>;
+  /** The Attempt the turn runs on its Task: from the start when briefed on one, once a call starts one, else null. */
+  readonly attempt: Effect.Effect<AttemptId | null>;
   /** Ends the Attempt the turn started on its Task, if it started one. */
   readonly end: (outcome: ChatTurnOutcome, sessionId: string | null) => Effect.Effect<void>;
 }
