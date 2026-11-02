@@ -184,6 +184,24 @@ export class TaskRepository extends Context.Service<
      * naming the first eight open entries and counting the rest (IN-006).
      */
     readonly completeTask: (taskId: TaskId, revision: number, completion: TaskCompletion) => Changed<Task, TaskChange>;
+    /**
+     * Queues a failed Task again for its owner, as a new Attempt of the same Task (EX-001). Only a
+     * Task under another one is retried, under ancestors still open and not being cancelled; its
+     * Quest reopens with it.
+     */
+    readonly retryTask: (taskId: TaskId, revision: number, at: string) => Changed<Task, TaskChange>;
+    /**
+     * Gives a party member's Task to another hob, queued for its first Attempt there, keeping its
+     * id, Attempts, checkpoints and results (ADR 018). Refused while its Attempt is live or work is
+     * open under it, when it holds a Quest of its own, and for a hob that already owns a Task on its
+     * way up, the lead included.
+     */
+    readonly reassignTask: (
+      taskId: TaskId,
+      revision: number,
+      ownerId: AgentId,
+      at: string,
+    ) => Changed<Task, TaskChange>;
     readonly recordCheckpoint: (input: NewCheckpoint) => Changed<Checkpoint>;
     /** Asks the nearest lead above the Task, or the user when there is none. */
     readonly askQuestion: (input: NewQuestion) => Changed<Question>;
@@ -226,6 +244,8 @@ export class TaskRepository extends Context.Service<
      * will end them on their own.
      */
     readonly listStrandedSteps: Effect.Effect<ReadonlyArray<Task>>;
+    /** Tasks whose cancel was asked for and is not confirmed yet, oldest first. */
+    readonly listCancellingTasks: Effect.Effect<ReadonlyArray<Task>>;
     /** Every Attempt still starting or running, oldest first: after a restart, none of them runs. */
     readonly listLiveAttempts: Effect.Effect<ReadonlyArray<Attempt>>;
   }

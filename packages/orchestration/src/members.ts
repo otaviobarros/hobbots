@@ -60,7 +60,8 @@ export interface MemberDeps {
   readonly recordToolStart: (task: Task) => (event: ToolStartedEvent) => Effect.Effect<boolean>;
   /** Records why a Task cannot go on as a blocker on it. */
   readonly explain: (taskId: TaskId, reason: string, at: string) => Effect.Effect<unknown>;
-  readonly confirmCancelsAbove: (task: Task) => Effect.Effect<void>;
+  /** Confirms every cancel asked for that nothing runs in any more. */
+  readonly settleCancels: Effect.Effect<void>;
   readonly notify: Effect.Effect<void>;
 }
 
@@ -356,13 +357,15 @@ export const makeMemberRunner = (deps: MemberDeps) => {
     deps.admission.withHob(
       agentId,
       Effect.gen(function* () {
+        const found = yield* read(taskId);
+        // Work left for a hob that no longer owns the Task, as after a reassignment, is not its to do.
+        if (Option.isNone(found) || found.value.task.ownerId !== agentId) return;
         const agent = yield* repo.findAgent(agentId);
         // A paused hob's work waits until it wakes; a retired hob's Task fails, so its lead hears.
         if (Option.isNone(agent) || agent.value.status === "retired") return yield* retire(taskId, yield* nowIso);
         if (agent.value.status !== "active") return;
         const config = yield* repo.findAgentConfig(agent.value.id, agent.value.configVersion);
-        const found = yield* read(taskId);
-        if (Option.isNone(config) || Option.isNone(found)) return;
+        if (Option.isNone(config)) return;
         const { task, tree } = found.value;
         const narrowed = (own: ToolAccess | null) => delegatedAccess(own, task, tree, deps.separator);
         // Registered and forked under one permit, so a narrower policy either sees neither or can
@@ -385,7 +388,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 Effect.catchCause((cause) => Effect.logWarning("Could not run a member's turn", cause)),
                 Effect.ensuring(
                   Effect.sync(() => running.delete(taskId)).pipe(
-                    Effect.andThen(deps.confirmCancelsAbove(task)),
+                    Effect.andThen(deps.settleCancels),
                     Effect.andThen(deps.notify),
                   ),
                 ),
