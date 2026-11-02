@@ -277,6 +277,7 @@ it("[TC-DP-140] a read answered before a pause never undoes the pause the hub an
     port: 4317,
     tailscale: { state: "running", dnsName: "studio-desk.example.ts.net", addresses: ["100.101.102.103"] },
     listening: ["100.101.102.103"],
+    https: { enabled: false, port: 4318, listening: false, forwarding: null, detail: null },
     problem: null,
     detail: null,
   };
