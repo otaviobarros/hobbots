@@ -9,12 +9,13 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { lateness } from "../src/index.ts";
+import { lateness, lateWorkOf } from "../src/index.ts";
 
 const at = "2026-11-01T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
+const ROOK = AgentId.make("rook");
 const threadId = ThreadId.make("t1");
 
 const task = (id: string, ownerId: AgentId, parentId: string | null, state: TaskState = "active", revision = 1) =>
@@ -96,5 +97,35 @@ describe("lateness", () => {
 
   it("never finds an item outside any Task late", () => {
     expect(lateness(item(QUILL, null, "message"), [])).toBeNull();
+  });
+});
+
+describe("the late work of a Task that is over", () => {
+  const about = (items: ReadonlyArray<BackpackItem>) => items.map((each) => [each.recipientId, each.taskId]);
+  // Quill's note waits under his Task, Rook's under his; Aldric waits for Quill's result.
+  const work = [item(QUILL, "copy", "message"), item(ROOK, "ads", "message"), item(ALDRIC, "copy")];
+
+  // covers OR-006, EX-001
+  it("[TC-OR-185] takes only the cancelled Task's own late work, and leaves a failed sibling's for its retry", () => {
+    const tree = [
+      task("campaign", ALDRIC, null),
+      task("copy", QUILL, "campaign", "cancelled"),
+      task("ads", ROOK, "campaign", "failed"),
+    ];
+    const copy = tree[1];
+    if (copy === undefined) throw new Error("no Task");
+    // Rook's work is late against his failed Task, but a retry takes it up again.
+    expect(lateness(item(ROOK, "ads", "message"), tree)).not.toBeNull();
+    expect(about(lateWorkOf(copy, tree, work))).toEqual([[QUILL, "copy"]]);
+
+    // Once the Quest itself is cancelled nothing can retry Rook's Task, so his work is late too.
+    const cancelled = [task("campaign", ALDRIC, null, "cancelling"), ...tree.slice(1)];
+    const top = cancelled[0];
+    if (top === undefined) throw new Error("no Task");
+    expect(about(lateWorkOf(top, cancelled, work))).toEqual([
+      [QUILL, "copy"],
+      [ROOK, "ads"],
+      [ALDRIC, "copy"],
+    ]);
   });
 });

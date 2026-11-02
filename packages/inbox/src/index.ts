@@ -18,6 +18,7 @@ export {
   type DispatchLimits,
   heldUnder,
   lateness,
+  lateWorkOf,
   type Turn,
 } from "./dispatcher.ts";
 export { type BackpackContext, backpackItemsFor, type ToolCallSource, tasksTouched } from "./items.ts";
