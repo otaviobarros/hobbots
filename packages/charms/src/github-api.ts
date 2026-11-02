@@ -128,9 +128,10 @@ export const GitHubApiLive = Layer.effect(
         let response = yield* send(token, path, params, what);
         // A refused token is refreshed once and the read tried again; refused again, GitHub is disconnected.
         if (response.status === 401) {
-          response = yield* send(yield* credential.refused(agentId, token), path, params, what);
+          const fresh = yield* credential.refused(agentId, token);
+          response = yield* send(fresh, path, params, what);
           if (response.status === 401) {
-            yield* credential.revoked;
+            yield* credential.revoked(fresh);
             return yield* new GitHubError({
               reason: "signed-out",
               message:

@@ -36,6 +36,8 @@ interface Script {
   refuseListing?: Array<string>;
   /** Seconds GitHub takes to answer a refresh. */
   refreshDelay?: number;
+  /** Seconds GitHub takes to hand out a device code. */
+  codeDelay?: number;
 }
 
 const tokens = (access: string, expiresAt: number | null = 8 * HOUR, refresh: string | null = `ghr_${access}`) => ({
@@ -50,7 +52,8 @@ const fakeSignIn = (script: Script) =>
     GitHubSignIn,
     GitHubSignIn.of({
       requestDeviceCode: (clientId) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          if (script.codeDelay !== undefined) yield* Effect.sleep(`${script.codeDelay} seconds`);
           script.asked.push(`code for ${clientId}`);
           return {
             deviceCode: Redacted.make("device-code"),
@@ -436,7 +439,7 @@ describe("The connected account's token", () => {
     expect(script.asked.filter((asked) => asked.startsWith("installations"))).toHaveLength(2);
   });
 
-  it("is forgotten on disconnect", async () => {
+  it("[TC-GEN-025] is forgotten on disconnect", async () => {
     const script: Script = { polls: [], refreshes: [], asked: [] };
     const result = await connected(script, tokens("ghu_first"), (credential, keychain, connection) =>
       Effect.gen(function* () {
@@ -449,7 +452,7 @@ describe("The connected account's token", () => {
     expect(Option.isNone(result.value.item)).toBe(true);
     expect(result.row).toBeNull();
   });
-  it("refreshes once more before a refused listing of installations disconnects", async () => {
+  it("[TC-GEN-026] refreshes once more before a refused listing of installations disconnects", async () => {
     const script: Script = {
       polls: [],
       refreshes: [tokens("ghu_second"), tokens("ghu_third")],
@@ -477,7 +480,7 @@ describe("The connected account's token", () => {
     ]);
   });
 
-  it("keeps a refreshed pair when the call is stopped, and never writes one back after a disconnect", async () => {
+  it("[TC-GEN-027] keeps a refreshed pair when the call is stopped, and never writes one back after a disconnect", async () => {
     const script: Script = {
       polls: [],
       refreshes: [tokens("ghu_second", 2 * HOUR), tokens("ghu_third")],
@@ -517,7 +520,7 @@ describe("The connected account's token", () => {
 });
 
 describe("Edge cases of the hub's sign-in", () => {
-  it("keeps the account when the keychain gives nothing back, since a locked keyring looks the same as a missing item", async () => {
+  it("[TC-GEN-028] keeps the account when the keychain gives nothing back, since a locked keyring looks the same as a missing item", async () => {
     const script: Script = { polls: [], refreshes: [], asked: [] };
     const result = await run(
       Effect.gen(function* () {
@@ -535,7 +538,7 @@ describe("Edge cases of the hub's sign-in", () => {
     expect(result.row).not.toBeNull();
   });
 
-  it("starts one device flow when Connect is pressed twice at once", async () => {
+  it("[TC-GEN-029] starts one device flow when Connect is pressed twice at once", async () => {
     const script: Script = { polls: [{ _tag: "Pending" }], refreshes: [], asked: [] };
     await run(
       Effect.gen(function* () {
@@ -547,5 +550,119 @@ describe("Edge cases of the hub's sign-in", () => {
       }),
     );
     expect(script.asked.filter((asked) => asked.startsWith("code for"))).toHaveLength(1);
+  });
+  it("[TC-GEN-030] does not use a refreshed pair the keychain would not save, and uses it once it does", async () => {
+    const script: Script = { polls: [], refreshes: [tokens("ghu_second", 20 * HOUR)], asked: [] };
+    const items = new Map<string, Redacted.Redacted<string>>();
+    let refuseWrites = false;
+    const flaky = Layer.succeed(
+      Keychain,
+      Keychain.of({
+        read: Effect.sync(() => Option.fromNullishOr(items.get("item"))),
+        write: (secret) =>
+          refuseWrites
+            ? Effect.fail(new KeychainError({ reason: "failed", message: "The keychain is locked." }))
+            : Effect.sync(() => void items.set("item", secret)),
+        remove: Effect.sync(() => void items.delete("item")),
+      }),
+    );
+    const holds = () => Buffer.from(Redacted.value(items.get("item") ?? Redacted.make("")), "base64url").toString();
+    const result = await run(
+      Effect.gen(function* () {
+        script.polls.push({ _tag: "Granted", tokens: tokens("ghu_first", 2 * HOUR) });
+        const { layer } = yield* setup(script, { keychain: flaky });
+        return yield* Effect.gen(function* () {
+          yield* (yield* GitHubConnection).connect;
+          yield* wait(5);
+          const credential = yield* GitHubCredential;
+          yield* TestClock.setTime(2 * HOUR - 60_000);
+          refuseWrites = true;
+          const refused = yield* Effect.result(credential.tokenFor(HOB));
+          const again = yield* Effect.result(credential.tokenFor(HOB));
+          const whileLocked = holds();
+          refuseWrites = false;
+          const unlocked = Redacted.value(yield* credential.tokenFor(HOB));
+          return { refused, again, whileLocked, unlocked, after: holds() };
+        }).pipe(Effect.provide(layer), Effect.scoped);
+      }),
+    );
+    expect(result.refused).toMatchObject({ _tag: "Failure", failure: { reason: "failed" } });
+    expect(result.again).toMatchObject({ _tag: "Failure", failure: { reason: "failed" } });
+    expect(result.whileLocked).toContain("ghr_ghu_first");
+    expect(result.unlocked).toBe("ghu_second");
+    expect(result.after).toContain("ghr_ghu_second");
+    // GitHub was asked once: the pair it gave was kept, not asked for again.
+    expect(script.asked.filter((asked) => asked.startsWith("refresh"))).toEqual(["refresh ghr_ghu_first"]);
+  });
+
+  it("[TC-GEN-031] lets no refusal of an old sign-in disconnect the one connected after it", async () => {
+    const script: Script = {
+      polls: [{ _tag: "Granted", tokens: tokens("ghu_first", 2 * HOUR) }],
+      refreshes: [new GitHubSignInError({ reason: "refused", message: "bad_refresh_token" })],
+      asked: [],
+      refreshDelay: 8,
+    };
+    const result = await run(
+      Effect.gen(function* () {
+        const { row, layer } = yield* setup(script);
+        return yield* Effect.gen(function* () {
+          const connection = yield* GitHubConnection;
+          const credential = yield* GitHubCredential;
+          yield* connection.connect;
+          yield* wait(5);
+          const old = yield* credential.tokenFor(HOB);
+          // A refresh of the old sign-in is under way when it is disconnected and connected again.
+          yield* TestClock.setTime(2 * HOUR - 60_000);
+          const late = yield* Effect.forkChild(Effect.result(credential.tokenFor(HOB)));
+          yield* wait(1);
+          yield* connection.disconnect;
+          script.polls.splice(0, script.polls.length, { _tag: "Granted", tokens: tokens("ghu_new", 20 * HOUR) });
+          yield* connection.connect;
+          yield* wait(10);
+          const refused = yield* Fiber.join(late);
+          // A 401 for the old token, arriving late, says nothing about the new sign-in.
+          yield* credential.revoked(old);
+          return {
+            refused,
+            state: yield* connection.state,
+            row: yield* Ref.get(row),
+            token: Redacted.value(yield* credential.tokenFor(HOB)),
+          };
+        }).pipe(Effect.provide(layer), Effect.scoped);
+      }),
+    );
+    expect(result.refused).toMatchObject({ _tag: "Failure", failure: { reason: "signed-out" } });
+    expect(result.state).toMatchObject({ _tag: "Connected" });
+    expect(result.row).not.toBeNull();
+    expect(result.token).toBe("ghu_new");
+  });
+
+  it("[TC-GEN-032] stops a Connect still waiting for its code when Disconnect is pressed", async () => {
+    const script: Script = {
+      polls: [{ _tag: "Granted", tokens: tokens("ghu_first") }],
+      refreshes: [],
+      asked: [],
+      codeDelay: 2,
+    };
+    const result = await run(
+      Effect.gen(function* () {
+        const { row, layer } = yield* setup(script);
+        return yield* Effect.gen(function* () {
+          const connection = yield* GitHubConnection;
+          const connecting = yield* Effect.forkChild(connection.connect);
+          yield* wait(1);
+          const disconnecting = yield* Effect.forkChild(connection.disconnect);
+          yield* wait(3);
+          yield* Fiber.join(connecting);
+          const disconnected = yield* Fiber.join(disconnecting);
+          yield* wait(10);
+          return { disconnected, state: yield* connection.state, row: yield* Ref.get(row) };
+        }).pipe(Effect.provide(layer), Effect.scoped);
+      }),
+    );
+    expect(result.disconnected).toMatchObject({ _tag: "Disconnected" });
+    expect(result.state).toMatchObject({ _tag: "Disconnected" });
+    expect(result.row).toBeNull();
+    expect(script.asked.filter((asked) => asked.startsWith("poll"))).toEqual([]);
   });
 });

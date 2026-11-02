@@ -94,8 +94,10 @@ const allPages = <A, E>(page: (n: number) => Effect.Effect<ReadonlyArray<A>, E>)
     for (let n = 1; n <= MAX_PAGES; n++) {
       const next = yield* page(n);
       items.push(...next);
-      if (next.length < PAGE) break;
+      if (next.length < PAGE) return items;
     }
+    // Past the cap the rest is left out, so a repository there is refused, never wrongly reached.
+    yield* Effect.logWarning(`GitHub listed more than ${MAX_PAGES * PAGE} items; the rest were not read.`);
     return items;
   });
 

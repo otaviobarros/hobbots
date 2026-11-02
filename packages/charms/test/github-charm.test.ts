@@ -108,7 +108,7 @@ const fakeCredential = (connected: boolean) =>
       connected: Effect.succeed(connected),
       tokenFor: () => Effect.succeed(Redacted.make("token")),
       refused: () => Effect.succeed(Redacted.make("token")),
-      revoked: Effect.void,
+      revoked: () => Effect.void,
       reaches: (_agentId, repository) =>
         repository.owner === "otaviobarros"
           ? Effect.void
@@ -236,7 +236,7 @@ describe("GitHub Charm", () => {
     expect(asked).toEqual([]);
   });
 
-  it("asks the credential whether it reaches the repository before reading it", async () => {
+  it("[TC-GEN-034] asks the credential whether it reaches the repository before reading it", async () => {
     const asked: Array<string> = [];
     const elsewhere = await callWith(
       { asked, remote: { owner: "someone", name: "public" } },
@@ -296,7 +296,7 @@ describe("GitHub API", () => {
                   Effect.sync(() => credential.push(`token for ${agentId}`)).pipe(Effect.as(Redacted.make(token))),
                 refused: () =>
                   Effect.sync(() => credential.push("refused")).pipe(Effect.as(Redacted.make(`${token}2`))),
-                revoked: Effect.sync(() => credential.push("revoked")),
+                revoked: () => Effect.sync(() => void credential.push("revoked")),
                 reaches: () => Effect.void,
               }),
             ),

@@ -52,7 +52,7 @@ function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) 
       {notice && (
         <div
           role="status"
-          className={`cut flex items-center gap-3 border-2 bg-[#2a2140] px-3 py-2.5 text-sm ${
+          className={`cut flex items-center gap-3 border-2 bg-notice px-3 py-2.5 text-sm ${
             notice.tone === "problem" ? "border-rose" : "border-lantern"
           }`}
         >
@@ -104,7 +104,7 @@ function KeepRunningRow({ keepRunning }: { keepRunning: NonNullable<typeof keepR
         />
       </div>
       {state.data !== undefined && !on && (
-        <p role="status" className="cut m-0 border-2 border-lantern bg-[#2a2140] px-3 py-2.5 text-sm leading-[1.45]">
+        <p role="status" className="cut m-0 border-2 border-lantern bg-notice px-3 py-2.5 text-sm leading-[1.45]">
           Closing the window will quit Hobbots. Hobs stop what they are doing, and their work is picked up again as
           interrupted next time. If hobs are busy, Hobbots asks before quitting.
         </p>

@@ -76,7 +76,7 @@ describe("The keychain on the hub", () => {
     expect(quoted).toMatchObject({ _tag: "Failure" });
   });
 
-  it("reads the gh and Git sign-ins on the hub, Git with the request on its input", async () => {
+  it("[TC-GEN-033] reads the gh and Git sign-ins on the hub, Git with the request on its input", async () => {
     writeFileSync(log, "");
     const tokens = await Effect.gen(function* () {
       const local = yield* LocalGitHubSignIns;

@@ -184,7 +184,7 @@ function Connecting({
   onCancel: () => void;
 }) {
   return (
-    <div className="cut flex flex-col gap-2 border-2 border-lantern bg-[#2a2140] px-3 py-2.5" role="status">
+    <div className="cut flex flex-col gap-2 border-2 border-lantern bg-notice px-3 py-2.5" role="status">
       <span className="text-sm">{copy.enterCode}</span>
       <span className="select-all font-pixel text-[28px] font-bold tracking-widest text-moonlight">
         {status.userCode}

@@ -93,8 +93,11 @@ export class GitHubCredential extends Context.Service<
       agentId: AgentId | null,
       token: Redacted.Redacted<string>,
     ) => Effect.Effect<Redacted.Redacted<string>, GitHubError>;
-    /** GitHub refused a refreshed token too: the hub disconnects. */
-    readonly revoked: Effect.Effect<void>;
+    /**
+     * GitHub refused `token` again after a refresh: the hub disconnects, unless the sign-in that
+     * token came from was already replaced, by a disconnect or a new connection.
+     */
+    readonly revoked: (token: Redacted.Redacted<string>) => Effect.Effect<void>;
     /**
      * Fails unless the hob's sign-in may act on `repository`. An app token also reads every public
      * repository, so with the app the repository must be one it is installed on (ADR 020), as GitHub
@@ -197,17 +200,32 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
       const problem = yield* Ref.make<GitHubProblem | null>(null);
       // One refresh at a time: GitHub retires a refresh token as soon as it is used.
       const refreshing = yield* Semaphore.make(1);
-      // Saving a sign-in and forgetting one never interleave, and a refresh that started before a
-      // forget does not save its pair after it: each forget starts a new generation.
+      // Saving a sign-in and forgetting one never interleave. Each connection and each forget starts
+      // a new generation, and work that began under an older one neither saves nor forgets anything.
       const committing = yield* Semaphore.make(1);
       const generation = yield* Ref.make(0);
-      // One device flow at a time, so a second press cannot start a code nobody can cancel.
+      // The tokens handed out under the current generation, so a late refusal of one from an older
+      // sign-in cannot disconnect the new one.
+      const issued = yield* Ref.make(new Set<string>());
+      // A refreshed pair the keychain did not take: kept so it is not lost, but not used until saved.
+      const unsaved = yield* Ref.make(false);
+      // Connect, Cancel, Disconnect and choosing a sign-in run one at a time, so Disconnect cannot
+      // slip in while Connect is still asking GitHub for a code.
       const connecting = yield* Semaphore.make(1);
 
-      /** Forgets the account and deletes its keychain item, keeping why for Settings. */
-      const forget = (why: GitHubProblem | null) =>
+      const nextGeneration = Effect.gen(function* () {
+        yield* Ref.update(generation, (n) => n + 1);
+        yield* Ref.set(issued, new Set());
+        yield* Ref.set(unsaved, false);
+      });
+
+      const issue = (token: Redacted.Redacted<string>) =>
+        Ref.update(issued, (tokens) => new Set(tokens).add(Redacted.value(token))).pipe(Effect.as(token));
+
+      /** Forgets the account and deletes its keychain item, keeping why for Settings. Holds `committing`. */
+      const forgetHeld = (why: GitHubProblem | null) =>
         Effect.gen(function* () {
-          yield* Ref.update(generation, (n) => n + 1);
+          yield* nextGeneration;
           yield* Ref.set(cache, Option.none());
           yield* accounts.clear;
           yield* Ref.set(problem, why);
@@ -216,9 +234,31 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
               Effect.logWarning("The GitHub sign-in could not be deleted from the keychain", error),
             ),
           );
+        });
+      const forget = (why: GitHubProblem | null) =>
+        forgetHeld(why).pipe(committing.withPermits(1), Effect.uninterruptible);
+      /** Forgets only while the sign-in of generation `of` is still the current one. */
+      const forgetIf = (of: number, why: GitHubProblem) =>
+        Effect.gen(function* () {
+          if ((yield* Ref.get(generation)) === of) yield* forgetHeld(why);
         }).pipe(committing.withPermits(1), Effect.uninterruptible);
 
+      const saveFailed = (error: KeychainError) =>
+        new GitHubError({
+          reason: "failed",
+          message: `GitHub renewed the hub's sign-in, but the keychain did not save it: ${error.message} Unlock the keychain, then try again.`,
+        });
+
+      /** Saves the cached pair the keychain refused before, so it can be used again. Holds `committing`. */
+      const saveCached = Effect.gen(function* () {
+        const cached = yield* Ref.get(cache);
+        if (!(yield* Ref.get(unsaved)) || Option.isNone(cached)) return;
+        yield* keychain.write(encodeTokens(cached.value)).pipe(Effect.mapError(saveFailed));
+        yield* Ref.set(unsaved, false);
+      });
+
       const stored = Effect.gen(function* () {
+        if (yield* Ref.get(unsaved)) yield* saveCached.pipe(committing.withPermits(1), Effect.uninterruptible);
         const cached = yield* Ref.get(cache);
         if (Option.isSome(cached)) return cached.value;
         const secret = yield* keychain.read.pipe(Effect.mapError(keychainFailed));
@@ -242,8 +282,11 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         return tokens;
       });
 
-      /** Refreshes `from`, saving the new pair before it is used. Disconnects when GitHub will not. */
-      const refresh = (from: UserTokens) =>
+      /**
+       * Refreshes `from`, read under generation `started`, saving the new pair before it is used.
+       * Disconnects when GitHub will not, unless that sign-in was replaced meanwhile.
+       */
+      const refresh = (from: UserTokens, started: number) =>
         Effect.gen(function* () {
           const now = yield* Clock.currentTimeMillis;
           if (
@@ -251,13 +294,12 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
             from.refreshToken === null ||
             (from.refreshExpiresAt !== null && from.refreshExpiresAt <= now)
           ) {
-            yield* forget({
+            yield* forgetIf(started, {
               reason: "expired",
               message: "The hub's GitHub sign-in expired. Connect GitHub again.",
             });
             return yield* disconnected;
           }
-          const started = yield* Ref.get(generation);
           const clientId = config.clientId;
           const refreshToken = from.refreshToken;
           // Once GitHub answers, the old pair is dead: a stopped turn must not lose the new one.
@@ -268,7 +310,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
                 .pipe(
                   Effect.catchTag("GitHubSignInError", (error: GitHubSignInError) =>
                     error.reason === "refused"
-                      ? forget({ reason: "refused", message: error.message }).pipe(
+                      ? forgetIf(started, { reason: "refused", message: error.message }).pipe(
                           Effect.andThen(Effect.fail(disconnected)),
                         )
                       : Effect.fail(new GitHubError({ reason: "failed", message: error.message })),
@@ -278,14 +320,11 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
                 Effect.gen(function* () {
                   // Disconnected meanwhile: the pair is dropped, never written back.
                   if ((yield* Ref.get(generation)) !== started) return false;
+                  // The old pair is dead now, so the new one is kept in memory even when the keychain
+                  // refuses it; it is used only once the keychain has saved it.
                   yield* Ref.set(cache, Option.some(next));
-                  yield* keychain
-                    .write(encodeTokens(next))
-                    .pipe(
-                      Effect.catch((error) =>
-                        Effect.logError("The fresh GitHub sign-in could not be saved to the keychain", error),
-                      ),
-                    );
+                  yield* Ref.set(unsaved, true);
+                  yield* saveCached;
                   return true;
                 }),
               );
@@ -302,12 +341,13 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         if (tokens.expiresAt === null || tokens.expiresAt - REFRESH_AHEAD_MS > now) return tokens.accessToken;
         return yield* refreshing.withPermits(1)(
           Effect.gen(function* () {
+            const started = yield* Ref.get(generation);
             // Another call may have refreshed while this one waited.
             const current = yield* stored;
             if (current.expiresAt === null || current.expiresAt - REFRESH_AHEAD_MS > now) {
               return current.accessToken;
             }
-            return (yield* refresh(current)).accessToken;
+            return (yield* refresh(current, started)).accessToken;
           }),
         );
       });
@@ -335,7 +375,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
           if (config.environmentToken !== null) return config.environmentToken;
           const account = yield* accounts.get;
           if (account === null) return yield* disconnected;
-          return yield* account.source === "app" ? appToken : localToken(account.source);
+          return yield* (account.source === "app" ? appToken : localToken(account.source)).pipe(Effect.flatMap(issue));
         });
 
       const refused = (_agentId: AgentId | null, token: Redacted.Redacted<string>) =>
@@ -356,19 +396,29 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
                   message: `GitHub refused ${LOCAL_LABEL[account.source]}. Sign in again, or choose another sign-in in Settings › Charms.`,
                 });
               }
-              return yield* refreshing.withPermits(1)(
-                Effect.gen(function* () {
-                  const current = yield* stored;
-                  if (Redacted.value(current.accessToken) !== Redacted.value(token)) return current.accessToken;
-                  return (yield* refresh(current)).accessToken;
-                }),
-              );
+              return yield* refreshing
+                .withPermits(1)(
+                  Effect.gen(function* () {
+                    const started = yield* Ref.get(generation);
+                    const current = yield* stored;
+                    if (Redacted.value(current.accessToken) !== Redacted.value(token)) return current.accessToken;
+                    return (yield* refresh(current, started)).accessToken;
+                  }),
+                )
+                .pipe(Effect.flatMap(issue));
             });
 
-      const revoked =
+      const revoked = (token: Redacted.Redacted<string>) =>
         config.environmentToken !== null
           ? Effect.void
-          : forget({ reason: "refused", message: "GitHub no longer accepts the hub's sign-in. Connect GitHub again." });
+          : Effect.gen(function* () {
+              // A token from a sign-in that was since replaced says nothing about the current one.
+              if (!(yield* Ref.get(issued)).has(Redacted.value(token))) return;
+              yield* forgetHeld({
+                reason: "refused",
+                message: "GitHub no longer accepts the hub's sign-in. Connect GitHub again.",
+              });
+            }).pipe(committing.withPermits(1), Effect.uninterruptible);
 
       const cannotConnect = Effect.gen(function* () {
         if (config.clientId === null) return "no-app" as const;
@@ -427,6 +477,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
               .pipe(Effect.mapError((error): GitHubProblem => ({ reason: "failed", message: error.message })));
             // The item and the account row are saved together, so Cancel cannot leave one without the other.
             yield* Effect.gen(function* () {
+              yield* nextGeneration;
               yield* keychain
                 .write(encodeTokens(answer.tokens))
                 .pipe(Effect.mapError((error): GitHubProblem => ({ reason: "failed", message: error.message })));
@@ -522,12 +573,16 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
             .login(token)
             .pipe(Effect.mapError((error) => new GitHubConnectRefused({ reason: "failed", message: error.message })));
           yield* stopWaiting;
+          const connectedAt = DateTime.formatIso(yield* DateTime.now);
           // The app's sign-in, if there was one, is not kept beside the one chosen now.
-          yield* forget(null);
-          yield* accounts.save({ source, login, connectedAt: DateTime.formatIso(yield* DateTime.now) });
+          yield* forgetHeld(null).pipe(
+            Effect.andThen(accounts.save({ source, login, connectedAt })),
+            committing.withPermits(1),
+            Effect.uninterruptible,
+          );
           yield* Effect.logInfo("GitHub connected", { source, login });
           return yield* state;
-        });
+        }).pipe(connecting.withPermits(1));
 
       const installUrl = `https://github.com/apps/${config.slug}/installations/new`;
 
@@ -551,7 +606,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         return yield* list(
           token,
           refused(null, token).pipe(
-            Effect.flatMap((fresh) => list(fresh, revoked.pipe(Effect.andThen(Effect.fail(disconnected))))),
+            Effect.flatMap((fresh) => list(fresh, revoked(fresh).pipe(Effect.andThen(Effect.fail(disconnected))))),
           ),
         );
       });
@@ -593,8 +648,8 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
       const connection = GitHubConnection.of({
         state,
         connect,
-        cancel: stopWaiting.pipe(Effect.andThen(state)),
-        disconnect: stopWaiting.pipe(Effect.andThen(forget(null)), Effect.andThen(state)),
+        cancel: stopWaiting.pipe(Effect.andThen(state), connecting.withPermits(1)),
+        disconnect: stopWaiting.pipe(Effect.andThen(forget(null)), Effect.andThen(state), connecting.withPermits(1)),
         found,
         use,
         repositories: Effect.gen(function* () {
