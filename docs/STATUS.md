@@ -23,6 +23,8 @@ Proven end to end, on the setup its record names.
 
 Built, but not proven end to end, or proven only in part.
 
+- **2026-11-02 · You connect GitHub on the hub, and choose which hobs use it.** Settings › Charms connects the Hobbots GitHub App with GitHub's device flow, keeping its tokens in the OS keychain and refreshing them on the hub, or uses the GitHub CLI's or Git's own sign-in already on the computer. Each hob's Charms tab grants the GitHub Charm; a hob without it, or a hub with nothing connected, is offered none of its actions from the next turn. Proven with stand-ins for GitHub, the keychain tools and the fake runtime; the Hobbots GitHub App is not registered yet, and no real device flow, keychain or Claude Code turn is verified. ([#322](https://github.com/otaviobarros/hobbots/issues/322))
+
 - **2026-10-29 · Opening at login after a real log-out.** The log-out and log-in steps of the background service were never run on a real Mac. ([#49](https://github.com/otaviobarros/hobbots/issues/49), [evidence](evidence/2026-10-29-background-service.md#gaps))
 - **2026-10-29 · The release workflow.** It packages, smoke-tests and drafts a release on a version tag, but no tag has run it yet, so the packaged checks have run only on a maintainer's Mac. ([#34](https://github.com/otaviobarros/hobbots/issues/34))
 - **2026-10-29 · Required checks on `main`.** The ruleset is written but not yet required. ([#22](https://github.com/otaviobarros/hobbots/issues/22))

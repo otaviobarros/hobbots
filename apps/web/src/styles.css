@@ -26,6 +26,7 @@
   --color-rose: #ee9292;
   --color-star: #cfc8ff;
   --color-wood: #7a5b3a;
+  --color-notice: #2a2140;
 
   --color-background: var(--color-ground);
   --color-foreground: var(--color-text);

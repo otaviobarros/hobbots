@@ -21,3 +21,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [017 — Switching a thread's brain](017-switching-brains.md)
 - [018 — Tasks and Quests](018-tasks-and-quests.md)
 - [019 — A hob's backpack and continuations](019-hob-backpack-and-continuations.md)
+- [020 — The GitHub Charm](020-github-charm.md)

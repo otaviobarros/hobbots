@@ -575,7 +575,7 @@ export class ChatService extends Context.Service<
               hubTools: combineHubTools(
                 taskTurn?.hubTools ?? null,
                 Option.isSome(charms)
-                  ? charms.value.forTurn({ agentId: agent.id, currentAccess: currentAccess(agent.id), redactor })
+                  ? yield* charms.value.forTurn({ agentId: agent.id, currentAccess: currentAccess(agent.id), redactor })
                   : null,
               ),
             })

@@ -1,6 +1,6 @@
 # Permissions and autonomy
 
-**Decided:** autonomy-first Trusted Workspace default, enforced boundaries, exceptional approvals, narrowing delegation, separate computer permission and human approval authority. The preset mapping, folders, sandbox and Charms are decided in [ADR 014](../decisions/014-tool-policy-and-enforcement.md). Approval lifetimes and standing grants are decided in [ADR 015](../decisions/015-approval-lifetimes-and-grants.md).
+**Decided:** autonomy-first Trusted Workspace default, enforced boundaries, exceptional approvals, narrowing delegation, separate computer permission and human approval authority. The preset mapping, folders, sandbox and Charms are decided in [ADR 014](../decisions/014-tool-policy-and-enforcement.md), and the GitHub Charm in [ADR 020](../decisions/020-github-charm.md). Approval lifetimes and standing grants are decided in [ADR 015](../decisions/015-approval-lifetimes-and-grants.md).
 
 Autonomy is how often an agent proceeds without interruption. Authority is which resources/actions it may use. High autonomy inside a narrow workspace is the default objective. Repeated confirmation for routine authorized edits/tests would violate the product direction.
 
@@ -19,6 +19,8 @@ Trusted Workspace is the default. The [design](../decisions/008-design.md) names
 | Push with force, or to the default branch | Ask, once only | Ask, once only | Ask, once only |
 | Use the web | Ask, per host | Allow | Allow |
 | Read GitHub (a Charm) | Allow | Allow | Allow |
+| Open pull requests (a Charm) | Ask | Ask | Allow |
+| Comment on GitHub (a Charm) | Ask | Ask | Allow |
 | Anything outside the hob's folders | Deny | Deny | Deny |
 
 Careful keeps investigation automatic and asks before modifications and consequential work. Trusting is deliberately broad inside the hob's folders and the sandbox, with clear disclosure of actual runtime privileges; it never grants self-approval or Hobbots administration. Per-hob overrides only narrow the table; a widening needs a separately recorded user grant. The UI says **Never** for Deny.
@@ -74,7 +76,7 @@ The sandbox is on by default for every hob. The user can turn it off for one hob
 
 ## Charms
 
-A **Charm** is a connection that gives a hob abilities beyond its runtime's own tools: an integration with another app or service such as GitHub, Slack, Google Drive or any MCP server. The user connects a Charm on the hub once and grants it per hob; each of its actions is Allow, Ask or Never per hob. The MVP ships the built-in GitHub Charm, which reads the repository, issues and pull requests of the hob's folders (#317) and later pushes. A Charm runs in the hub process outside the runtime sandbox, is offered to the runtime over its control channel rather than the network, and goes through the policy engine with Allow / Ask / Never on its exact arguments. Credentials a Charm needs stay on the hub and never enter the sandbox, so the Charm is the only route to effects that need them; a push to a remote that accepts pushes without credentials is a checked rule. A Charm never runs workspace code: Push runs no repository hooks or configured programs. The sandbox never blocks a Charm the user granted. Hobbots' coordination tools (delegation, messages between hobs, results) are not Charms and keep the control-plane exclusions below.
+A **Charm** is a connection that gives a hob abilities beyond its runtime's own tools: an integration with another app or service such as GitHub, Slack, Google Drive or any MCP server. The user connects a Charm on the hub once and grants it per hob; each of its actions is Allow, Ask or Never per hob. The MVP ships the built-in GitHub Charm on the user's own GitHub account, connected through the Hobbots GitHub App and kept in the hub's OS keychain. It reads the repository, issues and pull requests of the hob's folders (#317), pushes, opens pull requests and comments, and never sends a write twice by mistake ([ADR 020](../decisions/020-github-charm.md)). A Charm runs in the hub process outside the runtime sandbox, is offered to the runtime over its control channel rather than the network, and goes through the policy engine with Allow / Ask / Never on its exact arguments. Credentials a Charm needs stay on the hub and never enter the sandbox, so the Charm is the only route to effects that need them; a push to a remote that accepts pushes without credentials is a checked rule. A Charm never runs workspace code: Push runs no repository hooks or configured programs. The sandbox never blocks a Charm the user granted. Hobbots' coordination tools (delegation, messages between hobs, results) are not Charms and keep the control-plane exclusions below.
 
 Credentials remain scoped to the hub's execution environment or secrets provider and are excluded from messages/events. Hobs act only on the hub; a connected device never exposes its own files or apps. Device tokens, execution grants and agent tool credentials are separate boundaries ([deployment](deployment.md)).
 

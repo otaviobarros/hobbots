@@ -320,23 +320,24 @@ describe("tool calls in a reply", () => {
     const charms = Layer.succeed(
       CharmTools,
       CharmTools.of({
-        forTurn: (turn) => ({
-          tools: [
-            {
-              name: "github_search",
-              description: "Search",
-              inputSchema: { type: "object" },
-              label: "Searching GitHub",
-            },
-          ],
-          call: (name, input) =>
-            turn.currentAccess.pipe(
-              Effect.map((access) => {
-                seen.push(access?.folders ?? null);
-                return { text: `${name} read ${JSON.stringify(input)}`, refused: false };
-              }),
-            ),
-        }),
+        forTurn: (turn) =>
+          Effect.succeed({
+            tools: [
+              {
+                name: "github_search",
+                description: "Search",
+                inputSchema: { type: "object" },
+                label: "Searching GitHub",
+              },
+            ],
+            call: (name, input) =>
+              turn.currentAccess.pipe(
+                Effect.map((access) => {
+                  seen.push(access?.folders ?? null);
+                  return { text: `${name} read ${JSON.stringify(input)}`, refused: false };
+                }),
+              ),
+          }),
       }),
     );
     const reply = await Effect.gen(function* () {

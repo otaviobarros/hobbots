@@ -1,3 +1,4 @@
+import type { AgentId } from "@hobbots/domain";
 import {
   type GitHubComment,
   type GitHubItem,
@@ -9,85 +10,34 @@ import {
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Redacted, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { GitHubCredential } from "./github-account.ts";
+import { GitHubError } from "./github-error.ts";
+
+export { GitHubError };
 
 /**
- * GitHub's REST API, read on the hub with the user's own sign-in (#317). The token never leaves the
- * hub: it is not in the sandbox, the database, the browser or any answer a hob reads.
+ * GitHub's REST API, read on the hub with the GitHub account the user connected (#317, #322). Each
+ * read asks `GitHubCredential` for the hob's token. The token never leaves the hub: it is not in the
+ * sandbox, the database, the browser or any answer a hob reads.
  */
-
-/** Why a read failed, in words for the hob and the person. */
-export class GitHubError extends Schema.TaggedError<GitHubError>()("GitHubError", {
-  reason: Schema.Literals(["signed-out", "not-found", "rate-limited", "failed"]),
-  message: Schema.String,
-}) {}
 
 export class GitHubApi extends Context.Service<
   GitHubApi,
   {
-    readonly repository: (repository: GitHubRepository) => Effect.Effect<GitHubRepositoryInfo, GitHubError>;
+    readonly repository: (
+      agentId: AgentId,
+      repository: GitHubRepository,
+    ) => Effect.Effect<GitHubRepositoryInfo, GitHubError>;
     /** Searches issues and pull requests with a query the hub built (`githubSearchQuery`). */
-    readonly search: (query: string, limit: number) => Effect.Effect<GitHubSearchResult, GitHubError>;
+    readonly search: (agentId: AgentId, query: string, limit: number) => Effect.Effect<GitHubSearchResult, GitHubError>;
     readonly item: (
+      agentId: AgentId,
       repository: GitHubRepository,
       number: number,
       comments: number,
     ) => Effect.Effect<GitHubItem, GitHubError>;
   }
 >()("@hobbots/charms/GitHubApi") {}
-
-/** Where the hub finds the user's GitHub token, read again for every call so a new sign-in applies. */
-export class GitHubToken extends Context.Service<
-  GitHubToken,
-  { readonly get: Effect.Effect<Redacted.Redacted<string>, GitHubError> }
->()("@hobbots/charms/GitHubToken") {
-  /**
-   * The hub's own `GH_TOKEN` or `GITHUB_TOKEN`, else what `gh auth token` prints for github.com. Both
-   * are read on the hub, outside the sandbox, where the user signed in.
-   */
-  static readonly layer = (env: NodeJS.ProcessEnv) =>
-    Layer.effect(
-      GitHubToken,
-      Effect.gen(function* () {
-        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const fromEnv = env.GH_TOKEN?.trim() || env.GITHUB_TOKEN?.trim();
-        const signedOut = new GitHubError({
-          reason: "signed-out",
-          message: "The hub is not signed in to GitHub. Run `gh auth login` on the hub, then try again.",
-        });
-        const fromGh = spawner
-          .string(ChildProcess.make("gh", ["auth", "token", "--hostname", "github.com"], { env: ghEnv(env) }))
-          .pipe(
-            Effect.timeout("10 seconds"),
-            Effect.map((out) => out.trim()),
-            Effect.filterOrFail(
-              (token) => /^[A-Za-z0-9_]{20,255}$/.test(token),
-              () => signedOut,
-            ),
-            Effect.mapError(() => signedOut),
-          );
-        return GitHubToken.of({
-          get: fromEnv ? Effect.succeed(Redacted.make(fromEnv)) : Effect.map(fromGh, (token) => Redacted.make(token)),
-        });
-      }),
-    );
-}
-
-/** What `gh` runs with: where it finds its own config and the keychain, and nothing a hob set. */
-const ghEnv = (env: NodeJS.ProcessEnv): Record<string, string | undefined> => ({
-  PATH: env.PATH,
-  HOME: env.HOME,
-  USER: env.USER,
-  XDG_CONFIG_HOME: env.XDG_CONFIG_HOME,
-  GH_CONFIG_DIR: env.GH_CONFIG_DIR,
-  // On Linux, gh keeps its token in the Secret Service keyring, reached over the session bus.
-  DBUS_SESSION_BUS_ADDRESS: env.DBUS_SESSION_BUS_ADDRESS,
-  XDG_RUNTIME_DIR: env.XDG_RUNTIME_DIR,
-  // No prompts, no update checks and no pager on the hub.
-  GH_PROMPT_DISABLED: "1",
-  GH_NO_UPDATE_NOTIFIER: "1",
-  GH_PAGER: "",
-});
 
 // What GitHub answers, in the fields read. Bodies can be null; long text is cut for the hob's context.
 const User = Schema.NullOr(Schema.Struct({ login: Schema.String }));
@@ -142,39 +92,52 @@ const summary = (item: typeof ItemJson.Type): GitHubItemSummary => ({
 
 const API = "https://api.github.com";
 
-/** GitHub's REST API over `fetch`, signed in with the hub's token. */
+/** GitHub's REST API over `fetch`, signed in as the hob's GitHub credential. */
 export const GitHubApiLive = Layer.effect(
   GitHubApi,
   Effect.gen(function* () {
-    const token = yield* GitHubToken;
+    const credential = yield* GitHubCredential;
     const http = yield* HttpClient.HttpClient;
 
+    const send = (token: Redacted.Redacted<string>, path: string, params: Record<string, string>, what: string) =>
+      http
+        .execute(
+          HttpClientRequest.get(`${API}${path}`, { urlParams: params }).pipe(
+            HttpClientRequest.bearerToken(Redacted.value(token)),
+            HttpClientRequest.setHeaders({
+              Accept: "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "Hobbots",
+            }),
+          ),
+        )
+        .pipe(
+          Effect.timeout("20 seconds"),
+          Effect.mapError(() => new GitHubError({ reason: "failed", message: `GitHub did not answer for ${what}.` })),
+        );
+
     const read = <S extends Schema.Constraint>(
+      agentId: AgentId,
       path: string,
       schema: S,
       what: string,
       params: Record<string, string> = {},
     ): Effect.Effect<S["Type"], GitHubError, S["DecodingServices"]> =>
       Effect.gen(function* () {
-        const signIn = yield* token.get;
-        const request = HttpClientRequest.get(`${API}${path}`, { urlParams: params }).pipe(
-          HttpClientRequest.bearerToken(Redacted.value(signIn)),
-          HttpClientRequest.setHeaders({
-            Accept: "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": "Hobbots",
-          }),
-        );
-        const response = yield* http.execute(request).pipe(
-          Effect.timeout("20 seconds"),
-          Effect.mapError(() => new GitHubError({ reason: "failed", message: `GitHub did not answer for ${what}.` })),
-        );
+        const token = yield* credential.tokenFor(agentId);
+        let response = yield* send(token, path, params, what);
+        // A refused token is refreshed once and the read tried again; refused again, GitHub is disconnected.
         if (response.status === 401) {
-          return yield* new GitHubError({
-            reason: "signed-out",
-            message:
-              "GitHub refused the hub's sign-in. Sign in again with `gh auth login` on the hub, or replace the GH_TOKEN or GITHUB_TOKEN the hub was started with.",
-          });
+          const fresh = yield* credential.refused(agentId, token);
+          response = yield* send(fresh, path, params, what);
+          if (response.status === 401) {
+            yield* credential.revoked(fresh);
+            return yield* new GitHubError({
+              reason: "signed-out",
+              message:
+                "GitHub is disconnected: it no longer accepts the hub's sign-in. Connect GitHub again in Settings › Charms.",
+            });
+          }
         }
         if (response.status === 404) {
           return yield* new GitHubError({
@@ -214,8 +177,13 @@ export const GitHubApiLive = Layer.effect(
       });
 
     return GitHubApi.of({
-      repository: (repository) =>
-        read(`/repos/${repositorySlug(repository)}`, RepositoryJson, `repository ${repositorySlug(repository)}`).pipe(
+      repository: (agentId, repository) =>
+        read(
+          agentId,
+          `/repos/${repositorySlug(repository)}`,
+          RepositoryJson,
+          `repository ${repositorySlug(repository)}`,
+        ).pipe(
           Effect.map(
             (json): GitHubRepositoryInfo => ({
               fullName: json.full_name,
@@ -227,8 +195,8 @@ export const GitHubApiLive = Layer.effect(
             }),
           ),
         ),
-      search: (query, limit) =>
-        read("/search/issues", SearchJson, "this search", {
+      search: (agentId, query, limit) =>
+        read(agentId, "/search/issues", SearchJson, "this search", {
           q: query,
           sort: "updated",
           order: "desc",
@@ -241,17 +209,23 @@ export const GitHubApiLive = Layer.effect(
             items: json.items.slice(0, limit).map(summary),
           })),
         ),
-      item: (repository, number, comments) =>
+      item: (agentId, repository, number, comments) =>
         Effect.gen(function* () {
           const slug = repositorySlug(repository);
           const what = `issue or pull request #${number} in ${slug}`;
-          const json = yield* read(`/repos/${slug}/issues/${number}`, FullItemJson, what);
+          const json = yield* read(agentId, `/repos/${slug}/issues/${number}`, FullItemJson, what);
           const thread =
             comments === 0 || json.comments === 0
               ? []
-              : yield* read(`/repos/${slug}/issues/${number}/comments`, CommentsJson, `the comments on #${number}`, {
-                  per_page: String(comments),
-                });
+              : yield* read(
+                  agentId,
+                  `/repos/${slug}/issues/${number}/comments`,
+                  CommentsJson,
+                  `the comments on #${number}`,
+                  {
+                    per_page: String(comments),
+                  },
+                );
           return {
             ...summary(json),
             pullRequest: json.pull_request !== undefined,
