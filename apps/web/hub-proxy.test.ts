@@ -48,16 +48,18 @@ describe("web dev server", () => {
     return (await response.json()) as { hub: boolean; url: string; host: string };
   };
 
-  it("forwards the API to the hub without changing the Host", async () => {
+  // covers DP-001, ADR 021
+  it("[TC-GEN-119] forwards the API to the hub without changing the Host", async () => {
     expect(await reach("/api/health")).toEqual({ hub: true, url: "/api/health", host: new URL(devUrl).host });
   });
 
   // The hub links a hob's new GitHub app to these pages at the address it was reached at, which in
   // development is the dev server's: without forwarding them, the link opened the client instead.
-  it.each(["/github/hob-app/new?state=s", "/github/hob-app/callback?state=s&code=c"])(
-    "forwards %s, a hub page for a hob's own GitHub app, to the hub",
-    async (path) => {
-      expect(await reach(path)).toEqual({ hub: true, url: path, host: new URL(devUrl).host });
-    },
-  );
+  // covers DP-001, ADR 022
+  it.each([
+    { id: "TC-GEN-120", path: "/github/hob-app/new?state=s" },
+    { id: "TC-GEN-121", path: "/github/hob-app/callback?state=s&code=c" },
+  ])("[$id] forwards $path, a hub page for a hob's own GitHub app, to the hub", async ({ path }) => {
+    expect(await reach(path)).toEqual({ hub: true, url: path, host: new URL(devUrl).host });
+  });
 });
