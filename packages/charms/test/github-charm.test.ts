@@ -85,6 +85,8 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
       pullRequests: () => Effect.die("not used"),
       commentsSince: () => Effect.die("not used"),
       openPullRequest: () => Effect.die("not used"),
+      gitObject: () => Effect.die("not used"),
+      rateLimit: () => Effect.die("not used"),
       comment: () => Effect.die("not used"),
     }),
   );

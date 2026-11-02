@@ -25,6 +25,7 @@ import {
 import { type PolicyContext, PolicyEngine } from "@hobbots/permissions";
 import { Data, Effect, Layer, Schema } from "effect";
 import { makeCharmCallRunner } from "./charm-calls.ts";
+import { GitPush } from "./git-push.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { GitHubApi } from "./github-api.ts";
 import type { GitHubError } from "./github-error.ts";
@@ -76,7 +77,7 @@ export const GitHubCharmTools = Layer.effect(
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
     const runner = yield* makeCharmCallRunner({
-      github_push: pushReadBack(api),
+      github_push: pushReadBack(api, yield* GitPush),
       github_open_pull_request: pullRequestReadBack(api),
       github_comment: commentReadBack(api),
     });
