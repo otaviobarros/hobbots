@@ -13,24 +13,36 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 
-/** The journal events that change a Task tree (ADR 018). */
-export type TaskEvent = Extract<
-  HobbotsEvent,
-  {
-    readonly _tag:
-      | "TaskCreated"
-      | "TaskStateChanged"
-      | "QuestStarted"
-      | "CheckpointRecorded"
-      | "QuestionAsked"
-      | "QuestionAnswered"
-      | "QuestionEscalated"
-      | "NoteLeft"
-      | "HandedOff"
-      | "TaskCompleted"
-      | "QuestCompleted";
-  }
->;
+/**
+ * What the hub answered a Quest tab control with (ADR 018): the tree as it recorded the change.
+ * The client applies it before the change's events arrive, as it applies each of them, so whichever
+ * comes first the tree ends as the newest copy of each Task says, its Delegation included.
+ */
+interface ControlRecorded {
+  readonly _tag: "ControlRecorded";
+  readonly tree: TaskTree;
+}
+
+/** The journal events that change a Task tree (ADR 018), and a control's answer. */
+export type TaskEvent =
+  | ControlRecorded
+  | Extract<
+      HobbotsEvent,
+      {
+        readonly _tag:
+          | "TaskCreated"
+          | "TaskStateChanged"
+          | "QuestStarted"
+          | "CheckpointRecorded"
+          | "QuestionAsked"
+          | "QuestionAnswered"
+          | "QuestionEscalated"
+          | "NoteLeft"
+          | "HandedOff"
+          | "TaskCompleted"
+          | "QuestCompleted";
+      }
+    >;
 
 type Versioned = { readonly id: string; readonly revision: number };
 
@@ -120,8 +132,29 @@ const questChange = (
   ids: ReadonlySet<TaskId>,
 ): Partial<TaskTree> | null => (ids.has(event.quest.taskId) ? withQuest(tree, event.quest, ids) : null);
 
+/**
+ * One Task of a control's answer applied as its change would be, with the Delegation the answer
+ * holds for it, unless the tree already knows a newer copy of the Task.
+ */
+const withRecorded = (tree: TaskTree, task: Task, recorded: TaskTree, ids: ReadonlySet<TaskId>): TaskTree => {
+  const known = tree.tasks.find((each) => each.id === task.id);
+  const fresh = known === undefined || task.revision >= known.revision;
+  const delegation = recorded.delegations.find((each) => each.childTaskId === task.id);
+  return new TaskTree({
+    ...tree,
+    ...withTask(tree, task, recorded.attempts.find((each) => each.id === task.currentAttemptId) ?? null),
+    ...withQuest(tree, recorded.quests.find((each) => each.taskId === task.id) ?? null, ids),
+    ...withWait(tree, { task, wait: recorded.waits.find((each) => each.taskId === task.id) ?? null }),
+    ...(fresh && delegation !== undefined ? { delegations: upsert(tree.delegations, delegation) } : {}),
+  });
+};
+
 /** What each event changes in a tree it belongs to, or null for an event about another tree. */
 const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
+  ControlRecorded: (tree, { tree: recorded }, ids) => {
+    const mine = recorded.tasks.filter((task) => ids.has(task.id));
+    return mine.length === 0 ? null : mine.reduce((next, task) => withRecorded(next, task, recorded, ids), tree);
+  },
   TaskCreated: (tree, { task, delegation, milestones }, ids) =>
     ids.has(task.id) || (task.parentId !== null && ids.has(task.parentId))
       ? {

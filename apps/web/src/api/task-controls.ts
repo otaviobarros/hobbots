@@ -1,25 +1,8 @@
 import type { TaskTreeRead } from "@hobbots/api";
-import type { AgentId, QuestId, TaskId, TaskTree } from "@hobbots/domain";
-import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
+import type { AgentId, QuestId, TaskId } from "@hobbots/domain";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { applyTaskEvent } from "./tasks.ts";
-
-/**
- * Puts what the hub recorded for a control into every cached Task read at once, before its events
- * arrive. Each Task goes in as the change the stream would bring, so a newer copy already known is
- * kept and the events that follow change nothing twice.
- */
-const applyControlledTree = (client: QueryClient, tree: TaskTree) => {
-  for (const task of tree.tasks) {
-    applyTaskEvent(client, {
-      _tag: "TaskStateChanged",
-      task,
-      attempt: tree.attempts.find((each) => each.id === task.currentAttemptId) ?? null,
-      quest: tree.quests.find((each) => each.taskId === task.id) ?? null,
-      wait: tree.waits.find((each) => each.taskId === task.id) ?? null,
-    });
-  }
-};
 
 /** A control from the Quest tab (ADR 018, OR-006): what it acts on, and how it is sent. */
 export type TaskControl =
@@ -52,6 +35,7 @@ export const useTaskControl = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: send,
-    onSuccess: (read) => applyControlledTree(queryClient, read.tree),
+    // What the hub recorded shows at once, before its events arrive (see `ControlRecorded`).
+    onSuccess: (read) => applyTaskEvent(queryClient, { _tag: "ControlRecorded", tree: read.tree }),
   });
 };
