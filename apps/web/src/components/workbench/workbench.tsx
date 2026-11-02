@@ -5,8 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import { type ComponentType, useEffect, useId, useRef } from "react";
 import { threadTasksQuery } from "../../api/tasks.ts";
 import { attemptActivityQuery } from "../../api/workbench.ts";
+import type { NoteDrafts } from "../quest/note-box.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup } from "../quest/use-work.ts";
-import { findTask, taskTitle } from "../quest/work-model.ts";
+import { findTask, noteRecipient, taskTitle } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
 import { ChangesTab } from "./tabs/changes-tab.tsx";
 import { FilesTab } from "./tabs/files-tab.tsx";
@@ -14,6 +15,7 @@ import { SummaryTab } from "./tabs/summary-tab.tsx";
 import type { WorkbenchTabProps } from "./tabs/tab-props.ts";
 import { TerminalTab } from "./tabs/terminal-tab.tsx";
 import { useWorkbenchMoves, type WorkbenchView } from "./use-workbench.ts";
+import { WorkbenchChat } from "./workbench-chat.tsx";
 import { WorkbenchHeader } from "./workbench-header.tsx";
 import {
   type ActivityRead,
@@ -36,26 +38,35 @@ const PANELS: Readonly<Record<Exclude<WorkbenchTab, "browser">, ComponentType<Wo
 
 /**
  * One Task's full view (ADR 023), in the chat's place: its header, its five tabs with honest
- * labels, and Back to where it was opened from. The hob panel, the right panel and a pinned Quest
- * stay where they are. Escape goes back.
+ * labels, its chat drawer, and Back to where it was opened from. The hob panel, the right panel and
+ * a pinned Quest stay where they are. Escape goes back.
  */
 export function Workbench({
   hobId,
   threadId,
   view,
   pinned,
+  drafts,
 }: {
   hobId: AgentId;
   threadId: ThreadId;
   view: WorkbenchView;
   /** Pinned Tasks from other threads, whose Workbenches open here too. */
   pinned: ReadonlyArray<TaskId>;
+  /** Each Task's unsent note, the same one the Task drawer shows. */
+  drafts: NoteDrafts;
 }) {
   const followed = useFollowedTrees(threadId, pinned);
   const reading = useQuery(threadTasksQuery(threadId)).isPending;
   const found = findTask([...followed.thread, ...followed.elsewhere], view.taskId);
   const hobs = useHobLookup();
   const moves = useWorkbenchMoves(hobId, threadId);
+  const chatId = useId();
+  const toggle = useRef<HTMLButtonElement>(null);
+  const closeChat = () => {
+    moves.chat(false);
+    toggle.current?.focus();
+  };
   return (
     <section
       aria-label={messages.label({ title: found === null ? "" : taskTitle(found.task) })}
@@ -68,11 +79,41 @@ export function Workbench({
         <Button variant="link" size="xs" onClick={moves.back}>
           ← {view.from === "drawer" ? messages.backToTask : messages.backToChat}
         </Button>
+        <span className="flex-1" />
+        {found !== null && (
+          <Button
+            ref={toggle}
+            variant="chip"
+            size="xs"
+            aria-expanded={view.chatOpen}
+            aria-controls={view.chatOpen ? chatId : undefined}
+            onClick={() => (view.chatOpen ? closeChat() : moves.chat(true))}
+          >
+            {view.chatOpen
+              ? messages.chat.hide
+              : messages.chat.open({ name: hobs(noteRecipient(found.tree, found.task)).name })}
+          </Button>
+        )}
       </div>
       {found === null ? (
         <p className="m-0 px-5 py-6 text-detail text-label">{reading ? messages.loading : messages.notFound}</p>
       ) : (
-        <Bench key={found.task.id} tree={found.tree} task={found.task} view={view} hobs={hobs} moves={moves} />
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Bench key={found.task.id} tree={found.tree} task={found.task} view={view} hobs={hobs} moves={moves} />
+          </div>
+          {view.chatOpen && (
+            <WorkbenchChat
+              key={found.task.id}
+              id={chatId}
+              tree={found.tree}
+              task={found.task}
+              hobs={hobs}
+              drafts={drafts}
+              onClose={closeChat}
+            />
+          )}
+        </div>
       )}
     </section>
   );
@@ -148,7 +189,7 @@ function Bench({
                 onRetry={() => void read.refetch()}
               />
               {tab !== "browser" && states[tab].kind !== "not-used" && (
-                <Panel tab={tab} props={{ ...shared, state: states[tab] }} />
+                <Panel tab={tab} props={{ ...shared, state: states[tab], focus: on ? view.file : undefined }} />
               )}
             </div>
           );

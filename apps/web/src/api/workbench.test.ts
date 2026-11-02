@@ -1,11 +1,11 @@
 import type { AttemptActivityRead } from "@hobbots/api";
-import { AttemptActivity } from "@hobbots/domain";
+import { AttemptActivity, CommandId } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { attempt, CAMPAIGN } from "../test/quests.ts";
 import * as client from "./client.ts";
 import { startGeneration } from "./sync.ts";
-import { attemptActivityQuery } from "./workbench.ts";
+import { addOutput, applyCommandOutput, attemptActivityQuery, liveOutputQuery } from "./workbench.ts";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -44,5 +44,45 @@ describe("an Attempt's records in the Workbench", () => {
     expect(call).toHaveBeenCalledTimes(2);
     expect(loaded.activity.detailsClearedAt).not.toBeNull();
     expect(queryClient.getQueryData(attemptActivityQuery(done.id).queryKey)?.activity.detailsClearedAt).not.toBeNull();
+  });
+});
+
+describe("a running command's output", () => {
+  const RUN = CommandId.make("run");
+  const piece = (offset: number, delta: string) => ({
+    _tag: "CommandOutput" as const,
+    attemptId: done.id,
+    taskId: CAMPAIGN,
+    commandId: RUN,
+    offset,
+    delta,
+  });
+
+  it("adds each piece by its offset, so a repeated or overlapping piece adds nothing twice", () => {
+    let outputs = addOutput({}, piece(0, "one\n"));
+    outputs = addOutput(outputs, piece(4, "two\n"));
+    expect(addOutput(outputs, piece(4, "two\n"))).toBe(outputs);
+    outputs = addOutput(outputs, piece(4, "two\nthree\n"));
+    expect(outputs[RUN]).toEqual({ text: "one\ntwo\nthree\n", end: 14, missed: false });
+  });
+
+  it("marks the gap when a piece starts past what this client saw, then follows on from where that piece ended", () => {
+    let outputs = addOutput(addOutput({}, piece(0, "one\n")), piece(20, "later\n"));
+    expect(outputs[RUN]).toEqual({ text: "later\n", end: 26, missed: true });
+    outputs = addOutput(outputs, piece(26, "next\n"));
+    // A piece repeated after the gap, whole or overlapping, adds nothing twice.
+    expect(addOutput(outputs, piece(26, "next\n"))).toBe(outputs);
+    expect(addOutput(outputs, piece(20, "later\n"))).toBe(outputs);
+    outputs = addOutput(outputs, piece(26, "next\nlast\n"));
+    expect(outputs[RUN]).toEqual({ text: "later\nnext\nlast\n", end: 36, missed: true });
+  });
+
+  it("keeps what it saw across a new sync generation, since the hub has nothing to read it again from", async () => {
+    const queryClient = new QueryClient();
+    applyCommandOutput(queryClient, piece(0, "one\n"));
+    startGeneration(queryClient);
+    expect(await queryClient.fetchQuery(liveOutputQuery(done.id))).toEqual({
+      [RUN]: { text: "one\n", end: 4, missed: false },
+    });
   });
 });

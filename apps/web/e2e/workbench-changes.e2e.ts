@@ -110,6 +110,12 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
   await bench.getByRole("tab", { name: /^Summary/ }).click();
   await bench.getByRole("tab", { name: /^Changes/ }).click();
   await expect(files.getByRole("button", { name: /^new\.ts/ })).toHaveAttribute("aria-pressed", "true");
+
+  // A changed file Summary links to opens Changes on that file.
+  await bench.getByRole("tab", { name: /^Summary/ }).click();
+  await bench.getByRole("button", { name: "See the change to src/app.ts in Changes" }).click();
+  await expect(files.getByRole("button", { name: /^app\.ts/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(panel.getByRole("article", { name: "src/app.ts" })).toBeVisible();
 });
 
 // covers UX-002, UX-006

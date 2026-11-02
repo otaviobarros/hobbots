@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -101,6 +101,36 @@ describe("a hob's commit identity", () => {
     expect(commitIn(folder, env, "--author=Someone <someone@example.com>")).toBe(
       `Someone <someone@example.com>|${bot}|N`,
     );
+  });
+
+  // covers ADR 022
+  it("[TC-CH-199] never reaches the user's SSH signer, even when the hob asks for a signature with -S", () => {
+    const home = userSetup();
+    // The user signs with SSH through a signer of their own, such as 1Password's op-ssh-sign.
+    const signer = join(root, "signer.sh");
+    const ran = join(root, "signer-ran");
+    writeFileSync(signer, `#!/bin/sh\ntouch '${ran}'\nexit 1\n`, { mode: 0o755 });
+    writeFileSync(
+      join(home, ".gitconfig"),
+      `[user]\n\tsigningkey = ssh-ed25519 AAAAexample\n[gpg]\n\tformat = ssh\n[gpg "ssh"]\n\tprogram = ${signer}\n`,
+      { flag: "a" },
+    );
+    const folder = repository("asks-to-sign");
+    const env = withCommitIdentity(hubEnv(home), BOT);
+    // Nothing tells the hob the user signs: no key and the default format.
+    const config = (key: string) =>
+      execFileSync("git", ["-C", folder, "config", key], { env, encoding: "utf8" }).trim();
+    expect(config("user.signingkey")).toBe("");
+    expect(config("gpg.format")).toBe("openpgp");
+    // A commit the hob forces to be signed fails without ever starting the user's signer.
+    execFileSync("git", ["-C", folder, "add", "a.txt"], { env });
+    expect(() =>
+      execFileSync("git", ["-C", folder, "commit", "--quiet", "-S", "-m", "Add a"], { env, stdio: "pipe" }),
+    ).toThrow(/failed to write commit object/);
+    expect(existsSync(ran)).toBe(false);
+    // Without -S it commits as the bot, unsigned.
+    const bot = `${BOT.name} <${BOT.email}>`;
+    expect(commitIn(folder, env)).toBe(`${bot}|${bot}|N`);
   });
 
   // covers ADR 022

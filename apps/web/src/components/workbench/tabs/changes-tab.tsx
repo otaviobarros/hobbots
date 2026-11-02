@@ -14,15 +14,24 @@ const KINDS: ReadonlyArray<FileChangeKind> = ["added", "edited", "deleted", "mov
  * after. Documents are rendered, code is a diff and images sit side by side. While a turn runs the
  * list follows the hub's records as they arrive; afterwards it is the history they kept.
  */
-export function ChangesTab({ activity, state, hobs }: WorkbenchTabProps) {
-  const [picked, setPicked] = useState<string | null>(null);
+export function ChangesTab({ activity, state, hobs, focus }: WorkbenchTabProps) {
+  // The file to show: one picked in the list by its id, or one a link asked for by its path. A link
+  // is kept as asked, so it holds while the records load and after another tab shows.
+  const [picked, setPicked] = useState<{ readonly id?: string; readonly path?: string }>(
+    focus === undefined ? {} : { path: focus },
+  );
+  const [asked, setAsked] = useState(focus);
+  if (focus !== asked) {
+    setAsked(focus);
+    if (focus !== undefined) setPicked({ path: focus });
+  }
   if (activity === null) return null;
   const changes = activity.changes;
   const live = state.kind === "live";
   if (changes.length === 0) {
     return live ? <p className="m-0 px-5 py-4 text-detail text-label">{messages.noneYet}</p> : null;
   }
-  const selected = selectedChange(changes, picked, undefined);
+  const selected = selectedChange(changes, picked.id ?? null, picked.path);
   const counts = changeCounts(changes);
   const folders = byFolder(changes);
   return (
@@ -45,7 +54,11 @@ export function ChangesTab({ activity, state, hobs }: WorkbenchTabProps) {
               <ul className="m-0 flex list-none flex-col p-0">
                 {inFolder.map((change) => (
                   <li key={change.id}>
-                    <FileRow change={change} on={change.id === selected?.id} onPick={() => setPicked(change.id)} />
+                    <FileRow
+                      change={change}
+                      on={change.id === selected?.id}
+                      onPick={() => setPicked({ id: change.id })}
+                    />
                   </li>
                 ))}
               </ul>

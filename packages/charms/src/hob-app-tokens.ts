@@ -9,8 +9,9 @@ import type { GitHubHosts } from "./github-sign-in.ts";
  * Installation tokens for a hob's own GitHub App (#224, ADR 022). The hub signs a JWT with the hob's
  * key, finds the app's installation for the repository, and asks for a token scoped to that one
  * repository and to the permissions the action needs. Tokens live in memory only, until five minutes
- * before GitHub retires them. A revoked key or tokens GitHub keeps refusing mark the app as needing a
- * reconnect, and its calls fail with that reason, never sent again blindly, until the user acts.
+ * before GitHub retires them. A revoked key, tokens GitHub keeps refusing, or an app installed nowhere
+ * any more mark the app as needing a reconnect, and its calls fail with that reason, never sent again
+ * blindly, until the user acts.
  */
 
 /** Why a hob's app cannot act until the user fixes it: a new app for `key`, reinstalling it for `installation`. */
@@ -46,6 +47,9 @@ const InstallationJson = Schema.Struct({
   suspended_at: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 const AccessTokenJson = Schema.Struct({ token: Schema.String, expires_at: Schema.String });
+
+/** GitHub's largest page, so one page answers whether the app is installed anywhere for nearly every app. */
+const INSTALLATIONS_PAGE = 100;
 
 /** What the token source borrows from the hob's app service. */
 export interface HobAppTokenDeps {
@@ -88,7 +92,7 @@ export class HobAppTokens extends Context.Service<
      * GitHub took the app's key again, as when it lists the app's installations: that ends a `key`
      * mark, and an `installation` one too once the app is installed somewhere.
      */
-    readonly settled: (agentId: AgentId, installed: boolean) => Effect.Effect<void>;
+    readonly settled: (agentId: AgentId, app: HobGitHubApp, installed: boolean) => Effect.Effect<void>;
     /** GitHub refused the app's key outside a call. */
     readonly keyRefused: (agentId: AgentId, app: HobGitHubApp) => Effect.Effect<GitHubError>;
     /** Drops everything kept for the hob, when its app is replaced or removed. */
@@ -127,6 +131,10 @@ export const makeHobAppTokens = (deps: HobAppTokenDeps) =>
     // The app each lookup is for, by its key, so the cache's lookup needs only the key.
     const appsByKey = new Map<string, { readonly agentId: AgentId; readonly app: HobGitHubApp }>();
     const marks = new Map<AgentId, { readonly appId: number; readonly why: HobAppReconnect }>();
+    // The apps GitHub has shown installed somewhere since the hub started, by hob and app, so an app
+    // found installed nowhere is marked only once it was installed, never while it is new.
+    const seenInstalled = new Set<string>();
+    const seenKey = (agentId: AgentId, appId: number) => `${agentId}:${appId}`;
     // Every token minted and not yet expired by its value, replaced ones included, and the newest one
     // for each key, so a refusal of an older token still names its scope and takes the newest.
     const issued = new Map<string, Issued>();
@@ -143,9 +151,12 @@ export const makeHobAppTokens = (deps: HobAppTokenDeps) =>
         return new GitHubError({ reason: "signed-out", message });
       });
 
-    const markInstallation = (agentId: AgentId, app: HobGitHubApp) =>
+    const markInstallation = (
+      agentId: AgentId,
+      app: HobGitHubApp,
+      message = `GitHub refused ${bot(app)}'s tokens: the app may have been uninstalled or suspended. Install it again at ${deps.installUrl(app)}, then open the hob's Charms tab.`,
+    ) =>
       Effect.sync(() => {
-        const message = `GitHub refused ${bot(app)}'s tokens: the app may have been uninstalled or suspended. Install it again at ${deps.installUrl(app)}, then open the hob's Charms tab.`;
         marks.set(agentId, { appId: app.appId, why: { reason: "installation", message } });
       });
 
@@ -169,6 +180,54 @@ export const makeHobAppTokens = (deps: HobAppTokenDeps) =>
         message: `${bot(app)} is not installed on ${repositorySlug(repository)}, so it cannot act there. Install the hob's app on that repository at ${deps.installUrl(app)}, then try again.`,
       });
 
+    /**
+     * Whether GitHub lists no installation of the app that is not suspended: `GET /app/installations`
+     * with a JWT, one page. A full page, or an answer the hub cannot read, counts as installed, so the
+     * app is never marked on a guess. A refused key marks the app for its key instead.
+     */
+    const installedNowhere = (agentId: AgentId, app: HobGitHubApp, jwt: Redacted.Redacted<string>) =>
+      Effect.gen(function* () {
+        const response = yield* send(
+          HttpClientRequest.get(`${hosts.api}/app/installations`, {
+            urlParams: { per_page: String(INSTALLATIONS_PAGE) },
+          }).pipe(HttpClientRequest.bearerToken(Redacted.value(jwt))),
+          "the app's installations",
+        );
+        if (response.status === 401) return yield* Effect.flip(keyRefused(agentId, app));
+        if (response.status !== 200) return false;
+        const listed = yield* read(response, Schema.Array(InstallationJson), "the app's installations");
+        return listed.length < INSTALLATIONS_PAGE && listed.every((each) => each.suspended_at != null);
+      }).pipe(
+        // Only a refused key goes on; anything else GitHub answered leaves the app unmarked.
+        Effect.catchIf(
+          (error) => error.reason !== "signed-out",
+          () => Effect.succeed(false),
+        ),
+      );
+
+    /**
+     * The app is not installed on `repository`. When the hub had seen it installed and GitHub now lists it
+     * installed nowhere, it was uninstalled: the app is marked for reinstalling, so its calls stop until
+     * the user acts (#419).
+     */
+    const uninstalled = (agentId: AgentId, app: HobGitHubApp, repository: Repository, jwt: Redacted.Redacted<string>) =>
+      Effect.gen(function* () {
+        if (!seenInstalled.has(seenKey(agentId, app.appId)) || !(yield* installedNowhere(agentId, app, jwt))) {
+          return yield* notInstalled(app, repository);
+        }
+        const install = `Install it again at ${deps.installUrl(app)}, then open the hob's Charms tab.`;
+        yield* markInstallation(
+          agentId,
+          app,
+          `${bot(app)} is no longer installed anywhere on GitHub, or only where it is suspended, so it cannot act. ${install}`,
+        );
+        yield* Effect.logWarning("A hob's app is installed nowhere on GitHub; it needs a reconnect", { agentId });
+        return yield* new GitHubError({
+          reason: "signed-out",
+          message: `${bot(app)} is not installed on ${repositorySlug(repository)}, nor anywhere else on GitHub, so it cannot act. ${install}`,
+        });
+      });
+
     /** The app's installation for one repository: `GET /repos/{owner}/{repo}/installation` with a JWT. */
     const findInstallation = (key: string) =>
       Effect.gen(function* () {
@@ -185,7 +244,7 @@ export const makeHobAppTokens = (deps: HobAppTokenDeps) =>
           "the app's installation",
         );
         if (response.status === 401) return yield* Effect.flip(keyRefused(agentId, app));
-        if (response.status === 404) return yield* notInstalled(app, repository);
+        if (response.status === 404) return yield* uninstalled(agentId, app, repository, jwt);
         if (response.status !== 200) return yield* failed(response.status, "the app's installation");
         const installation = yield* read(response, InstallationJson, "the app's installation");
         if (installation.suspended_at != null) {
@@ -194,6 +253,7 @@ export const makeHobAppTokens = (deps: HobAppTokenDeps) =>
             message: `${bot(app)} is suspended on GitHub, so it cannot act on ${repositorySlug(repository)}. Unsuspend it in its installation settings on GitHub.`,
           });
         }
+        seenInstalled.add(seenKey(agentId, app.appId));
         return installation.id;
       });
 
@@ -232,7 +292,7 @@ export const makeHobAppTokens = (deps: HobAppTokenDeps) =>
         if (response.status === 404 || response.status === 422) {
           // The installation went away, or no longer reaches the repository: GitHub is asked again next time.
           yield* Cache.invalidate(installations, installationKeyOf(agentId, app, repository));
-          if (response.status === 404) return yield* notInstalled(app, repository);
+          if (response.status === 404) return yield* uninstalled(agentId, app, repository, jwt);
           return yield* new GitHubError({
             reason: "not-found",
             message: `GitHub would not give ${bot(app)} a token for ${repositorySlug(repository)}: the app may not be installed there, or not have the permissions this needs. Check its installation at ${deps.installUrl(app)}.`,
@@ -308,6 +368,7 @@ export const makeHobAppTokens = (deps: HobAppTokenDeps) =>
           yield* Cache.invalidate(tokens, key);
           yield* Cache.invalidate(installations, key);
         }
+        for (const seen of seenInstalled) if (seen.startsWith(`${agentId}:`)) seenInstalled.delete(seen);
         for (const [value, was] of issued) {
           if (was.agentId !== agentId) continue;
           issued.delete(value);
@@ -322,8 +383,9 @@ export const makeHobAppTokens = (deps: HobAppTokenDeps) =>
       revoked,
       reaches,
       reconnect,
-      settled: (agentId, installed) =>
+      settled: (agentId, app, installed) =>
         Effect.sync(() => {
+          if (installed) seenInstalled.add(seenKey(agentId, app.appId));
           if (installed || marks.get(agentId)?.why.reason === "key") marks.delete(agentId);
         }),
       keyRefused,

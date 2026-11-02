@@ -1,5 +1,6 @@
 import {
   type Agent,
+  CommandOutput,
   EVENT_SCHEMA_VERSIONS,
   EventEnvelope,
   type HobbotsEvent,
@@ -39,12 +40,13 @@ import {
 } from "./sync.ts";
 import type { TaskEvent } from "./task-trees.ts";
 import { applyTaskEvent } from "./tasks.ts";
-import { activityChanged, recordedAttempt } from "./workbench.ts";
+import { activityChanged, applyCommandOutput, recordedAttempt } from "./workbench.ts";
 
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
 const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady));
 const decodeDelta = Schema.decodeUnknownSync(Schema.fromJsonString(MessageDelta));
 const decodeRemoteAccess = Schema.decodeUnknownSync(Schema.fromJsonString(RemoteAccessChanged));
+const decodeCommandOutput = Schema.decodeUnknownSync(Schema.fromJsonString(CommandOutput));
 
 /** How long a stream the hub closed waits before it opens again. */
 const REOPEN_AFTER_MS = 2000;
@@ -107,6 +109,16 @@ type WorkbenchEvent = Extract<
 const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent =>
   event._tag === "CommandOutput" || recordedAttempt(event) !== null;
 
+/** A recorded command, file change or scan reads its Attempt's records again; a running command's output is kept as it comes. */
+const applyWorkbenchEvent = (queryClient: QueryClient, event: WorkbenchEvent) => {
+  if (event._tag === "CommandOutput") {
+    applyCommandOutput(queryClient, event);
+    return;
+  }
+  const attemptId = recordedAttempt(event);
+  if (attemptId !== null) void activityChanged(queryClient, attemptId);
+};
+
 /**
  * Applies an event to the Query cache and records what it changed in the sync generation's overlay.
  * Lists are only patched once loaded; creating a partial list here would hide the rest of it.
@@ -116,8 +128,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   // An Attempt's commands, file changes and scans (ADR 023) read its records again in the Workbench.
   // A running command's output is transient; the Terminal follows it.
   if (isWorkbenchEvent(event)) {
-    const attemptId = recordedAttempt(event);
-    if (attemptId !== null) void activityChanged(queryClient, attemptId);
+    applyWorkbenchEvent(queryClient, event);
     return;
   }
   switch (event._tag) {
@@ -292,6 +303,13 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
     source.addEventListener(STREAM_FRAME.delta, (frame) => {
       try {
         applyDelta(queryClient, decodeDelta(frame.data));
+      } catch (error) {
+        console.warn("Ignoring malformed event", error);
+      }
+    });
+    source.addEventListener(STREAM_FRAME.commandOutput, (frame) => {
+      try {
+        applyCommandOutput(queryClient, decodeCommandOutput(frame.data));
       } catch (error) {
         console.warn("Ignoring malformed event", error);
       }
