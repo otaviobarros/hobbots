@@ -31,6 +31,11 @@ export const ServerConfig = Config.all({
     ["ready", "outdated", "signedOut", "unavailable", "unverified"],
     "HOBBOTS_FAKE_CODEX_AVAILABILITY",
   ).pipe(Config.withDefault("ready" as const)),
+  // How the GitHub Charm pushes (ADR 020): over HTTPS with the hub's GitHub sign-in, or over SSH
+  // with the user's SSH agent, such as 1Password's. HOBBOTS_GITHUB_SSH_AGENT names the agent's socket;
+  // the hub's own SSH_AUTH_SOCK when absent.
+  githubPush: Config.Literals(["https", "ssh"], "HOBBOTS_GITHUB_PUSH").pipe(Config.withDefault("https" as const)),
+  githubSshAgent: Config.String("HOBBOTS_GITHUB_SSH_AGENT").pipe(Config.option),
   // Whether the fake runtime pretends its sandbox started, or cannot start on this hub.
   fakeSandbox: Config.Literals(["on", "unavailable"], "HOBBOTS_FAKE_SANDBOX").pipe(Config.withDefault("on" as const)),
   // Limits every hob tool call is held to (ADR 018): how many Quests deep work may nest, and how

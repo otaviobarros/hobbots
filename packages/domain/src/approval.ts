@@ -112,8 +112,11 @@ export const stableJson = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
-/** The arguments that say exactly what a call does, in the order they are looked for. */
-const EXACT_KEYS = ["command", "url", "file_path", "notebook_path", "path", "pattern", "query"] as const;
+/**
+ * The arguments that say exactly what a call does, in the order they are looked for. A hub tool's
+ * call, such as a GitHub push, says it in `summary`, which the hub writes from what it fixed.
+ */
+const EXACT_KEYS = ["command", "url", "file_path", "notebook_path", "path", "pattern", "query", "summary"] as const;
 
 /**
  * The exact action to show for a request: the command, address, file or pattern the call was made

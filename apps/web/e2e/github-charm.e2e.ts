@@ -97,3 +97,31 @@ test("[TC-GEN-024] connects GitHub in Settings and grants it per hob on the Char
   await expect(charms.getByText(/Through your GitHub CLI sign-in/)).toBeVisible();
   await expect(charms.getByText("Reaches every repository @octohob can see.", { exact: false })).toBeVisible();
 });
+
+// covers PE-002
+test("[TC-GEN-040] shows a repository added on GitHub while Hobbots stays open beside the browser", async ({
+  page,
+  context,
+}) => {
+  hub = await startHub(dataDir, { HOBBOTS_FAKE_GITHUB: "on" });
+  const current = hub;
+  await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
+  // GitHub itself is not reached: the page it opens is empty.
+  await context.route("https://github.com/**", (route) => route.fulfill({ body: "" }));
+
+  await page.goto(`${current.url}/#/settings`);
+  const charms = page.getByRole("region", { name: "Charms" });
+  await charms.getByRole("button", { name: "Connect with Hobbots" }).click();
+  const reached = charms.getByRole("list", { name: "Repositories it reaches" });
+  await expect(reached).toContainText("octohob/workshop", { timeout: 15_000 });
+  await expect(reached).not.toContainText("octohob/notes");
+
+  // You go to GitHub to choose repositories: Hobbots loses focus but stays on screen.
+  const github = context.waitForEvent("page");
+  await charms.getByRole("link", { name: "Choose repositories on GitHub" }).click();
+  await (await github).close();
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+
+  // The stand-in lists a second repository a few seconds later, as if you added it there.
+  await expect(reached).toContainText("octohob/notes", { timeout: 20_000 });
+});

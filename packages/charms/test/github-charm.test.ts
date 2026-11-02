@@ -16,8 +16,10 @@ import {
   GitHubCharmTools,
   GitHubCredential,
   GitHubError,
+  GitPushLive,
   GitRemotes,
 } from "../src/index.ts";
+import { directSandbox, memoryCharmCalls } from "./support.ts";
 
 let root = "";
 let project = "";
@@ -78,6 +80,8 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
           comments: [],
         });
       },
+      branchHead: () => Effect.succeed(null),
+      viewer: () => Effect.succeed("otaviobarros"),
     }),
   );
 
@@ -132,6 +136,10 @@ const charmLayer = (layers: {
         fakeRemotes({ [project]: layers.remote ?? HOBBOTS, [other]: { owner: "someone", name: "secret" } }),
         PolicyEngine.node,
         fakeCredential(layers.connected ?? true),
+        memoryCharmCalls(),
+        GitPushLive({ folder: path.join(root, "data", "charms", "github") }).pipe(
+          Layer.provide(Layer.mergeAll(directSandbox, NodeServices.layer)),
+        ),
       ),
     ),
   );
@@ -141,8 +149,11 @@ const offered = (layers: { readonly asked: Array<string>; readonly connected?: b
   Effect.gen(function* () {
     return yield* (yield* CharmTools).forTurn({
       agentId: AgentId.make("hob"),
+      threadId: null,
+      messageId: null,
       currentAccess: Effect.succeed(atStart),
       redactor: makeRedactor(),
+      approvals: null,
     });
   }).pipe(Effect.provide(charmLayer(layers)), Effect.runPromise);
 
@@ -152,25 +163,44 @@ const callWith = (
   current: ToolAccess | null,
   name: string,
   input: unknown,
+  steerFrom: ReadonlyArray<string> = [],
 ) =>
   Effect.gen(function* () {
     const charms = yield* CharmTools;
     let now: ToolAccess | null = access([project]);
     const tools = yield* charms.forTurn({
       agentId: AgentId.make("hob"),
+      threadId: null,
+      messageId: null,
       currentAccess: Effect.sync(() => now),
       redactor: makeRedactor(),
+      approvals: null,
     });
     if (tools === null) throw new Error("The turn was offered no GitHub tools");
     now = current;
-    return { names: tools.tools.map((tool) => tool.name), answer: yield* tools.call(name, input) };
+    const steered: Array<string | null> = [];
+    for (const cwd of steerFrom) steered.push(tools.steersPush ? yield* tools.steersPush(cwd) : null);
+    return { names: tools.tools.map((tool) => tool.name), answer: yield* tools.call(name, input), steered };
   }).pipe(Effect.provide(charmLayer(layers)), Effect.runPromise);
 
 describe("GitHub Charm", () => {
+  it("[TC-PE-158] points a git push to github_push only in the hob's folders whose origin is on GitHub", async () => {
+    const noRemote = path.join(root, "runtimes");
+    const { steered } = await callWith({ asked: [] }, access([project, noRemote]), "github_repository", {}, [
+      project,
+      noRemote,
+      other,
+    ]);
+    // A folder without a GitHub origin, or one the hob was not given, keeps its push decided as Push.
+    expect(steered).toEqual(["github_push", null, null]);
+    const chatOnly = await callWith({ asked: [] }, null, "github_repository", {}, [project]);
+    expect(chatOnly.steered).toEqual([null]);
+  });
+
   it("[TC-PE-131] reads the repository of the hob's own folder, on the hub", async () => {
     const asked: Array<string> = [];
     const { names, answer } = await callWith({ asked }, access([project]), "github_search", { kind: "issue" });
-    expect(names).toEqual(["github_repository", "github_search", "github_item"]);
+    expect(names).toEqual(["github_repository", "github_search", "github_item", "github_push"]);
     expect(answer.refused).toBe(false);
     expect(answer.text).toContain("37 matches for `repo:otaviobarros/hobbots is:issue is:open`.");
     expect(asked).toEqual(["search repo:otaviobarros/hobbots is:issue is:open (10)"]);
@@ -226,7 +256,12 @@ describe("GitHub Charm", () => {
   it("[TC-PE-140] offers its actions only to a hob with the Charm while GitHub is connected", async () => {
     const asked: Array<string> = [];
     const on = await offered({ asked }, access([project]));
-    expect(on?.tools.map((tool) => tool.name)).toEqual(["github_repository", "github_search", "github_item"]);
+    expect(on?.tools.map((tool) => tool.name)).toEqual([
+      "github_repository",
+      "github_search",
+      "github_item",
+      "github_push",
+    ]);
     expect(await offered({ asked }, access([project], undefined, false))).toBeNull();
     expect(await offered({ asked, connected: false }, access([project]))).toBeNull();
     expect(await offered({ asked }, null)).toBeNull();

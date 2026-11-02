@@ -25,7 +25,7 @@ Adapters and Hobbots services record real evidence. Inactivity is not acknowledg
 
 ## Records
 
-The backpack is built in `@hobbots/inbox`, `@hobbots/persistence` and migration 0026 ([#290](https://github.com/otaviobarros/hobbots/issues/290)), delivery in `@hobbots/inbox` ([#291](https://github.com/otaviobarros/hobbots/issues/291)), continuations in `@hobbots/agents`, `@hobbots/inbox` and the hub ([#292](https://github.com/otaviobarros/hobbots/issues/292)), and blockers in migration 0028, the hub and the web client ([#296](https://github.com/otaviobarros/hobbots/issues/296)).
+The backpack is built in `@hobbots/inbox`, `@hobbots/persistence` and migration 0026 ([#290](https://github.com/otaviobarros/hobbots/issues/290)), delivery in `@hobbots/inbox` ([#291](https://github.com/otaviobarros/hobbots/issues/291)), continuations in `@hobbots/agents`, `@hobbots/inbox` and the hub ([#292](https://github.com/otaviobarros/hobbots/issues/292)), and blockers in migration 0029, the hub and the web client ([#296](https://github.com/otaviobarros/hobbots/issues/296)).
 
 - **`BackpackItem`** (`@hobbots/domain`): recipient, kind, actionable, priority, state, the Task, Quest, Attempt and thread it belongs to, dedupe key, payload, not-before time, claim, fencing token, deliveries, disposition, error and blockers. Its `questId` is the nearest Quest above its Task, the one whose lead runs the work.
 - **`backpackItemsFor`** (`@hobbots/inbox`): the pure rule that turns a change's journal events into items. The repositories call it inside every journaled change, so the hob tools need no change. Routine progress is recorded too; it is not actionable. The hub's own ending checkpoints make no item, because the result or failure says it.

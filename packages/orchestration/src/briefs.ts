@@ -35,7 +35,7 @@ const firstLine = (text: string) => cut(text.split("\n")[0] ?? "", 160);
 const childrenOf = (task: Task, tree: TaskTree) => tree.tasks.filter((each) => each.parentId === task.id);
 
 /** A Task with the same owner as its parent: a step (ADR 018). */
-export const isStep = (task: Task, tree: ReadonlyArray<Task>): boolean =>
+const isStep = (task: Task, tree: ReadonlyArray<Task>): boolean =>
   tree.some((each) => each.id === task.parentId && each.ownerId === task.ownerId);
 
 /** Where `step` sits among its parent's steps, from 1, and how many there are. */

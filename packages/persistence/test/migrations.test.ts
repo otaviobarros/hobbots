@@ -14,7 +14,7 @@ import threadBrains from "../src/migrations/0020_thread_brains.ts";
 import hobSignCommits from "../src/migrations/0021_hob_sign_commits.ts";
 import threadArchivedAt from "../src/migrations/0023_thread_archived_at.ts";
 import githubCharm from "../src/migrations/0027_github_charm.ts";
-import backpackBlockers from "../src/migrations/0028_backpack_blockers.ts";
+import backpackBlockers from "../src/migrations/0029_backpack_blockers.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 /** The migrations that ran before the one with this id, to check it against existing rows. */
@@ -799,7 +799,7 @@ describe("0027_github_charm", () => {
   });
 });
 
-describe("0028_backpack_blockers", () => {
+describe("0029_backpack_blockers", () => {
   // covers DP-003, IN-007
   it("[TC-IN-095] gives every item that failed before it a blocker to retry, counting its deliveries, and none to the rest", async () => {
     const result = await Effect.gen(function* () {
@@ -843,7 +843,7 @@ describe("0028_backpack_blockers", () => {
       }
       yield* backpackBlockers;
       return yield* sql`SELECT * FROM backpack_blockers`;
-    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0028"))), Effect.runPromise);
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0029"))), Effect.runPromise);
 
     expect(
       result.map((row) => ({ ...row, number: Number(row.number), afterDeliveries: Number(row.afterDeliveries) })),
