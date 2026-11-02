@@ -59,4 +59,5 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-02 A turn whose backpack claim ran out writes nothing through the hob tools](2026-11-02-stale-claim-fence.md)
 - [2026-11-02 Tasks and Quests run end to end, through a restart](2026-11-02-tasks-and-quests-end-to-end.md)
 - [2026-11-02 A member that leads a nested Quest is left with nothing pending](2026-11-02-nested-lead-progress.md)
+- [2026-11-02 Remote access holds end to end over a fake Tailscale](2026-11-02-remote-access-end-to-end.md)
 - [2026-11-02 A hob with its own GitHub app works on GitHub as its bot, end to end against a fake GitHub](2026-11-02-hob-github-identity-end-to-end.md)

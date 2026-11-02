@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { formatBytes, operationLabel, shownSteps } from "../lib/reply-steps.ts";
 import { formatTime } from "../lib/time.ts";
 import { messages } from "./messages.ts";
+import { LogLink, OutputBlock } from "./tool-output.tsx";
 
 type StepState = ReplyStep["state"];
 
@@ -154,44 +155,19 @@ function ToolStep({
   );
 }
 
-const OUTPUT_TEXT =
-  "m-0 max-h-60 overflow-auto px-2.5 py-2 font-mono text-xs leading-normal whitespace-pre-wrap break-all";
-
-/**
- * What the call printed. Long output shows its start and its end, where the error usually is, with
- * how much was left out between them and a link to the whole log.
- */
+/** What the call printed, with a link to the whole log when part of it was left out. */
 function StepOutput({ output, logUrl }: { output: ToolOutput; logUrl: string }) {
-  const cut = output.omittedBytes > 0;
   return (
-    <figure aria-label={copy.output} className="m-0 ms-5.5 mt-1.5 flex min-w-0 flex-col border-2 border-line bg-deep">
-      <figcaption className="border-b-2 border-line px-2.5 py-1 text-xs text-label">{copy.output}</figcaption>
-      <pre className={OUTPUT_TEXT}>{output.head}</pre>
-      {cut && (
-        <>
-          <p className="m-0 border-y-2 border-dashed border-line px-2.5 py-1 text-center text-xs text-label">
-            {copy.omitted({ size: formatBytes(output.omittedBytes) })}
-          </p>
-          {/* Reversed, so the end, where an error usually is, shows first and the rest scrolls up. */}
-          <div className="flex max-h-60 flex-col-reverse overflow-auto">
-            <pre className={cn(OUTPUT_TEXT, "max-h-none overflow-visible")}>{output.tail}</pre>
-          </div>
-          <p className="m-0 border-t-2 border-line px-2.5 py-1 text-xs">
-            {output.logged ? (
-              <a
-                href={logUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-lantern underline-offset-2 hover:underline"
-              >
-                {copy.openLog({ size: formatBytes(output.totalBytes) })}
-              </a>
-            ) : (
-              <span className="text-label">{copy.noLog}</span>
-            )}
-          </p>
-        </>
-      )}
-    </figure>
+    <OutputBlock
+      output={output}
+      className="ms-5.5 mt-1.5"
+      whole={
+        output.logged ? (
+          <LogLink href={logUrl}>{copy.openLog({ size: formatBytes(output.totalBytes) })}</LogLink>
+        ) : (
+          <span className="text-label">{copy.noLog}</span>
+        )
+      }
+    />
   );
 }

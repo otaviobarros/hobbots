@@ -35,7 +35,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Clock, Duration, Effect, Layer, Schedule } from "effect";
+import { Clock, type Duration, Effect, Layer, Schedule } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -44,6 +44,7 @@ import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
 import { ToolLogsLive } from "../src/tool-logs.ts";
 import { HobToolsLive } from "../src/tools.ts";
+import { movableClock } from "./movable-clock.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 // Slice 8's done-when checks (ADR 015), at hub level and over the HTTP API, with the hub's own
@@ -56,51 +57,6 @@ const project = join(temp, "project");
 const dataDir = join(temp, "hub", "data");
 mkdirSync(project, { recursive: true });
 mkdirSync(dataDir, { recursive: true });
-
-/**
- * The wall clock, moved forward on demand, so a case can let a day pass without waiting a day.
- * Sleeps end at their real time or as soon as the clock is moved past them, whichever comes first.
- */
-const movableClock = () => {
-  let offset = 0;
-  const sleepers = new Set<{ readonly until: number; readonly wake: () => void }>();
-  const now = () => Date.now() + offset;
-  const nanos = () => BigInt(now()) * 1_000_000n;
-  const monotonic = () => process.hrtime.bigint() + BigInt(offset) * 1_000_000n;
-  const clock: Clock.Clock = {
-    currentTimeMillisUnsafe: now,
-    currentTimeMillis: Effect.sync(now),
-    currentTimeNanosUnsafe: nanos,
-    currentTimeNanos: Effect.sync(nanos),
-    monotonicTimeNanosUnsafe: monotonic,
-    monotonicTimeNanos: Effect.sync(monotonic),
-    sleep: (duration) =>
-      Effect.callback<void>((resume) => {
-        const millis = Duration.toMillis(duration);
-        const done = () => {
-          clearTimeout(timer);
-          sleepers.delete(sleeper);
-        };
-        const sleeper = {
-          until: now() + millis,
-          wake: () => {
-            done();
-            resume(Effect.void);
-          },
-        };
-        // Node's timers hold at most about 24.8 days; nothing here sleeps that long.
-        const timer = setTimeout(sleeper.wake, Math.min(millis, 2 ** 31 - 1));
-        timer.unref();
-        sleepers.add(sleeper);
-        return Effect.sync(done);
-      }),
-  };
-  const advance = (duration: Duration.Input) => {
-    offset += Duration.toMillis(duration);
-    for (const sleeper of [...sleepers]) if (sleeper.until <= now()) sleeper.wake();
-  };
-  return { clock, advance };
-};
 
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;

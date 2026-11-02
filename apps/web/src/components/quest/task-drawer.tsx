@@ -1,12 +1,12 @@
 import { type AgentId, isTerminalTask, type Task, type TaskId, type TaskTree, type ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { formatTime } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { useOpenWorkbench } from "../workbench/use-workbench.ts";
 import { roomStatus, roomStatusLabel, roomTone } from "./control-room.ts";
 import { messages } from "./messages.ts";
-import { emptyNote, NoteBox, type NoteDraft } from "./note-box.tsx";
+import { NoteBox, type NoteDrafts } from "./note-box.tsx";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
 import { findTask, taskDetail, taskTitle } from "./work-model.ts";
@@ -24,12 +24,15 @@ export function TaskDrawer({
   threadId,
   taskId,
   pinned,
+  drafts,
 }: {
   hobId: AgentId;
   threadId: ThreadId;
   taskId: TaskId;
   /** Pinned Tasks from other threads, which open here too. */
   pinned: ReadonlyArray<TaskId>;
+  /** Each Task's unsent note, so moving between Tasks never sends one about another. */
+  drafts: NoteDrafts;
 }) {
   const followed = useFollowedTrees(threadId, pinned);
   const trees = [...followed.thread, ...followed.elsewhere];
@@ -37,8 +40,6 @@ export function TaskDrawer({
   const open = useOpenTask(hobId, threadId);
   const openWorkbench = useOpenWorkbench(hobId, threadId);
   const heading = useRef<HTMLHeadingElement>(null);
-  // Each Task keeps its own unsent note, so moving between Tasks never sends one about another.
-  const [drafts, setDrafts] = useState<ReadonlyMap<TaskId, NoteDraft>>(new Map());
   // Opening another Task moves focus to its title, so a keyboard user lands in the drawer.
   // biome-ignore lint/correctness/useExhaustiveDependencies: each Task opened moves focus again.
   useEffect(() => {
@@ -89,8 +90,8 @@ export function TaskDrawer({
           tree={found.tree}
           task={found.task}
           hobs={hobs}
-          draft={drafts.get(found.task.id) ?? emptyNote()}
-          setDraft={(draft) => setDrafts((all) => new Map(all).set(found.task.id, draft))}
+          draft={drafts.get(found.task.id)}
+          setDraft={(draft) => drafts.set(found.task.id, draft)}
         />
       )}
     </aside>

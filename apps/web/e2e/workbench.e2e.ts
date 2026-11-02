@@ -163,6 +163,146 @@ test("[TC-UX-022] the Workbench opens from the Task drawer and the Quest tab, an
   await expect(bench.getByRole("tab", { name: /^Summary/ })).toHaveAttribute("aria-selected", "true");
 });
 
+// covers UX-002, IN-004
+test("[TC-UX-050] a nudge from the Workbench chat reaches Aldric as a note on the Task, and his next turn reads it", async ({
+  page,
+}) => {
+  const { url, aldric } = await aldricHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill(["Tidy the notes", script("start_quest", { key: "quest", goal: "Tidy the notes" })].join("\n"));
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
+  const card = page.getByRole("region", { name: "Aldric's work on Tidy the notes" });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 20_000 });
+
+  // The chat drawer opens beside the tabs, in the address, with focus in it.
+  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
+  await bench.getByRole("button", { name: "Talk to Aldric" }).click();
+  const chat = bench.getByRole("complementary", { name: "Talk about Tidy the notes" });
+  await expect(chat.getByRole("heading", { name: "Talk to Aldric" })).toBeFocused();
+  await expect(chat).toContainText("Nothing sent about this task yet.");
+  await expect(chat).toContainText("Goes to Aldric as a note on this task.");
+  await expect(page).toHaveURL(/chat=open/);
+  const nudges = chat.getByRole("group", { name: "Quick nudges" });
+  await expect(nudges.getByRole("button")).toHaveText(["Looks good", "Explain what you did", "Keep going"]);
+
+  // One tap sends the nudge as a note, which shows under your notes.
+  await nudges.getByRole("button", { name: "Explain what you did" }).click();
+  await expect(chat.getByRole("status")).toHaveText("Sent “Explain what you did” to Aldric.");
+  const notes = chat.getByRole("list", { name: "Your notes on this task" });
+  await expect(notes).toContainText("Explain what you did");
+  await expect(notes).toContainText("To Aldric");
+
+  // Escape closes the chat first, then leaves the Workbench.
+  await page.keyboard.press("Escape");
+  await expect(chat).toBeHidden();
+  await expect(bench.getByRole("button", { name: "Talk to Aldric" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(bench).toBeHidden();
+
+  // Aldric's next turn reads the note as a message about this Task.
+  await expect(page.getByText(/The user left a note about Task \S+: Explain what you did/)).toBeVisible({
+    timeout: 20_000,
+  });
+});
+
+// covers UX-002
+test("[TC-UX-052] a finished Task's Workbench chat offers no nudges or note box, and sends you to the chat", async ({
+  page,
+}) => {
+  const { url, aldric } = await aldricHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill(
+    [
+      "Tidy the notes",
+      script("start_quest", { key: "quest", goal: "Tidy the notes" }),
+      script("complete_task", { key: "done", summary: "The notes are tidy." }),
+    ].join("\n"),
+  );
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
+  const card = page.getByRole("region", { name: "Aldric's work on Tidy the notes" });
+  await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
+
+  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
+  await bench.getByRole("button", { name: "Talk to Aldric" }).click();
+  const chat = bench.getByRole("complementary", { name: "Talk about Tidy the notes" });
+  await expect(chat).toContainText("This work has ended. Tell Aldric in the chat instead.");
+  await expect(chat.getByRole("group", { name: "Quick nudges" })).toHaveCount(0);
+  await expect(chat.getByRole("textbox")).toHaveCount(0);
+
+  // Hide the chat closes it, and the address forgets it.
+  await bench.getByRole("button", { name: "Hide the chat" }).click();
+  await expect(chat).toBeHidden();
+  await expect(page).not.toHaveURL(/chat=open/);
+});
+
+// covers UX-002, UX-006
+test("[TC-UX-053] a nudge whose reply was lost goes out once when tapped again, even after the chat was closed", async ({
+  page,
+}) => {
+  const { url, aldric } = await aldricHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill(["Tidy the notes", script("start_quest", { key: "quest", goal: "Tidy the notes" })].join("\n"));
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
+  const card = page.getByRole("region", { name: "Aldric's work on Tidy the notes" });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 20_000 });
+
+  // The hub takes the nudge, but its reply never reaches the page.
+  let reached = 0;
+  await page.route("**/api/tasks/*/notes", async (route) => {
+    await route.fetch();
+    reached += 1;
+    await route.abort("connectionreset");
+  });
+  await card.getByRole("button", { name: "Open in Workbench" }).click();
+  const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
+  const talk = bench.getByRole("button", { name: "Talk to Aldric" });
+  await talk.click();
+  const chat = bench.getByRole("complementary", { name: "Talk about Tidy the notes" });
+  const keepGoing = chat.getByRole("group", { name: "Quick nudges" }).getByRole("button", { name: "Keep going" });
+  await keepGoing.click();
+  await expect(chat.getByRole("status")).toHaveText("Your note could not be sent. Try again.");
+  expect(reached).toBe(1);
+
+  // Closed and opened again, the same nudge goes out under the same key: the hub keeps it once.
+  await page.unroute("**/api/tasks/*/notes");
+  await bench.getByRole("button", { name: "Hide the chat" }).click();
+  await expect(chat).toBeHidden();
+  await talk.click();
+  await keepGoing.click();
+  await expect(chat.getByRole("status")).toHaveText("Sent “Keep going” to Aldric.");
+  await expect(chat.getByRole("list", { name: "Your notes on this task" }).getByRole("listitem")).toHaveCount(1);
+  await page.reload();
+  await expect(
+    page
+      .getByRole("complementary", { name: "Talk about Tidy the notes" })
+      .getByRole("list", { name: "Your notes on this task" })
+      .getByRole("listitem"),
+  ).toHaveCount(1);
+
+  // Tapped once more after the hub had it, it is a new note.
+  await page
+    .getByRole("complementary", { name: "Talk about Tidy the notes" })
+    .getByRole("button", { name: "Keep going" })
+    .click();
+  await expect(
+    page
+      .getByRole("complementary", { name: "Talk about Tidy the notes" })
+      .getByRole("list", { name: "Your notes on this task" })
+      .getByRole("listitem"),
+  ).toHaveCount(2);
+});
+
 // covers UX-002, UX-006
 test("[TC-UX-030] a finished Task's Summary says what was asked, what happened and what it made, and links each file into Changes and Files", async ({
   page,

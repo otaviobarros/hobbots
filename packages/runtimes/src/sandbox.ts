@@ -280,10 +280,22 @@ export const GIT_IDENTITY_VARIABLES = [
 ] as const;
 
 /**
+ * The user's signing setup taken away from a bot's commands: no key, OpenPGP rather than SSH, and
+ * Git's own SSH signer rather than the user's (such as 1Password's `op-ssh-sign`). Turning
+ * `commit.gpgsign` off is not enough, since `git commit -S` asks for a signature whatever it says;
+ * without these, a hob that reads the user's config and passes `-S` reaches the user's signer.
+ */
+const NO_USER_SIGNER: ReadonlyArray<readonly [string, string]> = [
+  ["user.signingkey", ""],
+  ["gpg.format", "openpgp"],
+  ["gpg.ssh.program", "ssh-keygen"],
+];
+
+/**
  * A hob with its own GitHub App commits as its bot (ADR 022): its name and noreply address as the
- * user, author and committer, unsigned, since the user's key never vouches for a bot's commits. The
- * identity variables are removed, since they would win over these settings. A hob on the user's
- * account keeps the environment as it is.
+ * user, author and committer, unsigned and with none of the user's signing setup, since the user's
+ * key never vouches for a bot's commits. The identity variables are removed, since they would win
+ * over these settings. A hob on the user's account keeps the environment as it is.
  */
 export const withCommitIdentity = (env: NodeJS.ProcessEnv, commitAs: CommitIdentity | undefined): NodeJS.ProcessEnv => {
   if (commitAs === undefined) return env;
@@ -300,6 +312,7 @@ export const withCommitIdentity = (env: NodeJS.ProcessEnv, commitAs: CommitIdent
         ],
       ),
       ...UNSIGNED,
+      ...NO_USER_SIGNER,
     ]),
   };
 };

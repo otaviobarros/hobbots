@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAgo, formatCount, formatIn, plural } from "./format.ts";
+import { formatAgo, formatCount, formatDuration, formatIn, plural } from "./format.ts";
 
 describe("format", () => {
   it("formats counts and times ahead in the locale", () => {
@@ -20,5 +20,15 @@ describe("format", () => {
     expect(formatAgo("2026-11-02T12:30:00Z", now, "en-US")).toBe("2 hours ago");
     expect(formatAgo("2026-11-01T12:00:00Z", now, "en-US")).toBe("yesterday");
     expect(formatAgo("2026-11-02T15:00:05Z", now, "en-US")).toBe("now");
+  });
+
+  it("formats how long something took, to the second", () => {
+    expect(formatDuration(420, "en-US")).toBe("0.4 sec");
+    expect(formatDuration(12_900, "en-US")).toBe("12 sec");
+    expect(formatDuration(184_000, "en-US")).toBe("3 min 4 sec");
+    expect(formatDuration(120_000, "en-US")).toBe("2 min");
+    expect(formatDuration(3_900_000, "en-US")).toBe("1 hr 5 min");
+    expect(formatDuration(30, "en-US")).toBe("0.1 sec");
+    expect(formatDuration(-5, "en-US")).toBe("0 sec");
   });
 });
