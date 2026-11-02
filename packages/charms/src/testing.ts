@@ -139,13 +139,26 @@ const invalid = (message: string) => json(422, { message: "Validation Failed", e
 
 const newToken = (prefix: string) => `${prefix}_${randomBytes(18).toString("base64url")}`;
 
-/** The words of a search query: `name:value` qualifiers, a quoted value kept whole, and plain words. */
+/**
+ * The `name:value` qualifiers of a search query, a quoted value kept whole. Read in one pass with no
+ * regular expression, since the query comes from the request (STD-SEC-005).
+ */
 const qualifiers = (query: string) => {
-  const found: Array<[string, string]> = [];
-  for (const match of query.matchAll(/(\w+):("[^"]*"|\S+)/g)) {
-    found.push([match[1] ?? "", (match[2] ?? "").replace(/^"|"$/g, "")]);
+  const words: Array<string> = [];
+  let word = "";
+  let quoted = false;
+  for (const character of query) {
+    if (character === '"') quoted = !quoted;
+    else if (character === " " && !quoted) {
+      words.push(word);
+      word = "";
+    } else word += character;
   }
-  return found;
+  words.push(word);
+  return words.flatMap((each): Array<[string, string]> => {
+    const colon = each.indexOf(":");
+    return colon > 0 ? [[each.slice(0, colon), each.slice(colon + 1)]] : [];
+  });
 };
 
 const matches = (item: FakeItem, [name, value]: [string, string]) => {
