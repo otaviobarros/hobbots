@@ -33,6 +33,7 @@ import memberApprovals from "./0030_member_approvals.ts";
 import devices from "./0031_devices.ts";
 import taskNotes from "./0032_task_notes.ts";
 import withdrawnQuestions from "./0033_withdrawn_questions.ts";
+import hobGitHubApps from "./0034_hob_github_apps.ts";
 import taskGrants from "./0035_task_grants.ts";
 
 /**
@@ -74,5 +75,6 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0031_devices": devices,
   "0032_task_notes": taskNotes,
   "0033_withdrawn_questions": withdrawnQuestions,
+  "0034_hob_github_apps": hobGitHubApps,
   "0035_task_grants": taskGrants,
 };

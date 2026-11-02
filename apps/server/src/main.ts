@@ -23,6 +23,9 @@ import {
   GitHubSignInNode,
   GitPushLive,
   GitRemotes,
+  HobAppKeysLive,
+  HobAppKeysMemory,
+  HobGitHubAppNode,
   KeychainLive,
   KeychainMemory,
   LocalGitHubSignInsFake,
@@ -41,6 +44,7 @@ import {
   GitHubAccountRepository,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
+  HobGitHubAppRepository,
   SearchIndex,
   SetupRepository,
   SqliteLive,
@@ -65,6 +69,7 @@ import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
+import { HobGitHubAppPages } from "./hob-github-app.ts";
 import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
@@ -158,6 +163,15 @@ const ServerLive = Layer.unwrap(
         ),
       ),
     );
+    // Each hob's own GitHub App (ADR 022): its identity in the database, its key in the keychain.
+    const HobApp = HobGitHubAppNode().pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          fakeGitHub ? HobAppKeysMemory : HobAppKeysLive(process.platform, process.env),
+          HobGitHubAppRepository.pipe(Layer.provide(Sqlite)),
+        ),
+      ),
+    );
     const charmFolder = join(dataDir, "charms", "github");
     const Charms = GitHubCharmTools.pipe(
       Layer.provide(
@@ -178,7 +192,7 @@ const ServerLive = Layer.unwrap(
           }),
         ),
       ),
-      Layer.provideMerge(Account),
+      Layer.provideMerge(Layer.merge(Account, HobApp)),
       Layer.provide(NodeServices.layer),
     );
     // The hub's own path separator, which alone divides the folders a hob may be given (STD-SEC-003).
@@ -270,6 +284,7 @@ const ServerLive = Layer.unwrap(
           Layer.mergeAll(
             ApiRoutes,
             EventStreamRoute,
+            HobGitHubAppPages,
             WebClientRoutes(config.webDir),
             OwnHostsOnly,
             KnownTailnetPeersOnly,

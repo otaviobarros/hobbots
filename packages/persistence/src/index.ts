@@ -4,6 +4,7 @@ export * from "./charm-calls.ts";
 export * from "./devices.ts";
 export * from "./github-account.ts";
 export * from "./grants.ts";
+export * from "./hob-github-apps.ts";
 export * from "./journal.ts";
 export * from "./migrations/index.ts";
 export * from "./postgres.ts";

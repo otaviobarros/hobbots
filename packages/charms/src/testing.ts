@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, type KeyObject, randomBytes, verify } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -91,6 +91,25 @@ export interface FakeGitHubOptions {
   readonly pendingPolls?: number;
 }
 
+/** A GitHub App the fake made from a manifest, as a hob's own app is (ADR 022). */
+export interface FakeApp {
+  readonly id: number;
+  readonly slug: string;
+  readonly clientId: string;
+  /** The manifest it was made from, as posted. */
+  readonly manifest: Record<string, unknown>;
+  /** The bot's user ID. */
+  readonly botId: number;
+  readonly installations: Array<FakeAppInstallation>;
+  /** Whether GitHub still takes JWTs signed with its key; false once revoked or deleted. */
+  keyLive: boolean;
+}
+
+export interface FakeAppInstallation {
+  readonly id: number;
+  readonly selection: "all" | "selected";
+}
+
 export interface FakeGitHub {
   /** Where GitHub's web, API and Git are all served. */
   readonly base: string;
@@ -117,6 +136,10 @@ export interface FakeGitHub {
   readonly secrets: () => ReadonlyArray<string>;
   /** Stops taking every access token handed out so far, as when they expire; refresh tokens still work. */
   readonly expireAccessTokens: () => void;
+  /** The apps made from a manifest, oldest first. */
+  readonly apps: ReadonlyArray<FakeApp>;
+  /** Installs an app made from a manifest on the account, as the user would on its installation page. */
+  readonly installApp: (slug: string, selection?: "all" | "selected") => number;
   readonly close: () => Promise<void>;
 }
 
@@ -186,6 +209,12 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
   const issued: Array<string> = [...(options.tokens ?? [])];
   const requests: Array<FakeGitHubRequest> = [];
   let polls = 0;
+  const apps: Array<FakeApp> = [];
+  const appKeys = new Map<number, KeyObject>();
+  // Manifest codes not yet exchanged, with the app each makes and when it lapses.
+  const codes = new Map<string, { readonly manifest: Record<string, unknown>; readonly expiresAt: number }>();
+  let nextAppId = 1_000;
+  let nextInstallationId = 50_000;
 
   const git = (cwd: string, ...args: Array<string>) =>
     execFileSync("git", args, {
@@ -425,8 +454,168 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     });
   };
 
-  /** The REST API, for a live access token only. */
-  const api = (request: FakeGitHubRequest) => {
+  /**
+   * GitHub's page for a new app from a manifest: the user clicks Create at once, and GitHub redirects
+   * to the manifest's `redirect_url` with a code and the state, as its manifest flow describes.
+   */
+  const newApp = (request: FakeGitHubRequest): FakeGitHubAnswer => {
+    let manifest: Record<string, unknown>;
+    try {
+      manifest = JSON.parse(String(parseBody(request).manifest ?? "")) as Record<string, unknown>;
+    } catch {
+      return invalid("The manifest is not JSON.");
+    }
+    if (typeof manifest.url !== "string" || typeof manifest.redirect_url !== "string") {
+      return invalid("A manifest needs a url and a redirect_url.");
+    }
+    const code = randomBytes(20).toString("hex");
+    codes.set(code, { manifest, expiresAt: Date.now() + 3_600_000 });
+    const redirect = new URL(manifest.redirect_url);
+    redirect.searchParams.set("code", code);
+    const state = request.query.get("state");
+    if (state !== null) redirect.searchParams.set("state", state);
+    return { status: 302, headers: { Location: redirect.toString() } };
+  };
+
+  /** Exchanges a manifest code once, within the hour, for the app and its secrets. */
+  const conversion = (code: string) => {
+    const pending = codes.get(code);
+    codes.delete(code);
+    if (pending === undefined || pending.expiresAt <= Date.now()) return notFound;
+    const name = String(pending.manifest.name ?? "app");
+    // App names are unique on GitHub: a taken one is renamed, as the user would on the page.
+    const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    let slug = base;
+    for (let n = 2; apps.some((app) => app.slug === slug); n++) slug = `${base}-${n}`;
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const pem = privateKey.export({ type: "pkcs1", format: "pem" }).toString();
+    const id = nextAppId++;
+    const app: FakeApp = {
+      id,
+      slug,
+      clientId: `Iv23${randomBytes(8).toString("hex")}`,
+      manifest: pending.manifest,
+      botId: 90_000_000 + id,
+      installations: [],
+      keyLive: true,
+    };
+    apps.push(app);
+    appKeys.set(id, publicKey);
+    const clientSecret = randomBytes(20).toString("hex");
+    const webhookSecret = randomBytes(20).toString("hex");
+    issued.push(pem, clientSecret, webhookSecret);
+    return json(201, {
+      id,
+      slug,
+      node_id: `A_${id}`,
+      client_id: app.clientId,
+      client_secret: clientSecret,
+      webhook_secret: webhookSecret,
+      pem,
+      name,
+      description: pending.manifest.description ?? null,
+      external_url: pending.manifest.url,
+      html_url: `https://github.com/apps/${slug}`,
+      owner: { login, id: 1, type: "User" },
+      permissions: pending.manifest.default_permissions ?? {},
+      events: pending.manifest.default_events ?? [],
+      created_at: now(),
+      updated_at: now(),
+    });
+  };
+
+  /** A JWT's three parts and what its header and claims say, or null when it is not one. */
+  const jwtOf = (request: FakeGitHubRequest) => {
+    const [kind, token] = (request.authorization ?? "").split(" ");
+    const parts = kind === "Bearer" && token !== undefined ? token.split(".") : [];
+    if (token === undefined || parts.length !== 3) return null;
+    const [header, payload, signature] = parts as [string, string, string];
+    try {
+      const head = JSON.parse(Buffer.from(header, "base64url").toString("utf8")) as { alg?: string };
+      const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+        iss?: string | number;
+        iat?: number;
+        exp?: number;
+      };
+      return { token, signed: `${header}.${payload}`, signature, alg: head.alg, ...claims };
+    } catch {
+      return null;
+    }
+  };
+
+  /** Not expired, not issued in the future, and lasting at most ten minutes, with a minute's drift. */
+  const inTime = (iat: number | undefined, exp: number | undefined) => {
+    const seconds = Date.now() / 1000;
+    return iat !== undefined && exp !== undefined && exp > seconds && iat <= seconds + 60 && exp - iat <= 660;
+  };
+
+  /**
+   * The app a JWT signs in as: `RS256`, issued by its client ID or app ID, signed with its live key,
+   * within its time, as GitHub checks one.
+   */
+  const appOf = (request: FakeGitHubRequest): FakeApp | null => {
+    const jwt = jwtOf(request);
+    if (jwt === null || jwt.alg !== "RS256" || !inTime(jwt.iat, jwt.exp)) return null;
+    const app = apps.find((each) => each.clientId === jwt.iss || String(each.id) === String(jwt.iss));
+    const key = app === undefined ? undefined : appKeys.get(app.id);
+    if (app === undefined || key === undefined || !app.keyLive) return null;
+    if (!verify("RSA-SHA256", Buffer.from(jwt.signed), key, Buffer.from(jwt.signature, "base64url"))) return null;
+    issued.push(jwt.token);
+    return app;
+  };
+
+  const installationJson = (app: FakeApp, installation: FakeAppInstallation) => ({
+    id: installation.id,
+    account: { login, id: 1, type: "User" },
+    app_id: app.id,
+    app_slug: app.slug,
+    target_type: "User",
+    repository_selection: installation.selection,
+    html_url: `https://github.com/settings/installations/${installation.id}`,
+    suspended_at: null,
+  });
+
+  /** The endpoints an app reaches with its JWT. */
+  const appApi = (request: FakeGitHubRequest) => {
+    const app = appOf(request);
+    if (app === null) return json(401, { message: "A JSON web token could not be decoded" });
+    if (request.path === "/app/installations" && request.method === "GET") {
+      return json(
+        200,
+        page(request, app.installations).map((installation) => installationJson(app, installation)),
+      );
+    }
+    const one = /^\/app\/installations\/(\d+)$/.exec(request.path);
+    if (one !== null && request.method === "DELETE") {
+      const at = app.installations.findIndex((installation) => installation.id === Number(one[1]));
+      if (at === -1) return notFound;
+      app.installations.splice(at, 1);
+      return { status: 204 } as const;
+    }
+    return notFound;
+  };
+
+  /** A bot's public account, which anyone may read. */
+  const user = (name: string) => {
+    const app = apps.find((each) => `${each.slug}[bot]` === name);
+    return app === undefined ? notFound : json(200, { login: name, id: app.botId, type: "Bot" });
+  };
+
+  /** What needs no user's token: making an app from a manifest, the app's own endpoints, and bots. */
+  const appRoutes = (request: FakeGitHubRequest): FakeGitHubAnswer | undefined => {
+    if (request.path === "/settings/apps/new" && request.method === "POST") return newApp(request);
+    const manifestCode = /^\/app-manifests\/([^/]+)\/conversions$/.exec(request.path);
+    if (manifestCode !== null && request.method === "POST") return conversion(manifestCode[1] ?? "");
+    if (request.path.startsWith("/app/")) return appApi(request);
+    const userPath = /^\/users\/([^/]+)$/.exec(request.path);
+    if (userPath !== null && request.method === "GET") return user(userPath[1] ?? "");
+    return undefined;
+  };
+
+  /** The REST API: an app's endpoints with its JWT, and the rest for a live access token only. */
+  const api = (request: FakeGitHubRequest): FakeGitHubAnswer => {
+    const forApp = appRoutes(request);
+    if (forApp !== undefined) return forApp;
     if (!signedIn(request)) return json(401, { message: "Bad credentials" });
     if (request.path === "/user") return json(200, { login, id: 1, type: "User" });
     if (request.path === "/user/installations") {
@@ -528,6 +717,10 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
       return;
     }
     const answer = instead ?? (path.startsWith("/login/") ? signIn(record) : api(record));
+    if (answer === "drop") {
+      request.socket.destroy();
+      return;
+    }
     response
       .writeHead(answer.status, {
         "Content-Type": "application/json; charset=utf-8",
@@ -580,6 +773,14 @@ export const startFakeGitHub = (options: FakeGitHubOptions): Promise<FakeGitHub>
     headOf,
     secrets: () => [...issued],
     expireAccessTokens: () => access.clear(),
+    apps,
+    installApp: (slug, selection = "selected") => {
+      const app = apps.find((each) => each.slug === slug);
+      if (app === undefined) throw new Error(`The fake GitHub has no app ${slug}`);
+      const id = nextInstallationId++;
+      app.installations.push({ id, selection });
+      return id;
+    },
     close: async () => {},
   };
 
