@@ -325,7 +325,9 @@ const browserAt = (hub: () => Hub, from: string) => {
 };
 
 // One database for each case, kept across a restart of the hub as the hub's file is.
-let database: ManagedRuntime.ManagedRuntime<Layer.Success<typeof TestDatabase>, Layer.Error<typeof TestDatabase>> | undefined;
+let database:
+  | ManagedRuntime.ManagedRuntime<Layer.Success<typeof TestDatabase>, Layer.Error<typeof TestDatabase>>
+  | undefined;
 let dataDir = "";
 let current: Hub | undefined;
 let clock = movableClock();
@@ -351,7 +353,8 @@ afterEach(async () => {
  * fake runtime and a fake Tailscale the case changes through `tailnet`.
  */
 const startHub = async (tailnet: Ref.Ref<FakeTailnet> = Ref.makeUnsafe(TAILNET)): Promise<Hub> => {
-  const db = (database ??= ManagedRuntime.make(TestDatabase));
+  const db = database ?? ManagedRuntime.make(TestDatabase);
+  database = db;
   const network = readNetworkSettings(dataDir);
   const port = network.port ?? (await freePort());
   const servePort = network.servePort ?? (await freePort());
