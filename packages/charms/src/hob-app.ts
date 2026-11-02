@@ -579,6 +579,7 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           const listed = yield* listInstallations(agentId, app, jwt);
           yield* tokens.settled(
             agentId,
+            app,
             listed.some((installation) => installation.suspended_at == null),
           );
           return yield* named(agentId, app, jwt, listed);
