@@ -281,7 +281,15 @@ describe("only approved devices reach the hub", () => {
     }
     expect((await send(SCRIPT, "GET", "/api/events")).status).toBe(401);
     // The health endpoint answers without one, so a client can tell this hub from another program.
-    expect(await request(SCRIPT, "GET", "/api/health")).toMatchObject({ status: 200, body: { app: "hobbots" } });
+    // Only a local caller learns the installation ID and data folder; a tailnet one, paired or not,
+    // learns that this is Hobbots and its version.
+    const local = await request<Record<string, unknown>>(SCRIPT, "GET", "/api/health");
+    expect(local).toMatchObject({ status: 200, body: { app: "hobbots" } });
+    expect(local.body).toHaveProperty("installationId");
+    expect(local.body).toHaveProperty("dataDir");
+    const tailnet = await request({ ...SCRIPT, [NODE_HEADER]: "nPHONE" }, "GET", "/api/health");
+    expect(tailnet).toMatchObject({ status: 200, body: { app: "hobbots", version: local.body.version } });
+    expect(Object.keys(tailnet.body as object).sort()).toEqual(["app", "version"]);
     // The hub's window passes, on the routes and the stream.
     expect((await request(APP, "GET", "/api/agents")).status).toBe(200);
     const stream = await send(APP, "GET", "/api/events");

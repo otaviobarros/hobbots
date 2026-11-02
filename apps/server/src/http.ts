@@ -13,11 +13,13 @@ import {
 import { HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
 import { RuntimeKind, type ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
+import { HttpServerRequest } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { ApprovalsHandlers } from "./approvals.ts";
 import { BackpackHandlers } from "./backpack.ts";
 import { BlockersHandlers } from "./blockers.ts";
 import { CharmCallsHandlers } from "./charm-calls.ts";
+import { DeviceGate } from "./devices.ts";
 import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobInputErrorsLayer } from "./hob-input-errors.ts";
@@ -148,10 +150,19 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
 );
 
 // Answers without a device, so a client can tell this hub from another program first (ADR 012).
+// Only a local request learns the installation ID and data folder (ADR 021).
 const HealthHandlers = HttpApiBuilder.group(HobbotsApi, "health", (handlers) =>
   Effect.gen(function* () {
     const installation = yield* Installation;
-    return handlers.handleAll({ health: () => Effect.succeed(installation) });
+    const gate = yield* DeviceGate;
+    return handlers.handleAll({
+      health: () =>
+        Effect.gen(function* () {
+          const place = yield* gate.placeOf(yield* HttpServerRequest.HttpServerRequest);
+          const local = Option.exists(place, (where) => where._tag === "Local");
+          return local ? installation : { app: installation.app, version: installation.version };
+        }),
+    });
   }),
 );
 

@@ -145,6 +145,17 @@ export const ServerIdentity = Schema.Struct({
 });
 export type ServerIdentity = typeof ServerIdentity.Type;
 
+/**
+ * What the health endpoint tells a request that did not come from this computer: only that this is
+ * Hobbots and which version, for the waiting screen. The installation ID and data folder stay local
+ * (ADR 021).
+ */
+export const PublicServerIdentity = Schema.Struct({
+  app: Schema.Literal("hobbots"),
+  version: Schema.String,
+});
+export type PublicServerIdentity = typeof PublicServerIdentity.Type;
+
 /** A hob with a turn in progress. */
 export const WorkingHob = Schema.Struct({
   agentId: AgentId,
@@ -272,7 +283,7 @@ export class ThreadsGroup extends HttpApiGroup.make("threads")
  * before it has a token (ADR 012, ADR 021).
  */
 export class HealthGroup extends HttpApiGroup.make("health")
-  .add(HttpApiEndpoint.get("health", "/health", { success: ServerIdentity }))
+  .add(HttpApiEndpoint.get("health", "/health", { success: Schema.Union([ServerIdentity, PublicServerIdentity]) }))
   .prefix("/api") {}
 
 export class SystemGroup extends HttpApiGroup.make("system")
