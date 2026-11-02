@@ -15,7 +15,8 @@ const copy = messages.question;
 
 /**
  * A question that climbed every lead and reached you (ADR 018). Your answer goes back down the same
- * chain to the hob that asked; once answered, the card keeps your answer.
+ * chain to the hob that asked; once answered, the card keeps your answer, and once its Task ends
+ * unanswered, it says the question was withdrawn.
  */
 export function QuestionCard({
   tree,
@@ -36,7 +37,7 @@ export function QuestionCard({
       aria-label={copy.asks({ name: asker.name })}
       className={cn(
         "cut ms-9 flex max-w-work-max animate-hb-in flex-col gap-2.5 border-2 bg-card px-3.5 py-3",
-        open ? "border-lantern" : "border-mint-deep",
+        open ? "border-lantern" : question.state === "withdrawn" ? "border-control" : "border-mint-deep",
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -51,6 +52,8 @@ export function QuestionCard({
       <p className="m-0 leading-normal whitespace-pre-wrap">{question.text}</p>
       {open ? (
         <AnswerForm question={question} askerName={asker.name} />
+      ) : question.state === "withdrawn" ? (
+        <p className="m-0 animate-hb-in text-sm text-secondary-text">{copy.withdrawn}</p>
       ) : (
         question.answer !== null && (
           <p className="m-0 animate-hb-in text-sm text-mint">{copy.youAnswered({ answer: question.answer })}</p>

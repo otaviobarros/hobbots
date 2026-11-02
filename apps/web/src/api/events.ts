@@ -191,21 +191,16 @@ const applyWorkEvent = (
     case "DeviceRevoked":
       void queryClient.invalidateQueries({ queryKey: ["devices"] });
       return;
-    // A question that reaches you, or leaves you, also changes what waits in your Inbox.
-    case "QuestionAsked":
-    case "QuestionEscalated":
-    case "QuestionAnswered":
-      applyTaskEvent(queryClient, event);
-      void questionChanged(queryClient, event.question);
-      return;
     case "TaskStateChanged":
     case "TaskCompleted":
       applyTaskEvent(queryClient, event);
       void workEnded(queryClient, event.task);
       return;
-    // The rest change Tasks and Quests (ADR 018).
+    // The rest change Tasks and Quests (ADR 018). A question that reaches you, or leaves you, also
+    // changes what waits in your Inbox.
     default:
       applyTaskEvent(queryClient, event);
+      if ("question" in event) void questionChanged(queryClient, event.question);
       return;
   }
 };

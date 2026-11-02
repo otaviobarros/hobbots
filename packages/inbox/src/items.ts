@@ -331,6 +331,7 @@ export const tasksTouched = (events: ReadonlyArray<JournaledEvent>): ReadonlyArr
         case "QuestionAsked":
         case "QuestionEscalated":
         case "QuestionAnswered":
+        case "QuestionWithdrawn":
           return [event.question.taskId];
         case "NoteLeft":
           return [event.note.taskId];
