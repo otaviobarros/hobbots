@@ -39,6 +39,7 @@ import {
 } from "./sync.ts";
 import type { TaskEvent } from "./task-trees.ts";
 import { applyTaskEvent } from "./tasks.ts";
+import { activityChanged, recordedAttempt } from "./workbench.ts";
 
 const decodeEntry = Schema.decodeUnknownSync(Schema.fromJsonString(EventEnvelope));
 const decodeReady = Schema.decodeUnknownSync(Schema.fromJsonString(StreamReady));
@@ -103,13 +104,8 @@ type WorkbenchEvent = Extract<
   HobbotsEvent,
   { readonly _tag: "CommandRecorded" | "FileChangesRecorded" | "FolderScanned" | "CommandOutput" }
 >;
-const WORKBENCH_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set<WorkbenchEvent["_tag"]>([
-  "CommandRecorded",
-  "FileChangesRecorded",
-  "FolderScanned",
-  "CommandOutput",
-]);
-const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent => WORKBENCH_EVENTS.has(event._tag);
+const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent =>
+  event._tag === "CommandOutput" || recordedAttempt(event) !== null;
 
 /**
  * Applies an event to the Query cache and records what it changed in the sync generation's overlay.
@@ -117,8 +113,13 @@ const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent => WORKB
  */
 export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
   applyQuestWork(queryClient, event);
-  // An Attempt's commands, file changes and scans (ADR 023): the Workbench reads them, not this client yet.
-  if (isWorkbenchEvent(event)) return;
+  // An Attempt's commands, file changes and scans (ADR 023) read its records again in the Workbench.
+  // A running command's output is transient; the Terminal follows it.
+  if (isWorkbenchEvent(event)) {
+    const attemptId = recordedAttempt(event);
+    if (attemptId !== null) void activityChanged(queryClient, attemptId);
+    return;
+  }
   switch (event._tag) {
     case "AgentUpserted":
       applyAgent(queryClient, event.agent);

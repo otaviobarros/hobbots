@@ -1,4 +1,5 @@
 import type { AgentId, Message, MessageId, ThreadId } from "@hobbots/domain";
+import { useOpenWorkbench } from "../workbench/use-workbench.ts";
 import { QuestStrip } from "./quest-strip.tsx";
 import { useHobLookup, useOpenTask, useThreadTrees } from "./use-work.ts";
 import { BEFORE_ALL, placeMoments } from "./work-model.ts";
@@ -20,10 +21,13 @@ export const useWorkMoments = (hobId: AgentId, threadId: ThreadId | undefined, t
   const trees = useThreadTrees(threadId);
   const hobs = useHobLookup();
   const open = useOpenTask(hobId, threadId ?? ("" as ThreadId));
+  const openWorkbench = useOpenWorkbench(hobId, threadId ?? ("" as ThreadId));
   const placed = placeMoments(transcript, trees);
   const at = (key: MessageId | typeof BEFORE_ALL) => {
     const moments = placed.get(key);
-    return moments === undefined ? null : <WorkMoments moments={moments} hobs={hobs} onOpen={open} />;
+    return moments === undefined ? null : (
+      <WorkMoments moments={moments} hobs={hobs} onOpen={open} onWorkbench={openWorkbench} />
+    );
   };
   return { before: at(BEFORE_ALL), after: (messageId: MessageId) => at(messageId) };
 };

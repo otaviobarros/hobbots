@@ -122,7 +122,8 @@ test("[TC-CH-193] the Quest tab says why a Reassign is refused, and cancels the 
   await expect(build).toContainText("Cancelled");
   await expect(copy).toContainText("Done");
   await expect(room.getByRole("button", { name: /Cancel Quest|Cancelling…/ })).toHaveCount(0);
-  await expect(controls.getByRole("button")).toHaveCount(0);
+  // Once it ended nothing is left to control, but its Workbench still opens.
+  await expect(controls.getByRole("button")).toHaveText(["Open in Workbench"]);
 
   // The card in the chat and the open drawer follow.
   await expect(page.getByText("Aldric stopped this")).toBeVisible();
