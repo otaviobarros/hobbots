@@ -5,6 +5,7 @@ import {
   AttemptId,
   CheckpointId,
   type Committed,
+  carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   type EventEnvelope,
@@ -94,6 +95,8 @@ const play = (cast: Cast, step: Duration.Input, bus: EventBus["Service"]) =>
       Effect.gen(function* () {
         const [task] = Option.getOrThrow(yield* tasks.readTree(taskId)).tasks;
         if (task === undefined) return;
+        // The hob reads what its backpack holds on the Task in the turn that finishes it (ADR 019).
+        const ledger = Option.getOrThrow(yield* tasks.readLedger(taskId));
         yield* tasks
           .completeTask(taskId, task.revision, {
             summary,
@@ -110,6 +113,7 @@ const play = (cast: Cast, step: Duration.Input, bus: EventBus["Service"]) =>
                     },
                   ],
             at: yield* iso,
+            carried: carriedFrom(ledger, () => true),
           })
           .pipe(Effect.flatMap(announce));
       });

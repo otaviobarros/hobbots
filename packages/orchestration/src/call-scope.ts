@@ -2,6 +2,7 @@ import { HobbotsRepository, HobTools, operationDecision, TaskRepository } from "
 import {
   type AgentId,
   ancestorsOf,
+  type CarriedItem,
   type Committed,
   DEFAULT_QUEST_LIMITS,
   type EventEnvelope,
@@ -44,6 +45,8 @@ export const DEFAULT_TASK_TOOL_LIMITS: TaskToolLimits = {
 export interface TaskToolCaller {
   readonly agentId: AgentId;
   readonly taskId: TaskId;
+  /** The backpack items the turn's prompt carries, which its `complete_task` consumes (ADR 019). */
+  readonly carried?: ReadonlyArray<CarriedItem>;
 }
 
 /** What a tool handler sees: the caller, its Task, that Task's whole tree as read in the call's transaction, and now. */

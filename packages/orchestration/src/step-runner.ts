@@ -20,8 +20,10 @@ import {
   type AgentId,
   type AttemptId,
   AttemptId as AttemptIdSchema,
+  type CarriedItem,
   CheckpointId,
   type Committed,
+  carriedFrom,
   descendantsOf,
   isLiveAttempt,
   isTerminalTask,
@@ -33,7 +35,7 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { DateTime, Effect, FiberMap, Layer, Option, Semaphore, Stream } from "effect";
-import { cut, isStep, RESULT_LIMIT, stepPrompt } from "./briefs.ts";
+import { cut, isStep, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { TaskSignal } from "./signal.ts";
 import { TaskTools } from "./task-tools.ts";
@@ -144,6 +146,23 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           return Option.isSome(recorded);
         });
 
+      /**
+       * What a step's session starts from: the tree its prompt is made from, read after the step's
+       * ledger, and the items it carries, which are those of its own Task item and hand-offs that
+       * prompt shows (ADR 019). A hand-off made after the ledger was read is shown but not carried,
+       * so it stays open rather than settling unread.
+       */
+      const startingPoint = (step: Task, before: TaskTree) =>
+        Effect.gen(function* () {
+          const ledger = yield* tasks.readLedger(step.id);
+          const tree = Option.getOrElse(yield* tasks.readTree(step.rootId), () => before);
+          const carried = Option.match(ledger, {
+            onNone: () => [],
+            onSome: (read) => carriedFrom(read, stepPromptShows(step, tree)),
+          });
+          return { tree, carried };
+        });
+
       /** The session's final reply, or why it ended without one. */
       const runSession = (
         agent: Agent,
@@ -152,6 +171,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
         tree: TaskTree,
         access: ToolAccess | null,
         attemptId: AttemptId,
+        carried: ReadonlyArray<CarriedItem>,
       ) =>
         Effect.gen(function* () {
           const adapter = adapters(config.runtime);
@@ -177,7 +197,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
               approvals: null,
               redaction: redactor,
               recordToolStart: recordToolStart(step),
-              hubTools: tools.forTurn({ agentId: agent.id, taskId: step.id }, STEP_TOOLS),
+              hubTools: tools.forTurn({ agentId: agent.id, taskId: step.id, carried }, STEP_TOOLS),
             })
             .pipe(
               Stream.runForEach((event) =>
@@ -210,11 +230,26 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           return ending;
         });
 
+      /** Records why a step could not complete as a blocker on it, so its failure says what was left open. */
+      const explain = (stepId: TaskId, reason: string, at: string) =>
+        attempt(
+          tasks.recordCheckpoint({
+            id: CheckpointId.make(newId()),
+            taskId: stepId,
+            source: "unplanned",
+            kind: "blocker",
+            milestoneId: null,
+            summary: cut(reason, RESULT_LIMIT),
+            createdAt: at,
+          }),
+          "record why a step could not complete",
+        );
+
       /**
        * Records how the step's session ended: the Attempt first, then the step completes with the
        * session's final reply unless it returned a result itself, or fails with the reason.
        */
-      const settle = (stepId: TaskId, attemptId: AttemptId, ending: Ending) =>
+      const settle = (stepId: TaskId, attemptId: AttemptId, ending: Ending, carried: ReadonlyArray<CarriedItem>) =>
         Effect.gen(function* () {
           const at = yield* nowIso;
           const failed = ending._tag === "Failed";
@@ -235,12 +270,19 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
           }
           if (!failed) {
             const done = yield* attempt(
-              tasks.completeTask(step.id, step.revision, {
-                summary: cut(redactor.text(ending.text), RESULT_LIMIT) || "The step finished without a reply.",
-                attemptId,
-                artifacts: [],
-                at,
-              }),
+              tasks
+                .completeTask(step.id, step.revision, {
+                  summary: cut(redactor.text(ending.text), RESULT_LIMIT) || "The step finished without a reply.",
+                  attemptId,
+                  artifacts: [],
+                  at,
+                  carried,
+                })
+                .pipe(
+                  Effect.tapError((error) =>
+                    error._tag === "TaskRefused" ? explain(step.id, error.message, at) : Effect.void,
+                  ),
+                ),
               "complete a step",
             );
             if (Option.isSome(done)) return;
@@ -327,13 +369,14 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS) =>
                 );
                 if (Option.isNone(started)) return;
                 const step = started.value.task;
+                const { tree: shown, carried } = yield* startingPoint(step, tree);
                 const run: Running = { agentId: step.ownerId, rootId: step.rootId, access, stop: null };
                 running.set(step.id, run);
                 yield* FiberMap.run(
                   fibers,
                   step.id,
-                  runSession(agent.value, config.value, step, tree, access, attemptId).pipe(
-                    Effect.flatMap((ending) => settle(step.id, attemptId, ending)),
+                  runSession(agent.value, config.value, step, shown, access, attemptId, carried).pipe(
+                    Effect.flatMap((ending) => settle(step.id, attemptId, ending, carried)),
                     Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
                     Effect.ensuring(
                       Effect.sync(() => running.delete(step.id)).pipe(

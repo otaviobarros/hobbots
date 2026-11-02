@@ -1,4 +1,4 @@
-import { type NewTask, TaskRepository } from "@hobbots/agents";
+import { type NewTask, type TaskCompletion, TaskRepository } from "@hobbots/agents";
 import {
   type AgentId,
   type Answerer,
@@ -17,6 +17,7 @@ import {
   isTerminalTask,
   type JournaledEvent,
   leadsAbove,
+  ledgerRefusal,
   Milestone,
   Quest,
   Question,
@@ -36,6 +37,7 @@ import {
 import { Effect, Layer, Option } from "effect";
 import { SqlClient, type SqlError } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
+import { makeLedger } from "./ledger.ts";
 import { makeTaskReads, taskColumns } from "./task-rows.ts";
 
 const refuse = (reason: TaskRefusal, message: string) => Effect.fail(new TaskRefused({ reason, message }));
@@ -67,6 +69,7 @@ export const TaskRepositoryLive = Layer.effect(
     const sql = yield* SqlClient.SqlClient;
     const change = makeJournaledChange(sql);
     const read = makeTaskReads(sql);
+    const ledger = makeLedger(sql);
 
     const loadTask = (id: string) =>
       read
@@ -411,24 +414,20 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
-    /** The completion gate's record checks: the result's Attempt, a finished subtree and no open questions. */
-    const gate = (task: Task, attemptId: string) =>
+    /**
+     * The completion gate: the result names the Task's current Attempt, and its responsibility
+     * ledger is settled but for what the completing turn carries (ADR 019). Returns what the
+     * completion consumes, and the items about ended Tasks under it that it resolves as late.
+     */
+    const gate = (task: Task, completion: TaskCompletion) =>
       Effect.gen(function* () {
-        if (attemptId !== task.currentAttemptId) {
+        if (completion.attemptId !== task.currentAttemptId) {
           return yield* refuse("attempt-mismatch", "A result names its Task's current Attempt");
         }
-        const tree = yield* read.treeOf(task.rootId);
-        const under = descendantsOf(task, tree);
-        if (under.some((each) => !isTerminalTask(each.state))) {
-          return yield* refuse("children-open", `Task ${task.id} has work still open under it`);
-        }
-        const done = new Set(tree.filter((each) => each.state === "completed").map((each) => each.id));
-        if (task.dependsOn.some((id) => !done.has(id))) {
-          return yield* refuse("dependencies-open", `Task ${task.id} waits on Tasks that have not completed`);
-        }
-        const ids = [task.id, ...under.map((each) => each.id)];
-        const open = yield* sql`SELECT id FROM questions WHERE state = 'open' AND ${sql.in("task_id", ids)}`;
-        if (open.length > 0) return yield* refuse("questions-open", `Task ${task.id} has unanswered questions`);
+        const { ledger: open, consumes, superseded } = yield* ledger.readFor(task, completion.carried);
+        const refusal = ledgerRefusal(open);
+        if (refusal !== null) return yield* refuse(refusal.reason, refusal.message);
+        return { consumes, superseded };
       });
 
     const completeTask: TaskRepository["Service"]["completeTask"] = (taskId, expected, completion) =>
@@ -440,7 +439,7 @@ export const TaskRepositoryLive = Layer.effect(
             ...(yield* orFail(TaskTransitions.complete(before, result, completion.at))),
             revision,
           });
-          yield* gate(task, completion.attemptId);
+          const settles = yield* gate(task, completion);
           yield* saveTask(task);
           const artifacts = completion.artifacts.map(
             (artifact) =>
@@ -466,6 +465,9 @@ export const TaskRepositoryLive = Layer.effect(
           events.push(...(yield* automatic(task, completion.at, revision + 1)));
           const quest = yield* endQuest(task, completion.at, revision + events.length);
           if (quest !== null) events.push({ _tag: "QuestCompleted", quest });
+          const by = yield* ledger.consumer(completion.attemptId);
+          events.push(...(yield* ledger.consume(settles.consumes, by, revision + events.length)));
+          events.push(...(yield* ledger.retire(settles.superseded, revision + events.length)));
           return { value: task, events };
         }),
       );
@@ -658,6 +660,16 @@ export const TaskRepositoryLive = Layer.effect(
       escalateQuestion,
       handOff,
       waitFor,
+      readLedger: (taskId) =>
+        read.task(taskId).pipe(
+          Effect.flatMap(([task]) =>
+            task === undefined
+              ? Effect.succeedNone
+              : ledger.readFor(task).pipe(Effect.map(({ ledger: open }) => Option.some(open))),
+          ),
+          sql.withTransaction,
+          Effect.orDie,
+        ),
       readTree: (taskId) => read.readTree(taskId).pipe(Effect.map(Option.fromNullishOr), Effect.orDie),
       readThreadTrees: (threadId) => read.threadTrees(threadId).pipe(Effect.orDie),
       findQuest: (questId) =>

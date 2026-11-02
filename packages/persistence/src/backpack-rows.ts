@@ -9,7 +9,7 @@ import {
   type NewBackpackItem,
 } from "@hobbots/domain";
 import { backpackItemsFor, type ToolCallSource, tasksTouched } from "@hobbots/inbox";
-import { Context, DateTime, Effect, Schema } from "effect";
+import { Context, DateTime, Duration, Effect, Schema } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import { makeTaskReads } from "./task-rows.ts";
 
@@ -20,6 +20,29 @@ import { makeTaskReads } from "./task-rows.ts";
 export const CurrentToolCall = Context.Reference<ToolCallSource | null>("@hobbots/persistence/CurrentToolCall", {
   defaultValue: () => null,
 });
+
+/**
+ * Leases are timed by the database's clock, so every hub process that shares a database agrees on
+ * when one runs out (ADR 019). Times are ISO 8601 text to the millisecond, as the app writes them.
+ */
+export const makeDatabaseClock = (sql: SqlClient.SqlClient) => {
+  /** The time `lease` from now. */
+  const until = (lease: Duration.Input) => {
+    const seconds = Duration.toMillis(lease) / 1000;
+    return sql.onDialectOrElse({
+      pg: () =>
+        sql`to_char((clock_timestamp() + make_interval(secs => ${seconds}::double precision)) AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+      orElse: () => sql`strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ${`+${seconds} seconds`})`,
+    });
+  };
+  /** Whether the row's lease is still running. */
+  const leaseLive = sql.onDialectOrElse({
+    pg: () => sql.literal("lease_expires_at::timestamptz > clock_timestamp()"),
+    orElse: () => sql.literal("lease_expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')"),
+  });
+  return { until, leaseLive };
+};
 
 const encodePayload = Schema.encodeSync(Schema.fromJsonString(BackpackPayload));
 const encodeDisposition = Schema.encodeSync(Schema.fromJsonString(BackpackDisposition));

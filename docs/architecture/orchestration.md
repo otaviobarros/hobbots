@@ -79,7 +79,7 @@ Cancellation/reassignment propagates as explicit commands and retains history. L
 
 ## Completion gate
 
-Before successful closure, reconcile required child outcomes, unresolved questions, promised artifacts, blocking approvals and final result. A model saying “done” does not override the gate. If the objective cannot be met within authority, capability or limits, persist a blocked/failed outcome with evidence and an actionable explanation.
+Before successful closure, reconcile required child outcomes, unresolved questions, promised artifacts, blocking approvals and final result. A model saying “done” does not override the gate. The gate reads the [responsibility ledger](inbox.md#responsibility-ledger), and a Quest closes only when the Task it sits on passes it. If the objective cannot be met within authority, capability or limits, persist a blocked/failed outcome with evidence and an actionable explanation.
 
 The core acceptance loop is Aldric → Rook → Sage/Pip, with independent work in flight, results arriving after a turn ends, automatic continuations, verification and final reporting. Run it across runtime boundaries and through injected restart/disconnection failures.
 

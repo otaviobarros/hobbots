@@ -1,4 +1,15 @@
-import { AgentId, MemberWork, Quest, QuestId, Question, QuestionId, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
+import {
+  AgentId,
+  MemberWork,
+  Quest,
+  QuestId,
+  Question,
+  QuestionId,
+  ResponsibilityLedger,
+  TaskId,
+  TaskTree,
+  ThreadId,
+} from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import {
@@ -32,6 +43,13 @@ export type QuestRead = typeof QuestRead.Type;
 export const ThreadTasksRead = Schema.Struct({ cursor: Schema.String, trees: Schema.Array(TaskTree) });
 export type ThreadTasksRead = typeof ThreadTasksRead.Type;
 
+/**
+ * What still keeps a Task open, as its completion gate reads it (ADR 019), with the cursor as
+ * above: the hub sees unfinished work without asking the hob for its status.
+ */
+export const LedgerRead = Schema.Struct({ cursor: Schema.String, ledger: ResponsibilityLedger });
+export type LedgerRead = typeof LedgerRead.Type;
+
 /** A hob's Tasks on other hobs' Quests, with the cursor as above. */
 export const MemberWorkRead = Schema.Struct({ cursor: Schema.String, work: Schema.Array(MemberWork) });
 export type MemberWorkRead = typeof MemberWorkRead.Type;
@@ -43,6 +61,12 @@ export class TasksGroup extends HttpApiGroup.make("tasks")
     HttpApiEndpoint.get("tree", "/tasks/:taskId", {
       params: { taskId: TaskId },
       success: TaskTreeRead,
+      error: TaskNotFound,
+    }),
+    // Open children, waits, dependencies, questions, milestones, approvals and backpack items.
+    HttpApiEndpoint.get("ledger", "/tasks/:taskId/ledger", {
+      params: { taskId: TaskId },
+      success: LedgerRead,
       error: TaskNotFound,
     }),
     HttpApiEndpoint.get("quest", "/quests/:questId", {
