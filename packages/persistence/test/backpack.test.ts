@@ -836,4 +836,54 @@ describe("The responsibility ledger", () => {
     expect(result.buildItem).toMatchObject({ claim: { owner: "hub-1:turn-1" }, disposition: null });
     expect(changed).not.toContain(result.buildItem.id);
   });
+
+  // covers IN-003, IN-005, IN-006
+  it("[TC-OR-188] progress the completing turn carries is consumed with the completion, so a restart before the turn settles leaves nothing pending", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const backpack = yield* Backpack;
+        yield* startOn("campaign", "a-root");
+        const copyStarted = recorded(yield* startOn("copy", "a-copy"));
+        yield* startOn("build", "a-build");
+        yield* finish(
+          "copy",
+          "a-copy",
+          carriedFrom(yield* ledgerOf("copy"), () => true),
+        );
+        yield* finish(
+          "build",
+          "a-build",
+          carriedFrom(yield* ledgerOf("build"), () => true),
+        );
+        // Aldric's turn takes up Quill's progress under a claim, as the dispatcher delivers it.
+        const claimed = yield* backpack.claim(copyStarted.id, "hub-1:turn-1", "1 minute");
+        const held = { owner: "hub-1:turn-1", token: claimed.value.fencingToken };
+        yield* backpack.deliver(copyStarted.id, held, { target: "thread:campaign", turnId: "turn-1" });
+        yield* backpack.acknowledge(copyStarted.id, held, "session-1");
+        yield* backpack.process(copyStarted.id, held);
+        // That turn completes the Task, carrying the results and the progress.
+        const done = yield* finish("campaign", "a-root", [
+          ...carriedFrom(yield* ledgerOf("campaign"), () => true),
+          { itemId: copyStarted.id, ...held },
+        ]);
+        const consumed = yield* backpack.find(copyStarted.id);
+        // The hub stops before the dispatcher settles the turn: the next start expires every claim.
+        yield* backpack.expireClaims({ all: true });
+        return { done, consumed, afterRestart: yield* backpack.find(copyStarted.id) };
+      }),
+    );
+
+    expect(result.done.value.state).toBe("completed");
+    expect(result.consumed).toMatchObject({
+      state: "resolved",
+      claim: null,
+      disposition: { _tag: "consumed", by: "attempt:a-root" },
+    });
+    const changed = result.done.entries.flatMap((entry) =>
+      entry.payload._tag === "BackpackItemChanged" ? [entry.payload.item.id] : [],
+    );
+    expect(changed).toContain(result.consumed.id);
+    expect(result.afterRestart).toMatchObject({ state: "resolved", disposition: { _tag: "consumed" } });
+  });
 });

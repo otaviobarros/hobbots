@@ -92,17 +92,14 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
         task,
         subtree.tasks.map((each) => each.id),
       )) {
-        // Routine progress never blocks (IN-005). Still waiting once the Task it is about has ended,
-        // it has nothing left to tell, so the completion resolves it as late with the rest below.
-        if (!item.actionable) {
-          routine.push(item);
-          continue;
-        }
         // The Task's own result or failure is for the Task above it, even when one hob owns both,
         // as a step's: an earlier failure of a Task retried since never keeps it open.
         if (item.taskId === task.id && (item.kind === "result" || item.kind === "failure")) continue;
         const holds = byId.get(item.id);
         if (holds !== undefined && carries(item, live, holds)) consumes.push({ item, carried: holds });
+        // Routine progress never blocks (IN-005). Not carried and still waiting once the Task it is
+        // about has ended, it has nothing left to tell: the completion resolves it as late below.
+        else if (!item.actionable) routine.push(item);
         else blocking.push(item);
       }
       const approvals = yield* pendingApprovals(task, DateTime.formatIso(yield* DateTime.now));

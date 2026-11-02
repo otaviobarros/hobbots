@@ -13,6 +13,7 @@
 |---|---|---|
 | `[TC-OR-185]` | Hub level: while Pip's turn is held, her `started` waits in Rook's backpack and Rook gets no new turn. Her result wakes Rook once, with her two updates as one digest line. Once all three Tasks and both Quests complete, nothing is open in any backpack. | ✅ SQLite, PostgreSQL |
 | `[TC-OR-186]` | Ledger: a lead's routine progress never blocks its completion. The completion resolves the progress no turn carried as late, at the version its Task ended, and leaves the progress a running turn holds to that turn. | ✅ SQLite, PostgreSQL |
+| `[TC-OR-188]` | Ledger: progress the completing turn carries under its claim is consumed in the completion's transaction, and stays consumed after a restart expires every claim before the dispatcher settles the turn. | ✅ SQLite, PostgreSQL |
 | `[TC-OR-187]` | Unit: a member's progress for the member that leads it is carried by that leader's Task session. It never wakes that session and never goes to a thread. | ✅ |
 
 ## Gaps
