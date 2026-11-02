@@ -16,18 +16,24 @@ import type { HttpServerRequest } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { windowKeyFile } from "./window-key.ts";
 
-/** A Tailscale peer, as `tailscale whois` names it (ADR 021). */
+/** Who owns a tailnet node: a Tailscale user, or the tags a tagged node carries instead. */
+export type TailnetOwner = TailscaleOwner;
+
+/** A Tailscale node, as `tailscale whois` names it (ADR 021). */
 export interface TailnetPeer {
-  /** Tailscale's stable node ID. */
+  /** Tailscale's stable ID for the node, which a device approved over the tailnet is bound to. */
   readonly nodeId: string;
+  /** The node's MagicDNS name, without its trailing dot. */
   readonly nodeName: string;
-  readonly owner: TailscaleOwner;
+  readonly owner: TailnetOwner;
 }
 
 /**
- * Which Tailscale peer sent a request: some for a tailnet request, none for a local one. Only the
- * listener a connection arrived on knows, so the tailnet listener provides this (#340). Without it
- * the hub has only loopback listeners, and a request from any other address is refused.
+ * Where a request came from (ADR 021): Some for a tailnet request, with the peer Tailscale names,
+ * and None for a local one. Which listener a connection arrived on decides it, not the peer's
+ * address: the fake Tailscale serves its tailnet on loopback addresses. A peer Tailscale does not
+ * know never gets this far; the hub answers it `403` first. Without this service the hub has only
+ * loopback listeners, and a request from any other address is refused.
  */
 export class TailnetPeers extends Context.Service<
   TailnetPeers,

@@ -9,8 +9,8 @@ import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { frameChange, type HubChange } from "./hub-events-model.ts";
 
 export interface HubEventsOptions {
-  /** The hub's `/api/events` URL. */
-  readonly url: string;
+  /** The hub's `/api/events` URL, read for each connection, since the hub's port can change. */
+  readonly url: () => string;
   /** Headers for each connection, read again every time, as the window key changes when the hub restarts. */
   readonly headers?: () => Readonly<Record<string, string>>;
   /** Whether the hub may answer now; the stream is followed only while it may. */
@@ -70,7 +70,7 @@ const follow = (options: HubEventsOptions) => {
   // Any bytes, keep-alives included, show the hub still answers; silence past the limit ends it.
   const bytes = HttpClientResponse.stream(
     Effect.suspend(() =>
-      HttpClient.get(url, {
+      HttpClient.get(url(), {
         headers: {
           accept: "text/event-stream",
           ...headers(),
@@ -105,7 +105,8 @@ const follow = (options: HubEventsOptions) => {
 
 /**
  * Follows the stream while the hub may answer. Answers `sync`, to call whenever that may have
- * changed, which connects at once to a hub that just started, and `stop`.
+ * changed, which connects at once to a hub that just started, `reconnect`, to connect again now,
+ * as to a hub that moved to another port, and `stop`.
  */
 export const followHub = (options: HubEventsOptions) => {
   let following: Fiber.Fiber<unknown, unknown> | null = null;
@@ -119,5 +120,9 @@ export const followHub = (options: HubEventsOptions) => {
     else void halt();
   };
   sync();
-  return { sync, stop: halt };
+  const reconnect = async () => {
+    await halt();
+    sync();
+  };
+  return { sync, reconnect, stop: halt };
 };

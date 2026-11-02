@@ -1,7 +1,9 @@
 import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
+import { hubPort } from "@hobbots/server/network-settings";
 import { app, BrowserWindow, dialog, ipcMain, Notification, screen, session, shell, utilityProcess } from "electron";
 import { handleFolderDialogIpc } from "./folder-dialog.ts";
+import { hubAddress } from "./hub-address.ts";
 import { followHub } from "./hub-events.ts";
 import { handleKeepRunningIpc } from "./keep-running.ts";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
@@ -31,8 +33,8 @@ app.setAboutPanelOptions({
   credits: "Free and open-source software under the Apache License 2.0. See hobbots.app.",
 });
 
-const port = Number(process.env.HOBBOTS_PORT ?? 4317);
-const apiUrl = `http://127.0.0.1:${port}`;
+// The port the user chose in Settings, kept in the data folder, unless HOBBOTS_PORT overrides it.
+const hub = hubAddress(hubPort(app.getPath("userData"), process.env));
 const devWebUrl = process.env.HOBBOTS_WEB_URL ?? "http://localhost:5173";
 
 // A packaged app carries the web client in its resources folder; a checkout uses the web build.
@@ -40,7 +42,7 @@ const devWebUrl = process.env.HOBBOTS_WEB_URL ?? "http://localhost:5173";
 const webDir = app.isPackaged ? join(process.resourcesPath, "web") : resolve(import.meta.dirname, "../../../web/dist");
 
 /** The pages the window may show, and the only ones the preload bridge answers. */
-const isAllowedUrl = (url: string) => url.startsWith(`${devWebUrl}/`) || url.startsWith(`${apiUrl}/`);
+const isAllowedUrl = (url: string) => url.startsWith(`${devWebUrl}/`) || url.startsWith(`${hub.apiUrl}/`);
 
 const isUp = async (url: string) => {
   try {
@@ -50,13 +52,28 @@ const isUp = async (url: string) => {
   }
 };
 
+/** What else follows the hub when it moves, once the app has set it up: its event stream and windows. */
+let afterMove: (before: string) => void = () => {};
+const moveHub = (port: number) => {
+  const before = hub.apiUrl;
+  if (hub.move(port)) afterMove(before);
+};
+/**
+ * The hub saves the port it moved to before it says so, so a move this app did not hear about, such
+ * as one made while its event stream was reconnecting, is found here before it looks for the hub.
+ */
+const followSavedPort = () => moveHub(hubPort(app.getPath("userData"), process.env));
+
 /** This installation's server, attached to when it already runs or launched and owned by this app. */
 const supervisor = new ServerSupervisor({
-  apiUrl,
+  get apiUrl() {
+    return hub.apiUrl;
+  },
   probe: async () => {
-    const check = await checkServer(apiUrl, app.getPath("userData"));
+    followSavedPort();
+    const check = await checkServer(hub.apiUrl, app.getPath("userData"));
     if (check.kind === "none") return "none";
-    requireOurs(check, port);
+    requireOurs(check, hub.port);
     return "ours";
   },
   launch: async () => {
@@ -68,7 +85,7 @@ const supervisor = new ServerSupervisor({
       env: {
         ...process.env,
         PATH: path,
-        HOBBOTS_PORT: String(port),
+        HOBBOTS_PORT: String(hub.port),
         HOBBOTS_DATA_DIR: app.getPath("userData"),
         HOBBOTS_VERSION: app.getVersion(),
         HOBBOTS_WEB_DIR: webDir,
@@ -110,7 +127,7 @@ const createWindow = async () => {
   if (!app.isPackaged && (await isUp(devWebUrl))) {
     await window.loadURL(devWebUrl);
   } else {
-    await window.loadURL(`${apiUrl}/`);
+    await window.loadURL(`${hub.apiUrl}/`);
   }
   return window;
 };
@@ -128,7 +145,7 @@ const setWindowCookie = async () => {
   const value = windowKey.current();
   if (value === undefined) return;
   // The packaged app never loads the dev server, so only a dev build gives it the key.
-  for (const url of app.isPackaged ? [apiUrl] : [apiUrl, devWebUrl]) {
+  for (const url of app.isPackaged ? [hub.apiUrl] : [hub.apiUrl, devWebUrl]) {
     await session.defaultSession.cookies.set({
       url,
       name: WINDOW_COOKIE,
@@ -150,8 +167,10 @@ const fetchHub = fetchAsWindow(windowKey, () => void setWindowCookie());
 
 /** A 401 to the window's own requests means the hub started again with a new key. */
 const renewOnRefusal = () =>
-  session.defaultSession.webRequest.onCompleted({ urls: [`${apiUrl}/api/*`, `${devWebUrl}/api/*`] }, (details) => {
-    if (details.statusCode === 401) renewWindowKey();
+  session.defaultSession.webRequest.onCompleted({ urls: ["http://*/api/*"] }, (details) => {
+    // The hub's port can change while the app runs, so the address is checked on each answer.
+    const own = [hub.apiUrl, devWebUrl].some((base) => details.url.startsWith(`${base}/api/`));
+    if (own && details.statusCode === 401) renewWindowKey();
   });
 
 /**
@@ -163,7 +182,7 @@ const requestNoticesOn = (open: (requestId: string) => void) =>
   requestNotices({
     read: async (path) => {
       try {
-        const response = await fetchHub(`${apiUrl}${path}`, { signal: AbortSignal.timeout(2000) });
+        const response = await fetchHub(`${hub.apiUrl}${path}`, { signal: AbortSignal.timeout(2000) });
         return response.ok ? await response.json() : null;
       } catch {
         return null;
@@ -187,24 +206,42 @@ const followHubFor = (
   menuBar: Pick<ReturnType<typeof startMenuBar>, "recheck" | "activityChanged">,
   notices: ReturnType<typeof requestNotices>,
 ) => {
-  const hub = followHub({
-    url: `${apiUrl}/api/events`,
+  const events = followHub({
+    url: () => `${hub.apiUrl}/api/events`,
     headers: windowKey.headers,
     canConnect: () => supervisor.mayAnswer,
     onConnected: () => {
       void menuBar.recheck();
       void notices.check();
     },
-    onChange: (change) => void (change._tag === "Approvals" ? notices.check() : menuBar.activityChanged()),
-    onLost: () => void menuBar.recheck(),
+    onChange: (change) => {
+      if (change._tag === "Port") moveHub(change.port);
+      else if (change._tag === "Approvals") void notices.check();
+      else void menuBar.activityChanged();
+    },
+    onLost: () => {
+      followSavedPort();
+      void menuBar.recheck();
+    },
   });
+  // The hub moved to another port (ADR 021): follow it there, and load each window from it again.
+  afterMove = (before) => {
+    void setWindowCookie();
+    void events.reconnect();
+    void menuBar.recheck();
+    for (const window of BrowserWindow.getAllWindows()) {
+      const url = window.webContents.getURL();
+      if (url.startsWith(`${before}/`)) void window.loadURL(`${hub.apiUrl}${url.slice(before.length)}`);
+      else window.webContents.reload();
+    }
+  };
   // Followed only while the server may answer; a server started again is followed at once, with
   // the key it wrote.
   supervisor.onChange(() => {
     renewWindowKey();
-    hub.sync();
+    events.sync();
   });
-  app.on("will-quit", () => void hub.stop());
+  app.on("will-quit", () => void events.stop());
 };
 
 app.whenReady().then(async () => {
@@ -234,7 +271,7 @@ app.whenReady().then(async () => {
     showOpenDialog: (window, options) =>
       window ? dialog.showOpenDialog(window, options) : dialog.showOpenDialog(options),
   });
-  const menuBar = startMenuBar({ supervisor, settings, apiUrl, fetchHub, port, createWindow });
+  const menuBar = startMenuBar({ supervisor, settings, hub, fetchHub, createWindow });
   try {
     await supervisor.start();
   } catch (error) {
@@ -243,7 +280,7 @@ app.whenReady().then(async () => {
       error instanceof ServerProblem
         ? error
         : error instanceof StartTimedOut
-          ? serverProblem({ kind: "none" }, port)
+          ? serverProblem({ kind: "none" }, hub.port)
           : undefined;
     if (problem) {
       await dialog.showMessageBox({
