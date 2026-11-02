@@ -82,6 +82,10 @@ const fakeApi = (asked: Array<string>, failWith?: GitHubError) =>
       },
       branchHead: () => Effect.succeed(null),
       viewer: () => Effect.succeed("otaviobarros"),
+      pullRequests: () => Effect.die("not used"),
+      commentsSince: () => Effect.die("not used"),
+      openPullRequest: () => Effect.die("not used"),
+      comment: () => Effect.die("not used"),
     }),
   );
 
@@ -200,7 +204,14 @@ describe("GitHub Charm", () => {
   it("[TC-PE-131] reads the repository of the hob's own folder, on the hub", async () => {
     const asked: Array<string> = [];
     const { names, answer } = await callWith({ asked }, access([project]), "github_search", { kind: "issue" });
-    expect(names).toEqual(["github_repository", "github_search", "github_item", "github_push"]);
+    expect(names).toEqual([
+      "github_repository",
+      "github_search",
+      "github_item",
+      "github_push",
+      "github_open_pull_request",
+      "github_comment",
+    ]);
     expect(answer.refused).toBe(false);
     expect(answer.text).toContain("37 matches for `repo:otaviobarros/hobbots is:issue is:open`.");
     expect(asked).toEqual(["search repo:otaviobarros/hobbots is:issue is:open (10)"]);
@@ -261,6 +272,8 @@ describe("GitHub Charm", () => {
       "github_search",
       "github_item",
       "github_push",
+      "github_open_pull_request",
+      "github_comment",
     ]);
     expect(await offered({ asked }, access([project], undefined, false))).toBeNull();
     expect(await offered({ asked, connected: false }, access([project]))).toBeNull();

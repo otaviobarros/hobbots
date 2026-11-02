@@ -11,6 +11,8 @@ const lead: Authority = {
     push: "ask",
     "use-web": "allow",
     "read-github": "allow",
+    "open-pull-request": "ask",
+    "comment-github": "ask",
     "outside-folders": "deny",
   },
   folders: ["/work/campaign", "/work/site"],

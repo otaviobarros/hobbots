@@ -53,7 +53,7 @@ const endedBefore = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<Task>
 
 /** An artifact as a line, its value cut to `limit`. */
 const artifactLine = (artifact: TaskTree["artifacts"][number], limit: number) =>
-  `  - ${artifact.label} (${artifact.kind}): ${cut(artifact.value, limit)}`;
+  `  - ${artifact.label} (${artifact.kind}, artifact ${artifact.id}): ${cut(artifact.value, limit)}`;
 
 /** The artifacts `taskId` made, cut to `limit`: short for the owner's briefing, whole for a step that builds on them. */
 const artifactLines = (tree: TaskTree, taskId: string, limit = SUMMARY_LIMIT) =>
@@ -76,29 +76,69 @@ export const stepPrompt = (step: Task, tree: TaskTree): string => {
       ...artifactLines(tree, done.id, RESULT_LIMIT),
     ];
   });
-  const handed = tree.handOffs.flatMap((handOff) => {
-    if (handOff.toTaskId !== step.id) return [];
-    const artifact = tree.artifacts.find((each) => each.id === handOff.artifactId);
-    return artifact === undefined ? [] : [artifactLine(artifact, RESULT_LIMIT)];
-  });
+  const handed = handedTo(step, tree);
   const inputs = [
     ...(before.length === 0 ? [] : ["What the steps before it returned:", ...before]),
     ...(handed.length === 0 ? [] : ["Handed to this step:", ...handed]),
   ];
-  const milestones = tree.milestones
-    .filter((milestone) => milestone.taskId === step.id && milestone.reachedAt === null)
-    .map((milestone) => `  - ${milestone.title} (milestone_id ${milestone.id})`);
   return [
     step.brief,
     "---",
     `This is step ${index} of ${total} of a Task you own, running in a fresh session with only its brief and what it refers to.`,
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
-    ...(milestones.length === 0
-      ? []
-      : ["Milestones to report with report_checkpoint as you reach them:", ...milestones]),
+    ...milestonesToReport(step, tree),
     `Report findings or blockers with report_checkpoint. When the step is done, call complete_task with its result; otherwise your final reply becomes its result. Task id: ${step.id}.`,
   ].join("\n");
 };
+
+/** What was handed to `task`, each value kept whole up to `RESULT_LIMIT`. */
+const handedTo = (task: Task, tree: TaskTree): ReadonlyArray<string> =>
+  tree.handOffs.flatMap((handOff) => {
+    if (handOff.toTaskId !== task.id) return [];
+    const artifact = tree.artifacts.find((each) => each.id === handOff.artifactId);
+    return artifact === undefined ? [] : [artifactLine(artifact, RESULT_LIMIT)];
+  });
+
+/** The milestones of `task` not reached yet, as its session is asked to report them. */
+const milestonesToReport = (task: Task, tree: TaskTree): ReadonlyArray<string> => {
+  const open = tree.milestones
+    .filter((milestone) => milestone.taskId === task.id && milestone.reachedAt === null)
+    .map((milestone) => `  - ${milestone.title} (milestone_id ${milestone.id})`);
+  return open.length === 0 ? [] : ["Milestones to report with report_checkpoint as you reach them:", ...open];
+};
+
+/**
+ * The prompt a party member's session starts from (ADR 018): the lead's brief first, then what the
+ * lead expects back, the Tasks it comes after and anything handed to it, then how to report. The
+ * member works with its lead only: what another member makes reaches it as a hand-off.
+ */
+export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string => {
+  const delegation = tree.delegations.find((each) => each.childTaskId === task.id);
+  const after = task.dependsOn.flatMap((id) => {
+    const before = tree.tasks.find((each) => each.id === id);
+    return before === undefined ? [] : [`  - Task ${before.id}, ${before.state}: ${firstLine(before.brief)}`];
+  });
+  const handed = handedTo(task, tree);
+  return [
+    task.brief,
+    "---",
+    `${lead} gave you this Task as part of a Quest ${lead} leads. You work on it in your own session, and you deal only with ${lead}, never with the other hobs on the Quest.`,
+    ...(delegation?.expectedOutput == null ? [] : [`${lead} expects back: ${delegation.expectedOutput}`]),
+    ...(after.length === 0
+      ? []
+      : [
+          "It comes after these Tasks. What you need from them reaches you as a hand-off from your lead, so do what you can meanwhile and finish once you have it:",
+          ...after,
+        ]),
+    ...(handed.length === 0 ? [] : [cut(["Handed to this Task:", ...handed].join("\n"), STEP_INPUT_LIMIT)]),
+    ...milestonesToReport(task, tree),
+    `Report findings or blockers with report_checkpoint, and ask ${lead} with ask. When the Task is done, call complete_task with its result. Task id: ${task.id}.`,
+  ].join("\n");
+};
+
+/** What a later turn of a member's session is reminded of, after the work that arrived for it. */
+export const memberReminder = (task: Task, lead: string): string =>
+  `You work on Task ${task.id} for ${lead}. When it is done, call complete_task with its result; while nothing else keeps it open, your final reply becomes its result.`;
 
 /**
  * The Tasks the owner's briefing lists under `task`, depth first, each with its place (`1`, `1.2`):

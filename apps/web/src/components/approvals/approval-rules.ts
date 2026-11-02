@@ -56,6 +56,10 @@ export const ruleText = (rule: GrantRule, name: string): string => {
       return copy.host({ name, host: rule.host });
     case "Push":
       return copy.push({ name, branch: rule.branch, remote: rule.remote, folder: rule.cwd });
+    case "PullRequest":
+      return copy.pullRequest({ name, repository: rule.repository, base: rule.base });
+    case "GitHubComment":
+      return copy.comment({ name, repository: rule.repository });
   }
 };
 

@@ -17,6 +17,8 @@ export const PolicyOperation = Schema.Literals([
   "push",
   "use-web",
   "read-github",
+  "open-pull-request",
+  "comment-github",
   "outside-folders",
 ]);
 export type PolicyOperation = typeof PolicyOperation.Type;
@@ -48,6 +50,8 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     push: "ask",
     "use-web": "ask",
     "read-github": "allow",
+    "open-pull-request": "ask",
+    "comment-github": "ask",
     "outside-folders": "deny",
   },
   balanced: {
@@ -59,6 +63,8 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     push: "ask",
     "use-web": "allow",
     "read-github": "allow",
+    "open-pull-request": "ask",
+    "comment-github": "ask",
     "outside-folders": "deny",
   },
   trusting: {
@@ -70,6 +76,8 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     push: "allow",
     "use-web": "allow",
     "read-github": "allow",
+    "open-pull-request": "allow",
+    "comment-github": "allow",
     "outside-folders": "deny",
   },
 };
@@ -119,6 +127,8 @@ export const PolicyOverrides = Schema.Struct({
   push: Schema.optionalKey(PolicyDecision),
   "use-web": Schema.optionalKey(PolicyDecision),
   "read-github": Schema.optionalKey(PolicyDecision),
+  "open-pull-request": Schema.optionalKey(PolicyDecision),
+  "comment-github": Schema.optionalKey(PolicyDecision),
   "outside-folders": Schema.optionalKey(PolicyDecision),
 });
 export type PolicyOverrides = typeof PolicyOverrides.Type;
