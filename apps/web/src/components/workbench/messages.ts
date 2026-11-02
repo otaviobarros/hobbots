@@ -1,4 +1,4 @@
-import { formatCount, formatList } from "../../lib/format.ts";
+import { formatCount, formatList, plural } from "../../lib/format.ts";
 import type { UnavailableReason, WorkbenchTab } from "./workbench-model.ts";
 
 /** Copy for the Workbench: one Task's full view (ADR 023, STD-I18N-001). */
@@ -53,5 +53,41 @@ export const messages = {
     terminal: ({ name }: { name: string }) => `${name} did not use the terminal in this task.`,
   },
   comingSoon: "Watching a hob use a browser comes in a later update.",
+  terminal: {
+    commands: "Commands",
+    tally: ({ total, failed, running }: { total: number; failed: number; running: number }) =>
+      [
+        plural(total, { one: "1 command", other: `${formatCount(total)} commands` }),
+        ...(failed > 0 ? [`${formatCount(failed)} failed`] : []),
+        ...(running > 0 ? [`${formatCount(running)} running`] : []),
+      ].join(" · "),
+    readOnly: "A record of what ran. You cannot type here.",
+    none: "No commands yet. They show here as they run.",
+    state: {
+      running: ({ time }: { time: string }) => `Running · ${time}`,
+      succeeded: "Succeeded",
+      failed: "Failed",
+      uncertain: "Cut off",
+    },
+    exitCode: ({ code }: { code: number }) => `exit code ${formatCount(code)}`,
+    uncertain: "The turn ended while this ran, so whether it finished is not known.",
+    folder: "Ran in",
+    sandbox: "Sandbox",
+    started: "Started",
+    took: "Took",
+    inSandbox: "In the sandbox",
+    unsandboxed: "Unsandboxed",
+    liveOutput: "Output",
+    waiting: "Nothing printed yet.",
+    atEnd: "Its output shows when it ends.",
+    missed: "Earlier output was not seen live. All of it shows here when the command ends.",
+    openLog: ({ size }: { size: string }) => `Open the full log (${size})`,
+    logCut: ({ size }: { size: string }) => `The log keeps the start and the end; ${size} in the middle was left out.`,
+    noLog: {
+      cleared: "The full log was cleared after 30 days.",
+      "attempt-limit": "The full log was not kept: this task had kept all the logs it may.",
+      other: "The full log could not be kept.",
+    },
+  },
   names: (names: ReadonlyArray<string>) => formatList(names),
 };

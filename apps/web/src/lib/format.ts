@@ -40,3 +40,32 @@ export const formatAgo = (iso: string, now: Date = new Date(), locale?: string):
   }
   return format.format(0, "second");
 };
+
+type DurationUnit = "second" | "minute" | "hour";
+
+const unitFormat = (unit: DurationUnit, value: number, locale?: string, fraction = 0) =>
+  new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "short", maximumFractionDigits: fraction }).format(
+    value,
+  );
+
+/** A whole count of `big` units and the `small` ones left over, the leftover left out when none. */
+const twoUnits = (total: number, per: number, big: DurationUnit, small: DurationUnit, locale?: string) => {
+  const rest = total % per;
+  const whole = unitFormat(big, Math.floor(total / per), locale);
+  return rest === 0 ? whole : `${whole} ${unitFormat(small, rest, locale)}`;
+};
+
+/**
+ * How long something took, in the reader's locale, to the second: "0.4 sec" under a second (at least 0.1 sec), "12 sec",
+ * "3 min 4 sec", "1 hr 5 min" past an hour.
+ */
+export const formatDuration = (ms: number, locale?: string): string => {
+  const elapsed = Math.max(0, ms);
+  // Anything that took time reads at least 0.1 sec, so a quick command never reads as taking none.
+  if (elapsed < 1000)
+    return unitFormat("second", elapsed === 0 ? 0 : Math.max(1, Math.round(elapsed / 100)) / 10, locale, 1);
+  const seconds = Math.floor(elapsed / 1000);
+  if (seconds < 60) return unitFormat("second", seconds, locale);
+  if (seconds < 3600) return twoUnits(seconds, 60, "minute", "second", locale);
+  return twoUnits(Math.floor(seconds / 60), 60, "hour", "minute", locale);
+};
