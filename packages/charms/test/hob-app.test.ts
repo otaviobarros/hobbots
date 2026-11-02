@@ -431,6 +431,40 @@ describe("A hob's own GitHub App", () => {
     for (const token of outcome.minted) expect(token.permissions).toEqual({ metadata: "read" });
   });
 
+  // covers ADR 022, #227
+  it("[TC-GEN-085] still removes every installation on disconnect when GitHub will not name their repositories", async () => {
+    const w = world();
+    const outcome = await run(
+      w,
+      Effect.gen(function* () {
+        const service = yield* HobGitHubAppService;
+        const frodo = yield* throughGitHub(FRODO);
+        const made = yield* service.complete(frodo.state, frodo.code);
+        github.installApp(made.app.slug, "selected");
+        github.installApp(made.app.slug, "all");
+        // Neither a token for the names nor the names themselves come back.
+        github.answer = (request) =>
+          (request.method === "POST" && /^\/app\/installations\/\d+\/access_tokens$/.test(request.path)) ||
+          request.path === "/installation/repositories"
+            ? { status: 500 }
+            : undefined;
+        const listing = yield* Effect.flip(service.installations(FRODO));
+        const disconnected = yield* service.disconnect(FRODO);
+        github.answer = null;
+        return {
+          listing,
+          disconnected,
+          left: github.apps.find((each) => each.slug === made.app.slug)?.installations.length,
+          leftOver: w.leftOver.get(FRODO) ?? null,
+        };
+      }),
+    );
+    expect(outcome.listing.message).toContain("the names of the app's repositories");
+    expect(outcome.disconnected.problem).toBeNull();
+    expect(outcome.left).toBe(0);
+    expect(outcome.leftOver).toBeNull();
+  });
+
   // covers ADR 022
   it("[TC-PE-253] shows what it could not remove when GitHub refuses the key, and still deletes the key", async () => {
     const w = world();

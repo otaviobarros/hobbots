@@ -541,25 +541,33 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               return read(response, Schema.Array(InstallationJson), "the app's installations");
             }),
           ),
-        ).pipe(
-          Effect.flatMap((listed) =>
-            Effect.forEach(
-              listed,
-              (installation) =>
-                Effect.gen(function* () {
-                  const suspended = installation.suspended_at != null;
-                  return {
-                    id: installation.id,
-                    account: installation.account?.login ?? app.owner,
-                    repositorySelection: installation.repository_selection,
-                    htmlUrl: installation.html_url,
-                    suspended,
-                    repositories: suspended ? null : yield* reached(agentId, app, installation.id, jwt),
-                  } satisfies HobGitHubAppInstallation;
-                }),
-              { concurrency: 4 },
-            ),
-          ),
+        );
+
+      /**
+       * Where the app is installed, with the repositories each reaches. Only this display needs the names;
+       * removing the installations needs only their IDs, so a name GitHub will not give never keeps one.
+       */
+      const named = (
+        agentId: AgentId,
+        app: HobGitHubApp,
+        jwt: Redacted.Redacted<string>,
+        listed: ReadonlyArray<typeof InstallationJson.Type>,
+      ) =>
+        Effect.forEach(
+          listed,
+          (installation) =>
+            Effect.gen(function* () {
+              const suspended = installation.suspended_at != null;
+              return {
+                id: installation.id,
+                account: installation.account?.login ?? app.owner,
+                repositorySelection: installation.repository_selection,
+                htmlUrl: installation.html_url,
+                suspended,
+                repositories: suspended ? null : yield* reached(agentId, app, installation.id, jwt),
+              } satisfies HobGitHubAppInstallation;
+            }),
+          { concurrency: 4 },
         );
 
       const installations = (agentId: AgentId) =>
@@ -567,12 +575,13 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
           yield* agentOf(agentId);
           const app = yield* apps.get(agentId);
           if (app === null) return [];
-          const listed = yield* listInstallations(agentId, app, yield* jwtFor(agentId, app));
+          const jwt = yield* jwtFor(agentId, app);
+          const listed = yield* listInstallations(agentId, app, jwt);
           yield* tokens.settled(
             agentId,
-            listed.some((installation) => !installation.suspended),
+            listed.some((installation) => installation.suspended_at == null),
           );
-          return listed;
+          return yield* named(agentId, app, jwt, listed);
         });
 
       /** Removes every installation of the app, so it reaches no repository even with a leaked key. */
