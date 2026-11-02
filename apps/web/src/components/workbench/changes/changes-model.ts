@@ -163,6 +163,15 @@ const nearChanges = (lines: ReadonlyArray<{ readonly kind: DiffRow["kind"] }>, c
  */
 export const codeDiff = (before: string | null, after: string | null, context: number = 3): CodeDiff => {
   const lines = lineRows(before ?? "", after ?? "");
+  return {
+    rows: foldLines(lines, context),
+    added: lines.filter((row) => row.kind === "added").length,
+    removed: lines.filter((row) => row.kind === "removed").length,
+  };
+};
+
+/** A diff's lines with each unchanged run more than `context` lines from a change folded into one row. */
+export const foldLines = (lines: ReadonlyArray<DiffRow>, context: number): ReadonlyArray<DiffRow> => {
   const near = nearChanges(lines, context);
   const rows: Array<DiffRow> = [];
   let folded = 0;
@@ -176,11 +185,7 @@ export const codeDiff = (before: string | null, after: string | null, context: n
     rows.push(row);
   }
   if (folded > 0) rows.push({ kind: "folded", lines: folded });
-  return {
-    rows,
-    added: lines.filter((row) => row.kind === "added").length,
-    removed: lines.filter((row) => row.kind === "removed").length,
-  };
+  return rows;
 };
 
 /** How a top-level block of a document changed. */

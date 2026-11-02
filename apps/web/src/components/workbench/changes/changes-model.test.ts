@@ -13,6 +13,7 @@ import {
   documentBlocks,
   documentDiff,
   fileKindLabel,
+  foldLines,
   selectedChange,
   sharedHobs,
   splitPath,
@@ -155,11 +156,25 @@ describe("a code diff", () => {
 
   it("folds a large file with many changes in one pass", () => {
     // 100,000 unchanged lines then 100,000 added ones: a fold that compared every unchanged line
-    // with every change would make ten billion comparisons.
-    const kept = "x\n".repeat(100_000);
-    const diff = codeDiff(kept, `${kept}${"y\n".repeat(100_000)}`);
-    expect(diff).toMatchObject({ added: 100_000, removed: 0 });
-    expect(diff.rows[0]).toEqual({ kind: "folded", lines: 99_997 });
+    // with every change would make ten billion comparisons. The rows are built here, so the test
+    // times the fold alone, not the diff before it.
+    const same = Array.from({ length: 100_000 }, (_, i) => ({
+      kind: "same" as const,
+      before: i + 1,
+      after: i + 1,
+      text: "x",
+    }));
+    const added = Array.from({ length: 100_000 }, (_, i) => ({
+      kind: "added" as const,
+      before: null,
+      after: 100_001 + i,
+      text: "y",
+    }));
+    const started = performance.now();
+    const rows = foldLines([...same, ...added], 3);
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(rows[0]).toEqual({ kind: "folded", lines: 99_997 });
+    expect(rows).toHaveLength(1 + 3 + 100_000);
   });
 });
 
