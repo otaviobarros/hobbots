@@ -162,6 +162,14 @@ const NoTools = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succe
 /** Quick retries, so a test that exhausts them stays short. */
 const LIMITS: DispatchLimits = { ...DEFAULT_DISPATCH_LIMITS, firstRetry: "5 millis", maxRetry: "20 millis" };
 
+/**
+ * A lease short enough to run out within a test, yet long enough for a healthy claim to last on a
+ * loaded runner: a claim lives on its first lease until its turn has been planned, checked and
+ * delivered and a third of a lease has passed. At 300 milliseconds a slow database let a claim
+ * nobody froze run out there, and its item was delivered a third time.
+ */
+const SHORT_LEASE = "1500 millis";
+
 type Database = Layer.Layer<Layer.Success<typeof TestDatabase>>;
 
 const makeHub = (database: Database, requests: Array<PromptRequest>, faults: Faults, limits: DispatchLimits) =>
@@ -505,7 +513,7 @@ describe("the backpack end to end", () => {
       { stall: true, lines: [wrapUp()] },
       { lines: [wrapUp("wrap-again")] },
     ]);
-    const { run, requests, releaseCall, unstall } = await start(database, faults, { ...LIMITS, lease: "300 millis" });
+    const { run, requests, releaseCall, unstall } = await start(database, faults, { ...LIMITS, lease: SHORT_LEASE });
     await run(party);
     holdCall(faults, "copy-done");
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, plan([quillDone]))));
@@ -562,7 +570,7 @@ describe("the backpack end to end", () => {
       { lines: [lateReview, wrapUp()] },
       { lines: [wrapUp("wrap-again")] },
     ]);
-    const { run, requests, releaseCall } = await start(database, faults, { ...LIMITS, lease: "300 millis" });
+    const { run, requests, releaseCall } = await start(database, faults, { ...LIMITS, lease: SHORT_LEASE });
     await run(party);
     holdCall(faults, "copy-done");
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, plan([quillDone]))));
