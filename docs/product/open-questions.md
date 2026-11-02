@@ -13,7 +13,7 @@ These choices are not decided yet. They do not reopen decided product direction.
 | Remote-to-local routing | Explicit handoff versus configured scoped routes, pairing, execution-grant transport and revocation. No silent privilege expansion. |
 | Policies | The preset mapping, folders and the sandbox are decided in ADR 014; what sandbox-runtime's credential masking hides and whether its live configuration updates work need evidence (#131). Grant matching, precedence, expiry and revocation are decided in ADR 015. |
 | Lifecycle | Exhaustive task/attempt/approval transition tables, late-result and reassignment rules, partial completion semantics. |
-| Deployment | OS/architecture support, app-data paths, per-platform service installation, device token format and storage, routes after Tailscale. |
+| Deployment | OS/architecture support, app-data paths, per-platform service installation, routes after Tailscale. Device tokens, pairing and the Tailscale route are decided in [ADR 021](../decisions/021-devices-and-remote-access.md). |
 | Persistence | Artifact storage backend, backup consistency, retention/redaction. Event compaction and cursor expiry are decided in ADR 013. |
 | UI extensions | Narrow-window behavior and a screen-reader and keyboard pass in the real app (the design tokens pass WCAG AA); generalized takeover/replay remains later. |
 | Providers | How API-key providers (Grok, OpenAI-compatible keys, Gemini without its CLI) run tools and delegation, given [ADR 002](../decisions/002-existing-runtimes.md)'s reuse of existing agent runtimes; what usage data each provider reports for the Usage potions. |

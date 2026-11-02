@@ -1,14 +1,15 @@
 # Deployment and devices
 
-**Decided:** the desktop hub ([ADR 010](../decisions/010-desktop-hub.md)). One computer runs the server as a background service with one SQLite database ([ADR 011](../decisions/011-sqlite-storage.md)). Other devices connect to it as clients over Tailscale, each approved once. Hobs act only on the hub. Single user, one installation.
+**Decided:** the desktop hub ([ADR 010](../decisions/010-desktop-hub.md)). One computer runs the server as a background service with one SQLite database ([ADR 011](../decisions/011-sqlite-storage.md)). Other devices connect to it as clients over Tailscale, each approved once ([ADR 021](../decisions/021-devices-and-remote-access.md)). Hobs act only on the hub. Single user, one installation.
 
 ## Roles
 
 | Role | What it is | What it owns |
 |---|---|---|
 | Hub | A computer where Hobbots was installed and set to run here. | The server, the database, artifacts, runtime connections and every hob's execution environment. |
-| Connected desktop | The desktop app set to connect to another computer. | Only the hub address and its device token; no server and no database. |
-| Browser | Any browser on the hub, or on the tailnet once remote access is on. | A device token in the browser session. |
+| The hub's window | The desktop app's own window on the hub. | Nothing of its own; it is trusted through the window key the hub writes to its data folder on every start. |
+| Connected desktop | The desktop app set to connect to another computer. | Only the hub address and its device token, in the OS keychain; no server and no database. |
+| Browser | Any browser on the hub, or on the tailnet once remote access is on. | A device token in an `HttpOnly` cookie. |
 
 Every client gets the full experience: chat, Quests, Inbox, approvals and the Workbench. The Workbench shows the hub's files, terminals and browsers; connecting a device never gives hobs access to that device.
 
@@ -20,7 +21,7 @@ Every client gets the full experience: chat, Quests, Inbox, approvals and the Wo
 - Quit stops the server gracefully, then exits the app; running work is recovered as interrupted on the next start ([execution lifecycle](execution-lifecycle.md)). A server the app did not start, such as a development server, is used but never stopped.
 - Linux and Windows follow the same shape (a tray icon and a login entry for the app) when they are supported; their exact startup mechanism is decided then.
 - One app instance and one server per user account. A second launch shows the existing window. The app connects to a running server rather than starting a second one, and first checks the server's identity (installation ID, version and data folder from the health endpoint); anything else on the port is an error, not a server to use.
-- The server serves the web client and the API on the same port, 4317 by default, changeable in Settings › Devices. The packaged app's window loads the client from the server like any browser on the hub; only development loads it from the Vite dev server.
+- The server serves the web client and the API on the same port, 4317 by default, changeable in Settings › Devices. The packaged app's window loads the client from the server like any browser on the hub; only development loads it from the Vite dev server, which forwards the API to the hub so the client still calls it on its own origin.
 - Hobs use installed, authenticated runtimes on the hub through supported adapters ([runtime adapters](runtime-adapters.md)). Runtime login stays a vendor flow; credentials never enter conversation history.
 - Without remote access the server listens only on loopback. Closing a browser never stops work.
 
@@ -33,20 +34,23 @@ The hub's execution environments are where hob work runs: the hub itself and any
 Tailscale is the MVP route.
 
 - Remote access is off until the user turns it on in onboarding or in Settings › Devices.
-- When it is on and Tailscale is connected, the server also listens on the hub's tailnet address and accepts only loopback and tailnet peers. Its address is `http://<magicdns-name>:4317`.
-- Optionally, `tailscale serve` gives the hub an HTTPS address on the tailnet. Hobbots shows the command or runs it with the user's consent; it never changes Tailscale settings silently.
+- When it is on and Tailscale is running, the server also listens on the hub's tailnet addresses, read from `tailscale status`, and accepts only loopback and tailnet peers that `tailscale whois` knows. Its address is `http://<magicdns-name>:4317`.
+- Optionally, `tailscale serve` gives the hub an HTTPS address on the tailnet. Hobbots shows the command or runs it with the user's consent; it never changes Tailscale settings silently and never uses Funnel.
 - If Tailscale disconnects, the server stops listening on the tailnet and Settings › Devices says why. It never falls back to other interfaces.
-- Tailnet membership is not authentication. Every request still needs an approved device token.
+- Pause remote access in the menu-bar icon closes the tailnet listener until Resume; loopback keeps working.
+- Tailnet membership is not authentication. Every request still needs an approved device token, bound to the Tailscale node it was approved on.
+
+[ADR 021](../decisions/021-devices-and-remote-access.md) decides the listener, the peer and host checks, HTTPS and Pause.
 
 ## Device approval
 
 1. A new device opens the hub's address, in a browser or in the desktop app's connect screen.
-2. The device shows "Waiting for approval on <hub name>" with a short matching code.
-3. The hub shows an Allow / Deny prompt with the device's name, platform, Tailscale identity and the same code. The prompt appears in the hub's window, its notification and the Inbox of every client already approved.
-4. Allow issues a device token stored on that device; Deny ends the attempt, and the device can ask again later.
+2. The device shows "Waiting for approval on <hub name>" with a six-digit matching code.
+3. The hub shows an Allow / Deny / Decide later prompt with the device's name, platform, Tailscale identity and the same code. The prompt appears in the hub's window, its notification and the Inbox of every client already approved. A request expires after 10 minutes, or 24 hours after Decide later, and rate limits keep a peer from flooding the hub with requests.
+4. Allow issues a device token to the waiting device, which alone holds the pairing secret that claims it; Deny ends the attempt, and the device can ask again later.
 5. Settings › Devices lists every approved device with its last activity. Revoke removes its token at once: open streams close and the next request is refused.
 
-Every new device asks once, including devices on the same Tailscale account and the hub's own browsers other than the desktop window. Device tokens are separate from agent MCP credentials and runtime credentials, and are never shown again after issue.
+Every new device asks once, including devices on the same Tailscale account and the hub's own browsers. Only the hub's own desktop window is trusted without asking; no setting trusts local browsers. Device tokens are separate from agent MCP credentials and runtime credentials, are stored only as hashes on the hub, and are never shown again after issue. Every API route and the event stream need a device, and the user session that decides approvals and grants comes from it. [ADR 021](../decisions/021-devices-and-remote-access.md) decides the token format, pairing, origin and CSRF rules, and how development and tests get a device.
 
 ## Connection routes
 
