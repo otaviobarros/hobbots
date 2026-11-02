@@ -1,4 +1,4 @@
-import type { HobGitHubAppDisconnected, HobGitHubAppStatus } from "@hobbots/api";
+import type { HobGitHubAppDisconnected, HobGitHubAppStarted, HobGitHubAppStatus } from "@hobbots/api";
 import { type Agent, hobAppBot } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
@@ -15,6 +15,8 @@ import { formatDay } from "../lib/format.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.charms.github.app;
+
+type Started = HobGitHubAppStarted;
 
 type Connected = Extract<HobGitHubAppStatus, { _tag: "Connected" }>;
 
@@ -44,8 +46,9 @@ const openInBrowser = (url: string) => {
  * or token ever reaches this page.
  */
 export function HobGitHubApp({ hob }: { hob: Agent }) {
-  // Set while the user is on GitHub making the app: the hub page that takes them there.
-  const [started, setStarted] = useState<string | null>(null);
+  // Set while the user is on GitHub making the app: the hub page that takes them there, until it expires.
+  const [started, setStarted] = useState<Started | null>(null);
+  const [expired, setExpired] = useState(false);
   const [disconnected, setDisconnected] = useState<HobGitHubAppDisconnected | null>(null);
   const [watching, watch] = useWatch();
   const status = useQuery(hobGitHubAppQuery(hob.id, watching));
@@ -56,13 +59,26 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
   useEffect(() => {
     if (tag === "Connected") setStarted(null);
   }, [tag]);
+  // The hub's page answers for an hour at most; after that only a new start can make the app.
+  useEffect(() => {
+    if (started === null) return;
+    const timer = setTimeout(
+      () => {
+        setStarted(null);
+        setExpired(true);
+      },
+      Math.max(0, Date.parse(started.expiresAt) - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [started]);
 
   const begin = () =>
     start.mutate(undefined, {
-      onSuccess: ({ url }) => {
-        setStarted(url);
+      onSuccess: (opened) => {
+        setStarted(opened);
+        setExpired(false);
         watch();
-        openInBrowser(url);
+        openInBrowser(opened.url);
       },
     });
   // A new app replaces one GitHub no longer accepts: the old one is removed, dismissed if anything of
@@ -94,11 +110,13 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
           hob={hob}
           cannotCreate={status.data.cannotCreate}
           started={started}
+          expired={expired}
           pending={start.isPending}
           onGive={() => {
             setDisconnected(null);
             begin();
           }}
+          onCancel={() => setStarted(null)}
         />
       )}
       {status.data?._tag === "Connected" && (
@@ -171,18 +189,58 @@ function Outcome({
   );
 }
 
+/**
+ * While the user is on GitHub: the hub page again, for a tab closed too soon, or a fresh start, for a
+ * page GitHub sent back with an error or one that already ran out, since each page works only once.
+ */
+function Finishing({
+  hob,
+  started,
+  pending,
+  onRestart,
+  onCancel,
+}: {
+  hob: Agent;
+  started: Started;
+  pending: boolean;
+  onRestart: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="cut flex flex-col gap-1.5 border-2 border-lantern bg-notice px-3 py-2.5" role="status">
+      <span className="text-[13px]">{copy.finishOnGitHub({ name: hob.name })}</span>
+      <a href={started.url} target="_blank" rel="noreferrer" className="text-[13px] text-lantern">
+        {copy.openAgain}
+      </a>
+      <span className="text-[13px] text-secondary-text">{copy.restartNote}</span>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" disabled={pending} onClick={onRestart}>
+          {copy.restart}
+        </Button>
+        <Button variant="outline" size="sm" onClick={onCancel}>
+          {copy.cancel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function NoApp({
   hob,
   cannotCreate,
   started,
+  expired,
   pending,
   onGive,
+  onCancel,
 }: {
   hob: Agent;
   cannotCreate: "no-keychain" | null;
-  started: string | null;
+  started: Started | null;
+  expired: boolean;
   pending: boolean;
   onGive: () => void;
+  onCancel: () => void;
 }) {
   return (
     <>
@@ -194,15 +252,11 @@ function NoApp({
             {copy.give({ name: hob.name })}
           </Button>
           <span className="text-[13px] text-label">{copy.giveNote({ name: hob.name })}</span>
+          {expired && <span className="text-[13px] text-label">{copy.expired}</span>}
         </div>
       )}
       {started !== null && (
-        <div className="cut flex flex-col gap-1.5 border-2 border-lantern bg-notice px-3 py-2.5" role="status">
-          <span className="text-[13px]">{copy.finishOnGitHub({ name: hob.name })}</span>
-          <a href={started} target="_blank" rel="noreferrer" className="text-[13px] text-lantern">
-            {copy.openAgain}
-          </a>
-        </div>
+        <Finishing hob={hob} started={started} pending={pending} onRestart={onGive} onCancel={onCancel} />
       )}
     </>
   );

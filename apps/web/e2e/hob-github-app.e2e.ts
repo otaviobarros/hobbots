@@ -121,6 +121,35 @@ test("[TC-GEN-056] gives a hob its own GitHub app from its Charms tab and shows 
     new RegExp(`^${current.url}/github/hob-app/new\\?state=`),
   );
 
+  // Each start works once, so a page GitHub sent back with an error is fixed by starting again,
+  // which opens a fresh page.
+  const first = await section.getByRole("link", { name: "Open GitHub again" }).getAttribute("href");
+  const reopened = context.waitForEvent("page");
+  await section.getByRole("button", { name: "Start again" }).click();
+  const again = await reopened;
+  await expect.poll(() => manifests.length).toBe(2);
+  await again.close();
+  await expect(section.getByRole("link", { name: "Open GitHub again" })).not.toHaveAttribute("href", first ?? "");
+
+  // A start that runs out offers a new one; Cancel does too, at once.
+  await section.getByRole("button", { name: "Cancel" }).click();
+  await expect(section.getByText("Finish on GitHub", { exact: false })).toBeHidden();
+  await page.route("**/api/agents/*/github-app/start", (route) =>
+    route.fulfill({
+      json: {
+        url: `${current.url}/github/hob-app/new?state=gone`,
+        expiresAt: new Date(Date.now() + 1500).toISOString(),
+      },
+    }),
+  );
+  const expiring = context.waitForEvent("page");
+  await section.getByRole("button", { name: "Give Pip its own GitHub app" }).click();
+  await (await expiring).close();
+  await expect(section.getByText("Finish on GitHub", { exact: false })).toBeVisible();
+  await expect(section.getByText("The last start ran out", { exact: false })).toBeVisible({ timeout: 5_000 });
+  await expect(section.getByRole("button", { name: "Give Pip its own GitHub app" })).toBeVisible();
+  await page.unroute("**/api/agents/*/github-app/start");
+
   // GitHub made the app: the tab follows it while you are there, and asks you to install it.
   const { state } = await standIn(page, { status: connected() });
   await expect(section.getByRole("link", { name: "pip-hobbots[bot]" })).toHaveAttribute("href", app.htmlUrl);

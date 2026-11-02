@@ -314,6 +314,10 @@ export const messages = {
         finishOnGitHub: ({ name }: { name: string }) =>
           `Finish on GitHub, in the browser that just opened. This updates once ${name}'s app is made.`,
         openAgain: "Open GitHub again",
+        restartNote:
+          "Each start works once. If GitHub said the app was not kept, or the page stopped working, start again.",
+        restart: "Start again",
+        expired: "The last start ran out before the app was made. Start again when you're ready.",
         startFailed: "Hobbots could not start making the app. Try again.",
         actsAs: "Acts as",
         since: ({ since }: { since: string }) => `Since ${since}.`,
