@@ -97,7 +97,7 @@ interface Hub {
   readonly dataDir: string;
   readonly events: Array<RemoteAccessStatus>;
   readonly check: () => Promise<RemoteAccessStatus>;
-  readonly update: (change: { enabled?: boolean; port?: number }) => Promise<RemoteAccessStatus>;
+  readonly update: (change: { enabled?: boolean; paused?: boolean; port?: number }) => Promise<RemoteAccessStatus>;
   readonly status: () => Promise<RemoteAccessStatus>;
   readonly hosts: () => Promise<ReadonlyArray<string>>;
 }
@@ -124,14 +124,21 @@ let holding = 0;
  * that answers who sent the request.
  */
 const startHub = async (
-  options: { readonly enabled?: boolean; readonly tailnet?: FakeTailnet; readonly ranges?: ReadonlyArray<string> } = {},
+  options: {
+    readonly enabled?: boolean;
+    readonly paused?: boolean;
+    readonly tailnet?: FakeTailnet;
+    readonly ranges?: ReadonlyArray<string>;
+  } = {},
 ): Promise<Hub> => {
   const port = await freePort();
   const dataDir = mkdtempSync(join(tmpdir(), "hobbots-remote-"));
   const tailnet = Ref.makeUnsafe(options.tailnet ?? DEFAULT_FAKE_TAILNET);
   const server: Server = createServer();
   const Remote = HubHostsLive.pipe(
-    Layer.provideMerge(RemoteAccessStateLive({ enabled: options.enabled ?? true, port })),
+    Layer.provideMerge(
+      RemoteAccessStateLive({ enabled: options.enabled ?? true, paused: options.paused ?? false, port }),
+    ),
   );
   const PeerRoute = HttpRouter.add(
     "GET",
@@ -313,6 +320,52 @@ describe("remote access over a fake Tailscale", () => {
     expect(await hub.update({ enabled: false })).toMatchObject({ enabled: false, listening: [], problem: "off" });
     expect(readNetworkSettings(hub.dataDir)).toEqual({ remoteAccess: false });
     expect(await refusal("127.0.0.2", hub.port(), "127.0.0.1")).toBe("ECONNREFUSED");
+  });
+
+  // covers DP-004
+  it("[TC-DP-095] Pause closes the tailnet listener and its connections, keeps loopback, survives a restart, and Resume restores it", async ({
+    skip,
+  }) => {
+    if (!spareLoopback) skip();
+    const hub = await startHub();
+    const open = connect(hub.port(), "127.0.0.2");
+    await new Promise((done) => open.once("connect", done));
+    const closed = new Promise((done) => open.once("close", done));
+
+    const paused = await hub.update({ paused: true });
+    expect(paused).toMatchObject({ enabled: true, paused: true, listening: [], problem: "paused" });
+    // Paused, the hub still says what Tailscale gives it, so Resume knows where it would listen.
+    expect(paused.tailscale?.state).toBe("running");
+    await closed;
+    expect(await refusal("127.0.0.2", hub.port(), "127.0.0.1")).toBe("ECONNREFUSED");
+    expect(await ask("127.0.0.1", hub.port())).toEqual({ status: 200, body: "local" });
+    await vi.waitFor(() => expect(hub.events.at(-1)).toMatchObject({ paused: true, problem: "paused" }));
+    expect(readNetworkSettings(hub.dataDir)).toEqual({ remoteAccessPaused: true });
+    // The 10 second check keeps it paused.
+    expect(await hub.check()).toMatchObject({ paused: true, listening: [] });
+
+    expect(await hub.update({ paused: false })).toMatchObject({
+      paused: false,
+      listening: ["127.0.0.2"],
+      problem: null,
+    });
+    expect(readNetworkSettings(hub.dataDir)).toEqual({ remoteAccessPaused: false });
+    expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.1" })).toEqual({ status: 200, body: "nFAKEHUB" });
+  });
+
+  // covers DP-004
+  it("[TC-DP-096] a hub that starts paused stays off the tailnet until Resume, and turning remote access on resumes it", async ({
+    skip,
+  }) => {
+    if (!spareLoopback) skip();
+    const hub = await startHub({ paused: true });
+    expect(await hub.status()).toMatchObject({ enabled: true, paused: true, listening: [], problem: "paused" });
+    expect(await refusal("127.0.0.2", hub.port(), "127.0.0.1")).toBe("ECONNREFUSED");
+
+    // Turning it off and on again in Settings is a choice to be reachable, so it resumes too.
+    expect(await hub.update({ enabled: false })).toMatchObject({ paused: true, problem: "off" });
+    expect(await hub.update({ enabled: true })).toMatchObject({ paused: false, listening: ["127.0.0.2"] });
+    expect(readNetworkSettings(hub.dataDir)).toEqual({ remoteAccess: true, remoteAccessPaused: false });
   });
 
   // covers DP-004

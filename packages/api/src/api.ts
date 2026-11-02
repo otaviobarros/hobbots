@@ -25,7 +25,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchem
 import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
 import { BackpackGroup, BlockersGroup } from "./backpack.ts";
 import { CharmCallsGroup } from "./charm-calls.ts";
-import { PairingGroup, PairingRequestsGroup } from "./devices.ts";
+import { DevicesGroup, PairingGroup, PairingRequestsGroup } from "./devices.ts";
 import {
   AgentNotFound,
   HobUnavailable,
@@ -311,6 +311,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(HealthGroup)
   .add(PairingGroup)
   .add(PairingRequestsGroup)
+  .add(DevicesGroup)
   .add(AgentsGroup)
   .add(ThreadsGroup)
   .add(SystemGroup)

@@ -95,6 +95,8 @@ const correlationOf = (event: JournaledEventType): RowCorrelation => {
     case "BackpackItemRecorded":
     case "BackpackItemChanged":
       return { ...NONE, agentId: event.item.recipientId, threadId: event.item.threadId, taskId: event.item.taskId };
+    case "DeviceRevoked":
+      return NONE;
     case "MessageUpserted":
     case "MessageQueued":
       return { ...NONE, threadId: event.message.threadId, messageId: event.message.id };

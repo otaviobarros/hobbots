@@ -15,11 +15,11 @@ import { Schema } from "effect";
 import { useEffect, useState } from "react";
 import { recordActivity, setActivity } from "./activity.ts";
 import { storeApproval } from "./approvals.ts";
-import { storeBlocker } from "./blockers.ts";
+import { storeBackpackItem } from "./backpack.ts";
 import { API_URL } from "./client.ts";
 import { grantsChanged } from "./grants.ts";
 import type { ConnectionState } from "./live.ts";
-import { setConnection } from "./live.ts";
+import { probeAccess, setConnection, setDeviceAccess } from "./live.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { placeThread, queryKeys, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { applyQuestWork } from "./quest-work.ts";
@@ -140,6 +140,10 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     case "TurnStarted":
     case "TurnEnded":
       return;
+    // Any list of devices is read again. This device's own removal shows when the hub refuses it.
+    case "DeviceRevoked":
+      void queryClient.invalidateQueries({ queryKey: ["devices"] });
+      return;
     default:
       applyWorkEvent(queryClient, event);
       return;
@@ -173,10 +177,10 @@ const applyWorkEvent = (
     case "GrantRevoked":
       void grantsChanged(queryClient);
       return;
-    // Only blockers show from a hob's backpack so far (ADR 019, IN-007).
+    // What hobs are waiting on, and what is stuck (ADR 019, IN-007).
     case "BackpackItemRecorded":
     case "BackpackItemChanged":
-      storeBlocker(queryClient, event.item);
+      storeBackpackItem(queryClient, event.item);
       return;
     // A question that reaches you, or leaves you, also changes what waits in your Inbox.
     case "QuestionAsked":
@@ -231,6 +235,7 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
         const ready = decodeReady(frame.data);
         sync.cursor = ready.cursor;
         if (!ready.resumed) startGeneration(queryClient);
+        setDeviceAccess(queryClient, "approved");
         report("live");
       } catch (error) {
         console.warn("Ignoring malformed event", error);
@@ -265,9 +270,11 @@ export const useHobbotsEvents = (): { state: ConnectionState; retry: () => void 
     });
     // "Reconnecting" lasts until the next Ready. A refusal, as when the hub started again with a new
     // key, closes the stream for good, so it opens again a moment later with the cookie set anew.
+    // Every drop also asks the hub why, so a revoked device or a hub out of reach says so at once.
     let reopen: ReturnType<typeof setTimeout> | undefined;
     source.onerror = () => {
       report("reconnecting");
+      void probeAccess(queryClient);
       if (source.readyState === EventSource.CLOSED && reopen === undefined) {
         reopen = setTimeout(() => setAttempt((n) => n + 1), REOPEN_AFTER_MS);
       }

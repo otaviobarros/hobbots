@@ -12,7 +12,7 @@ test("[TC-CH-190] the Quest tab shows the whole tree live with its controls and 
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
   await composer.press("Enter");
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
   // The tab is the control room: every Task, its owner, where it stands and who it waits on.
   await page.getByRole("tab", { name: "Quest" }).click();
@@ -44,7 +44,7 @@ test("[TC-CH-190] the Quest tab shows the whole tree live with its controls and 
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   await page.getByRole("textbox", { name: /^Message Aldric/ }).fill("Something else");
   await page.getByRole("textbox", { name: /^Message Aldric/ }).press("Enter");
-  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
   await expect(room).toContainText("Pinned from another thread");
   await room.getByRole("button", { name: /Quill · Draft the landing copy/ }).click();
   await expect(page.getByRole("complementary", { name: "Draft the landing copy, Task details" })).toBeVisible();

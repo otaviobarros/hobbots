@@ -3,6 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { formatWhen } from "../../lib/time.ts";
+import { RoomBackpack } from "../backpack/quest-backpack.tsx";
 import { HobSprite } from "../hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
 import { type RoomRow, roomRows, roomStatusLabel, roomTone, topCancel } from "./control-room.ts";
@@ -97,6 +98,7 @@ export function QuestRoom({
           </li>
         ))}
       </ul>
+      <RoomBackpack tree={tree} hobs={hobs} onOpen={open} />
       <RoomControls tree={tree} task={chosen?.task ?? null} hobs={hobs} cancel={topCancel(tree)} quest={card.quest} />
     </section>
   );
