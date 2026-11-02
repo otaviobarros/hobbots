@@ -321,11 +321,23 @@ describe("leading a party on a Quest", () => {
     expect(handing?.content).toContain("hand_off: Handed Landing copy to Task");
     expect(wrapUp?.content).toContain(`finished. Its result:`);
     expect(wrapUp?.content).toContain("complete_task: Task");
-    // Nothing is left for anyone to deal with.
+    // Nothing is left for anyone to deal with, routine progress included: Ada's reached Aldric as a
+    // digest along his next turns (#293), and what the wrap-up carries resolves once it has ended.
     for (const agentId of [ALDRIC, QUILL, ADA]) {
-      const open = await run(Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId })));
-      expect(open.filter((item) => item.actionable)).toEqual([]);
+      const open = await run(
+        retry(
+          Effect.flatMap(
+            Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId })),
+            (items) => (items.length === 0 ? Effect.succeed(items) : Effect.fail("not yet" as const)),
+          ),
+        ),
+      );
+      expect(open).toEqual([]);
     }
+    const digested = requests.filter((request) =>
+      `${request.briefing ?? ""}${request.prompt}`.includes("Routine progress"),
+    );
+    expect(digested.map((request) => request.prompt)).toContain("How is it going?");
   }, 20_000);
 
   // covers OR-003, IN-005
