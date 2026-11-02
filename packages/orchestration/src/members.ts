@@ -294,9 +294,10 @@ export const makeMemberRunner = (deps: MemberDeps) => {
 
   /** One turn of the member's session on its Task, carrying the work that waits there. */
   const turnOn = (taskId: TaskId, agent: Agent, config: AgentConfiguration, run: Running): CarryingTurn<AttemptId> => ({
-    // A member's session carries only work that needs it, so the plan never sees routine progress alone.
-    plan: () =>
+    // Routine progress rides along work that needs the member, and alone starts no turn (IN-005).
+    plan: (routineOnly) =>
       Effect.gen(function* () {
+        if (routineOnly) return null;
         const found = yield* read(taskId);
         if (Option.isNone(found) || found.value.task.state === "cancelling") return null;
         // One that went live since the turn was started: a second could not start, so the work

@@ -23,17 +23,24 @@ export const continuationThread = (item: BackpackItem, tree: ReadonlyArray<Task>
   item.actionable ? carryingThread(item, tree) : null;
 
 /**
- * The member's Task whose session a backpack item continues (ADR 019), or undefined when it goes to
- * a thread or wakes nobody: an actionable item its recipient holds under a Task another hob gave
- * it, such as the Task itself, a hand-off, an answer or a result of its own steps. Items held
- * under a step go to the step's own session, which starts from its brief.
+ * The member's Task whose session carries a backpack item (ADR 019), or undefined when it goes to a
+ * thread: an item its recipient holds under a Task another hob gave it, such as the Task itself, a
+ * hand-off, an answer, a result of its own steps, or progress from a member it leads in a nested
+ * Quest. Items held under a step go to the step's own session, which starts from its brief.
  */
-export const continuationTask = (item: BackpackItem, tree: ReadonlyArray<Task>): Task | undefined => {
-  if (!item.actionable || item.taskId === null) return undefined;
+export const carryingTask = (item: BackpackItem, tree: ReadonlyArray<Task>): Task | undefined => {
+  if (item.taskId === null) return undefined;
   const held = heldUnder(item, tree);
   const parent = held === undefined ? undefined : tree.find((each) => each.id === held.parentId);
   return held !== undefined && parent !== undefined && parent.ownerId !== held.ownerId ? held : undefined;
 };
+
+/**
+ * The member's Task whose session a backpack item continues: its carrying Task, for an actionable
+ * item. Routine progress never wakes a hob (IN-005); it rides along that session's next turn instead.
+ */
+export const continuationTask = (item: BackpackItem, tree: ReadonlyArray<Task>): Task | undefined =>
+  item.actionable ? carryingTask(item, tree) : undefined;
 
 const firstLine = (text: string) => text.split("\n", 1)[0]?.trim() ?? "";
 

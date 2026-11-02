@@ -83,7 +83,8 @@ const settledElsewhere = (item: BackpackItem, ended: ReadonlySet<string>) =>
 
 /**
  * The open items about a Task under `task` that has ended, other than its result or failure: the
- * ledger no longer counts them, and completing `task` resolves them as late (ADR 019).
+ * ledger no longer counts them, and completing `task` resolves them as late (ADR 019). `items` may
+ * hold routine progress too, which never counts but is settled the same way.
  */
 export const supersededItems = (
   task: Task,
