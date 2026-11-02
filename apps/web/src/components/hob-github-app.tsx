@@ -120,7 +120,31 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
           onDismiss={() => disconnect.mutate(undefined, { onSuccess: () => setDisconnected(null) })}
         />
       )}
-      {disconnected !== null && status.data?._tag === "None" && (
+      <Outcome
+        hob={hob}
+        disconnected={status.data?._tag === "None" ? disconnected : null}
+        startError={start.isError ? start.error : null}
+        changeFailed={disconnect.isError}
+      />
+    </section>
+  );
+}
+
+/** What the last change did: a disconnect with where to delete the app, or why a change failed. */
+function Outcome({
+  hob,
+  disconnected,
+  startError,
+  changeFailed,
+}: {
+  hob: Agent;
+  disconnected: HobGitHubAppDisconnected | null;
+  startError: unknown;
+  changeFailed: boolean;
+}) {
+  return (
+    <>
+      {disconnected !== null && (
         <span role="status" className="text-[13px] text-secondary-text">
           {copy.disconnected({ name: hob.name })}
           {disconnected.deleteUrl !== null && (
@@ -133,17 +157,17 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
           )}
         </span>
       )}
-      {start.isError && (
+      {startError !== null && (
         <span role="alert" className="text-[13px] text-rose">
-          {refusalOf(start.error, copy.startFailed)}
+          {refusalOf(startError, copy.startFailed)}
         </span>
       )}
-      {disconnect.isError && (
+      {changeFailed && (
         <span role="alert" className="text-[13px] text-rose">
           {copy.changeFailed}
         </span>
       )}
-    </section>
+    </>
   );
 }
 
