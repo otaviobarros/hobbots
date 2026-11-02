@@ -1,4 +1,4 @@
-import { PairingKind, PairingRequest, PairingState } from "@hobbots/domain";
+import { Device, DeviceId, PairingKind, PairingRequest, PairingState } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { DeviceSession, ForeignOrigin } from "./user-session.ts";
@@ -85,6 +85,34 @@ export class PairingRequestsGroup extends HttpApiGroup.make("pairingRequests")
       params: { requestId: Schema.String },
       success: PairingRequest,
       error: [PairingNotFound, PairingClosed],
+    }),
+  )
+  .middleware(DeviceSession)
+  .prefix("/api") {}
+
+/** No device has this id. */
+export class DeviceNotFound extends Schema.TaggedError<DeviceNotFound>()(
+  "DeviceNotFound",
+  {},
+  { httpApiStatus: 404 },
+) {}
+
+/** The hub's window is never revoked: quitting the hub ends its key, and the next start writes another. */
+export class CannotRevokeWindow extends Schema.TaggedError<CannotRevokeWindow>()(
+  "CannotRevokeWindow",
+  {},
+  { httpApiStatus: 409 },
+) {}
+
+/** The approved devices, and Revoke (ADR 021), which needs an approved device (PE-006). */
+export class DevicesGroup extends HttpApiGroup.make("devices")
+  .add(
+    // Every device, the hub's window first and then oldest first, revoked ones included.
+    HttpApiEndpoint.get("list", "/devices", { success: Schema.Array(Device) }),
+    HttpApiEndpoint.post("revoke", "/devices/:deviceId/revoke", {
+      params: { deviceId: DeviceId },
+      success: Device,
+      error: [DeviceNotFound, CannotRevokeWindow],
     }),
   )
   .middleware(DeviceSession)

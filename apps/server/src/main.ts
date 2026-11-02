@@ -94,7 +94,13 @@ const ServerLive = Layer.unwrap(
     const network = readNetworkSettings(dataDir);
     const port = Option.getOrElse(config.port, () => network.port ?? DEFAULT_PORT);
     const Remote = HubHostsLive.pipe(
-      Layer.provideMerge(RemoteAccessStateLive({ enabled: network.remoteAccess ?? false, port })),
+      Layer.provideMerge(
+        RemoteAccessStateLive({
+          enabled: network.remoteAccess ?? false,
+          paused: network.remoteAccessPaused ?? false,
+          port,
+        }),
+      ),
     );
     const Tailnet =
       config.fakeTailscale === "on"
@@ -156,7 +162,7 @@ const ServerLive = Layer.unwrap(
     const Charms = GitHubCharmTools.pipe(
       Layer.provide(
         Layer.mergeAll(
-          GitHubApiNode,
+          GitHubApiNode(),
           GitRemotes.layer,
           PolicyEngine.node,
           GitPushLive({ folder: charmFolder }).pipe(
