@@ -246,6 +246,8 @@ const ownedBy = (tree: TaskTree, agentId: AgentId): Task | undefined =>
 
 const isLive = (state: string) => state === "starting" || state === "running";
 
+const isTerminal = (state: string) => state === "completed" || state === "cancelled" || state === "failed";
+
 const attemptsOf = (tree: TaskTree, task: Task | undefined) =>
   tree.attempts.filter((each) => each.taskId === task?.id).map((each) => [each.agentId, each.state]);
 
@@ -586,6 +588,137 @@ describe("cancelling with confirmed outcomes", () => {
     expect(after).toHaveLength(1);
     expect(after[0]?.tasks[0]?.state).toBe("cancelled");
     expect(after[0]?.attempts.find((each) => each.id === stop?.id)?.state).toBe("unresolved");
+  }, 20_000);
+  // covers OR-006, IN-003
+  it("[TC-OR-180] cancelling the Quest while its lead reads a member's result leaves nothing waiting in any backpack", async () => {
+    const { run, release, requests } = setUp();
+    // Rook's result holds Aldric's continuation once its session has started, so the cancel stops it.
+    const prompt = [
+      "Plan the Black Friday campaign",
+      hub("delegate_task", {
+        key: "ads",
+        hob: "Rook",
+        brief: [
+          "Run the ads",
+          hub("complete_task", { key: "ads-done", summary: ["Ads ready", HOLD_STARTED, "That is all"].join("\n") }),
+        ].join("\n"),
+      }),
+      hub("delegate_task", {
+        key: "copy",
+        hob: "Quill",
+        brief: ["Draft the landing copy", HOLD, hub("complete_task", { key: "copy-done", summary: "Copy" })].join("\n"),
+      }),
+      hub("wait_for", { key: "wait", tasks: ["$ads.task_id", "$copy.task_id"] }),
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    const before = await run(treeWhen((tree) => ownedBy(tree, ROOK)?.state === "completed"));
+    const quest = before.quests[0];
+    if (quest === undefined) throw new Error("no Quest");
+    // Aldric's continuation reads Rook's result, its items held under the turn's claims.
+    await run(
+      retry(
+        Effect.gen(function* () {
+          const reading = continuations(yield* messages()).some((reply) => reply.status === "streaming");
+          const open = yield* Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId: ALDRIC }));
+          return reading && open.some((item) => item.state === "processing")
+            ? undefined
+            : yield* Effect.fail("not yet");
+        }),
+      ),
+    );
+    expect(requests.some((each) => each.prompt.split("\n").includes(HOLD_STARTED))).toBe(true);
+
+    await run(controls((each) => each.cancelQuest(quest.id)));
+    const done = await run(
+      treeWhen((tree) => tree.tasks.every((task) => ["cancelled", "completed"].includes(task.state))),
+    );
+    expect(done.tasks.map((task) => [task.ownerId, task.state])).toEqual([
+      [ALDRIC, "cancelled"],
+      [ROOK, "completed"],
+      [QUILL, "cancelled"],
+    ]);
+    expect(done.quests[0]?.state).toBe("cancelled");
+
+    // What the stopped turn carried, and what the cancel sent Aldric about Quill, resolve as late
+    // without waiting for another turn of his.
+    const open = await run(
+      retry(
+        Effect.flatMap(
+          Backpack.use((backpack) => backpack.listOpen({ _tag: "Workspace" })),
+          (items) => (items.length === 0 ? Effect.succeed(items) : Effect.fail("not yet" as const)),
+        ),
+      ).pipe(Effect.catch(() => Backpack.use((backpack) => backpack.listOpen({ _tag: "Workspace" })))),
+    );
+    expect(open.map((item) => [item.recipientId, item.kind, item.state])).toEqual([]);
+    const all = await run(messagesWhen(() => true));
+    expect(continuations(all).map((reply) => reply.status)).toEqual(["stopped"]);
+    // Nothing starts after: no continuation for the late work.
+    const sent = requests.length;
+    await release();
+    await run(Effect.sleep("300 millis"));
+    expect(requests).toHaveLength(sent);
+  }, 20_000);
+  // covers OR-006, IN-005
+  it("[TC-OR-184] cancelling the Quest resolves the routine progress its party reported, with no turn to carry it", async () => {
+    const { run, release, requests } = setUp();
+    // Rook's step reports progress and finishes; its result holds Rook's continuation once started.
+    // The progress waits for Aldric, whose Task waits on Rook with no turn running.
+    const prompt = [
+      "Plan the Black Friday campaign",
+      hub("delegate_task", {
+        key: "ads",
+        hob: "Rook",
+        brief: [
+          "Run the ads",
+          hub("plan_steps", {
+            key: "plan",
+            steps: [
+              {
+                brief: [
+                  "Pick the channels",
+                  hub("report_checkpoint", { key: "draft", kind: "progress", summary: "Channels shortlisted" }),
+                  hub("complete_task", {
+                    key: "picked",
+                    summary: ["Channels", HOLD_STARTED, "That is all"].join("\n"),
+                  }),
+                ].join("\n"),
+              },
+            ],
+          }),
+        ].join("\n"),
+      }),
+      hub("wait_for", { key: "wait", tasks: ["$ads.task_id"] }),
+    ].join("\n");
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    const openFor = (agentId: AgentId) => Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId }));
+    await run(
+      retry(
+        Effect.gen(function* () {
+          const reading = (yield* openFor(ROOK)).some((item) => item.kind === "result" && item.state === "processing");
+          const progress = (yield* openFor(ALDRIC)).some(
+            (item) => item.kind === "progress" && item.state === "pending",
+          );
+          return reading && progress ? undefined : yield* Effect.fail("not yet" as const);
+        }),
+      ),
+    );
+    const quest = (await run(treeWhen(() => true))).quests[0];
+    if (quest === undefined) throw new Error("no Quest");
+
+    await run(controls((each) => each.cancelQuest(quest.id)));
+    await run(treeWhen((tree) => tree.tasks.every((task) => isTerminal(task.state))));
+    const workspace = Backpack.use((backpack) => backpack.listOpen({ _tag: "Workspace" }));
+    const open = await run(
+      retry(
+        Effect.flatMap(workspace, (items) => (items.length === 0 ? Effect.succeed(items) : Effect.fail("not yet"))),
+      ).pipe(Effect.catch(() => workspace)),
+    );
+    expect(open.map((item) => [item.recipientId, item.kind, item.state])).toEqual([]);
+    // Nothing starts after for the late work.
+    const sent = requests.length;
+    await release();
+    await run(Effect.sleep("300 millis"));
+    expect(requests).toHaveLength(sent);
   }, 20_000);
 });
 

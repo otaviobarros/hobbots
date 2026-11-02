@@ -262,7 +262,13 @@ export class TaskTools extends Context.Service<
                   }),
                 ),
             };
-            return { hubTools, briefing, end, workingOn: chat.workingOn } satisfies ChatTaskTurn;
+            return {
+              hubTools,
+              briefing,
+              end,
+              workingOn: chat.workingOn,
+              attempt: Effect.sync(() => attemptId),
+            } satisfies ChatTaskTurn;
           });
 
         return TaskTools.of({ call, forTurn, forChat });

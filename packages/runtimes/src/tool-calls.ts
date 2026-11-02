@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
-import { operationDecision } from "@hobbots/agents";
+import { type CommandStart, operationDecision } from "@hobbots/agents";
 import { narrowest, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
 import {
   type PolicyContext,
@@ -799,6 +799,21 @@ const redactedCommandLabel = (command: string, redact: (text: string) => string)
   const label = commandLabel(line, lone).replace(STANDIN, (_, n: string) => markers[Number(n)] ?? "");
   return shortenLabel(label, COMMAND_LABEL_LIMIT);
 };
+
+/**
+ * The shell command a call runs, as the Workbench's Terminal records it (ADR 023), or undefined for
+ * any other call. Claude Code reports a command's output only when it ends, through its hooks.
+ */
+export const commandOf = (
+  tool: string,
+  input: Record<string, unknown>,
+  folder: string,
+  sandboxed: boolean,
+  liveOutput = false,
+): CommandStart | undefined =>
+  tool === "Bash" && typeof input.command === "string"
+    ? { line: input.command, folder, sandboxed, liveOutput }
+    : undefined;
 
 /**
  * Short words for a tool step, from the call's own arguments. Secrets are redacted with `redact`

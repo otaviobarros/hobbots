@@ -375,12 +375,6 @@ const settledFor = (agentId: AgentId) =>
     treeWhen((tree) => !tree.attempts.some((each) => each.agentId === agentId && isLive(each.state))),
   );
 
-/** Every reply in Aldric's chat has ended and nothing for him waits to be read. */
-const aldricIdle = Effect.andThen(
-  messagesWhen(() => true),
-  nothingFor(ALDRIC),
-);
-
 const pendingFrom = (agentId: AgentId) =>
   retry(
     Effect.flatMap(
@@ -678,9 +672,6 @@ describe("the Black Friday Quest end to end", () => {
     // Cancel Quest stops Quill's turn and confirms every Task still open; nothing starts after it.
     const quest = built.quests[0];
     if (quest === undefined) throw new Error("no Quest");
-    // Aldric's replies end first: a cancel that cuts off a reply reading his party's work leaves
-    // that work waiting for him (#396).
-    await run(aldricIdle);
     await controls((each) => each.cancelQuest(quest.id));
     const ended = await run(settledTree((tree) => tree.tasks[0]?.state === "cancelled"));
     expect(ended.quests.map((each) => each.state)).toEqual(["cancelled", "cancelled"]);

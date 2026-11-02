@@ -1,3 +1,4 @@
+export * from "./activity.ts";
 export * from "./approvals.ts";
 export * from "./backpack.ts";
 export * from "./charm-calls.ts";

@@ -107,9 +107,43 @@ const correlationOf = (event: JournaledEventType): RowCorrelation => {
     case "PairingChanged":
       return NONE;
     default:
-      return isTaskEvent(event)
-        ? taskCorrelationOf(event)
-        : { ...NONE, threadId: event.threadId, messageId: event.messageId };
+      return restCorrelationOf(event);
+  }
+};
+
+/** Task and Workbench events, and the message events that name their thread and message. */
+const restCorrelationOf = (
+  event: Exclude<
+    JournaledEventType,
+    {
+      readonly _tag:
+        | "AgentUpserted"
+        | "ThreadUpserted"
+        | "ApprovalRequested"
+        | "ApprovalResolved"
+        | "GrantCreated"
+        | "GrantRevoked"
+        | "BackpackItemRecorded"
+        | "BackpackItemChanged"
+        | "DeviceRevoked"
+        | "MessageUpserted"
+        | "MessageQueued"
+        | "PairingRequested"
+        | "PairingChanged";
+    }
+  >,
+): RowCorrelation => {
+  if (isTaskEvent(event)) return taskCorrelationOf(event);
+  // The Workbench's records name their Task (ADR 023).
+  switch (event._tag) {
+    case "CommandRecorded":
+      return { ...NONE, taskId: event.command.taskId };
+    case "FileChangesRecorded":
+      return { ...NONE, taskId: event.taskId };
+    case "FolderScanned":
+      return { ...NONE, taskId: event.scan.taskId };
+    default:
+      return { ...NONE, threadId: event.threadId, messageId: event.messageId };
   }
 };
 
