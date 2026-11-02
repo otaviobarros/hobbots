@@ -7,7 +7,7 @@ const named = (...ids: ReadonlyArray<string>) => ids.map((id) => ({ id }) as unk
 
 // Settings › Devices opens, and its first read answers only after a device was allowed elsewhere.
 // covers DP-004
-it("[TC-DP-128] drops a first read taken before a device was allowed, so the new device shows", async () => {
+it("[TC-DP-129] drops a first read taken before a device was allowed, so the new device shows", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const reads: Array<(devices: ReadonlyArray<Device>) => void> = [];
   const observer = new QueryObserver(client, {
