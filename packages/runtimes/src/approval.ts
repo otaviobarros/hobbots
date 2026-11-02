@@ -1,32 +1,17 @@
 import {
-  actionDigest,
+  type AskedDecision,
+  askUntilDecided,
   type PromptRequest,
   type Redactor,
   type RuntimeEvent,
   type ToolStartedEvent,
   type TurnApprovals,
 } from "@hobbots/agents";
-import type { ApprovalLifetime } from "@hobbots/domain";
 import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
 
-/** Why a call the policy answered Ask for did not run, when no one can be asked. */
-export const UNASKABLE = "Hobbots cannot ask you for approval on this turn, so the call did not run.";
-
 export const UNKNOWN_TOOL = (tool: string) => `Hobbots does not know the ${tool} tool, so it stays closed.`;
-
-/** Why a call did not run, in words for the model and the person, when no one was asked. */
-export const refusal = (verdict: PolicyVerdict): string =>
-  verdict.decision === "ask" ? `${verdict.reason.message} ${UNASKABLE}` : verdict.reason.message;
-
-const denied = (reason: string | null) =>
-  reason === null
-    ? "The user denied this call, so it did not run."
-    : `The user denied this call, so it did not run. Their reason: ${reason}`;
-
-const EXPIRED = "The approval request expired before the user decided, so the call did not run.";
-const NO_TOOLS = "The hob no longer has tools, so the approved call did not run.";
 
 /**
  * Reports a call the policy allowed, just before it runs. With `record`, waits until the call is
@@ -55,45 +40,36 @@ export interface ToolCall {
   readonly cwd: string;
 }
 
-/**
- * How the user let a call run: Asked when they approved this call's own request, with the lifetime
- * they picked; Granted when an approval they saved earlier answered it without asking.
- */
-export type UserApproval =
-  | { readonly _tag: "Asked"; readonly lifetime: ApprovalLifetime }
-  | { readonly _tag: "Granted" };
+/** The folders a call pushes from with Git, as the hub reads its command. */
+const pushesFrom = (call: ToolCall) => [
+  ...new Set(
+    (toolRequests(call.tool, call.input, call.cwd) ?? []).flatMap((request) =>
+      request._tag === "Push" && request.cwd !== undefined ? [request.cwd] : [],
+    ),
+  ),
+];
 
-const ASKED = "Hobbots showed the user an approval request for this call before it ran.";
-const LIFETIMES: Record<ApprovalLifetime, string> = {
-  once: "They approved it just this once, so a call like it asks again.",
-  quest: "They approved calls like it for this Quest.",
-  always: "They approved calls like it always, so those run without asking from now on.",
-};
+/** The hub tool a call's `git push` is pointed to instead, or null when none is. */
+const steeredTo = (call: ToolCall, steersPush: ((cwd: string) => Effect.Effect<string | null>) | undefined) =>
+  Effect.gen(function* () {
+    if (steersPush === undefined) return null;
+    for (const cwd of pushesFrom(call)) {
+      const tool = yield* steersPush(cwd);
+      if (tool !== null) return tool;
+    }
+    return null;
+  });
 
 /**
- * What the hob is told with the result of a call the user approved (#282). The hob never sees the
- * approval card, so without this it cannot tell an approved call from one that needed no approval.
+ * Why a `git push` command is refused when the turn offers the GitHub Charm's push for its folder (ADR 020): in any
+ * preset, since the Charm pushes with the user's sign-in under the hob's policy, and Git in the
+ * sandbox cannot.
  */
-export const approvalNote = (approval: UserApproval): string =>
-  approval._tag === "Asked"
-    ? `${ASKED} ${LIFETIMES[approval.lifetime]}`
-    : "This call ran without a new approval request because an approval the user saved earlier covers it.";
+export const steerPush = (tool: string) =>
+  `Push with the ${tool} tool instead of git push: Hobbots pushes your branch to GitHub for you, as the user and under your policy. A git push from your sandbox cannot sign in.`;
 
 /** Whether a call runs, and the verdict it runs under or why it does not. */
-export type CallDecision =
-  | {
-      readonly _tag: "Run";
-      readonly verdict: PolicyVerdict;
-      /** The user's approval it runs on, when the policy alone did not allow it. */
-      readonly approval?: UserApproval;
-    }
-  | {
-      readonly _tag: "Refuse";
-      readonly verdict: PolicyVerdict | undefined;
-      readonly reason: string;
-      /** The user, when they denied it; otherwise the policy. */
-      readonly decidedBy?: "user";
-    };
+export type CallDecision = AskedDecision<PolicyVerdict>;
 
 /** Decides a call under the context with the hob's live grants as they are now (PE-008). */
 const decideIn = (
@@ -115,29 +91,9 @@ const decideIn = (
   });
 
 /**
- * A call the policy allows: the grants that answered it are marked used, and it runs on the user's
- * approval when they approved it on this turn or a grant they saved answered it.
- */
-const allowed = (
-  approvals: TurnApprovals | null | undefined,
-  verdict: PolicyVerdict,
-  approved: ApprovalLifetime | null,
-): Effect.Effect<CallDecision> =>
-  Effect.gen(function* () {
-    const granted = verdict.grantIds.length > 0;
-    if (approvals && granted) yield* approvals.used(verdict.grantIds);
-    // An approval with a lifetime saved its grants first, so they answer the call it approved.
-    if (approved !== null) return { _tag: "Run", verdict, approval: { _tag: "Asked", lifetime: approved } } as const;
-    return granted && approvals
-      ? ({ _tag: "Run", verdict, approval: { _tag: "Granted" } } as const)
-      : ({ _tag: "Run", verdict } as const);
-  });
-
-/**
  * Decides a tool call: the policy's answer, and for Ask the user's (PE-003). While the user decides,
  * `report` gets ToolAwaitingApproval. An approved call is decided again under the hob's policy as
- * it is now, just before it runs: it runs when that policy allows it, or still asks for the same
- * action under the same policy version; a changed action or policy asks again (PE-008).
+ * it is now, just before it runs (PE-008).
  */
 export const decideCall = (
   engine: PolicyEngine["Service"],
@@ -146,61 +102,22 @@ export const decideCall = (
   call: ToolCall,
   report: (event: RuntimeEvent) => void,
   redaction?: Redactor | null,
+  steersPush?: (cwd: string) => Effect.Effect<string | null>,
 ): Effect.Effect<CallDecision> =>
-  Effect.gen(function* () {
-    let verdict = yield* decideIn(engine, context, approvals, call);
-    if (verdict === undefined) return { _tag: "Refuse", verdict, reason: UNKNOWN_TOOL(call.tool) } as const;
-    const label = toolLabel(call.tool, call.input, redaction?.text);
-    // The lifetime of the user's last approval of this call, once they approved it.
-    let approved: ApprovalLifetime | null = null;
-    while (verdict.decision === "ask") {
-      if (!approvals) return { _tag: "Refuse", verdict, reason: refusal(verdict) } as const;
-      const asked: PolicyVerdict = verdict;
-      const pending = yield* approvals.request({
-        stepId: call.id,
-        tool: call.tool,
-        operation: asked.operation,
-        targets: asked.targets,
-        arguments: call.input,
-        label,
-        reason: asked.reason.message,
-        policyVersion: asked.policyVersion,
-        onceOnly: asked.onceOnly,
-        grantable: asked.grantable,
-        rules: asked.rules,
-      });
-      report({
-        _tag: "ToolAwaitingApproval",
-        id: call.id,
-        approvalId: pending.approvalId,
-        tool: call.tool,
-        operation: asked.operation,
-        targets: asked.targets,
-        label,
-      });
-      const outcome = yield* pending.decision;
-      if (outcome._tag === "Denied")
-        return { _tag: "Refuse", verdict: asked, reason: denied(outcome.reason), decidedBy: "user" } as const;
-      if (outcome._tag === "Expired") return { _tag: "Refuse", verdict: asked, reason: EXPIRED } as const;
-      approved = outcome.lifetime;
-      const access = yield* approvals.currentAccess;
-      if (access === null) return { _tag: "Refuse", verdict: asked, reason: NO_TOOLS } as const;
-      // Approving with a lifetime saved its grants first, so they answer here.
-      const now = yield* decideIn(engine, { ...context, ...access.policy }, approvals, call);
-      if (now === undefined) return { _tag: "Refuse", verdict: asked, reason: UNKNOWN_TOOL(call.tool) } as const;
-      if (now.decision === "ask") {
-        const digest = yield* actionDigest({
-          ...call,
-          operation: now.operation,
-          targets: now.targets,
-          arguments: call.input,
-        });
-        if (digest === outcome.actionDigest && now.policyVersion === outcome.policyVersion) {
-          return { _tag: "Run", verdict: now, approval: { _tag: "Asked", lifetime: approved } } as const;
-        }
-      }
-      verdict = now;
-    }
-    if (verdict.decision !== "allow") return { _tag: "Refuse", verdict, reason: refusal(verdict) } as const;
-    return yield* allowed(approvals, verdict, approved);
-  });
+  Effect.flatMap(steeredTo(call, steersPush), (pushTool) =>
+    pushTool !== null
+      ? Effect.succeed<CallDecision>({ _tag: "Refuse", verdict: undefined, reason: steerPush(pushTool) })
+      : askUntilDecided({
+          call: {
+            id: call.id,
+            tool: call.tool,
+            arguments: call.input,
+            label: toolLabel(call.tool, call.input, redaction?.text),
+          },
+          approvals,
+          decide: (access) =>
+            decideIn(engine, access === null ? context : { ...context, ...access.policy }, approvals, call),
+          report,
+          unknown: UNKNOWN_TOOL(call.tool),
+        }),
+  );

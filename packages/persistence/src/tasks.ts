@@ -685,6 +685,7 @@ export const TaskRepositoryLive = Layer.effect(
         ),
       listMemberWork: (agentId) => read.memberWork(agentId).pipe(Effect.orDie),
       listQueuedSteps: read.queuedSteps.pipe(Effect.orDie),
+      listStrandedSteps: read.strandedSteps.pipe(Effect.orDie),
       listLiveAttempts: read.liveAttempts.pipe(Effect.orDie),
     });
   }),

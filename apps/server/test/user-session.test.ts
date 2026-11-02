@@ -284,9 +284,9 @@ describe("only the user decides approvals and manages grants", () => {
 
   // covers PE-006
   it("[TC-PE-112] only the hub's user-session middleware provides a user session, and every guarded route carries it", () => {
-    // Every route that decides approvals, manages grants, answers for you or changes what hobs may do, including any
+    // Every route that decides approvals, manages grants, answers for you, settles a Charm call or changes what hobs may do, including any
     // added to those groups later, sits behind the middleware.
-    for (const group of ["approvals", "grants", "permissions", "setup", "questions"] as const) {
+    for (const group of ["approvals", "grants", "permissions", "setup", "questions", "charmCalls"] as const) {
       const endpoints = Object.values(HobbotsApi.groups[group].endpoints);
       expect(endpoints.length).toBeGreaterThan(0);
       for (const endpoint of endpoints) expect([...endpoint.middlewares]).toContain(UserSessionOnly);
@@ -311,6 +311,7 @@ describe("only the user decides approvals and manages grants", () => {
       [
         join("apps", "server", "src", "user-session.ts"),
         join("packages", "agents", "src", "approvals.ts"),
+        join("packages", "agents", "src", "charm-calls.ts"),
         join("packages", "agents", "src", "grants.ts"),
         join("packages", "agents", "src", "questions.ts"),
         join("packages", "api", "src", "user-session.ts"),
@@ -319,7 +320,7 @@ describe("only the user decides approvals and manages grants", () => {
     // The services only require it: they import it, name it in a signature or a comment, and read it.
     const requiring =
       /^\s*(UserSession,|import .*\bUserSession\b.*|yield\* UserSession;|.*, UserSession>;?|\s*\*.*|\) => Effect\.Effect<.*UserSession>;)$/;
-    for (const service of ["approvals.ts", "grants.ts", "questions.ts"]) {
+    for (const service of ["approvals.ts", "charm-calls.ts", "grants.ts", "questions.ts"]) {
       const lines = readFileSync(join(root, "packages", "agents", "src", service), "utf8")
         .split("\n")
         .filter((line) => /\bUserSession\b/.test(line));

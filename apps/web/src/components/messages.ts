@@ -28,8 +28,8 @@ export const messages = {
     working: "Hobbots home, hobs are working",
     needsYou: ({ count }: { count: number }) =>
       pluralForm(count, {
-        one: "Hobbots inbox, a request needs you",
-        other: `Hobbots inbox, ${formatCount(count)} requests need you`,
+        one: "Hobbots inbox, something needs you",
+        other: `Hobbots inbox, ${formatCount(count)} things need you`,
       }),
   },
   home: {
@@ -186,6 +186,18 @@ export const messages = {
     openLog: ({ size }: { size: string }) => `Open the full log (${size})`,
     noLog: "The full log could not be kept.",
     started: "Started",
+  },
+  charmCall: {
+    ask: "Look on GitHub to see whether it went through, then tell Hobbots. Until you do, no hob makes this call to the same place again.",
+    applied: "It went through",
+    notSent: "It did not go through",
+    error: "Hobbots could not settle it. It may have settled already; the step shows how.",
+    /** How a call settled, by its state now. */
+    settled: {
+      applied: "Settled: it went through.",
+      "not-sent": "Settled: it did not go through, so it can be made again.",
+      refused: "Settled: GitHub refused it.",
+    },
   },
   approval: {
     asks: ({ name }: { name: string }) => `${name} asks permission`,

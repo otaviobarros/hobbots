@@ -53,6 +53,8 @@ export const redactEvent = (event: RuntimeEvent, redactor: Redactor): RuntimeEve
         targets: redactor.value(event.targets),
         reason: redactor.text(event.reason),
       };
+    case "ToolUncertain":
+      return { ...event, reason: redactor.text(event.reason) };
     case "ToolFinished":
       return event.output === undefined ? event : { ...event, output: redactor.text(event.output) };
     default:

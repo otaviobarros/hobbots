@@ -78,6 +78,11 @@ export type RuntimeEvent =
       /** Who refused it: the policy hook, the user answering an Ask, or the OS sandbox around the runtime. */
       readonly decidedBy: "policy" | "user" | "sandbox";
     }
+  /**
+   * A started call ended without a clear result: it may or may not have taken effect, so it must not
+   * run again until it is settled (ADR 020). Hub tools report it; `reason` says what is known.
+   */
+  | { readonly _tag: "ToolUncertain"; readonly id: string; readonly reason: string }
   | {
       readonly _tag: "Completed";
       readonly sessionId: string;
@@ -196,11 +201,28 @@ export interface HubToolAnswer {
   readonly refused: boolean;
 }
 
+/**
+ * The reply step a hub tool call shows as: the runtime's id for the call, and how the hub reports
+ * on it, such as while the call waits for the user's approval (ADR 020).
+ */
+export interface HubCallStep {
+  readonly id: string;
+  readonly report: (event: RuntimeEvent) => void;
+}
+
 /** The Hobbots tools a turn offers, and how a call reaches the hub, which checks it. */
 export interface HubTools {
   readonly tools: ReadonlyArray<HubTool>;
-  /** Never fails: a refused call is an answer with the reason. */
-  readonly call: (name: string, input: unknown) => Effect.Effect<HubToolAnswer>;
+  /**
+   * Never fails: a refused call is an answer with the reason. `step` is the call's step, when the
+   * runtime knows it; without one, a call that needs the user's approval is refused.
+   */
+  readonly call: (name: string, input: unknown, step?: HubCallStep) => Effect.Effect<HubToolAnswer>;
+  /**
+   * The hub tool a `git push` run in `cwd` is made with instead, such as the GitHub Charm's push for a
+   * folder whose origin is on GitHub (ADR 020), or null when the push is decided as a push.
+   */
+  readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
 }
 
 export interface PromptRequest {

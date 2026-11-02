@@ -1,5 +1,5 @@
 import { INBOX_HISTORY } from "@hobbots/domain";
-import { formatCount, formatIn, plural } from "../../lib/format.ts";
+import { formatCount, formatIn } from "../../lib/format.ts";
 
 /** User-facing copy for the Inbox page and the Needs you counts (STD-I18N-001). */
 export const messages = {
@@ -8,11 +8,7 @@ export const messages = {
   tabsLabel: "Inbox filters",
   tabs: { needs: "Needs you", all: "All", history: "History" },
   listLabel: "Requests",
-  waiting: ({ count }: { count: number }) =>
-    plural(count, {
-      one: `${formatCount(count)} request needs you`,
-      other: `${formatCount(count)} requests need you`,
-    }),
+  waiting: ({ count }: { count: number }) => `${formatCount(count)} waiting on you`,
   from: ({ name }: { name: string }) => `${name} → you`,
   group: ({ name, thread }: { name: string; thread: string }) => `${name} · ${thread}`,
   untitledThread: "A thread",
@@ -70,10 +66,6 @@ export const messages = {
       "Nothing needs you right now. When a hob asks permission or has a question, it waits here and you can open it in the Inbox.",
     open: "Open the Inbox",
   },
-  rail: ({ count }: { count: number }) =>
-    plural(count, {
-      one: `Inbox, ${formatCount(count)} request needs you`,
-      other: `Inbox, ${formatCount(count)} requests need you`,
-    }),
+  rail: ({ count }: { count: number }) => `Inbox, ${formatCount(count)} waiting on you`,
   count: ({ count }: { count: number }) => formatCount(count),
 } as const;

@@ -236,6 +236,12 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     ORDER BY ${orderBy(sql, ["t.created_at", "t.id"])}`.pipe(Effect.flatMap(decodeRows("task")));
   const liveAttempts = sql<Row>`SELECT * FROM attempts WHERE state IN ('starting', 'running')
     ORDER BY ${orderBy(sql, ["started_at", "id"])}`.pipe(Effect.flatMap(decodeRows("attempt")));
+  /** Steps that started and have not ended, with no live Attempt: their session ended, oldest first. */
+  const strandedSteps = sql<Row>`SELECT t.* FROM tasks t JOIN tasks p ON p.id = t.parent_id
+    LEFT JOIN attempts a ON a.id = t.current_attempt_id
+    WHERE t.state IN ('active', 'waiting', 'blocked', 'cancelling') AND p.owner_id = t.owner_id
+      AND (a.id IS NULL OR a.state NOT IN ('starting', 'running'))
+    ORDER BY ${orderBy(sql, ["t.created_at", "t.id"])}`.pipe(Effect.flatMap(decodeRows("task")));
 
   return {
     task,
@@ -249,6 +255,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     threadTrees,
     memberWork,
     queuedSteps,
+    strandedSteps,
     liveAttempts,
   };
 };

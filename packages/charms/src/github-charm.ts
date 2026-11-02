@@ -1,28 +1,37 @@
-import { CharmTools, type CharmTurn, type HubToolAnswer, type ToolAccess } from "@hobbots/agents";
+import { realpathSync } from "node:fs";
+import { isAbsolute, relative } from "node:path";
+import { CharmTools, type CharmTurn, type HubCallStep, type HubToolAnswer, type ToolAccess } from "@hobbots/agents";
 import {
   type AgentId,
+  GITHUB_PUSH_TOOL,
   GITHUB_TOOLS,
+  GITHUB_WRITE_TOOLS,
   type GitHubRepository,
   GitHubToolInputs,
   type GitHubToolName,
+  GitHubWriteInputs,
   githubItemText,
   githubRepositoryText,
   githubSearchQuery,
   githubSearchText,
   githubToolJsonSchema,
+  githubWriteToolJsonSchema,
   isGitHubToolName,
+  isGitHubWriteToolName,
   repositorySlug,
   trimTrailingSlashes,
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine } from "@hobbots/permissions";
 import { Data, Effect, Layer, Schema } from "effect";
+import { makeCharmCallRunner } from "./charm-calls.ts";
 import { GitHubCredential } from "./github-account.ts";
 import { GitHubApi } from "./github-api.ts";
 import type { GitHubError } from "./github-error.ts";
+import { makeGitHubPush, pushReadBack } from "./github-push.ts";
 import { GitRemotes } from "./remotes.ts";
 
 /**
- * The GitHub Charm's read actions as hub tools (#317, ADR 014). A turn offers them only to a hob
+ * The GitHub Charm's actions as hub tools (#317, #323, ADR 014): its reads, and its push. A turn offers them only to a hob
  * the user gave the Charm, while GitHub is connected on the hub (#322). Each call is decided by the
  * policy engine on the repository the hub found from the hob's own folder, then read on the hub with
  * the connected account. Nothing a hob writes names the repository, and no credential reaches it.
@@ -44,6 +53,15 @@ const policyContext = (access: ToolAccess): PolicyContext => ({
   modelHosts: [],
 });
 
+/** A folder as the file system resolves it, so a link and its target are the same folder. */
+const canonical = (folder: string) => {
+  try {
+    return realpathSync(folder);
+  } catch {
+    return folder;
+  }
+};
+
 const withoutSlash = (folder: string) => (folder.length > 1 ? trimTrailingSlashes(folder) || "/" : folder);
 
 export const GitHubCharmTools = Layer.effect(
@@ -55,7 +73,12 @@ export const GitHubCharmTools = Layer.effect(
     const credential = yield* GitHubCredential;
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
-    const tools = GITHUB_TOOLS.map((tool) => ({ ...tool, inputSchema: githubToolJsonSchema(tool.name) }));
+    const runner = yield* makeCharmCallRunner({ github_push: pushReadBack(api) });
+    const github = yield* makeGitHubPush(runner);
+    const tools = [
+      ...GITHUB_TOOLS.map((tool) => ({ ...tool, inputSchema: githubToolJsonSchema(tool.name) })),
+      ...GITHUB_WRITE_TOOLS.map((tool) => ({ ...tool, inputSchema: githubWriteToolJsonSchema(tool.name) })),
+    ];
 
     /** The folder to read and its repository: the one named, which must be the hob's, or the first that has one. */
     const repositoryFor = (access: ToolAccess, named: string | undefined) =>
@@ -114,21 +137,39 @@ export const GitHubCharmTools = Layer.effect(
       }
     };
 
-    const call = (turn: CharmTurn, name: string, raw: unknown) =>
+    /** The call's input, or a refusal saying what is wrong with it. */
+    const decoded = <S extends Schema.Top & { readonly DecodingServices: never }>(schema: S, raw: unknown) =>
+      Schema.decodeUnknownEffect(schema)(raw).pipe(
+        Effect.mapError((error) => new Refused({ message: describe(error) })),
+      );
+
+    /**
+     * The turn's access, and the folder and repository a call names, or a refusal when the turn has
+     * no tools or the user took the Charm away during the turn.
+     */
+    const resolved = (turn: CharmTurn, named: string | undefined, otherwise: string) =>
       Effect.gen(function* () {
-        if (!isGitHubToolName(name)) return yield* new Refused({ message: `Hobbots has no ${name} tool.` });
-        const input = yield* Schema.decodeUnknownEffect(GitHubToolInputs[name])(raw).pipe(
-          Effect.mapError((error) => new Refused({ message: describe(error) })),
-        );
         const access = yield* turn.currentAccess;
-        if (access === null) {
-          return yield* new Refused({ message: "You have no tools this turn, so GitHub cannot be read." });
-        }
-        // The user may take the Charm away during the turn.
+        if (access === null) return yield* new Refused({ message: `You have no tools this turn, so ${otherwise}.` });
         if (access.policy.hob.githubCharm === false) {
-          return yield* new Refused({ message: "The GitHub Charm is off for you now, so GitHub cannot be read." });
+          return yield* new Refused({ message: `The GitHub Charm is off for you now, so ${otherwise}.` });
         }
-        const { folder, repository } = yield* repositoryFor(access, input.folder);
+        return { access, ...(yield* repositoryFor(access, named)) };
+      });
+
+    const write = (turn: CharmTurn, name: "github_push", raw: unknown, step: HubCallStep | undefined) =>
+      Effect.gen(function* () {
+        const input = yield* decoded(GitHubWriteInputs[name], raw);
+        const { access, folder, repository } = yield* resolved(turn, input.folder, "nothing can be pushed");
+        return yield* github.push(turn, access, folder, repository, input, step);
+      });
+
+    const call = (turn: CharmTurn, name: string, raw: unknown, step: HubCallStep | undefined) =>
+      Effect.gen(function* () {
+        if (isGitHubWriteToolName(name)) return yield* write(turn, name, raw, step);
+        if (!isGitHubToolName(name)) return yield* new Refused({ message: `Hobbots has no ${name} tool.` });
+        const input = yield* decoded(GitHubToolInputs[name], raw);
+        const { access, folder, repository } = yield* resolved(turn, input.folder, "GitHub cannot be read");
         const verdict = yield* engine.decide(policyContext(access), {
           _tag: "GitHub",
           folder,
@@ -154,11 +195,28 @@ export const GitHubCharmTools = Layer.effect(
         // A defect becomes an answer; an interrupted turn stays interrupted.
         Effect.catchDefect((defect) =>
           Effect.logError("A GitHub Charm call failed", defect).pipe(
-            Effect.as({ text: "Hobbots could not read GitHub this time. Try again.", refused: true }),
+            Effect.as({ text: "Hobbots could not reach GitHub this time. Try again.", refused: true }),
           ),
         ),
         Effect.provideContext(context),
       );
+
+    /**
+     * A `git push` in one of the hob's folders whose origin is on GitHub is made with `github_push`
+     * (ADR 020): Git in the sandbox cannot sign in. A push anywhere else is decided as a push.
+     */
+    const steersPush = (turn: CharmTurn, cwd: string) =>
+      Effect.gen(function* () {
+        const access = yield* turn.currentAccess;
+        if (access === null) return null;
+        const at = canonical(cwd);
+        for (const folder of access.folders) {
+          const from = relative(canonical(folder), at);
+          if (from.startsWith("..") || isAbsolute(from)) continue;
+          if ((yield* remotes.repositoryOf(folder)) !== null) return GITHUB_PUSH_TOOL;
+        }
+        return null;
+      }).pipe(Effect.provideContext(context));
 
     return CharmTools.of({
       forTurn: (turn) =>
@@ -166,7 +224,11 @@ export const GitHubCharmTools = Layer.effect(
           const access = yield* turn.currentAccess;
           if (access === null || access.policy.hob.githubCharm === false) return null;
           if (!(yield* credential.connected)) return null;
-          return { tools, call: (name: string, input: unknown) => call(turn, name, input) };
+          return {
+            tools,
+            call: (name: string, input: unknown, step?: HubCallStep) => call(turn, name, input, step),
+            steersPush: (cwd: string) => steersPush(turn, cwd),
+          };
         }).pipe(Effect.provideContext(context)),
     });
   }),

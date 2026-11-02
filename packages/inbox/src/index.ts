@@ -1,4 +1,11 @@
 export { Backpack, type BackpackScope, type HeldClaim } from "./backpack.ts";
+export {
+  BlockersHost,
+  blockIfRecipientRetired,
+  blockRetiredHob,
+  blockRetiredWork,
+  decideBlocker,
+} from "./blockers.ts";
 export { arrivalsText, carryingThread, continuationThread } from "./continuations.ts";
 export {
   BackpackTurnFailed,

@@ -7,6 +7,7 @@ import {
   type SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { HubTools, RuntimeEvent } from "@hobbots/agents";
+import { stableJson } from "@hobbots/domain";
 import { Effect } from "effect";
 import { z } from "zod";
 
@@ -27,8 +28,42 @@ export const inputShape = (schema: Readonly<Record<string, unknown>>): z.ZodRawS
   return converted instanceof z.ZodObject ? converted.shape : {};
 };
 
+/**
+ * The ids of the hub tool calls Claude Code announced in its PreToolUse hook and has not yet sent to
+ * the server, so each call reaches the hub with its step. The MCP handler is not told the id, so a
+ * call is matched to its announcement by tool and input, and else to the oldest one of its tool.
+ */
+export class AnnouncedCalls {
+  private readonly pending: Array<{ readonly id: string; readonly name: string; readonly input: string }> = [];
+
+  announce(id: string, name: string, input: unknown) {
+    this.pending.push({ id, name, input: stableJson(input ?? {}) });
+  }
+
+  /** The id of the announced call that matches, taken off the list; null when none was announced. */
+  take(name: string, input: unknown, meta?: unknown): string | null {
+    const given = metaToolUseId(meta);
+    const exact = stableJson(input ?? {});
+    const index = [
+      this.pending.findIndex((call) => call.id === given),
+      this.pending.findIndex((call) => call.name === name && call.input === exact),
+      this.pending.findIndex((call) => call.name === name),
+    ].find((i) => i !== -1);
+    if (index === undefined) return given ?? null;
+    const [call] = this.pending.splice(index, 1);
+    return call?.id ?? null;
+  }
+}
+
+/** The tool use id Claude Code may send with an MCP call, in its request metadata. */
+const metaToolUseId = (meta: unknown): string | undefined => {
+  if (meta === null || typeof meta !== "object") return undefined;
+  const id = (meta as Record<string, unknown>)["claudecode/toolUseId"];
+  return typeof id === "string" && id !== "" ? id : undefined;
+};
+
 /** The in-process MCP server that answers the turn's hub tool calls through the hub. */
-const hubServer = (hub: HubTools) =>
+const hubServer = (hub: HubTools, announced: AnnouncedCalls, report: (event: RuntimeEvent) => void) =>
   createSdkMcpServer({
     name: HUB_SERVER,
     alwaysLoad: true,
@@ -37,8 +72,9 @@ const hubServer = (hub: HubTools) =>
         name: tool.name,
         description: tool.description,
         inputSchema: inputShape(tool.inputSchema),
-        handler: async (args) => {
-          const answer = await Effect.runPromise(hub.call(tool.name, args));
+        handler: async (args, extra) => {
+          const id = announced.take(tool.name, args, (extra as { _meta?: unknown } | undefined)?._meta);
+          const answer = await Effect.runPromise(hub.call(tool.name, args, id === null ? undefined : { id, report }));
           return { content: [{ type: "text", text: answer.text }], isError: answer.refused };
         },
       }),
@@ -59,12 +95,14 @@ const hubServer = (hub: HubTools) =>
 const hubOptions = (hub: HubTools, report: (event: RuntimeEvent) => void): Partial<Options> => {
   const labels = new Map(hub.tools.map((tool) => [tool.name, tool.label]));
   const started = new Set<string>();
+  const announced = new AnnouncedCalls();
   const start: HookCallback = async (input) => {
     if (input.hook_event_name !== "PreToolUse") return {};
     const name = hubToolOf(input.tool_name);
     const label = name === null ? undefined : labels.get(name);
     if (label === undefined) return {};
     started.add(input.tool_use_id);
+    announced.announce(input.tool_use_id, name as string, input.tool_input);
     report({ _tag: "StepStarted", id: input.tool_use_id, kind: "tool", label });
     return {
       hookSpecificOutput: {
@@ -81,7 +119,7 @@ const hubOptions = (hub: HubTools, report: (event: RuntimeEvent) => void): Parti
   };
   const matcher = `${PREFIX}.*`;
   return {
-    mcpServers: { [HUB_SERVER]: hubServer(hub) },
+    mcpServers: { [HUB_SERVER]: hubServer(hub, announced, report) },
     strictMcpConfig: true,
     hooks: {
       PreToolUse: [{ matcher, hooks: [start] }],

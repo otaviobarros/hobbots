@@ -273,12 +273,17 @@ export const GitHubSignInNode = (hosts?: GitHubHosts) =>
 
 /**
  * A stand-in for GitHub's sign-in, for a hub started with `HOBBOTS_FAKE_GITHUB=on`: the code is
- * entered by the second poll, and the account reaches one repository. Its tokens reach nothing.
+ * entered by the second poll, and the account reaches one repository, then a second one from
+ * `ADDED_AFTER_MS` after GitHub first listed them, as if the person added it on GitHub. Its tokens
+ * reach nothing.
  */
+const ADDED_AFTER_MS = 6_000;
+
 export const GitHubSignInFake = Layer.effect(
   GitHubSignIn,
   Effect.sync(() => {
     let polls = 0;
+    let firstListed: number | null = null;
     const granted = Effect.map(Clock.currentTimeMillis, (now) => ({
       accessToken: Redacted.make("ghu_fakeHobbotsToken0000000000000000000"),
       refreshToken: Redacted.make("ghr_fakeHobbotsRefresh00000000000000000"),
@@ -303,7 +308,14 @@ export const GitHubSignInFake = Layer.effect(
           : Effect.map(granted, (tokens) => ({ _tag: "Granted", tokens }) as const),
       refresh: () => granted,
       login: () => Effect.succeed("octohob"),
-      repositories: () => Effect.succeed([{ fullName: "octohob/workshop", private: true }]),
+      repositories: () =>
+        Effect.map(Clock.currentTimeMillis, (now) => {
+          firstListed ??= now;
+          return [
+            ...(now - firstListed >= ADDED_AFTER_MS ? [{ fullName: "octohob/notes", private: false }] : []),
+            { fullName: "octohob/workshop", private: true },
+          ];
+        }),
     });
   }),
 );

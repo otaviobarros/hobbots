@@ -1,20 +1,29 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ChatService, HobAdmission, HobbotsRepository, HobTools } from "@hobbots/agents";
+import { NodeServices } from "@effect/platform-node";
+import {
+  ChatService,
+  FolderSandbox,
+  HobAdmission,
+  HobbotsRepository,
+  HobTools,
+  SandboxUnavailable,
+} from "@hobbots/agents";
 import {
   GitHubAccountLive,
   GitHubApi,
   GitHubCharmTools,
   GitHubConnection,
   GitHubSignInFake,
+  GitPushLive,
   GitRemotes,
   KeychainMemory,
   LocalGitHubSignInsNone,
 } from "@hobbots/charms";
 import { Agent, AgentId, EMPTY_HOB_POLICY, isInProgress } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { GitHubAccountRepository, HobbotsRepositoryLive } from "@hobbots/persistence";
+import { CharmCallsLive, GitHubAccountRepository, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule } from "effect";
@@ -60,7 +69,15 @@ const FakeGitHub = Layer.succeed(
       }),
     search: (_agentId, query) => Effect.succeed({ query, total: 0, items: [] }),
     item: () => Effect.die("not read in these tests"),
+    branchHead: () => Effect.die("not read in these tests"),
+    viewer: () => Effect.die("not read in these tests"),
   }),
+);
+
+/** These tests push nothing, so the push's sandbox never starts. */
+const NoSandbox = Layer.succeed(
+  FolderSandbox,
+  FolderSandbox.of({ readOnly: () => Effect.fail(new SandboxUnavailable({ message: "Not in these tests." })) }),
 );
 
 describe("The GitHub Charm on a hub", () => {
@@ -97,6 +114,10 @@ describe("The GitHub Charm on a hub", () => {
             GitRemotes.of({ repositoryOf: () => Effect.succeed({ owner: "octohob", name: "workshop" }) }),
           ),
           PolicyEngine.node,
+          CharmCallsLive,
+          GitPushLive({ folder: join(root, "data", "charms", "github") }).pipe(
+            Layer.provide(Layer.mergeAll(NoSandbox, NodeServices.layer)),
+          ),
         ),
       ),
       Layer.provideMerge(Account),

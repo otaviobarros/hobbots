@@ -198,6 +198,7 @@ describe("A hob's backpack", () => {
       claim: null,
       fencingToken: 0,
       deliveries: [],
+      blockers: [],
       dedupeKey: `task:copy:v${result.copy.value.revision}:task`,
       payload: { _tag: "task", task: { id: "copy" }, delegation: { id: "d-copy", leadId: ALDRIC } },
     });

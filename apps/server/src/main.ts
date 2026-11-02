@@ -4,6 +4,7 @@ import { join, sep } from "node:path";
 import { NodeHttpServer, NodeRuntime, NodeServices } from "@effect/platform-node";
 import {
   ApprovalService,
+  CharmCallService,
   ChatService,
   GrantService,
   HobAdmission,
@@ -16,8 +17,10 @@ import {
   GitHubAccountLive,
   GitHubApiNode,
   GitHubCharmTools,
+  GitHubPushSettings,
   GitHubSignInFake,
   GitHubSignInNode,
+  GitPushLive,
   GitRemotes,
   KeychainLive,
   KeychainMemory,
@@ -25,12 +28,13 @@ import {
   LocalGitHubSignInsLive,
 } from "@hobbots/charms";
 import { secretsFromEnv } from "@hobbots/domain";
-import { Dispatcher } from "@hobbots/inbox";
+import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  CharmCallsLive,
   EventJournal,
   GitHubAccountRepository,
   GrantRepositoryLive,
@@ -41,10 +45,17 @@ import {
   TaskRepositoryLive,
   TaskToolCallsLive,
 } from "@hobbots/persistence";
-import { ClaudeCodeLayer, FakeAdditionalRuntimesLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
+import {
+  ClaudeCodeLayer,
+  FakeAdditionalRuntimesLayer,
+  FakeRuntimeLayer,
+  FolderSandboxLive,
+  ProcessSandbox,
+} from "@hobbots/runtimes";
 import { Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
+import { BlockOnRetirement } from "./blockers.ts";
 import { ServerConfig } from "./config.ts";
 import { ContinuationsLive, WakeOnArrival } from "./continuations.ts";
 import { EventBus } from "./event-bus.ts";
@@ -86,6 +97,7 @@ const ServerLive = Layer.unwrap(
       GrantRepositoryLive,
       TaskRepositoryLive,
       TaskToolCallsLive,
+      CharmCallsLive,
       BackpackLive,
       EventJournal.layer,
       SetupRepository.layer,
@@ -105,8 +117,9 @@ const ServerLive = Layer.unwrap(
             executable: Option.getOrUndefined(config.claudeExecutable),
           }).pipe(Layer.provide(ProcessSandbox.layer))
     ).pipe(Layer.provide(PolicyEngine.node));
-    // The GitHub Charm reads on the hub, outside the sandbox (#317), as the GitHub account the user
-    // connected in Settings, whose tokens stay in the OS keychain (ADR 020).
+    // The GitHub Charm reads and pushes on the hub, outside the sandbox (#317, #323), as the GitHub
+    // account the user connected in Settings, whose tokens stay in the OS keychain (ADR 020). A push
+    // reads the hob's branch with Git in the hob's sandbox.
     const fakeGitHub = config.fakeGitHub === "on";
     const Account = GitHubAccountLive({
       clientId: fakeGitHub ? "fake" : config.githubClientId,
@@ -122,8 +135,26 @@ const ServerLive = Layer.unwrap(
         ),
       ),
     );
+    const charmFolder = join(dataDir, "charms", "github");
     const Charms = GitHubCharmTools.pipe(
-      Layer.provide(Layer.mergeAll(GitHubApiNode, GitRemotes.layer, PolicyEngine.node)),
+      Layer.provide(
+        Layer.mergeAll(
+          GitHubApiNode,
+          GitRemotes.layer,
+          PolicyEngine.node,
+          GitPushLive({ folder: charmFolder }).pipe(
+            Layer.provide(
+              FolderSandboxLive({ dataFolder: dataDir, stateFolder: join(charmFolder, "sandbox") }).pipe(
+                Layer.provide(ProcessSandbox.layer),
+              ),
+            ),
+          ),
+          Layer.succeed(GitHubPushSettings, {
+            over: config.githubPush,
+            agentSocket: Option.getOrUndefined(config.githubSshAgent),
+          }),
+        ),
+      ),
       Layer.provideMerge(Account),
       Layer.provide(NodeServices.layer),
     );
@@ -137,6 +168,8 @@ const ServerLive = Layer.unwrap(
             JournalCompaction,
             // Work that arrives for a hob wakes its thread (ADR 019).
             WakeOnArrival,
+            // A retired hob's work fails as blockers that wait for you (IN-007).
+            BlockOnRetirement,
             config.runtime === "fake" && config.fakeQuest === "black-friday"
               ? FakeQuestLive(FAKE_QUEST_STEP)
               : Layer.empty,
@@ -148,7 +181,10 @@ const ServerLive = Layer.unwrap(
       // at start the dispatcher expires the claims an earlier process held (ADR 019).
       .pipe(
         Layer.provideMerge(
-          ContinuationsLive.pipe(Layer.provideMerge(Dispatcher.layer()), Layer.provideMerge(DispatcherHostLive)),
+          ContinuationsLive.pipe(
+            Layer.provideMerge(Dispatcher.layer({ ...DEFAULT_DISPATCH_LIMITS, maxDeliveries: config.maxDeliveries })),
+            Layer.provideMerge(DispatcherHostLive),
+          ),
         ),
       )
       // Before the chat service: its turns offer the Task tools (the hub checks every call), and a
@@ -166,6 +202,8 @@ const ServerLive = Layer.unwrap(
       // Before approvals, so a decision can save grants and every call reads the hob's live ones.
       .pipe(Layer.provideMerge(GrantService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
+      // Before the chat service, whose turns offer it; after the database, which keeps its call records.
+      .pipe(Layer.provideMerge(Layer.merge(Charms, CharmCallService.layer)))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
       .pipe(Layer.provideMerge(CanonicalSharedFolders))
       .pipe(
@@ -176,7 +214,6 @@ const ServerLive = Layer.unwrap(
             HobAdmission.layer,
             NodeFolderChecks,
             Runtime,
-            Charms,
             identity,
             // The hub's credentials, provider keys included, are redacted by value from what tools report.
             SecretRedaction.layer(secretsFromEnv(process.env)),

@@ -89,6 +89,7 @@ const item = (id: string, payload: BackpackItem["payload"], taskId = "child") =>
     claim: null,
     fencingToken: 0,
     deliveries: [],
+    blockers: [],
     disposition: null,
     error: null,
     createdAt: at,
