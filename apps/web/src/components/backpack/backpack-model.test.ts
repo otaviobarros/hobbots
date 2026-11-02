@@ -13,7 +13,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { withNewer } from "../../api/sync.ts";
 import { ADA, ALDRIC, BUILD, COPY, checkpoint, QUEST, QUILL, question, task } from "../../test/quests.ts";
-import { HANDLED_FOR_MS, waitingCount, waitingState, waitingView, waitingWhat } from "./backpack-model.ts";
+import { bothRead, HANDLED_FOR_MS, waitingCount, waitingState, waitingView, waitingWhat } from "./backpack-model.ts";
 
 const NOW = new Date("2026-11-02T10:00:00.000Z");
 const ago = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
@@ -175,5 +175,13 @@ describe("what a hob is waiting on", () => {
     expect(ids(withNewer(listed, entry("c"), open) ?? [])).toEqual(["a", "b", "c"]);
     expect(ids(withNewer(listed, entry("b", { revision: 2, state: "failed" }), open) ?? [])).toEqual(["a"]);
     expect(withNewer(undefined, entry("a"), open)).toBeUndefined();
+  });
+
+  it("knows what every hob waits on only once both the backpack and the blockers are read", () => {
+    expect(bothRead("success", "success")).toBe("success");
+    expect(bothRead("success", "pending")).toBe("pending");
+    expect(bothRead("pending", "success")).toBe("pending");
+    expect(bothRead("success", "error")).toBe("error");
+    expect(bothRead("error", "pending")).toBe("error");
   });
 });

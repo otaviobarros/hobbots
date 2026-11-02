@@ -69,7 +69,7 @@ export const messages = {
       plural(count, { one: "Every hob · 1 waiting", other: `Every hob · ${formatCount(count)} waiting` }),
     empty: "No hob is waiting on anything.",
     loading: "Reading what hobs are waiting on…",
-    loadFailed: "Hobbots could not read what hobs are waiting on.",
+    loadFailed: "Hobbots could not read what hobs are waiting on, so something may still be waiting.",
     tryAgain: "Try again",
     unknown: "Every hob",
   },

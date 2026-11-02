@@ -2,11 +2,11 @@ import type { TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import type { ReactNode } from "react";
 import { useBackpack } from "../../api/backpack.ts";
-import { useBlockers } from "../../api/blockers.ts";
+import { useBlockers, useBlockersQuery } from "../../api/blockers.ts";
 import { useNow } from "../inbox/use-now.ts";
 import type { HobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
-import { waitingCount, waitingView } from "./backpack-model.ts";
+import { bothRead, waitingCount, waitingView } from "./backpack-model.ts";
 import { messages } from "./messages.ts";
 import { useOpenItem } from "./use-open-item.ts";
 import { WaitingList } from "./waiting-list.tsx";
@@ -57,19 +57,22 @@ export function RoomBackpack({
 export function WorkspaceBackpack({ hobs }: { hobs: HobLookup }) {
   const now = useNow();
   const backpack = useBackpack();
-  const view = waitingView(backpack.items, useBlockers(), { kind: "workspace" }, now);
+  const blockers = useBlockersQuery();
+  // Stuck work comes from the blocker read, so neither read alone says what waits.
+  const status = bothRead(backpack.status, blockers.status);
+  const retry = () => {
+    if (backpack.status === "error") backpack.retry();
+    if (blockers.status === "error") void blockers.refetch();
+  };
+  const view = waitingView(backpack.items, blockers.data ?? [], { kind: "workspace" }, now);
   const openItem = useOpenItem();
   const count = waitingCount(view);
   return (
     <details aria-label={copy.workspace.label} className="border-b-4 border-line">
       <summary className="lbl cursor-pointer px-3.5 py-2.5 text-xs text-label hover:bg-hover">
-        {backpack.status === "success" ? copy.workspace.heading({ count }) : copy.workspace.unknown}
+        {status === "success" ? copy.workspace.heading({ count }) : copy.workspace.unknown}
       </summary>
-      <WorkspaceBody
-        status={backpack.status}
-        retry={backpack.retry}
-        empty={count + view.handled.length + view.routine === 0}
-      >
+      <WorkspaceBody status={status} retry={retry} empty={count + view.handled.length + view.routine === 0}>
         <WaitingList
           view={view}
           hobs={hobs}

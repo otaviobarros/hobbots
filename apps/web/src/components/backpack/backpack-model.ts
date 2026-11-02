@@ -108,6 +108,15 @@ export const waitingView = (
 export const handledLongAgo = (item: BackpackItem, now: Date): boolean =>
   item.state === "resolved" && now.getTime() - new Date(item.updatedAt).getTime() >= HANDLED_FOR_MS;
 
+type ReadStatus = "pending" | "error" | "success";
+
+/**
+ * Where two reads a view needs stand together: failed when either failed, being read while either
+ * is, and read only once both are, so the view never says nothing waits while it does not know.
+ */
+export const bothRead = (a: ReadStatus, b: ReadStatus): ReadStatus =>
+  a === "error" || b === "error" ? "error" : a === "pending" || b === "pending" ? "pending" : "success";
+
 /** How many items in a view need their hob: what its count says. */
 export const waitingCount = (view: WaitingView): number => view.open.length;
 
