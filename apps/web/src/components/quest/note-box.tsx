@@ -22,28 +22,55 @@ export interface NoteDraft {
 
 const emptyNote = (): NoteDraft => ({ text: "", key: NoteId.make(crypto.randomUUID()) });
 
-/** Each Task's unsent note, shared by the drawer and the Workbench so both show the same one. */
+/**
+ * The keys of a Task's nudges the hub has not confirmed. A nudge keeps its key until the hub has
+ * it, so tapping it again after a lost reply leaves it once, even after the chat was closed.
+ */
+export interface NudgeKeys {
+  /** The key a nudge goes out under: the one it was last sent under, or a new one. */
+  readonly take: (words: string) => NoteId;
+  /** The hub has the nudge, so the next tap is a new note. */
+  readonly settle: (words: string) => void;
+}
+
+/** Each Task's unsent note and nudges, shared by the drawer and the Workbench so both show the same. */
 export interface NoteDrafts {
   readonly get: (taskId: TaskId) => NoteDraft;
   readonly set: (taskId: TaskId, draft: NoteDraft) => void;
+  readonly nudges: (taskId: TaskId) => NudgeKeys;
 }
 
 /**
- * Holds each Task's unsent note in the component that shows both the drawer and the Workbench
- * (STD-REACT-003), so a note begun in one is still there in the other and goes out under one key.
+ * Holds each Task's unsent note and unconfirmed nudge keys in the component that shows both the
+ * drawer and the Workbench (STD-REACT-003), so they outlive either and go out under one key.
  */
 export const useNoteDrafts = (): NoteDrafts => {
   const [drafts, setDrafts] = useState<ReadonlyMap<TaskId, NoteDraft>>(new Map());
+  const [nudgeKeys, setNudgeKeys] = useState<ReadonlyMap<string, NoteId>>(new Map());
+  const nudgeId = (taskId: TaskId, words: string) => JSON.stringify([taskId, words]);
   return {
     get: (taskId) => drafts.get(taskId) ?? emptyNote(),
     set: (taskId, draft) => setDrafts((all) => new Map(all).set(taskId, draft)),
+    nudges: (taskId) => ({
+      take: (words) => {
+        const id = nudgeId(taskId, words);
+        const key = nudgeKeys.get(id) ?? NoteId.make(crypto.randomUUID());
+        setNudgeKeys((all) => new Map(all).set(id, key));
+        return key;
+      },
+      settle: (words) =>
+        setNudgeKeys((all) => {
+          const rest = new Map(all);
+          rest.delete(nudgeId(taskId, words));
+          return rest;
+        }),
+    }),
   };
 };
 
 /**
  * The box where you leave a note on a Task for its lead (ADR 018). With `nudges`, each one is a
- * note sent with one tap (ADR 023). A nudge keeps its key until the hub has it, so tapping it again
- * after a lost reply leaves it once.
+ * note sent with one tap (ADR 023), under the key `nudgeKeys` keeps for it.
  */
 export function NoteBox({
   tree,
@@ -52,6 +79,7 @@ export function NoteBox({
   draft,
   setDraft,
   nudges = [],
+  nudgeKeys,
   hint,
 }: {
   tree: TaskTree;
@@ -60,12 +88,12 @@ export function NoteBox({
   draft: NoteDraft;
   setDraft: (draft: NoteDraft) => void;
   nudges?: ReadonlyArray<string>;
+  nudgeKeys?: NudgeKeys | undefined;
   /** What the line under the box says while nothing was just sent. */
   hint?: string | undefined;
 }) {
   const lead = hobs(noteRecipient(tree, task));
   const send = useLeaveNote(task.id);
-  const [nudgeKeys, setNudgeKeys] = useState<ReadonlyMap<string, NoteId>>(new Map());
   const [nudged, setNudged] = useState<string | null>(null);
   const text = draft.text.trim();
   const submit = () => {
@@ -74,19 +102,14 @@ export function NoteBox({
     send.mutate({ key: draft.key, text }, { onSuccess: () => setDraft(emptyNote()) });
   };
   const nudge = (words: string) => {
-    if (send.isPending) return;
-    const key = nudgeKeys.get(words) ?? NoteId.make(crypto.randomUUID());
-    setNudgeKeys((all) => new Map(all).set(words, key));
+    if (send.isPending || nudgeKeys === undefined) return;
+    const key = nudgeKeys.take(words);
     setNudged(null);
     send.mutate(
       { key, text: words },
       {
         onSuccess: () => {
-          setNudgeKeys((all) => {
-            const rest = new Map(all);
-            rest.delete(words);
-            return rest;
-          });
+          nudgeKeys.settle(words);
           setNudged(words);
         },
       },
@@ -102,7 +125,7 @@ export function NoteBox({
         submit();
       }}
     >
-      {nudges.length > 0 && (
+      {nudgeKeys !== undefined && nudges.length > 0 && (
         <fieldset className="m-0 flex flex-wrap gap-1.5 border-0 p-0 pb-1">
           <legend className="sr-only">{copy.nudges}</legend>
           {nudges.map((words) => (

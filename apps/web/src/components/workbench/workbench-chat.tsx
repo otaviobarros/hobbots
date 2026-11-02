@@ -97,6 +97,7 @@ export function WorkbenchChat({
           draft={drafts.get(task.id)}
           setDraft={(draft) => drafts.set(task.id, draft)}
           nudges={copy.nudges}
+          nudgeKeys={drafts.nudges(task.id)}
           hint={
             leadId === task.ownerId
               ? copy.hintOwner({ name: lead.name })
