@@ -99,9 +99,9 @@ beforeAll(async () => {
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))
     .pipe(Layer.provideMerge(ChatService.layer))
     .pipe(Layer.provideMerge(ApprovalService.layer))
-    .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))
     .pipe(Layer.provideMerge(HobApp))
+    .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(CanonicalSharedFolders))
     .pipe(Layer.provideMerge(testDevicesWith(TestPeers)))
     .pipe(

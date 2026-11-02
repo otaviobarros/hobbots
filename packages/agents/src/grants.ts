@@ -42,6 +42,9 @@ export class GrantRepository extends Context.Service<
   }
 >()("@hobbots/agents/GrantRepository") {}
 
+/** The grant rules that allow a GitHub write, which the hob makes under its GitHub identity. */
+const GITHUB_RULES: ReadonlySet<GrantRule["_tag"]> = new Set(["Push", "PullRequest", "GitHubComment"]);
+
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
 const sep = "/";
@@ -179,6 +182,11 @@ export class GrantService extends Context.Service<
     readonly revokeLost: (agentId: AgentId | null, loss: AuthorityLoss) => Effect.Effect<void>;
     /** Revokes every grant of a hob that retired. */
     readonly revokeForAgent: (agentId: AgentId, reason: GrantRevokeReason) => Effect.Effect<void>;
+    /**
+     * Revokes the hob's grants for GitHub writes (Push, pull requests, comments) before its GitHub
+     * identity changes (ADR 022), so nothing allowed for one identity runs as the other.
+     */
+    readonly revokeGitHub: (agentId: AgentId) => Effect.Effect<void>;
     readonly used: (ids: ReadonlyArray<GrantId>) => Effect.Effect<void>;
     /**
      * Runs `effect` while no revocation for a change runs, so a grant saved inside it is either seen
@@ -250,6 +258,8 @@ export class GrantService extends Context.Service<
             ? Effect.void
             : revokeWhere(agentId, (grant) => lostAuthority(grant, loss)),
         revokeForAgent: (agentId, reason) => revokeWhere(agentId, () => reason),
+        revokeGitHub: (agentId) =>
+          revokeWhere(agentId, (grant) => (GITHUB_RULES.has(grant.rule._tag) ? "github-identity" : null)),
         exclusive: (effect) => Semaphore.withPermit(lock, effect),
         used: (ids) => (ids.length === 0 ? Effect.void : Effect.flatMap(nowIso, (at) => repo.touch(ids, at))),
       });

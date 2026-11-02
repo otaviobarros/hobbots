@@ -1,5 +1,6 @@
 import {
   DeviceRepository,
+  GrantService,
   HobbotsRepository,
   HobGitHubApps,
   RetiredHobGitHubApp,
@@ -211,6 +212,7 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
       const keys = yield* HobAppKeys;
       const apps = yield* HobGitHubApps;
       const hobs = yield* HobbotsRepository;
+      const grants = yield* GrantService;
       const devices = yield* DeviceRepository;
       const random = yield* SecureRandom.SecureRandom;
       const digest = yield* Digest.Digest;
@@ -405,6 +407,8 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               htmlUrl: made.html_url,
               connectedAt: DateTime.formatIso(yield* DateTime.now),
             };
+            // What the user allowed the hob to do on GitHub as them is not allowed as its bot (ADR 022).
+            yield* grants.revokeGitHub(open.agentId);
             yield* apps.save(open.agentId, app);
             yield* tokens.forget(open.agentId);
             yield* Effect.logInfo("A hob's GitHub app was made", { agentId: open.agentId, slug: app.slug });
@@ -556,6 +560,8 @@ export const HobGitHubAppLive = (hosts: GitHubHosts = GITHUB_HOSTS) =>
               yield* apps.remove(agentId);
               return { deleteUrl: deleteUrl(left.app.slug), problem: null };
             }
+            // Before the hob acts as the user again: nothing allowed for its bot runs as them (ADR 022).
+            yield* grants.revokeGitHub(agentId);
             // Tried once and shown, never retried in a loop (ADR 022).
             const problem = yield* uninstall(agentId, app);
             const kept = yield* keys.remove(agentId).pipe(

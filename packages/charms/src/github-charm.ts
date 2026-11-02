@@ -245,7 +245,8 @@ export const GitHubCharmTools = Layer.effect(
           const access = yield* turn.currentAccess;
           if (access === null || access.policy.hob.githubCharm === false) return null;
           // A hob with its own app reaches GitHub without the user's account (ADR 022).
-          const reachable = (yield* credential.connected) || (yield* credential.bot(turn.agentId)) !== null;
+          const bot = yield* credential.bot(turn.agentId).pipe(Effect.orElseSucceed(() => null));
+          const reachable = (yield* credential.connected) || bot !== null;
           if (!reachable) return null;
           return {
             tools,

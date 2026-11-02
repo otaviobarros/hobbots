@@ -94,7 +94,11 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
         const noToken = (error: GitHubError) => ({ _tag: "NoToken", message: error.message }) as const;
         const once = Effect.gen(function* () {
           // A hob with its own app always pushes as its bot, never over the user's SSH key (ADR 022).
-          const viaApp = (yield* credential.bot(agentId)) !== null;
+          // Asked on every attempt, retries included: a source other than the one the push was
+          // checked under stops it rather than sending it as someone else.
+          const bot = yield* credential.bot(agentId).pipe(Effect.result);
+          if (Result.isFailure(bot)) return noToken(bot.failure);
+          const viaApp = bot.success !== null;
           if (settings.over === "ssh" && !viaApp) return yield* over(null);
           const scope = { repository, action: "push" } as const;
           const token = yield* credential.tokenFor(agentId, scope).pipe(Effect.result);

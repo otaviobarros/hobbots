@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import {
   DeviceRepository,
+  GrantService,
   HobbotsRepository,
   HobGitHubApps,
   makeRedactor,
@@ -90,6 +91,8 @@ interface World {
   /** What could not be removed from a hob's app, which is then left over. */
   readonly leftOver: Map<AgentId, string>;
   readonly redactor: ReturnType<typeof makeRedactor>;
+  /** Every change of GitHub identity that revoked a hob's GitHub grants, in order. */
+  readonly revokedGitHub: Array<AgentId>;
 }
 
 const world = (): World => ({
@@ -104,6 +107,7 @@ const world = (): World => ({
   apps: new Map(),
   leftOver: new Map(),
   redactor: makeRedactor(),
+  revokedGitHub: [],
 });
 
 /** The hobs' apps in memory, as the database keeps them. */
@@ -148,6 +152,10 @@ const layer = (w: World, keys: Layer.Layer<HobAppKeys> = HobAppKeysMemory) =>
       Layer.succeed(DeviceRepository, {
         find: (id: DeviceId) => Effect.succeed(Option.fromNullishOr(w.devices.get(id))),
       } as unknown as DeviceRepository["Service"]),
+      // Only revoking a hob's GitHub grants is used here.
+      Layer.succeed(GrantService, {
+        revokeGitHub: (id: AgentId) => Effect.sync(() => void w.revokedGitHub.push(id)),
+      } as unknown as GrantService["Service"]),
       appsOf(w),
     ]),
   );
@@ -752,6 +760,7 @@ describe("A hob's own GitHub App's tokens", () => {
       calls,
       Effect.gen(function* () {
         yield* withApp(FRODO, ["otaviobarros/pony-gate"]);
+        const revokedOnConnect = [...w.revokedGitHub];
         const credential = yield* GitHubCredential;
         const stopped = yield* Effect.flip(
           credential.onRepository(
@@ -764,13 +773,44 @@ describe("A hob's own GitHub App's tokens", () => {
           ),
         );
         const after = yield* credential.tokenFor(FRODO, { repository, action: "comment" });
-        return { stopped, after, bot: yield* credential.bot(FRODO) };
+        return { revokedOnConnect, stopped, after, bot: yield* credential.bot(FRODO) };
       }),
     );
+    // Grants approved under one GitHub identity never carry over to the other: both switches revoke them.
+    expect(outcome.revokedOnConnect).toEqual([FRODO]);
+    expect(w.revokedGitHub).toEqual([FRODO, FRODO]);
     expect(outcome.stopped.message).toContain("changed during this call");
     expect(Redacted.value(outcome.after)).toBe("user-token");
     expect(outcome.bot).toBeNull();
     expect(calls).toEqual(["tokenFor"]);
+  });
+  // covers ADR 022
+  it("[TC-GEN-066] gives every call GitHub refused the same token at once one new token, minted once", async () => {
+    const w = world();
+    const repository = repositoryFor("pony-pen");
+    const outcome = await runCharm(
+      w,
+      [],
+      Effect.gen(function* () {
+        yield* withApp(FRODO, ["otaviobarros/pony-pen"]);
+        const credential = yield* GitHubCredential;
+        const scope = { repository, action: "read" } as const;
+        const stale = yield* credential.tokenFor(FRODO, scope);
+        github.expireInstallationTokens();
+        const fromToken = github.installationTokens.length;
+        // Three calls holding the same token are refused at once; a fourth comes after the renewal.
+        const renewed = yield* Effect.all(
+          [credential.refused(FRODO, stale), credential.refused(FRODO, stale), credential.refused(FRODO, stale)],
+          { concurrency: 3 },
+        );
+        const late = yield* credential.refused(FRODO, stale);
+        return { stale, renewed, late, minted: tokensSince(fromToken).length };
+      }),
+    );
+    const values = [...outcome.renewed, outcome.late].map(Redacted.value);
+    expect(new Set(values).size).toBe(1);
+    expect(values[0]).not.toBe(Redacted.value(outcome.stale));
+    expect(outcome.minted).toBe(1);
   });
 });
 

@@ -103,8 +103,12 @@ export class GitHubCredential extends Context.Service<
   {
     /** Whether the user's account is connected. A hob with its own app reaches GitHub without it. Reads no secret. */
     readonly connected: Effect.Effect<boolean>;
-    /** The bot the hob acts as when it has its own app, or null when it acts as the user's account. */
-    readonly bot: (agentId: AgentId) => Effect.Effect<string | null>;
+    /**
+     * The bot the hob acts as when it has its own app, or null when it acts as the user's account.
+     * Inside `onRepository` it fails `signed-out` once that is no longer the source the call was
+     * checked under, so a call never changes identity midway.
+     */
+    readonly bot: (agentId: AgentId) => Effect.Effect<string | null, GitHubError>;
     /**
      * A token for the hob's call (null: the hub's own read), refreshed first when it is close to
      * expiry. A hob's app token is scoped to `scope`'s repository and action, so its calls name one.
@@ -162,7 +166,9 @@ export const refusedTwice = (
 ) =>
   Effect.gen(function* () {
     yield* credential.revoked(token);
-    if ((yield* credential.bot(agentId)) === null) return noLongerAccepted;
+    const bot = yield* credential.bot(agentId).pipe(Effect.result);
+    if (Result.isFailure(bot)) return bot.failure;
+    if (bot.success === null) return noLongerAccepted;
     const why = yield* credential.tokenFor(agentId, scope).pipe(Effect.flip, Effect.result);
     return Result.isSuccess(why) ? why.success : noLongerAccepted;
   });

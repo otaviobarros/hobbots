@@ -106,6 +106,8 @@ interface Issued {
   readonly agentId: AgentId;
   readonly appId: number;
   readonly key: string;
+  /** When GitHub retires it, after which nobody can still hold it in a call. */
+  readonly expiresAt: number;
 }
 
 /** A cache key for one hob, app, repository and action, read back by the cache's lookup. */
@@ -125,7 +127,8 @@ export const makeHobAppTokens = (deps: HobAppTokenDeps) =>
     // The app each lookup is for, by its key, so the cache's lookup needs only the key.
     const appsByKey = new Map<string, { readonly agentId: AgentId; readonly app: HobGitHubApp }>();
     const marks = new Map<AgentId, { readonly appId: number; readonly why: HobAppReconnect }>();
-    // Every live token by its value, and the newest one for each key, so a refusal names its scope.
+    // Every token minted and not yet expired by its value, replaced ones included, and the newest one
+    // for each key, so a refusal of an older token still names its scope and takes the newest.
     const issued = new Map<string, Issued>();
     const newest = new Map<string, string>();
     // A refused token is replaced by one call only; the others take the replacement.
@@ -246,11 +249,11 @@ export const makeHobAppTokens = (deps: HobAppTokenDeps) =>
         yield* remember(json.token, `${bot(app)} token`);
         const now = yield* Clock.currentTimeMillis;
         const token = Redacted.make(json.token);
-        const previous = newest.get(key);
-        if (previous !== undefined) issued.delete(previous);
-        issued.set(json.token, { agentId, appId: app.appId, key });
+        const expiresAt = Date.parse(json.expires_at);
+        for (const [value, was] of issued) if (was.expiresAt <= now) issued.delete(value);
+        issued.set(json.token, { agentId, appId: app.appId, key, expiresAt });
         newest.set(key, json.token);
-        return { token, keepMs: Math.max(Date.parse(json.expires_at) - REPLACE_AHEAD_MS - now, 0) } satisfies Minted;
+        return { token, keepMs: Math.max(expiresAt - REPLACE_AHEAD_MS - now, 0) } satisfies Minted;
       });
 
     // Concurrent calls for one key share one lookup, so two calls at once mint one token.

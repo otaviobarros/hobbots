@@ -76,7 +76,7 @@ export const GitHubCredentialPerHob = Layer.effectContext(
 
     const credential = GitHubCredential.of({
       connected: account.connected,
-      bot: (agentId) => Effect.map(apps.get(agentId), (app) => (app === null ? null : hobAppBot(app))),
+      bot: (agentId) => Effect.map(sourceOf(agentId), (app) => (app === null ? null : hobAppBot(app))),
       tokenFor,
       refused,
       revoked: (token) => (hobApps.owns(token) ? hobApps.revoked(token) : account.revoked(token)),
