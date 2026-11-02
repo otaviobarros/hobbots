@@ -90,9 +90,12 @@ export function SetupRemoteAccess() {
   const tailscale = status?.tailscale ?? null;
   const ready = tailscale?.state === "running";
 
+  const next = () => void navigate({ to: "/setup/providers" });
+  // Skip leaves remote access off: it moves on only once the hub says so, and stays here when it
+  // cannot. Before the status is read it asks the hub anyway, since turning it off twice is harmless.
   const skip = () => {
-    if (status?.enabled) change.mutate({ enabled: false });
-    void navigate({ to: "/setup/providers" });
+    if (status?.enabled === false) return next();
+    change.mutate({ enabled: false }, { onSuccess: next });
   };
 
   return (

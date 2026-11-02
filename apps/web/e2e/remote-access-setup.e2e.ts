@@ -119,3 +119,33 @@ test("[TC-DP-124] setup without Tailscale shows how to get it, notices it, and S
   await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
   expect((await remoteAccess(hub)).enabled).toBe(false);
 });
+
+// covers DP-001, DP-004
+test("[TC-DP-127] Skip turns remote access off before leaving setup, and stays when the hub refuses", async ({
+  page,
+}) => {
+  test.skip(!(await spareLoopback()), "needs 127.0.0.2 on loopback");
+  fakeTailscale("running");
+  hub = await startHub(dataDir, { HOBBOTS_FAKE_TAILSCALE: "on" });
+  const current = hub;
+  await openRemoteStep(page, current);
+  await page.getByRole("switch", { name: "Let my other devices connect" }).click();
+  await expect(page.getByRole("img", { name: /^QR code for / })).toBeVisible();
+
+  // The hub cannot turn it off: setup stays on this step and says so.
+  await page.route("**/api/remote-access", (route) =>
+    route.request().method() === "PATCH" ? route.fulfill({ status: 500, body: "{}" }) : route.fallback(),
+  );
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Hobbots could not read or change remote access. Try again in a moment.",
+  );
+  await expect(page.getByRole("heading", { name: "Use Hobbots from your other devices too?" })).toBeVisible();
+  expect((await remoteAccess(current)).enabled).toBe(true);
+
+  // Once the hub answers, Skip turns it off and only then moves on.
+  await page.unroute("**/api/remote-access");
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page.getByRole("heading", { name: "Which AI do you already use?" })).toBeVisible();
+  expect((await remoteAccess(current)).enabled).toBe(false);
+});

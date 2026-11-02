@@ -463,8 +463,7 @@ export const messages = {
       notRunning: "Tailscale is off on this computer",
       signedOut: "Tailscale is signed out on this computer",
     },
-    missingBody:
-      "Tailscale links your own devices privately, with nothing exposed to the internet. It's free for personal use.",
+    missingBody: "Tailscale links your own devices privately, with nothing exposed to the internet.",
     steps: [
       "Install Tailscale, or open it, and sign in.",
       "Sign in with the same account on your other devices.",

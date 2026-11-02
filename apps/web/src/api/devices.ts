@@ -14,9 +14,15 @@ export const devicesQuery = queryOptions({
 export const approvedDevices = (devices: ReadonlyArray<Device>): ReadonlyArray<Device> =>
   devices.filter((device) => device.revokedAt === null);
 
-/** A device was allowed or revoked, here or on another device: the list is read again. */
-export const devicesChanged = (queryClient: QueryClient) =>
-  queryClient.invalidateQueries({ queryKey: devicesKey, exact: true });
+/**
+ * A device was allowed or revoked, here or on another device: the list is read again. A read already
+ * in flight may have been taken before the change, and while the list has no data yet Query would
+ * hand that read back instead of starting another, so it is cancelled first.
+ */
+export const devicesChanged = async (queryClient: QueryClient) => {
+  await queryClient.cancelQueries({ queryKey: devicesKey, exact: true });
+  await queryClient.invalidateQueries({ queryKey: devicesKey, exact: true });
+};
 
 /**
  * Revoke: the hub signs the device out at once, and it has to ask again. Revoking the device in use
