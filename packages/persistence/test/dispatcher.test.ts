@@ -420,7 +420,8 @@ describe("The dispatcher", () => {
         const backpack = yield* Backpack;
         const started = yield* Deferred.make<void>();
         let applied = 0;
-        // The first turn is accepted, then waits; meanwhile its claim is expired, as a restart does.
+        // The first turn is accepted, then waits until it is stopped; meanwhile its claim is expired,
+        // as a restart does. Only the lost claim's next renewal can end it.
         const slow: Turn = {
           target: "thread:t1",
           turnId: "slow",
@@ -429,7 +430,7 @@ describe("The dispatcher", () => {
               .accepted("session-slow")
               .pipe(
                 Effect.andThen(Deferred.succeed(started, undefined)),
-                Effect.andThen(Effect.sleep("200 millis")),
+                Effect.andThen(Effect.never),
                 Effect.andThen(Effect.sync(() => applied++)),
               ),
         };
@@ -445,7 +446,9 @@ describe("The dispatcher", () => {
         }));
         return { dropped, between, next, applied };
       }),
-      { ...LIMITS, lease: "90 millis" },
+      // Renewed every half second: soon enough to stop the slow turn, and long enough that the next
+      // turn's claim never lapses on a slow machine before it settles.
+      { ...LIMITS, lease: "1500 millis" },
     );
 
     expect(result.dropped).toEqual({ _tag: "Dropped" });
