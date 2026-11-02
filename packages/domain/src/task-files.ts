@@ -22,9 +22,11 @@ export type TaskFileOrigin = typeof TaskFileOrigin.Type;
 
 /**
  * The file as it is now, against what the Task left. `changed`: it no longer holds what the Task
- * left. `gone`: it is no longer there, or is no longer a file the hub may read.
+ * left. `unchecked`: it is the size the Task left, but too large for the hub to read, so whether it
+ * still holds the same was not checked. `gone`: it is no longer there, or is no longer a file the
+ * hub may read.
  */
-export const TaskFileNow = Schema.Literals(["same", "changed", "gone"]);
+export const TaskFileNow = Schema.Literals(["same", "changed", "unchecked", "gone"]);
 export type TaskFileNow = typeof TaskFileNow.Type;
 
 /** Why a file's contents are not served. `secret`: its name marks it as one that may hold secrets. */
@@ -271,13 +273,20 @@ export interface FileNow {
   readonly hash: string | null;
 }
 
-/** Whether a file found now no longer holds what the Task left: by size first, then by hash when both are known. */
-const changedSince = (left: FileCandidate["left"], found: FileNow) =>
-  left !== null && (left.size !== found.size || (found.hash !== null && left.hash !== found.hash));
+/**
+ * How a file found now compares with what the Task left: by size first, then by hash. A file of the
+ * same size that was too large to hash is `unchecked`, never taken as the same.
+ */
+const comparedWith = (left: FileCandidate["left"], found: FileNow): TaskFileNow => {
+  if (left === null) return "same";
+  if (left.size !== found.size) return "changed";
+  if (found.hash === null) return "unchecked";
+  return left.hash === found.hash ? "same" : "changed";
+};
 
 /** A listed file, from what the Task left and what is there now. */
 export const taskFile = (candidate: FileCandidate, found: FileNow | null): TaskFile => {
-  const now: TaskFileNow = found === null ? "gone" : changedSince(candidate.left, found) ? "changed" : "same";
+  const now: TaskFileNow = found === null ? "gone" : comparedWith(candidate.left, found);
   const size = found?.size ?? candidate.left?.size ?? null;
   const notServed: FileNotServed | null = isSecretFile(candidate.path)
     ? "secret"

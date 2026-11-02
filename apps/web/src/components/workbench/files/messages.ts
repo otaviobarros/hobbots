@@ -22,6 +22,7 @@ export const messages = {
   now: {
     same: null,
     changed: "Changed since this task",
+    unchecked: "Too large to check for changes",
     gone: "No longer there",
   } satisfies Record<TaskFileNow, string | null>,
   showInFinder: "Show in Finder",

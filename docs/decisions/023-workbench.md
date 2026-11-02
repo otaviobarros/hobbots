@@ -107,7 +107,7 @@ Contents are stored in the hub's data folder, out of every hob's reach, once per
 - The files the Task made (its Artifact references of kind file) and every file it added or edited.
 - Previews for images, PDF, Markdown and plain text. Other files show their name, size and kind.
 - **Show in Finder** in the desktop app on the hub. On another device or in a browser, **Download**, through the hub.
-- Only files inside the hob's folders are listed or served. A file changed or deleted since the Task says so: "Changed since this task" or "No longer there".
+- Only files inside the hob's folders are listed or served. A file changed or deleted since the Task says so: "Changed since this task" or "No longer there". A file larger than the hub serves is compared by size only, so one still the size the Task left says "Too large to check for changes" instead of passing as unchanged.
 
 ### Terminal
 

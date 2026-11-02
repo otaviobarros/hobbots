@@ -16,6 +16,7 @@ import {
   FileChangeId,
   type FileChangeKind,
   PREVIEW_TEXT_BYTES,
+  SERVED_FILE_BYTES,
   TaskId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive, SetupRepository } from "@hobbots/persistence";
@@ -53,6 +54,8 @@ const LONG = `${"x".repeat(99)}\n`
   .repeat(Math.floor((PREVIEW_TEXT_BYTES - 30) / 100))
   .padEnd(PREVIEW_TEXT_BYTES - 20, "y");
 const LONG_LOG = `${LONG}\ntoken ${HUB_SECRET}\nmore\n`;
+/** An export larger than the hub serves, as the Task left it; it is rewritten after, at the same size. */
+const EXPORT = new Uint8Array(SERVED_FILE_BYTES + 1);
 
 const sha256 = (data: string | Uint8Array) => createHash("sha256").update(data).digest("hex");
 
@@ -111,6 +114,7 @@ const activity = new AttemptActivity({
     change("escape.txt", "added", "outside\n"),
     change("old.txt", "added", "old\n", former),
     change("long.log", "added", LONG_LOG),
+    change("export.bin", "added", EXPORT),
   ],
   scans: [],
   artifacts: [
@@ -181,6 +185,11 @@ beforeAll(async () => {
   write(outside, "secret.txt", "Not for hobs.\n");
   write(former, "old.txt", "old\n");
   write(project, "long.log", LONG_LOG);
+  write(
+    project,
+    "export.bin",
+    EXPORT.map((byte, index) => (index === 0 ? 1 : byte)),
+  );
   // A link the Task left in its folder, to a file outside every folder of the hob's.
   symlinkSync(join(outside, "secret.txt"), join(project, "escape.txt"));
   runtime = ManagedRuntime.make(App);
@@ -228,6 +237,8 @@ describe("a Task's files", () => {
       { path: "data.bin", label: null, origin: "added", preview: "none", now: "same" },
       // A file the Task left that is now a link leading out of the folder is not read: it is gone.
       { path: "escape.txt", label: null, origin: "added", preview: "text", now: "gone" },
+      // Rewritten at the size the Task left, and too large to read: not taken as the same.
+      { path: "export.bin", label: null, origin: "added", preview: "none", now: "unchecked" },
       { path: "later.txt", label: null, origin: "added", preview: "text", now: "gone" },
       { path: "long.log", label: null, origin: "added", preview: "text", now: "same" },
       { path: "notes.txt", label: null, origin: "edited", preview: "text", now: "changed" },
