@@ -1,3 +1,4 @@
+import { lstat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
 import { hubPort } from "@hobbots/server/network-settings";
@@ -14,6 +15,7 @@ import { ServerSupervisor, StartTimedOut } from "./server.ts";
 import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server-identity.ts";
 import { fileSettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
+import { handleShowFileIpc } from "./show-file.ts";
 import { claimSingleInstance, onSecondLaunch } from "./single-instance.ts";
 import { fetchAsWindow, makeWindowKey, WINDOW_COOKIE } from "./window-key.ts";
 import { initialWindowBounds } from "./window-size.ts";
@@ -112,6 +114,8 @@ const createWindow = async () => {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
+      // Only for Chromium's own PDF viewer, which the Workbench's Files tab previews PDFs with.
+      plugins: true,
     },
   });
 
@@ -279,6 +283,16 @@ app.whenReady().then(async () => {
     windowOf: (event) => BrowserWindow.fromWebContents(event.sender),
     showOpenDialog: (window, options) =>
       window ? dialog.showOpenDialog(window, options) : dialog.showOpenDialog(options),
+  });
+  handleShowFileIpc({
+    ipcMain,
+    isTrusted,
+    readHub: async (path) => {
+      const response = await fetchHub(`${hub.apiUrl}${path}`, { signal: AbortSignal.timeout(5000) });
+      return response.ok ? await response.json() : null;
+    },
+    isFile: async (path) => (await lstat(path)).isFile(),
+    showItemInFolder: (path) => shell.showItemInFolder(path),
   });
   const menuBar = startMenuBar({ supervisor, settings, hub, fetchHub, createWindow });
   try {
