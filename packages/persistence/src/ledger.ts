@@ -88,6 +88,9 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
         task,
         subtree.tasks.map((each) => each.id),
       )) {
+        // The Task's own result or failure is for the Task above it, even when one hob owns both,
+        // as a step's: an earlier failure of a Task retried since never keeps it open.
+        if (item.taskId === task.id && (item.kind === "result" || item.kind === "failure")) continue;
         const holds = byId.get(item.id);
         if (holds !== undefined && carries(item, live, holds)) consumes.push({ item, carried: holds });
         else blocking.push(item);

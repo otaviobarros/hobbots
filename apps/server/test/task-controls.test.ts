@@ -384,7 +384,10 @@ describe("retrying and reassigning", () => {
     if (step === undefined) throw new Error("no step");
 
     await run(controls((each) => each.retry(step.id)));
-    const done = await run(treeWhen((tree) => tree.tasks[1]?.state === "completed"));
+    // A step completes before its Attempt ends, so both are waited for.
+    const done = await run(
+      treeWhen((tree) => tree.tasks[1]?.state === "completed" && !tree.attempts.some((each) => isLive(each.state))),
+    );
     expect(done.tasks[1]?.id).toBe(step.id);
     expect(done.attempts.filter((each) => each.taskId === step.id).map((each) => [each.number, each.state])).toEqual([
       [1, "failed"],
@@ -419,7 +422,13 @@ describe("retrying and reassigning", () => {
 
     await release();
     await run(controls((each) => each.reassign(copy.id, ADA)));
-    const done = await run(treeWhen((tree) => tree.tasks.find((task) => task.id === copy.id)?.state === "completed"));
+    const done = await run(
+      treeWhen(
+        (tree) =>
+          tree.tasks.find((task) => task.id === copy.id)?.state === "completed" &&
+          !tree.attempts.some((each) => isLive(each.state)),
+      ),
+    );
     const moved = done.tasks.find((task) => task.id === copy.id);
     expect(moved).toMatchObject({ ownerId: ADA, result: { summary: "Copy ready" } });
     expect(attemptsOf(done, moved)).toEqual([

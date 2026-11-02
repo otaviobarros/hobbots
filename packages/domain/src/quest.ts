@@ -245,6 +245,7 @@ export const TaskRefusal = Schema.Literals([
   "wait-outside-subtree",
   "note-key-reused",
   "parent-cancelling",
+  "task-cancelling",
   "top-task",
   "not-delegated",
   "same-owner",

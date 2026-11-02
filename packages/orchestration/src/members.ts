@@ -18,6 +18,7 @@ import {
 import {
   type Agent,
   type AgentConfiguration,
+  type AgentId,
   type AttemptId,
   AttemptId as AttemptIdSchema,
   ancestorsOf,
@@ -230,10 +231,12 @@ export const makeMemberRunner = (deps: MemberDeps) => {
    * A member's Task its hob can no longer work on, since the hob was retired: it fails with a
    * blocker that says why, so its lead hears of it and can hand the work to another hob.
    */
-  const retire = (taskId: TaskId, at: string) =>
+  const retire = (taskId: TaskId, agentId: AgentId, at: string) =>
     Effect.gen(function* () {
       const found = yield* read(taskId);
-      if (Option.isNone(found) || isTerminalTask(found.value.task.state)) return;
+      // A Task given to another hob meanwhile is no longer the retired hob's to fail.
+      if (Option.isNone(found) || found.value.task.ownerId !== agentId || isTerminalTask(found.value.task.state))
+        return;
       if (found.value.task.state === "cancelling") {
         const task = found.value.task;
         yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
@@ -266,9 +269,9 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         "end a stopped member's turn",
       );
       const hob = yield* repo.findAgent(run.agentId);
-      if (Option.isNone(hob) || hob.value.status === "retired") return yield* retire(taskId, at);
+      if (Option.isNone(hob) || hob.value.status === "retired") return yield* retire(taskId, run.agentId, at);
       const latest = yield* read(taskId);
-      if (Option.isNone(latest)) return;
+      if (Option.isNone(latest) || latest.value.task.ownerId !== run.agentId) return;
       const task = latest.value.task;
       if (task.state === "cancelling") {
         yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
@@ -362,7 +365,8 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         if (Option.isNone(found) || found.value.task.ownerId !== agentId) return;
         const agent = yield* repo.findAgent(agentId);
         // A paused hob's work waits until it wakes; a retired hob's Task fails, so its lead hears.
-        if (Option.isNone(agent) || agent.value.status === "retired") return yield* retire(taskId, yield* nowIso);
+        if (Option.isNone(agent) || agent.value.status === "retired")
+          return yield* retire(taskId, agentId, yield* nowIso);
         if (agent.value.status !== "active") return;
         const config = yield* repo.findAgentConfig(agent.value.id, agent.value.configVersion);
         if (Option.isNone(config)) return;
