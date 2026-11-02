@@ -23,7 +23,7 @@ import {
   Thread,
   ThreadId,
 } from "@hobbots/domain";
-import { Backpack, Dispatcher } from "@hobbots/inbox";
+import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher, type DispatchLimits, decideBlocker } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import {
   ApprovalRepositoryLive,
@@ -38,6 +38,7 @@ import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Deferred, Effect, Layer, ManagedRuntime, Schedule, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { DispatcherHostLive } from "../src/backpack.ts";
+import { BlockersHostLive, BlockOnRetirement } from "../src/blockers.ts";
 import { ContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
@@ -52,6 +53,8 @@ const HOLD = "fake:hold";
 
 /** Whether continuations wait for the gate before they write. */
 let holdContinuations = false;
+/** Whether continuations are cut off, as a provider that stops responding cuts them. */
+let cutContinuations = false;
 
 const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
   Layer.effect(
@@ -62,9 +65,12 @@ const held = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>) =>
         ...fake,
         sendPrompt: (request) => {
           requests.push(request);
-          const stream = fake.sendPrompt(request);
+          const continuation = request.prompt.includes("Hobbots wrote this");
+          const stream = fake.sendPrompt(
+            cutContinuations && continuation ? { ...request, prompt: `fake:cut-off\n${request.prompt}` } : request,
+          );
           // A continuation, while held, waits before it writes anything, so it can be stopped.
-          if (holdContinuations && request.prompt.startsWith("Hobbots wrote this")) {
+          if (holdContinuations && continuation) {
             return Stream.unwrap(Effect.as(Deferred.await(gate), stream));
           }
           return request.prompt.includes(HOLD)
@@ -106,10 +112,20 @@ const NoTools = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succe
 /** What the hub's records hold before it starts, as after a restart. */
 type Before = Layer.Layer<never, never, HobbotsRepository | TaskRepository | ApprovalRepository>;
 
-const makeApp = (gate: Deferred.Deferred<void>, requests: Array<PromptRequest>, before: Before) =>
-  Layer.mergeAll(WakeOnArrival, HobLifecycle.layer).pipe(
+/** Quick retries, so a test that exhausts them stays short. */
+const LIMITS: DispatchLimits = { ...DEFAULT_DISPATCH_LIMITS, firstRetry: "5 millis", maxRetry: "20 millis" };
+
+const makeApp = (
+  gate: Deferred.Deferred<void>,
+  requests: Array<PromptRequest>,
+  before: Before,
+  limits: DispatchLimits,
+) =>
+  Layer.mergeAll(WakeOnArrival, BlockOnRetirement, HobLifecycle.layer).pipe(
     Layer.provideMerge(ChatService.layer),
-    Layer.provideMerge(observed.pipe(Layer.provideMerge(Dispatcher.layer()), Layer.provideMerge(DispatcherHostLive))),
+    Layer.provideMerge(
+      observed.pipe(Layer.provideMerge(Dispatcher.layer(limits)), Layer.provideMerge(DispatcherHostLive)),
+    ),
     Layer.provideMerge(
       StepRunnerLive().pipe(Layer.provideMerge(TaskTools.layer("/")), Layer.provideMerge(TaskSignal.layer)),
     ),
@@ -138,6 +154,7 @@ let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<App>, Layer.Error<App>>
 
 afterEach(async () => {
   holdContinuations = false;
+  cutContinuations = false;
   emptyDispatch = null;
   dispatches = 0;
   await runtime?.dispose();
@@ -170,10 +187,10 @@ const Frodo: Before = Layer.effectDiscard(
   }),
 );
 
-const setUp = (before: Before = Frodo) => {
+const setUp = (before: Before = Frodo, limits: DispatchLimits = LIMITS) => {
   const requests: Array<PromptRequest> = [];
   const gate = Deferred.makeUnsafe<void>();
-  const app = ManagedRuntime.make(makeApp(gate, requests, before));
+  const app = ManagedRuntime.make(makeApp(gate, requests, before, limits));
   runtime = app;
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<App>>) => app.runPromise(effect);
   return { run, requests, release: () => run(Deferred.succeed(gate, undefined)) };
@@ -453,5 +470,105 @@ describe("continuing a hob when work arrives", () => {
     expect(all[0]?.content).toContain("ended as failed.");
     const [settled] = await run(settledItems([failure.id]));
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
+  });
+});
+
+describe("blockers", () => {
+  /** Your choice for the item's blocker numbered `blocker`, through the hub's host. */
+  const choose = (itemId: BackpackItem["id"], action: "retry" | "dismiss", blocker = 1) =>
+    decideBlocker(itemId, blocker, action).pipe(Effect.provide(BlockersHostLive));
+
+  // covers IN-007
+  it("[TC-OR-120] work whose every turn is cut off becomes a blocker instead of disappearing, and Retry starts it again", async () => {
+    cutContinuations = true;
+    const { run } = setUp();
+    const failure = await run(failedStep);
+    if (failure === undefined) throw new Error("no Failure recorded");
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    const [blocked] = await run(settledItems([failure.id]));
+    expect(blocked).toMatchObject({ state: "failed" });
+    expect(blocked?.blockers).toMatchObject([
+      {
+        number: 1,
+        reason: "retries-exhausted",
+        nextAction: "retry",
+        lastEnd: "interrupted",
+        afterDeliveries: 3,
+        decision: null,
+      },
+    ]);
+    // What the runtime said is kept raw for diagnosis; the client writes the explanation.
+    expect(blocked?.blockers[0]?.diagnostic).toBe(blocked?.error);
+    expect(blocked?.error ?? "").not.toContain("Delivered");
+    const listed = await run(Backpack.use((backpack) => backpack.listBlocked({ _tag: "Workspace" })));
+    expect(listed.map((each) => each.id)).toEqual([failure.id]);
+
+    cutContinuations = false;
+    const retried = await run(choose(failure.id, "retry"));
+    expect(retried.state).not.toBe("failed");
+    const all = await run(messagesWhen((each) => each.at(-1)?.status === "complete"));
+    expect(all.map((m) => m.status)).toEqual(["interrupted", "interrupted", "interrupted", "complete"]);
+    const [settled] = await run(settledItems([failure.id]));
+    expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[3]?.id });
+    expect(settled?.blockers).toMatchObject([{ decision: "retry" }]);
+    // Choosing Retry again finds it made.
+    expect((await run(choose(failure.id, "retry"))).state).toBe("resolved");
+  });
+
+  // covers IN-007
+  it("[TC-OR-121] work you stopped until it ran out of deliveries becomes a blocker, and Retry starts it without a message", async () => {
+    holdContinuations = true;
+    const { run, requests, release } = setUp(Frodo, { ...LIMITS, maxDeliveries: 1 });
+    const failure = await run(failedStep);
+    if (failure === undefined) throw new Error("no Failure recorded");
+    await run(ChatService.use((chat) => chat.wake(threadId)));
+    // The continuation reached the runtime and waits there, before it writes, when you stop it.
+    await run(
+      retry(
+        Effect.flatMap(messages(), (all) =>
+          all.at(-1)?.status === "streaming" && requests.length === 1 ? Effect.void : Effect.fail("not yet" as const),
+        ),
+      ),
+    );
+    await run(ChatService.use((chat) => chat.stop(threadId)));
+    await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
+    await release();
+    const [blocked] = await run(settledItems([failure.id]));
+    expect(blocked).toMatchObject({ state: "failed" });
+    // You stopped it: a code the client words, and nothing the runtime said (STD-I18N-005).
+    expect(blocked?.blockers).toMatchObject([
+      { reason: "retries-exhausted", nextAction: "retry", lastEnd: "stopped", diagnostic: null },
+    ]);
+    expect(blocked?.error).toBeNull();
+
+    holdContinuations = false;
+    await run(choose(failure.id, "retry"));
+    const all = await run(messagesWhen((each) => each.at(-1)?.status === "complete"));
+    expect(all.map((m) => [m.role, m.status])).toEqual([
+      ["assistant", "stopped"],
+      ["assistant", "complete"],
+    ]);
+  }, 10_000);
+
+  // covers IN-007, AG-006
+  it("[TC-OR-122] a retired hob's waiting work becomes a blocker to dismiss, and cannot be retried", async () => {
+    const { run } = setUp();
+    await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
+    const failure = await run(failedStep);
+    if (failure === undefined) throw new Error("no Failure recorded");
+    await run(HobLifecycle.use((hobs) => hobs.retire(FRODO, "stop")));
+    const [blocked] = await run(settledItems([failure.id]));
+    expect(blocked).toMatchObject({ state: "failed", error: null });
+    expect(blocked?.blockers).toMatchObject([
+      { reason: "recipient-retired", nextAction: "dismiss", diagnostic: null, lastEnd: null },
+    ]);
+
+    const refused = await run(Effect.flip(choose(failure.id, "retry")));
+    expect(refused).toMatchObject({ _tag: "BlockerRecipientRetired", agentId: FRODO });
+    const dismissed = await run(choose(failure.id, "dismiss"));
+    expect(dismissed).toMatchObject({ state: "resolved", disposition: { _tag: "dismissed", by: null } });
+    const closed = await run(Effect.flip(choose(failure.id, "retry")));
+    expect(closed).toMatchObject({ _tag: "BackpackItemNotBlocked", blocker: 1, state: "resolved" });
+    expect(await run(messages())).toEqual([]);
   });
 });

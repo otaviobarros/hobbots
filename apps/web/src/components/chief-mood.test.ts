@@ -20,8 +20,8 @@ describe("the chief's mood", () => {
 
 describe("the chief's label", () => {
   it("says how many requests wait while it needs you", () => {
-    expect(chiefLabel("needs-you", 1)).toBe("Hobbots inbox, a request needs you");
-    expect(chiefLabel("needs-you", 3)).toBe("Hobbots inbox, 3 requests need you");
+    expect(chiefLabel("needs-you", 1)).toBe("Hobbots inbox, something needs you");
+    expect(chiefLabel("needs-you", 3)).toBe("Hobbots inbox, 3 things need you");
   });
 
   it("names Home otherwise", () => {

@@ -158,6 +158,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   HandedOff: 1,
   TaskCompleted: 1,
   QuestCompleted: 1,
+  // An item's `blockers` was added with a default, compatibly.
   BackpackItemRecorded: 1,
   BackpackItemChanged: 1,
 };

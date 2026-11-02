@@ -28,8 +28,8 @@ export const messages = {
     working: "Hobbots home, hobs are working",
     needsYou: ({ count }: { count: number }) =>
       pluralForm(count, {
-        one: "Hobbots inbox, a request needs you",
-        other: `Hobbots inbox, ${formatCount(count)} requests need you`,
+        one: "Hobbots inbox, something needs you",
+        other: `Hobbots inbox, ${formatCount(count)} things need you`,
       }),
   },
   home: {

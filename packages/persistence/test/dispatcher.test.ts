@@ -9,6 +9,7 @@ import {
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
+  openBlocker,
   QuestId,
   TaskId,
   Thread,
@@ -17,10 +18,12 @@ import {
 import {
   Backpack,
   BackpackTurnFailed,
+  BlockersHost,
   type Delivery,
   Dispatcher,
   DispatcherHost,
   type DispatchLimits,
+  decideBlocker,
   type Turn,
 } from "@hobbots/inbox";
 import { Deferred, Effect, Fiber, Layer, Option } from "effect";
@@ -367,7 +370,7 @@ describe("The dispatcher", () => {
           turnId: `turn-${tries + 1}`,
           run: (delivery) =>
             ++tries === 1
-              ? Effect.fail(new BackpackTurnFailed({ reason: "The runtime could not start." }))
+              ? Effect.fail(new BackpackTurnFailed({ end: "failed", diagnostic: "The runtime could not start." }))
               : delivery.accepted("session-2"),
         });
         const recovered = yield* dispatcher.dispatch(item.id, flaky);
@@ -409,7 +412,12 @@ describe("The dispatcher", () => {
     expect(result.silent).toBe(3);
     expect(result.stored).toMatchObject({ state: "failed", claim: null });
     expect(result.stored.deliveries.map((each) => each.acknowledgedSessionId)).toEqual([null, null, null]);
-    expect(result.stored.error).toContain("The runtime never accepted the turn.");
+    // The runtime never accepted a turn, so it said nothing to keep: the blocker's reason and its
+    // count of deliveries explain the failure (STD-I18N-005).
+    expect(result.stored.error).toBeNull();
+    expect(result.stored.blockers).toMatchObject([
+      { reason: "retries-exhausted", lastEnd: "not-accepted", diagnostic: null, afterDeliveries: 3 },
+    ]);
   });
 
   // covers IN-002, IN-003
@@ -501,6 +509,7 @@ describe("The dispatcher", () => {
         kind: "result",
         state: "resolved",
         deliveries: [],
+        blockers: [],
         disposition: { _tag: "late", taskRevision: result.cancelled.revision },
       },
     });
@@ -552,7 +561,8 @@ describe("The dispatcher", () => {
               Effect.gen(function* () {
                 turns.push(deliveries.map((delivery) => delivery.item.id));
                 yield* Effect.forEach(deliveries, (delivery) => delivery.accepted(`session-${turns.length}`));
-                if (turns.length === 1) return yield* new BackpackTurnFailed({ reason: "The runtime failed" });
+                if (turns.length === 1)
+                  return yield* new BackpackTurnFailed({ end: "failed", diagnostic: "The runtime failed" });
               }),
           }),
         );
@@ -576,5 +586,214 @@ describe("The dispatcher", () => {
       { _tag: "consumed", by: "batch-2" },
       { _tag: "consumed", by: "batch-2" },
     ]);
+  });
+});
+
+/** A turn that ends before the runtime accepts it, every time. */
+const silentTurn =
+  (runs: { count: number }) =>
+  (each: BackpackItem): Turn => ({
+    target: `thread:${each.threadId}`,
+    turnId: `silent-${++runs.count}`,
+    run: () => Effect.void,
+  });
+
+describe("Blockers", () => {
+  // covers IN-007
+  it("[TC-IN-090] turns an item that runs out of deliveries into a blocker to retry, and a retry gives it as many deliveries again", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const dispatcher = yield* Dispatcher;
+        const backpack = yield* Backpack;
+        const runs = { count: 0 };
+        const first = yield* dispatcher.dispatch(item.id, silentTurn(runs));
+        const blocked = yield* backpack.listBlocked({ _tag: "Workspace" });
+        const retried = yield* backpack.decide(item.id, 1, "retry");
+        const again = yield* dispatcher.dispatch(item.id, silentTurn(runs));
+        return {
+          first,
+          blocked,
+          retried: retried.value,
+          again,
+          runs: runs.count,
+          stored: yield* backpack.find(item.id),
+        };
+      }),
+    );
+
+    expect(result.first._tag).toBe("Failed");
+    expect(result.blocked.map((each) => each.id)).toEqual([result.stored.id]);
+    expect(openBlocker(result.blocked[0] as BackpackItem)).toMatchObject({
+      number: 1,
+      reason: "retries-exhausted",
+      nextAction: "retry",
+      afterDeliveries: 3,
+      decision: null,
+    });
+    expect(result.retried).toMatchObject({ state: "pending", error: null, claim: null });
+    expect(result.retried.blockers[0]).toMatchObject({ decision: "retry" });
+    // Three deliveries before the retry and three after it, then a second blocker.
+    expect(result.again._tag).toBe("Failed");
+    expect(result.runs).toBe(6);
+    expect(result.stored.deliveries).toHaveLength(6);
+    expect(result.stored.blockers.map((each) => [each.number, each.afterDeliveries, each.decision])).toEqual([
+      [1, 3, "retry"],
+      [2, 6, null],
+    ]);
+  });
+
+  // covers IN-007
+  it("[TC-IN-091] dismisses a blocker as you, records the choice, and takes no second choice", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const dispatcher = yield* Dispatcher;
+        const backpack = yield* Backpack;
+        yield* dispatcher.dispatch(item.id, silentTurn({ count: 0 }));
+        const unknown = yield* Effect.flip(backpack.decide(item.id, 2, "dismiss"));
+        const dismissed = yield* backpack.decide(item.id, 1, "dismiss");
+        const second = yield* Effect.flip(backpack.decide(item.id, 1, "retry"));
+        const pending = yield* Effect.flip(backpack.decide(item.id, 1, "dismiss"));
+        return {
+          unknown,
+          dismissed: dismissed.value,
+          entries: dismissed.entries.map((entry) => entry.type),
+          second,
+          pending,
+          blocked: yield* backpack.listBlocked({ _tag: "Workspace" }),
+        };
+      }),
+    );
+
+    expect(result.unknown).toMatchObject({ _tag: "BackpackItemNotBlocked", blocker: 2, state: "failed" });
+    expect(result.dismissed).toMatchObject({ state: "resolved", disposition: { _tag: "dismissed", by: null } });
+    expect(result.dismissed.blockers).toMatchObject([{ decision: "dismiss" }]);
+    expect(result.dismissed.blockers[0]?.decidedAt).not.toBeNull();
+    expect(result.entries).toEqual(["BackpackItemChanged"]);
+    expect(result.second).toMatchObject({ _tag: "BackpackItemNotBlocked", state: "resolved" });
+    expect(result.pending).toMatchObject({ _tag: "BackpackItemNotBlocked" });
+    expect(result.blocked).toEqual([]);
+  });
+
+  // covers IN-007
+  it("[TC-IN-092] fails a retired hob's waiting item as a blocker to dismiss, and leaves an item a turn still holds and routine progress", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const backpack = yield* Backpack;
+        const held = yield* backpack.claim(item.id, "worker", "1 minute");
+        const whileHeld = yield* backpack.abandon(item.id);
+        const claim = { owner: "worker", token: held.value.fencingToken };
+        yield* backpack.deliver(item.id, claim, { target: "thread:t1", turnId: "turn-1" });
+        // The turn ends once the hob retired, and the item comes back to pending.
+        yield* backpack.requeue(item.id, claim);
+        const abandoned = yield* backpack.abandon(item.id);
+        const again = yield* backpack.abandon(item.id);
+        // Routine progress for Aldric never needs your choice, so it is not abandoned.
+        const progress = recorded(
+          yield* (yield* TaskRepository).recordCheckpoint({
+            id: CheckpointId.make("c-progress"),
+            taskId: TaskId.make("copy"),
+            source: "unplanned",
+            kind: "progress",
+            milestoneId: null,
+            summary: "Halfway",
+            createdAt: now,
+          }),
+        );
+        const routine = yield* backpack.abandon(progress.id);
+        return {
+          whileHeld: whileHeld.value,
+          abandoned: abandoned.value,
+          again: again.value,
+          routine: routine.value,
+          progress: yield* backpack.find(progress.id),
+        };
+      }),
+    );
+
+    expect(result.whileHeld).toBeNull();
+    expect(result.abandoned).toMatchObject({ state: "failed", error: null });
+    expect(result.abandoned?.blockers).toMatchObject([
+      {
+        number: 1,
+        reason: "recipient-retired",
+        nextAction: "dismiss",
+        diagnostic: null,
+        afterDeliveries: 1,
+        decision: null,
+      },
+    ]);
+    expect(result.again).toBeNull();
+    expect(result.routine).toBeNull();
+    expect(result.progress).toMatchObject({ kind: "progress", state: "pending", blockers: [] });
+  });
+
+  // covers IN-007
+  it("[TC-IN-093] holds an item to the configured limit of deliveries", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const runs = { count: 0 };
+        const outcome = yield* (yield* Dispatcher).dispatch(item.id, silentTurn(runs));
+        return { outcome, runs: runs.count };
+      }),
+      { ...LIMITS, maxDeliveries: 1 },
+    );
+
+    expect(result.outcome._tag).toBe("Failed");
+    expect(result.runs).toBe(1);
+    if (result.outcome._tag !== "Failed") throw new Error("not failed");
+    // The runtime said nothing, so there is nothing to diagnose: the client explains the blocker
+    // from its reason and its count of deliveries (STD-I18N-005).
+    expect(result.outcome.item.error).toBeNull();
+    expect(result.outcome.item.blockers).toMatchObject([
+      { reason: "retries-exhausted", lastEnd: "not-accepted", diagnostic: null },
+    ]);
+  });
+
+  // covers IN-007
+  it("[TC-IN-094] binds a choice to the blocker it was made for, so a late one never reaches a newer blocker", async () => {
+    const retired = new Set<string>();
+    const result = await run(
+      Effect.gen(function* () {
+        const { item } = yield* campaign;
+        const dispatcher = yield* Dispatcher;
+        const backpack = yield* Backpack;
+        const resumed: Array<string> = [];
+        const host = BlockersHost.of({
+          isRetired: (agentId) => Effect.succeed(retired.has(agentId)),
+          announce: () => Effect.void,
+          resume: (threadId) => Effect.sync(() => void resumed.push(threadId)),
+        });
+        const decide = (blocker: number, action: "retry" | "dismiss") =>
+          decideBlocker(item.id, blocker, action).pipe(Effect.provideService(BlockersHost, host));
+        const runs = { count: 0 };
+        yield* dispatcher.dispatch(item.id, silentTurn(runs));
+        yield* decide(1, "retry");
+        // Made again for the same blocker, as a client retrying its request: found made.
+        const duplicate = yield* decide(1, "retry");
+        yield* dispatcher.dispatch(item.id, silentTurn(runs));
+        // Late choices for the first blocker, after the item failed again as the second.
+        const lateRetry = yield* decide(1, "retry");
+        const lateDismiss = yield* Effect.flip(decide(1, "dismiss"));
+        const stillOpen = yield* backpack.find(item.id);
+        retired.add(item.recipientId);
+        const refused = yield* Effect.flip(decide(2, "retry"));
+        const dismissed = yield* decide(2, "dismiss");
+        return { duplicate, lateRetry, lateDismiss, stillOpen, refused, dismissed, resumed, runs: runs.count };
+      }),
+    );
+
+    expect(result.duplicate).toMatchObject({ state: "pending", deliveries: { length: 3 } });
+    expect(result.lateRetry).toMatchObject({ state: "failed", deliveries: { length: 6 } });
+    expect(result.lateDismiss).toMatchObject({ _tag: "BackpackItemNotBlocked", blocker: 1, state: "failed" });
+    expect(openBlocker(result.stillOpen)).toMatchObject({ number: 2, decision: null });
+    expect(result.refused).toMatchObject({ _tag: "BlockerRecipientRetired" });
+    expect(result.dismissed.blockers.map((each) => each.decision)).toEqual(["retry", "dismiss"]);
+    // One resume for the one Retry that was taken; the duplicate and the late one change nothing.
+    expect(result.resumed).toEqual(["t1"]);
+    expect(result.runs).toBe(6);
   });
 });
