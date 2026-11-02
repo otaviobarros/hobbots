@@ -46,7 +46,7 @@ export class TaskFile extends Schema.Class<TaskFile>("TaskFile")({
   /** Its size now, or the size the Task left when it is gone. */
   size: Schema.NullOr(Schema.Number),
   now: TaskFileNow,
-  /** The SHA-256 of what it holds now, a preview's version: null when it is gone. */
+  /** The SHA-256 of what it holds now, a preview's version: null when it is gone or too large to serve. */
   hash: Schema.NullOr(Schema.String),
   /** Why its contents are not served, or null when they are. */
   notServed: Schema.NullOr(FileNotServed),
@@ -262,16 +262,22 @@ export const fileCandidates = (
   return [...made, ...touched];
 };
 
-/** A file as the hub found it now: its size and hash, or null when it is not there. */
+/**
+ * A file as the hub found it now: its size and hash. A file larger than the hub serves is only
+ * measured, never read, so it has no hash.
+ */
 export interface FileNow {
   readonly size: number;
-  readonly hash: string;
+  readonly hash: string | null;
 }
+
+/** Whether a file found now no longer holds what the Task left: by size first, then by hash when both are known. */
+const changedSince = (left: FileCandidate["left"], found: FileNow) =>
+  left !== null && (left.size !== found.size || (found.hash !== null && left.hash !== found.hash));
 
 /** A listed file, from what the Task left and what is there now. */
 export const taskFile = (candidate: FileCandidate, found: FileNow | null): TaskFile => {
-  const now: TaskFileNow =
-    found === null ? "gone" : candidate.left !== null && candidate.left.hash !== found.hash ? "changed" : "same";
+  const now: TaskFileNow = found === null ? "gone" : changedSince(candidate.left, found) ? "changed" : "same";
   const size = found?.size ?? candidate.left?.size ?? null;
   const notServed: FileNotServed | null = isSecretFile(candidate.path)
     ? "secret"

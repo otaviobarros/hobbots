@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { isAbsolute, join, normalize, relative, sep } from "node:path";
 import { HobFiles } from "@hobbots/agents";
+import { SERVED_FILE_BYTES } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
-import { openFileIn } from "./scanner.ts";
+import { openFileIn, type Seen, unchangedSince } from "./scanner.ts";
 
 /**
  * The hob's folders as the Workbench's Files tab reads them (ADR 023). Every read opens the file
@@ -32,18 +33,48 @@ const place = async (folders: ReadonlyArray<string>, value: string) => {
   return { folder, path: relative(folder, target).split(sep).join("/") };
 };
 
-/** The size and SHA-256 of what one open of the file reads, so the two always agree. */
-const look = async (folder: string, path: string) => {
+/** How many looks are remembered: past it the oldest is forgotten and hashed again when asked. */
+const REMEMBERED_LOOKS = 4096;
+
+/**
+ * The size and SHA-256 of the file one open reaches. A file larger than the hub serves is never
+ * read, only measured: it has no hash. Any other is read through only when it may have changed since
+ * it was last hashed: an earlier look of the same file, unchanged in inode, size and times since well
+ * before that look began, is reused, as the scanner reuses its own.
+ */
+const lookWith = (seen: Map<string, Seen>) => async (folder: string, path: string) => {
+  const startNs = BigInt(Date.now()) * 1_000_000n;
   const handle = await openFileIn(folder, path);
   if (handle === null) return null;
   try {
+    const key = `${folder}\0${path}`;
+    const stats = await handle.stat({ bigint: true });
+    if (stats.size > BigInt(SERVED_FILE_BYTES)) return { size: Number(stats.size), hash: null };
+    const before = seen.get(key);
+    if (unchangedSince(before, stats)) return { size: Number(stats.size), hash: before.hash };
     const hash = createHash("sha256");
     let size = 0;
-    for await (const chunk of handle.createReadStream({ autoClose: false })) {
+    for await (const chunk of handle.createReadStream({ autoClose: false, start: 0, end: SERVED_FILE_BYTES })) {
       hash.update(chunk as Uint8Array);
       size += (chunk as Uint8Array).length;
     }
-    return { size, hash: hash.digest("hex") };
+    // It grew past what the hub serves while it was read.
+    if (size > SERVED_FILE_BYTES) return { size, hash: null };
+    const digest = hash.digest("hex");
+    seen.delete(key);
+    // What was read is what the stats describe only when its size agrees with them.
+    if (BigInt(size) === stats.size) {
+      seen.set(key, {
+        ino: stats.ino,
+        size: stats.size,
+        mtimeNs: stats.mtimeNs,
+        ctimeNs: stats.ctimeNs,
+        hash: digest,
+        scanStartNs: startNs,
+      });
+      if (seen.size > REMEMBERED_LOOKS) seen.delete(seen.keys().next().value as string);
+    }
+    return { size, hash: digest };
   } finally {
     await handle.close();
   }
@@ -72,12 +103,14 @@ const optional = <A>(run: () => Promise<A | null>) =>
     Effect.orElseSucceed(() => Option.none<A>()),
   );
 
-export const makeHobFiles = () =>
-  HobFiles.of({
+export const makeHobFiles = () => {
+  const look = lookWith(new Map());
+  return HobFiles.of({
     place: (folders, value) => optional(() => place(folders, value)),
     look: (folder, path) => optional(() => look(folder, path)),
     read: (folder, path, maxBytes) => optional(() => read(folder, path, maxBytes)),
   });
+};
 
 /** The hub's reads of the hob's folders for the Files tab. */
 export const HobFilesLive = Layer.sync(HobFiles, makeHobFiles);

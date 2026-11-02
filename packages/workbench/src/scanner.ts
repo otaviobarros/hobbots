@@ -24,7 +24,7 @@ const SKIPPED = new Set([".git", "node_modules"]);
 const SETTLE_NS = 2_000_000_000n;
 
 /** What an earlier scan hashed, and when that scan began, to reuse the hash while the file provably did not change. */
-interface Seen {
+export interface Seen {
   readonly ino: bigint;
   readonly size: bigint;
   readonly mtimeNs: bigint;
@@ -39,7 +39,7 @@ interface Seen {
  * put a modification time back, but none without root can set the change time, which every write
  * and every attempt to restore the modification time moves.
  */
-const unchangedSince = (seen: Seen | undefined, stats: BigIntStats): seen is Seen =>
+export const unchangedSince = (seen: Seen | undefined, stats: BigIntStats): seen is Seen =>
   seen !== undefined &&
   seen.ino === stats.ino &&
   seen.size === stats.size &&
