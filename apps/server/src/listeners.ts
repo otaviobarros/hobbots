@@ -45,9 +45,9 @@ export class HubListeners extends Context.Service<
     /**
      * Opens the serve listener on `127.0.0.1` at `port`, which `tailscale serve` forwards HTTPS to,
      * or closes it with every connection it accepted when `port` is null. `spare` is the connection
-     * of the request that closes it, such as turning HTTPS off from the HTTPS address: it stays for
-     * that request's answer, which closes it, so the page hears where to go. Answers whether it
-     * listens, and why it could not open.
+     * of the request that closes it, such as turning HTTPS off from the HTTPS address: it stays,
+     * however long the change takes, until `release`, so the page hears where to go. Answers whether
+     * it listens, and why it could not open.
      */
     readonly serveOn: (
       port: number | null,
@@ -56,6 +56,12 @@ export class HubListeners extends Context.Service<
       readonly listening: boolean;
       readonly detail: string | null;
     }>;
+    /**
+     * Lets a connection `serveOn` spared go once its request is done changing things: its answer
+     * closes it, and should none come within a few seconds, it closes anyway. Does nothing to a
+     * connection that was not spared.
+     */
+    readonly release: (socket: Socket) => Effect.Effect<void>;
   }
 >()("@hobbots/server/HubListeners") {}
 
@@ -150,17 +156,15 @@ export const HubListenersLive = (server: Server, initialPort: number) =>
       // The serve listener, its port, and the connections `tailscale serve` opened on it.
       let serve: { readonly relay: NetServer; readonly port: number } | undefined;
       const served = new Set<Socket>();
+      // Connections kept past closing the serve listener for their request's answer, until released.
+      const spared = new Set<Socket>();
       const closeServe = (spare?: Socket) =>
         Effect.suspend(() => {
           const open = serve;
           serve = undefined;
           for (const socket of served) {
-            if (socket === spare) {
-              // Its answer closes it; should none come, it closes anyway.
-              setTimeout(() => socket.destroy(), SPARE_FOR_MS).unref();
-            } else {
-              socket.destroy();
-            }
+            if (socket === spare) spared.add(socket);
+            else socket.destroy();
           }
           served.clear();
           return open === undefined ? Effect.void : stopListening(open.relay);
@@ -244,6 +248,12 @@ export const HubListenersLive = (server: Server, initialPort: number) =>
               else failed.push({ address, detail: describe(opened.failure) });
             }
             return { listening: [...relays.keys()], failed };
+          }),
+        release: (socket) =>
+          Effect.sync(() => {
+            if (!spared.delete(socket)) return;
+            // Its answer closes it; should none come, it closes anyway.
+            setTimeout(() => socket.destroy(), SPARE_FOR_MS).unref();
           }),
         serveOn: (at, spare) =>
           Effect.gen(function* () {

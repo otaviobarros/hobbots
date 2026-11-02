@@ -299,7 +299,11 @@ export const RemoteAccessLive = (dataDir: string) =>
       const update = (payload: UpdateRemoteAccessPayload, from?: Socket) =>
         Effect.gen(function* () {
           const changed = yield* Effect.exit(change(payload));
-          const status = yield* reconcileFor(from);
+          // A connection kept for this answer is let go only once the hub has settled, however long
+          // Tailscale takes to say what it serves.
+          const status = yield* reconcileFor(from).pipe(
+            Effect.ensuring(from === undefined ? Effect.void : listeners.release(from)),
+          );
           if (Exit.isFailure(changed)) return yield* Effect.failCause(changed.cause);
           return status;
         });

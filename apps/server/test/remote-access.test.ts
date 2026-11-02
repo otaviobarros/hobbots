@@ -33,7 +33,7 @@ import {
   RemoteAccessStateLive,
   updateFromRequest,
 } from "../src/remote-access.ts";
-import { DEFAULT_FAKE_TAILNET, type FakeTailnet, TailscaleFake } from "../src/tailscale.ts";
+import { DEFAULT_FAKE_TAILNET, type FakeTailnet, Tailscale, TailscaleFake } from "../src/tailscale.ts";
 import { OwnHostsOnly } from "../src/web.ts";
 import { AS_WINDOW, TEST_WINDOW_KEY } from "./window-device.ts";
 
@@ -149,7 +149,11 @@ let stop: (() => Promise<void>) | undefined;
 afterEach(async () => {
   await stop?.();
   stop = undefined;
+  servedTakes = 0;
 });
+
+/** How long the fake `tailscale serve status` takes to answer, in milliseconds. */
+let servedTakes = 0;
 
 /** Holds every `/hold` request until a test releases it. */
 const latch = () => {
@@ -259,7 +263,18 @@ const startHub = async (
     Layer.provideMerge(RemoteAccessLive(dataDir).pipe(Layer.provideMerge(HubListenersLive(server, port)))),
     Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port })),
     Layer.provideMerge(
-      Layer.mergeAll(EventBus.layer, Remote, TailscaleFake(tailnet, options.ranges ?? DEFAULT_FAKE_TAILNET.ranges)),
+      Layer.mergeAll(
+        EventBus.layer,
+        Remote,
+        // `tailscale serve status` answers after `servedTakes`, as a slow Tailscale may.
+        Layer.effect(
+          Tailscale,
+          Effect.map(Effect.service(Tailscale), (tailscale) => ({
+            ...tailscale,
+            served: Effect.suspend(() => Effect.andThen(Effect.sleep(servedTakes), tailscale.served)),
+          })),
+        ).pipe(Layer.provide(TailscaleFake(tailnet, options.ranges ?? DEFAULT_FAKE_TAILNET.ranges))),
+      ),
     ),
   );
   const runtime = ManagedRuntime.make(hub);
@@ -847,4 +862,23 @@ describe("HTTPS through tailscale serve", () => {
     // The tailnet's HTTP address, where the page goes next, keeps working.
     expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.5" })).toEqual({ status: 200, body: "nPHONE" });
   });
+
+  it("[TC-DP-144] turning HTTPS off through tailscale serve is answered however long Tailscale takes to say what it serves", async ({
+    skip,
+  }) => {
+    if (!spareLoopback) skip();
+    const hub = await startHub({ tailnet: WITH_PHONE, https: true });
+    // Longer than the few seconds a kept connection is given once the change is done.
+    servedTakes = 6000;
+    const off = await viaServe(hub, {
+      from: "127.0.0.5",
+      path: "/https-off",
+      method: "POST",
+      headers: { connection: "keep-alive" },
+    });
+    expect(off.status).toBe(200);
+    expect(off.connection).toBe("close");
+    expect(JSON.parse(off.body)).toMatchObject({ enabled: false, listening: false });
+    expect(await refusal("127.0.0.1", hub.servePort)).toBe("ECONNREFUSED");
+  }, 20_000);
 });
