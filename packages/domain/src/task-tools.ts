@@ -259,6 +259,7 @@ export const TaskToolRefusal = Schema.Literals([
   "no-attempt",
   "no-task",
   "task-state",
+  "claim-stale",
 ]);
 export type TaskToolRefusal = typeof TaskToolRefusal.Type;
 
