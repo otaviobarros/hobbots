@@ -380,7 +380,7 @@ describe("continuing a hob when work arrives", () => {
           // The reply that asked was still running when Hobbots stopped.
           yield* repo.upsertMessage(
             new Message({
-              id: pending.messageId,
+              id: MessageId.make("before-restart"),
               threadId,
               role: "assistant",
               content: "Pushing the ring's map",

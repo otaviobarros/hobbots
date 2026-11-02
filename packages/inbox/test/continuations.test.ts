@@ -2,10 +2,14 @@ import {
   AgentId,
   ApprovalId,
   ApprovalRequest,
+  ArtifactId,
+  ArtifactRef,
+  AttemptId,
   BackpackItem,
   BackpackItemId,
   type BackpackItemKind,
   type BackpackPayload,
+  HandOff,
   MessageId,
   Task,
   TaskId,
@@ -13,7 +17,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { arrivalsText, backpackItemsFor, continuationThread, lateness } from "../src/index.ts";
+import { arrivalsText, backpackItemsFor, continuationTask, continuationThread, lateness } from "../src/index.ts";
 
 const at = "2026-11-02T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
@@ -95,6 +99,37 @@ describe("which thread a backpack item continues", () => {
         samsWork,
       ]),
     ).toBeNull();
+  });
+
+  // covers IN-004, OR-003
+  it("[TC-IN-061] continues a member's own session with what it holds under the Task it was given, never a step's", () => {
+    const samsWork = task("stew", SAM, "quest", "waiting");
+    const samsStep = task("chop", SAM, "stew", "queued");
+    const all = [...tree, samsWork, samsStep];
+    const handed = item(SAM, "stew", "hand-off", {
+      _tag: "hand-off",
+      handOff: new HandOff({ artifactId: ArtifactId.make("a1"), toTaskId: TaskId.make("stew"), createdAt: at }),
+      artifact: new ArtifactRef({
+        id: ArtifactId.make("a1"),
+        taskId: TaskId.make("cook"),
+        attemptId: AttemptId.make("a1"),
+        kind: "text",
+        label: "Recipe",
+        value: "Taters",
+        createdAt: at,
+      }),
+    });
+    expect(continuationTask(handed, all)?.id).toBe("stew");
+    // His own step's result comes back to the Task he was given, in the same session.
+    const fromStep = item(SAM, "chop", "result", { _tag: "result", task: samsStep, artifacts: [] });
+    expect(continuationTask(fromStep, all)?.id).toBe("stew");
+    // A step's own Task item is the step's, which starts from its brief; Frodo's work goes to his thread.
+    expect(continuationTask(item(SAM, "chop", "task", { _tag: "task", task: samsStep, delegation: null }), all)).toBe(
+      undefined,
+    );
+    expect(continuationTask(item(FRODO, "cook", "result", { _tag: "result", task: sams, artifacts: [] }), all)).toBe(
+      undefined,
+    );
   });
 
   it("never wakes a hob for routine progress, and continues the thread of work outside any Task", () => {

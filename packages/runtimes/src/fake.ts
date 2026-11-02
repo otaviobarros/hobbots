@@ -238,11 +238,51 @@ const parsedInput = (text: string): unknown => {
   }
 };
 
+/** A string input value `$<key>.<path>` names a detail of an earlier scripted call's answer. */
+const REFERENCE = /^\$([^.\s]+)\.(\S+)$/;
+
+/** What a scripted call's answer gave back: the details on its last line, when they are JSON. */
+const answerDetails = (text: string): unknown => {
+  try {
+    return JSON.parse(text.split("\n").at(-1) ?? "");
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * `input` with each `$<key>.<path>` string replaced by that detail of the answer to the earlier
+ * scripted call made with that key, in any session of this fake: `$copy.task_id` or
+ * `$copy.artifacts.0`. A reference to nothing stays as written, so the hub refuses it.
+ */
+const resolveReferences = (input: unknown, details: ReadonlyMap<string, unknown>): unknown => {
+  if (typeof input === "string") {
+    const match = REFERENCE.exec(input);
+    if (match === null) return input;
+    let value: unknown = details.get(match[1] ?? "");
+    for (const part of (match[2] ?? "").split(".")) {
+      value = value !== null && typeof value === "object" ? (value as Record<string, unknown>)[part] : undefined;
+    }
+    return value === undefined ? input : value;
+  }
+  if (Array.isArray(input)) return input.map((each) => resolveReferences(each, details));
+  if (input !== null && typeof input === "object") {
+    return Object.fromEntries(Object.entries(input).map(([name, value]) => [name, resolveReferences(value, details)]));
+  }
+  return input;
+};
+
 /**
  * The hub tool calls a prompt scripts, each shown as a step. What the hub answers is added to
- * `answers`, one `<tool>: <answer>` each, for the reply to end with as a model would read it.
+ * `answers`, one `<tool>: <answer>` each, for the reply to end with as a model would read it. The
+ * details each answer gives back are kept in `details` under the call's key, for later calls to
+ * refer to as `$<key>.<path>`.
  */
-export const scriptedHubEvents = (request: PromptRequest, answers: Array<string>): Stream.Stream<RuntimeEvent> => {
+export const scriptedHubEvents = (
+  request: PromptRequest,
+  answers: Array<string>,
+  details: Map<string, unknown> = new Map(),
+): Stream.Stream<RuntimeEvent> => {
   const hub = request.hubTools;
   if (!hub) return Stream.empty;
   const calls = request.prompt
@@ -267,8 +307,11 @@ export const scriptedHubEvents = (request: PromptRequest, answers: Array<string>
             kind: "tool",
             label: hub.tools.find((tool) => tool.name === call.name)?.label ?? call.name,
           });
-          const answer = yield* hub.call(call.name, call.input, { id: call.id, report });
+          // Resolved when the call is made, so it can name what an earlier call answered.
+          const answer = yield* hub.call(call.name, resolveReferences(call.input, details), { id: call.id, report });
           answers.push(`${call.name}: ${answer.text}`);
+          const key = (call.input as { readonly key?: unknown } | null)?.key;
+          if (typeof key === "string" && !answer.refused) details.set(key, answerDetails(answer.text));
           yield* Queue.offer(queue, { _tag: "StepEnded", id: call.id });
           yield* Queue.end(queue);
         }),
@@ -326,6 +369,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
   const enforcement = fakeEnforcement(sandbox);
   // Each session's instructions, and the lines its previous turn kept for its next.
   const sessions = new Map<string, { readonly instructions: string; readonly later: ReadonlyArray<string> }>();
+  // What scripted hub calls gave back, by key, for later calls in any session to refer to.
+  const details = new Map<string, unknown>();
   const sendPrompt = (request: PromptRequest): Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached> => {
     // A brain that is not ready cannot start a turn, as with the real runtime.
     if (availability !== "ready") {
@@ -366,7 +411,7 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
       { _tag: "StepEnded", id: "thinking-1" },
     ]).pipe(
       Stream.concat(scriptedToolEvents({ ...request, prompt: scripted }, options.engine, sandbox)),
-      Stream.concat(scriptedHubEvents({ ...request, prompt: scripted }, answers)),
+      Stream.concat(scriptedHubEvents({ ...request, prompt: scripted }, answers, details)),
       Stream.concat(written),
       Stream.concat(failure),
     );

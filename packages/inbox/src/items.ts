@@ -223,8 +223,8 @@ const questAbove = (task: Task, trees: Trees, quests: ReadonlyArray<Quest>): Que
 };
 
 /**
- * The outcome of an approval request no live turn waits for, for the hob that asked, in the thread
- * it asked in. It is about no Task, so it continues that thread's chat.
+ * The outcome of an approval request no live turn waits for, for the hob that asked: in the thread
+ * it asked in, or for a party member, on the Task its turn worked on.
  */
 const approvalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolCallSource | null) =>
   events.flatMap((event): ReadonlyArray<NewBackpackItem> => {
@@ -234,7 +234,8 @@ const approvalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolC
     return [
       {
         recipientId: approval.agentId,
-        taskId: null,
+        // A party member's request continues the session that works its Task; a chat turn's, its thread.
+        taskId: approval.taskId,
         questId: null,
         attemptId: null,
         threadId: approval.threadId,

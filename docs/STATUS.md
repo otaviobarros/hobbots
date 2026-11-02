@@ -50,7 +50,9 @@ Built, but not proven end to end, or proven only in part.
 
 - **2026-11-01 · Work is done only when nothing is left open.** Completing a Task or a Quest is refused while work under it, a wait, a dependency, a question, a milestone, a pending approval or an unread backpack item is still open, and the refusal names up to eight of them and counts the rest. The hub reads the same responsibility ledger without asking the hob. The turn that finishes a Task consumes the items it carried in the same transaction. Proven at repository and hub level with the fake runtime on SQLite and PostgreSQL. A member's Task has no turn of its own to complete from yet. ([#294](https://github.com/otaviobarros/hobbots/issues/294), [#292](https://github.com/otaviobarros/hobbots/issues/292))
 
-Running delegated work, waking a hob for its backpack items, other runtimes, the Workbench and remote access are not built yet. The [slices](https://github.com/otaviobarros/hobbots/issues?q=label%3A%22type%3A+slice%22) list them in order.
+- **2026-11-02 · A lead runs a party on a Quest.** A hob you ask brings in other hobs, each of which works on its Task in its own session, in parallel, under its own policy narrowed by the delegation. A member's approval asks you, not its lead. A member that comes after another waits, and gets that result only when the lead hands it on; the lead keeps answering you while it waits, and wraps up in your chat once every member is done. Proven at hub level with the fake runtime on SQLite and PostgreSQL. Real Claude Code is not verified, and This Task grants are not built yet ([#352](https://github.com/otaviobarros/hobbots/issues/352)). ([#273](https://github.com/otaviobarros/hobbots/issues/273))
+
+Other runtimes, the Workbench and remote access are not built yet. The [slices](https://github.com/otaviobarros/hobbots/issues?q=label%3A%22type%3A+slice%22) list them in order.
 
 ## Keep this page current
 
