@@ -37,9 +37,9 @@ GitHub's behaviour here comes from its documentation for GitHub App user access 
 - **Branch names are checked.** A branch name must pass `git check-ref-format --branch`, and may not start with `-`, or be `HEAD` or start with `refs/`. Git commands take full refspecs after `--end-of-options`, so no name becomes an option.
 - Out of scope: merging, closing, labels, reviews, editing or deleting comments, tags, deleting branches, pull requests across forks, and fetching. A hob still cannot fetch from a private repository; a push GitHub refuses because the branch moved tells the hob to ask you. A Fetch action is a follow-up.
 
-### The credential: your GitHub account, through the Hobbots GitHub App
+### The credential: your GitHub account
 
-- **A GitHub App, not an OAuth App or a borrowed `gh` login.** The Charm signs in as a GitHub App user, with a user access token. GitHub gives that token only the permissions both you and the app have, and only on the repositories where you installed the app, so you choose which repositories hobs can reach on GitHub. An OAuth App would need the `repo` scope, which covers every repository you can see and some organization administration. The borrowed `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token` of #317 is removed once #322 lands, and the hub never falls back to it.
+- **A GitHub App, not an OAuth App or a borrowed `gh` login.** The Charm signs in as a GitHub App user, with a user access token. GitHub gives that token only the permissions both you and the app have, and only on the repositories where you installed the app, so you choose which repositories hobs can reach on GitHub. An OAuth App would need the `repo` scope, which covers every repository you can see and some organization administration. It is the recommended choice. The silent fallback of #317 to `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token` goes away once #322 lands: the hub uses only the credential you chose.
 - **The app asks for these permissions and nothing else:**
   - Metadata: read. GitHub requires it.
   - Contents: read and write. Git over HTTPS, so Push.
@@ -53,9 +53,14 @@ GitHub's behaviour here comes from its documentation for GitHub App user access 
 - **Revoked, expired or disconnected.** A refused refresh (`bad_refresh_token`), or a 401 that survives a refresh, marks GitHub disconnected. The hub deletes the keychain item, Settings asks you to connect again, and from the next turn no hob is offered the Charm. A call already running fails with "GitHub is disconnected" and is never retried.
 - **Disconnecting.** Disconnect in Settings deletes the keychain item the same way. It then links to GitHub's authorized apps page, since revoking the grant from the hub would need the client secret.
 - **Uninstalled from a repository.** That repository is then outside the token's reach. GitHub answers not found or refuses the call, and the hob is told the app may not be installed there. It does not disconnect GitHub. #322 checks what GitHub answers for reads of a public repository and for writes.
-- **Or your own token.** Settings also offers "Use my own token" instead of the app. You either paste a token, which goes to the keychain item, or give a 1Password secret reference (`op://…`), which the hub reads with `op read` on the hub for each call and never stores. The hub checks the token against GitHub when you save it and shows its login. A fine-grained token with the permissions above is recommended. A classic token works too, but Settings warns that it reaches every repository you can see. An own token has no refresh: when GitHub refuses it, GitHub is disconnected as above. Whichever credential you choose, the hub still picks the repository from the hob's folder, so a wider token never lets a hob reach another repository through the Charm.
+- **Or a sign-in already on this computer.** Settings › GitHub lists what the hub finds on the hub, each as one click, the way onboarding lists the providers it finds. It never asks you to paste a token.
+  - **Your GitHub CLI sign-in:** when `gh` is signed in to github.com, the hub offers it with its login and reads it with `gh auth token` for each call, as #317 does today.
+  - **Git's own credential for github.com:** when Git's credential helper (the macOS keychain helper or Git Credential Manager) holds one, the hub offers it and reads it with `git credential fill` for each call, with a hub-only configuration so no repository setting chooses the helper.
+  - Both are labeled as reaching every repository the sign-in can see, unlike the app. The hub stores neither: it reads them again for each call, so signing out of `gh` or Git ends them.
+  - Whichever credential you choose, the hub still picks the repository from the hob's folder, so a wider sign-in never lets a hob reach another repository through the Charm.
+- **Pushing with your SSH agent.** As an option, Push can go over SSH with your SSH agent, such as 1Password's, instead of the token. The hub pushes to `git@github.com:<owner>/<repository>.git`, built from the repository it resolved, with your `~/.ssh` configuration (a hob cannot write it), host keys checked against GitHub's, and no setting from the hob's repository. The agent asks for its own approval, such as 1Password's Touch ID, on top of the hob's policy. SSH only pushes: reading, opening pull requests and commenting still need one of the credentials above. The hub never gives the agent to the sandbox for this; the signing switch of ADR 014 stays separate.
 - **Headless hubs and tests.** `HOBBOTS_GITHUB_TOKEN` in the hub's environment replaces the connected account. It is for a hub without a keychain and for the fake GitHub API in tests. It should be a fine-grained token with the permissions above. The hub never runs `gh` for it.
-- **The token is a known value.** The hub adds the access and refresh tokens to the values it redacts by value (permissions contract), so neither can reach a hob through any tool output.
+- **The token is a known value.** The hub adds every token it uses to the values it redacts by value (permissions contract), so none can reach a hob through any tool output.
 
 ### Granting the Charm to a hob
 
@@ -137,11 +142,11 @@ Reads have no effect, so a failed read is reported and the hob may simply call a
 - **Nothing else changes.** The actions, the policy, the repository resolution, the redaction and the failure handling stay the same for either credential.
 - **Push changes inside.** With a hob's own app, Push creates commits through GitHub's API so GitHub marks them Verified ([#225](https://github.com/otaviobarros/hobbots/issues/225)). It stays the same action with the same approval.
 - **Who acts is shown from the start.** The step and the approval card already say who acts on GitHub, so #221 adds a value, not a field.
-- The token borrowed in #317 is not kept as a third source.
+- The `gh` sign-in and Git's credential stay as further sources you choose in Settings, never a silent fallback.
 
 ## Rationale
 
-A GitHub App gives the narrowest credential GitHub offers to a desktop app that ships no secret. It is limited to the repositories you install it on and to four permissions, and it refreshes itself without asking you to sign in again for six months. The same app model is what #221 uses for a hob's own name, so the two credentials share one shape. People who already keep a token, in 1Password or elsewhere, can use it instead; the hub's repository resolution, not the token's reach, is what keeps a hob on its own repository.
+A GitHub App gives the narrowest credential GitHub offers to a desktop app that ships no secret. It is limited to the repositories you install it on and to four permissions, and it refreshes itself without asking you to sign in again for six months. The same app model is what #221 uses for a hob's own name, so the two credentials share one shape. People who are already signed in with `gh` or Git, or push with an SSH agent, can use that with one click instead of a second sign-in; the hub's repository resolution, not the credential's reach, is what keeps a hob on its own repository.
 
 Pushing from a hub-owned staging repository to a URL the hub builds keeps workspace code out of the hub entirely. Checking each dangerous setting one by one would always miss the next one Git adds.
 
@@ -149,8 +154,8 @@ Asking before pull requests and comments under Balanced follows the reason pushe
 
 ## Consequences
 
-- **#322** connects the account: the `GitHubCredential` service, the device flow, your own token or 1Password reference, the keychain item, Settings, and the Charms tab grant. It removes the borrowed token.
-- **#323** builds Push: the staging repository, the credential helper, the once-only rules, `git push` steering, hub tools that can ask, the Charm call records with their keys (migration 0029), and reconciliation.
+- **#322** connects the account: the `GitHubCredential` service, the device flow, the sign-ins found on the computer, the keychain item, Settings, and the Charms tab grant. It removes the borrowed token.
+- **#323** builds Push: the staging repository, pushing over SSH with your agent, the credential helper, the once-only rules, `git push` steering, hub tools that can ask, the Charm call records with their keys (migration 0029), and reconciliation.
 - **#324** builds Open pull requests and Comment on GitHub on the same call records, with outgoing redaction and the comment marker.
 - **#325** proves the feature end to end against a fake GitHub API with the fake runtime.
 - The permissions contract adds the two new operations and points here.
@@ -162,9 +167,10 @@ Asking before pull requests and comments under Balanced follows the reason pushe
 The scenarios that would show this decision holds. Each names the test case that checks it, or the issue that will.
 
 - The read actions reach only the repository of the hob's own folders, never under Never and never from a folder outside them; no input widens a search; what GitHub returns is redacted: `[TC-PE-130]`, `[TC-PE-131]`, `[TC-PE-132]`, `[TC-PE-133]`, `[TC-PE-134]`.
-- You connect GitHub with the device flow, Settings shows the account, its repositories and its permissions, and the token is only in the keychain. Connecting with your own token, pasted or as a 1Password reference, works the same way and warns about a classic token. After you disconnect, or GitHub refuses the refresh, no hob is offered the Charm from its next turn. Not proven yet: [#322](https://github.com/otaviobarros/hobbots/issues/322).
+- You connect GitHub with the device flow, Settings shows the account, its repositories and its permissions, and the token is only in the keychain. Choosing the `gh` sign-in or Git's credential instead takes one click, says it reaches every repository, and stores nothing. After you disconnect, or GitHub refuses the refresh, no hob is offered the Charm from its next turn. Not proven yet: [#322](https://github.com/otaviobarros/hobbots/issues/322).
 - A hob without the grant, or with the sandbox off, is offered no GitHub action. Not proven yet: [#322](https://github.com/otaviobarros/hobbots/issues/322).
 - Under Balanced a hob pushes a branch after your approval. A push with force, or to the default branch, asks as high risk and is never granted. A `git push` command is refused with a pointer to `github_push`. Not proven yet: [#323](https://github.com/otaviobarros/hobbots/issues/323).
+- With the SSH option on, an approved push goes over SSH through your agent to the repository the hub resolved, and no setting from the hob's repository changes the host or command. Not proven yet: [#323](https://github.com/otaviobarros/hobbots/issues/323).
 - An approved push sends the commit the card showed, even when the hob commits again before it runs, and a branch name shaped like an option is refused. Not proven yet: [#323](https://github.com/otaviobarros/hobbots/issues/323).
 - An approved push runs no hook or configured program from a hostile folder configuration, a repository with alternates or grafts is refused, and the token reaches no process the hob can see. Not proven yet: [#323](https://github.com/otaviobarros/hobbots/issues/323).
 - Two calls that find an expiring token refresh it once, and the new pair is in the keychain before either call uses it. Not proven yet: [#322](https://github.com/otaviobarros/hobbots/issues/322). Not proven yet: [#323](https://github.com/otaviobarros/hobbots/issues/323).
