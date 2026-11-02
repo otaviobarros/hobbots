@@ -76,24 +76,27 @@ Each line links to the tab or the chat that holds the detail. Buttons at the end
 
 - **Documents and Markdown** are shown rendered, before and after, with the changed parts marked.
 - **Code and other text** is shown as a diff.
-- **Images** are shown before and after side by side. **Other files** show their name, size and kind.
+- **Images** are shown before and after side by side when both versions were kept (below). When the earlier one was not, Changes shows the current image with "Earlier version not kept" and says why. **Other files** show their name, size and kind.
 - Each file is marked **Added**, **Edited**, **Deleted** or **Moved**.
 
 ### How changes are captured
 
 The hub compares the hob's folders before and after the turn, so a change counts however it was made.
 
-1. **A baseline when a turn starts.** Before the runtime starts, the hub lists every file in the hob's folders with its size, modification time and content hash. It reuses the last hash of a file whose size and modification time did not change, so a repeat scan is cheap.
-2. **A compare when it ends.** When the turn ends, however it ends, the hub scans again and records each difference as a file change of that Attempt.
+1. **A baseline when a turn starts.** Before the runtime starts, the hub lists every file in the hob's folders with its content hash, and keeps the contents it may need to show (below).
+2. **A compare when it ends.** When the turn ends, however it ends, the hub scans again and records each difference as a file change of that Attempt. Kept contents that no change points at are dropped then.
 3. **Along the way.** A file tool's change is recorded as soon as its call ends, and the hub rescans after each command, so Changes is Live during the turn. The end-of-turn compare is the record that counts.
 
 Rules for the scan:
+
+- **A hash is reused only when the file provably did not change.** To keep repeat scans cheap, the hub reuses a file's hash from an earlier scan only when its inode, size, modification time and change time (`ctime`), all to the nanosecond, match that scan, and that scan began after the file's last change. Any process can set a modification time, but none without root can set the change time: every write, and every attempt to restore the modification time, moves it. A file changed in the same clock tick as the scan that hashed it is hashed again, as Git does for "racily clean" files. The end-of-turn compare hashes every file whose change time is at or after the baseline began, so a command that writes the same number of bytes and puts the old modification time back is still caught.
 
 - **Git and non-Git folders alike.** The scan reads the files themselves. It skips `.git` and `node_modules`, and in a Git folder it reads `.gitignore` files as data and skips what they ignore.
 - **It never runs code from the folder.** No `git` command, hook, script or tool from the repository runs. Git can run code from a repository's own config, such as `core.fsmonitor`, so the hub never calls it.
 - **It reads only the hob's folders.** It never follows a link out of them; a link is recorded as a link.
 - **Bounded.** A folder past 100,000 files, or a scan that takes longer than 10 seconds, stops tracking for that folder. Changes then reads Unavailable for it, with why. Both limits are configurable.
-- **Contents are kept for text up to 1 MiB.** Larger and binary files keep their hash, size and kind only.
+- **Contents are kept for text up to 1 MiB and for images (PNG, JPEG, GIF, WebP) up to 10 MiB.** Larger and other binary files keep their hash, size and kind only, and their changes say "Earlier version not kept: too large" or "not a kind Hobbots can show".
+- **Bounded per Attempt.** An Attempt keeps at most 256 MiB of contents. Past that, later changes keep their hash, size and kind only and say so. The limits are configurable.
 - **Secrets stay out.** Kept contents pass through the same redaction as tool output. Files whose names mark them as secret, such as `.env` and private keys, keep no contents: Changes and Files say "Contents not kept: this file may hold secrets."
 - **Shared folders are labeled.** When another turn ran in the same folder at the same time, a change there cannot be pinned on one hob. It is shown under both Attempts with "Changed while Ada was also working here."
 
@@ -164,7 +167,8 @@ Keeping the small records with the Task and the heavy details for 30 days keeps 
 
 - Screen 7 and the design specification change to match: tab order, Summary first, the greyed Not used tabs and Browser as Coming soon.
 - The Screenshot label leaves the MVP with the Browser view.
-- The hub reads every file in a hob's folders at the start and end of each turn. Very large folders lose change tracking past the limits.
+- The hub reads every file in a hob's folders at the start and end of each turn, and hashes again each file that changed since. Very large folders lose change tracking past the limits.
+- The baseline copies small text files and images it has not kept before. They are kept once per hash and dropped at turn end unless a change points at them.
 - The data folder gains content stored once per hash, cleared with the logs after the retention window.
 - #382 brings the Browser tab and its Live, Screenshot and History states.
 
@@ -173,6 +177,8 @@ Keeping the small records with the Task and the heavy details for 30 days keeps 
 The scenarios that would show this decision holds. Each names the issue that will prove it.
 
 - A Task that edits two files, one with a file tool and one with a command, and runs a command, records both changes and the command's output, redacted, on SQLite and PostgreSQL: not proven yet, [#384](https://github.com/otaviobarros/hobbots/issues/384).
+- A command that rewrites a file with the same number of bytes and restores its modification time is still recorded as a change: not proven yet, [#384](https://github.com/otaviobarros/hobbots/issues/384).
+- An image the Task overwrote or deleted shows its earlier version, and one past the size limit says "Earlier version not kept" with why: not proven yet, [#384](https://github.com/otaviobarros/hobbots/issues/384), [#387](https://github.com/otaviobarros/hobbots/issues/387).
 - Change capture works in a Git and a non-Git folder, runs no code from the repository, keeps no contents of a secret file and labels a change made while another hob worked in the same folder: not proven yet, [#384](https://github.com/otaviobarros/hobbots/issues/384).
 - Opening a finished Task shows Summary first with the header, a tab it did not use reads "Not used in this Task", Browser reads Coming soon, and going back keeps your chat and pinned Quest: not proven yet, [#385](https://github.com/otaviobarros/hobbots/issues/385).
 - A finished Task's Summary names what it made and links to each file, with no model call: not proven yet, [#386](https://github.com/otaviobarros/hobbots/issues/386).
