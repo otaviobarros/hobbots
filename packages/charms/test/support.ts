@@ -3,7 +3,7 @@ import { CharmCall, isCharmCallSettled } from "@hobbots/domain";
 import { Effect, Layer, Option, Redacted } from "effect";
 import { GitHubToken } from "../src/index.ts";
 
-/** Charm call records in memory, with the rules of the SQL ones (migration 0028). */
+/** Charm call records in memory, with the rules of the SQL ones (migration 0027). */
 export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
   Layer.succeed(
     CharmCalls,
