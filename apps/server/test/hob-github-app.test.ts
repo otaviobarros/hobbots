@@ -66,6 +66,7 @@ const SAM = AgentId.make("sam");
 // A test names the Tailscale node a request comes from with this header; without it, it is local.
 const NODE_HEADER = "x-test-tailnet-node";
 const TestPeers = Layer.succeed(TailnetPeers, {
+  remote: (request) => request.headers[NODE_HEADER] !== undefined,
   hub: Effect.succeedNone,
   peerOf: (request) =>
     Effect.succeed(

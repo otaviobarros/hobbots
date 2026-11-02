@@ -29,6 +29,7 @@ const status = (change: Partial<RemoteAccessStatus>): RemoteAccessStatus => ({
   listening: [],
   problem: "off",
   detail: null,
+  https: { enabled: false, port: 4318, listening: false, forwarding: null, detail: null },
   ...change,
 });
 

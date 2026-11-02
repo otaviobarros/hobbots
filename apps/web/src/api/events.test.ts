@@ -1,10 +1,21 @@
-import { Agent, AgentId, ApprovalId, ApprovalRequest, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
-import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, it } from "vitest";
+import {
+  Agent,
+  AgentId,
+  ApprovalId,
+  ApprovalRequest,
+  Message,
+  MessageId,
+  type RemoteAccessStatus,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
 import { activityQuery } from "./activity.ts";
 import { approvalsKey } from "./approvals.ts";
-import { applyEvent } from "./events.ts";
+import { applyEvent, remoteAccessChanged } from "./events.ts";
 import { queryKeys } from "./queries.ts";
+import { remoteAccessQuery } from "./remote-access.ts";
 
 const threadId = ThreadId.make("t1");
 const now = "2026-10-28T12:00:00.000Z";
@@ -245,4 +256,41 @@ describe("approval events", () => {
       "denied",
     ]);
   });
+});
+
+// Settings reads remote access again as its stream connects, and the menu-bar icon pauses it while
+// that read is on its way: the read was answered before the pause, and lands after its event.
+// covers DP-004
+it("[TC-DP-140] a read answered before a pause never undoes the pause the hub announced after it", async () => {
+  vi.stubGlobal("location", new URL("http://127.0.0.1:4317/#/settings"));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const reads: Array<(answer: RemoteAccessStatus) => void> = [];
+  const observer = new QueryObserver(client, {
+    ...remoteAccessQuery,
+    queryFn: () => new Promise<RemoteAccessStatus>((resolve) => reads.push(resolve)),
+  });
+  const unsubscribe = observer.subscribe(() => {});
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const connected: RemoteAccessStatus = {
+    enabled: true,
+    paused: false,
+    port: 4317,
+    tailscale: { state: "running", dnsName: "studio-desk.example.ts.net", addresses: ["100.101.102.103"] },
+    listening: ["100.101.102.103"],
+    problem: null,
+    detail: null,
+  };
+  const paused: RemoteAccessStatus = { ...connected, paused: true, problem: "paused", listening: [] };
+
+  reads[0]?.(connected);
+  await tick();
+  void client.invalidateQueries({ queryKey: remoteAccessQuery.queryKey });
+  await tick();
+  expect(reads).toHaveLength(2);
+  remoteAccessChanged(client, paused);
+  reads[1]?.(connected);
+  await tick();
+  expect(observer.getCurrentResult().data).toEqual(paused);
+  unsubscribe();
+  vi.unstubAllGlobals();
 });
