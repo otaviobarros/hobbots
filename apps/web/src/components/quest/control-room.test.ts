@@ -1,4 +1,4 @@
-import { AgentId, Attempt, AttemptId, Delegation, Quest, QuestId, type Task, TaskId, TaskWait } from "@hobbots/domain";
+import { AgentId, Attempt, AttemptId, Delegation, Quest, QuestId, Task, TaskId, TaskWait } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import {
@@ -16,7 +16,16 @@ import {
   task,
   tree,
 } from "../../test/quests.ts";
-import { attemptCount, roomRows, taskControls, topCancel } from "./control-room.ts";
+import {
+  attemptCount,
+  cancelOutcome,
+  controlError,
+  pendingStart,
+  reassignTargets,
+  roomRows,
+  taskControls,
+  topCancel,
+} from "./control-room.ts";
 import { parsePins, sortPinnedReads } from "./use-work.ts";
 
 const ROOK = AgentId.make("rook");
@@ -96,6 +105,21 @@ describe("roomRows", () => {
     });
     expect(roomRows(cancelling).map((row) => row.status)).toEqual(["running", "cancelling", "cancelled"]);
   });
+
+  it("shows a cancel whose stop was never confirmed apart from one that was", () => {
+    const base = blackFriday();
+    const unresolved = new Attempt({ ...attempt(BUILD, "unresolved"), agentId: ADA });
+    const ended = tree({
+      ...base,
+      tasks: [
+        nth(base.tasks, 0),
+        task(COPY, { ownerId: QUILL, state: "cancelled" }),
+        new Task({ ...task(BUILD, { ownerId: ADA, state: "cancelled" }), currentAttemptId: unresolved.id }),
+      ],
+      attempts: [unresolved],
+    });
+    expect(roomRows(ended).map((row) => row.status)).toEqual(["running", "cancelled", "unresolved"]);
+  });
 });
 
 describe("taskControls", () => {
@@ -113,6 +137,14 @@ describe("taskControls", () => {
     expect(taskControls(failed, build)).toEqual({ retry: false, reassign: true, cancel: true });
   });
 
+  it("never retries the top Task, and keeps a Task that leads a quest or has work open under it with its hob", () => {
+    const base = blackFriday();
+    const failedTop = tree({ ...base, tasks: [task(CAMPAIGN, { state: "failed" }), ...base.tasks.slice(1)] });
+    expect(taskControls(failedTop, nth(failedTop.tasks, 0)).retry).toBe(false);
+    const leading = nested();
+    expect(taskControls(leading, nth(leading.tasks, 2))).toEqual({ retry: false, reassign: false, cancel: true });
+  });
+
   it("offers nothing on a step that ended, and only Cancel on a running step", () => {
     const steps = tree({
       tasks: [task(CAMPAIGN), task(TaskId.make("outline"), { state: "completed" }), task(TaskId.make("draft"))],
@@ -121,6 +153,106 @@ describe("taskControls", () => {
     const draft = nth(steps.tasks, 2);
     expect(taskControls(steps, outline)).toEqual({ retry: false, reassign: false, cancel: false });
     expect(taskControls(steps, draft)).toEqual({ retry: false, reassign: false, cancel: true });
+  });
+});
+
+describe("reassignTargets", () => {
+  it("offers every other hob except the Task's owner and whoever owns a Task above it", () => {
+    const hobs = [ALDRIC, QUILL, ADA, ROOK].map((id) => ({ id }));
+    const base = nested();
+    expect(reassignTargets(base, nth(base.tasks, 2), hobs).map((hob) => hob.id)).toEqual([QUILL, ROOK]);
+    // Under Ada's own Quest, neither Aldric nor Ada can take Rook's research.
+    expect(reassignTargets(base, nth(base.tasks, 3), hobs).map((hob) => hob.id)).toEqual([QUILL]);
+  });
+});
+
+describe("cancelOutcome", () => {
+  const cancelled = (states: { copy: Task["state"]; build: Task["state"]; top: Task["state"] }, unresolved = false) => {
+    const stuck = new Attempt({ ...attempt(BUILD, "unresolved"), agentId: ADA });
+    return tree({
+      ...blackFriday(),
+      tasks: [
+        task(CAMPAIGN, { state: states.top }),
+        task(COPY, { ownerId: QUILL, state: states.copy }),
+        new Task({
+          ...task(BUILD, { ownerId: ADA, state: states.build }),
+          currentAttemptId: unresolved ? stuck.id : null,
+        }),
+      ],
+      attempts: unresolved ? [stuck] : [],
+    });
+  };
+
+  it("has nothing to say about work nobody cancelled", () => {
+    const base = blackFriday();
+    expect(cancelOutcome(base, nth(base.tasks, 0))).toBeNull();
+  });
+
+  it("counts the Tasks asked to stop and those that confirmed, apart from work that had already ended", () => {
+    const asked = cancelled({ top: "cancelling", copy: "completed", build: "cancelling" });
+    expect(cancelOutcome(asked, nth(asked.tasks, 0))).toEqual({
+      total: 2,
+      confirmed: 0,
+      unresolved: 0,
+      settled: false,
+    });
+    const halfway = cancelled({ top: "cancelling", copy: "completed", build: "cancelled" });
+    expect(cancelOutcome(halfway, nth(halfway.tasks, 0))).toMatchObject({ confirmed: 1, settled: false });
+    const done = cancelled({ top: "cancelled", copy: "completed", build: "cancelled" });
+    expect(cancelOutcome(done, nth(done.tasks, 0))).toEqual({ total: 2, confirmed: 2, unresolved: 0, settled: true });
+  });
+
+  it("tells a stop never confirmed apart from a confirmed one", () => {
+    const left = cancelled({ top: "cancelled", copy: "cancelled", build: "cancelled" }, true);
+    expect(cancelOutcome(left, nth(left.tasks, 0))).toEqual({ total: 3, confirmed: 2, unresolved: 1, settled: true });
+    // A member's own cancel counts only what is under it.
+    expect(cancelOutcome(left, nth(left.tasks, 2))).toEqual({ total: 1, confirmed: 0, unresolved: 1, settled: true });
+  });
+});
+
+describe("pendingStart", () => {
+  it("waits for the new Attempt of a Task you retried or gave away, and not for one never started", () => {
+    const failed = new Attempt({ ...attempt(COPY, "failed"), agentId: QUILL });
+    const retried = tree({
+      ...blackFriday(),
+      tasks: [task(CAMPAIGN), task(COPY, { ownerId: QUILL, state: "queued" })],
+      attempts: [failed],
+    });
+    expect(pendingStart(retried, nth(retried.tasks, 1))).toEqual({ attempt: 2 });
+    const fresh = tree({ tasks: [task(CAMPAIGN), task(COPY, { ownerId: QUILL, state: "queued" })] });
+    expect(pendingStart(fresh, nth(fresh.tasks, 1))).toBeNull();
+    const started = tree({
+      ...retried,
+      attempts: [failed, new Attempt({ ...failed, id: AttemptId.make("a-copy-2"), number: 2, state: "running" })],
+      tasks: [task(CAMPAIGN), task(COPY, { ownerId: QUILL, state: "active" })],
+    });
+    expect(pendingStart(started, nth(started.tasks, 1))).toBeNull();
+  });
+});
+
+describe("controlError", () => {
+  const names = { owner: "Ada", target: "Quill" };
+  const refusal = (reason: string) =>
+    new ApiError("TaskNotControllable", "TaskNotControllable", { reason, message: `Refused: ${reason}` });
+
+  it("says why the hub refused, naming the hob it is about", () => {
+    expect(controlError(refusal("attempt-live"), names)).toBe(
+      "Ada is working on it right now. Reassign it once that turn ends.",
+    );
+    expect(controlError(refusal("lineage-owner"), names)).toBe(
+      "Quill works on a Task above this one, so it cannot take it.",
+    );
+    expect(controlError(refusal("task-ended"), names)).toBe("This work already ended, so there is nothing to cancel.");
+    expect(controlError(new ApiError("HobUnavailable", "HobUnavailable"), names)).toBe(
+      "Quill is retired, so it cannot take this work.",
+    );
+  });
+
+  it("passes on the hub's words for a reason it does not know, and asks again when the hub was not reached", () => {
+    expect(controlError(refusal("something-new"), names)).toBe("The hub refused this: Refused: something-new");
+    expect(controlError(new ApiError("Failed to fetch", undefined), names)).toBe(
+      "This could not reach the hub. Try again.",
+    );
   });
 });
 

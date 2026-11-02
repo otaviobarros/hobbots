@@ -138,9 +138,50 @@ export const messages = {
     cancelTask: "Cancel Task",
     cancelQuest: "Cancel Quest",
     cancelling: "Cancelling…",
-    /** Why the controls cannot be used yet: the hub does not confirm their outcome so far (OR-006). */
-    held: "Retry, Reassign and Cancel arrive once the hub can confirm what each one did.",
-    status: { cancelling: "Cancelling…", cancelled: "Cancelled" },
+    retrying: "Retrying…",
+    yesCancel: "Yes, cancel",
+    giveTo: ({ title }: { title: string }) => `Give ${title} to`,
+    giving: ({ name }: { name: string }) => `Giving it to ${name}…`,
+    noOneElse: "No other hob can take this Task.",
+    keep: "Keep it",
+    confirmTask: ({ title }: { title: string }) => `Cancel ${title} and everything under it?`,
+    confirmQuest: "Cancel this quest? Every hob on it stops.",
+    confirmRequest: "Cancel this task? Its hob stops.",
+    /** A retry or reassignment the hub recorded, until its owner starts the new Attempt. */
+    queued: ({ name, count }: { name: string; count: number }) =>
+      `Queued: waiting for ${name} to start Attempt ${formatCount(count)}.`,
+    /** A cancel asked for, while its Tasks confirm. */
+    confirming: ({ confirmed, total }: { confirmed: number; total: number }) =>
+      `Cancel asked for. ${formatCount(confirmed)} of ${formatCount(total)} ${plural(total, { one: "Task", other: "Tasks" })} confirmed stopped.`,
+    /** A cancel every Task confirmed. */
+    confirmedAll: ({ total }: { total: number }) =>
+      plural(total, {
+        one: "Cancelled: the Task confirmed it stopped.",
+        other: `Cancelled: ${formatCount(total)} Tasks confirmed they stopped.`,
+      }),
+    /** A cancel that ended with some stops never confirmed (OR-006). */
+    unresolved: ({ count }: { count: number }) =>
+      plural(count, {
+        one: "Cancelled, but 1 Task never confirmed it stopped. Check what it did before you rely on it.",
+        other: `Cancelled, but ${formatCount(count)} Tasks never confirmed they stopped. Check what they did before you rely on them.`,
+      }),
+    refused: {
+      "task-ended": "This work already ended, so there is nothing to cancel.",
+      "task-state": "This Task changed meanwhile. Look at where it stands and try again.",
+      "task-cancelling": "This Task is being cancelled.",
+      "parent-cancelling": "The Task above it is being cancelled.",
+      "attempt-live": ({ name }: { name: string }) =>
+        `${name} is working on it right now. Reassign it once that turn ends.`,
+      "children-open": "Work is still open under this Task. Cancel that first.",
+      "quest-exists": "This Task leads a quest of its own, so it stays with its hob.",
+      "same-owner": ({ name }: { name: string }) => `${name} already has this Task.`,
+      "lineage-owner": ({ name }: { name: string }) => `${name} works on a Task above this one, so it cannot take it.`,
+      retired: ({ name }: { name: string }) => `${name} is retired, so it cannot take this work.`,
+      gone: "That hob is no longer on this hub.",
+      other: ({ message }: { message: string }) => `The hub refused this: ${message}`,
+      failed: "This could not reach the hub. Try again.",
+    },
+    status: { cancelling: "Cancelling…", cancelled: "Cancelled", unresolved: "Not confirmed" },
   },
   someHob: "A hob",
   /** Names joined as a list in the reader's language: "Quill and Ada". */
