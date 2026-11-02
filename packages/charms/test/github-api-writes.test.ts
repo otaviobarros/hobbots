@@ -1,6 +1,7 @@
 import { AgentId } from "@hobbots/domain";
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Fiber, Layer, Redacted } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
+import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
 import { GitHubApi, GitHubApiLive, GitHubCredential } from "../src/index.ts";
 
@@ -11,6 +12,8 @@ const repository = { owner: "octo", name: "app" };
 /** One answer the fake GitHub gives: a status and body, or a failure before any answer. */
 type Answer =
   | { readonly status: number; readonly body?: unknown; readonly headers?: Record<string, string> }
+  /** Headers at once, then a body that never ends. */
+  | { readonly stalls: number }
   | { readonly fails: unknown };
 
 interface Seen {
@@ -21,7 +24,10 @@ interface Seen {
 }
 
 /** GitHub's API answering each request with the next of `answers`, and the hub's credential, recorded. */
-const run = <A>(answers: ReadonlyArray<Answer>, use: (api: GitHubApi["Service"]) => Effect.Effect<A, unknown>) => {
+const run = <A>(
+  answers: ReadonlyArray<Answer>,
+  use: (api: GitHubApi["Service"]) => Effect.Effect<A, unknown, TestClock.TestClock>,
+) => {
   const seen: Array<Seen> = [];
   const credential: Array<string> = [];
   const queue = [...answers];
@@ -37,6 +43,12 @@ const run = <A>(answers: ReadonlyArray<Answer>, use: (api: GitHubApi["Service"])
           return yield* new HttpClientError.HttpClientError({
             reason: new HttpClientError.TransportError({ request, cause: answer.fails }),
           });
+        }
+        if ("stalls" in answer) {
+          return HttpClientResponse.fromWeb(
+            request,
+            new Response(new ReadableStream({ start: () => {} }), { status: answer.stalls }),
+          );
         }
         return HttpClientResponse.fromWeb(
           request,
@@ -61,8 +73,11 @@ const run = <A>(answers: ReadonlyArray<Answer>, use: (api: GitHubApi["Service"])
   );
   return Effect.gen(function* () {
     return yield* use(yield* GitHubApi);
-  }).pipe(Effect.provide(GitHubApiLive.pipe(Layer.provide(http), Layer.provide(signIn))), Effect.runPromise, (result) =>
-    result.then((value) => ({ value, seen, credential })),
+  }).pipe(
+    Effect.provide(GitHubApiLive.pipe(Layer.provide(http), Layer.provide(signIn))),
+    Effect.provide(Layer.fresh(TestClock.layer())),
+    Effect.runPromise,
+    (result) => result.then((value) => ({ value, seen, credential })),
   );
 };
 
@@ -109,6 +124,19 @@ describe("GitHub API writes", () => {
       expect(uncertain.value).toMatchObject({ _tag: "Uncertain" });
       expect(uncertain.seen).toHaveLength(1);
     }
+  });
+
+  // covers EX-003, EX-004
+  it("[TC-GEN-045] leaves a write uncertain when GitHub sends its headers and then never ends the body", async () => {
+    const stalled = await run([{ stalls: 201 }], (api) =>
+      Effect.gen(function* () {
+        const writing = yield* api.comment(hob, repository, 7, "Hi").pipe(Effect.forkChild);
+        yield* TestClock.adjust("31 seconds");
+        return yield* Fiber.join(writing);
+      }),
+    );
+    expect(stalled.value).toMatchObject({ _tag: "Uncertain" });
+    expect(stalled.seen).toHaveLength(1);
   });
 
   // covers PE-005, EX-004

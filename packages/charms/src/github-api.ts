@@ -366,38 +366,39 @@ export const GitHubApiLive = Layer.effect(
           ),
         )
         .pipe(
+          Effect.flatMap((response): Effect.Effect<GitHubWrite<S["Type"]>, never, S["DecodingServices"]> => {
+            if (response.status === 401) return Effect.succeed({ _tag: "SignedOut" });
+            if (rateLimited(response)) {
+              return Effect.succeed({
+                _tag: "RateLimited",
+                message: `GitHub's rate limit for the hub's sign-in is used up, so nothing was sent.${retryText(response)}`,
+              });
+            }
+            if (response.status >= 500) {
+              return Effect.succeed({ _tag: "Uncertain", message: `GitHub answered ${response.status}.` });
+            }
+            if (response.status < 200 || response.status >= 300) {
+              return refusalText(response).pipe(Effect.map((message) => ({ _tag: "Refused", message }) as const));
+            }
+            // GitHub took it, but an answer that cannot be read does not say what was made.
+            return HttpClientResponse.schemaBodyJson(schema)(response).pipe(
+              Effect.match({
+                onFailure: () =>
+                  ({ _tag: "Uncertain", message: "GitHub's answer was cut off or not as expected." }) as const,
+                onSuccess: (value) => ({ _tag: "Done", value }) as const,
+              }),
+            );
+          }),
+          // The deadline covers reading the answer too: a body that never ends leaves the write uncertain.
           Effect.timeout("30 seconds"),
-          Effect.matchEffect({
-            onFailure: (error): Effect.Effect<GitHubWrite<S["Type"]>> =>
+          Effect.catch(
+            (error): Effect.Effect<GitHubWrite<S["Type"]>> =>
               Effect.succeed(
                 neverSent(error)
                   ? { _tag: "NotSent", message: "The hub could not reach GitHub, so nothing was sent." }
                   : { _tag: "Uncertain", message: "GitHub did not answer in time, or the connection dropped." },
               ),
-            onSuccess: (response): Effect.Effect<GitHubWrite<S["Type"]>, never, S["DecodingServices"]> => {
-              if (response.status === 401) return Effect.succeed({ _tag: "SignedOut" });
-              if (rateLimited(response)) {
-                return Effect.succeed({
-                  _tag: "RateLimited",
-                  message: `GitHub's rate limit for the hub's sign-in is used up, so nothing was sent.${retryText(response)}`,
-                });
-              }
-              if (response.status >= 500) {
-                return Effect.succeed({ _tag: "Uncertain", message: `GitHub answered ${response.status}.` });
-              }
-              if (response.status < 200 || response.status >= 300) {
-                return refusalText(response).pipe(Effect.map((message) => ({ _tag: "Refused", message }) as const));
-              }
-              // GitHub took it, but an answer that cannot be read does not say what was made.
-              return HttpClientResponse.schemaBodyJson(schema)(response).pipe(
-                Effect.match({
-                  onFailure: () =>
-                    ({ _tag: "Uncertain", message: "GitHub's answer was cut off or not as expected." }) as const,
-                  onSuccess: (value) => ({ _tag: "Done", value }) as const,
-                }),
-              );
-            },
-          }),
+          ),
         );
 
     /** A write with the hob's token, sent once more with a refreshed token when GitHub refused the sign-in. */
