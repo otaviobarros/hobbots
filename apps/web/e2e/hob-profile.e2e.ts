@@ -248,8 +248,15 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
   await page.getByRole("tab", { name: "Charms" }).click();
   const files = page.getByRole("listitem").filter({ hasText: "Files" });
   await expect(files).toContainText("Delete is checked by Hobbots");
-  // The GitHub Charm reads on the hub, Allow under Balanced; pushing comes later.
-  await expect(page.getByText("Reads the repository of Pip's folders")).toBeVisible();
+  // The GitHub Charm lists each action with its answer: reads Allow, writes Ask under Balanced.
+  await expect(page.getByText("Reads, pushes to, opens pull requests in and comments on")).toBeVisible();
+  const githubActions = page.getByRole("list", { name: "GitHub" });
+  await expect(githubActions.getByRole("listitem")).toHaveText([
+    "ReadAllow",
+    "PushAsk",
+    "Pull requestsAsk",
+    "CommentAsk",
+  ]);
   await page.getByRole("button", { name: "Change what Pip may do" }).click();
   await expect(page.getByRole("tab", { name: "Permissions" })).toHaveAttribute("aria-selected", "true");
 
@@ -288,6 +295,13 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
     .toMatchObject({ decisions: { "read-github": "deny" } });
   await github.getByText("Allow", { exact: true }).click();
   await expect(github.getByRole("radio", { name: "Allow" })).toBeChecked();
+
+  // Opening pull requests and commenting are Ask under Balanced, and offer all three answers.
+  for (const name of ["Open pull requests", "Comment on GitHub"]) {
+    const rule = page.getByRole("radiogroup", { name });
+    await expect(rule.getByRole("radio")).toHaveCount(3);
+    await expect(rule.getByRole("radio", { name: "Ask" })).toBeChecked();
+  }
 
   // Picking the preset's answer again drops the override; removing the folder empties the list.
   await commands.getByText("Allow", { exact: true }).click();

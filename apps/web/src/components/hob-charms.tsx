@@ -92,11 +92,19 @@ export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: (
   );
 }
 
+/** The GitHub Charm's actions as the card lists them, each with its own answer (ADR 020). */
+const GITHUB_ACTIONS = [
+  ["read", "read-github"],
+  ["push", "push"],
+  ["pullRequests", "open-pull-request"],
+  ["comment", "comment-github"],
+] as const satisfies ReadonlyArray<readonly [keyof typeof messages.charms.github, PolicyOperation]>;
+
 /**
- * The GitHub Charm (#317, ADR 020): it reads the repository of the hob's folders on the hub, with the
- * GitHub account connected in Settings, so it needs no sandbox and no credential reaches the hob. You
- * grant it per hob here; without the grant, or with no account connected, the hob is offered none of
- * its actions. Pushing comes later.
+ * The GitHub Charm (#317, ADR 020): it reads, pushes, opens pull requests and comments in the
+ * repository of the hob's folders on the hub, with the GitHub account connected in Settings, so it
+ * needs no sandbox and no credential reaches the hob. You grant it per hob here; without the grant, or
+ * with no account connected, the hob is offered none of its actions.
  */
 function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermissions }) {
   const copy = messages.charms.github;
@@ -105,7 +113,6 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
   const switchId = useId();
   const granted = update.isPending ? update.variables.githubCharm !== false : permissions.policy.githubCharm !== false;
   const connected = github.data === undefined || github.data._tag === "Connected" || github.data._tag === "Environment";
-  const read = ANSWER[offeredAnswer("read-github", permissions.decisions["read-github"])];
   return (
     <div className="cut flex flex-col gap-2.5 border-2 border-line bg-card px-4 py-3.5">
       <div className="flex items-center gap-3.5">
@@ -131,17 +138,15 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
       </div>
       {granted ? (
         <ul aria-label={copy.name} className="m-0 flex list-none flex-wrap gap-3 p-0 ps-[54px]">
-          <li className="flex items-center gap-1 text-[13px]">
-            <span className="text-secondary-text">{copy.read}</span>
-            <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(read))}>{read}</span>
-          </li>
-          <li className="flex items-center gap-1 text-[13px]">
-            <span className="text-secondary-text">{copy.push}</span>
-            <span className="bg-lantern px-1.5 text-xs text-ground">{copy.later}</span>
-            <span className="text-label">
-              {copy.pushLater({ name: hob.name, push: ANSWER[permissions.decisions.push] })}
-            </span>
-          </li>
+          {GITHUB_ACTIONS.map(([label, operation]) => {
+            const answer = ANSWER[offeredAnswer(operation, permissions.decisions[operation])];
+            return (
+              <li key={operation} className="flex items-center gap-1 text-[13px]">
+                <span className="text-secondary-text">{copy[label]}</span>
+                <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(answer))}>{answer}</span>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <span className="ps-[54px] text-[13px] text-label">{copy.off({ name: hob.name })}</span>
