@@ -74,7 +74,7 @@ test("[TC-CH-190] the Quest tab shows the whole tree live with its controls and 
 });
 
 // covers CH-005, OR-006, UX-001
-test("[TC-CH-191] the Quest tab says why a Reassign is refused, and cancels the Black Friday Quest until every Task confirms", async ({
+test("[TC-CH-193] the Quest tab says why a Reassign is refused, and cancels the Black Friday Quest until every Task confirms", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
