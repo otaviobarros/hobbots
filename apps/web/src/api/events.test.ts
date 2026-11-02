@@ -279,6 +279,7 @@ it("[TC-DP-140] a read answered before a pause never undoes the pause the hub an
     listening: ["100.101.102.103"],
     problem: null,
     detail: null,
+    https: { enabled: false, port: 4318, listening: false, forwarding: null, detail: null },
   };
   const paused: RemoteAccessStatus = { ...connected, paused: true, problem: "paused", listening: [] };
 
