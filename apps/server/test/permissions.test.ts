@@ -225,6 +225,26 @@ describe("a hob's folders", () => {
     expect(off.body.policy).toEqual({ ownFolders: [], hiddenSharedFolders: [notes], overrides: {} });
   });
 
+  // covers AG-004, PE-002
+  it("[TC-PE-146] grants the GitHub Charm to every hob, and takes it away and back as new versions", async () => {
+    const agent = await newHob();
+    // A new hob has the Charm: the policy leaves it out.
+    expect((await request("GET", permissions(agent))).body.policy).toEqual({
+      ownFolders: [],
+      hiddenSharedFolders: [],
+      overrides: {},
+    });
+    const off = await request("PATCH", permissions(agent), { githubCharm: false });
+    expect(off).toMatchObject({ status: 200, body: { configVersion: 2, policy: { githubCharm: false } } });
+    // Other policy changes keep it off, and the same answer again adds no version.
+    const hidden = await request("PATCH", permissions(agent), { hiddenSharedFolders: [notes] });
+    expect(hidden.body).toMatchObject({ configVersion: 3, policy: { githubCharm: false } });
+    expect((await request("PATCH", permissions(agent), { githubCharm: false })).body.configVersion).toBe(3);
+    const on = await request("PATCH", permissions(agent), { githubCharm: true });
+    expect(on.body.configVersion).toBe(4);
+    expect(on.body.policy).toEqual({ ownFolders: [], hiddenSharedFolders: [notes], overrides: {} });
+  });
+
   // covers AG-004
   it("[TC-AG-091] refuses a missing folder, an own folder that is already shared and hiding a folder that is not shared", async () => {
     const agent = await newHob();

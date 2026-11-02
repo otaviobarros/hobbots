@@ -1,5 +1,12 @@
 import type { InvalidFolder } from "@hobbots/api";
-import type { EventEnvelope, InstallationSetup, MessageId, ThreadId, TransientEvent } from "@hobbots/domain";
+import type {
+  EventEnvelope,
+  GitHubAccount,
+  InstallationSetup,
+  MessageId,
+  ThreadId,
+  TransientEvent,
+} from "@hobbots/domain";
 import { Context, type Effect, type Option, Schema } from "effect";
 
 /** Announces what the use cases did to every client: journal entries once committed, and transient reply events. */
@@ -54,3 +61,16 @@ export class ToolLogUnavailable extends Schema.TaggedError<ToolLogUnavailable>()
  * the user can open it from the step.
  */
 export class ToolLogs extends Context.Service<ToolLogs, ToolLogsShape>()("@hobbots/agents/ToolLogs") {}
+
+/**
+ * Who is connected to GitHub on the hub, and since when (ADR 020), for the UI. The tokens are kept
+ * in the OS keychain, never here.
+ */
+export class GitHubAccounts extends Context.Service<
+  GitHubAccounts,
+  {
+    readonly get: Effect.Effect<GitHubAccount | null>;
+    readonly save: (account: GitHubAccount) => Effect.Effect<void>;
+    readonly clear: Effect.Effect<void>;
+  }
+>()("@hobbots/agents/GitHubAccounts") {}
