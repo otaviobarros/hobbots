@@ -24,4 +24,4 @@ The new suite passed 10 of 10 runs on each database. The persistence and server 
 
 - Real Claude Code serving the hob tools was not run ([#271](https://github.com/otaviobarros/hobbots/issues/271)).
 - A real crash of the packaged app was not run. The restart is two hubs, one after the other, on one database ([#295](https://github.com/otaviobarros/hobbots/issues/295)).
-- A turn whose claim expired before the runtime accepted it still runs to its end, and only its outcome is refused. This spends a model turn but writes nothing ([#298](https://github.com/otaviobarros/hobbots/issues/298)).
+- A turn whose claim expired before the runtime accepted it still runs to its end. `[TC-IN-164]` proves only that its `complete_task` is refused and that the dispatcher drops its outcome. Other hob tool calls it makes are not checked against the claims it carried: a `delegate_task` with a fresh key would still create a Task. This predates this run and is not tracked by an issue yet.
