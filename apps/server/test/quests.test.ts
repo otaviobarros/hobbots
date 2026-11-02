@@ -1133,4 +1133,57 @@ describe("a nested Quest", () => {
     expect(pipPrompts).toHaveLength(2);
     expect(pipPrompts[1]?.prompt).toContain('was answered by the user: "Playful"');
   }, 20_000);
+
+  // covers IN-005, IN-006
+  it("[TC-OR-185] Pip's routine progress waits for Rook without waking him, rides along his next turn as a digest, and nothing is left open", async () => {
+    const { run, requests, release } = setUp();
+    const pipBrief = [
+      HOLD,
+      hub("report_checkpoint", { key: "half", kind: "progress", summary: "Half the keywords" }),
+      hub("complete_task", { key: "keywords-done", summary: "Twelve keywords, led by 'doorbuster'" }),
+    ];
+    const rookBrief = rookLeads(pipBrief, [
+      `fake:then ${hub("complete_task", { key: "ads-done", summary: "Ads ready around 'doorbuster'" })}`,
+    ]);
+    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
+
+    // Pip's turn started and is held: the hub's "started" waits in Rook's backpack and wakes nobody.
+    const started = await run(treeWhen((tree) => tree.attempts.some((each) => each.agentId === PIP)));
+    const rook = taskOf(started, ROOK);
+    const pip = taskOf(started, PIP);
+    const rookItems = () => Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId: ROOK }));
+    const [waiting] = await run(
+      retry(
+        Effect.filterOrFail(
+          rookItems(),
+          (items) => items.length > 0,
+          () => "not yet" as const,
+        ),
+      ),
+    );
+    expect(waiting).toMatchObject({ kind: "progress", taskId: pip.id, state: "pending", actionable: false });
+    await run(Effect.sleep("500 millis"));
+    expect(promptsTo(requests, rook)).toHaveLength(1);
+
+    await release();
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    expect(done.tasks.map((task) => task.state)).toEqual(["completed", "completed", "completed"]);
+    expect(done.quests.map((quest) => quest.state)).toEqual(["completed", "completed"]);
+    // Her result woke Rook once, and her two updates came along it as one line of the digest.
+    const rookPrompts = promptsTo(requests, rook);
+    expect(rookPrompts).toHaveLength(2);
+    expect(rookPrompts[1]?.prompt).toContain("Twelve keywords");
+    expect(rookPrompts[1]?.prompt).toContain(`Task ${pip.id} sent 2 updates. The latest: Half the keywords`);
+    // Once every Task has ended, no backpack holds anything open, routine progress included.
+    const open = await run(
+      retry(
+        Effect.filterOrFail(
+          Backpack.use((backpack) => backpack.listOpen({ _tag: "Workspace" })),
+          (items) => items.length === 0,
+          () => "not yet" as const,
+        ),
+      ).pipe(Effect.catch(() => Backpack.use((backpack) => backpack.listOpen({ _tag: "Workspace" })))),
+    );
+    expect(open.map((item) => [item.recipientId, item.kind, item.taskId, item.state])).toEqual([]);
+  }, 20_000);
 });

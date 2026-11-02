@@ -14,6 +14,7 @@ import {
   Backpack,
   type BackpackScope,
   BackpackTurnFailed,
+  carryingTask,
   carryingThread,
   continuationTask,
   type Delivery,
@@ -156,16 +157,18 @@ export const ContinuationsLive = Layer.effect(
 
 /**
  * The same branch for a party member's Task (ADR 019): the work its owner holds under it waits for
- * one turn of the session that works it, never for a thread.
+ * one turn of the session that works it, never for a thread. A member that leads a nested Quest gets
+ * its party's routine progress as one digest along that turn, as a lead's chat does; the progress
+ * never starts a turn on its own (IN-005).
  */
 export const MemberContinuationsLive = Layer.effect(
   MemberContinuations,
   Effect.gen(function* () {
     const { routed, carry } = yield* makeCarrier;
-    const tasked = (scope: BackpackScope) =>
-      Effect.map(routed(scope), (all) =>
+    const tasked = (scope: BackpackScope, routine = false) =>
+      Effect.map(routed(scope, routine), (all) =>
         all.flatMap(({ item, tree }) => {
-          const task = continuationTask(item, tree);
+          const task = routine ? carryingTask(item, tree) : continuationTask(item, tree);
           return task === undefined ? [] : [{ item, taskId: task.id }];
         }),
       );
@@ -178,7 +181,7 @@ export const MemberContinuationsLive = Layer.effect(
 
     const deliver: MemberContinuations["Service"]["deliver"] = (taskId, agentId, turn) =>
       Effect.gen(function* () {
-        const items = (yield* tasked({ _tag: "Hob", agentId })).filter((each) => each.taskId === taskId);
+        const items = (yield* tasked({ _tag: "Hob", agentId }, true)).filter((each) => each.taskId === taskId);
         return yield* carry(
           items.map(({ item }) => item),
           `task:${taskId}`,

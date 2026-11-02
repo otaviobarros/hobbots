@@ -14,6 +14,7 @@ import {
   type GitHubRepository,
   type GitHubWriteInput,
   type GitHubWriteToolName,
+  githubActorText,
   githubCommentSummary,
   githubPullRequestSummary,
   hasCommentMarker,
@@ -323,7 +324,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
               summary: githubPullRequestSummary(plan),
               recorded: { existing: existing.map((pr) => pr.number) },
               appliedText: `Opened a pull request from ${plan.head} into ${plan.base} in ${slug}.`,
-              label: `Opening a pull request from ${input.head}`,
+              label: `Opening a pull request from ${input.head} ${githubActorText(actingAs)}`,
               request: { _tag: "PullRequest", folder, repository: slug, base },
               send: sendOnceMore(
                 api.openPullRequest(agentId, repository, {
@@ -400,7 +401,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
               summary: githubCommentSummary(plan),
               recorded: { marker },
               appliedText: `Commented on #${input.number} in ${slug}.`,
-              label: `Commenting on #${input.number}`,
+              label: `Commenting on #${input.number} ${githubActorText(actingAs)}`,
               request: { _tag: "GitHubComment", folder, repository: slug, number: input.number },
               send: sendOnceMore(
                 api.comment(agentId, repository, input.number, `${body}\n\n${commentMarker(marker)}`),

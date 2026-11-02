@@ -44,13 +44,16 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
   const items = makeItemReads(sql);
   const clock = makeDatabaseClock(sql);
 
-  /** The owner's open actionable items about the Task or a Task under it, each with whether its claim's lease runs. */
+  /**
+   * The owner's open items about the Task or a Task under it, actionable and routine, each with
+   * whether its claim's lease runs.
+   */
   const openItems = (task: Task, scope: ReadonlyArray<string>) =>
     Effect.gen(function* () {
       const rows = yield* sql<Row>`SELECT backpack_items.*,
           CASE WHEN claim_owner IS NOT NULL AND ${clock.leaseLive} THEN 1 ELSE 0 END AS claim_live
         FROM backpack_items
-        WHERE recipient_id = ${task.ownerId} AND actionable = 1 AND state NOT IN ('resolved', 'failed')
+        WHERE recipient_id = ${task.ownerId} AND state NOT IN ('resolved', 'failed')
           AND ${sql.in("task_id", scope)}
         ORDER BY priority DESC, recorded_sequence`;
       const live = new Map(rows.map((row) => [String(row.id), Number(row.claimLive) === 1]));
@@ -84,6 +87,7 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
       const byId = new Map(carried.map((each) => [each.itemId as string, each]));
       const consumes: Array<LedgerRead["consumes"][number]> = [];
       const blocking: Array<BackpackItem> = [];
+      const routine: Array<BackpackItem> = [];
       for (const { item, live } of yield* openItems(
         task,
         subtree.tasks.map((each) => each.id),
@@ -93,11 +97,15 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
         if (item.taskId === task.id && (item.kind === "result" || item.kind === "failure")) continue;
         const holds = byId.get(item.id);
         if (holds !== undefined && carries(item, live, holds)) consumes.push({ item, carried: holds });
+        // Routine progress never blocks (IN-005). Not carried and still waiting once the Task it is
+        // about has ended, it has nothing left to tell: the completion resolves it as late below.
+        else if (!item.actionable) routine.push(item);
         else blocking.push(item);
       }
       const approvals = yield* pendingApprovals(task, DateTime.formatIso(yield* DateTime.now));
       const ledger = responsibilityLedger(task, { subtree, tree, approvals, items: blocking });
-      return { ledger, consumes, superseded: supersededItems(task, subtree, blocking) } satisfies LedgerRead;
+      const superseded = supersededItems(task, subtree, [...blocking, ...routine]);
+      return { ledger, consumes, superseded } satisfies LedgerRead;
     });
 
   /**
