@@ -347,19 +347,14 @@ const continuations = (all: ReadonlyArray<Message>) =>
 const settledTree = (ready: (tree: TaskTree) => boolean) =>
   treeWhen((tree) => ready(tree) && !tree.attempts.some((each) => isLive(each.state)));
 
-/**
- * Nothing that needs anyone waits in any hob's backpack, nor in yours. Routine progress sent to
- * Rook, a party member that leads a nested Quest, is left out: a member's turn never carries
- * routine progress, so it stays pending after his Task ends (#397).
- */
+/** Nothing waits in any hob's backpack, routine progress included, nor in yours. */
 const nothingOpen = retry(
   Effect.gen(function* () {
     const backpack = yield* Backpack;
     const scopes = [ALDRIC, QUILL, ADA, ROOK, PIP].map((agentId) => ({ _tag: "Hob" as const, agentId }));
     for (const scope of [...scopes, { _tag: "Workspace" as const }]) {
       const open = yield* backpack.listOpen(scope);
-      const left = open.filter((item) => item.actionable || item.recipientId !== ROOK);
-      if (left.length > 0) return yield* Effect.fail("not yet" as const);
+      if (open.length > 0) return yield* Effect.fail("not yet" as const);
     }
   }),
 );
