@@ -174,11 +174,19 @@ export interface PendingApproval {
 
 /** How a turn asks the user to approve a tool call and waits for the answer. */
 export interface TurnApprovals {
-  /** Stores a pending request for the action. A turn that has ended gets one that is already expired. */
-  readonly request: (action: ApprovalAction) => Effect.Effect<PendingApproval>;
+  /**
+   * Stores a pending request for the action. A turn that has ended gets one that is already expired.
+   * Null when nobody can be asked on this turn, such as a step's: a call the policy answers Ask for
+   * is refused, unless a grant answers it.
+   */
+  readonly request: ((action: ApprovalAction) => Effect.Effect<PendingApproval>) | null;
   /** The hob's tool access now, to decide an approved call again just before it runs (PE-008). */
   readonly currentAccess: Effect.Effect<ToolAccess | null>;
-  /** The hob's live grants now, read again for every call so a revocation applies to the next (PE-008). */
+  /**
+   * The hob's live grants that apply to the turn now: its Always grants and its This Task grants for
+   * the top Task the turn works on (ADR 018). Read again for every call, so a revocation, or a Task
+   * the turn starts, applies to the next (PE-008).
+   */
   readonly grants: Effect.Effect<ReadonlyArray<Grant>>;
   /** Records that these grants answered a call. */
   readonly used: (grantIds: ReadonlyArray<GrantId>) => Effect.Effect<void>;

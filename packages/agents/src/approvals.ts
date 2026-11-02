@@ -22,6 +22,7 @@ import {
   type GrantRule,
   INBOX_HISTORY,
   type MessageId,
+  offersThisTask,
   ruleOperation,
   stableJson,
   type TaskId,
@@ -114,6 +115,8 @@ export interface TurnApprovalsHandle {
 interface Waiter {
   readonly owner: TurnApprovalsHandle;
   readonly agentId: AgentId;
+  /** The top Task the turn works on now, which a This Task decision must still be for. */
+  readonly workingOn: Effect.Effect<TaskId | null>;
   /** The hob's tool access as it is now, read when a decision saves grants. */
   readonly currentAccess: Effect.Effect<ToolAccess | null>;
   readonly decision: Deferred.Deferred<ApprovalOutcome>;
@@ -131,10 +134,9 @@ const refusedDecision = (approval: ApprovalRequest, input: ApprovalDecisionInput
   if (approval.onceOnly && input.confirmed !== true) return new ApprovalNotConfirmed({ approvalId: approval.id });
   const lifetime = input.lifetime ?? "once";
   if (lifetime === "once") return null;
-  // Quests do not exist yet, so nothing can be bound to one.
-  if (lifetime === "quest" || approval.onceOnly || !approval.grantable || approval.rules.length === 0) {
-    return new ApprovalNotGrantable({ approvalId: approval.id, lifetime });
-  }
+  // This Task binds to the Task the request came from, so a request from outside one offers none.
+  const offered = lifetime === "task" ? offersThisTask(approval) : approval.grantable && approval.rules.length > 0;
+  if (!offered || approval.onceOnly) return new ApprovalNotGrantable({ approvalId: approval.id, lifetime });
   const refused = (input.rules ?? approval.rules).find((rule) => !ruleOffered(approval, rule));
   return refused === undefined
     ? null
@@ -150,47 +152,66 @@ const sameDecision = (approval: ApprovalRequest, input: ApprovalDecisionInput): 
   return input.decision !== "approve" || (approval.lifetime ?? "once") === (input.lifetime ?? "once");
 };
 
-/** The grants a decision with a lifetime saves, one per rule. */
-const grantsFor = (approval: ApprovalRequest, input: ApprovalDecisionInput, now: string): ReadonlyArray<Grant> =>
-  input.decision === "approve" && input.lifetime === "always"
-    ? (input.rules ?? approval.rules).map(
-        (rule) =>
-          new Grant({
-            id: GrantId.make(crypto.randomUUID()),
-            agentId: approval.agentId,
-            operation: ruleOperation(rule),
-            rule,
-            lifetime: "always",
-            questId: null,
-            approvalId: approval.id,
-            grantedBy: "user",
-            createdAt: now,
-            expiresAt: null,
-            lastUsedAt: null,
-            revokedAt: null,
-            revokedBy: null,
-            revokeReason: null,
-          }),
-      )
-    : [];
+/**
+ * The grants a decision with a lifetime saves, one per rule: Always's for good, This Task's bound to
+ * the request's top Task and to the hob that asked (ADR 018).
+ */
+const grantsFor = (approval: ApprovalRequest, input: ApprovalDecisionInput, now: string): ReadonlyArray<Grant> => {
+  if (input.decision !== "approve") return [];
+  const lifetime = input.lifetime ?? "once";
+  if (lifetime === "once") return [];
+  return (input.rules ?? approval.rules).map(
+    (rule) =>
+      new Grant({
+        id: GrantId.make(crypto.randomUUID()),
+        agentId: approval.agentId,
+        operation: ruleOperation(rule),
+        rule,
+        lifetime,
+        taskId: lifetime === "task" ? approval.rootTaskId : null,
+        approvalId: approval.id,
+        grantedBy: "user",
+        createdAt: now,
+        expiresAt: null,
+        lastUsedAt: null,
+        revokedAt: null,
+        revokedBy: null,
+        revokeReason: null,
+      }),
+  );
+};
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
 /**
  * Ask decisions (PE-003, PE-007, PE-008): a tool call the policy answers Ask for becomes a durable
- * request and its turn waits until the user approves it or denies it. Approving it Always also saves
- * its rules as grants, in the same transaction (ADR 015). Duplicate decisions are idempotent, a
+ * request and its turn waits until the user approves it or denies it. Approving it for This Task or
+ * Always also saves its rules as grants, in the same transaction (ADR 015, ADR 018). Duplicate decisions are idempotent, a
  * request whose turn ended, whose hob retired, whose server restarted or that waited a day expires
  * and cannot be approved late, and a decision applies only to the exact action it names.
  */
 export class ApprovalService extends Context.Service<
   ApprovalService,
   {
-    /** Approvals for one turn, given how to read the hob's tool access when an approved call runs. */
+    /**
+     * Approvals for one turn, given how to read the hob's tool access when an approved call runs, and
+     * the top Task the turn works on now: a chat turn can start one partway through. Its requests
+     * offer This Task for that Task, and its grants for that Task answer its calls (ADR 018).
+     */
     readonly forTurn: (
       owner: ApprovalOwner,
       currentAccess: Effect.Effect<ToolAccess | null>,
+      workingOn: Effect.Effect<TaskId | null>,
     ) => Effect.Effect<TurnApprovalsHandle>;
+    /**
+     * A step's approvals (ADR 018): a step has no conversation to ask in, so nothing is asked, but
+     * the hob's grants answer its calls, This Task's for the step's top Task included.
+     */
+    readonly forStep: (
+      agentId: AgentId,
+      rootTaskId: TaskId,
+      currentAccess: Effect.Effect<ToolAccess | null>,
+    ) => TurnApprovals;
     /**
      * Approves or denies a pending request, and lets its turn go on. Deciding it again the same way
      * returns it unchanged, so a retried or doubled decision applies once and saves its grants once.
@@ -302,17 +323,26 @@ export class ApprovalService extends Context.Service<
         if (Option.isSome(committed)) yield* announce(committed.value);
       }
 
-      const liveGrants = (agentId: AgentId) =>
-        Option.isSome(grants) ? grants.value.live(agentId) : Effect.succeed([]);
+      // The hob's Always grants, and its This Task grants for the top Task the turn works on now.
+      const liveGrants = (agentId: AgentId, workingOn: Effect.Effect<TaskId | null>) =>
+        Option.isNone(grants)
+          ? Effect.succeed([])
+          : Effect.map(Effect.all([grants.value.live(agentId), workingOn]), ([live, top]) =>
+              live.filter((grant) => grant.taskId === null || grant.taskId === top),
+            );
       const used = (ids: ReadonlyArray<GrantId>) => (Option.isSome(grants) ? grants.value.used(ids) : Effect.void);
 
-      const forTurn = (owner: ApprovalOwner, currentAccess: Effect.Effect<ToolAccess | null>) =>
+      const forTurn = (
+        owner: ApprovalOwner,
+        currentAccess: Effect.Effect<ToolAccess | null>,
+        workingOn: Effect.Effect<TaskId | null>,
+      ) =>
         Effect.sync(() => {
           let open = true;
           const handle: TurnApprovalsHandle = {
             approvals: {
               currentAccess,
-              grants: liveGrants(owner.agentId),
+              grants: liveGrants(owner.agentId, workingOn),
               used,
               request: (action) =>
                 Semaphore.withPermit(
@@ -327,6 +357,7 @@ export class ApprovalService extends Context.Service<
                     const approval = new ApprovalRequest({
                       id: ApprovalId.make(crypto.randomUUID()),
                       ...owner,
+                      rootTaskId: yield* workingOn,
                       stepId: action.stepId,
                       tool: action.tool,
                       operation: action.operation,
@@ -351,7 +382,13 @@ export class ApprovalService extends Context.Service<
                       return { approvalId: saved.id, decision: Effect.succeed({ _tag: "Expired" }) } as PendingApproval;
                     }
                     const decision = yield* Deferred.make<ApprovalOutcome>();
-                    waiters.set(saved.id, { owner: handle, agentId: owner.agentId, currentAccess, decision });
+                    waiters.set(saved.id, {
+                      owner: handle,
+                      agentId: owner.agentId,
+                      workingOn,
+                      currentAccess,
+                      decision,
+                    });
                     return {
                       approvalId: saved.id,
                       // A wait given up (the call was aborted) or past the request's expiry expires it.
@@ -381,6 +418,17 @@ export class ApprovalService extends Context.Service<
           return handle;
         });
 
+      const forStep = (
+        agentId: AgentId,
+        rootTaskId: TaskId,
+        currentAccess: Effect.Effect<ToolAccess | null>,
+      ): TurnApprovals => ({
+        request: null,
+        currentAccess,
+        grants: liveGrants(agentId, Effect.succeed(rootTaskId)),
+        used,
+      });
+
       // Whether a turn here waits for it, its hob is active and it has not waited too long. Otherwise
       // no call would run, so it can only expire.
       const decidable = (approval: ApprovalRequest, now: string) =>
@@ -388,8 +436,15 @@ export class ApprovalService extends Context.Service<
           ? hobActive(approval.agentId)
           : Effect.succeed(false);
 
+      const stillOn = (approval: ApprovalRequest) =>
+        Effect.map(
+          waiters.get(approval.id)?.workingOn ?? Effect.succeed(null),
+          (top) => top !== null && top === approval.rootTaskId,
+        );
+
       // Saves the decision with its grants only while the hob's access now still holds each rule, so
       // a narrowing since the request was asked, or one racing this decision, leaves no grant behind.
+      // This Task binds to the Task the turn still works on, never to one it has left (ADR 018).
       const saveGrants = (
         approval: ApprovalRequest,
         next: ApprovalRequest,
@@ -399,6 +454,7 @@ export class ApprovalService extends Context.Service<
         Effect.gen(function* () {
           const access = yield* waiters.get(approval.id)?.currentAccess ?? Effect.succeed(null);
           if (!saving.every((grant) => ruleHolds(access, grant.rule))) return "narrowed" as const;
+          if (saving.some((grant) => grant.taskId !== null) && !(yield* stillOn(approval))) return "narrowed" as const;
           return yield* settle(next, saving, guarded);
         });
 
@@ -464,6 +520,7 @@ export class ApprovalService extends Context.Service<
 
       return ApprovalService.of({
         forTurn,
+        forStep,
         decide,
         expireForAgent,
         listForThread: repo.listForThread,

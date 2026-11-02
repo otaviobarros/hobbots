@@ -26,6 +26,11 @@ import {
   isLiveAttempt,
   isTerminalTask,
   ledgerRefusal,
+  narrowest,
+  POLICY_OPERATIONS,
+  type PolicyDecision,
+  type PolicyOverrides,
+  PRESET_DECISIONS,
   ResponsibilityLedger,
   type Task,
   type TaskId,
@@ -74,8 +79,30 @@ const liveAttemptOn = (task: Task, tree: TaskTree): boolean =>
   tree.attempts.some((attempt) => attempt.id === task.currentAttemptId && isLiveAttempt(attempt.state));
 
 /**
+ * The answers of a Delegation that narrow what the member would answer on its own. The lead gives
+ * its own answer for every operation as a ceiling; where that is no narrower than the member's own,
+ * such as the lead's Ask where the member's preset asks anyway, it changes nothing and is left out.
+ * Otherwise it would count as a restriction asking, and no This Task or Always grant could ever
+ * answer a member's call (ADR 015, ADR 018). A deliberate narrowing, such as edits narrowed to Ask,
+ * is kept, and no grant answers it.
+ */
+const narrowingOf = (policy: ToolAccess["policy"], given: PolicyOverrides): PolicyOverrides =>
+  Object.fromEntries(
+    POLICY_OPERATIONS.flatMap((operation) => {
+      const answer = given[operation];
+      if (answer === undefined) return [];
+      const own = [policy.hob.overrides[operation], ...policy.restrictions.map((each) => each[operation])].reduce(
+        (so: PolicyDecision, next) => (next === undefined ? so : narrowest(so, next)),
+        PRESET_DECISIONS[policy.preset][operation],
+      );
+      return answer !== own && narrowest(own, answer) === answer ? [[operation, answer]] : [];
+    }),
+  );
+
+/**
  * A member's tools, narrowed by every Delegation on the way down to its Task (ADR 018): each adds
- * its decisions as a restriction, and the member keeps only the folders each one allows.
+ * the decisions that narrow the member's own as a restriction, and the member keeps only the
+ * folders each one allows.
  */
 export const delegatedAccess = (
   access: ToolAccess | null,
@@ -86,7 +113,10 @@ export const delegatedAccess = (
   if (access === null) return null;
   const path = new Set<string>([task.id, ...ancestorsOf(task, tree.tasks).map((each) => each.id)]);
   const given = tree.delegations.filter((delegation) => path.has(delegation.childTaskId));
-  const restrictions = [...access.policy.restrictions, ...given.map((delegation) => delegation.authority.overrides)];
+  const restrictions = [
+    ...access.policy.restrictions,
+    ...given.map((delegation) => narrowingOf(access.policy, delegation.authority.overrides)),
+  ];
   const narrowing = given.flatMap((delegation) =>
     delegation.authority.folders === null ? [] : [delegation.authority.folders],
   );
@@ -339,6 +369,8 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 // The member's requests reach you in the Inbox under its lead's thread, as its own (PE-006).
                 { agentId: agent.id, threadId: task.threadId, messageId: null, taskId: task.id },
                 run.accessNow ?? Effect.succeed(run.access),
+                // A member's This Task binds to the top of its lead's tree, so it ends with the Quest (ADR 018).
+                Effect.succeed(task.rootId),
               );
         const ending = yield* runSessionTurn(deps.adapters, deps.redactor, {
           agent,

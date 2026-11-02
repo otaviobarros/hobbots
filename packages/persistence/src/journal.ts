@@ -11,6 +11,7 @@ import {
 import { Context, Data, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
 import { recordBackpackItems } from "./backpack-rows.ts";
+import { endTaskGrants } from "./task-grants.ts";
 
 /** Where the journal stands: its epoch (new for every fresh database) and the last committed sequence. */
 export interface JournalHead {
@@ -190,6 +191,16 @@ const makeJournalWriter = (sql: SqlClient.SqlClient) => {
  */
 export const lockJournal = (sql: SqlClient.SqlClient) => makeJournalWriter(sql).lock.pipe(Effect.asVoid);
 
+/**
+ * The events a change's own events call for in the same transaction, at sequences from `first` on:
+ * the backpack items they record (ADR 019), then the grants of the top Tasks they end (ADR 018).
+ */
+const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEventType>, first: number) =>
+  Effect.gen(function* () {
+    const items = yield* recordBackpackItems(sql, events, first);
+    return [...items, ...(yield* endTaskGrants(sql, events, first + items.length))];
+  });
+
 // A conditional write found nothing to change; its transaction rolls back, releasing its sequences.
 class NothingChanged extends Data.TaggedError("NothingChanged") {}
 
@@ -197,7 +208,8 @@ class NothingChanged extends Data.TaggedError("NothingChanged") {}
  * Runs a change in one transaction with the journal sequences its events take, from `first`,
  * reserved before it writes, and appends its events before commit: the journal is the outbox
  * (ADR 013). The backpack items its events call for are recorded in the same transaction, with
- * their own events after the change's (ADR 019). A change that returns null wrote nothing, and rolls back.
+ * their own events after the change's (ADR 019), as are the grants of the top Tasks it ends
+ * (ADR 018). A change that returns null wrote nothing, and rolls back.
  */
 export const makeJournaled =
   (sql: SqlClient.SqlClient) =>
@@ -218,10 +230,11 @@ export const makeJournaled =
       if (change.events.length !== count) {
         return yield* Effect.die(new Error(`Reserved ${count} journal sequences for ${change.events.length} events`));
       }
-      // The backpack items the change calls for take the sequences after its own (ADR 019).
-      const items = yield* recordBackpackItems(sql, change.events, first + count);
-      if (items.length > 0) yield* journal.reserve(items.length);
-      return { value: change.value, entries: yield* journal.append(first, [...change.events, ...items]) };
+      // What the change calls for takes the sequences after its own: the backpack items it records
+      // (ADR 019), then the This Task grants of the top Tasks it ends (ADR 018).
+      const derived = yield* derivedFrom(sql, change.events, first + count);
+      if (derived.length > 0) yield* journal.reserve(derived.length);
+      return { value: change.value, entries: yield* journal.append(first, [...change.events, ...derived]) };
     }).pipe(
       sql.withTransaction,
       Effect.map(Option.some),
@@ -250,10 +263,7 @@ export const makeJournaledChange =
     return Effect.gen(function* () {
       const first = yield* journal.lock;
       const change = yield* write(first);
-      const events = [
-        ...change.events,
-        ...(yield* recordBackpackItems(sql, change.events, first + change.events.length)),
-      ];
+      const events = [...change.events, ...(yield* derivedFrom(sql, change.events, first + change.events.length))];
       yield* journal.advance(first, events.length);
       return { value: change.value, entries: yield* journal.append(first, events) };
     }).pipe(

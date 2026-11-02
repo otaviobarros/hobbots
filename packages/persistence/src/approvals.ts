@@ -1,5 +1,5 @@
 import { ApprovalRepository } from "@hobbots/agents";
-import { ApprovalRequest, type ApprovalState, type Grant } from "@hobbots/domain";
+import { ApprovalRequest, type ApprovalState, Grant, isTerminalTask, type TaskState } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { UnwaitedApprovals } from "./backpack-rows.ts";
@@ -87,6 +87,7 @@ export const ApprovalRepositoryLive = Layer.effect(
             thread_id: approval.threadId,
             message_id: approval.messageId,
             task_id: approval.taskId,
+            root_task_id: approval.rootTaskId,
             step_id: approval.stepId,
             tool: approval.tool,
             operation: approval.operation,
@@ -111,6 +112,11 @@ export const ApprovalRepositoryLive = Layer.effect(
         }),
       ).pipe(Effect.map(Option.getOrThrow));
 
+    const taskEnded = (taskId: string) =>
+      sql<{ readonly state: string }>`SELECT state FROM tasks WHERE id = ${taskId}`.pipe(
+        Effect.map(([row]) => row === undefined || isTerminalTask(row.state as TaskState)),
+      );
+
     // The state check lets a decision and an expiry race safely: only one moves it out of `from`,
     // and only that one saves the decision's grants (ADR 015).
     const resolve = (
@@ -129,7 +135,15 @@ export const ApprovalRepositoryLive = Layer.effect(
           if (updated.length === 0) return null;
           const saved = yield* Effect.forEach(grants, (grant, index) =>
             Effect.gen(function* () {
-              const row = grantRow(grant, revision + 1 + index);
+              // A This Task grant whose top Task ended meanwhile is saved already ended, so it never
+              // outlives its Task (ADR 018). The journal orders this against the Task's own change.
+              const ended = grant.taskId !== null && (yield* taskEnded(grant.taskId));
+              const row = grantRow(
+                ended
+                  ? new Grant({ ...grant, revokedAt: approval.decidedAt, revokedBy: "hub", revokeReason: "task-ended" })
+                  : grant,
+                revision + 1 + index,
+              );
               yield* sql`INSERT INTO grants ${sql.insert(row.columns)}`;
               return row.grant;
             }),

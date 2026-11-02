@@ -59,7 +59,7 @@ The component sheet defines: buttons (primary, approve, secondary, deny, quiet, 
 
 - Durable server records drive every status; persuasive assistant text never does.
 - Workbench labels are honest: Live, Screenshot (with age), History, Unavailable (and why). Computer control is shown as Later.
-- Approvals show the exact action, target, who asked (for example You → Pip → Tinker), why now, risk and expiry. Lifetimes: once, this Quest, always for this site; high-risk actions offer once only and need a check box. Deny takes an optional reason. Expired requests cannot be approved late.
+- Approvals show the exact action, target, who asked (for example You → Pip → Tinker), why now, risk and expiry. Lifetimes: once, This Task (This Quest once a party joins), always for this site; high-risk actions offer once only and need a check box. Deny takes an optional reason. Expired requests cannot be approved late.
 - Retire asks what happens to a hob's work (hand it off, let it finish, stop it now). Nothing is deleted; the hob moves to Settings › Archived hobs.
 - Archiving a thread never asks first and never deletes: a toast offers Undo, and Restore brings it back at any time. An archived thread leaves the hob panel, stays in search with an Archived tag, and opens read-only with no composer. Archive is disabled, with its reason, while the thread has a running or queued reply or a pending approval, so it never interrupts work. The hub's archived time drives the Archived state on every device.
 - Closing the window keeps Hobbots in the menu bar by default; Settings › General lets the user change that and turn off Open at login. With it off, closing the last window while hobs work first says that their work will stop.

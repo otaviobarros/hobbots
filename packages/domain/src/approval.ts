@@ -38,6 +38,15 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
+  /**
+   * The top Task of the work the call was made in: the Task the chat turn works on, or the top of a
+   * step's or a party member's tree. This Task binds a grant to it (ADR 018). Null outside a Task,
+   * and for requests from before This Task, which then offer no This Task.
+   */
+  rootTaskId: Schema.NullOr(TaskId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /** The reply step of the tool call, the runtime's own id for it. */
   stepId: Schema.String,
   /** The runtime's name for the tool, such as `Bash`. */
@@ -64,7 +73,8 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
     Schema.withConstructorDefault(Effect.succeed(false)),
   ),
   /**
-   * Whether This Quest and Always are offered (ADR 015): only when a saved rule could answer the Ask.
+   * Whether This Task and Always are offered (ADR 015): only when a saved rule could answer the Ask.
+   * This Task also needs the request to come from a Task (`rootTaskId`).
    * False for a high-risk action, a command Hobbots cannot read fully, and an Ask from an override,
    * a restriction or a safety check.
    */
@@ -95,6 +105,13 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   decidedAt: Schema.NullOr(Schema.String),
   revision: Revision,
 }) {}
+
+/**
+ * Whether a request offers This Task (ADR 018): it offers a rule, as Always does, and comes from a
+ * Task, which the grant binds to. The card says This Quest once a party joins that Task.
+ */
+export const offersThisTask = (approval: Pick<ApprovalRequest, "grantable" | "onceOnly" | "rules" | "rootTaskId">) =>
+  approval.grantable && !approval.onceOnly && approval.rules.length > 0 && approval.rootTaskId !== null;
 
 /** How many decided and expired requests the Inbox lists beside the pending ones: the most recently closed. */
 export const INBOX_HISTORY = 200;

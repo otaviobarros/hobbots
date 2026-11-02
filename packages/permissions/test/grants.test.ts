@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { AgentId, Grant, GrantId, type GrantRule, ruleOperation } from "@hobbots/domain";
+import { AgentId, Grant, GrantId, type GrantRule, ruleOperation, TaskId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { type PolicyContext, type PolicyRequest, readCommandLine } from "../src/index.ts";
 import { contextFor, decide, files, type Home, useHome } from "./fixture.ts";
@@ -14,7 +14,7 @@ const grantOf = (rule: GrantRule, fields: Partial<Grant> = {}) =>
     operation: ruleOperation(rule),
     rule,
     lifetime: "always",
-    questId: null,
+    taskId: null,
     approvalId: null,
     grantedBy: "user",
     createdAt: "2026-11-01T00:00:00.000Z",
@@ -256,18 +256,19 @@ describe("standing grants", () => {
   });
 
   // covers PE-007
-  it("leaves grants out of the policy version, and applies a Quest grant only to its Quest", async () => {
+  it("leaves grants out of the policy version, and a This Task grant answers like any grant it is given", async () => {
     const careful = contextFor(home, "careful");
     const granted = await approveAlways(careful, command("pnpm test", home.project));
     expect((await decide(granted, command("pnpm test", home.project))).policyVersion).toBe(
       (await decide(careful, command("pnpm test", home.project))).policyVersion,
     );
-    const quest = {
+    // Which grants apply to the Task a call is made in is the turn's to say; the engine matches the site.
+    const task = {
       ...granted,
-      grants: granted.grants.map((g) => new Grant({ ...g, lifetime: "quest", questId: "q1" })),
+      grants: granted.grants.map((g) => new Grant({ ...g, lifetime: "task", taskId: TaskId.make("t1") })),
     };
-    expect((await decide(quest, command("pnpm test", home.project))).decision).toBe("ask");
-    expect((await decide({ ...quest, questId: "q1" }, command("pnpm test", home.project))).decision).toBe("allow");
+    expect((await decide(task, command("pnpm test", home.project))).decision).toBe("allow");
+    expect((await decide(task, command("pnpm test --watch", home.project))).decision).toBe("ask");
   });
 });
 
