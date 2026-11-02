@@ -23,6 +23,13 @@ export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers
           if (Option.isNone(tree)) return yield* new TaskNotFound({ taskId: params.taskId });
           return { cursor: at, tree: tree.value };
         }),
+      ledger: ({ params }) =>
+        Effect.gen(function* () {
+          const at = yield* cursor;
+          const ledger = yield* tasks.readLedger(params.taskId);
+          if (Option.isNone(ledger)) return yield* new TaskNotFound({ taskId: params.taskId });
+          return { cursor: at, ledger: ledger.value };
+        }),
       quest: ({ params }) =>
         Effect.gen(function* () {
           const at = yield* cursor;

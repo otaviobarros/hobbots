@@ -39,6 +39,8 @@ Built, but not proven end to end, or proven only in part.
 
 - **2026-11-01 · Hobs read their repository's issues and pull requests on GitHub.** The GitHub Charm reads the repository of a hob's own folder, its issues and its pull requests on the hub with the user's GitHub sign-in, so no credential reaches the sandbox, under the hob's Read GitHub rule. Proven with a stand-in for GitHub and the fake runtime at hub level; a real Claude Code turn with a real sign-in is not verified. ([#317](https://github.com/otaviobarros/hobbots/issues/317), [#325](https://github.com/otaviobarros/hobbots/issues/325))
 
+- **2026-11-01 · Work is done only when nothing is left open.** Completing a Task or a Quest is refused while work under it, a wait, a dependency, a question, a milestone, a pending approval or an unread backpack item is still open, and the refusal names up to eight of them and counts the rest. The hub reads the same responsibility ledger without asking the hob. The turn that finishes a Task consumes the items it carried in the same transaction. Proven at repository and hub level with the fake runtime on SQLite and PostgreSQL. Until backpack items are delivered, a hob reads a result or an answer only through its next turn's briefing, so a request waits for your next message before it can complete, and a member's Task has no turn of its own to complete from. ([#294](https://github.com/otaviobarros/hobbots/issues/294), [#292](https://github.com/otaviobarros/hobbots/issues/292))
+
 Running delegated work, waking a hob for its backpack items, other runtimes, the Workbench and remote access are not built yet. The [slices](https://github.com/otaviobarros/hobbots/issues?q=label%3A%22type%3A+slice%22) list them in order.
 
 ## Keep this page current

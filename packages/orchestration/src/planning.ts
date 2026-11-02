@@ -167,6 +167,7 @@ export const makePlanning = ({ tasks, capacity, limits }: Deps) => ({
             attemptId: task.currentAttemptId,
             artifacts,
             at: scope.at,
+            carried: scope.caller.carried ?? [],
           }),
         ),
       );

@@ -2,6 +2,8 @@ import type { ChatTurn, TaskRepository } from "@hobbots/agents";
 import {
   type AgentId,
   AttemptId,
+  type CarriedItem,
+  carriedFrom,
   type EventEnvelope,
   isTerminalTask,
   type Task,
@@ -10,8 +12,8 @@ import {
   type TaskToolRefused,
   type TaskTree,
 } from "@hobbots/domain";
-import { Effect } from "effect";
-import { BRIEF_LIMIT, cut, ownerBriefing } from "./briefs.ts";
+import { Effect, Option } from "effect";
+import { BRIEF_LIMIT, briefingShows, cut, ownerBriefing } from "./briefs.ts";
 import { fromRecords, journalOf, newId, refuse, type TaskToolCaller } from "./call-scope.ts";
 
 /** Calls that start work, so a chat turn with no open Task starts one for its request. */
@@ -46,67 +48,90 @@ export const makeChatResolver = (
   /** Refuses a new Task for a hob that already owns as many open Tasks as the hub allows. */
   hobRoom: (ownerId: AgentId, adding: number) => Effect.Effect<void, TaskToolRefused>,
   turn: ChatTurn,
-) => ({
-  /** What the turn's session is told of the open Task, read as the turn starts. */
-  briefing: Effect.map(tasks.readThreadTrees(turn.threadId), (trees) => {
-    const open = openTaskOf(trees, turn);
-    return open === undefined ? null : ownerBriefing(open.top, open.tree);
-  }),
+) => {
+  /** The Task the turn was briefed on, and the backpack items the briefing showed it. */
+  let briefed: { readonly taskId: TaskId; readonly carried: ReadonlyArray<CarriedItem> } | null = null;
+  return {
+    /**
+     * What the turn's session is told of the open Task, read as the turn starts. The briefing shows
+     * each Task under it, and under its own steps, with its state and result, and the answers to the
+     * questions its hob asked about it, so the turn carries those results, failures and answers in
+     * its hob's backpack: they settle when the turn completes the Task. The ledger is read after the
+     * tree, so only items the briefing shows at their recorded version are carried; one that
+     * arrived in between stays open for a later turn.
+     */
+    briefing: Effect.gen(function* () {
+      const open = openTaskOf(yield* tasks.readThreadTrees(turn.threadId), turn);
+      if (open === undefined) return null;
+      const ledger = yield* tasks.readLedger(open.top.id);
+      const shown = briefingShows(open.top, open.tree);
+      briefed = {
+        taskId: open.top.id,
+        carried: Option.match(ledger, { onNone: () => [], onSome: (read) => carriedFrom(read, shown) }),
+      };
+      return ownerBriefing(open.top, open.tree);
+    }),
 
-  /** `ownAttempt` is the Attempt this turn already started, if any. */
-  resolve: (
-    name: TaskToolName,
-    at: string,
-    ownAttempt: AttemptId | null,
-  ): Effect.Effect<ResolvedCaller, TaskToolRefused> =>
-    Effect.gen(function* () {
-      const journal = journalOf();
-      let task: Task | undefined = openTaskOf(yield* tasks.readThreadTrees(turn.threadId), turn)?.top;
-      if (task === undefined) {
-        if (!STARTS_WORK.has(name)) {
-          return yield* refuse(
-            "no-task",
-            "You are not working on a Task in this conversation. plan_steps, start_quest or delegate_task starts one for this request.",
+    /** `ownAttempt` is the Attempt this turn already started, if any. */
+    resolve: (
+      name: TaskToolName,
+      at: string,
+      ownAttempt: AttemptId | null,
+    ): Effect.Effect<ResolvedCaller, TaskToolRefused> =>
+      Effect.gen(function* () {
+        const journal = journalOf();
+        let task: Task | undefined = openTaskOf(yield* tasks.readThreadTrees(turn.threadId), turn)?.top;
+        if (task === undefined) {
+          if (!STARTS_WORK.has(name)) {
+            return yield* refuse(
+              "no-task",
+              "You are not working on a Task in this conversation. plan_steps, start_quest or delegate_task starts one for this request.",
+            );
+          }
+          // The request's Task counts against its hob's open Tasks, whichever call starts it.
+          yield* hobRoom(turn.agentId, 1);
+          task = journal.keep(
+            yield* fromRecords(
+              tasks.createTask({
+                task: {
+                  id: TaskId.make(newId()),
+                  ownerId: turn.agentId,
+                  parentId: null,
+                  threadId: turn.threadId,
+                  brief: cut(turn.prompt, BRIEF_LIMIT) || "A request in this conversation",
+                  dependsOn: [],
+                  createdAt: at,
+                },
+                delegation: null,
+                milestones: [],
+              }),
+            ),
           );
         }
-        // The request's Task counts against its hob's open Tasks, whichever call starts it.
-        yield* hobRoom(turn.agentId, 1);
-        task = journal.keep(
+        const caller = {
+          agentId: turn.agentId,
+          taskId: task.id,
+          carried: briefed?.taskId === task.id ? briefed.carried : [],
+        };
+        const own = ownAttempt !== null && task.currentAttemptId === ownAttempt;
+        if (own || !NEEDS_ATTEMPT.has(name) || (name !== "complete_task" && task.currentAttemptId !== null)) {
+          return { caller, entries: journal.entries, attemptId: null };
+        }
+        // The turn that starts the Task, or returns its result, runs it as an Attempt of its own.
+        const attemptId = AttemptId.make(newId());
+        journal.keep(
           yield* fromRecords(
-            tasks.createTask({
-              task: {
-                id: TaskId.make(newId()),
-                ownerId: turn.agentId,
-                parentId: null,
-                threadId: turn.threadId,
-                brief: cut(turn.prompt, BRIEF_LIMIT) || "A request in this conversation",
-                dependsOn: [],
-                createdAt: at,
-              },
-              delegation: null,
-              milestones: [],
+            tasks.startAttempt(task.id, task.revision, {
+              id: attemptId,
+              runtime: turn.runtime,
+              sessionId: null,
+              configVersion: turn.configVersion,
+              policyVersion: null,
+              startedAt: at,
             }),
           ),
         );
-      }
-      const own = ownAttempt !== null && task.currentAttemptId === ownAttempt;
-      if (own || !NEEDS_ATTEMPT.has(name) || (name !== "complete_task" && task.currentAttemptId !== null)) {
-        return { caller: { agentId: turn.agentId, taskId: task.id }, entries: journal.entries, attemptId: null };
-      }
-      // The turn that starts the Task, or returns its result, runs it as an Attempt of its own.
-      const attemptId = AttemptId.make(newId());
-      journal.keep(
-        yield* fromRecords(
-          tasks.startAttempt(task.id, task.revision, {
-            id: attemptId,
-            runtime: turn.runtime,
-            sessionId: null,
-            configVersion: turn.configVersion,
-            policyVersion: null,
-            startedAt: at,
-          }),
-        ),
-      );
-      return { caller: { agentId: turn.agentId, taskId: task.id }, entries: journal.entries, attemptId };
-    }),
-});
+        return { caller, entries: journal.entries, attemptId };
+      }),
+  };
+};

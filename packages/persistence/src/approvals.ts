@@ -17,7 +17,7 @@ interface ApprovalRow {
 
 // Targets and arguments are JSON text (migration 0018); the revision is a bigint on PostgreSQL;
 // once_only is 0 or 1 (migration 0019); grantable is 0 or 1 and rules are JSON text (migration 0022).
-const approvalRows = (rows: ReadonlyArray<ApprovalRow>) =>
+export const approvalRows = (rows: ReadonlyArray<ApprovalRow>) =>
   rows.map((row) => ({
     ...row,
     targets: JSON.parse(String(row.targets)),

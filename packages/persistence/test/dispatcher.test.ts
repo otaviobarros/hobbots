@@ -6,6 +6,7 @@ import {
   type BackpackItem,
   CheckpointId,
   type Committed,
+  carriedFrom,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   QuestId,
@@ -419,7 +420,8 @@ describe("The dispatcher", () => {
         const backpack = yield* Backpack;
         const started = yield* Deferred.make<void>();
         let applied = 0;
-        // The first turn is accepted, then waits; meanwhile its claim is expired, as a restart does.
+        // The first turn is accepted, then waits until it is stopped; meanwhile its claim is expired,
+        // as a restart does. Only the lost claim's next renewal can end it.
         const slow: Turn = {
           target: "thread:t1",
           turnId: "slow",
@@ -428,7 +430,7 @@ describe("The dispatcher", () => {
               .accepted("session-slow")
               .pipe(
                 Effect.andThen(Deferred.succeed(started, undefined)),
-                Effect.andThen(Effect.sleep("200 millis")),
+                Effect.andThen(Effect.never),
                 Effect.andThen(Effect.sync(() => applied++)),
               ),
         };
@@ -444,7 +446,9 @@ describe("The dispatcher", () => {
         }));
         return { dropped, between, next, applied };
       }),
-      { ...LIMITS, lease: "90 millis" },
+      // Renewed every half second: soon enough to stop the slow turn, and long enough that the next
+      // turn's claim never lapses on a slow machine before it settles.
+      { ...LIMITS, lease: "1500 millis" },
     );
 
     expect(result.dropped).toEqual({ _tag: "Dropped" });
@@ -469,12 +473,15 @@ describe("The dispatcher", () => {
           policyVersion: null,
           startedAt: now,
         });
-        // Quill's result is recorded, and Aldric's whole request is cancelled before Aldric gets to it.
+        // Quill's result is recorded from the turn its Task item started, and Aldric's whole request
+        // is cancelled before Aldric gets to it.
+        const ledger = Option.getOrThrow(yield* tasks.readLedger(copy.id));
         const done = yield* tasks.completeTask(copy.id, started.value.task.revision, {
           summary: "Copy drafted",
           attemptId: AttemptId.make("a1"),
           artifacts: [],
           at: now,
+          carried: carriedFrom(ledger, () => true),
         });
         const cancelled = yield* tasks.moveTask(root.id, root.revision, "cancelled", now);
         let runs = 0;
