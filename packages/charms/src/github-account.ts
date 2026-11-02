@@ -219,8 +219,15 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         yield* Ref.set(unsaved, false);
       });
 
-      const issue = (token: Redacted.Redacted<string>) =>
-        Ref.update(issued, (tokens) => new Set(tokens).add(Redacted.value(token))).pipe(Effect.as(token));
+      /** Records `token` as the current sign-in's, unless that sign-in changed since generation `of`. */
+      const issueIf = (of: number, token: Redacted.Redacted<string>) =>
+        committing.withPermits(1)(
+          Effect.gen(function* () {
+            if ((yield* Ref.get(generation)) !== of) return false;
+            yield* Ref.update(issued, (tokens) => new Set(tokens).add(Redacted.value(token)));
+            return true;
+          }),
+        );
 
       /** Forgets the account and deletes its keychain item, keeping why for Settings. Holds `committing`. */
       const forgetHeld = (why: GitHubProblem | null) =>
@@ -238,7 +245,7 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
       const forget = (why: GitHubProblem | null) =>
         forgetHeld(why).pipe(committing.withPermits(1), Effect.uninterruptible);
       /** Forgets only while the sign-in of generation `of` is still the current one. */
-      const forgetIf = (of: number, why: GitHubProblem) =>
+      const forgetIf = (of: number, why: GitHubProblem | null) =>
         Effect.gen(function* () {
           if ((yield* Ref.get(generation)) === of) yield* forgetHeld(why);
         }).pipe(committing.withPermits(1), Effect.uninterruptible);
@@ -257,10 +264,13 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         yield* Ref.set(unsaved, false);
       });
 
-      const stored = Effect.gen(function* () {
+      const stored: Effect.Effect<UserTokens, GitHubError> = Effect.gen(function* () {
         if (yield* Ref.get(unsaved)) yield* saveCached.pipe(committing.withPermits(1), Effect.uninterruptible);
         const cached = yield* Ref.get(cache);
         if (Option.isSome(cached)) return cached.value;
+        // The keychain is read outside the lock, so what it gave back is kept only if no disconnect
+        // or new connection happened meanwhile; otherwise the current sign-in is read again.
+        const started = yield* Ref.get(generation);
         const secret = yield* keychain.read.pipe(Effect.mapError(keychainFailed));
         if (Option.isNone(secret)) {
           if ((yield* accounts.get) === null) return yield* disconnected;
@@ -275,11 +285,17 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         const tokens = decodeTokens(secret.value);
         if (tokens === null) {
           // An item Hobbots cannot read is no sign-in.
-          if ((yield* accounts.get) !== null) yield* forget(null);
+          if ((yield* accounts.get) !== null) yield* forgetIf(started, null);
           return yield* disconnected;
         }
-        yield* Ref.set(cache, Option.some(tokens));
-        return tokens;
+        const current = yield* committing.withPermits(1)(
+          Effect.gen(function* () {
+            if ((yield* Ref.get(generation)) !== started) return false;
+            yield* Ref.set(cache, Option.some(tokens));
+            return true;
+          }),
+        );
+        return current ? tokens : yield* stored;
       });
 
       /**
@@ -370,15 +386,18 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
         );
 
       // Today every hob uses the user's own account; a hob's own identity (#221) would be chosen here.
-      const tokenFor = (_agentId: AgentId | null) =>
+      const tokenFor = (agentId: AgentId | null): Effect.Effect<Redacted.Redacted<string>, GitHubError> =>
         Effect.gen(function* () {
           if (config.environmentToken !== null) return config.environmentToken;
+          const started = yield* Ref.get(generation);
           const account = yield* accounts.get;
           if (account === null) return yield* disconnected;
-          return yield* (account.source === "app" ? appToken : localToken(account.source)).pipe(Effect.flatMap(issue));
+          const token = yield* account.source === "app" ? appToken : localToken(account.source);
+          // A token read across a disconnect or a new connection belongs to the old sign-in.
+          return (yield* issueIf(started, token)) ? token : yield* tokenFor(agentId);
         });
 
-      const refused = (_agentId: AgentId | null, token: Redacted.Redacted<string>) =>
+      const refused = (agentId: AgentId | null, token: Redacted.Redacted<string>) =>
         config.environmentToken !== null
           ? Effect.fail(
               new GitHubError({
@@ -387,6 +406,9 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
               }),
             )
           : Effect.gen(function* () {
+              const started = yield* Ref.get(generation);
+              // A token of a sign-in since replaced: the call is tried again with the current one.
+              if (!(yield* Ref.get(issued)).has(Redacted.value(token))) return yield* tokenFor(agentId);
               const account = yield* accounts.get;
               if (account === null) return yield* disconnected;
               // The hub cannot renew a sign-in it does not own; the user signs in again where they keep it.
@@ -396,16 +418,14 @@ export const GitHubAccountLive = (config: GitHubAppConfig) =>
                   message: `GitHub refused ${LOCAL_LABEL[account.source]}. Sign in again, or choose another sign-in in Settings › Charms.`,
                 });
               }
-              return yield* refreshing
-                .withPermits(1)(
-                  Effect.gen(function* () {
-                    const started = yield* Ref.get(generation);
-                    const current = yield* stored;
-                    if (Redacted.value(current.accessToken) !== Redacted.value(token)) return current.accessToken;
-                    return (yield* refresh(current, started)).accessToken;
-                  }),
-                )
-                .pipe(Effect.flatMap(issue));
+              const fresh = yield* refreshing.withPermits(1)(
+                Effect.gen(function* () {
+                  const current = yield* stored;
+                  if (Redacted.value(current.accessToken) !== Redacted.value(token)) return current.accessToken;
+                  return (yield* refresh(current, started)).accessToken;
+                }),
+              );
+              return (yield* issueIf(started, fresh)) ? fresh : yield* tokenFor(agentId);
             });
 
       const revoked = (token: Redacted.Redacted<string>) =>

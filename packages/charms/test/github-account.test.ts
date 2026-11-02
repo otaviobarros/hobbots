@@ -398,7 +398,7 @@ describe("The connected account's token", () => {
     const result = await connected(script, tokens("ghu_first"), (credential, keychain) =>
       Effect.gen(function* () {
         // GitHub refused the token: the hub refreshes once, and GitHub refuses that too.
-        const refused = yield* Effect.result(credential.refused(HOB, Redacted.make("ghu_first")));
+        const refused = yield* Effect.result(credential.refused(HOB, yield* credential.tokenFor(HOB)));
         return {
           refused,
           connected: yield* credential.connected,
@@ -664,5 +664,53 @@ describe("Edge cases of the hub's sign-in", () => {
     expect(result.state).toMatchObject({ _tag: "Disconnected" });
     expect(result.row).toBeNull();
     expect(script.asked.filter((asked) => asked.startsWith("poll"))).toEqual([]);
+  });
+  it("[TC-GEN-035] keeps no keychain read that finished after a disconnect and a new connection", async () => {
+    const script: Script = { polls: [{ _tag: "Granted", tokens: tokens("ghu_b") }], refreshes: [], asked: [] };
+    const item = (access: string) =>
+      Redacted.make(
+        Buffer.from(
+          JSON.stringify({
+            accessToken: access,
+            refreshToken: `ghr_${access}`,
+            expiresAt: 8 * HOUR,
+            refreshExpiresAt: null,
+          }),
+        ).toString("base64url"),
+      );
+    // After a restart, the hub holds account A's item and reads it slowly the first time.
+    const items = new Map([["item", item("ghu_a")]]);
+    let slowReads = 1;
+    const slow = Layer.succeed(
+      Keychain,
+      Keychain.of({
+        read: Effect.gen(function* () {
+          const found = Option.fromNullishOr(items.get("item"));
+          if (slowReads-- > 0) yield* Effect.sleep("8 seconds");
+          return found;
+        }),
+        write: (secret) => Effect.sync(() => void items.set("item", secret)),
+        remove: Effect.sync(() => void items.delete("item")),
+      }),
+    );
+    const result = await run(
+      Effect.gen(function* () {
+        const { row, layer } = yield* setup(script, { keychain: slow });
+        yield* Ref.set(row, { source: "app" as const, login: "account-a", connectedAt: "2026-11-01T00:00:00.000Z" });
+        return yield* Effect.gen(function* () {
+          const connection = yield* GitHubConnection;
+          const credential = yield* GitHubCredential;
+          const reading = yield* Effect.forkChild(credential.tokenFor(HOB));
+          yield* wait(1);
+          yield* connection.disconnect;
+          yield* connection.connect;
+          // B connects at its first poll, 5 seconds on; A's read finishes after that.
+          yield* wait(10);
+          const during = Redacted.value(yield* Fiber.join(reading));
+          return { during, after: Redacted.value(yield* credential.tokenFor(HOB)) };
+        }).pipe(Effect.provide(layer), Effect.scoped);
+      }),
+    );
+    expect(result).toEqual({ during: "ghu_b", after: "ghu_b" });
   });
 });
