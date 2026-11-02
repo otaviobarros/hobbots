@@ -368,6 +368,67 @@ describe("a Task's steps in fresh sessions", () => {
   });
 
   // covers OR-004, OR-005
+  it("[TC-OR-060] a step works from the whole result and artifacts of the step it comes after, not a summary", async () => {
+    const { run, control, stepsAsked } = setUp();
+    const thread = await run(seed);
+    // Longer than a summary, as an outline or a draft is: only its end says it arrived whole.
+    const outline = `${"Channel notes for the launch. ".repeat(100)}End of the outline.`;
+    const draft = `${"Draft line for the launch. ".repeat(100)}End of the draft.`;
+    const steps = [
+      {
+        brief: `Outline the channels\n${hub("complete_task", {
+          key: "outline",
+          summary: outline,
+          artifacts: [{ kind: "text", label: "Draft", value: draft }],
+        })}`,
+      },
+      { brief: "Write the copy", after: [1] },
+    ];
+    await run(send(thread.id, `Plan the spring launch\n${hub("plan_steps", { key: "plan", steps })}`));
+    await run(control.open("Outline the channels"));
+    await run(control.open("Write the copy"));
+    await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+
+    const second = stepsAsked()[1]?.prompt ?? "";
+    expect(second).toContain(`Step 1 returned: ${outline}`);
+    expect(second).toContain(`Draft (text): ${draft}`);
+
+    // The owner's briefing still keeps each result short, so its own context stays small.
+    await run(send(thread.id, "How did it go?"));
+    const told = control.requests.at(-1)?.briefing ?? "";
+    expect(told).toContain("Channel notes for the launch.");
+    expect(told).not.toContain("End of the outline.");
+    expect(told).not.toContain("End of the draft.");
+  });
+
+  // covers OR-004, OR-005
+  it("[TC-OR-061] a step is given at most 4,000 characters of each step it comes after, and 16,000 in all", async () => {
+    const { run, control, stepsAsked } = setUp({ limits: { maxRunningStepsPerHob: 5, maxRunningStepsPerTree: 5 } });
+    const thread = await run(seed);
+    // Five results, each longer than one step is given of it.
+    const result = (n: number) => `${`Result ${n} keeps going. `.repeat(250)}End of result ${n}.`;
+    const briefs = [1, 2, 3, 4, 5].map((n) => `Write part ${n}`);
+    const steps = [
+      ...briefs.map((brief, index) => ({
+        brief: `${brief}\n${hub("complete_task", { key: brief, summary: result(index + 1) })}`,
+      })),
+      { brief: "Join the parts", after: [1, 2, 3, 4, 5] },
+    ];
+    await run(send(thread.id, `Write the guide\n${hub("plan_steps", { key: "plan", steps })}`));
+    for (const brief of [...briefs, "Join the parts"]) await run(control.open(brief));
+    await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+
+    const joined = stepsAsked().find((request) => request.prompt.startsWith("Join the parts"))?.prompt ?? "";
+    expect(joined).toContain("Step 1 returned: Result 1 keeps going.");
+    expect(joined).not.toContain("End of result 1.");
+    expect(joined).toContain("…");
+    // The four results that fit are cut to 4,000 characters; the fifth is cut off by the total.
+    expect(joined).toContain("Step 4 returned:");
+    expect(joined).not.toContain("Step 5 returned:");
+    expect(joined.length).toBeLessThan(17_000);
+  });
+
+  // covers OR-004, OR-005
   it("[TC-OR-027] steps without an order run in parallel, up to the hob's limit", async () => {
     const { run, control } = setUp({ limits: { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3 } });
     const thread = await run(seed);
