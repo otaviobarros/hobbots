@@ -11,9 +11,9 @@ import {
 } from "@hobbots/domain";
 import { Backpack, type BackpackScope, type HeldClaim } from "@hobbots/inbox";
 import { DateTime, Duration, Effect, Layer } from "effect";
-import { SqlClient, type SqlError } from "effect/sql";
+import { SqlClient, SqlError } from "effect/sql";
 import { dispositionColumn, makeItemReads } from "./backpack-rows.ts";
-import { makeJournaledChange } from "./journal.ts";
+import { lockJournal, makeJournaledChange } from "./journal.ts";
 
 /**
  * Leases are timed by the database's clock, so every hub process that shares a database agrees on
@@ -206,6 +206,35 @@ export const BackpackLive = Layer.effect(
         }),
       );
 
+    const fenced: Backpack["Service"]["fenced"] = (itemId, held, effect, options = {}) =>
+      Effect.gen(function* () {
+        // The journal's head first, as every journaled change takes it, so this never waits on a
+        // renewal or an expiry that holds the head and waits on the item. Then the item's row:
+        // holding it keeps an expiry off until the transaction ends, so the claim checked is the
+        // claim the effect commits under.
+        yield* lockJournal(sql);
+        const live = yield* sql`UPDATE backpack_items SET claim_token = claim_token
+          WHERE id = ${itemId} AND claim_owner = ${held.owner} AND claim_token = ${held.token}
+            AND ${clock.leaseLive} AND state IN ('acknowledged', 'processing')
+          RETURNING id`;
+        if (live.length === 0) return yield* refuse(itemId, held, "process");
+        const value = yield* effect;
+        const settled =
+          options.consumes === undefined
+            ? null
+            : yield* guarded(itemId, held, "resolve", {
+                ends: true,
+                columns: { disposition: dispositionColumn({ _tag: "consumed", by: options.consumes }) },
+              });
+        return { value, settled };
+      }).pipe(
+        sql.withTransaction,
+        Effect.catchIf(
+          (error): error is SqlError.SqlError => SqlError.isSqlError(error),
+          (error) => Effect.die(error),
+        ),
+      );
+
     const scopeOf = (scope: BackpackScope) => {
       switch (scope._tag) {
         case "Hob":
@@ -229,6 +258,7 @@ export const BackpackLive = Layer.effect(
       resolve: (itemId, held, disposition) =>
         guarded(itemId, held, "resolve", { ends: true, columns: { disposition: dispositionColumn(disposition) } }),
       fail: (itemId, held, error) => guarded(itemId, held, "fail", { ends: true, columns: { error } }),
+      fenced,
       expireClaims,
       find: (itemId) =>
         reads.item(itemId).pipe(
