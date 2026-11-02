@@ -27,6 +27,8 @@ const requests = (h: Home): Record<PolicyOperation, PolicyRequest> => ({
   push: { _tag: "Push", remote: "origin", branch: "feature", force: false, toDefaultBranch: false },
   "use-web": { _tag: "Web", host: "registry.npmjs.org", addresses: [] },
   "read-github": { _tag: "GitHub", folder: h.project, repository: "otaviobarros/hobbots" },
+  "open-pull-request": { _tag: "PullRequest", folder: h.project, repository: "otaviobarros/hobbots", base: "main" },
+  "comment-github": { _tag: "GitHubComment", folder: h.project, repository: "otaviobarros/hobbots", number: 324 },
   "outside-folders": files("read-files", h.project, "../secret.txt"),
 });
 
@@ -40,6 +42,9 @@ const ADR_014: Record<PolicyOperation, readonly [PolicyDecision, PolicyDecision,
   push: ["ask", "ask", "allow"],
   "use-web": ["ask", "allow", "allow"],
   "read-github": ["allow", "allow", "allow"],
+  // ADR 020's rows for the GitHub Charm's writes.
+  "open-pull-request": ["ask", "ask", "allow"],
+  "comment-github": ["ask", "ask", "allow"],
   "outside-folders": ["deny", "deny", "deny"],
 };
 
