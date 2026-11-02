@@ -2,7 +2,7 @@ import { CharmCall, MessageId, ThreadId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { CharmCallNotFound, CharmCallSettled, ThreadNotFound } from "./errors.ts";
-import { UserSessionOnly } from "./user-session.ts";
+import { DeviceSession } from "./user-session.ts";
 
 /** How the user settles an uncertain Charm call from its step, after looking on GitHub (ADR 020). */
 export const SettleCharmCallPayload = Schema.Struct({ outcome: Schema.Literals(["applied", "not-sent"]) });
@@ -25,5 +25,5 @@ export class CharmCallsGroup extends HttpApiGroup.make("charmCalls")
       error: [CharmCallNotFound, CharmCallSettled],
     }),
   )
-  .middleware(UserSessionOnly)
+  .middleware(DeviceSession)
   .prefix("/api") {}

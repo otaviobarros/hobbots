@@ -1,5 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, signedOutClaudeCode, startHub } from "./hub.ts";
+import type { Page } from "@playwright/test";
+import { admit, emptyDataDir, expect, type Hub, removeDataDir, signedOutClaudeCode, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -64,6 +64,7 @@ test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home
   hub = await startHub(dataDir);
   // A new browser context has no stored draft or last route, only what the hub knows.
   const restarted = await browser.newPage();
+  await admit(restarted.context(), hub);
   await openApp(restarted, hub);
   await expect(restarted).toHaveURL(atHome);
   await expect(restarted.getByRole("link", { name: /^Open chat with Pip/ })).toBeVisible();

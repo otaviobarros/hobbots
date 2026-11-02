@@ -6,7 +6,8 @@
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "allow": "tsx src/allow.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -29,6 +30,7 @@
   "exports": {
     "./main": "./src/main.ts",
     "./installation": "./src/installation.ts",
-    "./network-settings": "./src/network-settings.ts"
+    "./network-settings": "./src/network-settings.ts",
+    "./window-key": "./src/window-key.ts"
   }
 }

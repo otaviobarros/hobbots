@@ -3,7 +3,6 @@ import { HobbotsApi } from "@hobbots/api";
 import { Effect, Layer } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { forExistingThread } from "./thread-exists.ts";
-import { UserSessionOnlyLive } from "./user-session.ts";
 
 // Tool calls waiting for the user's decision, and the decisions (PE-003), for user sessions only (PE-006).
 export const ApprovalsHandlers = HttpApiBuilder.group(HobbotsApi, "approvals", (handlers) =>
@@ -17,4 +16,4 @@ export const ApprovalsHandlers = HttpApiBuilder.group(HobbotsApi, "approvals", (
       decide: ({ params, payload }) => approvals.decide(params.approvalId, payload),
     });
   }),
-).pipe(Layer.provide(UserSessionOnlyLive));
+);

@@ -30,7 +30,8 @@ import githubCharm from "./0027_github_charm.ts";
 import charmCalls from "./0028_charm_calls.ts";
 import backpackBlockers from "./0029_backpack_blockers.ts";
 import memberApprovals from "./0030_member_approvals.ts";
-import taskNotes from "./0031_task_notes.ts";
+import devices from "./0031_devices.ts";
+import taskNotes from "./0032_task_notes.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -68,5 +69,6 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0028_charm_calls": charmCalls,
   "0029_backpack_blockers": backpackBlockers,
   "0030_member_approvals": memberApprovals,
-  "0031_task_notes": taskNotes,
+  "0031_devices": devices,
+  "0032_task_notes": taskNotes,
 };

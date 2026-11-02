@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { expect, test } from "@playwright/test";
-import { emptyDataDir, type Hub, removeDataDir, startHub } from "./hub.ts";
+
+import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -16,7 +16,7 @@ test.afterEach(async () => {
 const call = async <T>(method: string, path: string, body?: unknown): Promise<T> => {
   const response = await fetch(`${hub?.url}/api${path}`, {
     method,
-    headers: { "content-type": "application/json", origin: String(hub?.url) },
+    headers: { "content-type": "application/json", ...hub?.headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`${method} ${path}: ${response.status} ${await response.text()}`);
