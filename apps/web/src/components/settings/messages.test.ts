@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { versionLabel } from "./about.ts";
+import { versionLabel } from "./messages.ts";
 
 describe("versionLabel", () => {
   it("names a release and calls a checkout a development build", () => {
