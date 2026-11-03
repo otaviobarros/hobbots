@@ -281,7 +281,7 @@ describe("the connected desktop", () => {
   });
 
   // covers DP-001, DP-004
-  it("[TC-DP-161] the window's requests reach the hub's origins only while its address is the pinned node's", async () => {
+  it("[TC-DP-176] the window's requests reach the hub's origins only while its address is the pinned node's", async () => {
     const { nodes, lookup } = tailnet();
     let now = 0;
     // The window's session, as Electron's webRequest hands each request to the guard.
