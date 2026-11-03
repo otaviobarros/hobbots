@@ -273,6 +273,7 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       milestones: ReadonlyArray<string>,
       after: TaskId[],
       parentId: TaskId = campaign.id,
+      folders: ReadonlyArray<string> | null = null,
     ) =>
       Effect.gen(function* () {
         const task = yield* tasks
@@ -290,7 +291,7 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
               id: DelegationId.make(id(`d-${name}`)),
               brief,
               expectedOutput: null,
-              authority: { overrides: {}, folders: null },
+              authority: { overrides: {}, folders },
               timeoutMs: null,
             },
             milestones: milestones.map((title, index) => ({ id: MilestoneId.make(id(`${name}-${index}`)), title })),
@@ -325,10 +326,27 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
     }
     // The shop badge stops with Quill and Ada both at work, after both changed the badge.
     if (script === "shop-badge") {
-      const badge = yield* member("badge", cast.quill, "Make the shop badge\nA badge in the agreed colour.", [], []);
+      // Each member works only in the folders its lead gave it (#582): Quill the shop's web folder.
+      const badge = yield* member(
+        "badge",
+        cast.quill,
+        "Make the shop badge\nA badge in the agreed colour.",
+        [],
+        [],
+        campaign.id,
+        [`${SHOP}/web`],
+      );
       yield* changeInShop(AttemptId.make(id("a-badge")), "web/badge.png", "green", bus);
       yield* pause;
-      yield* member("review", cast.ada, "Review the shop\nCheck the shop's page before it goes out.", [], []);
+      yield* member(
+        "review",
+        cast.ada,
+        "Review the shop\nCheck the shop's page before it goes out.",
+        [],
+        [],
+        campaign.id,
+        [SHOP],
+      );
       yield* changeInShop(AttemptId.make(id("a-review")), "web/badge.png", "grey-again", bus);
       yield* pause;
       // Quill finishes with the badge left uncommitted, as the hub reads it from a repository (#586).

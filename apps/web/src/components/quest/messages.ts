@@ -75,6 +75,8 @@ export const messages = {
     from: ({ name }: { name: string }) => `${name} gave it`,
     brief: "Brief",
     expected: ({ text }: { text: string }) => `Expected: ${text}`,
+    folders: "Folders",
+    noFolders: "No folders: it can only chat.",
     milestones: "Milestones",
     checkpoints: "Checkpoints",
     noCheckpoints: "Nothing reported yet.",

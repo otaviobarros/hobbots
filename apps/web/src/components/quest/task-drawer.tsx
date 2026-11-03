@@ -136,6 +136,21 @@ function Detail({
           {detail.expected !== null && <span className="text-label">{copy.expected({ text: detail.expected })}</span>}
         </div>
       </Section>
+      {detail.folders !== null && (
+        <Section title={copy.folders}>
+          {detail.folders.length === 0 ? (
+            <p className="m-0 text-detail text-label">{copy.noFolders}</p>
+          ) : (
+            <ul aria-label={copy.folders} className="m-0 flex list-none flex-col gap-1 p-0 text-detail">
+              {detail.folders.map((folder) => (
+                <li key={folder} className="break-all font-mono text-xs">
+                  {folder}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
       {detail.milestones.length > 0 && (
         <Section title={copy.milestones}>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-detail">

@@ -14,6 +14,7 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { firstLine } from "../../lib/format.ts";
+import { memberFolders } from "./member-folders.ts";
 
 /**
  * How the chat shows a request's work (ADR 018, screen 17): the card under the request, the strip
@@ -256,6 +257,7 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
     brief: delegation?.brief ?? task.brief,
     expected: delegation?.expectedOutput ?? null,
     from: delegation?.leadId ?? null,
+    folders: memberFolders(tree, task),
     status: rowStatus(tree, task),
     milestones: tree.milestones.filter((each) => each.taskId === task.id).sort((a, b) => a.position - b.position),
     checkpoints: tree.checkpoints.filter((each) => checkpointOn(each, task.id)),

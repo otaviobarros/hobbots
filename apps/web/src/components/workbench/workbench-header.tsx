@@ -6,6 +6,7 @@ import { agentsQuery, runtimesQuery } from "../../api/queries.ts";
 import { RuntimeTile, useBrainLabel } from "../brain-picker.tsx";
 import { HobSprite } from "../hob-sprite.tsx";
 import { roomStatus, roomStatusLabel, roomTone } from "../quest/control-room.ts";
+import { folderName, memberFolders } from "../quest/member-folders.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
@@ -76,11 +77,22 @@ export function WorkbenchHeader({
         </span>
         {runtime !== null && <Brain runtime={runtime} model={model} />}
         {runtime !== null && <Where runtime={runtime} read={read} />}
+        <Folders folders={memberFolders(tree, task)} />
       </div>
       {attempts.length > 1 && attempt !== null && (
         <AttemptPicker attempts={attempts} chosen={attempt.id} onAttempt={onAttempt} />
       )}
     </header>
+  );
+}
+
+/** The folders a member works in, by name, each full path in the hint. Nothing for work no lead gave. */
+function Folders({ folders }: { folders: ReadonlyArray<string> | null }) {
+  if (folders === null) return null;
+  return (
+    <span title={folders.join("\n")} className="min-w-0 truncate">
+      {folders.length === 0 ? messages.noFolders : messages.worksIn({ names: folders.map(folderName) })}
+    </span>
   );
 }
 
