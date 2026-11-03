@@ -194,6 +194,10 @@ const start = async () => {
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.retry({ schedule: Schedule.spaced("20 millis"), times: 1500 }));
 
+/** Once `holds` is true, checked again on each retry. */
+const eventually = (holds: () => boolean) =>
+  retry(Effect.suspend(() => (holds() ? Effect.void : Effect.fail("not yet" as const))));
+
 const hubLine = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
 const send = (threadId: ThreadId, prompt: ReadonlyArray<string>) =>
@@ -251,13 +255,7 @@ describe("delegating between Codex and Claude hobs", () => {
     expect(pipTurn?.answers).toEqual([expect.objectContaining({ tool: "complete_task", success: true })]);
 
     // The result reached Aldric, on Claude Code.
-    await run(
-      retry(
-        claudeRequests.some((request) => request.prompt.includes("Pip checked the copy"))
-          ? Effect.void
-          : Effect.fail("not yet" as const),
-      ),
-    );
+    await run(eventually(() => claudeRequests.some((request) => request.prompt.includes("Pip checked the copy"))));
   });
 
   // covers OR-001, OR-002, RT-001, AG-005, ADR 024
@@ -293,12 +291,10 @@ describe("delegating between Codex and Claude hobs", () => {
     // Quill's result reached Pip in a later turn of the same Codex thread.
     const thread = delegated?.thread;
     await run(
-      retry(
+      eventually(() =>
         standInTurns(codexFolder).some(
           (turn) => turn.thread === thread && turn.input.includes("Quill drafted the copy"),
-        )
-          ? Effect.void
-          : Effect.fail("not yet" as const),
+        ),
       ),
     );
   });
