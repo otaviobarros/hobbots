@@ -81,6 +81,7 @@ export function NoteBox({
   nudges = [],
   nudgeKeys,
   hint,
+  label,
 }: {
   tree: TaskTree;
   task: Task;
@@ -91,8 +92,11 @@ export function NoteBox({
   nudgeKeys?: NudgeKeys | undefined;
   /** What the line under the box says while nothing was just sent. */
   hint?: string | undefined;
+  /** The box's name, when it must say more than who the note goes to. */
+  label?: string | undefined;
 }) {
   const lead = hobs(noteRecipient(tree, task));
+  const boxName = label ?? copy.noteLabel({ name: lead.name });
   const send = useLeaveNote(task.id);
   const [nudged, setNudged] = useState<string | null>(null);
   const text = draft.text.trim();
@@ -145,8 +149,8 @@ export function NoteBox({
       )}
       <span className="flex gap-2">
         <Textarea
-          aria-label={copy.noteLabel({ name: lead.name })}
-          placeholder={copy.noteLabel({ name: lead.name })}
+          aria-label={boxName}
+          placeholder={boxName}
           value={draft.text}
           onChange={(event) => {
             setNudged(null);
