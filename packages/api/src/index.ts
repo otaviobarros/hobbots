@@ -5,6 +5,7 @@ export * from "./charm-calls.ts";
 export * from "./connect.ts";
 export * from "./devices.ts";
 export * from "./errors.ts";
+export * from "./export.ts";
 export * from "./github.ts";
 export * from "./hob-github-app.ts";
 export * from "./permissions.ts";

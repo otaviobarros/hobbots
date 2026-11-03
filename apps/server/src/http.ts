@@ -23,6 +23,7 @@ import { BlockersHandlers } from "./blockers.ts";
 import { CharmCallsHandlers } from "./charm-calls.ts";
 import { DevicesHandlers } from "./device-handlers.ts";
 import { DeviceGate } from "./devices.ts";
+import { ExportsHandlers } from "./exports.ts";
 import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobGitHubAppHandlers } from "./hob-github-app.ts";
@@ -220,6 +221,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     HobGitHubAppHandlers,
     WorkbenchHandlers,
     RemoteAccessHandlers,
+    ExportsHandlers,
     UsageHandlers,
   ]),
   Layer.provide(DeviceSessionLive),
