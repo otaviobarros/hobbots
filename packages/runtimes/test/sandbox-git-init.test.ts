@@ -1,5 +1,14 @@
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -297,7 +306,7 @@ describe("a repository a hob deletes", () => {
         expect(committed.ok, committed.stderr).toBe(true);
       });
       const hook = join(project, ".git", "hooks", "pre-commit");
-      execFileSync("sh", ["-c", `echo 'echo earlier' > ${hook}`]);
+      writeFileSync(hook, "echo earlier\n");
       await inTurn(project, async (prepared) => {
         // A hook that exists stays read-only, as before.
         const edited = await runIn(prepared, project, "echo 'echo hob' >> .git/hooks/pre-commit");
