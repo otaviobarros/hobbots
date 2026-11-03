@@ -130,15 +130,17 @@ describe("Stopping a reply", () => {
         // The thread and hob take the next message as usual: it starts right away, or just after
         // the stopped turn has left the thread.
         yield* chat.sendPrompt(thread.id, "again");
-        const next = yield* HobbotsRepository.use((repo) => repo.listMessages(thread.id)).pipe(
-          Effect.flatMap((messages) => {
-            const last = messages.at(-1);
-            return last?.role === "assistant" && last.status === "streaming"
-              ? Effect.succeed(last)
-              : Effect.fail("not yet" as const);
-          }),
-          Effect.retry(Schedule.spaced("5 millis")),
-        );
+        // Waits for the next reply's event, not its row: the row is written before the event is
+        // published, so reading the row could end the test before the event arrives.
+        const next = yield* Effect.suspend(() => {
+          const upserted = events.find(
+            (e) =>
+              e._tag === "MessageUpserted" && e.message.role === "assistant" && e.message.id !== assistantMessage.id,
+          );
+          return upserted?._tag === "MessageUpserted"
+            ? Effect.succeed(upserted.message)
+            : Effect.fail("not yet" as const);
+        }).pipe(Effect.retry(Schedule.spaced("5 millis")));
         return { requested, busyWhileStopping, stopped, events: stopEvents(events), next, threadId: thread.id };
       }),
     );
