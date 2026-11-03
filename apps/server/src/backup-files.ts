@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream, type Dirent } from "node:fs";
-import { chmod, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -73,7 +73,7 @@ export const restoreMarkerFile = (dataDir: string) => join(dataDir, "restore.jso
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** `2026-11-03 14.05.09`: readable, sorts by time, and valid in a file name on every system. */
-const fileStamp = (at: Date) =>
+export const fileStamp = (at: Date) =>
   `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}.${pad(at.getMinutes())}.${pad(at.getSeconds())}`;
 
 export const backupFolderName = (at: Date) => `Hobbots backup ${fileStamp(at)}.hobbots-backup`;
@@ -256,6 +256,26 @@ const exists = (path: string) =>
   );
 
 /**
+ * Undoes a restore that failed: removes each hub entry the restore wrote, never one of the entries
+ * that were there and not yet moved, moves the moved ones back, and removes the set-aside folder
+ * once it is empty again.
+ */
+const putBack = async (
+  dataDir: string,
+  setAside: string,
+  originals: ReadonlyArray<string>,
+  moved: ReadonlyArray<string>,
+  madeSetAside: boolean,
+) => {
+  for (const entry of HUB_ENTRIES) {
+    if (originals.includes(entry) && !moved.includes(entry)) continue;
+    await rm(join(dataDir, entry), { recursive: true, force: true });
+  }
+  for (const entry of moved) await rename(join(setAside, entry), join(dataDir, entry)).catch(() => undefined);
+  if (madeSetAside) await rmdir(setAside).catch(() => undefined);
+};
+
+/**
  * Restores a checked backup into `dataDir`, with no hub running there (ADR 026): moves the hub's own
  * entries aside into `<dataDir>.before-restore-<date>`, copies the backup in owner-only, writes a new
  * installation ID and the marker the next start applies. A failure puts everything back as it was.
@@ -268,12 +288,20 @@ export const restoreInto = async (
   at: Date,
 ): Promise<string | null> => {
   const setAside = `${dataDir}.before-restore-${fileStamp(at).replace(" ", "-")}`;
-  const moved: Array<string> = [];
   await mkdir(dataDir, { recursive: true, mode: 0o700 });
+  // The hub's entries as they were: a failure puts back exactly these and removes only what the
+  // restore itself wrote.
+  const originals: Array<string> = [];
+  for (const entry of HUB_ENTRIES) if (await exists(join(dataDir, entry))) originals.push(entry);
+  const moved: Array<string> = [];
+  let madeSetAside = false;
   try {
-    for (const entry of HUB_ENTRIES) {
-      if (!(await exists(join(dataDir, entry)))) continue;
-      await mkdir(setAside, { recursive: true, mode: 0o700 });
+    if (originals.length > 0) {
+      // Never into a folder that is already there, which a failure would then remove.
+      await mkdir(setAside, { mode: 0o700 });
+      madeSetAside = true;
+    }
+    for (const entry of originals) {
       await rename(join(dataDir, entry), join(setAside, entry));
       moved.push(entry);
     }
@@ -301,14 +329,7 @@ export const restoreInto = async (
     await chmod(dataDir, 0o700);
     return marker.setAside;
   } catch (error) {
-    for (const entry of HUB_ENTRIES) {
-      if (!moved.includes(entry)) await rm(join(dataDir, entry), { recursive: true, force: true });
-    }
-    for (const entry of moved) {
-      await rm(join(dataDir, entry), { recursive: true, force: true });
-      await rename(join(setAside, entry), join(dataDir, entry));
-    }
-    if (moved.length > 0) await rm(setAside, { recursive: true, force: true });
+    await putBack(dataDir, setAside, originals, moved, madeSetAside);
     throw error;
   }
 };

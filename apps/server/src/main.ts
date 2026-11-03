@@ -70,7 +70,7 @@ import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/wor
 import { Deferred, Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
-import { BackupHolds, HeldRuntimes } from "./backup-holds.ts";
+import { BackupHolds, HeldActivityStore, HeldRuntimes } from "./backup-holds.ts";
 import { HubBackups } from "./backups.ts";
 import { BlockOnRetirement } from "./blockers.ts";
 import { ServerConfig } from "./config.ts";
@@ -302,7 +302,15 @@ const ServerLive = Layer.unwrap(
                 ),
               ),
             ),
-          ).pipe(Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity"))))),
+          ).pipe(
+            Layer.provideMerge(
+              Layer.merge(
+                FolderScannerLive,
+                // Nothing is deleted from it while a backup holds cleanup (ADR 026).
+                HeldActivityStore.pipe(Layer.provide(ActivityStoreLive(join(dataDir, "activity")))),
+              ),
+            ),
+          ),
         ),
       )
       // One dispatcher for the whole hub, so the claims it expires at start are an earlier process's.

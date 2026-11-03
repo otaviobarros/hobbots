@@ -29,21 +29,46 @@ export interface BackupCounts {
   readonly tasks: number;
 }
 
-export const backupCounts: Effect.Effect<BackupCounts, SqlError.SqlError, SqlClient.SqlClient> = Effect.gen(
-  function* () {
+/**
+ * Which tables and columns a backup's copy of the database has. A copy made before a migration on
+ * update can be from any older schema, so a backup reads only what that schema holds.
+ */
+interface CopySchema {
+  readonly has: (table: string, column?: string) => boolean;
+}
+
+/** Every schema since migration 0038 has every table and column a backup reads. */
+const CURRENT: CopySchema = { has: () => true };
+
+/** The tables and columns of the SQLite database open on the client. */
+const sqliteSchema: Effect.Effect<CopySchema, SqlError.SqlError, SqlClient.SqlClient> = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const rows = yield* sql<{ readonly tableName: string; readonly columnName: string }>`
+    SELECT m.name AS table_name, c.name AS column_name
+    FROM sqlite_master m, pragma_table_info(m.name) c
+    WHERE m.type = 'table'
+  `;
+  const tables = new Set(rows.map((row) => row.tableName));
+  const columns = new Set(rows.map((row) => `${row.tableName}.${row.columnName}`));
+  return { has: (table, column) => (column === undefined ? tables.has(table) : columns.has(`${table}.${column}`)) };
+});
+
+const backupCounts = (schema: CopySchema): Effect.Effect<BackupCounts, SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const count = (table: string) =>
-      sql<{ readonly n: unknown }>`SELECT COUNT(*) AS n FROM ${sql(table)}`.pipe(
-        Effect.map((rows) => Number(rows[0]?.n ?? 0)),
-      );
+      schema.has(table)
+        ? sql<{ readonly n: unknown }>`SELECT COUNT(*) AS n FROM ${sql(table)}`.pipe(
+            Effect.map((rows) => Number(rows[0]?.n ?? 0)),
+          )
+        : Effect.succeed(0);
     return {
       hobs: yield* count("agents"),
       threads: yield* count("threads"),
       quests: yield* count("quests"),
       tasks: yield* count("tasks"),
     };
-  },
-);
+  });
 
 /** A hob's own folders, as a backup's manifest lists them, so a restore can say which are missing. */
 export interface HobFolders {
@@ -56,15 +81,21 @@ const FolderList = Schema.fromJsonString(Schema.Array(Schema.String));
 const decodeFolders = Schema.decodeUnknownSync(FolderList);
 
 /** Each hob's own folders, and the folders every hob shares under the name `Shared folders`. */
-export const hobFolders: Effect.Effect<ReadonlyArray<HobFolders>, SqlError.SqlError, SqlClient.SqlClient> = Effect.gen(
-  function* () {
+const hobFolders = (
+  schema: CopySchema,
+): Effect.Effect<ReadonlyArray<HobFolders>, SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    const hobs = yield* sql<{
-      readonly id: string;
-      readonly name: string;
-      readonly ownFolders: unknown;
-    }>`SELECT id, name, own_folders FROM agents ORDER BY id`;
-    const shared = yield* sql<{ readonly approvedFolders: unknown }>`SELECT approved_folders FROM installation_setup`;
+    const hobs = schema.has("agents", "own_folders")
+      ? yield* sql<{
+          readonly id: string;
+          readonly name: string;
+          readonly ownFolders: unknown;
+        }>`SELECT id, name, own_folders FROM agents ORDER BY id`
+      : [];
+    const shared = schema.has("installation_setup", "approved_folders")
+      ? yield* sql<{ readonly approvedFolders: unknown }>`SELECT approved_folders FROM installation_setup`
+      : [];
     const sharedFolders = shared[0] === undefined ? [] : decodeFolders(String(shared[0].approvedFolders));
     return [
       ...(sharedFolders.length === 0 ? [] : [{ agentId: "", name: "Shared folders", folders: sharedFolders }]),
@@ -72,19 +103,22 @@ export const hobFolders: Effect.Effect<ReadonlyArray<HobFolders>, SqlError.SqlEr
         .map((hob) => ({ agentId: hob.id, name: hob.name, folders: decodeFolders(String(hob.ownFolders)) }))
         .filter((hob) => hob.folders.length > 0),
     ];
-  },
-);
+  });
 
 /**
  * Takes every device secret out of a backup's copy of the database (ADR 026): blanks each device's
  * token hash and deletes every pairing request with its secret hash. Runs on the copy, never on the
  * hub's own database.
  */
-export const scrubBackupCopy: Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  yield* sql`UPDATE devices SET token_hash = NULL`;
-  yield* sql`DELETE FROM pairing_requests`;
-});
+const scrub = (schema: CopySchema): Effect.Effect<void, SqlError.SqlError, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    // Devices and pairing arrived with migration 0031: an older copy holds no device secret.
+    if (schema.has("devices", "token_hash")) yield* sql`UPDATE devices SET token_hash = NULL`;
+    if (schema.has("pairing_requests")) yield* sql`DELETE FROM pairing_requests`;
+  });
+
+export const scrubBackupCopy = scrub(CURRENT);
 
 /** Whether SQLite finds the database file sound, as `PRAGMA integrity_check` reports it. */
 const integrityOk: Effect.Effect<boolean, SqlError.SqlError, SqlClient.SqlClient> = Effect.gen(function* () {
@@ -136,14 +170,15 @@ export const finishBackupCopy = (filename: string) =>
     filename,
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* scrubBackupCopy;
+      const schema = yield* sqliteSchema;
+      yield* scrub(schema);
       yield* sql`PRAGMA journal_mode = DELETE`;
       yield* sql`VACUUM`;
       if (!(yield* integrityOk)) return yield* new BackupCopyDamaged();
       return {
         schemaVersion: yield* schemaVersion,
-        counts: yield* backupCounts,
-        hobFolders: yield* hobFolders,
+        counts: yield* backupCounts(schema),
+        hobFolders: yield* hobFolders(schema),
       } satisfies FinishedCopy;
     }),
   );

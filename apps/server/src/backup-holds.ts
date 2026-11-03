@@ -1,12 +1,19 @@
-import { AdditionalRuntimes, type PromptRequest, RuntimeAdapter, type RuntimeAdapterShape } from "@hobbots/agents";
+import {
+  ActivityStore,
+  AdditionalRuntimes,
+  type PromptRequest,
+  RuntimeAdapter,
+  type RuntimeAdapterShape,
+} from "@hobbots/agents";
 import { Context, Effect, Latch, Layer, Option, type Scope, Semaphore, Stream, SubscriptionRef } from "effect";
 
 /**
  * The two holds a backup places while it runs (ADR 026). They live in this process's memory only, so
  * a hub that stops during a backup releases them.
  *
- * - The **cleanup hold**: the jobs that delete files do not run while it stands. New files can
- *   still be written.
+ * - The **cleanup hold**: no Workbench content is deleted while it stands, by the hourly cleanup or
+ *   by a turn that replaced it, and placing it waits for a deletion already under way. What would
+ *   have been deleted stays until a later cleanup finds it unnamed. New files can still be written.
  * - The **workspace hold**: no turn that can write to the default workspace starts, and the backup
  *   waits for those already running to end. A turn of a hob with folders of its own goes on.
  */
@@ -14,8 +21,10 @@ export class BackupHolds extends Context.Service<
   BackupHolds,
   {
     readonly cleanupHeld: Effect.Effect<boolean>;
-    /** Holds cleanup until the scope closes. */
+    /** Holds cleanup until the scope closes, once every deletion already under way has ended. */
     readonly holdCleanup: Effect.Effect<void, never, Scope.Scope>;
+    /** Runs a deletion unless cleanup is held, when it does nothing. */
+    readonly unlessCleanupHeld: (deletion: Effect.Effect<void>) => Effect.Effect<void>;
     /**
      * Stops new workspace turns until the scope closes, then waits for the running ones to end,
      * reporting how many still run each time that changes.
@@ -31,6 +40,9 @@ export class BackupHolds extends Context.Service<
     BackupHolds,
     Effect.gen(function* () {
       const cleanup = yield* SubscriptionRef.make(0);
+      const deleting = yield* SubscriptionRef.make(0);
+      // Starting a deletion and placing the cleanup hold take turns, so none starts after it unseen.
+      const cleanupGate = yield* Semaphore.make(1);
       // Open while no backup holds the workspace.
       const open = yield* Latch.make(true);
       const running = yield* SubscriptionRef.make(0);
@@ -56,10 +68,31 @@ export class BackupHolds extends Context.Service<
 
       return BackupHolds.of({
         cleanupHeld: Effect.map(SubscriptionRef.get(cleanup), (n) => n > 0),
-        holdCleanup: Effect.acquireRelease(
-          SubscriptionRef.update(cleanup, (n) => n + 1),
-          () => SubscriptionRef.update(cleanup, (n) => n - 1),
-        ),
+        holdCleanup: Effect.gen(function* () {
+          yield* Effect.acquireRelease(
+            Semaphore.withPermit(
+              cleanupGate,
+              SubscriptionRef.update(cleanup, (n) => n + 1),
+            ),
+            () => SubscriptionRef.update(cleanup, (n) => n - 1),
+          );
+          yield* SubscriptionRef.changes(deleting).pipe(
+            Stream.takeUntil((n) => n <= 0),
+            Stream.runDrain,
+          );
+        }),
+        unlessCleanupHeld: (deletion) =>
+          Effect.gen(function* () {
+            const allowed = yield* Semaphore.withPermit(
+              cleanupGate,
+              Effect.gen(function* () {
+                if ((yield* SubscriptionRef.get(cleanup)) > 0) return false;
+                yield* SubscriptionRef.update(deleting, (n) => n + 1);
+                return true;
+              }),
+            );
+            if (allowed) yield* deletion.pipe(Effect.ensuring(SubscriptionRef.update(deleting, (n) => n - 1)));
+          }),
         holdWorkspace: (waiting) =>
           Effect.gen(function* () {
             yield* Effect.acquireRelease(
@@ -116,5 +149,18 @@ export const HeldRuntimes = Layer.effectContext(
     if (Option.isNone(others)) return claude;
     const held = new Map([...others.value].map(([kind, adapter]) => [kind, heldAdapter(holds, adapter)] as const));
     return Context.add(claude, AdditionalRuntimes, held);
+  }),
+);
+
+/**
+ * The hub's store of Workbench contents with every deletion under the cleanup hold (ADR 026): a
+ * backup's copy of the database names contents that must still be there when it copies them.
+ */
+export const HeldActivityStore = Layer.effect(
+  ActivityStore,
+  Effect.gen(function* () {
+    const holds = yield* BackupHolds;
+    const store = yield* ActivityStore;
+    return ActivityStore.of({ ...store, remove: (ids) => holds.unlessCleanupHeld(store.remove(ids)) });
   }),
 );

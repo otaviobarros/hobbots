@@ -2,6 +2,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  ActivityStore,
   DeviceRepository,
   HobbotsRepository,
   type NewAttempt,
@@ -14,6 +15,7 @@ import {
   AgentId,
   ArtifactId,
   AttemptId,
+  ContentId,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
   Message,
@@ -37,8 +39,8 @@ import {
 import { Effect, Exit, Fiber, Latch, Layer, Option, Ref, Stream } from "effect";
 import { SqlClient } from "effect/sql";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { listFiles, readBackup, restoreMarkerFile } from "../src/backup-files.ts";
-import { BackupHolds } from "../src/backup-holds.ts";
+import { fileStamp, listFiles, readBackup, restoreInto, restoreMarkerFile } from "../src/backup-files.ts";
+import { BackupHolds, HeldActivityStore } from "../src/backup-holds.ts";
 import { HubBackups, writeBackup } from "../src/backups.ts";
 import { checkDestination } from "../src/destination.ts";
 import { Installation } from "../src/installation.ts";
@@ -456,14 +458,53 @@ describe("backup and restore", () => {
   });
 
   // covers OP-003
-  it("[TC-OP-028] holds cleanup for as long as a backup runs", async () => {
+  it("[TC-OP-028] deletes no Workbench content while a backup holds cleanup, and waits for a deletion under way", async () => {
     const result = await Effect.gen(function* () {
-      const holds = yield* BackupHolds;
-      const before = yield* holds.cleanupHeld;
-      const during = yield* Effect.scoped(Effect.andThen(holds.holdCleanup, holds.cleanupHeld));
-      return { before, during, after: yield* holds.cleanupHeld };
-    }).pipe(Effect.provide(BackupHolds.layer), Effect.runPromise);
-    expect(result).toEqual({ before: false, during: true, after: false });
+      const removed = yield* Ref.make<ReadonlyArray<string>>([]);
+      const log = yield* Ref.make<ReadonlyArray<string>>([]);
+      const note = (line: string) => Ref.update(log, (lines) => [...lines, line]);
+      const finishDeleting = yield* Latch.make(false);
+      // The hub's store, whose first deletion takes a while, as a slow disk would.
+      const Store = Layer.succeed(
+        ActivityStore,
+        ActivityStore.of({
+          put: () => Effect.die("unused"),
+          has: () => Effect.succeed(true),
+          get: () => Effect.succeed(Option.none()),
+          list: Effect.succeed([]),
+          remove: (ids) =>
+            Effect.gen(function* () {
+              if (ids.includes(ContentId.make(`${"a".repeat(64)}`))) yield* finishDeleting.await;
+              yield* Ref.update(removed, (all) => [...all, ...ids]);
+              yield* note(`deleted ${ids.length}`);
+            }),
+        }),
+      );
+      return yield* Effect.gen(function* () {
+        const holds = yield* BackupHolds;
+        const store = yield* ActivityStore;
+        const slow = yield* store.remove([ContentId.make("a".repeat(64))]).pipe(Effect.forkChild);
+        yield* Effect.yieldNow;
+        const backup = yield* Effect.scoped(
+          Effect.gen(function* () {
+            yield* holds.holdCleanup;
+            yield* note("cleanup held");
+            // A turn that replaced a content, and the hourly cleanup, delete nothing now.
+            yield* store.remove([ContentId.make("b".repeat(64))]);
+            yield* note("copied the Workbench");
+          }),
+        ).pipe(Effect.forkChild);
+        yield* Effect.sleep("20 millis");
+        yield* finishDeleting.open;
+        yield* Fiber.join(slow);
+        yield* Fiber.join(backup);
+        yield* store.remove([ContentId.make("c".repeat(64))]);
+        return { log: yield* Ref.get(log), removed: yield* Ref.get(removed), held: yield* holds.cleanupHeld };
+      }).pipe(Effect.provide(HeldActivityStore.pipe(Layer.provide(Store), Layer.provideMerge(BackupHolds.layer))));
+    }).pipe(Effect.runPromise);
+    expect(result.log).toEqual(["deleted 1", "cleanup held", "copied the Workbench", "deleted 1"]);
+    expect(result.removed).toEqual(["a".repeat(64), "c".repeat(64)]);
+    expect(result.held).toBe(false);
   });
 
   // covers OP-003
@@ -501,5 +542,55 @@ describe("backup and restore", () => {
     // Once migrated, the next start makes none.
     await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dataDir))));
     expect(await Effect.runPromise(backupBeforeMigrations(dataDir, "0.15.0"))).toBeNull();
+  });
+
+  // covers OP-003
+  it("[TC-OP-033] keeps the hub's own data when a restore fails while setting it aside or copying in", async () => {
+    await onHub(dataDir, seed);
+    await seedFiles(dataDir);
+    const folder = join(destination, "six.hobbots-backup");
+    await backUp(dataDir, folder);
+    const manifest = await readBackup(folder, 38);
+    const snapshot = async () => {
+      const files = await listFiles(dataDir);
+      return Object.fromEntries(
+        await Promise.all(files.map(async (file) => [file, (await readFile(join(dataDir, file))).toString("base64")])),
+      );
+    };
+    const before = await snapshot();
+
+    // The folder beside it is already there, so nothing can be set aside: nothing changes.
+    const at = new Date("2026-11-03T12:00:00.000Z");
+    const aside = `${dataDir}.before-restore-${fileStamp(at).replace(" ", "-")}`;
+    await mkdir(aside);
+    await writeFile(join(aside, "someone-elses.txt"), "keep me");
+    await expect(restoreInto(dataDir, folder, manifest, at)).rejects.toThrow();
+    expect(await snapshot()).toEqual(before);
+    expect(await readdir(aside)).toEqual(["someone-elses.txt"]);
+
+    // A file of the backup goes missing after it was checked: what was copied in is removed and the
+    // hub's own data is moved back.
+    await rm(join(folder, "tool-logs", "a1.log"));
+    const later = new Date("2026-11-03T12:00:05.000Z");
+    await expect(restoreInto(dataDir, folder, manifest, later)).rejects.toThrow();
+    expect(await snapshot()).toEqual(before);
+    await expect(lstat(`${dataDir}.before-restore-${fileStamp(later).replace(" ", "-")}`)).rejects.toThrow();
+  });
+
+  // covers OP-003
+  it("[TC-OP-037] backs up an older data folder before migrating it, from any earlier schema", async () => {
+    for (const before of ["0005", "0030"]) {
+      const dir = join(root, `schema-${before}`);
+      await mkdir(dir);
+      const older = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < before)) as typeof migrations;
+      await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dir), older)));
+      const made = await Effect.runPromise(backupBeforeMigrations(dir, "0.15.0"));
+      expect(made).not.toBeNull();
+      const manifest = await readBackup(made as string, 38);
+      expect(manifest.schemaVersion).toBe(Number(before) - 1);
+      expect(manifest.counts).toEqual({ hobs: 0, threads: 0, quests: 0, tasks: 0 });
+      // The next start migrates it.
+      await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dir))));
+    }
   });
 });
