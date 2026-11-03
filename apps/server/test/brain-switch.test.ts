@@ -15,7 +15,15 @@ import {
   RuntimeError,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { type Agent, isInProgress, type Message, type RuntimeKind, roleFields, type Thread } from "@hobbots/domain";
+import {
+  type Agent,
+  isInProgress,
+  type Message,
+  type RuntimeKind,
+  RuntimeModels,
+  roleFields,
+  type Thread,
+} from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
@@ -28,7 +36,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FAKE_DIRECTIVES, makeFakeRuntime } from "@hobbots/runtimes";
-import { Layer, Stream } from "effect";
+import { Effect, Layer, Stream } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -90,8 +98,17 @@ const recorded = (runtime: RuntimeKind, fake: RuntimeAdapterShape): RuntimeAdapt
   },
 });
 
-/** A hub whose fake runtimes answer for Claude Code and, unless left out, for Codex. */
-const start = (options: { readonly codex?: boolean } = {}) => {
+const fakeCodex = (noModels: boolean): RuntimeAdapterShape => {
+  const fake = makeFakeRuntime({ runtime: "codex" });
+  if (!noModels) return fake;
+  return { ...fake, models: Effect.succeed(new RuntimeModels({ runtime: "codex", source: "fallback", models: [] })) };
+};
+
+/**
+ * A hub whose fake runtimes answer for Claude Code and, unless left out, for Codex. A Codex that
+ * offers no models is one this build cannot yet run turns with.
+ */
+const start = (options: { readonly codex?: boolean | "noModels" } = {}) => {
   asked = { "claude-code": [], codex: [] };
   claudeDown = false;
   claudeWorks = false;
@@ -101,7 +118,7 @@ const start = (options: { readonly codex?: boolean } = {}) => {
       ? Layer.empty
       : Layer.succeed(
           AdditionalRuntimes,
-          new Map([["codex", recorded("codex", makeFakeRuntime({ runtime: "codex" }))]]),
+          new Map([["codex", recorded("codex", fakeCodex(options.codex === "noModels"))]]),
         ),
   );
   const App = HobLifecycle.layer
@@ -329,5 +346,18 @@ describe("switching a thread's brain", () => {
     await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "finish" });
     const retired = await switchTo(id, { runtime: "claude-code", model: "fake-quick", effort: null });
     expect(retired).toMatchObject({ status: 409, body: { _tag: "HobUnavailable" } });
+  });
+
+  // covers RT-001, AG-005
+  it("[TC-CH-202] refuses a runtime that offers no models, as Codex does until its turns run", async () => {
+    start({ codex: "noModels" });
+    const agent = await summon();
+    const { id } = await newThread(agent);
+    const picked = await switchTo(id, { runtime: "codex", model: null, effort: null }, true);
+    expect(picked).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "runtime" } });
+    expect((await thread(agent, id)).brain).toBeNull();
+    expect((await request("POST", "/api/agents", { ...hob, runtime: "codex", model: null, effort: null })).status).toBe(
+      400,
+    );
   });
 });

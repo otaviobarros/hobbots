@@ -18,6 +18,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
+import { expiringCache, isAtLeast, modelListMaxAge } from "../src/binary.ts";
 import {
   APPROVAL_NOTE,
   baseOptions,
@@ -26,12 +27,9 @@ import {
   type ClaudeCodeConfig,
   claudeCandidates,
   exited,
-  expiringCache,
   fallbackModels,
   findClaudeCode,
-  isAtLeast,
   makeClaudeCode as makeAdapter,
-  modelListMaxAge,
   parseVersion,
   planFromReport,
   runtimePath,
