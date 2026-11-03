@@ -44,7 +44,7 @@ test("[TC-UX-085] a question waiting for you is answered in the Task drawer, goe
     "You answered: Yes, Dec 12 for international orders.",
   );
 
-  // Ada's next turn carries the answer: her part finishes and the Quest wraps up.
+  // Once the question is answered, her part finishes and the Quest wraps up.
   const card = page.getByRole("region", { name: "Aldric's work on Plan the Black Friday campaign" });
   await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
 
