@@ -422,7 +422,9 @@ test("[TC-PE-043] where the sandbox cannot start, the profile and provider healt
 
   // Settings shows the same declaration under the provider.
   await page.goto(`${current.url}/#/settings`);
-  const provider = page.getByRole("list", { name: "Enforcement on this hub" });
+  const provider = page
+    .getByRole("region", { name: "Claude Code" })
+    .getByRole("list", { name: "Enforcement on this hub" });
   await expect(provider.getByRole("listitem").filter({ hasText: "Process sandbox" })).toContainText("Unsupported");
 });
 
