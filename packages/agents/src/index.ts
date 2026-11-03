@@ -19,6 +19,7 @@ export * from "./questions.ts";
 export * from "./repository.ts";
 export * from "./runtime.ts";
 export * from "./secrets.ts";
+export * from "./task-files.ts";
 export * from "./task-turns.ts";
 export * from "./tasks.ts";
 export * from "./tool-output.ts";
