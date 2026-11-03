@@ -107,7 +107,9 @@ export const makeCodex = (config: CodexConfig) =>
       // Each sign-in and refresh asks the hub's own App Server, which refreshes the user's login (ADR 024).
       signIn: (binary: string) =>
         askAppServer(binary, chatGptTokens).pipe(
-          Effect.mapError((error) => new RuntimeError({ message: error instanceof Error ? error.message : notStarted })),
+          Effect.mapError(
+            (error) => new RuntimeError({ message: error instanceof Error ? error.message : notStarted }),
+          ),
         ),
       clientVersion: config.clientVersion,
       workspaceDir: config.workspaceDir,

@@ -184,14 +184,15 @@ describe("the App Server client", () => {
 
 // covers AG-005, RT-001
 describe("Codex's provider health", () => {
-  it("[TC-RT-001] reports a ChatGPT sign-in as unverified until Codex turns run, read without a token or a refresh", async () => {
+  // TC-RT-001 is retired: Codex turns run now (#438), so a ChatGPT sign-in is ready (TC-RT-034).
+  it("[TC-RT-034] reports a ChatGPT sign-in as ready, read without a token or a refresh", async () => {
     const { dir, adapter } = codexWith({
       account: { type: "chatgpt", email: "me@example.com", planType: "pro", workspaceName: null },
     });
     const health = await Effect.runPromise((await adapter).health);
     expect(health).toMatchObject({
       runtime: "codex",
-      availability: "unverified",
+      availability: "ready",
       billing: "subscription (pro)",
       version: "0.166.0",
       detail: "me@example.com",
@@ -274,14 +275,16 @@ describe("Codex's models for the brain picker", () => {
     expect(fakeCodexLog(dir).filter((message) => message.method === "model/list")).toHaveLength(2);
   });
 
-  it("[TC-RT-016] offers no models to pick while Codex turns do not run, even signed in", async () => {
+  // TC-RT-016 is retired: Codex turns run now (#438), so a signed-in Codex offers its models (TC-RT-035).
+  it("[TC-RT-035] offers a signed-in Codex's models to pick", async () => {
     const { dir, adapter } = codexWith({
       account: { type: "chatgpt", email: null, planType: "plus", workspaceName: null },
       pages: [[{ model: "gpt-6", supportedReasoningEfforts: efforts("low") }]],
     });
     const models = await Effect.runPromise((await adapter).models);
-    expect(models).toMatchObject({ runtime: "codex", source: "fallback", models: [] });
-    expect(fakeCodexLog(dir).some((message) => message.method === "model/list")).toBe(false);
+    expect(models).toMatchObject({ runtime: "codex", source: "runtime" });
+    expect(models.models.map((entry) => entry.id)).toEqual(["gpt-6"]);
+    expect(fakeCodexLog(dir).some((message) => message.method === "model/list")).toBe(true);
   });
 
   it("[TC-RT-009] offers no models while Codex is missing or outdated", async () => {

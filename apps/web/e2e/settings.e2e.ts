@@ -100,7 +100,8 @@ test("[TC-UX-024] a signed-out runtime shows how to fix it in Settings › AI pr
 });
 
 // covers AG-005, RT-001
-test("[TC-RT-012] Settings › AI providers shows a signed-in Codex, and each state that stops it with its fix", async ({
+// TC-RT-012 is retired: a signed-in Codex is ready now that its turns run (#438), checked by TC-RT-036.
+test("[TC-RT-036] Settings › AI providers shows a ready, signed-in Codex, and each state that stops it with its fix", async ({
   page,
 }) => {
   await openSettings(page, { HOBBOTS_RUNTIME: "claude", HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir) });
@@ -127,10 +128,9 @@ test("[TC-RT-012] Settings › AI providers shows a signed-in Codex, and each st
   await checkAgain("apiKey");
   await expect(codex.getByText(/signed in with an API key/)).toBeVisible();
 
-  // Signed in with ChatGPT: found and ready to sign turns in, but not offered until Codex turns run.
+  // Signed in with ChatGPT: ready, with nothing left to fix.
   await checkAgain("ready");
-  await expect(codex.getByText("Unverified")).toBeVisible();
-  await expect(codex.getByText(/cannot run Codex turns yet/)).toBeVisible();
+  await expect(codex.getByText("Ready")).toBeVisible();
   await expect(codex.getByText("subscription (plus)")).toBeVisible();
   await expect(codex.getByText("0.166.0")).toBeVisible();
   await expect(codex.getByRole("button", { name: "Check again" })).toBeHidden();
