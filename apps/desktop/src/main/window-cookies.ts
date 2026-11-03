@@ -4,7 +4,7 @@
  * 400-day refresh of it out of the window's cookie store, so the token never reaches the disk.
  * Electron stays out of this file; connected-mode.ts applies these to the window's session.
  */
-import type { HubOrigins } from "./hub-connection.ts";
+import type { HubOrigins, WindowRequestVerdict } from "./hub-connection.ts";
 
 /** The device cookie over plain HTTP, and its `__Host-` twin over HTTPS, as the hub names them. */
 export const DEVICE_COOKIE = "hobbots_device";
@@ -61,3 +61,50 @@ export const withoutDeviceCookies = (
       return kept.length === 0 ? [] : [[name, kept]];
     }),
   );
+
+/** A request's `Cookie` header without the device cookies, for a request that must not carry the token. */
+const withoutDeviceCookieHeader = (headers: Readonly<Record<string, string>>): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(headers).flatMap(([name, value]) => {
+      if (name.toLowerCase() !== "cookie") return [[name, value]];
+      const kept = value
+        .split(";")
+        .map((pair) => pair.trim())
+        .filter((pair) => pair !== "" && !DEVICE_COOKIES.has(cookieName(pair)));
+      return kept.length === 0 ? [] : [[name, kept.join("; ")]];
+    }),
+  );
+
+/** The part of Electron's `webRequest` the guard uses, so a test can drive it without Electron. */
+export interface BeforeSendHeaders {
+  readonly onBeforeSendHeaders: (
+    listener: (
+      details: { readonly url: string; readonly requestHeaders: Record<string, string> },
+      callback: (response: { cancel?: boolean; requestHeaders?: Record<string, string> }) => void,
+    ) => void,
+  ) => void;
+}
+
+/**
+ * Puts every request of the window through the gate before the browser engine sends it, page loads
+ * and reloads included: a request to the hub's origins while its address is not the pinned node's is
+ * cancelled, so it carries no token and loads no page, and `onRefused` checks the connection again.
+ */
+export const guardWindowRequests = (
+  webRequest: BeforeSendHeaders,
+  gate: (url: string) => Promise<WindowRequestVerdict>,
+  onRefused: () => void,
+) =>
+  webRequest.onBeforeSendHeaders((details, callback) => {
+    void gate(details.url)
+      .catch((): WindowRequestVerdict => "cancel")
+      .then((verdict) => {
+        if (verdict === "cancel") {
+          onRefused();
+          return callback({ cancel: true });
+        }
+        if (verdict === "withoutToken")
+          return callback({ requestHeaders: withoutDeviceCookieHeader(details.requestHeaders) });
+        callback({});
+      });
+  });

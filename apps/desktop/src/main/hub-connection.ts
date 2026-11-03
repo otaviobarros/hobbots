@@ -38,13 +38,25 @@ export const hubOrigins = (address: string): HubOrigins | undefined => {
   return { host, origin: `${url.protocol}//${host}${port}`, http: `http://${host}`, https: `https://${host}` };
 };
 
-/** Whether a page's URL is on the hub, over HTTP or HTTPS: the only pages the window may show. */
+/** The hub's two origins: its stored address, and its HTTPS address through `tailscale serve`. */
+const hubPageOrigins = (origins: HubOrigins) => new Set([origins.origin, origins.https]);
+
+/**
+ * Whether a URL is on one of the hub's two origins: the only pages the window may show and the only
+ * senders the bridge answers. Another port on the same host is another service, so it is not the hub.
+ */
 export const isHubPage = (origins: HubOrigins, url: string) => {
   try {
-    const parsed = new URL(url);
-    return (
-      (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname.toLowerCase() === origins.host
-    );
+    return hubPageOrigins(origins).has(new URL(url).origin);
+  } catch {
+    return false;
+  }
+};
+
+/** Whether a URL is on the hub's host, on any port: the browser engine sends the host's cookies to all of them. */
+const isHubHost = (origins: HubOrigins, url: string) => {
+  try {
+    return new URL(url).hostname.toLowerCase() === origins.host;
   } catch {
     return false;
   }
@@ -227,3 +239,19 @@ export const connectedHub = (options: ConnectedHubOptions) => {
   return { verify, headers, fetchAsDevice, refusal };
 };
 export type ConnectedHub = ReturnType<typeof connectedHub>;
+
+/**
+ * What happens to a request of the window, as the browser engine is about to send it: `cancel` when
+ * it goes to the hub's origins while the address does not belong to the pinned node, `withoutToken`
+ * when it goes to another port of the hub's host, which must not see the device cookies.
+ */
+export type WindowRequestVerdict = "send" | "withoutToken" | "cancel";
+
+/** Judges each request of the window: a page or a call of the hub is sent only to the pinned node. */
+export const windowRequestGate =
+  ({ origins, nodeId, nodeCheck }: Pick<ConnectedHubOptions, "origins" | "nodeId" | "nodeCheck">) =>
+  async (url: string): Promise<WindowRequestVerdict> => {
+    if (!isHubHost(origins, url)) return "send";
+    if (!isHubPage(origins, url)) return "withoutToken";
+    return (await nodeCheck.isPinned(origins.host, nodeId).catch(() => false)) ? "send" : "cancel";
+  };

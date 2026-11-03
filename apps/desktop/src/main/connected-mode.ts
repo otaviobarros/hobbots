@@ -19,6 +19,7 @@ import {
   hubOrigins,
   isHubPage,
   makeNodeCheck,
+  windowRequestGate,
 } from "./hub-connection.ts";
 import { followHub } from "./hub-events.ts";
 import type { AppShell } from "./hub-mode.ts";
@@ -30,7 +31,7 @@ import type { HubConnection } from "./settings.ts";
 import { reveal } from "./single-instance.ts";
 import { showOnLaunch, systemNotices } from "./system-notices.ts";
 import type { DeviceTokenStore, thisComputer } from "./tailnet.ts";
-import { deviceCookies, withoutDeviceCookies } from "./window-cookies.ts";
+import { deviceCookies, guardWindowRequests, withoutDeviceCookies } from "./window-cookies.ts";
 
 /** How often a hub that cannot be reached is checked again (ADR 025). */
 const RETRY_MS = 5000;
@@ -156,11 +157,12 @@ export const startConnected = async (
   if (origins === undefined) throw new Error(`The stored hub address is not one Hobbots uses: ${connection.address}`);
   const isAllowedUrl = (url: string) => isHubPage(origins, url);
   const isTrusted = (event: Electron.IpcMainInvokeEvent) => isAllowedUrl(event.senderFrame?.url ?? "");
+  const nodeCheck = makeNodeCheck(computer.tailnet);
   const hub = connectedHub({
     origins,
     nodeId: connection.nodeId,
     fallbackName: connection.nodeName,
-    nodeCheck: makeNodeCheck(computer.tailnet),
+    nodeCheck,
     token: computer.token.read,
     fetch: globalThis.fetch,
   });
@@ -173,6 +175,18 @@ export const startConnected = async (
     view: () => connectionView(connection, connectionState.current, app.getVersion(), connectionState.hubVersion),
   });
   keepCookiesInMemory(origins);
+  // Every request of the window, reloads included, goes to the hub only while its address is the
+  // pinned node's; a refused one checks the connection, which then takes the cookies away.
+  guardWindowRequests(
+    session.defaultSession.webRequest,
+    windowRequestGate({ origins, nodeId: connection.nodeId, nodeCheck }),
+    () => void connectionState.check(),
+  );
+  // The window holds the token only while the hub's node checks out, and gets it back once it does.
+  connectionState.onChange((state) => {
+    if (state.state === "connected") void setCookies(origins, computer.token);
+    else if (state.state === "otherNode") void clearCookies(origins);
+  });
   // A refused request from the window's pages may mean the hub revoked this device: check now.
   session.defaultSession.webRequest.onCompleted((details) => {
     if (details.statusCode === 401 && isAllowedUrl(details.url)) void connectionState.check();

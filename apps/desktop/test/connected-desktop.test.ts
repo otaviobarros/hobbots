@@ -13,13 +13,16 @@ import {
   makeNodeCheck,
   type NodeLookup,
   type TailnetNode,
+  windowRequestGate,
 } from "../src/main/hub-connection.ts";
 import { followHub } from "../src/main/hub-events.ts";
 import { fileSettingsStore, type HubConnection } from "../src/main/settings.ts";
 import { thisComputer } from "../src/main/tailnet.ts";
 import {
+  type BeforeSendHeaders,
   DEVICE_COOKIE,
   deviceCookies,
+  guardWindowRequests,
   SECURE_DEVICE_COOKIE,
   withoutDeviceCookies,
 } from "../src/main/window-cookies.ts";
@@ -233,9 +236,13 @@ describe("the connected desktop", () => {
       expect(cookie).not.toHaveProperty("expirationDate");
       expect(cookie).not.toHaveProperty("domain");
     }
-    // The window may show the hub's pages over HTTP and HTTPS, and nothing else.
+    // The window may show the hub's two origins, HTTP on its port and HTTPS, and nothing else:
+    // another port on the same host is another service.
     expect(isHubPage(ORIGINS, "http://studio.example.ts.net:4317/threads/t1")).toBe(true);
     expect(isHubPage(ORIGINS, "https://studio.example.ts.net/")).toBe(true);
+    expect(isHubPage(ORIGINS, "http://studio.example.ts.net:8080/")).toBe(false);
+    expect(isHubPage(ORIGINS, "http://studio.example.ts.net/")).toBe(false);
+    expect(isHubPage(ORIGINS, "https://studio.example.ts.net:8443/")).toBe(false);
     expect(isHubPage(ORIGINS, "https://example.com/")).toBe(false);
     expect(isHubPage(ORIGINS, "file:///etc/passwd")).toBe(false);
 
@@ -271,6 +278,54 @@ describe("the connected desktop", () => {
     // A device the hub revoked is told apart from a hub that cannot say.
     hub.revoke();
     expect(await connected.refusal()).toBe("revoked");
+  });
+
+  // covers DP-001, DP-004
+  it("[TC-DP-161] the window's requests reach the hub's origins only while its address is the pinned node's", async () => {
+    const { nodes, lookup } = tailnet();
+    let now = 0;
+    // The window's session, as Electron's webRequest hands each request to the guard.
+    let listener: Parameters<BeforeSendHeaders["onBeforeSendHeaders"]>[0] | undefined;
+    let refused = 0;
+    guardWindowRequests(
+      { onBeforeSendHeaders: (next) => void (listener = next) },
+      windowRequestGate({ origins: ORIGINS, nodeId: STUDIO.nodeId, nodeCheck: makeNodeCheck(lookup, () => now) }),
+      () => void refused++,
+    );
+    const send = (url: string, cookie = "hobbots_device=hbd_token; theme=dark") =>
+      new Promise<{ cancel?: boolean; requestHeaders?: Record<string, string> }>((answer) =>
+        listener?.({ url, requestHeaders: { cookie, accept: "text/html" } }, answer),
+      );
+
+    // The pinned node: page loads and the hub's calls go out untouched.
+    expect(await send("http://studio.example.ts.net:4317/")).toEqual({});
+    expect(await send("https://studio.example.ts.net/api/threads")).toEqual({});
+    // Another port of the hub's host is another service: it never sees the device cookies.
+    expect(await send("http://studio.example.ts.net:8080/")).toEqual({
+      requestHeaders: { cookie: "theme=dark", accept: "text/html" },
+    });
+    expect(
+      await send("http://studio.example.ts.net:8080/", "__Host-hobbots_device=hbd_token; hobbots_device=hbd_token"),
+    ).toEqual({ requestHeaders: { accept: "text/html" } });
+    // Other hosts get none of the hub's cookies anyway.
+    expect(await send("https://example.com/")).toEqual({});
+    expect(refused).toBe(0);
+
+    // The address moves to another computer: a reload, a link and a call of the page are all cancelled
+    // before they are sent, and each one checks the connection again.
+    nodes.set(HUB_ADDRESS, OTHER);
+    now += 61_000;
+    expect(await send("http://studio.example.ts.net:4317/")).toEqual({ cancel: true });
+    expect(await send("https://studio.example.ts.net/threads/t1")).toEqual({ cancel: true });
+    expect(await send("http://studio.example.ts.net:4317/api/activity")).toEqual({ cancel: true });
+    expect(refused).toBe(3);
+    // A Tailscale that cannot answer is not the pinned node either.
+    const broken = windowRequestGate({
+      origins: ORIGINS,
+      nodeId: STUDIO.nodeId,
+      nodeCheck: makeNodeCheck({ resolve: async () => [HUB_ADDRESS], whois: () => Promise.reject(new Error("down")) }),
+    });
+    expect(await broken("http://studio.example.ts.net:4317/")).toBe("cancel");
   });
 
   // covers DP-001, DP-004
