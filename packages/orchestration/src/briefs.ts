@@ -30,7 +30,7 @@ const STEP_INPUT_LIMIT = 16_000;
 /** `text` trimmed and cut to `limit` characters, marked when it was cut. */
 export const cut = (text: string, limit: number): string => clip(text.trim(), limit);
 
-const firstLine = (text: string) => cut(text.split("\n")[0] ?? "", 160);
+export const firstLine = (text: string) => cut(text.split("\n")[0] ?? "", 160);
 
 /** The children of `task` in `tree`, oldest first. */
 const childrenOf = (task: Task, tree: TaskTree) => tree.tasks.filter((each) => each.parentId === task.id);
@@ -160,6 +160,18 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
     `Report findings or blockers with report_checkpoint, and ask ${lead} with ask. When the Task is done, call complete_task with its result. Task id: ${task.id}.`,
   ].join("\n");
 };
+
+/**
+ * Why a member's Task is blocked when its turn ended with only its own `milestones` unreported, in
+ * words its lead can act on: nothing it waits on is open, so it goes on only when someone acts, and
+ * delegating the same work again leaves this Task behind (#571).
+ */
+export const stoppedShort = (milestones: ReadonlyArray<string>): string =>
+  [
+    `Its member ended a turn without completing it, and only its own milestones are unreported: ${milestones.map((title) => `"${title}"`).join(", ")}.`,
+    "It waits on no question, approval or other Task, so nothing moves it on by itself.",
+    "Hand it what it needs, or cancel or reassign it; delegating the same work again leaves this Task open.",
+  ].join(" ");
 
 /**
  * The Tasks a member's work builds on: those its Task comes after, then those whose artifacts were

@@ -26,15 +26,13 @@ import {
   type Committed,
   isLiveAttempt,
   isTerminalTask,
-  ledgerRefusal,
-  ResponsibilityLedger,
   type Task,
   type TaskId,
   type TaskTree,
 } from "@hobbots/domain";
 import { DateTime, Effect, FiberMap, Option, Semaphore } from "effect";
 import { type PathSeparator, sharedFolders } from "./authority.ts";
-import { memberPrompt, memberReminder } from "./briefs.ts";
+import { memberPrompt, memberReminder, stoppedShort } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { emptyQuestFinding } from "./empty-quests.ts";
 import { type Ending, type Running, runSessionTurn, STOPPED } from "./session.ts";
@@ -208,8 +206,10 @@ export const makeMemberRunner = (deps: MemberDeps) => {
     });
 
   /**
-   * Leaves a Task its turn did not finish waiting, or blocked when only its own milestones keep it
-   * open. The items the turn carries settle with it, so they keep nothing open.
+   * Leaves a Task its turn did not finish waiting while anything it waits on is open: a question, a
+   * Task it comes after, an approval or work that arrived. Only when its own milestones are all that
+   * is left is it blocked, with a reason its lead can act on (#571). The items the turn carries
+   * settle with it, so they keep nothing open.
    */
   const holdOpen = (taskId: TaskId, at: string, carried: ReadonlySet<string>) =>
     Effect.andThen(leaveOpen(taskId, at, carried), flagEmptyQuest(taskId, at));
@@ -231,9 +231,9 @@ export const makeMemberRunner = (deps: MemberDeps) => {
       const { task } = found.value;
       if (task.state !== "active" && task.state !== "waiting") return;
       const open = ledger.value.open.filter((entry) => entry._tag !== "Item" || !carried.has(entry.item.id));
-      if (open.length > 0 && open.every((entry) => entry._tag === "Milestone")) {
-        const refusal = ledgerRefusal(new ResponsibilityLedger({ taskId: task.id, open }));
-        yield* deps.explain(task.id, refusal?.message ?? "Its milestones were not reported.", at);
+      const milestones = open.flatMap((entry) => (entry._tag === "Milestone" ? [entry.milestone.title] : []));
+      if (open.length > 0 && milestones.length === open.length) {
+        yield* deps.explain(task.id, stoppedShort(milestones), at);
         const latest = yield* read(taskId);
         if (Option.isSome(latest)) {
           const now = latest.value.task;
