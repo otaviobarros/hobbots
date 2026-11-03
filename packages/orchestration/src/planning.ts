@@ -281,7 +281,11 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
       const journal = journalOf();
       const moves = cancelMoves(target, scope.tree);
       for (const { task, to } of moves) {
-        journal.keep(yield* fromRecords(tasks.moveTask(task.id, task.revision, to, scope.at)));
+        journal.keep(
+          yield* fromRecords(
+            tasks.moveTask(task.id, task.revision, to, scope.at, { cancelledBy: scope.caller.agentId }),
+          ),
+        );
       }
       const cancelling = moves.filter((move) => move.to === "cancelling").map((move) => move.task.id as string);
       return {

@@ -141,7 +141,7 @@ export class TaskControls extends Context.Service<
           const at = yield* nowIso;
           for (const move of cancelMoves(task, tree)) {
             yield* tasks
-              .moveTask(move.task.id, move.task.revision, move.to, at)
+              .moveTask(move.task.id, move.task.revision, move.to, at, { cancelledBy: "you" })
               .pipe(Effect.mapError(refusedFor(taskId)), Effect.flatMap(announce));
           }
           if (replying) yield* stopReply(task);

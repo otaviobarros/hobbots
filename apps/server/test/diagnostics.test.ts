@@ -240,8 +240,11 @@ const twoHobQuest = Effect.gen(function* () {
     });
   yield* tasks.startAttempt(copy.value.id, copy.value.revision, attempt("a-copy-1", "session-q1"));
   yield* tasks.updateAttempt(AttemptId.make("a-copy-1"), {
-    state: "failed",
-    outcome: `Push refused for ${GITHUB_TOKEN} with ${PROVIDER_KEY} in ${SHOP}/sale.html and ${homedir()}/notes.txt`,
+    _tag: "Ended",
+    end: {
+      _tag: "Failed",
+      reason: `Push refused for ${GITHUB_TOKEN} with ${PROVIDER_KEY} in ${SHOP}/sale.html and ${homedir()}/notes.txt`,
+    },
     at: "2026-11-01T00:01:00.000Z",
   });
   const failed = yield* latest("copy");
@@ -263,11 +266,12 @@ const twoHobQuest = Effect.gen(function* () {
     carried,
   });
   yield* tasks.updateAttempt(AttemptId.make("a-copy-2"), {
-    state: "completed",
+    _tag: "Ended",
+    end: { _tag: "Finished", outcome: null },
     at: "2026-11-01T00:03:00.000Z",
   });
   yield* tasks.startAttempt(build.value.id, build.value.revision, attempt("a-build-1", "session-a1"));
-  yield* tasks.updateAttempt(AttemptId.make("a-build-1"), { state: "running", at: now });
+  yield* tasks.updateAttempt(AttemptId.make("a-build-1"), { _tag: "Running", at: now });
 });
 
 describe("Diagnostics", () => {

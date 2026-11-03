@@ -1,6 +1,4 @@
-import type { TaskRepository } from "@hobbots/agents";
 import {
-  type Committed,
   cancelMoves,
   descendantsOf,
   isLiveAttempt,
@@ -10,15 +8,13 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { Clock, DateTime, Effect, Option, type Scope } from "effect";
+import type { TurnEndDeps } from "./turn-end.ts";
 
 /** Why an Attempt whose cancel could not be confirmed ended, on the Attempt itself. */
 const UNRESOLVED =
   "Hobbots asked it to stop and could not confirm that it did. Whether it changed anything after that is not known.";
 
-interface SettlerDeps {
-  readonly tasks: TaskRepository["Service"];
-  /** A change the records may refuse, as when the Task moved on meanwhile: logged, never fatal. */
-  readonly attempt: <A, E>(change: Effect.Effect<Committed<A>, E>, what: string) => Effect.Effect<Option.Option<A>>;
+interface SettlerDeps extends Pick<TurnEndDeps, "tasks" | "attempt"> {
   /** How long a stopped session has, in milliseconds, to end before its cancel is left unresolved. */
   readonly timeoutMs: number;
   /** Runs the settler again later, as when a cancel's time to stop runs out. */
@@ -52,7 +48,7 @@ export const makeCancelSettler = ({ tasks, attempt, timeoutMs, wake, scope }: Se
       if (now - first < timeoutMs) return true;
       const at = DateTime.formatIso(yield* DateTime.now);
       const marked = yield* attempt(
-        tasks.updateAttempt(live.id, { state: "unresolved", outcome: UNRESOLVED, at }),
+        tasks.updateAttempt(live.id, { _tag: "Ended", end: { _tag: "Unconfirmed", reason: UNRESOLVED }, at }),
         "leave a cancel unresolved",
       );
       return Option.isNone(marked);
