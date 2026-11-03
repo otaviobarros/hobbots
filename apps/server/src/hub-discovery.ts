@@ -1,7 +1,7 @@
 import { isIPv6 } from "node:net";
 import { HubPort, type TailscaleState } from "@hobbots/domain";
 import { Duration, Effect, Option, Result, Schema } from "effect";
-import { HttpClient } from "effect/http";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { addressRanges, TAILNET_RANGES, type TailnetNode, type TailnetSnapshot, Tailscale } from "./tailscale.ts";
 
 /**
@@ -206,11 +206,17 @@ export const judgeHubHealth = (
     },
   });
 
-/** Asks the address for the hub's health answer, giving it two seconds. */
+/**
+ * Asks the address for the hub's health answer, giving it two seconds. A redirect is never followed,
+ * so the only computer asked is the one the user's tailnet names; a hub answers health directly.
+ */
 export const askHub = (origin: string): Effect.Effect<HubAnswer, never, HttpClient.HttpClient> =>
   HttpClient.get(`${origin}/api/health`, { acceptJson: true }).pipe(
+    // `fetch` follows redirects itself unless told not to.
+    Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
     Effect.flatMap((response) => {
       if (response.status === 429) return Effect.succeed<HubAnswer>({ _tag: "Throttled" });
+      // Anything but a direct answer, a redirect included, is not a hub's health answer.
       if (response.status !== 200) return Effect.succeed<HubAnswer>({ _tag: "NotHobbots" });
       return response.json.pipe(
         Effect.map((body) => judgeHubHealth(body)),

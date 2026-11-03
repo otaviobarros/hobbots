@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Effect, Layer, Ref, Result } from "effect";
 import { FetchHttpClient } from "effect/http";
@@ -178,7 +178,8 @@ describe("findHubs", () => {
       ),
     );
 
-  it("asks at most eight computers at once", async () => {
+  // covers DP-002, DP-004
+  it("[TC-DP-190] asks at most eight computers at once", async () => {
     let inFlight = 0;
     let most = 0;
     const slow: typeof fetch = async () => {
@@ -193,7 +194,8 @@ describe("findHubs", () => {
     expect(most).toBe(8);
   });
 
-  it("gives up on a computer that does not answer within two seconds", async () => {
+  // covers DP-002
+  it("[TC-DP-191] gives up on a computer that does not answer within two seconds", async () => {
     const started = Date.now();
     const silent: typeof fetch = (_input, init) =>
       new Promise((_, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)));
@@ -202,7 +204,8 @@ describe("findHubs", () => {
     expect(Date.now() - started).toBeLessThan(3500);
   });
 
-  it("says why it cannot look when Tailscale is not running here", async () => {
+  // covers DP-002, DP-004
+  it("[TC-DP-192] says why it cannot look when Tailscale is not running here", async () => {
     const tailnet = Ref.makeUnsafe<FakeTailnet>({
       state: "signedOut",
       dnsName: null,
@@ -214,6 +217,97 @@ describe("findHubs", () => {
       findHubs.pipe(Effect.provide(Layer.mergeAll(TailscaleFake(tailnet), FetchHttpClient.layer))),
     );
     expect(scan).toEqual({ _tag: "TailscaleNotReady", state: "signedOut" });
+  });
+});
+
+describe("findHubs with redirects", () => {
+  const servers: Array<Server> = [];
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done))));
+  });
+
+  const serve = async (handle: (response: ServerResponse) => void) => {
+    const asked: Array<string> = [];
+    const server = createServer((request, response) => {
+      asked.push(`${request.headers.host}${request.url}`);
+      handle(response);
+    });
+    servers.push(server);
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    return { reach: `127.0.0.1:${(server.address() as AddressInfo).port}`, asked };
+  };
+  const hubAnswer = (response: ServerResponse) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ app: "hobbots", name: "Trap", version: "0.4.0", connect: 1 }));
+  };
+  const redirect = (location: string) => (response: ServerResponse) => {
+    response.writeHead(302, { location });
+    response.end();
+  };
+
+  // covers DP-004
+  it("[TC-DP-193] never follows a redirect, so a peer cannot send the scan to loopback, the local network, the internet or another user's computer", async () => {
+    // Hubs that would answer if a redirect were followed: one on loopback, one on another user's node.
+    const loopbackTrap = await serve(hubAnswer);
+    const theirs = await serve(hubAnswer);
+    const toLoopback = await serve(redirect(`http://${loopbackTrap.reach}/api/health`));
+    const toLocal = await serve(redirect("http://192.168.1.1/api/health"));
+    const toPublic = await serve(redirect("http://203.0.113.5/api/health"));
+    const toTheirs = await serve(redirect("http://theirs.example.ts.net:4317/api/health"));
+    const own = (nodeId: string, nodeName: string, reach: string) => ({ nodeId, nodeName, owner: you, reach });
+    const tailnet: FakeTailnet = {
+      state: "running",
+      dnsName: "laptop.example.ts.net",
+      addresses: ["127.0.0.2"],
+      self: { nodeId: "nLAPTOP", nodeName: "laptop.example.ts.net", owner: you },
+      peers: {
+        "127.0.0.11": own("nA", "a.example.ts.net", toLoopback.reach),
+        "127.0.0.12": own("nB", "b.example.ts.net", toLocal.reach),
+        "127.0.0.13": own("nC", "c.example.ts.net", toPublic.reach),
+        "127.0.0.14": own("nD", "d.example.ts.net", toTheirs.reach),
+        "127.0.0.15": {
+          nodeId: "nTHEIRS",
+          nodeName: "theirs.example.ts.net",
+          owner: { _tag: "User", login: "someone@example.com" },
+          reach: theirs.reach,
+        },
+      },
+      ranges: ["127.0.0.0/8"],
+    };
+    // Every request that leaves for the network, after the fake tailnet's names are resolved.
+    const sent: Array<{ url: string; redirect: Request["redirect"] }> = [];
+    const network: typeof fetch = (input, init) => {
+      const request = new Request(input, init);
+      sent.push({ url: request.url, redirect: request.redirect });
+      return fetch(request);
+    };
+    const scan = await Effect.runPromise(
+      findHubs.pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            TailscaleFake(Ref.makeUnsafe(tailnet)),
+            FetchHttpClient.layer.pipe(
+              Layer.provide(
+                Layer.succeed(
+                  FetchHttpClient.Fetch,
+                  fakeTailnetFetch(() => tailnet, network),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // A redirect is not a health answer, so no hub is listed, the trap's included.
+    expect(scan).toEqual({ _tag: "Scanned", hubs: [] });
+    // One request per peer, each told not to follow redirects, and nothing reached the traps.
+    expect(sent.map(({ url }) => url).sort()).toEqual(
+      [toLoopback, toLocal, toPublic, toTheirs].map(({ reach }) => `http://${reach}/api/health`).sort(),
+    );
+    expect(sent.every(({ redirect }) => redirect === "manual")).toBe(true);
+    expect([...loopbackTrap.asked, ...theirs.asked]).toEqual([]);
+    expect([toLoopback, toLocal, toPublic, toTheirs].map(({ asked }) => asked.length)).toEqual([1, 1, 1, 1]);
   });
 });
 
