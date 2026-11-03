@@ -24,12 +24,21 @@ export interface ServedRoute {
   readonly funnel: boolean;
 }
 
-/** What one `tailscale status` tells the hub: its own node, and the addresses of every peer it lists. */
+/** A peer `tailscale status` lists: its node, its tailnet addresses and whether it is online. */
+export interface TailnetNode extends TailnetPeer {
+  readonly addresses: ReadonlyArray<string>;
+  readonly online: boolean;
+}
+
+/** What one `tailscale status` tells this computer: its own node, and every peer it lists. */
 export interface TailnetSnapshot {
   readonly status: TailscaleStatus;
+  /** The addresses of every peer, for whether a connection can come from the tailnet. */
   readonly peers: ReadonlySet<string>;
-  /** The hub's own node, for who may pair and which requests come from the hub itself (ADR 021). */
+  /** This computer's own node, for who may pair and which requests come from the hub itself (ADR 021). */
   readonly self: TailnetPeer | null;
+  /** Every peer whose owner Tailscale names, for finding hubs and resolving a typed address (ADR 025). */
+  readonly nodes: ReadonlyArray<TailnetNode>;
 }
 
 export class Tailscale extends Context.Service<
@@ -53,6 +62,7 @@ const notListed = (state: TailscaleState): TailnetSnapshot => ({
   status: { state, dnsName: null, addresses: [] },
   peers: new Set(),
   self: null,
+  nodes: [],
 });
 
 // The fields of `tailscale status --json` the hub reads (ipnstate.Status in Tailscale's source).
@@ -74,7 +84,14 @@ const StatusJson = Schema.Struct({
     Schema.NullOr(
       Schema.Record(
         Schema.String,
-        Schema.Struct({ TailscaleIPs: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))) }),
+        Schema.Struct({
+          ID: Schema.optional(Schema.String),
+          DNSName: Schema.optional(Schema.String),
+          TailscaleIPs: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
+          Online: Schema.optional(Schema.Boolean),
+          UserID: Schema.optional(Schema.Number),
+          Tags: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
+        }),
       ),
     ),
   ),
@@ -100,12 +117,23 @@ const ownerOf = (tags: ReadonlyArray<string>, login: string | undefined): Tailne
 const selfOf = (raw: RawStatus, dnsName: string | null): TailnetPeer | null => {
   const self = raw.Self;
   if (!self?.ID) return null;
-  const login = self.UserID === undefined ? undefined : raw.User?.[String(self.UserID)]?.LoginName;
-  const owner = ownerOf(self.Tags ?? [], login);
+  const owner = ownerOf(self.Tags ?? [], loginOf(raw, self.UserID));
   return owner === null ? null : { nodeId: self.ID, nodeName: dnsName ?? "", owner };
 };
 
-/** The hub's node and its peers' addresses from `tailscale status --json`; not running when it cannot be read. */
+const loginOf = (raw: RawStatus, userId: number | undefined) =>
+  userId === undefined ? undefined : raw.User?.[String(userId)]?.LoginName;
+
+/** The peers `tailscale status` lists with an ID, a MagicDNS name and an owner. */
+const nodesOf = (raw: RawStatus): ReadonlyArray<TailnetNode> =>
+  Object.values(raw.Peer ?? {}).flatMap((peer) => {
+    const owner = ownerOf(peer.Tags ?? [], loginOf(raw, peer.UserID));
+    const nodeName = stripDot(peer.DNSName ?? "");
+    if (!peer.ID || nodeName === "" || owner === null) return [];
+    return [{ nodeId: peer.ID, nodeName, owner, addresses: peer.TailscaleIPs ?? [], online: peer.Online === true }];
+  });
+
+/** This computer's node and its peers from `tailscale status --json`; not running when it cannot be read. */
 export const readStatus = (json: string): TailnetSnapshot =>
   Option.match(decodeStatus(json), {
     onNone: () => notListed("notRunning"),
@@ -116,7 +144,7 @@ export const readStatus = (json: string): TailnetSnapshot =>
       const dnsName = raw.Self?.DNSName ? stripDot(raw.Self.DNSName) : null;
       const peers = new Set(Object.values(raw.Peer ?? {}).flatMap((peer) => peer.TailscaleIPs ?? []));
       const name = dnsName === "" ? null : dnsName;
-      return { status: { state, dnsName: name, addresses }, peers, self: selfOf(raw, name) };
+      return { status: { state, dnsName: name, addresses }, peers, self: selfOf(raw, name), nodes: nodesOf(raw) };
     },
   });
 
@@ -275,6 +303,13 @@ const FakeNode = Schema.Struct({
     Schema.TaggedStruct("User", { login: Schema.String }),
     Schema.TaggedStruct("Tagged", { tags: Schema.Array(Schema.String) }),
   ]),
+  /** Whether `status` lists the node as online; it is unless this says otherwise. */
+  online: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Where the fake tailnet delivers a request to this node's MagicDNS name, such as
+   * `127.0.0.1:4417`, so hubs on one computer can stand in for hubs on other computers.
+   */
+  reach: Schema.optionalKey(Schema.String),
 });
 
 export const FakeTailnet = Schema.Struct({
@@ -322,21 +357,42 @@ const fakeServe = (fake: FakeTailnet, args: ReadonlyArray<string>): FakeTailnet 
   return { ...fake, serve: target };
 };
 
+/** The fake tailnet's peers as `status` lists them: each node once, with every address it has. */
+const fakeNodes = (fake: FakeTailnet, self: TailnetPeer | null): ReadonlyArray<TailnetNode> => {
+  const nodes = new Map<string, TailnetNode>();
+  for (const [address, { nodeId, nodeName, owner, online }] of Object.entries(fake.peers)) {
+    if (nodeId === self?.nodeId) continue;
+    const known = nodes.get(nodeId);
+    nodes.set(nodeId, {
+      nodeId,
+      nodeName,
+      owner,
+      addresses: [...(known?.addresses ?? []), address],
+      online: online ?? true,
+    });
+  }
+  return [...nodes.values()];
+};
+
+const fakeSnapshot = (fake: FakeTailnet): TailnetSnapshot => {
+  if (fake.state !== "running") return notListed(fake.state);
+  const self = fake.self ?? fake.peers["127.0.0.1"] ?? null;
+  const ownSelf = self === null ? null : { nodeId: self.nodeId, nodeName: self.nodeName, owner: self.owner };
+  return {
+    status: { state: fake.state, dnsName: fake.dnsName, addresses: fake.addresses },
+    peers: new Set(Object.keys(fake.peers)),
+    self: ownSelf,
+    nodes: fakeNodes(fake, ownSelf),
+  };
+};
+
 const fakeFrom = (
   read: Effect.Effect<FakeTailnet>,
   write: (fake: FakeTailnet) => Effect.Effect<void>,
   ranges: ReadonlyArray<string>,
 ) =>
   Tailscale.of({
-    snapshot: Effect.map(read, (fake) =>
-      fake.state === "running"
-        ? {
-            status: { state: fake.state, dnsName: fake.dnsName, addresses: fake.addresses },
-            peers: new Set(Object.keys(fake.peers)),
-            self: fake.self ?? fake.peers["127.0.0.1"] ?? null,
-          }
-        : notListed(fake.state),
-    ),
+    snapshot: Effect.map(read, fakeSnapshot),
     whois: (address) =>
       Effect.map(read, (fake) =>
         fake.state === "running" ? Option.fromNullishOr(fake.peers[address]) : Option.none(),
@@ -376,20 +432,55 @@ const decodeFake = Schema.decodeUnknownOption(Schema.fromJsonString(FakeTailnet)
  * hub runs; without the file it is `DEFAULT_FAKE_TAILNET`, and a file it cannot read is not installed.
  * Its `tailscale serve` writes the file.
  */
+const fakeTailnetFile = (dataDir: string) => join(dataDir, "fake-tailscale.json");
+
+/** The development fake's tailnet from the data folder, as `TailscaleFakeFile` reads it on every check. */
+export const readFakeTailnetFile = (dataDir: string): FakeTailnet => {
+  let raw: string;
+  try {
+    raw = readFileSync(fakeTailnetFile(dataDir), "utf8");
+  } catch {
+    return DEFAULT_FAKE_TAILNET;
+  }
+  return Option.getOrElse(decodeFake(raw), () => ({ ...DEFAULT_FAKE_TAILNET, state: "notInstalled" as const }));
+};
+
 export const TailscaleFakeFile = (dataDir: string) => {
-  const file = join(dataDir, "fake-tailscale.json");
-  const read = Effect.sync((): FakeTailnet => {
-    let raw: string;
-    try {
-      raw = readFileSync(file, "utf8");
-    } catch {
-      return DEFAULT_FAKE_TAILNET;
-    }
-    return Option.getOrElse(decodeFake(raw), () => ({ ...DEFAULT_FAKE_TAILNET, state: "notInstalled" as const }));
-  });
+  const file = fakeTailnetFile(dataDir);
+  const read = Effect.sync(() => readFakeTailnetFile(dataDir));
   const write = (next: FakeTailnet) => Effect.sync(() => writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`));
   return Layer.effect(
     Tailscale,
     Effect.map(read, (start) => fakeFrom(read, write, start.ranges)),
   );
 };
+
+/**
+ * A `fetch` that reaches the fake tailnet's nodes by their MagicDNS names, as Tailscale's DNS does on
+ * a real tailnet: a request to a node's name goes to its `reach`, or else to its fake tailnet address
+ * on the same port. A name the fake tailnet does not know fails, as an unknown name does. Any other
+ * host is left alone.
+ */
+export const fakeTailnetFetch =
+  (read: () => FakeTailnet, base: typeof globalThis.fetch = globalThis.fetch): typeof globalThis.fetch =>
+  (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const fake = read();
+    const name = url.hostname.toLowerCase();
+    const entry = Object.entries(fake.peers).find(([, node]) => node.nodeName === name);
+    if (entry === undefined) {
+      const suffix = fake.dnsName?.split(".").slice(1).join(".");
+      return suffix && name.endsWith(`.${suffix}`)
+        ? Promise.reject(new TypeError(`fetch failed: ${name} is not on the fake tailnet`))
+        : base(request);
+    }
+    const [address, node] = entry;
+    if (fake.state !== "running" || node.online === false) {
+      return Promise.reject(new TypeError(`fetch failed: ${name} is offline`));
+    }
+    const target = new URL(url);
+    const host = isIPv6(address) ? `[${address}]` : address;
+    target.host = node.reach ?? `${host}${url.port === "" ? "" : `:${url.port}`}`;
+    return base(new Request(target, request));
+  };
