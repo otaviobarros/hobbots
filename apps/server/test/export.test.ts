@@ -308,6 +308,50 @@ const filesIn = (folder: string): Record<string, Buffer> =>
 
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(HobbotsExport));
 
+/** The records of Aldric's export: its hobs and threads, the Quest with Quill's Task as a summary, and the work history. */
+const expectRecords = (data: HobbotsExport) => {
+  expect(data).toMatchObject({ format: "hobbots.export", version: 1, hobbotsVersion: "9.9.9" });
+  expect(data.hobs.map((each) => [each.name, each.roleTitle, each.runtime])).toEqual([
+    ["Aldric", "Marketing", "claude-code"],
+    ["Quill", "Marketing", "claude-code"],
+  ]);
+  expect(data.threads.map((thread) => thread.title)).toEqual(["Black Friday campaign", "Notes / ideas"]);
+  const [tree] = data.quests;
+  expect(tree?.quests.map((quest) => quest.goal)).toEqual(["A Black Friday campaign"]);
+  // Aldric's Task in full; Quill's as its title and state only.
+  expect(tree?.tasks.map((task) => [task.title, task.detail, task.state])).toEqual([
+    ["Run the Black Friday campaign", "full", "completed"],
+    ["Draft the copy", "summary", "cancelled"],
+  ]);
+  const top = tree?.tasks[0];
+  expect(top?.result).toBe("Campaign ready");
+  const artifacts = top?.artifacts.map((artifact) => [artifact.label, artifact.copiedTo, artifact.notCopied]);
+  expect(artifacts?.sort()).toEqual([
+    ["Chart", "files/campaign-task/chart.png", null],
+    ["Old draft", null, "gone"],
+    ["Settings", null, "secret"],
+    ["Store", null, null],
+    ["The report", "files/campaign-task/report.md", null],
+  ]);
+  expect(top?.attempts[0]?.commands.map((command) => [command.command, command.exitCode])).toEqual([["pnpm build", 0]]);
+  expect(top?.attempts[0]?.changes.map((change) => [change.path, change.kind])).toEqual([["report.md", "added"]]);
+};
+
+/** The Markdown of Aldric's export, which a person reads without Hobbots. */
+const expectMarkdown = (files: Record<string, Buffer>) => {
+  const quest = files["quests/2026-11-02 A Black Friday campaign.md"]?.toString() ?? "";
+  expect(quest).toContain("## Quest: A Black Friday campaign");
+  expect(quest).toContain("[files/campaign-task/report.md](../files/campaign-task/report.md)");
+  expect(quest).toContain("- File “Old draft”: `draft.md`, not copied because it is no longer there");
+  expect(quest).toContain("not copied because its name marks it as a file that may hold secrets");
+  expect(quest).toContain("Ran `pnpm build`");
+  expect(quest).toContain("### Draft the copy");
+  const thread = files["threads/2026-11-02 Black Friday campaign.md"]?.toString() ?? "";
+  expect(thread).toContain("**You** · 2026-11-02 10:00 UTC");
+  expect(thread).toContain("**Aldric** · 2026-11-02 11:00 UTC");
+  expect(thread).toContain("- Running pnpm test: done");
+};
+
 describe("exports", () => {
   // covers OP-003
   it("[TC-OP-040] an export of a hob opens on its own and holds its threads, Quests, artifacts and work history", async () => {
@@ -328,46 +372,8 @@ describe("exports", () => {
     expect(files["files/campaign-task/report.md"]?.toString()).toBe(REPORT);
     expect(new Uint8Array(files["files/campaign-task/chart.png"] ?? [])).toEqual(PNG);
 
-    const data = decode(files["export.json"]?.toString());
-    expect(data).toMatchObject({ format: "hobbots.export", version: 1, hobbotsVersion: "9.9.9" });
-    expect(data.hobs.map((each) => [each.name, each.roleTitle, each.runtime])).toEqual([
-      ["Aldric", "Marketing", "claude-code"],
-      ["Quill", "Marketing", "claude-code"],
-    ]);
-    expect(data.threads.map((thread) => thread.title)).toEqual(["Black Friday campaign", "Notes / ideas"]);
-    const [tree] = data.quests;
-    expect(tree?.quests.map((quest) => quest.goal)).toEqual(["A Black Friday campaign"]);
-    // Aldric's Task in full; Quill's as its title and state only.
-    expect(tree?.tasks.map((task) => [task.title, task.detail, task.state])).toEqual([
-      ["Run the Black Friday campaign", "full", "completed"],
-      ["Draft the copy", "summary", "cancelled"],
-    ]);
-    const top = tree?.tasks[0];
-    expect(top?.result).toBe("Campaign ready");
-    const artifacts = top?.artifacts.map((artifact) => [artifact.label, artifact.copiedTo, artifact.notCopied]);
-    expect(artifacts?.sort()).toEqual([
-      ["Chart", "files/campaign-task/chart.png", null],
-      ["Old draft", null, "gone"],
-      ["Settings", null, "secret"],
-      ["Store", null, null],
-      ["The report", "files/campaign-task/report.md", null],
-    ]);
-    expect(top?.attempts[0]?.commands.map((command) => [command.command, command.exitCode])).toEqual([
-      ["pnpm build", 0],
-    ]);
-    expect(top?.attempts[0]?.changes.map((change) => [change.path, change.kind])).toEqual([["report.md", "added"]]);
-
-    const quest = files["quests/2026-11-02 A Black Friday campaign.md"]?.toString() ?? "";
-    expect(quest).toContain("## Quest: A Black Friday campaign");
-    expect(quest).toContain("[files/campaign-task/report.md](../files/campaign-task/report.md)");
-    expect(quest).toContain("- File “Old draft”: `draft.md`, not copied because it is no longer there");
-    expect(quest).toContain("not copied because its name marks it as a file that may hold secrets");
-    expect(quest).toContain("Ran `pnpm build`");
-    expect(quest).toContain("### Draft the copy");
-    const thread = files["threads/2026-11-02 Black Friday campaign.md"]?.toString() ?? "";
-    expect(thread).toContain("**You** · 2026-11-02 10:00 UTC");
-    expect(thread).toContain("**Aldric** · 2026-11-02 11:00 UTC");
-    expect(thread).toContain("- Running pnpm test: done");
+    expectRecords(decode(files["export.json"]?.toString()));
+    expectMarkdown(files);
     expect(files["README.md"]?.toString()).toContain("Redaction is best effort");
   });
 
