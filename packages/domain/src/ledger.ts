@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
 import { BackpackItem, type BackpackItemId } from "./backpack.ts";
 import { Milestone, Question, type TaskRefusal, type TaskTree, TaskWait } from "./quest.ts";
+import { TaskReadiness } from "./readiness.ts";
 import { descendantsOf, isTerminalTask, Task, TaskId } from "./task.ts";
 
 /**
@@ -108,16 +109,15 @@ export const supersededItems = (
 export const responsibilityLedger = (task: Task, sources: LedgerSources): ResponsibilityLedger => {
   const under = descendantsOf(task, sources.subtree.tasks);
   const scope = new Set([task.id, ...under.map((each) => each.id)]);
-  const done = new Set(sources.tree.filter((each) => each.state === "completed").map((each) => each.id));
   const ended = new Set<string>(under.filter((each) => isTerminalTask(each.state)).map((each) => each.id));
   const open: Array<LedgerEntry> = [
     ...under.filter((each) => !isTerminalTask(each.state)).map((each) => ({ _tag: "Child", task: each }) as const),
     ...sources.subtree.waits
       .filter((wait) => wait.taskId === task.id && waitHolds(wait, under))
       .map((wait) => ({ _tag: "Wait", wait }) as const),
-    ...sources.tree
-      .filter((each) => task.dependsOn.includes(each.id) && !done.has(each.id))
-      .map((each) => ({ _tag: "Dependency", task: each }) as const),
+    ...TaskReadiness.unmet(TaskReadiness.of(task, sources.tree)).flatMap((id) =>
+      sources.tree.filter((each) => each.id === id).map((each) => ({ _tag: "Dependency", task: each }) as const),
+    ),
     ...sources.subtree.questions
       .filter((question) => question.state === "open" && scope.has(question.taskId))
       .map((question) => ({ _tag: "Question", question }) as const),

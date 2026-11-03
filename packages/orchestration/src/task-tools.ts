@@ -315,7 +315,7 @@ export class TaskTools extends Context.Service<
                 answered(
                   callFrom(turn.agentId, source, name, input, (resolved) => {
                     if (resolved.attemptId !== null) attemptId = resolved.attemptId;
-                    known = resolved.caller.taskId;
+                    if (resolved.readOnly !== true) known = resolved.caller.taskId;
                   }),
                   step,
                 ),

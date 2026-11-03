@@ -911,17 +911,9 @@ describe("Task records", () => {
         yield* tasks.startAttempt(campaignId, root.revision, attempt("a-root"));
         yield* tasks.updateAttempt(AttemptId.make("a-root"), { state: "completed", at: now });
         const failOpen = yield* reason(tasks.moveTask(campaignId, (yield* latest("campaign")).revision, "failed", now));
-        // Ada's Task waits on Quill's copy before it can complete.
+        // Ada's Task cannot start before Quill's copy completes (#667).
         const build = yield* latest("build");
-        const buildStarted = yield* tasks.startAttempt(build.id, build.revision, attempt("a-build"));
-        const waiting = yield* reason(
-          tasks.completeTask(build.id, buildStarted.value.task.revision, {
-            summary: "Built",
-            attemptId: AttemptId.make("a-build"),
-            artifacts: [],
-            at: now,
-          }),
-        );
+        const waiting = yield* reason(tasks.startAttempt(build.id, build.revision, attempt("a-build")));
         const notSibling = yield* reason(
           tasks.createTask({ task: newTask("ada-step", ADA, "build", ["campaign"]), delegation: null, milestones: [] }),
         );

@@ -232,9 +232,16 @@ export class TaskRepository extends Context.Service<
     ) => Changed<{ readonly task: Task; readonly attempt: Attempt }, TaskChange>;
     /**
      * Moves a Task to another state. It fails or is cancelled only once its Attempt and every Task
-     * under it have ended, and ends its Quest with it.
+     * under it have ended, and ends its Quest with it. A move to `blocked` settles the backpack items
+     * in `carried`, those the turn that ended read, as a completion settles them; other moves ignore them.
      */
-    readonly moveTask: (taskId: TaskId, revision: number, to: TaskTarget, at: string) => Changed<Task, TaskChange>;
+    readonly moveTask: (
+      taskId: TaskId,
+      revision: number,
+      to: TaskTarget,
+      at: string,
+      carried?: ReadonlyArray<CarriedItem>,
+    ) => Changed<Task, TaskChange>;
     /**
      * Completes a Task with a result from its current Attempt once its responsibility ledger is
      * settled, less what the completing turn carries; completes its Quest with it. Refused otherwise,

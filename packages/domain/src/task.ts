@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { AgentId, ThreadId } from "./ids.ts";
+import type { TaskReadiness } from "./readiness.ts";
 import { Revision } from "./revision.ts";
 
 /**
@@ -17,8 +18,8 @@ export type AttemptId = typeof AttemptId.Type;
 
 /**
  * Where a Task stands (execution lifecycle). `waiting` is on a dependency, approval or answer;
- * `blocked` needs something its owner cannot do; `cancelling` is a cancel requested and not yet
- * confirmed. `completed`, `failed` and `cancelled` are terminal; only a retry reopens a failed Task.
+ * `blocked` waits for a decision from outside its turn: its lead's, or for a step its owner's;
+ * `cancelling` is a cancel requested and not yet confirmed. `completed`, `failed` and `cancelled` are terminal; only a retry reopens a failed Task.
  */
 export const TaskState = Schema.Literals([
   "queued",
@@ -140,9 +141,15 @@ export const TaskTransitions = {
       ? new Task({ ...task, state: to, updatedAt: at })
       : new IllegalTaskTransition({ taskId: task.id, from: task.state, to }),
 
-  /** A new Attempt makes the Task active: a first start, a resume, or a retry of a failed Task. */
-  start: (task: Task, attemptId: AttemptId, at: string): Task | IllegalTaskTransition =>
-    task.state === "completed" || task.state === "cancelled" || task.state === "cancelling"
+  /**
+   * A new Attempt makes the Task active: a first start, a resume, or a retry of a failed Task. It
+   * starts only when `readiness`, read from its tree, is Ready.
+   */
+  start: (task: Task, attemptId: AttemptId, at: string, readiness: TaskReadiness): Task | IllegalTaskTransition =>
+    task.state === "completed" ||
+    task.state === "cancelled" ||
+    task.state === "cancelling" ||
+    readiness._tag !== "Ready"
       ? new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "active" })
       : new Task({ ...task, state: "active", currentAttemptId: attemptId, updatedAt: at }),
 
@@ -162,8 +169,12 @@ export const TaskTransitions = {
       ? new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "queued" })
       : new Task({ ...task, ownerId, state: "queued", currentAttemptId: null, updatedAt: at }),
 
+  /**
+   * A Task completes from its turn, or, once blocked, when its owner decides how it ends: a step
+   * that stopped on a finding completes with the result its owner gives (#667).
+   */
   complete: (task: Task, result: TaskResult, at: string): Task | IllegalTaskTransition =>
-    task.state === "active" || task.state === "waiting"
+    task.state === "active" || task.state === "waiting" || task.state === "blocked"
       ? new Task({ ...task, state: "completed", result, updatedAt: at })
       : new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "completed" }),
 };

@@ -301,7 +301,8 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
             milestones: milestones.map((title, index) => ({ id: MilestoneId.make(id(`${name}-${index}`)), title })),
           })
           .pipe(Effect.flatMap(announce));
-        return (yield* start(task, `a-${name}`)).task;
+        // A Task that comes after others stays queued until they complete, as a real one does.
+        return after.length === 0 ? (yield* start(task, `a-${name}`)).task : task;
       });
     // The spring sale stops here, with work in each state the Quest tab's controls act on.
     if (script === "spring-sale") {
@@ -391,9 +392,6 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       [],
       [copy.id],
     );
-    yield* whileOpen(build.id, tasks.moveTask(build.id, build.revision, "waiting", yield* iso)).pipe(
-      Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: announce })),
-    );
     yield* pause;
 
     // Rook runs the ads and brings in Pip for the keywords, leading a Quest of his own under Aldric's.
@@ -434,7 +432,29 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
           .pipe(Effect.flatMap(announce));
       }),
     );
-    yield* whileOpen(build.id, report(build.id, "progress", "Keyword research done while waiting on Quill", null));
+    yield* pause;
+
+    // Quill finishes, and Ada's Task starts with the copy it comes after.
+    yield* whileOpen(
+      copy.id,
+      Effect.gen(function* () {
+        yield* report(copy.id, "milestone", "Landing copy written", "copy-1");
+        yield* complete(copy.id, "a-copy", "Landing copy ready", [
+          "Landing copy",
+          "Black Friday: 20% off everything, this weekend only.",
+        ]);
+      }),
+    );
+    if ((yield* stateOf(copy.id)) === "completed") {
+      yield* whileOpen(
+        build.id,
+        Effect.gen(function* () {
+          const queued = Option.getOrThrow(yield* tasks.readTree(build.id)).tasks[0];
+          if (queued !== undefined) yield* start(queued, "a-build");
+        }),
+      );
+    }
+    yield* whileOpen(build.id, report(build.id, "progress", "Keyword research done", null));
     yield* pause;
 
     // Ada's question needs a call only you can make: Aldric passes it up to you.
@@ -452,32 +472,6 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       }),
     );
     yield* pause;
-
-    // Quill finishes; Aldric checks the copy and hands it to Ada.
-    yield* whileOpen(
-      copy.id,
-      Effect.gen(function* () {
-        yield* report(copy.id, "milestone", "Landing copy written", "copy-1");
-        yield* complete(copy.id, "a-copy", "Landing copy ready", [
-          "Landing copy",
-          "Black Friday: 20% off everything, this weekend only.",
-        ]);
-      }),
-    );
-    if ((yield* stateOf(copy.id)) === "completed") {
-      yield* whileOpen(
-        build.id,
-        Effect.gen(function* () {
-          yield* tasks
-            .handOff(ArtifactId.make(`art-a-copy-${key}`), build.id, yield* iso)
-            .pipe(Effect.flatMap(announce));
-          const waiting = Option.getOrThrow(yield* tasks.readTree(build.id)).tasks[0];
-          if (waiting !== undefined) {
-            yield* tasks.moveTask(build.id, waiting.revision, "active", yield* iso).pipe(Effect.flatMap(announce));
-          }
-        }),
-      );
-    }
 
     // Once you answer, Ada finishes and Aldric wraps up in your chat. Work you cancelled is skipped.
     if (Option.isSome(cutoff)) yield* answered(cutoff.value.id, build.id, step);
