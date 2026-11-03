@@ -106,14 +106,17 @@ const FILE_OPERATIONS: ReadonlyArray<PolicyOperation> = ["read-files", "edit-fil
  * What the member's tools will be under `decisions`, in words for the lead, refusing a request whose
  * own answers open commands and close the file operations they run with, so no member is given work
  * it has no tool for (#661). The same gap left by the lead's or the member's own policy is a warning.
+ * With no folder, or reading denied, the member's turns are chat-only, as `toolTurn` makes them.
  * Commands also need the member's sandbox, which is decided when its turn starts.
  */
 const toolsFor = (
   member: Agent,
   asked: PolicyOverrides | undefined,
-  decisions: Record<PolicyOperation, PolicyDecision>,
+  { decisions, folders }: Pick<Authority, "decisions" | "folders">,
 ) => {
   const open = openTools((operation) => decisions[operation]);
+  const chatOnly =
+    folders.length === 0 ? "no folder is both yours and its own" : open.read ? null : "it would have read-files deny";
   const tools = [
     [open.read, "file reads"],
     [open.edit, "file edits"],
@@ -123,9 +126,9 @@ const toolsFor = (
   const has = tools.flatMap(([on, name]) => (on ? [name] : []));
   const lacks = tools.flatMap(([on, name]) => (on ? [] : [`no ${name}`]));
   const summary =
-    has.length === 0
-      ? ` ${member.name} will have no tools.`
-      : ` ${member.name} will have: ${[has.join(", "), ...(lacks.length === 0 ? [] : [lacks.join(", ")])].join("; ")}.`;
+    chatOnly === null
+      ? ` ${member.name} will have: ${[has.join(", "), ...(lacks.length === 0 ? [] : [lacks.join(", ")])].join("; ")}.`
+      : ` ${member.name} will have no tools: ${chatOnly}, so its turns are chat-only. Do the Task's file work yourself, or give it work that needs no files.`;
   const commands = COMMAND_OPERATIONS.filter((operation) => decisions[operation] !== "deny");
   if (open.commands || commands.length === 0) return Effect.succeed(summary);
   const closing = FILE_OPERATIONS.filter((operation) => decisions[operation] !== "allow");
@@ -139,6 +142,7 @@ const toolsFor = (
       `${member.name} could not use ${gives.join(" or ")}: ${rule}. Give ${takes.join(" and ")} allow, or give ${gives.join(" and ")} deny and run the commands yourself.${summary}`,
     );
   }
+  if (chatOnly !== null) return Effect.succeed(summary);
   return Effect.succeed(
     `${summary} It cannot use ${commands.join(" or ")} though it has them: ${rule}. Run any commands the Task needs yourself.`,
   );
@@ -206,7 +210,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         yield* checkMember(scope, task, member);
         yield* capacity(scope, member.id, 1);
         const { decisions, ...given } = yield* memberAuthority(scope, task, member, input);
-        const tools = yield* toolsFor(member, input.authority?.decisions, decisions);
+        const tools = yield* toolsFor(member, input.authority?.decisions, { decisions, folders: given.folders });
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         const journal = journalOf();
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);

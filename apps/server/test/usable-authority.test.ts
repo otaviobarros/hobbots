@@ -2,7 +2,19 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { toolRequests, toolTurn } from "@hobbots/runtimes";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
-import { hub, memberTask, PIP, ROOK, retry, send, sharedDatabase, startHub, treeWhen } from "./dependency-hub.ts";
+import {
+  hub,
+  memberTask,
+  PIP,
+  promptsTo,
+  ROOK,
+  retry,
+  send,
+  sharedDatabase,
+  startHub,
+  taskOf,
+  treeWhen,
+} from "./dependency-hub.ts";
 
 // Issue #661: a lead gave its member Local Git and Run commands with Edit files Never, meaning "commit,
 // but touch no file". Commands run only through Bash, which a hob has only when Read files and Edit
@@ -58,13 +70,13 @@ describe("a delegation whose authority leaves the member no tool for its brief",
         }),
       ]),
     );
-    await run(treeWhen((each) => memberTask(each, ROOK) !== undefined));
+    const rook = taskOf(await run(treeWhen((each) => memberTask(each, ROOK) !== undefined)), ROOK);
     expect(answers.get("commit")).toContain("Rook will have: file reads, file edits, commands, git_init.");
 
     const request = await run(
       retry(
         Effect.suspend(() => {
-          const found = requests.find((each) => each.prompt.includes("Make the local commit"));
+          const [found] = promptsTo(requests, rook);
           return found === undefined ? Effect.fail("not yet") : Effect.succeed(found);
         }),
       ),
@@ -80,5 +92,37 @@ describe("a delegation whose authority leaves the member no tool for its brief",
       ).pipe(Effect.provide(PolicyEngine.node)),
     );
     expect(verdicts.map((each) => [each.operation, each.decision])).toEqual([["local-git", "allow"]]);
+  }, 30_000);
+
+  // covers OR-002, PE-005
+  it("[TC-OR-433] tells the lead a member with no folder in common will have no tools, and its turn is chat-only", async () => {
+    const { run, answers, requests } = await startHub(await sharedDatabase());
+    await run(
+      send([
+        "Commit the app",
+        hub("delegate_task", {
+          key: "commit",
+          hob: "Rook",
+          brief: "Make the local commit",
+          authority: { folders: [] },
+        }),
+      ]),
+    );
+    const rook = taskOf(await run(treeWhen((each) => memberTask(each, ROOK) !== undefined)), ROOK);
+    const answer = answers.get("commit");
+    expect(answer).toContain(
+      "Rook will have no tools: no folder is both yours and its own, so its turns are chat-only.",
+    );
+    expect(answer).not.toContain("will have: ");
+
+    const request = await run(
+      retry(
+        Effect.suspend(() => {
+          const [found] = promptsTo(requests, rook);
+          return found === undefined ? Effect.fail("not yet") : Effect.succeed(found);
+        }),
+      ),
+    );
+    expect(toolTurn(request.tools, "on")).toBeNull();
   }, 30_000);
 });
