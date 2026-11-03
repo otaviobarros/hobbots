@@ -27,7 +27,7 @@ import {
   type StartAppServer,
   TOOLS_CLOSED,
 } from "../src/codex/turn.ts";
-import type { ProcessSandboxShape, SandboxScope } from "../src/sandbox.ts";
+import { type ProcessSandboxShape, type SandboxScope, sandboxFilesystem } from "../src/sandbox.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-codex-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -639,6 +639,12 @@ describe("a Codex turn with tools", () => {
         allowedHosts: CODEX_MODEL_HOSTS,
       }),
     ]);
+    // What Codex writes it reads back, such as its state database, which on macOS needs both.
+    const filesystem = sandboxFilesystem({ ...(scopes[0] as Omit<SandboxScope, "tempFolder">), tempFolder: temp });
+    for (const path of codexWrites(runtimeFolder)) {
+      expect(filesystem.allowWrite).toContain(path);
+      expect(filesystem.allowRead).toContain(path);
+    }
     // Codex makes its installation ID on its first start, outside the sandbox; the folders are made before it.
     for (const folder of codexWrites(runtimeFolder).filter((path) => !path.endsWith("installation_id"))) {
       expect(existsSync(folder)).toBe(true);

@@ -58,7 +58,7 @@ export interface SandboxScope {
    * The only places inside `runtimeFolder` the turn's processes may read and write, for a runtime
    * that would load what it wrote outside the policy, such as Codex's configuration and execution
    * rules (ADR 024). Absent, the whole runtime folder is open. Listed one by one, since on Linux a
-   * folder opened for reading hides what is writable inside it.
+   * folder opened for reading hides what is writable inside it. What it may write it may also read.
    */
   readonly runtimeAccess?: { readonly read: ReadonlyArray<string>; readonly write: ReadonlyArray<string> };
   /** More places that must stay readable for the runtime to start, such as the package its binary runs from. */
@@ -152,7 +152,8 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
     allowRead: [
       ...new Set([
         ...(scope.folderAccess.read ? scope.folders : []),
-        ...(scope.runtimeAccess?.read ?? [scope.runtimeFolder]),
+        // On macOS, writing a path does not open it for reading, and the runtime reads back what it writes.
+        ...(scope.runtimeAccess ? [...scope.runtimeAccess.read, ...scope.runtimeAccess.write] : [scope.runtimeFolder]),
         scope.tempFolder,
         ...binaryDirs,
         ...(scope.runtimeFiles ?? []),
