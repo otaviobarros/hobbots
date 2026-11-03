@@ -41,7 +41,8 @@ export type TaskEvent =
           | "NoteLeft"
           | "HandedOff"
           | "TaskCompleted"
-          | "QuestCompleted";
+          | "QuestCompleted"
+          | "ToolCallRefused";
       }
     >;
 
@@ -191,6 +192,12 @@ const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
   QuestionEscalated: questionChange,
   QuestionWithdrawn: questionChange,
   NoteLeft: (tree, { note }, ids) => (ids.has(note.taskId) ? { notes: upsertNewer(tree.notes, note) } : null),
+  // A refusal tried again replaces its record, unless the copy known was refused later.
+  ToolCallRefused: (tree, { refusal }, ids) => {
+    if (refusal.taskId === null || !ids.has(refusal.taskId)) return null;
+    const known = tree.refusals.find((each) => each.id === refusal.id);
+    return known !== undefined && known.tries > refusal.tries ? null : { refusals: upsert(tree.refusals, refusal) };
+  },
   HandedOff: (tree, { handOff, artifact }, ids) => {
     if (!ids.has(handOff.toTaskId) && !ids.has(artifact.taskId)) return null;
     const known = tree.handOffs.some(

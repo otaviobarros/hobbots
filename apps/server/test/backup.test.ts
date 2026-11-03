@@ -31,6 +31,7 @@ import {
   DeviceRepositoryLive,
   EventJournal,
   HobbotsRepositoryLive,
+  knownSchemaVersion,
   migrations,
   RestoreRepository,
   SqliteLive,
@@ -235,12 +236,12 @@ describe("backup and restore", () => {
     expect(made.path).toBe(folder);
 
     await rm(dataDir, { recursive: true, force: true });
-    const manifest = await readBackup(folder, 38);
+    const manifest = await readBackup(folder, knownSchemaVersion());
     expect(manifest).toMatchObject({
       format: "hobbots.backup",
       storage: "sqlite",
       database: "included",
-      schemaVersion: 38,
+      schemaVersion: knownSchemaVersion(),
       counts: { hobs: 1, threads: 1, quests: 1, tasks: 1 },
     });
     const setAside = await Effect.runPromise(performRestore(dataDir, folder));
@@ -551,7 +552,7 @@ describe("backup and restore", () => {
     await seedFiles(dataDir);
     const folder = join(destination, "six.hobbots-backup");
     await backUp(dataDir, folder);
-    const manifest = await readBackup(folder, 38);
+    const manifest = await readBackup(folder, knownSchemaVersion());
     const snapshot = async () => {
       const files = await listFiles(dataDir);
       return Object.fromEntries(

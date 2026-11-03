@@ -11,6 +11,7 @@ import {
   Milestone,
   Quest,
   Question,
+  RefusedCall,
   Task,
   type TaskId,
   TaskNote,
@@ -57,6 +58,19 @@ const fromRow = {
   handOff: (row: Row) => row,
   note: (row: Row) => ({ ...row, revision: int(row.revision) }),
   wait: (row: Row) => ({ taskId: row.taskId, on: json(row.waitsOn), mode: row.mode, createdAt: row.createdAt }),
+  refusal: (row: Row) => ({
+    id: row.id,
+    agentId: row.agentId,
+    taskId: row.taskId,
+    tool: row.tool,
+    key: row.callKey,
+    input: row.input,
+    reason: row.reason,
+    message: row.message,
+    tries: int(row.tries),
+    createdAt: row.createdAt,
+    refusedAt: row.refusedAt,
+  }),
 };
 
 const decoders = {
@@ -71,6 +85,7 @@ const decoders = {
   handOff: Schema.decodeUnknownEffect(Schema.Array(HandOff)),
   note: Schema.decodeUnknownEffect(Schema.Array(TaskNote)),
   wait: Schema.decodeUnknownEffect(Schema.Array(TaskWait)),
+  refusal: Schema.decodeUnknownEffect(Schema.Array(RefusedCall)),
 };
 
 interface Records {
@@ -85,6 +100,7 @@ interface Records {
   readonly handOff: HandOff;
   readonly note: TaskNote;
   readonly wait: TaskWait;
+  readonly refusal: RefusedCall;
 }
 
 /** Decodes stored rows as records of `kind`. A row that does not decode is a defect: the hub wrote it. */
@@ -213,6 +229,9 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
         ),
         waits: yield* sql<Row>`SELECT * FROM task_waits WHERE ${inTree("task_id")}
           ORDER BY ${orderBy(sql, ["created_at", "task_id"])}`.pipe(Effect.flatMap(decodeRows("wait"))),
+        refusals: yield* sql<Row>`SELECT * FROM task_tool_refusals WHERE ${inTree("task_id")} ORDER BY ${oldest}`.pipe(
+          Effect.flatMap(decodeRows("refusal")),
+        ),
       });
     });
 

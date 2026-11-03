@@ -60,7 +60,12 @@ export function ReplySteps({
               settle={step.state === "uncertain" ? settle?.(step.id) : undefined}
             />
           ) : (
-            <StepLine step={step} outcome={step.state} />
+            <>
+              <StepLine step={step} outcome={step.state} />
+              {step.state === "failed" && step.output !== undefined && (
+                <span className="block ps-5.5 text-xs text-rose">{copy.refused({ why: step.output.head })}</span>
+              )}
+            </>
           )}
         </li>
       ))}

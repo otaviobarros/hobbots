@@ -65,7 +65,7 @@ Screenshot moves to #382 with the Browser. Computer control stays Later.
 Summary is built from records the hub already keeps. It makes **no model call**, so it costs nothing, is never wrong about what happened and works offline from the runtime.
 
 - **What you asked.** The Task's brief: your message, or the lead's brief for a member's Task.
-- **What happened.** Its checkpoints and steps in order, each with a mark: done, failed, waiting or next. Retries show as tries.
+- **What happened.** Its checkpoints and steps in order, each with a mark: done, failed, waiting or next. Retries show as tries. A hob tool call the hub refused on the Task shows as failed, with what the hob was told ([#575](https://github.com/otaviobarros/hobbots/issues/575)).
 - **What it made.** The Task's Artifact references (files, links and text) and its changed files, each linked into Files or Changes.
 - **Still open.** Its open questions, pending approvals, blockers and unresolved backpack items, each linked to where you act on it.
 - **The result**, once the Task has one.

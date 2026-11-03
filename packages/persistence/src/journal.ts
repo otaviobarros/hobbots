@@ -143,6 +143,8 @@ const restCorrelationOf = (
       return { ...NONE, taskId: event.taskId };
     case "FolderScanned":
       return { ...NONE, taskId: event.scan.taskId };
+    case "ToolCallRefused":
+      return { ...NONE, agentId: event.refusal.agentId, taskId: event.refusal.taskId };
     default:
       return { ...NONE, threadId: event.threadId, messageId: event.messageId };
   }
