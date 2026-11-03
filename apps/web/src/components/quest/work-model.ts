@@ -248,10 +248,21 @@ export const findTask = (trees: ReadonlyArray<TaskTree>, taskId: TaskId) => {
   return null;
 };
 
-/** What the drawer shows for a Task: its brief, checkpoints, questions and output. */
+/**
+ * The completed Tasks the Task comes after, oldest first: the hub gives the Task what they returned,
+ * their results and artifacts, when it starts (ADR 018).
+ */
+const returnedTo = (tree: TaskTree, task: Task): ReadonlyArray<Task> =>
+  task.dependsOn.flatMap((id) => tree.tasks.filter((each) => each.id === id && each.result !== null));
+
+/** What the drawer shows for a Task: its brief, checkpoints, questions and output, and what it was given. */
 export const taskDetail = (tree: TaskTree, task: Task) => {
   const delegation = tree.delegations.find((each) => each.childTaskId === task.id) ?? null;
-  const received = new Set(tree.handOffs.filter((each) => each.toTaskId === task.id).map((each) => each.artifactId));
+  const returned = returnedTo(tree, task);
+  const received = new Set([
+    ...tree.handOffs.filter((each) => each.toTaskId === task.id).map((each) => each.artifactId),
+    ...tree.artifacts.filter((each) => returned.some((done) => done.id === each.taskId)).map((each) => each.id),
+  ]);
   return {
     brief: delegation?.brief ?? task.brief,
     expected: delegation?.expectedOutput ?? null,
@@ -264,6 +275,7 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
     notes: tree.notes.filter((each) => each.taskId === task.id && (each.senderId ?? null) === null),
     output: tree.artifacts.filter((each) => each.taskId === task.id),
     given: tree.artifacts.filter((each) => received.has(each.id)),
+    returned,
     rows: workRowsAll(tree, task),
   };
 };
