@@ -355,6 +355,6 @@ export const attemptsOf = (tree: TaskTree, task: Task) =>
 export const promptsTo = (requests: ReadonlyArray<PromptRequest>, task: Task) =>
   requests.filter(
     (request) =>
-      request.prompt.includes(`Task id: ${task.id}.`) ||
-      request.prompt.split("\n\n").some((part) => part.startsWith(`You work on Task ${task.id} `)),
+      request.prompt.endsWith(`Task id: ${task.id}.`) ||
+      (request.prompt.split("\n\n").at(-1) ?? "").startsWith(`You work on Task ${task.id} `),
   );

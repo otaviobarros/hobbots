@@ -303,8 +303,8 @@ const expectAdaQueued = (waiting: TaskTree, requests: ReadonlyArray<PromptReques
 };
 
 /**
- * Ada started only once Quill's Task had completed, and finished with his copy from Aldric: in her
- * first turn when the hand-off was already there, or in a second turn of the same session.
+ * Ada started only once Quill's Task had completed, with his copy in her first prompt, and
+ * finished in that one turn: nothing had to be handed to her.
  */
 const expectAdaFinished = (
   done: TaskTree,
@@ -312,21 +312,22 @@ const expectAdaFinished = (
   { quillTask, adaTask }: { readonly quillTask: Task | undefined; readonly adaTask: Task | undefined },
 ) => {
   const adaPrompts = promptsTo(requests, adaTask);
+  expect(adaPrompts).toHaveLength(1);
   const [adaFirst] = adaPrompts;
   expect(adaFirst?.sessionId).toBeNull();
   expect(adaFirst?.prompt).toContain("Aldric gave you this Task as part of a Quest Aldric leads.");
-  expect(adaFirst?.prompt).toContain(`Task ${quillTask?.id}, completed: Draft the landing copy`);
-  expect(adaPrompts.some((request) => request.prompt.includes("Black Friday: 20% off everything"))).toBe(true);
+  expect(adaFirst?.prompt).toContain(`Task ${quillTask?.id} (Draft the landing copy) returned: Landing copy ready`);
+  expect(adaFirst?.prompt).toContain("Black Friday: 20% off everything");
   const adaAttempts = done.attempts.filter((each) => each.taskId === adaTask?.id);
-  expect(adaAttempts.map((each) => each.state)).toEqual(adaPrompts.map(() => "completed"));
-  expect(adaPrompts.slice(1).every((request) => request.sessionId === adaAttempts[0]?.sessionId)).toBe(true);
+  expect(adaAttempts.map((each) => each.state)).toEqual(["completed"]);
   const quillDone = done.tasks.find((each) => each.id === quillTask?.id)?.updatedAt ?? "";
   expect(adaAttempts.every((each) => each.startedAt >= quillDone)).toBe(true);
+  expect(done.handOffs).toEqual([]);
 };
 
 describe("leading a party on a Quest", () => {
   // covers OR-002, OR-003, IN-004
-  it("[TC-OR-090] Aldric delegates to Quill and Ada; Ada's Task waits for Quill's to complete and gets his copy through Aldric, who wraps up in the chat", async () => {
+  it("[TC-OR-090] Aldric delegates to Quill and Ada; Ada's Task waits for Quill's to complete and starts with his copy, and Aldric wraps up in the chat", async () => {
     const { run, requests, release } = setUp();
     const prompt = [
       "Plan the Black Friday campaign",
@@ -354,8 +355,9 @@ describe("leading a party on a Quest", () => {
         depends_on: ["$copy.task_id"],
       }),
       hub("wait_for", { key: "wait", tasks: ["$copy.task_id", "$build.task_id"] }),
-      // Aldric's next turn answers you; the two after it are the continuations that work arriving starts.
-      `fake:then fake:then ${hub("hand_off", { key: "hand", artifact_id: "$copy-done.artifacts.0", to_task_id: "$build.task_id" })}`,
+      // Aldric's next turn answers you; the two after it are the continuations that each result
+      // starts. He wraps up once both are in: before then the wrap-up is refused.
+      `fake:then fake:then ${hub("complete_task", { key: "early", summary: "Too early" })}`,
       `fake:then fake:then fake:then ${hub("complete_task", { key: "wrap", summary: "The Black Friday campaign is ready" })}`,
     ].join("\n");
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
@@ -381,20 +383,21 @@ describe("leading a party on a Quest", () => {
     const chatted = await run(messagesWhen((all) => all.length === 4));
     expect(chatted.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
 
-    // Quill finishes; Aldric hands his copy to Ada, who finishes in her own session; Aldric wraps up.
+    // Quill finishes; Ada starts with his copy and finishes in her own session; Aldric wraps up.
     await release();
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     expect(done.tasks[0]?.result?.summary).toBe("The Black Friday campaign is ready");
     expect(ownedBy(done, QUILL)?.state).toBe("completed");
     expect(ownedBy(done, ADA)?.state).toBe("completed");
-    expect(done.handOffs.map((each) => each.toTaskId)).toEqual([adaTask?.id]);
+    expect(adaTask?.dependsOn).toEqual([members.quillTask?.id]);
 
     expectAdaFinished(done, requests, members);
 
-    // Two continuations in the chat: the hand-off, then the wrap-up with the Quest's result.
+    // Two continuations in the chat: Quill's result, where wrapping up is refused while Ada's Task
+    // is open, then Ada's, where Aldric wraps up with the Quest's result.
     const all = await run(messagesWhen((each) => continuations(each).length === 2));
-    const [handing, wrapUp] = continuations(all);
-    expect(handing?.content).toContain("hand_off: Handed Landing copy to Task");
+    const [early, wrapUp] = continuations(all);
+    expect(early?.content).toContain("Refused");
     expect(wrapUp?.content).toContain(`finished. Its result:`);
     expect(wrapUp?.content).toContain("complete_task: Task");
     // Nothing is left for anyone to deal with, routine progress included: Ada's reached Aldric as a

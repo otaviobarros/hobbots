@@ -600,7 +600,9 @@ describe("the Black Friday Quest end to end", () => {
     expect(done.handOffs.map((each) => each.toTaskId)).toEqual([ada.id]);
     const adaPrompts = promptsTo(script.requests, ada);
     expect(adaPrompts).toHaveLength(3);
-    expect(adaPrompts[0]?.prompt).toContain(`Task ${taskOf(done, QUILL).id}, completed: Draft the landing copy`);
+    expect(adaPrompts[0]?.prompt).toContain(
+      `Task ${taskOf(done, QUILL).id} (Draft the landing copy) returned: Playful landing copy`,
+    );
     expect(adaPrompts[1]?.prompt).toContain("Black Friday: 20% off everything");
     expect(adaPrompts[2]?.prompt).toContain('was answered by the user: "Yes, Dec 12"');
     expect(new Set(adaPrompts.slice(1).map((request) => request.sessionId)).size).toBe(1);
