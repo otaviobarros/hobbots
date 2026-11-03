@@ -16,6 +16,7 @@ import {
 } from "./app-server.ts";
 import type { ChatGptTokens } from "./auth.ts";
 import { type CodexTurnEvents, codexTurnEvents, type TurnEnd } from "./events.ts";
+import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
 import { codexPath } from "./locate.ts";
 import { TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
 
@@ -39,12 +40,15 @@ interface CodexToolTurn {
   readonly redact: (text: string) => string;
 }
 
-/** A request Codex sends about a tool call. */
-type ToolRequest = Exclude<TurnServerRequest, { readonly method: "account/chatgptAuthTokens/refresh" }>;
+/** A request Codex sends about a tool call it would run itself. Hub tool calls go to the hub instead. */
+type ToolRequest = Exclude<
+  TurnServerRequest,
+  { readonly method: "account/chatgptAuthTokens/refresh" | "item/tool/call" }
+>;
 
 /**
- * Decides the tool calls Codex asks about: commands, file changes, MCP calls and hub tools. The
- * policy (#439) and hub tools (#440) plug in here; until then every call is refused.
+ * Decides the tool calls Codex asks about: commands, file changes and MCP calls. The policy (#439)
+ * plugs in here; until then every call is refused.
  */
 type CodexToolGate = (request: ToolRequest, turn: CodexToolTurn) => Effect.Effect<unknown, RuntimeError>;
 
@@ -81,11 +85,6 @@ const refuseTools: CodexToolGate = (request, turn) =>
         return { decision: "decline" };
       case "mcpServer/elicitation/request":
         return { action: "decline", content: null, _meta: null };
-      case "item/tool/call": {
-        const { callId, tool } = request.params;
-        denied(turn, { id: callId, tool, operation: "run-commands", label: `Using ${tool}` });
-        return { contentItems: [{ type: "inputText", text: TOOLS_CLOSED }], success: false };
-      }
     }
   });
 
@@ -172,6 +171,7 @@ const failed = (error: AppServerError | RuntimeError) =>
 const requestHandlers = (
   config: CodexTurnConfig,
   binary: string,
+  hub: PromptRequest["hubTools"],
   turn: () => CodexToolTurn | undefined,
 ): ServerRequestHandlers => {
   const answer = (request: TurnServerRequest): Effect.Effect<unknown, RuntimeError> => {
@@ -189,6 +189,8 @@ const requestHandlers = (
     const current = turn();
     // Codex asks about calls only while a turn runs, which is after its thread is open.
     if (current === undefined) return Effect.fail(new RuntimeError({ message: "No Codex turn is running." }));
+    // Hub tools reach the hub on this channel, so the sandbox holds no hub address or token (ADR 024).
+    if (request.method === "item/tool/call") return callHubTool(hub, request.params, current);
     return (config.tools ?? refuseTools)(request, current);
   };
   return Object.fromEntries(
@@ -202,7 +204,10 @@ const requestHandlers = (
   );
 };
 
-/** Opens the turn's Codex thread: resumes the Hobbots thread's session, or starts one. */
+/**
+ * Opens the turn's Codex thread: resumes the Hobbots thread's session, or starts one with the turn's
+ * hub tools. A resumed thread keeps the hub tools it started with, since `thread/resume` takes none.
+ */
 const openThread = (server: AppServer, request: PromptRequest, cwd: string, instructions: string) => {
   const model = request.model ? { model: request.model } : {};
   return request.sessionId
@@ -218,7 +223,7 @@ const openThread = (server: AppServer, request: PromptRequest, cwd: string, inst
         ...THREAD_SETTINGS,
         ...model,
         developerInstructions: instructions,
-        dynamicTools: [],
+        dynamicTools: dynamicToolsOf(request.hubTools),
       });
 };
 
@@ -298,7 +303,10 @@ export const runCodexTurn = (
             },
             cwd,
           },
-          { handlers: requestHandlers(config, binary, () => turn), clientVersion: config.clientVersion },
+          {
+            handlers: requestHandlers(config, binary, request.hubTools, () => turn),
+            clientVersion: config.clientVersion,
+          },
         )
         .pipe(Effect.mapError(failed));
 

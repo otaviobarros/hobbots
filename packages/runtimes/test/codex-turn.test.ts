@@ -1,12 +1,20 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type PromptRequest, RuntimeError, type RuntimeEvent, RuntimeLimitReached } from "@hobbots/agents";
+import {
+  type HubTools,
+  type PromptRequest,
+  RuntimeError,
+  type RuntimeEvent,
+  RuntimeLimitReached,
+} from "@hobbots/agents";
+import { ApprovalId } from "@hobbots/domain";
 import { Effect, Exit, Fiber, PubSub, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import type { AppServer, AppServerCommand, AppServerNotification } from "../src/codex/app-server.ts";
 import type { ChatGptTokens } from "../src/codex/auth.ts";
 import { codexTurnEvents, LOST_CALL, LOST_TURN } from "../src/codex/events.ts";
+import { notOffered } from "../src/codex/hub-tools.ts";
 import {
   type CodexTurnConfig,
   codexFolders,
@@ -301,20 +309,18 @@ describe("a Codex turn", () => {
         ask("item/commandExecution/requestApproval", { itemId: "c1", command: "ls -la", cwd: "/w" }),
         ask("item/fileChange/requestApproval", { itemId: "f1" }),
         ask("mcpServer/elicitation/request", { serverName: "s", mode: "form" }),
-        ask("item/tool/call", { callId: "t1", tool: "delegate", arguments: {} }),
         ask("item/permissions/requestApproval", { itemId: "p1" }),
       ],
       script: [message("m1", "I could not run it."), completed("completed")],
     });
     const exit = await run(config(server.start));
-    expect(server.answers.slice(0, 4)).toEqual([
+    expect(server.answers.slice(0, 3)).toEqual([
       { decision: "decline" },
       { decision: "decline" },
       { action: "decline", content: null, _meta: null },
-      { contentItems: [{ type: "inputText", text: TOOLS_CLOSED }], success: false },
     ]);
     // Anything else Codex asks the client fails, which Codex takes as refused.
-    expect(server.answers[4]).toEqual({ refused: "no handler" });
+    expect(server.answers[3]).toEqual({ refused: "no handler" });
     const denied = events(exit).filter((event) => event._tag === "ToolDenied");
     expect(denied).toEqual([
       expect.objectContaining({
@@ -324,8 +330,13 @@ describe("a Codex turn", () => {
         label: "Running ls -la",
         targets: ["/w"],
       }),
-      expect.objectContaining({ id: "f1", tool: "apply_patch", operation: "edit-files", decidedBy: "policy" }),
-      expect.objectContaining({ id: "t1", tool: "delegate", reason: TOOLS_CLOSED }),
+      expect.objectContaining({
+        id: "f1",
+        tool: "apply_patch",
+        operation: "edit-files",
+        reason: TOOLS_CLOSED,
+        decidedBy: "policy",
+      }),
     ]);
     expect(events(exit).at(-1)).toMatchObject({ _tag: "Completed", text: "I could not run it." });
   });
@@ -382,6 +393,137 @@ describe("a Codex turn", () => {
     expect(settings).toContain(`sqlite_home = ${JSON.stringify(state)}`);
     expect(settings).toContain('web_search = "disabled"');
     expect(settings).toMatch(/\[features\][^[]*view_image = false[^[]*multi_agent = false/);
+  });
+
+  // Hub tools (#440): served as Codex dynamic tools on the App Server's channel (ADR 024).
+  const hubCalls: Array<{ readonly name: string; readonly input: unknown; readonly step?: string }> = [];
+  const hub: HubTools = {
+    tools: [
+      {
+        name: "delegate_task",
+        description: "Hands a Task to another hob.",
+        inputSchema: { type: "object", properties: { hob: { type: "string" } }, required: ["hob"] },
+        label: "Delegating a Task",
+      },
+    ],
+    call: (name, input, step) =>
+      Effect.sync(() => {
+        hubCalls.push({ name, input, ...(step ? { step: step.id } : {}) });
+        step?.report({
+          _tag: "ToolAwaitingApproval",
+          id: step.id,
+          tool: name,
+          operation: "run-commands",
+          targets: [],
+          label: "Delegating a Task",
+          approvalId: ApprovalId.make("a1"),
+        });
+        return name === "delegate_task"
+          ? { text: "Delegated to Quill as Task t-1.", refused: false }
+          : { text: `${name} is not offered.`, refused: true };
+      }),
+  };
+  const toolCall = (callId: string, tool: string, input: unknown = {}) => ({
+    method: "item/tool/call",
+    params: { threadId: THREAD, turnId: TURN, callId, namespace: null, tool, arguments: input },
+  });
+  const toolDone = (id: string, tool: string, success: boolean) =>
+    item("item/completed", { type: "dynamicToolCall", id, tool, status: success ? "completed" : "failed", success });
+
+  // covers OR-001, PE-003, ADR 024
+  it("[TC-RT-080] declares the turn's hub tools on a new Codex thread and answers each call through the hub, as a step", async () => {
+    hubCalls.length = 0;
+    const server = fakeServer({
+      asks: [toolCall("call_1", "delegate_task", { hob: "Quill" })],
+      script: [toolDone("call_1", "delegate_task", true), message("m1", "Quill has it."), completed("completed")],
+    });
+    const exit = await run(config(server.start), prompt({ hubTools: hub }));
+    expect(server.requests.find((request) => request.method === "thread/start")?.params).toMatchObject({
+      dynamicTools: [
+        {
+          type: "function",
+          name: "delegate_task",
+          description: "Hands a Task to another hob.",
+          inputSchema: hub.tools[0]?.inputSchema,
+        },
+      ],
+    });
+    // The hub decided the call with its step, so an approval it asks for waits on that step.
+    expect(hubCalls).toEqual([{ name: "delegate_task", input: { hob: "Quill" }, step: "call_1" }]);
+    expect(server.answers[0]).toEqual({
+      contentItems: [{ type: "inputText", text: "Delegated to Quill as Task t-1." }],
+      success: true,
+    });
+    expect(events(exit).filter((event) => event._tag !== "TextDelta")).toEqual([
+      { _tag: "SessionStarted", sessionId: THREAD, billing: null },
+      { _tag: "StepStarted", id: "call_1", kind: "tool", label: "Delegating a Task" },
+      expect.objectContaining({ _tag: "ToolAwaitingApproval", id: "call_1", approvalId: "a1" }),
+      { _tag: "ToolFinished", id: "call_1", failed: false },
+      expect.objectContaining({ _tag: "Completed", text: "Quill has it." }),
+    ]);
+    // The tools reach the hub on the App Server's channel: no MCP server, no hub address or token.
+    const command = server.commands[0];
+    expect(JSON.stringify(command?.args)).not.toContain("mcp_servers");
+    expect(Object.keys(command?.env ?? {}).filter((name) => /HOBBOTS|HUB|TOKEN/i.test(name))).toEqual([]);
+  });
+
+  // covers PE-003, ADR 024
+  it("[TC-RT-081] refuses a hub tool the turn does not offer, including on a resumed thread that offers none", async () => {
+    hubCalls.length = 0;
+    const offered = fakeServer({
+      asks: [toolCall("call_1", "github_push")],
+      script: [toolDone("call_1", "github_push", false), completed("completed")],
+    });
+    const refused = await run(config(offered.start), prompt({ hubTools: hub }));
+    // The hub, not the tool's name, decided it.
+    expect(hubCalls.map((call) => call.name)).toEqual(["github_push"]);
+    expect(offered.answers[0]).toEqual({
+      contentItems: [{ type: "inputText", text: "github_push is not offered." }],
+      success: false,
+    });
+    expect(events(refused)).toContainEqual({ _tag: "ToolFinished", id: "call_1", failed: true });
+
+    // The thread started with hub tools, and this turn offers none: Codex may still call one.
+    const resumed = fakeServer({
+      asks: [toolCall("call_2", "delegate_task", { hob: "Quill" })],
+      script: [toolDone("call_2", "delegate_task", false), completed("completed")],
+    });
+    const exit = await run(config(resumed.start), prompt({ sessionId: THREAD }));
+    expect(resumed.requests.find((request) => request.method === "thread/resume")?.params).not.toHaveProperty(
+      "dynamicTools",
+    );
+    expect(resumed.answers[0]).toEqual({
+      contentItems: [{ type: "inputText", text: notOffered("delegate_task") }],
+      success: false,
+    });
+    expect(events(exit)).toContainEqual({
+      _tag: "StepStarted",
+      id: "call_2",
+      kind: "tool",
+      label: "Using delegate_task",
+    });
+    expect(hubCalls).toHaveLength(1);
+  });
+
+  // covers EX-004, ADR 024
+  it("[TC-RT-082] marks a hub tool call uncertain when Codex stops before it recorded the answer", async () => {
+    hubCalls.length = 0;
+    const server = fakeServer({ asks: [toolCall("call_1", "delegate_task", { hob: "Quill" })], dies: true });
+    const seen: Array<RuntimeEvent> = [];
+    const exit = await Effect.runPromise(
+      runCodexTurn(config(server.start), prompt({ hubTools: hub })).pipe(
+        Stream.runForEach((event) => Effect.sync(() => seen.push(event))),
+        Effect.exit,
+      ),
+    );
+    expect(exit).toEqual(Exit.fail(new RuntimeError({ message: LOST_TURN })));
+    // The hub ran the call, but the hob never heard its answer: it must be checked before it runs again.
+    expect(hubCalls).toHaveLength(1);
+    expect(seen.filter((event) => event._tag !== "ToolAwaitingApproval")).toEqual([
+      { _tag: "SessionStarted", sessionId: THREAD, billing: null },
+      { _tag: "StepStarted", id: "call_1", kind: "tool", label: "Delegating a Task" },
+      { _tag: "ToolUncertain", id: "call_1", reason: LOST_CALL },
+    ]);
   });
 });
 

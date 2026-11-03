@@ -53,7 +53,7 @@ Codex starts each turn with `approvalPolicy: "untrusted"`, `sandbox: "danger-ful
 | --- | --- | --- |
 | Tool interception | Under `untrusted`, with no execution rules loaded (below), Codex asks the client before **every** command (`item/commandExecution/requestApproval`), even `ls`, `pwd` and `git status`; before every file change (`item/fileChange/requestApproval`); and before every MCP tool call (`mcpServer/elicitation/request`, marked `codex_approval_kind: "mcp_tool_call"`). Hub tools reach the hub as calls it runs itself (below). The hub decides each request with the policy engine. Allow: record `ToolStarted` with `recordToolStart`, then answer `accept`; a failed record answers `decline`. Ask: `ToolAwaitingApproval`, wait for the user, then decide again. Never: `decline`. | Verified on Linux with a stand-in model |
 | Process sandbox | Hobbots wraps `codex app-server` in sandbox-runtime, as ADR 014 says, with Codex's own sandbox off (external sandbox above). | **Unverified**: needs #439 on macOS and Linux |
-| Hub tools | Codex's dynamic tools (below), not MCP. | Verified with a stand-in model |
+| Hub tools | Codex's dynamic tools (below), not MCP. | Verified with a stand-in model, and with the hub in CI (#440) |
 | Tool events | `item/started` and `item/completed` carry each command (line, folder, status, exit code, output), file change, MCP call and hub tool call. `item/commandExecution/outputDelta` streams output while a command runs, so Codex reports `ToolOutput`, unlike Claude Code. A declined command ends with status `declined`. | Verified with a stand-in model |
 | Tool interruption | `turn/interrupt`, acknowledged by `turn/completed` with status `interrupted` (above). | Verified with a stand-in model |
 
@@ -68,7 +68,7 @@ That these features are off is checked in #439 from the tools the first model re
 
 **Codex's own hooks are not used.** Codex 0.166.0 has `PreToolUse` and `PermissionRequest` hooks, and the probe showed a `PreToolUse` hook sees shell commands (as `Bash`), `apply_patch` and hub tools, and can refuse one with a reason. But a hook is a command Codex runs, so it would run inside the sandbox and need a way to reach the hub. Approval requests already reach the hub on the channel it holds. The cost: a call the policy refuses reaches the model as "rejected by user", not with the policy's reason. The Workbench and `ToolDenied` keep the reason.
 
-**What is blocked when one is missing.** ADR 014's table applies unchanged. Until #439 verifies the sandbox around Codex on this hub, a Codex hob gets file changes through approvals only: commands, Local Git and the web are blocked and labeled. Until #440 lands hub tools, a Codex hob cannot delegate or use Charms.
+**What is blocked when one is missing.** ADR 014's table applies unchanged. Until #439 verifies the sandbox around Codex on this hub, a Codex hob gets file changes through approvals only: commands, Local Git and the web are blocked and labeled. Hub tools need none of the missing capabilities, so a Codex hob delegates, reports and uses Charms from #440 on.
 
 ### What Codex reads from the folders and its home
 
@@ -85,6 +85,13 @@ The turn's coordination tools and Charm actions are Codex **dynamic tools**: `th
 
 The tools reach the hub on the channel the hub already holds, so the sandboxed process needs no hub address and no token. An MCP server would be a process Codex starts inside the sandbox, which would need both. Dynamic tools need the experimental API, which is the cost. Each call is decided by the hub, never approved by name, shows as a step, and carries its step for approvals, as in ADR 014 for Claude Code.
 
+How a call runs (#440):
+
+- **A step from the moment Codex asks.** The step's ID is the call's `callId`, which is also the ID of Codex's `dynamicToolCall` item. The hub is given that step, so a call that needs the user's approval waits on it.
+- **It ends with Codex's record of it.** The step ends when `item/completed` arrives for the call, as failed when the hub refused it (`success: false`). A Codex that exits before it recorded the answer leaves the call uncertain (EX-004): the hub may have done the work, but the hob never heard the answer.
+- **The hub finishes what it started.** A Codex that exits, or a turn that is cancelled, stops waiting for the answer, but the hub call runs to its end, as on Claude Code, so a write is never cut off halfway.
+- **A thread keeps the tools it started with.** Verified on Codex 0.166.0: `thread/resume` takes no dynamic tools and ignores any it is given, so a resumed thread offers its first turn's tools. The hub decides every call against the turn's own tools, so a tool the thread was offered but the turn does not hold is refused, and a turn with no hub tools refuses every call. A tool the hob gains after its Codex thread started, such as a Charm granted later, is not offered in that thread; a new thread offers it.
+
 ### Commit identity and attribution
 
 - **Identity.** Codex passes `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n` and `GIT_CONFIG_VALUE_n` to its commands unchanged (verified). So ADR 014's signing switch and ADR 022's bot identity work for Codex hobs through the same variables.
@@ -100,6 +107,7 @@ The tools reach the hub on the channel the hub already holds, so the sandboxed p
 - The adapter depends on Codex's experimental API (`app-server`, dynamic tools), so raising the Codex version is a deliberate change with the contract test.
 - A policy refusal reaches a Codex model as a plain rejection.
 - Codex hobs cannot use Codex's own sub-agents, web search or images; delegation goes through Hobbots.
+- A Codex thread offers the hub tools it started with. A Charm granted after a Codex thread started reaches the hob in a new thread only.
 
 ## Validation
 
@@ -111,7 +119,7 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - A command allowed in one turn writes an allow rule into `CODEX_HOME/rules` and into a folder's `.codex/rules`; the write to `CODEX_HOME/rules` fails, and in the next turn a command the rule names still asks the hub and is recorded before it runs. Not proven yet: [#439](https://github.com/otaviobarros/hobbots/issues/439).
 - Every command and file change Codex asks about is decided by the policy, recorded before it runs, refused when the record fails, held under Ask and declined under Never; the first model request offers no `view_image`, sub-agent, web search, image, app, plugin, browser or computer tool; and Codex runs inside Hobbots' sandbox on macOS and Linux with its own sandbox off. Not proven yet: [#439](https://github.com/otaviobarros/hobbots/issues/439).
 - A Codex hob's commits carry the hob's identity, honor the signing switch and carry no Codex attribution once signed in. Not proven yet: [#439](https://github.com/otaviobarros/hobbots/issues/439).
-- A Codex hob delegates and uses Charms through dynamic tools decided by the hub, each call a step, with no hub address or token in the sandbox. Not proven yet: [#440](https://github.com/otaviobarros/hobbots/issues/440).
+- A Codex hob delegates and uses Charms through dynamic tools decided by the hub, each call a step that carries its step for approvals, with no hub address or token in the sandbox; a call whose answer Codex never recorded is uncertain; a resumed thread keeps the tools it started with and the hub refuses one the turn does not hold; and a Claude hob delegates to a Codex hob, and a Codex hob to a Claude hob, each getting the result: `[TC-RT-080]` to `[TC-RT-082]` with a scripted App Server, `[TC-RT-083]` on an installed Codex 0.166.0 with a stand-in model, and `[TC-RT-084]`, `[TC-RT-085]` with the hub and a stand-in Codex in CI ([#440](https://github.com/otaviobarros/hobbots/issues/440), [evidence](../evidence/2026-11-03-codex-hub-tools.md)). With a real model on macOS, not proven yet: [#442](https://github.com/otaviobarros/hobbots/issues/442).
 - Codex shows as a provider in onboarding, Summon and the profile, and a missing, signed-out or outdated Codex cannot be picked. Not proven yet: [#441](https://github.com/otaviobarros/hobbots/issues/441).
 - A Claude hob delegates to a Codex hob in one Quest and gets its result, with the fake runtime in CI on SQLite and PostgreSQL and once by hand with an installed Codex on macOS. Not proven yet: [#442](https://github.com/otaviobarros/hobbots/issues/442).
 - The App Server behaviors this ADR relies on were observed on Codex 0.166.0 with a stand-in model: [evidence](../evidence/2026-11-03-codex-app-server-probe.md).
