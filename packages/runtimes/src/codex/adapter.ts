@@ -21,6 +21,13 @@ const installGuidance = "Install Codex with `npm install -g @openai/codex`, then
 const notStarted = `Codex could not be started. ${installGuidance}`;
 const outdated = `Hobbots needs Codex ${minimumCodexVersion} or later. Run \`npm install -g @openai/codex\`.`;
 
+/**
+ * Whether this build runs Codex turns. Until it does (#438), a signed-in Codex reports
+ * "unverified" and offers no model, so neither the brain picker nor the server lets a hob or
+ * thread pick a brain that cannot answer. Settings still shows how Codex is installed and signed in.
+ */
+const turnsRun = false;
+
 const notYet = { status: "unsupported", evidence: "Hobbots does not run Codex turns yet." } as const;
 
 /** What the Codex adapter enforces until it runs turns: nothing, so nothing is offered as safe. */
@@ -59,7 +66,7 @@ export const makeCodex = (config: CodexConfig) =>
       askAppServer(binary, readSignIn).pipe(
         Effect.map((signIn) =>
           runtimeHealth({
-            availability: signIn._tag === "ChatGpt" ? "ready" : "signedOut",
+            availability: signIn._tag !== "ChatGpt" ? "signedOut" : turnsRun ? "ready" : "unverified",
             billing: billingOf(signIn),
             version,
             // Health detail is never shown in the UI, which words each state itself.
@@ -81,9 +88,11 @@ export const makeCodex = (config: CodexConfig) =>
       probe,
       fallbackModels: codexFallbackModels,
       listModels: (binary) =>
-        askAppServer(binary, listModels).pipe(
-          Effect.map((listed) => (listed.length === 0 ? codexFallbackModels : toCodexModels(listed))),
-        ),
+        turnsRun
+          ? askAppServer(binary, listModels).pipe(
+              Effect.map((listed) => (listed.length === 0 ? codexFallbackModels : toCodexModels(listed))),
+            )
+          : Effect.succeed(codexFallbackModels),
     });
 
     return RuntimeAdapter.of({

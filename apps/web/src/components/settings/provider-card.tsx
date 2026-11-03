@@ -55,6 +55,10 @@ const fixHint = (runtime: RuntimeKind, health: RuntimeHealth | undefined) => {
   }
 };
 
+/** A Codex that is signed in but that this build cannot run turns with yet. */
+const waitsForTurns = (health: RuntimeHealth | undefined) =>
+  health?.runtime === "codex" && health.availability === "unverified";
+
 /** Claude Code that bills an API key instead of the user's subscription, which costs them extra. */
 const billsElsewhere = (health: RuntimeHealth | undefined) =>
   health?.runtime === "claude-code" &&
@@ -122,6 +126,7 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
       {health && <ProviderFacts health={health} />}
       {hint && <p className="mt-2 mb-0 text-sm text-lantern">{hint}</p>}
       {hint && <FixActions guide={look.guide} notFound={health?.version === null} />}
+      {waitsForTurns(health) && <p className="mt-2 mb-0 text-sm text-label">{copy.codex.turnsNotYet}</p>}
       {billsElsewhere(health) && <p className="mt-2 mb-0 text-sm text-lantern">{copy["claude-code"].billingWarning}</p>}
     </section>
   );

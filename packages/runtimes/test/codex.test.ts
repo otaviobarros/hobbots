@@ -1,15 +1,16 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { RuntimeAdapterShape } from "@hobbots/agents";
 import { type Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
+import { binaryLocator } from "../src/binary.ts";
 import { makeCodex } from "../src/codex/adapter.ts";
 import { startAppServer } from "../src/codex/app-server.ts";
 import { billingOf, chatGptTokens, signInOf } from "../src/codex/auth.ts";
-import { codexCandidates, codexPath, findCodex, parseCodexVersion } from "../src/codex/locate.ts";
-import { toCodexModels } from "../src/codex/models.ts";
+import { codexCandidates, codexPath, findCodex, minimumCodexVersion, parseCodexVersion } from "../src/codex/locate.ts";
+import { listModels, toCodexModels } from "../src/codex/models.ts";
 import type { Model } from "../src/codex/protocol.ts";
 import { type FakeCodexOptions, fakeCodex, fakeCodexLog } from "./codex-fixture.ts";
 
@@ -109,8 +110,9 @@ describe("Codex's models", () => {
   });
 });
 
+// covers RT-001
 describe("the App Server client", () => {
-  it("answers Codex's requests by method, refuses the rest, and ends with the process", async () => {
+  it("[TC-RT-013] answers Codex's requests by method, refuses the rest, and ends with the process", async () => {
     const dir = folder();
     const binary = fakeCodex(dir, { behavior: "ask" });
     const answered = await run(
@@ -142,7 +144,7 @@ describe("the App Server client", () => {
     });
   });
 
-  it("fails what is waiting and ends notifications when Codex exits", async () => {
+  it("[TC-RT-014] fails what is waiting and ends notifications when Codex exits", async () => {
     const binary = fakeCodex(folder(), { behavior: "exit" });
     const result = await run(
       Effect.scoped(
@@ -165,7 +167,7 @@ describe("the App Server client", () => {
     expect(result.read).toHaveLength(0);
   });
 
-  it("fails a start whose binary cannot run", async () => {
+  it("[TC-RT-015] fails a start whose binary cannot run", async () => {
     const exit = await run(
       Effect.exit(
         Effect.scoped(
@@ -180,14 +182,14 @@ describe("the App Server client", () => {
 
 // covers AG-005, RT-001
 describe("Codex's provider health", () => {
-  it("[TC-RT-001] reports a ChatGPT sign-in as ready, read without a token or a refresh", async () => {
+  it("[TC-RT-001] reports a ChatGPT sign-in as unverified until Codex turns run, read without a token or a refresh", async () => {
     const { dir, adapter } = codexWith({
       account: { type: "chatgpt", email: "me@example.com", planType: "pro", workspaceName: null },
     });
     const health = await Effect.runPromise((await adapter).health);
     expect(health).toMatchObject({
       runtime: "codex",
-      availability: "ready",
+      availability: "unverified",
       billing: "subscription (pro)",
       version: "0.166.0",
       detail: "me@example.com",
@@ -239,7 +241,8 @@ describe("Codex's provider health", () => {
 // covers AG-005, RT-001
 describe("Codex's models for the brain picker", () => {
   it("[TC-RT-008] lists every page Codex returns, without hidden models or ultra", async () => {
-    const { dir, adapter } = codexWith({
+    const dir = folder();
+    const binary = fakeCodex(dir, {
       pages: [
         [{ model: "gpt-6", supportedReasoningEfforts: efforts("low", "high", "ultra") }],
         [
@@ -248,13 +251,31 @@ describe("Codex's models for the brain picker", () => {
         ],
       ],
     });
-    const models = await Effect.runPromise((await adapter).models);
+    const listed = await run(
+      Effect.scoped(
+        startAppServer(
+          { command: binary, args: ["app-server"], env: { PATH: process.env.PATH ?? "" } },
+          { clientVersion: "test" },
+        ).pipe(Effect.flatMap(listModels)),
+      ),
+    );
+    const models = toCodexModels(listed);
     expect(models.source).toBe("runtime");
     expect(models.models.map((entry) => [entry.id, entry.efforts])).toEqual([
       ["gpt-6", ["low", "high"]],
       ["gpt-mini", ["low"]],
     ]);
     expect(fakeCodexLog(dir).filter((message) => message.method === "model/list")).toHaveLength(2);
+  });
+
+  it("[TC-RT-016] offers no models to pick while Codex turns do not run, even signed in", async () => {
+    const { dir, adapter } = codexWith({
+      account: { type: "chatgpt", email: null, planType: "plus", workspaceName: null },
+      pages: [[{ model: "gpt-6", supportedReasoningEfforts: efforts("low") }]],
+    });
+    const models = await Effect.runPromise((await adapter).models);
+    expect(models).toMatchObject({ runtime: "codex", source: "fallback", models: [] });
+    expect(fakeCodexLog(dir).some((message) => message.method === "model/list")).toBe(false);
   });
 
   it("[TC-RT-009] offers no models while Codex is missing or outdated", async () => {
@@ -292,5 +313,24 @@ describe("signing a turn in", () => {
     const exit = await tokensFrom({ account: { type: "apiKey" }, token: "key" });
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("not signed in with ChatGPT");
+  });
+});
+
+// covers AG-005
+describe("noticing an update", () => {
+  it("[TC-RT-017] asks a binary configured by bare name for its version again once it is updated", async () => {
+    const dir = folder();
+    fakeCodex(dir, { version: "codex-cli 0.166.0" });
+    const locate = binaryLocator({
+      find: () => "codex",
+      parse: parseCodexVersion,
+      env: () => ({ PATH: [dir, process.env.PATH ?? ""].join(delimiter) }),
+      minimum: minimumCodexVersion,
+    });
+    expect(await Effect.runPromise(locate)).toMatchObject({ _tag: "Found", binary: "codex", version: "0.166.0" });
+    const updated = fakeCodex(dir, { version: "codex-cli 0.167.0" });
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(updated, later, later);
+    expect(await Effect.runPromise(locate)).toMatchObject({ _tag: "Found", version: "0.167.0" });
   });
 });

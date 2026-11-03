@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
-import { resolve, sep } from "node:path";
+import { delimiter, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import type { RuntimeHealth, RuntimeModels } from "@hobbots/domain";
 import { Clock, DateTime, Duration, Effect } from "effect";
@@ -27,23 +27,47 @@ export const isAtLeast = (version: string, minimum: string): boolean => {
   return true;
 };
 
+/** The file a binary runs: the binary itself when it is a path, or a bare name's first match on PATH. */
+const binaryFile = (binary: string, path: string | undefined): string | undefined =>
+  binary.includes(sep)
+    ? binary
+    : (path ?? "")
+        .split(delimiter)
+        .filter((folder) => folder !== "")
+        .map((folder) => join(folder, binary))
+        .find(isExecutable);
+
+/** When the file a binary runs last changed, or undefined when that file cannot be found. */
+const modifiedAt = (binary: string, path: string | undefined): number | undefined => {
+  const file = binaryFile(binary, path);
+  if (file === undefined) return undefined;
+  try {
+    return statSync(file).mtimeMs;
+  } catch {
+    return undefined;
+  }
+};
+
 /**
  * Asks a runtime's binary for its version with `--version`, once per binary until the file
- * changes, as an update does. Undefined when the binary cannot run or prints no version.
+ * changes, as an update does. Undefined when the binary cannot run or prints no version. A binary
+ * whose file cannot be found, so an update could not be noticed, is asked every time.
  */
 const binaryVersions = (parse: (output: string) => string | undefined, env: (binary: string) => NodeJS.ProcessEnv) => {
   const versions = new Map<string, { readonly modified: number; readonly version: string }>();
   return (binary: string) =>
     Effect.gen(function* () {
+      const binaryEnv = env(binary);
       // A configured path may not exist, and an update can remove the binary between lookups.
-      const modified = yield* Effect.try(() => statSync(binary).mtimeMs).pipe(Effect.orElseSucceed(() => -1));
+      const modified = modifiedAt(binary, binaryEnv.PATH);
       const cached = versions.get(binary);
       if (cached !== undefined && cached.modified === modified) return cached.version;
       const output = yield* Effect.tryPromise(() =>
-        execFileAsync(binary, ["--version"], { timeout: 10_000, env: env(binary) }).then((result) => result.stdout),
+        execFileAsync(binary, ["--version"], { timeout: 10_000, env: binaryEnv }).then((result) => result.stdout),
       ).pipe(Effect.orElseSucceed(() => ""));
       const version = parse(output);
-      if (version !== undefined) versions.set(binary, { modified, version });
+      if (version !== undefined && modified !== undefined) versions.set(binary, { modified, version });
+      else versions.delete(binary);
       return version;
     });
 };
