@@ -45,7 +45,7 @@ import { makeDelegating } from "./delegating.ts";
 import { makePlanning } from "./planning.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
 import { TaskSignal } from "./signal.ts";
-import { makeWrapUp } from "./wrap-up.ts";
+import { makeSettle, makeWrapUp } from "./wrap-up.ts";
 
 type ToolHandler = (scope: CallScope, input: never) => Effect.Effect<TaskToolOutcome, TaskToolRefused>;
 
@@ -114,6 +114,7 @@ export class TaskTools extends Context.Service<
         const folderChecks = yield* FolderChecks;
         const hobs = yield* HobbotsRepository;
         const wrapUp = yield* makeWrapUp;
+        const settle = yield* makeSettle;
         const handlers: Record<TaskToolName, ToolHandler> = {
           ...makePlanning({ tasks, capacity, limits, wrapUp }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
@@ -159,6 +160,8 @@ export class TaskTools extends Context.Service<
               Effect.mapError((error) => new TaskToolRefused({ reason: "invalid-input", message: describe(error) })),
             );
             const { key, ...rest } = input;
+            // What the turn changed is on the record before the completion reads it (#586).
+            if (name === "complete_task") yield* settle(rest);
             const at = DateTime.formatIso(yield* DateTime.now);
             const outcome = yield* ledger.once(
               { agentId, key, tool: name, input: stableJson({ ...rest, ...source.turn }), at, fence: source.fence },

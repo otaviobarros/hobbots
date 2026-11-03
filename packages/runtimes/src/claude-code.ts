@@ -998,7 +998,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const sandboxed = tools !== null && sandbox.state === "on";
           const commitAs = tools?.commitAs;
           // A hob without its own app commits as the user, never as an identity Git makes up (#586).
-          const commits = userCommits(tools !== null, commitAs);
+          const commits = userCommits(tools);
           const instructions = turnInstructions(
             request.instructions,
             sandboxed,

@@ -71,6 +71,11 @@ export class ActivityRecorder extends Context.Service<
     readonly forTurn: (turn: ActivityTurn) => Effect.Effect<TurnActivity, never, Scope.Scope>;
     /** Clears the details past the retention window and drops kept contents no record names. */
     readonly prune: Effect.Effect<void>;
+    /**
+     * Records now what the live turn on `attemptId` changed so far, rather than when its scan
+     * waiting to run gets to it, so a check made during the turn reads it (#586).
+     */
+    readonly settle: (attemptId: AttemptId) => Effect.Effect<void>;
   }
 >()("@hobbots/agents/ActivityRecorder") {
   static readonly layer = (limits: ActivityLimits = DEFAULT_ACTIVITY_LIMITS) =>
@@ -100,6 +105,8 @@ interface LiveTurn {
   readonly claims: Set<string>;
   /** When each of its commands ran, in ticks; `closed` is null while it runs. */
   readonly spans: Array<Span>;
+  /** Records the changes made so far now, if the turn works on `attemptId` (#586). */
+  settle: (attemptId: AttemptId) => Effect.Effect<void>;
 }
 
 /** When a command ran, in the recorder's ticks. */
@@ -220,6 +227,7 @@ const makeRecorder = (limits: ActivityLimits) =>
           writing: new Map(),
           claims: new Set(),
           spans: [],
+          settle: () => Effect.void,
         };
         // A later turn of the same Attempt keeps what the turns before it recorded.
         const turnStarted = yield* nowIso;
@@ -567,6 +575,13 @@ const makeRecorder = (limits: ActivityLimits) =>
           Effect.catchCause((cause) => Effect.logWarning("Could not record a turn's activity", cause)),
         );
 
+        // Another hub call, such as `complete_task`, may need what the turn changed so far on the record now.
+        me.settle = (attemptId) =>
+          Effect.gen(function* () {
+            if ((me.attemptId ?? (yield* turn.attempt)) !== attemptId) return;
+            yield* Semaphore.withPermit(scanLock, compare(false));
+          });
+
         /** Changes made so far, scanned once more after the scans already waiting. */
         let rescanWanted = false;
         const rescanLater = Effect.suspend(() => {
@@ -825,5 +840,8 @@ const makeRecorder = (limits: ActivityLimits) =>
       yield* dropUnnamed(yield* store.list);
     }).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not prune the Workbench's details", cause)));
 
-    return ActivityRecorder.of({ forTurn, prune });
+    const settle = (attemptId: AttemptId) =>
+      Effect.forEach([...live], (turn) => turn.settle(attemptId), { discard: true });
+
+    return ActivityRecorder.of({ forTurn, prune, settle });
   });

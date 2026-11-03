@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userGitIdentity, withUserIdentity } from "../src/git-config.ts";
+import { repositoryNamesItself, userGitIdentity, withUserIdentity } from "../src/git-config.ts";
 import { gitConfigEnv, UNSIGNED_GIT } from "../src/sandbox.ts";
 
 // Issue #586: a hob without its own app commits as the user, never as an identity Git makes up
@@ -49,7 +49,7 @@ describe("Commits a hob makes without its own app", () => {
   });
   afterEach(() => rmSync(repo, { recursive: true, force: true }));
 
-  /** Commits as a hob's command would, unable to read any user config, and returns the author or Git's error. */
+  /** Commits as a hob's command would, unable to read any user config, and returns the author and committer or Git's error. */
   const commit = (env: NodeJS.ProcessEnv) => {
     const base = {
       PATH: process.env.PATH,
@@ -57,24 +57,35 @@ describe("Commits a hob makes without its own app", () => {
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_AUTHOR_NAME: undefined,
+      GIT_AUTHOR_EMAIL: undefined,
+      GIT_COMMITTER_NAME: undefined,
+      GIT_COMMITTER_EMAIL: undefined,
+      EMAIL: undefined,
     };
     try {
       execFileSync("git", ["add", "a.md"], { cwd: repo, env: { ...base, ...env } });
       execFileSync("git", ["commit", "-q", "-m", "one"], { cwd: repo, env: { ...base, ...env }, stdio: "pipe" });
-      return execFileSync("git", ["log", "-1", "--format=%ae"], { cwd: repo, env: base }).toString().trim();
+      return execFileSync("git", ["log", "-1", "--format=%an <%ae>, %cn <%ce>"], { cwd: repo, env: base })
+        .toString()
+        .trim();
     } catch (error) {
       return `failed: ${String((error as { stderr?: Buffer }).stderr ?? error)}`;
     }
   };
 
   // covers OR-004
-  it("[TC-OR-286] commit under the user's configured email, which a repository's own setting still overrides", () => {
-    const env = withUserIdentity(UNSIGNED_GIT, { name: "Ada Lovelace", email: "ada@example.com" });
+  it("[TC-OR-286] commit under the user's configured name and email, unless the repository names its own", () => {
+    const ada = { name: "Ada Lovelace", email: "ada@example.com" };
+    const env = withUserIdentity(UNSIGNED_GIT, ada, repositoryNamesItself([repo], join(repo, "no-home")));
     expect(env.GIT_CONFIG_COUNT).toBe(UNSIGNED_GIT.GIT_CONFIG_COUNT);
-    expect(commit(env)).toBe("ada@example.com");
+    expect(commit(env)).toBe("Ada Lovelace <ada@example.com>, Ada Lovelace <ada@example.com>");
+    // The repository sets its own identity: the next turn leaves it to Git.
     writeFileSync(join(repo, "a.md"), "a, again\n");
+    execFileSync("git", ["config", "user.name", "Site Bot"], { cwd: repo });
     execFileSync("git", ["config", "user.email", "site@example.com"], { cwd: repo });
-    expect(commit(env)).toBe("site@example.com");
+    expect(repositoryNamesItself([join(repo, "docs")], join(repo, "no-home"))).toBe(true);
+    const next = withUserIdentity(UNSIGNED_GIT, ada, repositoryNamesItself([repo], join(repo, "no-home")));
+    expect(commit(next)).toBe("Site Bot <site@example.com>, Site Bot <site@example.com>");
   });
 
   // covers OR-004

@@ -12,11 +12,65 @@ import git from "isomorphic-git";
  * refreshed.
  */
 
-/** A repository found above a file: its top folder and its Git folder. */
+/**
+ * A repository found above a file: its top folder, its Git folder and, for a linked worktree, the
+ * main repository's Git folder that holds the refs and objects every worktree shares.
+ */
 interface Repository {
   readonly dir: string;
   readonly gitdir: string;
+  readonly common: string | null;
 }
+
+/** The shared Git folder a linked worktree's `commondir` names, or null for a repository's own. */
+const commonOf = async (gitdir: string): Promise<string | null> => {
+  const named = (await readFile(join(gitdir, "commondir"), "utf8").catch(() => "")).trim();
+  return named === "" ? null : isAbsolute(named) ? named : resolve(gitdir, named);
+};
+
+/**
+ * What stays in a linked worktree's own Git folder, as Git keeps it: its HEAD, its index, the
+ * other pseudo-refs and its own refs. The rest (objects, branches, tags, packed refs, config) is
+ * shared, in the main repository's Git folder.
+ */
+const PER_WORKTREE = [/^[A-Z_]*HEAD$/, /^index$/, /^logs\/HEAD$/, /^refs\/(bisect|worktree|rewritten)(\/|$)/];
+
+/**
+ * The file system isomorphic-git reads a linked worktree through: one Git folder, as it expects,
+ * with each shared file read from the main repository's. It reads only, since the index is never
+ * refreshed.
+ */
+const worktreeFs = (gitdir: string, common: string) => {
+  const route = (path: string) => {
+    // isomorphic-git probes the file system with a call that names no file.
+    if (typeof path !== "string") return path;
+    const inside = relative(gitdir, path);
+    if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) return path;
+    const name = inside.split(sep).join("/");
+    return PER_WORKTREE.some((pattern) => pattern.test(name)) ? path : join(common, inside);
+  };
+  const routed =
+    <A extends ReadonlyArray<unknown>, R>(method: (path: string, ...rest: A) => R) =>
+    async (path: string, ...rest: A) =>
+      method(route(path), ...rest);
+  const p = fs.promises;
+  return {
+    promises: {
+      readFile: routed(p.readFile.bind(p) as (path: string, ...rest: Array<unknown>) => Promise<unknown>),
+      readdir: routed(p.readdir.bind(p) as (path: string, ...rest: Array<unknown>) => Promise<unknown>),
+      stat: routed(p.stat.bind(p) as (path: string, ...rest: Array<unknown>) => Promise<unknown>),
+      lstat: routed(p.lstat.bind(p) as (path: string, ...rest: Array<unknown>) => Promise<unknown>),
+      readlink: routed(p.readlink.bind(p) as (path: string, ...rest: Array<unknown>) => Promise<unknown>),
+      // Nothing is written: a write would be a bug, so it fails.
+      writeFile: () => Promise.reject(new Error("read-only")),
+      mkdir: () => Promise.reject(new Error("read-only")),
+      rmdir: () => Promise.reject(new Error("read-only")),
+      unlink: () => Promise.reject(new Error("read-only")),
+      symlink: () => Promise.reject(new Error("read-only")),
+      chmod: () => Promise.reject(new Error("read-only")),
+    },
+  };
+};
 
 /**
  * The Git folder `.git` names in `dir`: the folder itself, or for a worktree or submodule, the
@@ -47,7 +101,7 @@ const repositoryOf = async (file: string, known: Map<string, Repository | null>)
     visited.push(at);
     const gitdir = await gitdirIn(at);
     if (gitdir !== null) {
-      found = { dir: at, gitdir };
+      found = { dir: at, gitdir, common: await commonOf(gitdir) };
       break;
     }
     if (dirname(at) === at) break;
@@ -69,7 +123,7 @@ const STAGE = 3;
 /** Of `paths` in one repository, those that differ from its last commit, staged or not. */
 const changedIn = async (repository: Repository, paths: ReadonlyArray<string>): Promise<ReadonlyArray<string>> => {
   const rows = await git.statusMatrix({
-    fs,
+    fs: repository.common === null ? fs : worktreeFs(repository.gitdir, repository.common),
     dir: repository.dir,
     gitdir: repository.gitdir,
     filepaths: [...paths],

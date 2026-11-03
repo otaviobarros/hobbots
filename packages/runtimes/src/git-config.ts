@@ -233,17 +233,8 @@ export interface GitIdentity {
   readonly email: string | null;
 }
 
-/**
- * The identity the user's own Git config sets (#586): `user.name` and `user.email` from
- * `~/.gitconfig`, the XDG config and the files they include unconditionally, the last setting
- * winning as in Git. `includeIf` files are left out, since their conditions depend on the
- * repository. Only these two settings are read, so a file that also holds a secret still gives them.
- */
-export const userGitIdentity = (
-  home: string,
-  env: NodeJS.ProcessEnv = process.env,
-  read: ReadText = readText,
-): GitIdentity => {
+/** The identity `files` set, read as Git reads them, following unconditional includes. */
+const identityIn = (files: ReadonlyArray<string>, home: string, read: ReadText): GitIdentity => {
   const identity: { name: string | null; email: string | null } = { name: null, email: null };
   const seen = new Set<string>();
   const visit = (file: string) => {
@@ -260,20 +251,77 @@ export const userGitIdentity = (
       else if (section === "include" && key === "path" && value !== "") visit(pathFrom(value, file, home));
     }
   };
-  for (const { file, kind } of userGitConfigFiles(home, env)) if (kind === "config") visit(file);
+  for (const file of files) visit(file);
   return identity;
 };
 
 /**
+ * The identity the user's own Git config sets (#586): `user.name` and `user.email` from
+ * `~/.gitconfig`, the XDG config and the files they include unconditionally, the last setting
+ * winning as in Git. `includeIf` files are left out, since their conditions depend on the
+ * repository. Only these two settings are read, so a file that also holds a secret still gives them.
+ */
+export const userGitIdentity = (
+  home: string,
+  env: NodeJS.ProcessEnv = process.env,
+  read: ReadText = readText,
+): GitIdentity =>
+  identityIn(
+    userGitConfigFiles(home, env).flatMap(({ file, kind }) => (kind === "config" ? [file] : [])),
+    home,
+    read,
+  );
+
+/** The config files of the repository holding `folder`: its own, a worktree's, and the shared one. */
+const repositoryConfigs = (folder: string, read: ReadText): ReadonlyArray<string> => {
+  for (let at = folder; ; at = dirname(at)) {
+    const dotGit = join(at, ".git");
+    if (read(join(dotGit, "config")) !== null) return [join(dotGit, "config"), join(dotGit, "config.worktree")];
+    const line = (read(dotGit) ?? "").split("\n")[0]?.trim() ?? "";
+    if (line.startsWith("gitdir:")) {
+      const gitdir = resolve(at, line.slice("gitdir:".length).trim());
+      const common = (read(join(gitdir, "commondir")) ?? "").trim();
+      const shared = common === "" ? gitdir : resolve(gitdir, common);
+      return [join(shared, "config"), join(gitdir, "config.worktree")];
+    }
+    if (dirname(at) === at) return [];
+  }
+};
+
+/**
+ * Whether a repository holding one of `folders` sets its own `user.name` or `user.email`, which
+ * then stays its own: the user's name is given to Git only where no repository names its own.
+ */
+export const repositoryNamesItself = (
+  folders: ReadonlyArray<string>,
+  home: string,
+  read: ReadText = readText,
+): boolean =>
+  folders.some((folder) => {
+    const own = identityIn(repositoryConfigs(folder, read), home, read);
+    return own.name !== null || own.email !== null;
+  });
+
+/**
  * The environment a hob's commands commit with when no app identity applies (#586). Git would
- * otherwise make an email up from the user's account and the computer's name when it finds none,
- * as a sandbox that cannot read the user's config does. With the user's email known, `EMAIL` gives
- * it to Git below every config, so a repository's own `user.email` still wins. With none, Git is
- * told to take an identity from config only, so a commit without one fails, and the hob asks.
+ * otherwise make an identity up from the user's account and the computer's name when it finds none,
+ * as a sandbox that cannot read the user's config does.
+ *
+ * - The user's email goes in `EMAIL`, below every config, so a repository's own `user.email` wins.
+ * - Git has no such place for a name, so the user's name goes in `GIT_AUTHOR_NAME` and
+ *   `GIT_COMMITTER_NAME`, which win over config, only when no repository of the turn's folders
+ *   names itself (`ownName`). Such a repository keeps its own name and email.
+ * - With no email, Git is told to take an identity from config only, so a commit without one
+ *   fails, and the hob asks.
+ *
  * Settings already in `GIT_CONFIG_COUNT` are kept.
  */
-export const withUserIdentity = (env: NodeJS.ProcessEnv, identity: GitIdentity): NodeJS.ProcessEnv => {
-  if (identity.email !== null) return { ...env, EMAIL: identity.email };
+export const withUserIdentity = (env: NodeJS.ProcessEnv, identity: GitIdentity, ownName = false): NodeJS.ProcessEnv => {
+  if (identity.email !== null) {
+    const named =
+      identity.name === null || ownName ? {} : { GIT_AUTHOR_NAME: identity.name, GIT_COMMITTER_NAME: identity.name };
+    return { ...env, EMAIL: identity.email, ...named };
+  }
   const count = Number.parseInt(env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
   return {
     ...env,
@@ -294,18 +342,22 @@ export interface UserCommits {
 }
 
 /**
- * The user's identity for a turn with tools, whose commands may commit, when its hob has no app of
- * its own to commit as (`commitAs`), read from the user's config now. Anything else commits as it would.
+ * The user's identity for a turn with tools, whose commands in its folders may commit, when its hob
+ * has no app of its own to commit as (`commitAs`), read from the user's config and the folders'
+ * repositories now. Anything else commits as it would.
  */
 export const userCommits = (
-  hasTools: boolean,
-  commitAs: { readonly name: string; readonly email: string } | undefined,
+  tools: {
+    readonly folders: ReadonlyArray<string>;
+    readonly commitAs?: { readonly name: string; readonly email: string };
+  } | null,
   home: string = homedir(),
 ): UserCommits => {
-  if (!hasTools || commitAs !== undefined) return { note: "", env: (env) => env };
+  if (tools === null || tools.commitAs !== undefined) return { note: "", env: (env) => env };
   const identity = userGitIdentity(home);
+  const ownName = repositoryNamesItself(tools.folders, home);
   return {
     note: identity.email === null ? NO_GIT_IDENTITY_NOTE : "",
-    env: (env) => withUserIdentity(env, identity),
+    env: (env) => withUserIdentity(env, identity, ownName),
   };
 };

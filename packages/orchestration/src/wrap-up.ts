@@ -1,5 +1,11 @@
-import { ActivityRepository, GitWorkspace, type UncommittedFiles } from "@hobbots/agents";
-import { CheckpointId, type Task } from "@hobbots/domain";
+import {
+  ActivityRecorder,
+  ActivityRepository,
+  GitWorkspace,
+  TaskRepository,
+  type UncommittedFiles,
+} from "@hobbots/agents";
+import { CheckpointId, type Task, TaskId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 
 /**
@@ -62,5 +68,24 @@ export const makeWrapUp = Effect.gen(function* () {
       ]);
       if (files.length === 0) return NOTHING;
       return wrapUpOf(task, yield* workspace.value.uncommitted(files));
+    });
+});
+
+/**
+ * Records now what the live turn on a Task's current Attempt changed so far, before
+ * `complete_task` reads it in its transaction: a file tool's change is scanned a moment after the
+ * call ends, and the call may come first. It runs outside the call's transaction, since recording
+ * writes records of its own. A hub without the Workbench's recorder has nothing to wait for.
+ */
+export const makeSettle = Effect.gen(function* () {
+  const recorder = yield* Effect.serviceOption(ActivityRecorder);
+  const tasks = yield* TaskRepository;
+  return (input: unknown): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const named = (input as { readonly task_id?: unknown } | null)?.task_id;
+      if (Option.isNone(recorder) || typeof named !== "string") return;
+      const tree = yield* tasks.readTree(TaskId.make(named));
+      const attemptId = Option.isSome(tree) ? tree.value.tasks[0]?.currentAttemptId : null;
+      if (attemptId) yield* recorder.value.settle(attemptId);
     });
 });
