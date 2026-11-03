@@ -9,5 +9,5 @@ export function ReplyApprovals({ threadId, messageId, hob }: { threadId: ThreadI
     ...approvalsQuery(threadId),
     select: (all) => all.filter((approval) => approval.messageId === messageId),
   });
-  return approvals.data?.map((approval) => <ApprovalCard key={approval.id} approval={approval} hob={hob} />);
+  return approvals.data?.map((approval) => <ApprovalCard key={approval.id} approval={approval} hob={hob} via="chat" />);
 }

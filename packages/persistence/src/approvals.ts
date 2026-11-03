@@ -106,6 +106,8 @@ export const ApprovalRepositoryLive = Layer.effect(
             created_at: approval.createdAt,
             expires_at: approval.expiresAt,
             decided_at: approval.decidedAt,
+            decided_by_device_id: approval.decidedByDeviceId,
+            decided_via: approval.decidedVia,
             revision,
           })}`;
           return { value: approval, events: [{ _tag: "ApprovalRequested", approval } as const] };
@@ -130,7 +132,8 @@ export const ApprovalRepositoryLive = Layer.effect(
           const approval = new ApprovalRequest({ ...input, revision });
           const updated = yield* sql`UPDATE approval_requests
             SET state = ${approval.state}, lifetime = ${approval.lifetime}, deny_reason = ${approval.denyReason},
-              decided_at = ${approval.decidedAt}, revision = ${revision}
+              decided_at = ${approval.decidedAt}, decided_by_device_id = ${approval.decidedByDeviceId},
+              decided_via = ${approval.decidedVia}, revision = ${revision}
             WHERE id = ${approval.id} AND state = ${from} RETURNING id`;
           if (updated.length === 0) return null;
           const saved = yield* Effect.forEach(grants, (grant, index) =>

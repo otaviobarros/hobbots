@@ -13,6 +13,7 @@ export const messages = {
   group: ({ name, thread }: { name: string; thread: string }) => `${name} · ${thread}`,
   untitledThread: "A thread",
   unknownHob: "A hob",
+  unknownDevice: "a device",
   kind: { approval: "Approval", expired: "Expired" },
   status: {
     pending: ({ expiry }: { expiry: string }) => `Waiting on you · ${expiry}`,
@@ -60,6 +61,33 @@ export const messages = {
     verdict: { once: "Once", always: "Always", task: "Task", denied: "Denied", expired: "Expired" },
     meta: ({ when, thread }: { when: string; thread: string }) => `${when} · ${thread}`,
     action: ({ name, action }: { name: string; action: string }) => `${name}: ${action}`,
+    /**
+     * Who decided a request and where (#598), one whole sentence per decision and surface; `unknown`
+     * when the client did not say where.
+     */
+    decider: {
+      once: {
+        chat: ({ device }: { device: string }) => `Allowed once from ${device} in the chat`,
+        inbox: ({ device }: { device: string }) => `Allowed once from ${device} in the Inbox`,
+        unknown: ({ device }: { device: string }) => `Allowed once from ${device}`,
+      },
+      always: {
+        chat: ({ device }: { device: string }) => `Allowed always from ${device} in the chat`,
+        inbox: ({ device }: { device: string }) => `Allowed always from ${device} in the Inbox`,
+        unknown: ({ device }: { device: string }) => `Allowed always from ${device}`,
+      },
+      task: {
+        chat: ({ device }: { device: string }) => `Allowed for its Task from ${device} in the chat`,
+        inbox: ({ device }: { device: string }) => `Allowed for its Task from ${device} in the Inbox`,
+        unknown: ({ device }: { device: string }) => `Allowed for its Task from ${device}`,
+      },
+      denied: {
+        chat: ({ device }: { device: string }) => `Denied from ${device} in the chat`,
+        inbox: ({ device }: { device: string }) => `Denied from ${device} in the Inbox`,
+        unknown: ({ device }: { device: string }) => `Denied from ${device}`,
+      },
+    },
+    expiredUndecided: "Expired before anyone decided",
   },
   /** A question no lead could answer, in Needs you. */
   question: {
