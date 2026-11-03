@@ -20,36 +20,61 @@ const save = (report: DiagnosticsReport) => {
   URL.revokeObjectURL(url);
 };
 
+const sameInputs = (a: Inputs, b: Inputs) => a.questId === b.questId && a.includeTitles === b.includeTitles;
+
 const failure = (error: unknown): string =>
   error instanceof ApiError && error.tag === "DiagnosticsReportRefused"
     ? copy.refused({ field: String(error.fields.field) })
     : copy.failed;
 
+/** What a report is made from. */
+interface Inputs {
+  readonly questId: QuestId | null;
+  readonly includeTitles: boolean;
+}
+
+/** A request and how it ended, kept with the inputs it was made from. */
+type Outcome =
+  | (Inputs & { readonly state: "making" })
+  | (Inputs & { readonly state: "made"; readonly report: DiagnosticsReport })
+  | (Inputs & { readonly state: "failed"; readonly error: string });
+
 /**
  * Copy report (ADR 026): the hub makes a redacted report on request and it is shown in full here
- * before you copy or save it. Titles stay out unless you turn them on.
+ * before you copy or save it. Titles stay out unless you turn them on. Choosing another Quest or
+ * changing Include titles drops the report, a refusal and any request still running, so what you
+ * copy or save always matches the controls above it.
  */
 export function DiagnosticsReportMaker({ questId }: { questId: QuestId | null }) {
   const titlesId = useId();
   const [includeTitles, setIncludeTitles] = useState(false);
-  const [making, setMaking] = useState(false);
-  const [report, setReport] = useState<DiagnosticsReport | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [copied, copyReport] = useCopy();
+  // Choosing another Quest drops the report and any answer still on its way, even if you come back.
+  const [madeFor, setMadeFor] = useState(questId);
+  if (madeFor !== questId) {
+    setMadeFor(questId);
+    setOutcome(null);
+  }
+  const changeTitles = (next: boolean) => {
+    setIncludeTitles(next);
+    setOutcome(null);
+  };
+
+  const current = outcome !== null && sameInputs(outcome, { questId, includeTitles }) ? outcome : null;
+  const making = current?.state === "making";
+  const report = current?.state === "made" ? current.report : null;
+  const error = current?.state === "failed" ? current.error : null;
 
   const make = () => {
-    setMaking(true);
-    setError(null);
-    setReport(null);
+    const inputs: Inputs = { questId, includeTitles };
+    // Only the latest request may land: an older one that answers late is dropped.
+    const settle = (next: Outcome) =>
+      setOutcome((now) => (now?.state === "making" && sameInputs(now, inputs) ? next : now));
+    setOutcome({ ...inputs, state: "making" });
     makeReport(questId, includeTitles).then(
-      (made) => {
-        setReport(made);
-        setMaking(false);
-      },
-      (cause: unknown) => {
-        setError(failure(cause));
-        setMaking(false);
-      },
+      (made) => settle({ ...inputs, state: "made", report: made }),
+      (cause: unknown) => settle({ ...inputs, state: "failed", error: failure(cause) }),
     );
   };
 
@@ -62,7 +87,7 @@ export function DiagnosticsReportMaker({ questId }: { questId: QuestId | null })
           <span id={titlesId}>{copy.includeTitles}</span>
           <span className="text-xs text-secondary-text">{copy.includeTitlesNote}</span>
         </span>
-        <Switch aria-labelledby={titlesId} checked={includeTitles} onCheckedChange={setIncludeTitles} />
+        <Switch aria-labelledby={titlesId} checked={includeTitles} onCheckedChange={changeTitles} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={make} disabled={making}>

@@ -54,9 +54,24 @@ test("[TC-OP-053] follows a Quest that delegated to two hobs from Settings › D
   await expect(diagnostics.getByRole("button", { name: "Report copied" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${shown}`);
 
-  // Titles go in only when you turn them on.
+  // A report belongs to the Quest it was made for: choosing another drops it, so it cannot be copied by mistake.
+  const questValue = (await option.getAttribute("value")) ?? "";
+  await picker.selectOption("");
+  await expect(report).toHaveCount(0);
+  await expect(diagnostics.getByRole("button", { name: /^Copy report|^Report copied/ })).toHaveCount(0);
+  await picker.selectOption(questValue);
+  await expect(report).toHaveCount(0);
+  await diagnostics.getByRole("button", { name: "Make report" }).click();
+  await expect(report).toContainText('"format": "hobbots.diagnostics"');
+
+  // Titles go in only when you turn them on, and changing that drops the report made without them.
   await diagnostics.getByRole("switch", { name: "Include titles" }).click();
+  await expect(report).toHaveCount(0);
   await diagnostics.getByRole("button", { name: "Make report" }).click();
   await expect(report).toContainText('"title": "A Black Friday campaign');
   await expect(report).toContainText('"title": "Draft the landing copy"');
+
+  // Turning titles off again drops the report that holds them.
+  await diagnostics.getByRole("switch", { name: "Include titles" }).click();
+  await expect(report).toHaveCount(0);
 });
