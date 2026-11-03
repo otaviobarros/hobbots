@@ -79,7 +79,9 @@ const HUB_SECRET = "hub-credential-0123456789";
 const PASTED = `ghp_${"a1B2".repeat(9)}`;
 /** A device's token hash, which only a backup may hold, and only blank. */
 const TOKEN_HASH = "f".repeat(64);
-const REPORT = `# Launch report\n\nAll set.\n`;
+const REPORT = `# Launch report\n\nAll set. Deploy with ${PASTED}.\n`;
+/** A binary file with the hub's secret in it: not text the redactor can rewrite. */
+const DUMP = Uint8Array.from([0, 0xff, ...new TextEncoder().encode(HUB_SECRET), 0xfe, 0]);
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 
 const hob = (id: AgentId, name: string, ownFolders: ReadonlyArray<string>) =>
@@ -197,6 +199,15 @@ const seed = Effect.gen(function* () {
     },
     milestones: [],
   });
+  // Quill's own Quest under Aldric's: Aldric's export holds its goal and state, not its acceptance.
+  yield* tasks.startQuest({
+    id: QuestId.make("q2"),
+    taskId: TaskId.make("copy-task"),
+    goal: "Copy for every channel",
+    acceptance: ["Quill's private acceptance"],
+    limits: DEFAULT_QUEST_LIMITS,
+    createdAt: LATER,
+  });
   const created = Option.getOrThrow(yield* tasks.readTree(top)).tasks[0];
   if (created === undefined) throw new Error("no Task");
   const started = yield* tasks.startAttempt(top, created.revision, attempt("a1"));
@@ -239,7 +250,8 @@ const seed = Effect.gen(function* () {
     attemptId: AttemptId.make("a1"),
     artifacts: [
       { id: ArtifactId.make("art-report"), kind: "file", label: "The report", value: join(project, "report.md") },
-      { id: ArtifactId.make("art-chart"), kind: "file", label: "Chart", value: "chart.png" },
+      { id: ArtifactId.make("art-chart"), kind: "file", label: "Chart", value: "chart #1.png" },
+      { id: ArtifactId.make("art-dump"), kind: "file", label: "Dump", value: "dump.bin" },
       { id: ArtifactId.make("art-gone"), kind: "file", label: "Old draft", value: "draft.md" },
       { id: ArtifactId.make("art-env"), kind: "file", label: "Settings", value: ".env" },
       { id: ArtifactId.make("art-link"), kind: "link", label: "Store", value: "https://hobbots.ai" },
@@ -283,7 +295,8 @@ beforeAll(async () => {
   mkdirSync(saved, { recursive: true });
   mkdirSync(workspace, { recursive: true });
   writeFileSync(join(project, "report.md"), REPORT);
-  writeFileSync(join(project, "chart.png"), PNG);
+  writeFileSync(join(project, "chart #1.png"), PNG);
+  writeFileSync(join(project, "dump.bin"), DUMP);
   writeFileSync(join(project, ".env"), `API_TOKEN=${HUB_SECRET}\n`);
   runtime = ManagedRuntime.make(App);
   await runtime.runPromise(Effect.void);
@@ -317,7 +330,11 @@ const expectRecords = (data: HobbotsExport) => {
   ]);
   expect(data.threads.map((thread) => thread.title)).toEqual(["Black Friday campaign", "Notes / ideas"]);
   const [tree] = data.quests;
-  expect(tree?.quests.map((quest) => quest.goal)).toEqual(["A Black Friday campaign"]);
+  // Quill's Quest is Quill's: its goal and state only.
+  expect(tree?.quests.map((quest) => [quest.goal, quest.detail, quest.acceptance])).toEqual([
+    ["A Black Friday campaign", "full", ["Copy approved"]],
+    ["Copy for every channel", "summary", []],
+  ]);
   // Aldric's Task in full; Quill's as its title and state only.
   expect(tree?.tasks.map((task) => [task.title, task.detail, task.state])).toEqual([
     ["Run the Black Friday campaign", "full", "completed"],
@@ -327,7 +344,8 @@ const expectRecords = (data: HobbotsExport) => {
   expect(top?.result).toBe("Campaign ready");
   const artifacts = top?.artifacts.map((artifact) => [artifact.label, artifact.copiedTo, artifact.notCopied]);
   expect(artifacts?.sort()).toEqual([
-    ["Chart", "files/campaign-task/chart.png", null],
+    ["Chart", "files/campaign-task/chart #1.png", null],
+    ["Dump", null, "holds-secret"],
     ["Old draft", null, "gone"],
     ["Settings", null, "secret"],
     ["Store", null, null],
@@ -342,6 +360,10 @@ const expectMarkdown = (files: Record<string, Buffer>) => {
   const quest = files["quests/2026-11-02 A Black Friday campaign.md"]?.toString() ?? "";
   expect(quest).toContain("## Quest: A Black Friday campaign");
   expect(quest).toContain("[files/campaign-task/report.md](../files/campaign-task/report.md)");
+  // A `#` in a file's name is part of the link's path, not a fragment.
+  expect(quest).toContain("[files/campaign-task/chart #1.png](../files/campaign-task/chart%20%231.png)");
+  expect(quest).toContain("not copied because it holds what looks like a secret");
+  expect(quest).toContain("_Another hob's Quest: only its goal and state are exported._");
   expect(quest).toContain("- File “Old draft”: `draft.md`, not copied because it is no longer there");
   expect(quest).toContain("not copied because its name marks it as a file that may hold secrets");
   expect(quest).toContain("Ran `pnpm build`");
@@ -357,20 +379,21 @@ describe("exports", () => {
   it("[TC-OP-040] an export of a hob opens on its own and holds its threads, Quests, artifacts and work history", async () => {
     const result = await run({ _tag: "Hob", agentId: ALDRIC });
     expect(result.folder.startsWith(join(saved, "Hobbots export Aldric "))).toBe(true);
-    expect(result).toMatchObject({ threads: 2, quests: 1, files: 2, notCopied: 2 });
+    expect(result).toMatchObject({ threads: 2, quests: 1, files: 2, notCopied: 3 });
 
     const files = filesIn(result.folder);
     expect(Object.keys(files).sort()).toEqual([
       "README.md",
       "export.json",
-      "files/campaign-task/chart.png",
+      "files/campaign-task/chart #1.png",
       "files/campaign-task/report.md",
       "quests/2026-11-02 A Black Friday campaign.md",
       "threads/2026-11-02 Black Friday campaign.md",
       "threads/2026-11-02 Notes ideas.md",
     ]);
-    expect(files["files/campaign-task/report.md"]?.toString()).toBe(REPORT);
-    expect(new Uint8Array(files["files/campaign-task/chart.png"] ?? [])).toEqual(PNG);
+    // A text file is redacted like any other string; a binary one with no secret is copied as it is.
+    expect(files["files/campaign-task/report.md"]?.toString()).toBe(REPORT.replace(PASTED, "[redacted: GitHub token]"));
+    expect(new Uint8Array(files["files/campaign-task/chart #1.png"] ?? [])).toEqual(PNG);
 
     expectRecords(decode(files["export.json"]?.toString()));
     expectMarkdown(files);
@@ -380,9 +403,9 @@ describe("exports", () => {
   // covers OP-003
   it("[TC-OP-041] redacts every string, your own messages included, and holds no device record, token hash or other hob's brief", async () => {
     const result = await run({ _tag: "Hob", agentId: ALDRIC });
-    const text = Object.entries(filesIn(result.folder))
-      .filter(([path]) => !path.startsWith("files/"))
-      .map(([, bytes]) => bytes.toString())
+    // The copied files included: what the Tasks made is redacted too.
+    const text = Object.values(filesIn(result.folder))
+      .map((bytes) => bytes.toString("latin1"))
       .join("\n");
     expect(text).not.toContain(PASTED);
     expect(text).not.toContain(HUB_SECRET);
@@ -394,6 +417,7 @@ describe("exports", () => {
     expect(text).not.toContain("Use [redacted");
     // Quill's brief is Quill's: Aldric's export names its Task only.
     expect(text).not.toContain("secret discount");
+    expect(text).not.toContain("Quill's private acceptance");
     // A file named as one that may hold secrets is never copied.
     expect(existsSync(join(result.folder, "files", "campaign-task", ".env"))).toBe(false);
   });

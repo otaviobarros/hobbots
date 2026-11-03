@@ -67,9 +67,22 @@ const NOT_COPIED: Record<ArtifactNotCopied, string> = {
   gone: "it is no longer there",
   "outside-folders": "it is not in the hob's folders now",
   secret: "its name marks it as a file that may hold secrets",
+  "holds-secret": "it holds what looks like a secret, and it is not text that could be redacted",
   "too-large": "it is larger than 100 MiB",
   "export-full": "the export already holds 1 GiB of files",
 };
+
+/** A relative path as a link target: each segment encoded, so `#`, `?`, spaces and brackets stay part of the name. */
+const linkTarget = (path: string): string =>
+  path
+    .split("/")
+    .map((segment) =>
+      encodeURIComponent(segment).replace(/[()]/g, (paren) => `%${paren.charCodeAt(0).toString(16).toUpperCase()}`),
+    )
+    .join("/");
+
+/** Text that Markdown shows as it is inside a link's brackets. */
+const linkText = (text: string): string => text.replace(/[\\[\]*_`<>]/g, (character) => `\\${character}`);
 
 const artifactLine = (artifact: ExportedArtifact): string => {
   switch (artifact.kind) {
@@ -79,7 +92,7 @@ const artifactLine = (artifact: ExportedArtifact): string => {
       return `- Text “${artifact.label}”:\n\n${quoted(artifact.value)}\n`;
     default:
       return artifact.copiedTo !== null
-        ? `- File “${artifact.label}”: [${artifact.copiedTo}](../${encodeURI(artifact.copiedTo)}), from ${code(artifact.value)}`
+        ? `- File “${artifact.label}”: [${linkText(artifact.copiedTo)}](../${linkTarget(artifact.copiedTo)}), from ${code(artifact.value)}`
         : `- File “${artifact.label}”: ${code(artifact.value)}, not copied because ${NOT_COPIED[artifact.notCopied ?? "gone"]}`;
   }
 };
@@ -142,7 +155,11 @@ export const treeMarkdown = (tree: ExportedTree, names: ExportNames): string => 
     `## Quest: ${quest.goal}`,
     "",
     `Led by ${nameOf(names, quest.leadId)} · ${quest.state} · started ${when(quest.createdAt)}`,
-    ...(quest.acceptance.length === 0 ? [] : ["", "Done when:", "", ...quest.acceptance.map((line) => `- ${line}`)]),
+    ...(quest.detail === "summary"
+      ? ["", "_Another hob's Quest: only its goal and state are exported._"]
+      : quest.acceptance.length === 0
+        ? []
+        : ["", "Done when:", "", ...quest.acceptance.map((line) => `- ${line}`)]),
     "",
   ]);
   return [
@@ -186,7 +203,7 @@ export const readmeMarkdown = (data: HobbotsExport, names: ExportNames, files: n
     "",
     "Every piece of text in this export went through Hobbots' redactor, your own messages included: secrets it knows by value and anything shaped like a key or token are replaced with `[redacted: …]`. Redaction is best effort, and a secret it cannot recognize still passes through.",
     "",
-    "Files in `files/` are copied as they are. A file whose name marks it as one that may hold secrets, such as `.env`, is listed and not copied.",
+    "Text files in `files/` went through the redactor too. Any other file is copied as it is only when the redactor found nothing in it, and is listed and not copied otherwise. A file whose name marks it as one that may hold secrets, such as `.env`, is listed and not copied.",
     "",
     "## What is not here",
     "",

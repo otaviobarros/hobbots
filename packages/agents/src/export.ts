@@ -12,6 +12,7 @@ import {
   type ExportedAttempt,
   type ExportedHob,
   type ExportedMessage,
+  type ExportedQuest,
   type ExportedTask,
   type ExportedThread,
   type ExportedTree,
@@ -19,6 +20,7 @@ import {
   HobbotsExport,
   isSecretFile,
   type Message,
+  type Quest,
   safeFileName,
   type Task,
   type TaskTree,
@@ -33,7 +35,7 @@ import { type ExportNames, readmeMarkdown, threadMarkdown, treeMarkdown } from "
 import { hobFoldersNow } from "./permissions.ts";
 import { FolderChecks, InstallationSettings } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
-import { makeRedactor, SecretRedaction } from "./secrets.ts";
+import { makeRedactor, type Redactor, SecretRedaction } from "./secrets.ts";
 import { HobFiles } from "./task-files.ts";
 import { TaskRepository } from "./tasks.ts";
 
@@ -105,6 +107,19 @@ const exportedArtifact = (artifact: ArtifactRef): ExportedArtifact => ({
 });
 
 /** The tree's Tasks with the top one first, then each Task's children depth first, oldest first. */
+/** A Quest, its acceptance only when its Task is exported in full. */
+const exportedQuest = (quest: Quest, full: boolean): ExportedQuest => ({
+  id: quest.id,
+  taskId: quest.taskId,
+  leadId: quest.leadId,
+  goal: quest.goal,
+  detail: full ? "full" : "summary",
+  acceptance: full ? quest.acceptance : [],
+  state: quest.state,
+  createdAt: quest.createdAt,
+  endedAt: quest.endedAt,
+});
+
 const depthFirst = (tasks: ReadonlyArray<Task>): ReadonlyArray<Task> => {
   const top = tasks[0];
   if (top === undefined) return [];
@@ -179,6 +194,26 @@ const folderName = (data: HobbotsExport): string => {
 };
 
 const encodeExport = Schema.encodeSync(HobbotsExport);
+
+const utf8 = new TextDecoder("utf-8", { fatal: true });
+const bytesAsText = new TextDecoder("latin1");
+
+/**
+ * What an export writes for a file artifact's bytes (ADR 026: every string is redacted). UTF-8 text
+ * goes through the redactor like any other string. Any other file is copied as it is only when
+ * the redactor finds nothing in it read byte by byte, since a token in a binary file is still
+ * ASCII; otherwise it is not copied at all.
+ */
+const redactedContents = (redactor: Redactor, bytes: Uint8Array): Option.Option<string | Uint8Array> => {
+  const text = Option.liftThrowable(() => utf8.decode(bytes))().pipe(Option.filter((each) => !each.includes("\0")));
+  if (Option.isSome(text)) return Option.some(redactor.text(text.value));
+  const raw = bytesAsText.decode(bytes);
+  return redactor.text(raw) === raw ? Option.some(bytes) : Option.none();
+};
+
+/** How many bytes `contents` takes on disk. */
+const sizeOf = (contents: string | Uint8Array): number =>
+  typeof contents === "string" ? new TextEncoder().encode(contents).length : contents.length;
 
 export class DataExport extends Context.Service<
   DataExport,
@@ -323,16 +358,10 @@ export class DataExport extends Context.Service<
               threadId: top.threadId,
               title: quest?.goal ?? taskTitleOf(top.brief),
               file: "",
-              quests: tree.quests.map((each) => ({
-                id: each.id,
-                taskId: each.taskId,
-                leadId: each.leadId,
-                goal: each.goal,
-                acceptance: each.acceptance,
-                state: each.state,
-                createdAt: each.createdAt,
-                endedAt: each.endedAt,
-              })),
+              quests: tree.quests.map((each) => {
+                const owned = tree.tasks.find((task) => task.id === each.taskId);
+                return exportedQuest(each, owned !== undefined && full(owned));
+              }),
               tasks: exported,
             } satisfies ExportedTree;
           });
@@ -452,10 +481,12 @@ export class DataExport extends Context.Service<
                 if (total + found.value.size > EXPORT_TOTAL_BYTES) return refuse("export-full");
                 const bytes = yield* files.read(from, path, found.value.size);
                 if (Option.isNone(bytes)) return refuse("gone");
+                const contents = redactedContents(redactor, bytes.value);
+                if (Option.isNone(contents)) return refuse("holds-secret");
                 const base = redactor.text(path.slice(path.lastIndexOf("/") + 1));
                 const copiedTo = `files/${safeFileName(taskId, "task")}/${uniqueName(taken, safeFileName(base, "file"))}`;
-                yield* folders.write(folder, copiedTo, bytes.value);
-                total += bytes.value.length;
+                yield* folders.write(folder, copiedTo, contents.value);
+                total += sizeOf(contents.value);
                 return { ...artifact, copiedTo };
               });
             const quests = yield* Effect.forEach(data.quests, (tree) =>

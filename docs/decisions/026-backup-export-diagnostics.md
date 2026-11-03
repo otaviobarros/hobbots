@@ -100,7 +100,7 @@ An export is your conversations and work history in a form you can read and keep
 | Redacted | Only where the hub already stores redacted text | All text, your messages and replies included |
 | Hob configuration | Yes, as stored | The hob's name, role and brain, as a record |
 
-**What you can export.** Settings › Backup & export and the thread and hob menus offer: this thread; this hob, which is its threads, the Quests it led and the Tasks it worked on; or everything. For a Quest that spanned several hobs, a hob's export holds that hob's Tasks in full and the rest of the tree as titles and states only.
+**What you can export.** Settings › Backup & export and the thread and hob menus offer: this thread; this hob, which is its threads, the Quests it led and the Tasks it worked on; or everything. For a Quest that spanned several hobs, a hob's export holds that hob's Tasks in full and the rest of the tree as titles and states only. Another hob's Quest in that tree is its goal and state, without its acceptance.
 
 An export is a folder named `Hobbots export <what> <date>`:
 
@@ -112,7 +112,7 @@ An export is a folder named `Hobbots export <what> <date>`:
 | `files/` | The files the Tasks made, copied from the hob's folders (below). |
 | `export.json` | Everything above as data: format `hobbots.export`, version 1, with the hub's own IDs, so a program can read it. |
 
-- **Artifacts.** A file artifact is copied into `files/<task id>/` when it is still a regular file in the hob's folders, up to 100 MiB each and 1 GiB per export. Past that, or when it is gone, the Quest file lists it with its path and why it was not copied. A link or text artifact is written in place.
+- **Artifacts.** A file artifact is copied into `files/<task id>/` when it is still a regular file in the hob's folders, up to 100 MiB each and 1 GiB per export. A file that is UTF-8 text goes through the redactor like every other string. Any other file is copied as it is only when the redactor finds nothing in its bytes. Past the limits, when it is gone, or when it holds a secret that cannot be redacted, the Quest file lists it with its path and why it was not copied. A link or text artifact is written in place.
 - **Work history.** The commands and file changes the Workbench recorded are listed. Their stored contents and logs are not, since they belong to a backup.
 - **Usage.** Each reply's usage goes in as #398 records it. This ADR does not change how usage is recorded.
 - **Redaction.** Every string goes through the hub's redactor, known values and secret shapes alike, your own messages and the replies included. Briefs and prompts are text like any other and are redacted the same way. A secret the redactor cannot recognize still passes through, and the README says so.

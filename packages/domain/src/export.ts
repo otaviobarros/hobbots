@@ -83,10 +83,18 @@ export type ExportedThread = typeof ExportedThread.Type;
 /**
  * Why a file artifact was not copied. `gone`: it is no longer a regular file. `outside-folders`:
  * it is not in the hob's folders now. `secret`: its name marks it as one that may hold secrets.
- * `too-large`: it is over the most one file may be. `export-full`: the export already holds as
- * much as it may.
+ * `holds-secret`: it is not text the redactor can rewrite, and it holds something the redactor
+ * recognizes as a secret. `too-large`: it is over the most one file may be. `export-full`: the
+ * export already holds as much as it may.
  */
-export const ArtifactNotCopied = Schema.Literals(["gone", "outside-folders", "secret", "too-large", "export-full"]);
+export const ArtifactNotCopied = Schema.Literals([
+  "gone",
+  "outside-folders",
+  "secret",
+  "holds-secret",
+  "too-large",
+  "export-full",
+]);
 export type ArtifactNotCopied = typeof ArtifactNotCopied.Type;
 
 export const ExportedArtifact = Schema.Struct({
@@ -179,11 +187,13 @@ export const ExportedTask = Schema.Struct({
 });
 export type ExportedTask = typeof ExportedTask.Type;
 
+/** A Quest's goal is its title; its acceptance is part of its Task's detail, so a summary has none. */
 export const ExportedQuest = Schema.Struct({
   id: QuestId,
   taskId: TaskId,
   leadId: AgentId,
   goal: Schema.String,
+  detail: ExportedDetail,
   acceptance: Schema.Array(Schema.String),
   state: QuestState,
   createdAt: Schema.String,
