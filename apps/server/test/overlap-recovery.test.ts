@@ -250,7 +250,127 @@ const findingsWhen = (count: number) =>
     Effect.retry({ schedule: Schedule.spaced("20 millis"), times: 150 }),
   );
 
+/**
+ * One turn on `attempt` that runs a file tool on the badge, `act` making the change as it runs, then
+ * `after` while the turn is still live. The turn's last scan runs as its scope closes.
+ */
+const turnOnBadge = <A, E, R>(
+  attempt: AttemptId,
+  operation: "edit-files" | "delete-files",
+  act: (badge: string) => void,
+  after: Effect.Effect<A, E, R>,
+) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const turn = yield* (yield* ActivityRecorder).forTurn({
+        folders: [shop],
+        attempt: Effect.succeed(attempt),
+        redactor: makeRedactor(),
+      });
+      const badge = join(shop, "web", "badge.png");
+      yield* Stream.runDrain(
+        turn.run(
+          {
+            prompt: "",
+            sessionId: null,
+            instructions: "",
+            instructionsChanged: false,
+            model: null,
+            effort: null,
+            tools: null,
+            recordToolStart: () => Effect.succeed(true),
+          },
+          (request) =>
+            Stream.fromIterable<RuntimeEvent>([
+              {
+                _tag: "ToolStarted",
+                id: "tool",
+                tool: "Bash",
+                operation,
+                targets: [badge],
+                label: "Changing the badge",
+              },
+            ]).pipe(
+              Stream.tap((event) =>
+                event._tag === "ToolStarted" && request.recordToolStart ? request.recordToolStart(event) : Effect.void,
+              ),
+              Stream.concat(
+                Stream.fromEffect(
+                  Effect.sync((): RuntimeEvent => {
+                    act(badge);
+                    return { _tag: "ToolFinished", id: "tool", failed: false };
+                  }),
+                ),
+              ),
+            ),
+        ),
+      );
+      return yield* after;
+    }),
+  );
+
 describe("A finding on two Tasks changing the same file", () => {
+  // covers OR-004
+  it("[TC-OR-412] is not recorded for a file the lead deleted before it delegated, though its turn scans it again after", async () => {
+    // Issue #658: Frodo's turn clears the badge, delegates Pip, and ends with the badge still gone, so
+    // its last scan sees the delete again after Pip's Task exists. Pip then makes the badge anew.
+    const LEAD_ATTEMPT = AttemptId.make("frodo-1");
+    const run = start(Hub);
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const tasks = yield* TaskRepository;
+        const root = Option.getOrThrow(yield* tasks.readTree(LEAD)).tasks[0];
+        yield* tasks.startAttempt(LEAD, root?.revision ?? 0, {
+          id: LEAD_ATTEMPT,
+          runtime: "claude-code",
+          sessionId: null,
+          configVersion: 1,
+          policyVersion: null,
+          startedAt: new Date().toISOString(),
+        });
+        yield* turnOnBadge(
+          LEAD_ATTEMPT,
+          "delete-files",
+          (badge) => rmSync(badge),
+          Effect.gen(function* () {
+            // Called at once: the delegation records the delete first, whether or not its rescan ran yet.
+            return yield* (yield* TaskTools).call({ agentId: FRODO, taskId: LEAD }, "delegate_task", {
+              key: "rebuild",
+              task_id: LEAD,
+              hob: "Pip",
+              brief: "Make the badge again",
+            });
+          }),
+        );
+        const rebuild = Option.getOrThrow(yield* tasks.readTree(LEAD)).tasks.find(
+          (each) => each.ownerId === PIP && each.id !== PIP_TASK,
+        );
+        if (rebuild === undefined) return yield* Effect.die("Pip's Task was not delegated");
+        const attempt = AttemptId.make("pip-rebuild-1");
+        yield* tasks.startAttempt(rebuild.id, rebuild.revision, {
+          id: attempt,
+          runtime: "claude-code",
+          sessionId: null,
+          configVersion: 1,
+          policyVersion: null,
+          startedAt: new Date().toISOString(),
+        });
+        yield* turnOnBadge(attempt, "edit-files", (badge) => writeFileSync(badge, "green"), Effect.void);
+        yield* Effect.sleep("300 millis");
+        const leads = (yield* (yield* ActivityRepository).read(LEAD_ATTEMPT)).pipe(Option.getOrThrow).changes;
+        return { rebuild, leads, found: yield* findings };
+      }),
+    );
+    // The lead's delete keeps the time it was first seen, before Pip's Task was delegated.
+    expect(result.leads.map((each) => [each.path, each.kind, each.recordedAt < result.rebuild.createdAt])).toEqual([
+      ["web/badge.png", "deleted", true],
+    ]);
+    expect(
+      result.found.filter((each) => each.taskId === result.rebuild.id || each.aboutTaskId === result.rebuild.id),
+    ).toEqual([]);
+  });
+
   // covers OR-004
   it("[TC-OR-289] is recorded when a member's turn completes its Task before its last scan records the change", async () => {
     const run = start(Hub);

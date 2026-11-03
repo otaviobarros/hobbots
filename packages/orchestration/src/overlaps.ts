@@ -68,7 +68,7 @@ const bothAtWork = (first: Task, later: string) => !isTerminalTask(first.state) 
  */
 const handedDown = (lead: Task, changes: ReadonlyArray<FileChange>, task: Task, tasks: ReadonlyArray<Task>) =>
   ancestorsOf(task, tasks).some((above) => above.id === lead.id)
-    ? changes.filter((change) => change.recordedAt >= task.createdAt)
+    ? changes.filter((change) => change.recordedAt > task.createdAt)
     : changes;
 
 /**

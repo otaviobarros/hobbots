@@ -449,6 +449,14 @@ const makeRecorder = (limits: ActivityLimits) =>
                 ? null
                 : (baseline.versions.get(wasAt) ?? withoutContents(change.before, "other", "unreadable"));
             const after = change.after === null ? null : yield* keepVersion(folder, change.path, change.after);
+            // A change the turn saw before, still as it was, keeps the time it was first seen, so a
+            // later scan does not make it look newer than it is (#658).
+            const seen = changeSets.get(folder)?.find((each) => each.path === change.path);
+            const same =
+              seen !== undefined &&
+              seen.kind === change.kind &&
+              seen.movedFrom === change.movedFrom &&
+              seen.after?.hash === change.after?.hash;
             return {
               id,
               path: change.path,
@@ -458,7 +466,7 @@ const makeRecorder = (limits: ActivityLimits) =>
               after,
               sharedWith: sharedIn(folder, change),
               settled,
-              recordedAt: at,
+              recordedAt: same ? seen.recordedAt : at,
             } satisfies FileChangeDraft;
           });
 
