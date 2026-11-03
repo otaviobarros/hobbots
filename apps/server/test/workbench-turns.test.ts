@@ -300,4 +300,53 @@ describe("an Attempt that several turns work in", () => {
       ["draft b", "attempt-limit"],
     ]);
   }, 30_000);
+
+  // covers UX-002, PE-005
+  it("[TC-OR-318] a later turn that edits a file an earlier turn kept keeps its before-version, counted once", async () => {
+    // Room for one 1,000-byte content in the Attempt, not two.
+    const { run: inHub } = setUp({}, { limits: { ...limits, contentsPerAttempt: 1_500 } });
+    await inHub(say(["Draft the notes", hub("start_quest", { key: "quest", goal: "Draft the notes" })].join("\n")));
+    await inHub(
+      say(["First draft", run({ command: "draft", writes: { "a.txt": `${"a".repeat(999)}\n` } })].join("\n")),
+    );
+    const tree = await inHub(treeWhen((each) => each.attempts.length > 0));
+    const attempt = tree.attempts[0];
+    if (attempt === undefined) throw new Error("no Attempt");
+    const first = await inHub(endedActivity(attempt.id, 2));
+    const kept = first.changes[0]?.after?.contentId;
+    expect(kept).toEqual(expect.any(String));
+
+    await inHub(say(["Redo it", run({ command: "redo", writes: { "a.txt": `${"b".repeat(999)}\n` } })].join("\n")));
+    const activity = await inHub(endedActivity(attempt.id, 3));
+    // The first draft is already kept and counted, so the edit's before-version names it; only the
+    // new draft would pass the budget.
+    expect(activity.changes.map(({ path, before, after }) => [path, before, after?.notKept])).toEqual([
+      ["a.txt", expect.objectContaining({ contentId: kept, notKept: null }), "attempt-limit"],
+    ]);
+  }, 30_000);
+
+  // covers UX-002, PE-005
+  it("[TC-OR-319] counts an earlier turn's text at its redacted size, so a later turn cannot pass the budget", async () => {
+    // 1,000 bytes as written, 2,700 once each secret in it reads as its marker.
+    const secrets = `${SHORT_SECRET}\n`.repeat(100);
+    const { run: inHub } = setUp({}, { limits: { ...limits, contentsPerAttempt: 4_000 } });
+    await inHub(say(["Write the files", hub("start_quest", { key: "quest", goal: "Write the files" })].join("\n")));
+    await inHub(say(["The secrets", run({ command: "write secrets", writes: { "secrets.txt": secrets } })].join("\n")));
+    // Once it is deleted, only the deletion's before-version keeps it, and no later scan sees it.
+    await inHub(say(["Drop them", run({ command: "drop secrets", writes: { "secrets.txt": null } })].join("\n")));
+    // 2,000 more bytes fit beside the 1,000 written, but not beside the 2,700 kept.
+    await inHub(
+      say(["The rest", run({ command: "write rest", writes: { "rest.txt": `${"r".repeat(1_999)}\n` } })].join("\n")),
+    );
+    const tree = await inHub(treeWhen((each) => each.attempts.length > 0));
+    const attempt = tree.attempts[0];
+    if (attempt === undefined) throw new Error("no Attempt");
+    const activity = await inHub(endedActivity(attempt.id, 4));
+    expect(
+      activity.changes.map(({ path, before, after }) => [path, before?.contentId ?? null, after?.notKept ?? null]),
+    ).toEqual([
+      ["rest.txt", null, "attempt-limit"],
+      ["secrets.txt", expect.any(String), null],
+    ]);
+  }, 30_000);
 });

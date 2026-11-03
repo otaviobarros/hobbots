@@ -26,6 +26,7 @@ import { Context, DateTime, Duration, Effect, Layer, Option, type Scope, Semapho
 import {
   ActivityRepository,
   ActivityStore,
+  type ActivityStoreShape,
   type CommandDraft,
   type FileChangeDraft,
   type FolderScanDraft,
@@ -121,23 +122,39 @@ const withoutContents = (file: ScannedFile, kind: FileVersion["kind"], notKept: 
   notKept,
 });
 
+/** A file content a turn keeps: its id, its kind, and its bytes as stored. */
+interface KeptContent {
+  readonly id: ContentId;
+  readonly kind: FileVersion["kind"];
+  readonly size: number;
+}
+
 /**
- * What an Attempt's records already keep: the bytes of the file contents its changes name, once
- * each, and of its commands' logs. A turn that resumes the Attempt counts them against its budgets.
+ * What an Attempt's records already keep: each file content its changes name, once, by the file
+ * hash it was kept for, with its bytes as stored, and the bytes of its commands' logs. A turn that
+ * resumes the Attempt counts them against its budgets. A text content is stored redacted, which can
+ * make it longer than the file, so its bytes are read from the store; an image is stored as it is.
  */
-const attemptUse = (activity: AttemptActivity) => {
-  const contents = new Map<ContentId, number>();
-  for (const change of activity.changes) {
-    for (const version of [change.before, change.after]) {
-      if (version?.contentId) contents.set(version.contentId, version.size);
+const attemptUse = (store: ActivityStoreShape, activity: AttemptActivity) =>
+  Effect.gen(function* () {
+    const contents = new Map<string, KeptContent>();
+    for (const change of activity.changes) {
+      for (const version of [change.before, change.after]) {
+        if (!version?.contentId || contents.has(version.hash)) continue;
+        const size =
+          version.kind === "image"
+            ? Option.some(version.size)
+            : Option.map(yield* store.get(version.contentId), (bytes) => bytes.byteLength);
+        if (Option.isSome(size))
+          contents.set(version.hash, { id: version.contentId, kind: version.kind, size: size.value });
+      }
     }
-  }
-  let logs = 0;
-  for (const command of activity.commands) {
-    if (command.log !== null) logs += command.log.totalBytes - command.log.omittedBytes;
-  }
-  return { contents: [...contents.values()].reduce((sum, size) => sum + size, 0), logs };
-};
+    let logs = 0;
+    for (const command of activity.commands) {
+      if (command.log !== null) logs += command.log.totalBytes - command.log.omittedBytes;
+    }
+    return { contents, logs };
+  });
 
 const makeRecorder = (limits: ActivityLimits) =>
   Effect.gen(function* () {
@@ -149,10 +166,7 @@ const makeRecorder = (limits: ActivityLimits) =>
     // Contents a live turn may still point at, so neither another turn nor pruning drops them.
     const pinned = new Map<ContentId, number>();
     // What each file hash was kept as, so a file kept before is not read again while it is kept.
-    const kept = new Map<
-      string,
-      { readonly id: ContentId; readonly kind: FileVersion["kind"]; readonly size: number }
-    >();
+    const kept = new Map<string, KeptContent>();
 
     const pin = (id: ContentId) => pinned.set(id, (pinned.get(id) ?? 0) + 1);
     const unpin = (id: ContentId) => {
@@ -206,14 +220,20 @@ const makeRecorder = (limits: ActivityLimits) =>
         const writers = new Set<string>();
         let logsUsed = 0;
         let taskId: TaskId | null = null;
-        // The Attempt's budgets hold across its turns: what earlier turns kept counts here too.
+        // The Attempt's budgets hold across its turns: what earlier turns kept counts here, once,
+        // and a file kept then is not read or counted again.
+        const earlier = new Set<ContentId>();
         const resumed = yield* turn.attempt;
-        if (resumed !== null) {
-          const earlier = yield* Effect.map(repo.read(resumed), Option.map(attemptUse));
-          if (Option.isSome(earlier)) {
-            heldBytes += earlier.value.contents;
-            logsUsed += earlier.value.logs;
+        const before = resumed === null ? Option.none() : yield* repo.read(resumed);
+        if (Option.isSome(before)) {
+          const use = yield* attemptUse(store, before.value);
+          for (const [hash, content] of use.contents) {
+            if (!kept.has(hash)) kept.set(hash, content);
+            if (earlier.has(content.id)) continue;
+            earlier.add(content.id);
+            heldBytes += content.size;
           }
+          logsUsed += use.logs;
         }
 
         const keep = (id: ContentId) => {
@@ -231,8 +251,10 @@ const makeRecorder = (limits: ActivityLimits) =>
         const settle = (reserved: number, id: ContentId, size: number) => {
           heldBytes -= reserved;
           if (held.has(id)) return;
-          held.set(id, size);
-          heldBytes += size;
+          // An earlier turn's content is counted already.
+          const bytes = earlier.has(id) ? 0 : size;
+          held.set(id, bytes);
+          heldBytes += bytes;
           keep(id);
         };
 
@@ -266,9 +288,9 @@ const makeRecorder = (limits: ActivityLimits) =>
             if (plan.readUpTo === null) return withoutContents(file, plan.kind, plan.notKept);
             const known = kept.get(file.hash);
             if (known !== undefined && (yield* store.has(known.id))) {
-              if (!held.has(known.id) && !reserve(known.size))
-                return withoutContents(file, known.kind, "attempt-limit");
-              if (!held.has(known.id)) settle(known.size, known.id, known.size);
+              const counted = held.has(known.id) || earlier.has(known.id);
+              if (!counted && !reserve(known.size)) return withoutContents(file, known.kind, "attempt-limit");
+              if (!held.has(known.id)) settle(counted ? 0 : known.size, known.id, known.size);
               return { ...withoutContents(file, known.kind, null), contentId: known.id };
             }
             // The file's size as scanned is reserved before it is read, so no read passes the budget.
