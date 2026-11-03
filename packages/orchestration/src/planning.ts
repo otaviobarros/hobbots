@@ -3,6 +3,7 @@ import {
   ArtifactId,
   cancelMoves,
   descendantsOf,
+  isLiveAttempt,
   isTerminalTask,
   MilestoneId,
   QuestId,
@@ -34,6 +35,18 @@ interface Deps {
   ) => Effect.Effect<void, TaskToolRefused>;
   readonly limits: TaskToolLimits;
 }
+
+/**
+ * What a hob reads after it waits. wait_for does not block, so a hob told it may keep working calls
+ * it again and again to check (#572); it ends its turn instead, and the hub wakes it.
+ */
+const END_TURN =
+  "End your turn now. Hobbots wakes you when they end, or sooner when something arrives for you, such as a question. Calling wait_for again only to check changes nothing.";
+
+const sameTasks = (recorded: ReadonlyArray<string>, asked: ReadonlyArray<string>) => {
+  const wanted = new Set(asked);
+  return recorded.length === wanted.size && recorded.every((id) => wanted.has(id));
+};
 
 const newMilestones = (titles: ReadonlyArray<string> | undefined) =>
   (titles ?? []).map((title) => ({ id: MilestoneId.make(newId()), title }));
@@ -125,6 +138,17 @@ export const makePlanning = ({ tasks, capacity, limits }: Deps) => ({
       if (mode === "any" ? ended.length > 0 : ended.length === input.tasks.length) {
         return { done: { message: "Nothing to wait for: they have already ended.", details: { states } }, entries: [] };
       }
+      const recorded = scope.tree.waits.find((wait) => wait.taskId === task.id);
+      if (recorded !== undefined && recorded.mode === mode && sameTasks(recorded.on, input.tasks)) {
+        return {
+          done: { message: `Task ${task.id} already waits for these. ${END_TURN}`, details: { states } },
+          entries: [],
+        };
+      }
+      // The turn making the call still runs: the Task shows waiting once it ends (#572).
+      const turnRunning =
+        task.state === "active" &&
+        scope.tree.attempts.some((each) => each.id === task.currentAttemptId && isLiveAttempt(each.state));
       const journal = journalOf();
       journal.keep(
         yield* fromRecords(
@@ -132,12 +156,13 @@ export const makePlanning = ({ tasks, capacity, limits }: Deps) => ({
             on: input.tasks.map((id) => TaskId.make(id)),
             mode,
             at: scope.at,
+            keepActive: turnRunning,
           }),
         ),
       );
       return {
         done: {
-          message: `Task ${task.id} is waiting for ${mode === "any" ? "any" : "all"} of them. You can keep working meanwhile.`,
+          message: `Task ${task.id} waits for ${mode === "any" ? "any" : "all"} of them. ${END_TURN}`,
           details: { states },
         },
         entries: journal.entries,
