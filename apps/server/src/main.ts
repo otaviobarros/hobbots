@@ -13,6 +13,7 @@ import {
   HobLifecycle,
   HobService,
   PermissionSummary,
+  RecoveryLog,
   SecretRedaction,
   TaskFiles,
 } from "@hobbots/agents";
@@ -298,6 +299,8 @@ const ServerLive = Layer.unwrap(
             NodeFolderChecks,
             Runtime,
             identity,
+            // What the startup recovery could not do, for Settings › Diagnostics (ADR 026).
+            RecoveryLog.layer,
             // The hub's credentials, provider keys included, are redacted by value from what tools report.
             SecretRedaction.layer(secretsFromEnv(process.env)),
             // The whole output of long tool calls, which their steps show cut.

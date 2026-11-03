@@ -3,6 +3,7 @@ export * from "./approvals.ts";
 export * from "./backpack.ts";
 export * from "./charm-calls.ts";
 export * from "./devices.ts";
+export * from "./diagnostics.ts";
 export * from "./errors.ts";
 export * from "./github.ts";
 export * from "./hob-github-app.ts";

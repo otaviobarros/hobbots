@@ -13,7 +13,7 @@ import {
   RUNTIME_NAMES,
   type RuntimeEnforcement,
   RuntimeHealth,
-  type RuntimeKind,
+  RuntimeKind,
   RuntimeModels,
   type SafetyPreset,
 } from "@hobbots/domain";
@@ -365,6 +365,12 @@ export const missingRuntimeHealth = (runtime: RuntimeKind): RuntimeHealth =>
       toolEvents: unsupported,
       toolInterruption: unsupported,
     },
+  });
+
+/** Every runtime's health, Claude Code first; one the hub has no adapter for is listed as unavailable. */
+export const everyRuntimeHealth = (adapters: RuntimeAdapters): Effect.Effect<ReadonlyArray<RuntimeHealth>> =>
+  Effect.forEach(RuntimeKind.literals, (kind) => adapters(kind)?.health ?? Effect.succeed(missingRuntimeHealth(kind)), {
+    concurrency: "unbounded",
   });
 
 /** The models of a runtime this hub has no adapter for: none. */

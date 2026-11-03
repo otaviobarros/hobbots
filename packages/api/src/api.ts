@@ -26,6 +26,7 @@ import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
 import { BackpackGroup, BlockersGroup } from "./backpack.ts";
 import { CharmCallsGroup } from "./charm-calls.ts";
 import { DevicesGroup, PairingGroup, PairingRequestsGroup, PairingThrottled } from "./devices.ts";
+import { DiagnosticsGroup } from "./diagnostics.ts";
 import {
   AgentNotFound,
   HobUnavailable,
@@ -341,4 +342,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(GitHubGroup)
   .add(HobGitHubAppGroup)
   .add(RemoteAccessGroup)
-  .add(WorkbenchGroup) {}
+  .add(WorkbenchGroup)
+  .add(DiagnosticsGroup) {}

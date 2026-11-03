@@ -1,3 +1,4 @@
+import type { TraceEntry } from "@hobbots/api";
 import {
   AgentId,
   type Committed,
@@ -334,6 +335,39 @@ const toEnvelope = (row: JournalRow) =>
     correlation: { agentId: row.agentId, threadId: row.threadId, messageId: row.messageId },
     causationId: row.causationId,
     payload: JSON.parse(row.payload),
+  });
+
+/**
+ * The latest entries that apply to any of `taskIds`, oldest first, at most `limit`, as Diagnostics
+ * follows a Quest (ADR 026): order, type, time and IDs, never the payload. A row names no Task, so
+ * the payloads that mention one are read and each is kept only when its event applies to it.
+ */
+export const journalForTasks = (sql: SqlClient.SqlClient, taskIds: ReadonlyArray<string>, limit: number) =>
+  Effect.gen(function* () {
+    if (taskIds.length === 0) return [];
+    const wanted = new Set(taskIds);
+    // `_` and `%` match any character in LIKE; the exact check below drops what they let in.
+    const mentions = sql.or(taskIds.map((id) => sql`payload LIKE ${`%"${id}"%`}`));
+    const rows =
+      yield* sql<JournalRow>`SELECT * FROM event_journal WHERE ${mentions} ORDER BY sequence DESC LIMIT ${limit * 2}`;
+    const entries: Array<TraceEntry> = [];
+    for (const row of rows) {
+      if (entries.length >= limit) break;
+      const envelope = yield* toEnvelope(row);
+      const { taskId } = correlationOf(envelope.payload);
+      if (taskId === null || !wanted.has(taskId)) continue;
+      entries.push({
+        sequence: envelope.sequence,
+        type: envelope.type,
+        occurredAt: envelope.occurredAt,
+        agentId: envelope.correlation.agentId,
+        threadId: envelope.correlation.threadId,
+        messageId: envelope.correlation.messageId,
+        taskId: taskId as TraceEntry["taskId"],
+        causationId: envelope.causationId,
+      });
+    }
+    return entries.reverse();
   });
 
 /** Reads and compacts the event journal. Writes go through the repositories, with the change they describe. */
