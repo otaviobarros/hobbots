@@ -276,7 +276,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           if (completed) return;
           const latest = yield* currentTask(stepId);
           if (Option.isNone(latest) || isTerminalTask(latest.value.state)) return;
-          const blocks = held && latest.value.state === "active";
+          const blocks = held && latest.value.state !== "cancelling";
           yield* attempt(
             blocks
               ? tasks.moveTask(stepId, latest.value.revision, "blocked", at, carried)

@@ -283,7 +283,7 @@ export const stepPromptShows = (step: Task, tree: TaskTree): ((item: BackpackIte
 
 /** What the owner can do about a step that stopped on a finding or blocker, which holds the steps after it (#667). */
 const STOPPED_STEP =
-  "A blocked step stopped on a finding or blocker, and the steps after it wait for you. To go on, call complete_task on that step with the result the steps after it should work from; to change the plan, cancel it with cancel_task and plan again.";
+  "A blocked step stopped on a finding or blocker, and the steps after it wait for you. To go on, call complete_task on that step with the result the steps after it should work from; to change the plan, cancel it and the steps after it with cancel_task, then plan again.";
 
 /**
  * What the owner's chat turn is told of the open Task it works on: the Task, and for each Task

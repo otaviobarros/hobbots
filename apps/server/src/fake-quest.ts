@@ -415,23 +415,6 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
           .pipe(Effect.flatMap(announce));
       }),
     );
-    yield* whileOpen(build.id, report(build.id, "progress", "Keyword research done while waiting on Quill", null));
-    yield* pause;
-
-    // Ada's question needs a call only you can make: Aldric passes it up to you.
-    const cutoff = yield* whileOpen(
-      build.id,
-      Effect.gen(function* () {
-        const asked = yield* ask(
-          "q-cutoff",
-          build.id,
-          cast.ada,
-          "Carriers stop international deliveries on Dec 10. Should international orders get an earlier cutoff, Dec 12, while everything else stays Dec 18?",
-        );
-        yield* tasks.escalateQuestion(asked.id, cast.lead).pipe(Effect.flatMap(announce));
-        return asked;
-      }),
-    );
     yield* pause;
 
     // Quill finishes, and Ada's Task starts with the copy it comes after.
@@ -454,6 +437,24 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
         }),
       );
     }
+    yield* whileOpen(build.id, report(build.id, "progress", "Keyword research done", null));
+    yield* pause;
+
+    // Ada's question needs a call only you can make: Aldric passes it up to you.
+    const cutoff = yield* whileOpen(
+      build.id,
+      Effect.gen(function* () {
+        const asked = yield* ask(
+          "q-cutoff",
+          build.id,
+          cast.ada,
+          "Carriers stop international deliveries on Dec 10. Should international orders get an earlier cutoff, Dec 12, while everything else stays Dec 18?",
+        );
+        yield* tasks.escalateQuestion(asked.id, cast.lead).pipe(Effect.flatMap(announce));
+        return asked;
+      }),
+    );
+    yield* pause;
 
     // Once you answer, Ada finishes and Aldric wraps up in your chat. Work you cancelled is skipped.
     if (Option.isSome(cutoff)) yield* answered(cutoff.value.id, build.id, step);

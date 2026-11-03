@@ -50,9 +50,11 @@ const BLOCKED_ARRIVAL = "ended as blocked";
 
 /** Runs the plan until step 1 is blocked. */
 const untilBlocked = async (reactions: ReadonlyArray<Reaction>) => {
-  const started = await startHub(await sharedDatabase(), reactions);
+  const database = await sharedDatabase();
+  const started = await startHub(database, reactions);
   await started.run(send(["Write the docs", plan]));
-  return { ...started, blocked: await started.run(settledTree((tree) => stepsOf(tree)[0]?.state === "blocked")) };
+  const blocked = await started.run(settledTree((tree) => stepsOf(tree)[0]?.state === "blocked"));
+  return { ...started, database, blocked };
 };
 
 describe("a step that stops on a finding holds the steps after it", () => {
@@ -113,5 +115,15 @@ describe("a step that stops on a finding holds the steps after it", () => {
     const done = await run(settledTree((tree) => stepsOf(tree)[2]?.state === "completed"));
     expect(stepsOf(done).map((step) => step.state)).toEqual(["cancelled", "cancelled", "completed"]);
     expect(promptsTo(requests, second)).toEqual([]);
+  }, 30_000);
+
+  // covers OR-002, EX-004
+  it("[TC-OR-403] a step held for Aldric stays held, with step 2 queued, after Hobbots restarts", async () => {
+    const { database, stop } = await untilBlocked([]);
+    stop();
+    const again = await startHub(database);
+    // Startup recovery ends the steps left open with no live Attempt; a held one is not among them.
+    const after = await again.run(settledTree((tree) => stepsOf(tree)[1]?.state === "queued"));
+    expect(stepsOf(after).map((step) => step.state)).toEqual(["blocked", "queued"]);
   }, 30_000);
 });

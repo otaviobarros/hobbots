@@ -363,7 +363,7 @@ export const TaskRepositoryLive = Layer.effect(
     /** Whether `task` can start an Attempt, read from its tree: refused unless it is Ready (#667). */
     const readiness = (task: Task) =>
       Effect.gen(function* () {
-        const ready = TaskReadiness.of(task, yield* read.treeOf(task.rootId));
+        const ready = TaskReadiness.of(task, task.dependsOn.length === 0 ? [] : yield* read.treeOf(task.rootId));
         if (ready._tag === "Ready") return ready;
         const unmet = TaskReadiness.unmet(ready).join(", ");
         return yield* refuse(
