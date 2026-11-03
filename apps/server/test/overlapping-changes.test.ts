@@ -95,55 +95,79 @@ const member = (id: TaskId, ownerId: AgentId) => ({
   milestones: [],
 });
 
-/** Frodo's Quest with Rook making the badge and Pip reviewing, both at work in the same folder. */
-const seed = Effect.gen(function* () {
-  const repo = yield* HobbotsRepository;
-  for (const [id, name] of [
-    [FRODO, "Frodo"],
-    [ROOK, "Rook"],
-    [PIP, "Pip"],
-  ] as const)
-    yield* repo.insertAgent(hob(id, name));
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: FRODO, title: "Badge", createdAt: now, updatedAt: now }),
-  );
-  const tasks = yield* TaskRepository;
-  yield* tasks.createTask({
-    task: {
-      id: LEAD,
-      ownerId: FRODO,
-      parentId: null,
-      threadId,
-      brief: "Build the site",
-      dependsOn: [],
+/** Frodo's Quest, with no members yet: his root Task, its Quest and, with `attempt`, his own Attempt. */
+const seedLead = (attempt: { readonly id: AttemptId; readonly startedAt: string } | null = null) =>
+  Effect.gen(function* () {
+    const repo = yield* HobbotsRepository;
+    for (const [id, name] of [
+      [FRODO, "Frodo"],
+      [ROOK, "Rook"],
+      [PIP, "Pip"],
+    ] as const)
+      yield* repo.insertAgent(hob(id, name));
+    yield* repo.upsertThread(
+      new Thread({ id: threadId, agentId: FRODO, title: "Badge", createdAt: now, updatedAt: now }),
+    );
+    const tasks = yield* TaskRepository;
+    yield* tasks.createTask({
+      task: {
+        id: LEAD,
+        ownerId: FRODO,
+        parentId: null,
+        threadId,
+        brief: "Build the site",
+        dependsOn: [],
+        createdAt: now,
+      },
+      delegation: null,
+      milestones: [],
+    });
+    yield* tasks.startQuest({
+      id: QuestId.make("q-site"),
+      taskId: LEAD,
+      goal: "A site with a badge",
+      acceptance: [],
+      limits: DEFAULT_QUEST_LIMITS,
       createdAt: now,
-    },
-    delegation: null,
-    milestones: [],
-  });
-  yield* tasks.startQuest({
-    id: QuestId.make("q-site"),
-    taskId: LEAD,
-    goal: "A site with a badge",
-    acceptance: [],
-    limits: DEFAULT_QUEST_LIMITS,
-    createdAt: now,
-  });
-  for (const [taskId, ownerId, attemptId] of [
-    [ROOK_TASK, ROOK, ROOK_ATTEMPT],
-    [PIP_TASK, PIP, PIP_ATTEMPT],
-  ] as const) {
-    const created = yield* tasks.createTask(member(taskId, ownerId));
-    yield* tasks.startAttempt(taskId, created.value.revision, {
-      id: attemptId,
+    });
+    if (attempt === null) return;
+    const read = Option.getOrThrow(yield* tasks.readTree(LEAD));
+    const root = read.tasks.find((each) => each.id === LEAD);
+    yield* tasks.startAttempt(LEAD, root?.revision ?? 0, {
+      id: attempt.id,
       runtime: "claude-code",
       sessionId: null,
       configVersion: 1,
       policyVersion: null,
-      startedAt: now,
+      startedAt: attempt.startedAt,
     });
-  }
-});
+  });
+
+/** Rook making the badge and Pip reviewing, both at work in the same folder from `startedAt`. */
+const seedMembers = (startedAt = now) =>
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    for (const [taskId, ownerId, attemptId] of [
+      [ROOK_TASK, ROOK, ROOK_ATTEMPT],
+      [PIP_TASK, PIP, PIP_ATTEMPT],
+    ] as const) {
+      const created = yield* tasks.createTask(member(taskId, ownerId));
+      yield* tasks.startAttempt(taskId, created.value.revision, {
+        id: attemptId,
+        runtime: "claude-code",
+        sessionId: null,
+        configVersion: 1,
+        policyVersion: null,
+        startedAt,
+      });
+    }
+  });
+
+/** Frodo's Quest with Rook making the badge and Pip reviewing, both at work in the same folder. */
+const seed = Effect.andThen(seedLead(), seedMembers());
+
+/** `second` seconds into the Quest. */
+const at = (second: number) => new Date(Date.parse(now) + 1000 * second).toISOString();
 
 /** A change a scan recorded `second` seconds into the Quest. */
 const change = (attempt: string, path: string, hash: string, second = 0): FileChangeDraft => ({
@@ -155,7 +179,7 @@ const change = (attempt: string, path: string, hash: string, second = 0): FileCh
   after: { hash, size: 10, kind: "image", contentId: null, notKept: "unreadable" },
   sharedWith: [],
   settled: false,
-  recordedAt: new Date(Date.parse(now) + 1000 * second).toISOString(),
+  recordedAt: at(second),
 });
 
 /** Records a turn's changes as the recorder does: saved with their event, then published. */
@@ -181,6 +205,46 @@ const findingsWhen = (count: number) =>
 const settle = Effect.sleep("200 millis");
 
 describe("Two Tasks of a Quest changing the same file", () => {
+  // covers OR-004
+  it("[TC-OR-410] is no finding for files the lead changed before it delegated, but one for a change while both were at work", async () => {
+    // Issue #658: Frodo's root Attempt stays open until the Quest ends. Before he delegated, it
+    // cleared the last run's files; then Rook and Pip rebuilt them at the same paths.
+    const FRODO_ATTEMPT = AttemptId.make("frodo-1");
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seedLead({ id: FRODO_ATTEMPT, startedAt: at(-60) });
+        const cleared = (path: string, movedFrom: string | null = null): FileChangeDraft => ({
+          ...change("frodo", path, "gone", -30),
+          kind: movedFrom === null ? "deleted" : "moved",
+          movedFrom,
+          after: movedFrom === null ? null : change("frodo", path, "moved").after,
+        });
+        yield* record(FRODO_ATTEMPT, project, [
+          cleared("web/badge.png"),
+          cleared("ledger/core.py"),
+          cleared("docs/NOTES.md", "notes.txt"),
+        ]);
+        yield* seedMembers();
+        yield* record(ROOK_ATTEMPT, project, [change("rook", "web/badge.png", "rook-1", 1)]);
+        yield* record(PIP_ATTEMPT, project, [
+          change("pip", "ledger/core.py", "pip-1", 1),
+          change("pip", "notes.txt", "pip-1", 1),
+        ]);
+        yield* settle;
+        const rebuilt = yield* findings;
+        const woken = (yield* (yield* Backpack).listOpen({ _tag: "Hob", agentId: FRODO })).filter(
+          (item) => item.payload._tag === "checkpoint",
+        );
+        // Frodo then rewrites a file Pip changed while Pip is still at work: that one is real.
+        yield* record(FRODO_ATTEMPT, project, [change("frodo", "ledger/core.py", "frodo-2", 2)]);
+        return { rebuilt, woken, concurrent: yield* findingsWhen(1) };
+      }),
+    );
+    expect(result.rebuilt).toEqual([]);
+    expect(result.woken).toEqual([]);
+    expect(result.concurrent.map((each) => [each.taskId, each.aboutTaskId])).toEqual([[LEAD, PIP_TASK]]);
+  });
+
   // covers OR-004
   it("[TC-OR-280] is one finding for the lead, on the Task that changed it and about the other, however often it is recorded", async () => {
     const result = await run(
