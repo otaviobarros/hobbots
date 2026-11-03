@@ -361,7 +361,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
             attemptId,
             prompt:
               previous === null
-                ? memberPrompt(task, tree, lead)
+                ? [memberPrompt(task, tree, lead), work.text("start")].filter((part) => part !== "").join("\n\n")
                 : `${work.text("prompt")}\n\n${memberReminder(task, lead)}`,
             sessionId: previous,
             access: run.access,
