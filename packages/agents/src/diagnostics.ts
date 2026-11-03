@@ -314,13 +314,20 @@ export interface ReportPlaces {
 
 const literally = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/** Drops trailing slashes without a regex, which would backtrack on a long run of them. */
+const withoutTrailingSlashes = (path: string): string => {
+  let end = path.length;
+  while (end > 0 && (path[end - 1] === "/" || path[end - 1] === "\\")) end -= 1;
+  return path.slice(0, end);
+};
+
 /** Replaces each hob folder, then the home folder, wherever a path starts with one. */
 export const placesHidden = (places: ReportPlaces): ((text: string) => string) => {
   const named = places.folders
-    .map((folder, index) => ({ folder: folder.replace(/[/\\]+$/, ""), name: `folder ${index + 1}` }))
+    .map((folder, index) => ({ folder: withoutTrailingSlashes(folder), name: `folder ${index + 1}` }))
     .filter((each) => each.folder.length > 1)
     .sort((a, b) => b.folder.length - a.folder.length);
-  const home = places.home.replace(/[/\\]+$/, "");
+  const home = withoutTrailingSlashes(places.home);
   // A folder counts only as a whole path: `/Users/me/shop` is not inside `/Users/me/shopping`.
   const rules = [
     ...named.map((each) => ({
