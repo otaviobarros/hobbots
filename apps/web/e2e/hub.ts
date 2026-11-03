@@ -51,6 +51,8 @@ export const startHub = async (dataDir: string, env: Record<string, string> = {}
       HOBBOTS_DATA_DIR: dataDir,
       HOBBOTS_WEB_DIR: join(web, "dist"),
       HOBBOTS_RUNTIME: "fake",
+      // A hub on the real runtimes never finds a Codex installed on this machine unless a test gives it one.
+      HOBBOTS_CODEX_EXECUTABLE: join(dataDir, "bin", "codex"),
       ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -230,6 +232,52 @@ process.stdin.on("data", (chunk) => {
     const response = message.request.subtype === "initialize" ? { commands: [], models: [], account: {} } : {};
     const reply = { type: "control_response", response: { subtype: "success", request_id: message.request_id, response } };
     process.stdout.write(JSON.stringify(reply) + "\\n");
+  }
+});
+`,
+  );
+  chmodSync(path, 0o755);
+  return path;
+};
+
+/** What the stand-in Codex reports: its version and how it is signed in. */
+export type FakeCodexState = "outdated" | "signedOut" | "apiKey" | "ready";
+
+const CODEX_ACCOUNTS: Record<FakeCodexState, unknown> = {
+  outdated: null,
+  signedOut: null,
+  apiKey: { type: "apiKey" },
+  ready: { type: "chatgpt", email: "player@example.com", planType: "plus", workspaceName: null },
+};
+
+/**
+ * Writes a stand-in for Codex where the hub looks for it (`<dataDir>/bin/codex`), answering
+ * `--version`, `account/read` and `model/list` over the App Server's JSON-RPC.
+ */
+export const fakeCodexAt = (dataDir: string, state: FakeCodexState): string => {
+  const path = join(dataDir, "bin", "codex");
+  mkdirSync(join(dataDir, "bin"), { recursive: true });
+  const version = state === "outdated" ? "0.100.0" : "0.166.0";
+  writeFileSync(
+    path,
+    `#!/usr/bin/env node
+if (process.argv.includes("--version")) {
+  process.stdout.write("codex-cli ${version}\\n");
+  process.exit(0);
+}
+const results = {
+  initialize: { userAgent: "fake", codexHome: "/fake", platformFamily: "unix", platformOs: "linux" },
+  "account/read": { account: ${JSON.stringify(CODEX_ACCOUNTS[state])}, requiresOpenaiAuth: true, workspaceRouting: null },
+  "model/list": { data: [], nextCursor: null },
+};
+let buffered = "";
+process.stdin.on("data", (chunk) => {
+  buffered += chunk;
+  for (let end = buffered.indexOf("\\n"); end >= 0; end = buffered.indexOf("\\n")) {
+    const message = JSON.parse(buffered.slice(0, end));
+    buffered = buffered.slice(end + 1);
+    if (message.id === undefined) continue;
+    process.stdout.write(JSON.stringify({ id: message.id, result: results[message.method] ?? {} }) + "\\n");
   }
 });
 `,

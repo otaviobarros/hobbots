@@ -42,6 +42,50 @@ export const messages = {
     openSource: "Hobbots is free and open source.",
     repository: "Read the code, report a bug or suggest a hob on GitHub",
   },
+  providers: {
+    heading: "AI providers",
+    billing: "Billing",
+    version: "Version",
+    checking: "Checking",
+    checkAgain: "Check again",
+    lookingAgain: "Looking on this Mac…",
+    noRestart: "No need to restart Hobbots.",
+    installGuide: "Install guide",
+    availability: {
+      ready: "Ready",
+      outdated: "Outdated",
+      signedOut: "Signed out",
+      unavailable: "Unavailable",
+      unverified: "Unverified",
+    },
+    // Each `{command}` is shown as code.
+    "claude-code": {
+      outdated: "This Claude Code is older than Hobbots supports. Update it with {command}.",
+      updateCommand: "claude update",
+      notFound: "Claude Code was not found or could not start. Install it and sign in with {command}.",
+      signInCommand: "claude",
+      signedOut:
+        "Claude Code is installed but not signed in. Run {command} in a terminal and sign in with your claude.ai account.",
+      notStarted: "Claude Code is installed but did not start. Run {command} in a terminal to sign in.",
+      startCommand: "claude",
+      billingWarning:
+        "Not billing your Claude subscription. Unset ANTHROPIC_API_KEY and sign in to Claude Code with your claude.ai account.",
+    },
+    codex: {
+      outdated: "This Codex is older than Hobbots supports. Update it with {command}, or the way you installed it.",
+      updateCommand: "npm install -g @openai/codex@latest",
+      notFound: "Codex was not found or could not start. Install it and sign in with {command}.",
+      signInCommand: "codex login",
+      signedOut:
+        "Codex is installed but not signed in. Run {command} in a terminal and sign in with your ChatGPT account.",
+      apiKey:
+        "Codex is signed in with an API key. Hobbots runs Codex only on your ChatGPT plan: run {command} and sign in with ChatGPT.",
+      otherProvider:
+        "Codex is signed in to another provider. Hobbots runs Codex only on your ChatGPT plan: run {command} and sign in with ChatGPT.",
+      notStarted: "Codex is installed but did not start. Run {command} in a terminal to check it.",
+      startCommand: "codex",
+    },
+  },
 } as const;
 
 /** A checkout's server reports `development` rather than a release number. */

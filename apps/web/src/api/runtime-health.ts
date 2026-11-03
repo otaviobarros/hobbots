@@ -2,6 +2,19 @@ import type { RuntimeHealth, RuntimeKind } from "@hobbots/domain";
 
 export const claudeInstallGuide = "https://code.claude.com/docs/en/setup";
 
+/** Where OpenAI explains installing Codex and signing in. */
+export const codexInstallGuide = "https://developers.openai.com/codex/cli";
+
+/**
+ * Why a signed-out Codex cannot run hobs: no sign-in, or one that is not a ChatGPT plan, which the
+ * hub reports as its billing (ADR 024). Null for any other state.
+ */
+export const signInProblem = (health: RuntimeHealth | undefined): "signedOut" | "apiKey" | "otherProvider" | null => {
+  if (health?.availability !== "signedOut") return null;
+  if (health.runtime !== "codex" || health.billing === null) return "signedOut";
+  return health.billing === "api-key" ? "apiKey" : "otherProvider";
+};
+
 /** What the user has to fix before the provider can run, or null when nothing is wrong. */
 export const runtimeProblem = (
   health: RuntimeHealth | undefined,

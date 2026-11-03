@@ -57,6 +57,7 @@ import {
 } from "@hobbots/persistence";
 import {
   ClaudeCodeLayer,
+  CodexLayer,
   FakeAdditionalRuntimesLayer,
   FakeRuntimeLayer,
   FolderSandboxLive,
@@ -161,10 +162,16 @@ const ServerLive = Layer.unwrap(
             FakeRuntimeLayer({ ...fake, availability: config.fakeAvailability }),
             FakeAdditionalRuntimesLayer({ ...fake, availability: config.fakeCodexAvailability }),
           )
-        : ClaudeCodeLayer({
-            workspaceDir: join(config.dataDir, "workspaces", "default"),
-            executable: Option.getOrUndefined(config.claudeExecutable),
-          }).pipe(Layer.provide(ProcessSandbox.layer))
+        : Layer.mergeAll(
+            ClaudeCodeLayer({
+              workspaceDir: join(config.dataDir, "workspaces", "default"),
+              executable: Option.getOrUndefined(config.claudeExecutable),
+            }).pipe(Layer.provide(ProcessSandbox.layer)),
+            CodexLayer({
+              executable: Option.getOrUndefined(config.codexExecutable),
+              clientVersion: config.version,
+            }).pipe(Layer.provide(NodeServices.layer)),
+          )
     ).pipe(Layer.provide(PolicyEngine.node), Layer.provide(Remote));
     // The GitHub Charm reads and pushes on the hub, outside the sandbox (#317, #323), as the GitHub
     // account the user connected in Settings, whose tokens stay in the OS keychain (ADR 020). A push

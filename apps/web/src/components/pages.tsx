@@ -12,11 +12,11 @@ import { GitHubSettings } from "./github-settings.tsx";
 import { messages } from "./messages.ts";
 import { WaitingDevices } from "./pairing/waiting-devices.tsx";
 import { RemoteAccessSettings } from "./remote-access-settings.tsx";
-import { RuntimeCard } from "./runtime.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
 import { AboutSettings } from "./settings/about-settings.tsx";
 import { messages as settingsMessages } from "./settings/messages.ts";
 import { NotificationSettings } from "./settings/notification-settings.tsx";
+import { ProviderCard } from "./settings/provider-card.tsx";
 import { ReduceMotionRow } from "./settings/reduce-motion.tsx";
 import { StandingRuleSettings } from "./standing-rules/standing-rules.tsx";
 
@@ -81,9 +81,8 @@ export function UsagePage() {
   );
 }
 
-// Providers from the Hobbots design. Only Claude Code is wired in this build.
+// Providers from the Hobbots design. Only Claude Code and Codex are wired in this build.
 const LATER_PROVIDERS = [
-  { name: "ChatGPT (Codex)", mark: "G", color: "#8fd3a8" },
   { name: "Gemini", mark: "G", color: "#8fb4f0" },
   { name: "Grok", mark: "X", color: "#c9c3e8" },
   { name: "Local models (Ollama)", mark: "L", color: "#f3e9b5" },
@@ -126,7 +125,8 @@ export function SettingsPage() {
         <PermissionSettings />
       </Panel>
       <Panel label="AI providers" id="ai-providers">
-        <RuntimeCard />
+        <ProviderCard runtime="claude-code" />
+        <ProviderCard runtime="codex" />
         <div className="flex flex-col">
           {LATER_PROVIDERS.map((p) => (
             <ProviderRow key={p.name} name={p.name} mark={p.mark} color={p.color}>
