@@ -364,7 +364,13 @@ describe("leading a party on a Quest", () => {
     const waiting = await run(
       treeWhen((tree) => {
         const quill = ownedBy(tree, QUILL);
-        return ownedBy(tree, ADA)?.state === "queued" && quill?.state === "active" && tree.quests.length === 1;
+        // Aldric's own Task waits once his turn has ended (#572), which can come after Quill starts.
+        return (
+          ownedBy(tree, ADA)?.state === "queued" &&
+          quill?.state === "active" &&
+          tree.quests.length === 1 &&
+          tree.tasks[0]?.state === "waiting"
+        );
       }),
     );
     const members = expectAdaQueued(waiting, requests);
