@@ -306,7 +306,7 @@ describe("a Task's activity", () => {
       sandboxed: true,
       liveOutput: false,
       state: "succeeded",
-      exitCode: null,
+      exitCode: 0,
     });
     expect(command?.command).toBe("npm run format -- --token [redacted: GitHub token]");
     expect(command?.output?.head).toBe(

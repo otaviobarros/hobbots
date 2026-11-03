@@ -23,6 +23,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { Clock, Effect, Exit, Layer, Option, Queue, Stream } from "effect";
 import { decideCall, startCall } from "./approval.ts";
 import { toolTurn } from "./claude-code.ts";
+import { type HookEnd, toolFinished } from "./command-exit.ts";
 import { applyScriptedWrites } from "./fake-writes.ts";
 import { commandOf, toolLabel, toolRequests } from "./tool-calls.ts";
 
@@ -250,16 +251,25 @@ const finishScripted = (
     call.effect?.live === true && output !== undefined
       ? output.split(/(?<=\n)/).map((text): RuntimeEvent => ({ _tag: "ToolOutput", id: call.id, text }))
       : [];
-  return [
-    ...live,
-    {
-      _tag: "ToolFinished",
-      id: call.id,
-      failed: exitCode !== undefined && exitCode !== 0,
-      ...(output === undefined ? {} : { output }),
-      ...(exitCode === undefined ? {} : { exitCode }),
-    },
-  ];
+  return [...live, toolFinished(call.id, ...hookEnd(call.tool, output, exitCode))];
+};
+
+/**
+ * How Claude Code's hooks would report the call's end, so the fake's events take the real runtime's
+ * path: a command that exits non-zero fails with an `Exit code N` error, and one that exits 0 succeeds
+ * with its output.
+ */
+const hookEnd = (
+  tool: string,
+  output: string | undefined,
+  exitCode: number | undefined,
+): [HookEnd, string | undefined] => {
+  if (exitCode !== undefined && exitCode !== 0) {
+    const error = [`Exit code ${exitCode}`, ...(output === undefined || output === "" ? [] : [output])].join("\n");
+    return [{ hook_event_name: "PostToolUseFailure", tool_name: tool, error, is_interrupt: false }, error];
+  }
+  const response = { stdout: output ?? "", stderr: "", interrupted: false, isImage: false, noOutputExpected: false };
+  return [{ hook_event_name: "PostToolUse", tool_name: tool, tool_response: response }, output];
 };
 
 /** The command a scripted call runs, in the folder the policy decided it in, or undefined for another tool. */

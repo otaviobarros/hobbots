@@ -504,7 +504,8 @@ const makeRecorder = (limits: ActivityLimits) =>
               commands.set(event.id, {
                 ...command,
                 ...output,
-                state: event.failed ? "failed" : "succeeded",
+                // A command that exits non-zero failed, whatever the runtime's own flag says (#591).
+                state: event.failed || (event.exitCode ?? 0) !== 0 ? "failed" : "succeeded",
                 exitCode: event.exitCode ?? null,
                 endedAt: yield* nowIso,
               });
