@@ -44,8 +44,11 @@ export interface AppServer {
   ) => Effect.Effect<ClientRequests[M]["result"], AppServerError>;
   /** Sends a request this module has no types for yet, for methods added after the probe. */
   readonly requestUnknown: (method: string, params: unknown) => Effect.Effect<unknown, AppServerError>;
-  /** Notifications that arrive after the stream is run; earlier ones are not kept. */
-  readonly notifications: Stream.Stream<AppServerNotification>;
+  /**
+   * Subscribes at once to the notifications that arrive from now on. The stream ends when the
+   * process exits, so a reader can tell a turn that never completed.
+   */
+  readonly subscribe: Effect.Effect<Stream.Stream<AppServerNotification>, never, Scope.Scope>;
   /** Succeeds with the exit code when the process exits, for whatever reason. */
   readonly exited: Effect.Effect<number>;
 }
@@ -99,7 +102,8 @@ export const startAppServer = (
 
     const send = (message: JsonRpcMessage) => Queue.offer(outbox, JSON.stringify(message));
     const pending = new Map<RequestId, Deferred.Deferred<unknown, AppServerError>>();
-    const notifications = yield* PubSub.unbounded<AppServerNotification>();
+    // `null` marks the process exit, which ends every subscriber's stream.
+    const notifications = yield* PubSub.unbounded<AppServerNotification | null>();
     const exit = yield* Deferred.make<number>();
     let nextId = 0;
 
@@ -147,6 +151,7 @@ export const startAppServer = (
       Effect.flatMap((code) =>
         Effect.gen(function* () {
           yield* Deferred.succeed(exit, Number(code));
+          yield* PubSub.publish(notifications, null);
           const gone = new AppServerError({ message: `Codex exited with code ${code} before it answered.` });
           for (const waiting of pending.values()) yield* Deferred.fail(waiting, gone);
           pending.clear();
@@ -181,7 +186,14 @@ export const startAppServer = (
       initialized,
       request,
       requestUnknown,
-      notifications: Stream.fromPubSub(notifications),
+      subscribe: Effect.gen(function* () {
+        const subscription = yield* PubSub.subscribe(notifications);
+        // Subscribed after the exit was announced: there is nothing more to read.
+        if (yield* Deferred.isDone(exit)) return Stream.empty;
+        return Stream.fromSubscription(subscription).pipe(
+          Stream.takeWhile((notification): notification is AppServerNotification => notification !== null),
+        );
+      }),
       exited: Deferred.await(exit),
     } satisfies AppServer;
   });
