@@ -563,6 +563,16 @@ describe("reading a Claude Code turn", () => {
     expect(planFromReport(undefined, at)).toEqual(nothing);
     expect(planFromReport(report(null), at)).toEqual(nothing);
     expect(planFromReport(report({ limits: null }), at)).toEqual(nothing);
+    // Spend reported without rows is kept, also once credits can no longer pay for requests.
+    expect(
+      planFromReport(
+        report({
+          limits: null,
+          extra_usage: { is_enabled: false, monthly_limit: null, used_credits: 900, utilization: null },
+        }),
+        at,
+      ),
+    ).toEqual({ ...nothing, extraUsage: { enabled: false, monthlyLimit: null, usedCredits: 900, currency: null } });
   });
 
   it("[TC-CH-097] ends the turn at a rejected rate limit, with when it resets, unless overage covers it", () => {

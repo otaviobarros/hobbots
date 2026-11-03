@@ -30,14 +30,17 @@ export const HobUsage = Schema.Struct({
 });
 export type HobUsage = typeof HobUsage.Type;
 
-/** Every hob's replies that started in one hour (UTC), so a client can count them by its own days. */
-export const HourUsage = Schema.Struct({
-  /** The hour's start, ISO 8601 in UTC: "2026-11-02T13:00:00.000Z". */
-  hour: Schema.String,
+/**
+ * Every hob's replies that started in one minute (UTC). A minute fits every time zone's offset, so a
+ * client can count them by its own days.
+ */
+export const MinuteUsage = Schema.Struct({
+  /** The minute's start, ISO 8601 in UTC: "2026-11-02T18:45:00.000Z". */
+  minute: Schema.String,
   replies: Schema.Number,
   tokens: Schema.Number,
 });
-export type HourUsage = typeof HourUsage.Type;
+export type MinuteUsage = typeof MinuteUsage.Type;
 
 /**
  * One of a plan's meters, as the provider sent it: which meters apply, their order and their severity
@@ -92,12 +95,15 @@ export const unreportedPlan = (runtime: RuntimeKind, checkedAt: string | null = 
   checkedAt,
 });
 
-/** What the hub's hobs used from `since` until `until`, and every runtime's plan. */
+/**
+ * What the hub's hobs used from `since` until `until`, and every runtime's plan. A client that names
+ * `since`, such as the start of its own first day, gets exactly that period.
+ */
 export const UsageReport = Schema.Struct({
   since: Schema.String,
   until: Schema.String,
   hobs: Schema.Array(HobUsage),
-  hours: Schema.Array(HourUsage),
+  minutes: Schema.Array(MinuteUsage),
   plans: Schema.Array(PlanUsage),
 });
 export type UsageReport = typeof UsageReport.Type;

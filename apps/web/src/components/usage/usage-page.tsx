@@ -4,7 +4,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { agentsQuery, archivedAgentsQuery, runtimesQuery, usageQuery } from "../../api/queries.ts";
-import { dailyUsage, hobShares } from "../../lib/usage.ts";
+import { dailyUsage, hobShares, localDay } from "../../lib/usage.ts";
 import { Page } from "../pages.tsx";
 import { DailyChart, HobBreakdown } from "./hob-breakdown.tsx";
 import { messages } from "./messages.ts";
@@ -61,7 +61,7 @@ function PeriodPicker({ days }: { days: UsagePeriod }) {
 
 /** Screen 12, Usage: what's left of each AI plan and who used it, over 7 or 30 days (OP-002). */
 export function UsagePage({ days }: { days: UsagePeriod }) {
-  const report = useQuery(usageQuery(days));
+  const report = useQuery(usageQuery(days, localDay(new Date())));
   const runtimes = useQuery(runtimesQuery);
   const active = useQuery(agentsQuery);
   const retired = useQuery(archivedAgentsQuery);
@@ -70,7 +70,7 @@ export function UsagePage({ days }: { days: UsagePeriod }) {
   );
   const period = messages.period.last[days];
   const now = new Date(report.data?.until ?? Date.now());
-  const daily = report.data ? dailyUsage(report.data.hours, report.data.until, Number(days)) : [];
+  const daily = report.data ? dailyUsage(report.data.minutes, report.data.until, Number(days)) : [];
   const replies = daily.reduce((sum, day) => sum + day.replies, 0);
 
   return (

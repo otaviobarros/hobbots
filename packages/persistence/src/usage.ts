@@ -1,4 +1,4 @@
-import { AgentId, AgentStatus, type HobUsage, type HourUsage, RuntimeKind } from "@hobbots/domain";
+import { AgentId, AgentStatus, type HobUsage, type MinuteUsage, RuntimeKind } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 
@@ -32,8 +32,8 @@ const hobRow = (row: Readonly<Record<string, unknown>>): HobUsage => ({
   cacheWriteTokens: count(row.cacheWriteTokens),
 });
 
-const hourRow = (row: Readonly<Record<string, unknown>>): HourUsage => ({
-  hour: `${String(row.hour)}:00:00.000Z`,
+const minuteRow = (row: Readonly<Record<string, unknown>>): MinuteUsage => ({
+  minute: `${String(row.minute)}:00.000Z`,
   replies: count(row.replies),
   tokens: count(row.tokens),
 });
@@ -45,7 +45,7 @@ export class UsageLedger extends Context.Service<
     readonly usage: (
       since: string,
       until: string,
-    ) => Effect.Effect<{ readonly hobs: ReadonlyArray<HobUsage>; readonly hours: ReadonlyArray<HourUsage> }>;
+    ) => Effect.Effect<{ readonly hobs: ReadonlyArray<HobUsage>; readonly minutes: ReadonlyArray<MinuteUsage> }>;
   }
 >()("@hobbots/persistence/UsageLedger") {
   static readonly layer = Layer.effect(
@@ -68,17 +68,18 @@ export class UsageLedger extends Context.Service<
                 WHERE ${sql.literal(SETTLED)} AND m.created_at >= ${since} AND m.created_at < ${until}
                 GROUP BY t.agent_id, a.name, a.status, m.runtime, m.model
                 ORDER BY t.agent_id, m.runtime, m.model`,
-              // Message times are ISO 8601 text in UTC, so their first 13 characters name the hour.
+              // Message times are ISO 8601 text in UTC, so their first 16 characters name the minute.
+              // Some time zones sit a quarter or half hour off UTC, so an hour would split their days.
               sql<Record<string, unknown>>`
-                SELECT SUBSTR(m.created_at, 1, 13) AS hour, COUNT(*) AS replies, SUM(${sql.literal(TOKENS)}) AS tokens
+                SELECT SUBSTR(m.created_at, 1, 16) AS minute, COUNT(*) AS replies, SUM(${sql.literal(TOKENS)}) AS tokens
                 FROM messages m
                 WHERE ${sql.literal(SETTLED)} AND m.created_at >= ${since} AND m.created_at < ${until}
-                GROUP BY SUBSTR(m.created_at, 1, 13)
-                ORDER BY hour`,
+                GROUP BY SUBSTR(m.created_at, 1, 16)
+                ORDER BY minute`,
             ],
             { concurrency: 1 },
           ).pipe(
-            Effect.map(([hobs, hours]) => ({ hobs: hobs.map(hobRow), hours: hours.map(hourRow) })),
+            Effect.map(([hobs, minutes]) => ({ hobs: hobs.map(hobRow), minutes: minutes.map(minuteRow) })),
             Effect.orDie,
           ),
       });

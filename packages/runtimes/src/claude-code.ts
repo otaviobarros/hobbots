@@ -540,18 +540,19 @@ export const turnUsage = (result: SDKResultSuccess): ReplyUsage => ({
 
 /**
  * A plan's meters from Claude Code's `/usage` report, as the server sent them
- * (https://code.claude.com/docs/en/agent-sdk/typescript#sdkusagereport). An API-key session, a token
- * without the profile scope or a failed fetch reports no rows, and so reports nothing.
+ * (https://code.claude.com/docs/en/agent-sdk/typescript#sdkusagereport). An API-key session or a token
+ * without the profile scope gets no report, and a failed fetch no rows: neither reports any meter.
  */
 export const planFromReport = (report: SDKUsageReport | undefined, checkedAt: string): PlanUsage => {
-  const limits = report?.rate_limits?.limits;
-  if (!report?.rate_limits || !limits) return unreportedPlan("claude-code", checkedAt);
-  const extra = report.rate_limits.extra_usage;
+  const rates = report?.rate_limits;
+  if (!rates) return unreportedPlan("claude-code", checkedAt);
+  const extra = rates.extra_usage;
   return {
     runtime: "claude-code",
-    reported: true,
+    // Rows can be missing while usage credits are still reported, and spend shows either way.
+    reported: rates.limits !== null,
     checkedAt,
-    meters: limits.map((row) => ({
+    meters: (rates.limits ?? []).map((row) => ({
       kind: row.kind,
       group: row.group,
       percent: row.percent,

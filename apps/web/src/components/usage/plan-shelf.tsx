@@ -12,7 +12,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { potion, potionPalette } from "../../art/icons.ts";
 import { formatMoney } from "../../lib/format.ts";
-import { billingOf, headlineMeter, leftOf, refillOf } from "../../lib/usage.ts";
+import { billingOf, headlineMeter, leftOf, refillOf, reportedCredits } from "../../lib/usage.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.plans;
@@ -45,12 +45,11 @@ const meterLabel = (meter: PlanMeter): string => {
 };
 
 const creditsOf = (plan: PlanUsage): string | null => {
-  const extra = plan.extraUsage;
-  if (!extra?.enabled || extra.usedCredits === null) return null;
-  const currency = extra.currency ?? "USD";
+  const spent = reportedCredits(plan);
+  if (spent === null) return null;
   return copy.credits({
-    used: formatMoney(extra.usedCredits, currency),
-    limit: extra.monthlyLimit === null ? null : formatMoney(extra.monthlyLimit, currency),
+    used: formatMoney(spent.used, spent.currency),
+    limit: spent.limit === null ? null : formatMoney(spent.limit, spent.currency),
   });
 };
 
@@ -79,7 +78,7 @@ const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView =
       headline: health.availability === "ready" ? copy.notReported : copy.unavailable,
       detail: unreportedDetail(health, name),
       meters: [],
-      credits: null,
+      credits: creditsOf(plan),
     };
   }
   return {

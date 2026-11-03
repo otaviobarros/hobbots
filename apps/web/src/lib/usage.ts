@@ -2,7 +2,7 @@ import {
   type AgentId,
   type AgentStatus,
   type HobUsage,
-  type HourUsage,
+  type MinuteUsage,
   type PlanMeter,
   type PlanUsage,
   type RuntimeKind,
@@ -94,22 +94,29 @@ const pad = (value: number) => String(value).padStart(2, "0");
 export const localDay = (time: Date): string =>
   `${time.getFullYear()}-${pad(time.getMonth() + 1)}-${pad(time.getDate())}`;
 
+/** The start of the reader's own first day of a `days`-day period that ends today. */
+export const periodStart = (now: Date, days: number): Date =>
+  new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+
 /**
  * The period's replies and tokens on each of its last `days` local days, oldest first and ending on
  * the day of `until`. Days without replies are kept, at zero.
  */
-export const dailyUsage = (hours: ReadonlyArray<HourUsage>, until: string, days: number): ReadonlyArray<DayUsage> => {
-  const end = new Date(until);
-  const keys = Array.from({ length: days }, (_, back) => {
-    const day = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (days - 1 - back));
-    return localDay(day);
-  });
+export const dailyUsage = (
+  minutes: ReadonlyArray<MinuteUsage>,
+  until: string,
+  days: number,
+): ReadonlyArray<DayUsage> => {
+  const first = periodStart(new Date(until), days);
+  const keys = Array.from({ length: days }, (_, index) =>
+    localDay(new Date(first.getFullYear(), first.getMonth(), first.getDate() + index)),
+  );
   const totals = new Map(keys.map((key) => [key, { replies: 0, tokens: 0 }]));
-  for (const hour of hours) {
-    const total = totals.get(localDay(new Date(hour.hour)));
+  for (const minute of minutes) {
+    const total = totals.get(localDay(new Date(minute.minute)));
     if (total === undefined) continue;
-    total.replies += hour.replies;
-    total.tokens += hour.tokens;
+    total.replies += minute.replies;
+    total.tokens += minute.tokens;
   }
   return keys.map((day) => ({ day, ...(totals.get(day) ?? { replies: 0, tokens: 0 }) }));
 };
@@ -120,6 +127,19 @@ export const headlineMeter = (plan: PlanUsage): PlanMeter | undefined =>
 
 /** How much of a meter's window is left, 0 to 1. */
 export const leftOf = (meter: PlanMeter): number => Math.min(1, Math.max(0, (100 - meter.percent) / 100));
+
+/**
+ * The usage credits a plan reported spending this month, in minor units of its currency. Spend shows
+ * whether or not credits can pay for requests right now: turning them off after spending does not
+ * undo the month's spend.
+ */
+export const reportedCredits = (
+  plan: PlanUsage,
+): { readonly used: number; readonly limit: number | null; readonly currency: string } | null => {
+  const extra = plan.extraUsage;
+  if (extra === null || extra.usedCredits === null) return null;
+  return { used: extra.usedCredits, limit: extra.monthlyLimit, currency: extra.currency ?? "USD" };
+};
 
 /** How a runtime bills this hub, from what its health reports: a subscription, an API key, or unknown. */
 export type Billing = "subscription" | "apiKey" | "unknown";

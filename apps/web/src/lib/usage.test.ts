@@ -1,6 +1,16 @@
 import { AgentId, type HobUsage, type PlanUsage } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { billingOf, dailyUsage, headlineMeter, hobShares, leftOf, localDay, refillOf } from "./usage.ts";
+import {
+  billingOf,
+  dailyUsage,
+  headlineMeter,
+  hobShares,
+  leftOf,
+  localDay,
+  periodStart,
+  refillOf,
+  reportedCredits,
+} from "./usage.ts";
 
 const row = (hob: string, model: string, tokens: number, replies = 1, unreported = 0): HobUsage => ({
   hobId: AgentId.make(hob),
@@ -39,17 +49,17 @@ describe("usage", () => {
     expect(hobShares([])).toEqual([]);
   });
 
-  it("counts the period's hours into the reader's own days, keeping empty days", () => {
-    const at = (day: number, hour: number) => new Date(2026, 9, day, hour).toISOString();
+  it("counts the period's minutes into the reader's own days, keeping empty days", () => {
+    const at = (day: number, hour: number, minute = 0) => new Date(2026, 9, day, hour, minute).toISOString();
     const days = dailyUsage(
       [
-        { hour: at(27, 9), replies: 1, tokens: 10 },
-        { hour: at(29, 0), replies: 2, tokens: 20 },
-        { hour: at(29, 23), replies: 1, tokens: 5 },
+        { minute: at(27, 0, 0), replies: 1, tokens: 10 },
+        { minute: at(29, 0, 15), replies: 2, tokens: 20 },
+        { minute: at(29, 23, 59), replies: 1, tokens: 5 },
         // Before the period's first day.
-        { hour: at(20, 12), replies: 9, tokens: 90 },
+        { minute: at(26, 23, 59), replies: 9, tokens: 90 },
       ],
-      at(29, 23),
+      at(29, 15),
       3,
     );
     expect(days).toEqual([
@@ -58,6 +68,37 @@ describe("usage", () => {
       { day: "2026-10-29", replies: 3, tokens: 25 },
     ]);
     expect(localDay(new Date(2026, 0, 5))).toBe("2026-01-05");
+  });
+
+  it("starts the period at the reader's midnight, so its days hold every reply the report counts", () => {
+    // At 15:00 on November 2, the last 7 days start at midnight on October 27: a reply on October 26
+    // is outside both the report and the chart.
+    expect(periodStart(new Date(2026, 10, 2, 15), 7)).toEqual(new Date(2026, 9, 27));
+    const until = new Date(2026, 10, 2, 15).toISOString();
+    const since = periodStart(new Date(until), 7).toISOString();
+    const days = dailyUsage([{ minute: since, replies: 1, tokens: 1 }], until, 7);
+    expect(days[0]).toEqual({ day: "2026-10-27", replies: 1, tokens: 1 });
+  });
+
+  // A reply at 18:45 UTC is 00:15 the next day in India (UTC+5:30), so a whole-hour bucket starting
+  // at 18:00 UTC would put it on the day before. Node reads TZ again when it changes.
+  it("puts a reply on its own day in a half-hour time zone", () => {
+    const zone = process.env.TZ;
+    process.env.TZ = "Asia/Kolkata";
+    try {
+      const days = dailyUsage(
+        [{ minute: "2026-11-01T18:45:00.000Z", replies: 1, tokens: 1 }],
+        "2026-11-02T06:00:00.000Z",
+        2,
+      );
+      expect(days).toEqual([
+        { day: "2026-11-01", replies: 0, tokens: 0 },
+        { day: "2026-11-02", replies: 1, tokens: 1 },
+      ]);
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
   });
 
   it("shows the meter the provider picked, and how much of it is left", () => {
@@ -81,6 +122,28 @@ describe("usage", () => {
     expect(headlineMeter({ ...plan, meters: [meter("session", 30, false)] })?.kind).toBe("session");
     expect(headlineMeter({ ...plan, meters: [] })).toBeUndefined();
     expect([leftOf(meter("a", 75, true)), leftOf(meter("a", 120, true))]).toEqual([0.25, 0]);
+  });
+
+  it("keeps reported credit spend once credits are turned off, and with no meters", () => {
+    const plan = (extraUsage: PlanUsage["extraUsage"]): PlanUsage => ({
+      runtime: "claude-code",
+      reported: false,
+      meters: [],
+      extraUsage,
+      checkedAt: null,
+    });
+    expect(reportedCredits(plan({ enabled: false, monthlyLimit: 5000, usedCredits: 1250, currency: "EUR" }))).toEqual({
+      used: 1250,
+      limit: 5000,
+      currency: "EUR",
+    });
+    expect(reportedCredits(plan({ enabled: true, monthlyLimit: null, usedCredits: 0, currency: null }))).toEqual({
+      used: 0,
+      limit: null,
+      currency: "USD",
+    });
+    expect(reportedCredits(plan({ enabled: true, monthlyLimit: 5000, usedCredits: null, currency: null }))).toBeNull();
+    expect(reportedCredits(plan(null))).toBeNull();
   });
 
   it("reads how a runtime bills from its health", () => {

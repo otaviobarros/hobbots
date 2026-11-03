@@ -138,15 +138,17 @@ describe("UsageLedger", () => {
   });
 
   // covers OP-002
-  it("[TC-OP-071] counts the period's replies and tokens by the hour they started, in UTC", async () => {
-    const { hours } = await run(
+  it("[TC-OP-071] counts the period's replies and tokens by the minute they started, in UTC", async () => {
+    // A minute, not an hour, so a reader in a time zone a half or quarter hour off UTC gets its own days.
+    const { minutes } = await run(
       UsageLedger.use((ledger) => ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z")),
     );
-    expect(hours).toEqual([
-      { hour: "2026-10-28T09:00:00.000Z", replies: 2, tokens: 1900 },
-      { hour: "2026-10-28T10:00:00.000Z", replies: 1, tokens: 0 },
-      { hour: "2026-10-29T15:00:00.000Z", replies: 1, tokens: 10 },
-      { hour: "2026-10-30T23:00:00.000Z", replies: 1, tokens: 10 },
+    expect(minutes).toEqual([
+      { minute: "2026-10-28T09:15:00.000Z", replies: 1, tokens: 1300 },
+      { minute: "2026-10-28T09:40:00.000Z", replies: 1, tokens: 600 },
+      { minute: "2026-10-28T10:05:00.000Z", replies: 1, tokens: 0 },
+      { minute: "2026-10-29T15:00:00.000Z", replies: 1, tokens: 10 },
+      { minute: "2026-10-30T23:59:00.000Z", replies: 1, tokens: 10 },
     ]);
   });
 });
