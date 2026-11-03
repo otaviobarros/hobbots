@@ -1,9 +1,10 @@
 import { Device, DeviceId, type RemoteAccessStatus, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { qrRows } from "@hobbots/ui/components/qr-code";
 import { describe, expect, it } from "vitest";
+import { connectionCalls } from "../../api/connected-desktop.ts";
 import { approvedDevices } from "../../api/devices.ts";
 import { tailnetName, tailscaleNotReady } from "../remote-access-settings.tsx";
-import { connectionCalls, versionsLine } from "./connected-hub.tsx";
+import { versionsLine } from "./connected-hub.tsx";
 import { deviceMeta, deviceName } from "./device-meta.ts";
 import { typedPort } from "./port-field.tsx";
 
@@ -83,9 +84,16 @@ describe("allowed devices", () => {
       throw new Error("not called");
     };
     const disconnect = async () => ({ stillListed: false });
-    expect(connectionCalls({ get, disconnect })).toEqual({ get, disconnect });
+    expect(connectionCalls({ get, disconnect })).toMatchObject({ get, disconnect });
     // The previous desktop app's bridge: the hub it uses, and no Disconnect.
-    expect(connectionCalls({ get })).toEqual({ get, disconnect: undefined });
+    expect(connectionCalls({ get })).toEqual({
+      get,
+      disconnect: undefined,
+      retry: undefined,
+      changeAddress: undefined,
+      openTailscale: undefined,
+      onChange: undefined,
+    });
     // No bridge, or one that cannot say which hub it uses: the hub's own settings show.
     expect(connectionCalls(undefined)).toBeUndefined();
     expect(connectionCalls({ disconnect })).toBeUndefined();

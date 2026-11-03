@@ -1,7 +1,13 @@
 import { Button } from "@hobbots/ui/components/button";
 import { useId, useState } from "react";
 import type { ConnectionAction } from "../api/client.ts";
-import type { ConnectionReason } from "../api/connected-desktop.ts";
+import {
+  type ConnectionReason,
+  connectionBridge,
+  useChangeAddress,
+  useOpenTailscale,
+  useRetryConnection,
+} from "../api/connected-desktop.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.connectionBanner;
@@ -9,36 +15,30 @@ const copy = messages.connectionBanner;
 const BUTTON = "border-ground text-ground hover:bg-lantern-hover";
 
 /** The actions this banner can take with the bridge it has; the rest wait for screens that offer them. */
-const offered = (view: ConnectionReason): ReadonlyArray<ConnectionAction> => {
-  const bridge = globalThis.window?.hobbots?.connection;
-  return view.actions.filter(
+const offered = (view: ConnectionReason): ReadonlyArray<ConnectionAction> =>
+  view.actions.filter(
     (action) =>
-      (action === "tryAgain" && bridge?.retry !== undefined) ||
-      (action === "openTailscale" && bridge?.openTailscale !== undefined) ||
-      (action === "changeAddress" && bridge?.changeAddress !== undefined),
+      (action === "tryAgain" && connectionBridge?.retry !== undefined) ||
+      (action === "openTailscale" && connectionBridge?.openTailscale !== undefined) ||
+      (action === "changeAddress" && connectionBridge?.changeAddress !== undefined),
   );
-};
 
 /** Types the hub's new address, as after its port changed while this app was away (ADR 025). */
 function ChangeAddress({ address, onDone }: { address: string; onDone: () => void }) {
   const id = useId();
   const [text, setText] = useState(address);
-  const [pending, setPending] = useState(false);
-  const [refusal, setRefusal] = useState<string | null>(null);
-  const submit = async () => {
-    const change = globalThis.window?.hobbots?.connection?.changeAddress;
-    if (change === undefined) return;
-    setPending(true);
-    const answer = await change(text).finally(() => setPending(false));
-    if (answer.ok) onDone();
-    else setRefusal(answer.message);
-  };
+  const change = useChangeAddress();
+  const refusal = change.data?.ok === false ? change.data.message : null;
   return (
     <form
       className="flex w-full flex-wrap items-center gap-2"
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        change.mutate(text, {
+          onSuccess: (answer) => {
+            if (answer.ok) onDone();
+          },
+        });
       }}
     >
       <label htmlFor={id}>{copy.addressLabel}</label>
@@ -50,13 +50,13 @@ function ChangeAddress({ address, onDone }: { address: string; onDone: () => voi
         aria-invalid={refusal !== null}
         aria-describedby={refusal === null ? undefined : `${id}-refusal`}
         onChange={(event) => {
-          setRefusal(null);
+          change.reset();
           setText(event.target.value);
         }}
         className="min-w-0 flex-1 border-2 border-ground bg-deep px-2 py-0.5 font-mono text-xs font-normal text-text outline-none focus-visible:outline-3 focus-visible:outline-moonlight"
       />
-      <Button type="submit" variant="outline" size="xs" className={BUTTON} disabled={pending}>
-        {pending ? copy.connecting : copy.connect}
+      <Button type="submit" variant="outline" size="xs" className={BUTTON} disabled={change.isPending}>
+        {change.isPending ? copy.connecting : copy.connect}
       </Button>
       <Button type="button" variant="outline" size="xs" className={BUTTON} onClick={onDone}>
         {copy.cancel}
@@ -77,7 +77,8 @@ function ChangeAddress({ address, onDone }: { address: string; onDone: () => voi
  */
 export function ConnectionBanner({ view, onRetry }: { view: ConnectionReason; onRetry: () => void }) {
   const [changing, setChanging] = useState(false);
-  const bridge = globalThis.window?.hobbots?.connection;
+  const retry = useRetryConnection();
+  const openTailscale = useOpenTailscale();
   const actions = offered(view);
   return (
     <div
@@ -91,7 +92,7 @@ export function ConnectionBanner({ view, onRetry }: { view: ConnectionReason; on
         {view.title} <span className="font-normal">{view.detail}</span>
       </span>
       {actions.includes("openTailscale") && (
-        <Button variant="outline" size="xs" className={BUTTON} onClick={() => void bridge?.openTailscale?.()}>
+        <Button variant="outline" size="xs" className={BUTTON} onClick={() => openTailscale.mutate()}>
           {copy.openTailscale}
         </Button>
       )}
@@ -106,7 +107,7 @@ export function ConnectionBanner({ view, onRetry }: { view: ConnectionReason; on
           size="xs"
           className={BUTTON}
           onClick={() => {
-            void bridge?.retry?.();
+            retry.mutate();
             onRetry();
           }}
         >

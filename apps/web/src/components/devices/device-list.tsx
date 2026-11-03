@@ -2,10 +2,10 @@ import { type Device, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
+import { useDesktopConnection } from "../../api/connected-desktop.ts";
 import { approvedDevices, devicesQuery, useRevokeDevice } from "../../api/devices.ts";
 import { useNow } from "../inbox/use-now.ts";
 import { messages } from "../messages.ts";
-import { useDesktopConnection } from "./connected-hub.tsx";
 import { type DeviceContext, deviceMeta, deviceName } from "./device-meta.ts";
 
 const copy = messages.remoteAccess.devices;
