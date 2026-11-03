@@ -130,10 +130,29 @@ const lastSession = (task: Task, tree: TaskTree): string | null => {
 };
 
 /**
+ * The Attempt the member's next turn on the Task goes on in, as a lead's later turns do (#577,
+ * #668): its current one, when its owner's last turn there finished, or was stopped by Hobbots, on
+ * the same brain and configuration. A failed turn, a cancel, a retry and a reassignment end it, so
+ * the next turn starts a new one. The hub refuses a resume it would not allow, which leaves the work
+ * waiting for the next try.
+ */
+const resumableAttempt = (task: Task, tree: TaskTree, config: AgentConfiguration): AttemptId | null => {
+  const current = tree.attempts.find((each) => each.id === task.currentAttemptId);
+  return task.state !== "queued" &&
+    current !== undefined &&
+    current.agentId === task.ownerId &&
+    (current.state === "completed" || current.state === "interrupted") &&
+    current.runtime === config.runtime &&
+    current.configVersion === config.version
+    ? current.id
+    : null;
+};
+
+/**
  * Runs party members' Tasks (ADR 018, ADR 019). A member works on its Task in a session of its
  * own, under its own policy narrowed by the delegation, with the Task tools on its Task. Each turn
  * carries the work its owner holds under the Task, starting with the Task itself, through the
- * dispatcher, and is an Attempt of the Task. A turn that ends without the Task's result leaves it
+ * dispatcher, and goes on in the Task's current Attempt (#668). A turn that ends without the Task's result leaves it
  * waiting for what comes next, such as a hand-off from its lead or an answer, which starts the
  * next turn in the same session. A member's tool calls that need approval ask you directly, in the
  * Inbox, under the lead's thread (PE-006).
@@ -159,7 +178,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
     });
 
   /**
-   * After a turn: the Attempt ends with it. Unless the turn returned the result itself, its final
+   * After a turn: the Attempt ends with it, until the next turn resumes it. Unless the turn returned the result itself, its final
    * reply completes the Task once nothing keeps it open. A Task that comes after others starts
    * only once they have completed, with what they returned, so nothing more from them is to come.
    * A Task still open waits, or is blocked when only its own unreported milestones keep it open,
@@ -313,7 +332,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         const hob = yield* repo.findAgent(agent.id);
         if (Option.isNone(hob) || hob.value.status !== "active") return null;
         // A Task that ended still takes the turn's claims, so the dispatcher settles its items as late.
-        return AttemptIdSchema.make(newId());
+        return resumableAttempt(found.value.task, found.value.tree, config) ?? AttemptIdSchema.make(newId());
       }),
     run: (attemptId, work) =>
       Effect.gen(function* () {
@@ -323,15 +342,22 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         const { task, tree } = found.value;
         if (isTerminalTask(task.state) || task.state === "cancelling") return { _tag: "Handled" } as CarriedEnd;
         const previous = lastSession(task, tree);
+        const at = yield* nowIso;
         const started = yield* deps.attempt(
-          tasks.startAttempt(task.id, task.revision, {
-            id: attemptId,
-            runtime: config.runtime,
-            sessionId: previous,
-            configVersion: config.version,
-            policyVersion: null,
-            startedAt: yield* nowIso,
-          }),
+          attemptId === task.currentAttemptId
+            ? tasks.resumeAttempt(task.id, task.revision, {
+                runtime: config.runtime,
+                configVersion: config.version,
+                at,
+              })
+            : tasks.startAttempt(task.id, task.revision, {
+                id: attemptId,
+                runtime: config.runtime,
+                sessionId: previous,
+                configVersion: config.version,
+                policyVersion: null,
+                startedAt: at,
+              }),
           "start a member's turn",
         );
         if (Option.isNone(started)) {

@@ -82,9 +82,9 @@ describe("a resumed member hears where its inputs stand", () => {
       `  - Task ${quill.id} (Write the backend), completed: Stores amounts as integer cents`,
     );
     expect(resumed?.prompt.split("Stores amounts as integer cents")).toHaveLength(2);
-    // He finished from that turn: one question, two turns, and his own result.
+    // He finished from that turn: one question, two turns of one Attempt (#668), and his own result.
     expect(done.questions.filter((each) => each.askerId === ROOK)).toHaveLength(1);
-    expect(attemptsOf(done, rook)).toEqual(["completed", "completed"]);
+    expect(attemptsOf(done, rook)).toEqual(["completed"]);
     expect(rook.result?.summary).toBe("Frontend renders integer cents");
   }, 30_000);
 });

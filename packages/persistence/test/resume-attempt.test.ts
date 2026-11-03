@@ -154,4 +154,26 @@ describe("resuming a Task's Attempt", () => {
     expect(ending.attempts).toEqual([{ id: "a1", number: 1, state: "completed", endedAt: now }]);
     // About 3 seconds on PostgreSQL alone, so the 5 second default runs out on a loaded runner.
   }, 20_000);
+
+  // covers EX-001, OR-006
+  it("[TC-OR-453] refuses to resume the failed Attempt of a retried Task, which waits for a new one (#668)", async () => {
+    const step = TaskId.make("step");
+    const result = await run(
+      Effect.gen(function* () {
+        const tasks = yield* TaskRepository;
+        yield* turnEnded();
+        const created = yield* tasks.createTask({
+          task: { id: step, ownerId: ALDRIC, parentId: top, threadId, brief: "Draft", dependsOn: [], createdAt: now },
+          delegation: null,
+          milestones: [],
+        });
+        yield* tasks.startAttempt(step, created.value.revision, attempt("s1"));
+        const ended = yield* tasks.updateAttempt(AttemptId.make("s1"), { state: "completed", at: now });
+        const failed = yield* tasks.moveTask(step, ended.value.task.revision, "failed", later);
+        const retried = yield* tasks.retryTask(step, failed.value.revision, later);
+        return yield* tasks.resumeAttempt(step, retried.value.revision, resume).pipe(Effect.flip);
+      }),
+    );
+    expect(result).toMatchObject({ reason: "attempt-ended" });
+  }, 20_000);
 });

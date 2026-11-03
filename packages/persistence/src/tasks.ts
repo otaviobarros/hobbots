@@ -438,6 +438,8 @@ export const TaskRepositoryLive = Layer.effect(
     const resumable = (task: Task, resume: AttemptResume) =>
       Effect.gen(function* () {
         if (isTerminalTask(task.state)) return yield* refuse("task-ended", `Task ${task.id} is ${task.state}`);
+        // A retried Task waits in the queue for a new Attempt, never the one that failed (EX-001).
+        if (task.state === "queued") return yield* refuse("attempt-ended", `Task ${task.id} waits for a new Attempt`);
         const [last] = task.currentAttemptId === null ? [] : yield* read.attempt(task.currentAttemptId);
         if (last === undefined) return yield* refuse("attempt-missing", `Task ${task.id} has no Attempt to resume`);
         if (isLiveAttempt(last.state)) return yield* refuse("attempt-live", `Attempt ${last.id} is still live`);

@@ -53,12 +53,14 @@ describe("an empty nested Quest", () => {
     expect(toFrodo.length).toBeGreaterThan(0);
     expect(toFrodo.every((each) => !each.prompt.includes(`You work on Task ${pip?.id} `))).toBe(true);
 
-    // Pip's later turn, once answered, leaves the Quest empty again: still one finding.
+    // Pip's later turn, once answered, leaves the Quest empty again: still one finding. It goes on
+    // in his Task's one Attempt (#668), so his later prompts are counted instead.
+    const later = `You work on Task ${pip?.id} for Frodo.`;
     const after = await run(
       treeWhen(
         (tree) =>
           tree.questions[0]?.state === "answered" &&
-          tree.attempts.filter((each) => each.agentId === PIP).length >= 2 &&
+          requests.some((each) => each.sessionId !== null && each.prompt.includes(later)) &&
           !tree.attempts.some((each) => each.state === "starting" || each.state === "running"),
       ),
     );

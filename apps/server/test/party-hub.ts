@@ -11,6 +11,7 @@ import {
   type PromptRequest,
   QuestionService,
   RuntimeAdapter,
+  TaskControls,
   TaskRepository,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
@@ -175,7 +176,7 @@ export const partyHub = () => {
     }),
   );
 
-  const app = Layer.mergeAll(WakeOnArrival, HobLifecycle.layer).pipe(
+  const app = Layer.mergeAll(WakeOnArrival, HobLifecycle.layer, TaskControls.layer).pipe(
     Layer.provideMerge(ChatService.layer),
     Layer.provideMerge(ContinuationsLive),
     Layer.provideMerge(

@@ -627,22 +627,16 @@ describe("a member Task already being worked", () => {
         yield* bus.publish(ended.entries);
       }),
     );
-    const resumed = await run(
+    // Quill's turn goes on in the Attempt that ended, as a member's later turns do (#668).
+    await run(
       retry(
-        Effect.flatMap(
-          Effect.map(
-            TaskRepository.use((tasks) => tasks.readTree(memberTask.id)),
-            Option.getOrThrow,
-          ),
-          (tree) =>
-            tree.attempts.some((each) => each.id !== "held-a-copy")
-              ? Effect.succeed(tree)
-              : Effect.fail("not yet" as const),
+        Effect.suspend(() =>
+          promptsTo(requests, memberTask).length > 0 ? Effect.void : Effect.fail("not yet" as const),
         ),
       ),
     );
-    expect(resumed.attempts.filter((each) => each.agentId === QUILL).length).toBeGreaterThan(1);
-    expect(promptsTo(requests, memberTask).length).toBeGreaterThan(0);
+    const resumed = Option.getOrThrow(await run(TaskRepository.use((tasks) => tasks.readTree(memberTask.id))));
+    expect(resumed.attempts.map((each) => [each.id, each.agentId])).toEqual([["held-a-copy", QUILL]]);
     const taken = await run(Backpack.use((backpack) => backpack.find(waiting.id)));
     expect(taken.deliveries.length).toBeGreaterThan(0);
   }, 20_000);

@@ -220,9 +220,9 @@ export class TaskRepository extends Context.Service<
     ) => Changed<{ readonly task: Task; readonly attempt: Attempt }>;
     /**
      * Puts the Task's current Attempt, once it has ended, back to starting for another turn of the
-     * same work, as a lead's next chat turn on its Task does: the Attempt keeps its number, and only a
-     * retry or a reassignment starts a new one. Refused for a Task that has ended or is being
-     * cancelled, for an Attempt that is live, was cancelled or never confirmed its stop, and for one
+     * same work, as a lead's next chat turn or a member's next turn on its Task does: the Attempt
+     * keeps its number, and only a retry or a reassignment starts a new one. Refused for a Task that
+     * has ended, is being cancelled or waits queued after a retry, for an Attempt that is live, was cancelled or never confirmed its stop, and for one
      * that ran on another brain or configuration, which starts an Attempt of its own instead.
      */
     readonly resumeAttempt: (

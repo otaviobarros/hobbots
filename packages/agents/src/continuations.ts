@@ -24,7 +24,7 @@ export type CarriedEnd = { readonly _tag: "Handled" } | ({ readonly _tag: "Ended
 
 /**
  * The turn a session runs for the work that waits there: a thread's chat, whose turns are its
- * replies, or a member's Task, whose turns are Attempts.
+ * replies, or a member's Task, whose turns go on in its Attempts.
  */
 export interface CarryingTurn<Id extends string = MessageId> {
   /**
@@ -66,7 +66,7 @@ export interface MemberWorkWaiting {
 /**
  * The one wake path of ADR 019, as a party member's Task sees it: the backpack items its owner
  * holds under the Task, such as the Task itself, a hand-off or an answer, delivered into one turn
- * of the session that works it. Each turn is an Attempt of the Task. Absent, as in hubs and tests
+ * of the session that works it. Each turn is a turn of the Task's current Attempt. Absent, as in hubs and tests
  * without a backpack, no member's Task runs.
  */
 export class MemberContinuations extends Context.Service<
