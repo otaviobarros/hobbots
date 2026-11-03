@@ -5,7 +5,7 @@
 - **Pull request:** [#460](https://github.com/otaviobarros/hobbots/pull/460)
 - **Commit:** `05e0658` on `main`, for the probe; no Hobbots code ran
 - **Setup:** Manual probe in a Linux x86_64 container (Ubuntu 24.04, Node 22). Codex 0.166.0 (`@openai/codex` from npm, `codex-cli 0.166.0`), started as `codex app-server` over stdio with a throwaway `CODEX_HOME` and no account. A small JSON-RPC client drove it. A scripted stand-in for the Responses API, set as a custom model provider (`wire_api = "responses"`, no OpenAI sign-in), returned fixed tool calls through Codex's code mode (`exec`) and recorded each request. The protocol types came from `codex app-server generate-ts --experimental`. No macOS, no Hobbots sandbox, no real model.
-- **Result:** Passed with gaps. Every App Server behavior ADR 024 relies on was observed, except those that need macOS, the sandbox or a real sign-in.
+- **Result:** Passed with gaps. Every App Server behavior ADR 024 relies on was observed, except those that need macOS, the sandbox or a real sign-in. Execution rules in Codex's home or a folder skip approval unless closed off as ADR 024 says.
 
 ## Checks
 
@@ -29,6 +29,10 @@
 | Probe | A `PreToolUse` hook in `CODEX_HOME/config.toml`, trusted there | ✅ Saw shell commands as `Bash`, `apply_patch` and the dynamic tool; refused a command with its reason |
 | Probe | The same hook given with `-c` on the command line | ✅ Listed as untrusted and never ran; its trust cannot be given that way |
 | Probe | A folder's `.codex/config.toml` with a hook and an MCP server | ✅ Hook listed as untrusted; MCP server not started; the folder's `AGENTS.md` read as instructions |
+| Probe | An allow rule for `touch` in `CODEX_HOME/rules/default.rules` | ❌ `touch b.txt` ran without asking (ADR 024 makes `rules/` read-only) |
+| Probe | The same rule in a folder's `.codex/rules`, with no trust entry for the folder | ❌ `touch b.txt` ran without asking |
+| Probe | The same, with the folder marked `trust_level = "untrusted"` in `CODEX_HOME/config.toml` | ✅ The rule was ignored and `touch b.txt` asked |
+| Probe | `sqlite_home` and `log_dir` set to another folder | ✅ Databases and logs went there; `CODEX_HOME` got only `sessions/`, `shell_snapshots/`, `thread-writer-locks/`, `.tmp/`, `skills/.system`, `installation_id` and `.sandbox_migration` |
 | Probe | Codex attribution in the first model request, in a Git repository | ✅ No `<git_attribution>` block with the stand-in provider; `commit_attribution` reported as an unrecognized setting |
 
 ## Gaps

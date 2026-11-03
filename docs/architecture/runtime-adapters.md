@@ -40,7 +40,7 @@ Codex 0.166.0, probed on 2026-11-03 on Linux with a stand-in model ([ADR 024](..
 | Concurrency | One App Server process per turn; two turns of one hob at once | Unverified |
 | Streaming | Item notifications and text deltas; command output streams (`ToolOutput`) | Verified |
 | Interruption | `turn/interrupt`, acknowledged by `turn/completed` with status `interrupted` | Verified |
-| Tool interception | Approval requests for every command, file change and MCP call under `untrusted` | Verified |
+| Tool interception | Approval requests for every command, file change and MCP call under `untrusted`, with execution rules closed off (folders untrusted, `CODEX_HOME/rules` read-only) | Verified; the read-only home unverified |
 | Process sandbox | Hobbots' sandbox around the App Server; Codex's own off (`externalSandbox`) | Unverified |
 | Hub tools | Dynamic tools, called back on the App Server channel | Verified |
 | Tool events | `item/started`, `item/completed`, output deltas | Verified |
