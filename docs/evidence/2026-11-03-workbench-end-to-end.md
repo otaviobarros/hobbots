@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-03
 - **Issue:** [#391](https://github.com/otaviobarros/hobbots/issues/391)
-- **Pull request:** not opened yet
+- **Pull request:** [#559](https://github.com/otaviobarros/hobbots/pull/559)
 - **Commit:** not yet on `main` (ran on the pull request branch, based on `main` at `d526795`)
 - **Setup:** Linux x86_64, Node 22.23.4, the fake runtime. Hub cases over the HTTP API and the event stream, on SQLite in memory and on PostgreSQL 16.15 (a local server on port 54329, as `pnpm test:pg` uses). Browser cases with Playwright 1.64.1 on Chrome for Testing 153 (headless shell), against a hub from source on SQLite with the web client's build. Aldric works under the Balanced preset in one folder holding release notes and an old draft.
 - **Result:** Passed. A Task that edits files, with a file tool and with a command, and runs commands is followed through every tab while its turn runs and read again as History once it ends, with nothing lost, and a Task that used none of the tabs greys each one out with why. No product code changed. Real Claude Code was not run.
