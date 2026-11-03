@@ -60,7 +60,7 @@ describe("a lead reads its subtree and messages its members", () => {
       brief: "Commit it",
       state: "queued",
       turn_running: false,
-      open_questions: [{ question_id: question, question: "git init was denied. What now?", waits_for: PIP }],
+      questions: [{ question_id: question, question: "git init was denied. What now?", state: "open", waits_for: PIP }],
       recent_checkpoints: [expect.objectContaining({ kind: "blocker", summary: "git init is denied" })],
     });
 
@@ -70,8 +70,7 @@ describe("a lead reads its subtree and messages its members", () => {
       nettle,
     ]);
     expect(
-      (pips.details.tasks as ReadonlyArray<{ open_questions: Array<{ waits_for: string }> }>)[0]?.open_questions[0]
-        ?.waits_for,
+      (pips.details.tasks as ReadonlyArray<{ questions: Array<{ waits_for: string }> }>)[0]?.questions[0]?.waits_for,
     ).toBe("you");
     const fromAbove = await call(FRODO, TOP, "read_tasks", { key: "read-pip", task_id: pip });
     expect((fromAbove.details.tasks as ReadonlyArray<Record<string, unknown>>).map((each) => each.task_id)).toEqual([

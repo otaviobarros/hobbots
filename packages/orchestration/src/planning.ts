@@ -19,6 +19,7 @@ import {
   fromRecords,
   journalOf,
   ledTask,
+  nameFor,
   newId,
   ownTask,
   questLimitsFor,
@@ -62,8 +63,7 @@ const openOnAwaited = (scope: CallScope, awaited: ReadonlyArray<Task>) => {
       task_id: question.taskId as string,
       asker: question.askerId as string,
       question: question.text,
-      waits_for:
-        question.recipientId === scope.caller.agentId ? "you" : ((question.recipientId ?? "the user") as string),
+      waits_for: nameFor(question.recipientId, scope.caller.agentId),
     }));
   // A Task is blocked, or the last thing its hob reported about it is a blocker.
   const blockers = awaited.flatMap((each) => {

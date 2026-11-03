@@ -35,7 +35,7 @@ Expose controlled Hobbots tools through MCP or a supported equivalent adapter in
 | `escalate` | A lead | Passes a question to the next lead, and from the top lead to you |
 | `hand_off` | A lead | Gives one Task's result to another Task as an artifact reference |
 | `wait_for` | A Task's owner | Waits for any or all of its child Tasks without blocking its chat |
-| `read_tasks` | A Task's owner | Reads the state of every Task under its own, at any depth |
+| `read_tasks` | A Task's owner | Reads the state of every Task under its own, at any depth, with each question's state and answer |
 | `message_task` | A lead | Sends a message to a member's Task directly under its own, which wakes the member |
 | `complete_task` | A Task's owner | Returns the result, subject to the completion gate |
 | `cancel_task` | A Task's owner | Cancels one of its child Tasks and that Task's subtree |
@@ -53,7 +53,7 @@ How the hub holds these today ([#271](https://github.com/otaviobarros/hobbots/is
 - A member's Delegation stores the lead's authority on its Task, narrowed by every Delegation above it, by what the brief asks for and by the member's own policy. A brief that asks for more than the lead has is refused, not trimmed. Folders are compared at the hub's own path separator only, so on macOS and Linux a name with a backslash is never inside another folder. Every turn of the member works under it ([#273](https://github.com/otaviobarros/hobbots/issues/273)).
 - Open-Task limits count Tasks that have not ended: per hob (16 by default) and per request's tree (32 by default), with depth 2 by default. Depth and deadlines come from every Quest on the Tasks above, whichever started first, so a Quest started later on a Task above still limits the work under it. `HOBBOTS_QUEST_MAX_DEPTH`, `HOBBOTS_MAX_OPEN_TASKS_PER_HOB` and `HOBBOTS_MAX_OPEN_TASKS_PER_TREE` change them. Running concurrency per runtime session and Task deadlines while work runs belong to the scheduler.
 - `wait_for` records a wait and tells the hob to end its turn: it does not block, and the hub wakes the owner when the wait is met or something arrives for it. The Task shows as waiting once the turn that waited ends, not while it still runs, and the same wait again records nothing ([#572](https://github.com/otaviobarros/hobbots/issues/572)). Its result lists the questions and blockers the awaited Tasks have open, so a lead answers what waits on it instead of waiting on itself ([#573](https://github.com/otaviobarros/hobbots/issues/573)). A question a lead answers or passes on before its copy was delivered settles that copy as `answered`, so no later turn asks it again. Waking the owner when the wait is met belongs to the inbox.
-- A lead's chat turn is briefed on the questions under its Task that only you can answer, told that your note is not an answer to them, and asked to report only what its Task tools did and to read the work with `read_tasks` instead of guessing ([#569](https://github.com/otaviobarros/hobbots/issues/569)).
+- A lead's chat turn is briefed on the questions under its Task that only you can answer, told that your note is not an answer to them, and asked to report only what its Task tools did and to read the work with `read_tasks` instead of guessing ([#569](https://github.com/otaviobarros/hobbots/issues/569)). Its briefing also lists the questions it passed up that are answered since, with each answer ([#659](https://github.com/otaviobarros/hobbots/issues/659)).
 
 How a Task's steps run today ([#272](https://github.com/otaviobarros/hobbots/issues/272)):
 
