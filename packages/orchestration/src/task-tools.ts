@@ -267,8 +267,11 @@ export class TaskTools extends Context.Service<
             known = yield* chat.workingOn;
             // A turn briefed on its Task works on it as an Attempt of its own from the start.
             const begun = yield* chat.begin(DateTime.formatIso(yield* DateTime.now));
+            // The Task the turn's Attempt is on, which it ends on whatever Task a later call names.
+            let attemptOn: TaskId | null = null;
             if (begun !== null) {
               attemptId = begun.attemptId;
+              attemptOn = known;
               yield* announce(begun.entries);
             }
             // The Task you asked for completes only by complete_task, so it is never blocked here.
@@ -278,17 +281,18 @@ export class TaskTools extends Context.Service<
                 change.pipe(
                   Effect.tap((committed) => announce(committed.entries)),
                   Effect.map((committed) => committed.value),
+                  Effect.tapError((error) => Effect.logDebug("A chat turn's end was refused", error)),
                   Effect.option,
                 ),
               explain: () => Effect.void,
             };
             const end = (ending: TurnEnding, sessionId: string | null) =>
               Effect.gen(function* () {
-                if (attemptId === null || known === null) return;
+                if (attemptId === null || attemptOn === null) return;
                 const at = DateTime.formatIso(yield* DateTime.now);
                 yield* endTurn(ended, {
                   runner: "root",
-                  taskId: known,
+                  taskId: attemptOn,
                   attemptId,
                   ending,
                   carried: [],
@@ -305,7 +309,10 @@ export class TaskTools extends Context.Service<
               call: (name, input, step) =>
                 answered(
                   callFrom(turn.agentId, source, name, input, (resolved) => {
-                    if (resolved.attemptId !== null) attemptId = resolved.attemptId;
+                    if (resolved.attemptId !== null) {
+                      attemptId = resolved.attemptId;
+                      attemptOn = resolved.caller.taskId;
+                    }
                     known = resolved.caller.taskId;
                   }),
                   step,

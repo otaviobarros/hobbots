@@ -6,8 +6,11 @@ import {
   type CarriedItem,
   type Committed,
   isTerminalTask,
+  type Task,
   type TaskId,
+  type TaskMove,
   type TaskState,
+  type TurnEndInput,
   type TurnEnding,
   type TurnRunner,
   turnEnded,
@@ -37,6 +40,30 @@ export interface TurnOnTask {
 }
 
 /**
+ * Makes the Task's move once its Attempt has ended. A blocked move records why first. Ending the
+ * Attempt gives the Task's version; a blocker, or an Attempt already ended, needs it read again.
+ */
+const moveAfter = (
+  deps: TurnEndDeps,
+  taskId: TaskId,
+  move: Extract<TaskMove, { _tag: "Move" }>,
+  after: Option.Option<{ readonly task: Task }>,
+  at: string,
+) =>
+  Effect.gen(function* () {
+    if (move.reason !== undefined) yield* deps.explain(taskId, move.reason, at);
+    const now =
+      Option.isSome(after) && move.reason === undefined
+        ? Option.some(after.value.task)
+        : Option.flatMap(yield* deps.tasks.readTree(taskId), (tree) => Option.fromNullishOr(tree.tasks[0]));
+    if (Option.isSome(now) && !isTerminalTask(now.value.state))
+      yield* deps.attempt(
+        deps.tasks.moveTask(now.value.id, now.value.revision, move.to, at),
+        `move a Task to ${move.to}`,
+      );
+  });
+
+/**
  * Ends a turn on its Task by the one turn-end decision (`turnEnded`), the same for every runner.
  * A Task the turn completes with its reply completes first and its Attempt ends after, so a restart
  * in between keeps the result. Then the Attempt ends, and the Task makes its move, which a Task
@@ -62,15 +89,18 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
       yield* ended(attemptEndOf(turn.runner, turn.ending));
       return { decided: null, completed: false };
     }
-    const ledger = isTerminalTask(task.state) ? Option.none() : yield* tasks.readLedger(task.id);
-    const decided = turnEnded({
+    // A step's move does not depend on what is open, so only the other runners read it.
+    const ledger =
+      turn.runner === "step" || isTerminalTask(task.state) ? Option.none() : yield* tasks.readLedger(task.id);
+    const input: TurnEndInput = {
       runner: turn.runner,
       task,
       ending: turn.ending,
       ledger: Option.match(ledger, { onNone: () => [], onSome: (each) => each.open }),
       carried: new Set(turn.carried.map((each) => each.itemId as string)),
       ...(turn.was === undefined ? {} : { was: turn.was }),
-    });
+    };
+    const decided = turnEnded(input);
     let move = decided.task;
     if (move._tag === "Complete") {
       const explainRefusal = move.explainRefusal;
@@ -100,16 +130,11 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
       move = move.otherwise;
     }
     const after = yield* ended(decided.cause);
-    if (move._tag !== "Move") return { decided, completed: false };
-    if (move.reason !== undefined) yield* deps.explain(task.id, move.reason, turn.at);
-    // Ending the Attempt gives the Task's version; a blocker, or an Attempt already ended, needs it read again.
-    const now =
-      Option.isSome(after) && move.reason === undefined
-        ? Option.some(after.value.task)
-        : Option.flatMap(yield* tasks.readTree(task.id), (tree) => Option.fromNullishOr(tree.tasks[0]));
-    if (Option.isSome(now) && !isTerminalTask(now.value.state)) {
-      const to = move.to;
-      yield* attempt(tasks.moveTask(now.value.id, now.value.revision, to, turn.at), `move a Task to ${to}`);
+    // A Task that changed while its turn ended, as one whose cancel arrived meanwhile, moves as it now is.
+    if (Option.isSome(after) && after.value.task.state !== task.state) {
+      const again = turnEnded({ ...input, task: after.value.task }).task;
+      move = again._tag === "Complete" ? again.otherwise : again;
     }
+    if (move._tag === "Move") yield* moveAfter(deps, task.id, move, after, turn.at);
     return { decided, completed: false };
   });
