@@ -4,13 +4,14 @@ import {
   isLiveAttempt,
   isTerminalTask,
   NoteId,
+  type Question,
   type Task,
   type TaskToolInput,
   type TaskToolRefused,
   type TaskTree,
 } from "@hobbots/domain";
 import { Effect } from "effect";
-import { type CallScope, fromRecords, journalOf, ledTask, newId, ownTask, refuse } from "./call-scope.ts";
+import { type CallScope, fromRecords, journalOf, ledTask, nameFor, newId, ownTask, refuse } from "./call-scope.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -34,6 +35,21 @@ const waitingOn = (task: Task, tree: TaskTree): ReadonlyArray<string> => {
   ];
 };
 
+/**
+ * A question as `read_tasks` reports it: its state as the hub records it, who it waits for while
+ * open, and its answer once answered, so a lead never tells the user one is unanswered from memory (#659).
+ */
+const describeQuestion = (question: Question, caller: string) => ({
+  question_id: question.id as string,
+  question: question.text,
+  state: question.state,
+  ...(question.state === "open" && { waits_for: nameFor(question.recipientId, caller) }),
+  ...(question.state === "answered" && {
+    answer: question.answer,
+    answered_by: nameFor(question.answeredBy?._tag === "Lead" ? question.answeredBy.agentId : null, caller),
+  }),
+});
+
 /** One Task as `read_tasks` reports it: where it stands, what holds it and what it last said. */
 const describeTask = (task: Task, tree: TaskTree, caller: string) => {
   // What its hob and the hub reported, newest first; the hub's own state changes show in `state`.
@@ -50,13 +66,9 @@ const describeTask = (task: Task, tree: TaskTree, caller: string) => {
     state: task.state,
     turn_running: attempt !== undefined && isLiveAttempt(attempt.state),
     waiting_on: waitingOn(task, tree),
-    open_questions: tree.questions
-      .filter((question) => question.taskId === task.id && question.state === "open")
-      .map((question) => ({
-        question_id: question.id as string,
-        question: question.text,
-        waits_for: question.recipientId === caller ? "you" : ((question.recipientId ?? "the user") as string),
-      })),
+    questions: tree.questions
+      .filter((question) => question.taskId === task.id)
+      .map((question) => describeQuestion(question, caller)),
     recent_checkpoints: reported.map((each) => ({ kind: each.kind, summary: each.summary, at: each.createdAt })),
     ...(task.result === null ? {} : { result: task.result.summary }),
   };
@@ -74,6 +86,9 @@ export const makeLeading = ({ tasks }: Deps) => ({
   read_tasks: (scope: CallScope, input: Omit<TaskToolInput<"read_tasks">, "key">) =>
     Effect.gen(function* () {
       const root = yield* readRoot(scope, input.task_id);
+      // A request that ended is never reopened; a member's Task under it can be retried.
+      const top = scope.tree.tasks[0];
+      const ended = top !== undefined && isTerminalTask(top.state) ? top : undefined;
       const under = descendantsOf(root, scope.tree.tasks);
       const listed = under.map((task) => describeTask(task, scope.tree, scope.caller.agentId));
       return {
@@ -81,7 +96,11 @@ export const makeLeading = ({ tasks }: Deps) => ({
           message:
             listed.length === 0
               ? `Nothing is under Task ${root.id} yet.`
-              : `${listed.length === 1 ? "1 Task is" : `${listed.length} Tasks are`} under Task ${root.id}, at every depth. This is what the records say now; nothing else is known.`,
+              : `${listed.length === 1 ? "1 Task is" : `${listed.length} Tasks are`} under Task ${root.id}, at every depth. This is what the records say now; nothing else is known.${
+                  ended === undefined
+                    ? ""
+                    : ` Task ${ended.id} ended as ${ended.state}, so nothing under it changes now.`
+                }`,
           details: { tasks: listed },
         },
         entries: [],

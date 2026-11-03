@@ -97,3 +97,49 @@ describe("a lead reports only what happened", () => {
     expect(next?.briefing).not.toContain("Questions only the user can answer");
   }, 30_000);
 });
+
+describe("a lead hears the answer to a question it passed up", () => {
+  // covers OR-002, IN-004
+  it("[TC-OR-470] once you answer a question the lead passed up, each later turn of the lead lists it with its answer, and read_tasks shows it answered", async () => {
+    const party = partyHub();
+    dispose = party.dispose;
+    const { run, requests, reactions, answers } = party;
+    reactions.push({
+      on: "asks, as question",
+      lines: [hub("escalate", { key: "up", question_id: "$theme.question_id" })],
+    });
+    await run(
+      send([
+        "Build the frontend",
+        hub("delegate_task", {
+          key: "frontend",
+          hob: "Rook",
+          brief: ["Build the frontend", hub("ask", { key: "theme", question: "Light or dark theme?" })].join("\n"),
+        }),
+        hub("wait_for", { key: "wait", tasks: ["$frontend.task_id"] }),
+      ]),
+    );
+    const escalated = await run(treeWhen((tree) => tree.questions[0]?.recipientId === null));
+    const question = escalated.questions[0];
+    if (question === undefined) throw new Error("no question for you");
+    await run(messagesWhen(() => true));
+
+    await run(QuestionService.use((questions) => questions.answer(question.id, "Dark")));
+    await run(treeWhen((tree) => tree.questions[0]?.state === "answered"));
+    const before = requests.length;
+    await run(send(["How is it going?", hub("read_tasks", { key: "read" })]));
+    await run(messagesWhen(() => requests.slice(before).some((each) => each.prompt.includes("How is it going?"))));
+    const next = requests.slice(before).find((each) => each.prompt.includes("How is it going?"));
+    expect(next?.briefing).toContain("Questions you passed up that are answered, latest last");
+    expect(next?.briefing).toContain(
+      `Question ${question.id} from hob ${ROOK} about Task ${question.taskId}: "Light or dark theme?" Answered by the user: "Dark"`,
+    );
+    expect(next?.briefing).not.toContain("Questions only the user can answer");
+
+    // What Frodo reads back is the question as the hub records it, with its answer.
+    const read = answers.get("read") ?? "";
+    expect(read).toContain('"state":"answered"');
+    expect(read).toContain('"answer":"Dark"');
+    expect(read).toContain('"answered_by":"the user"');
+  }, 30_000);
+});
