@@ -62,3 +62,4 @@ A check that needs a real runtime, a packaged app or a real Mac, and that will b
 - [2026-11-02 Remote access holds end to end over a fake Tailscale](2026-11-02-remote-access-end-to-end.md)
 - [2026-11-02 A hob with its own GitHub app works on GitHub as its bot, end to end against a fake GitHub](2026-11-02-hob-github-identity-end-to-end.md)
 - [2026-11-03 Codex App Server behaves as ADR 024 relies on, with a stand-in model](2026-11-03-codex-app-server-probe.md)
+- [2026-11-03 Codex's install, version, sign-in and models show in provider health](2026-11-03-codex-detection.md)
