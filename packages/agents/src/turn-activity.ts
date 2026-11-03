@@ -1,5 +1,6 @@
 import {
   type ActivityLimits,
+  type AttemptActivity,
   type AttemptId,
   CommandId,
   type ContentId,
@@ -120,6 +121,24 @@ const withoutContents = (file: ScannedFile, kind: FileVersion["kind"], notKept: 
   notKept,
 });
 
+/**
+ * What an Attempt's records already keep: the bytes of the file contents its changes name, once
+ * each, and of its commands' logs. A turn that resumes the Attempt counts them against its budgets.
+ */
+const attemptUse = (activity: AttemptActivity) => {
+  const contents = new Map<ContentId, number>();
+  for (const change of activity.changes) {
+    for (const version of [change.before, change.after]) {
+      if (version?.contentId) contents.set(version.contentId, version.size);
+    }
+  }
+  let logs = 0;
+  for (const command of activity.commands) {
+    if (command.log !== null) logs += command.log.totalBytes - command.log.omittedBytes;
+  }
+  return { contents: [...contents.values()].reduce((sum, size) => sum + size, 0), logs };
+};
+
 const makeRecorder = (limits: ActivityLimits) =>
   Effect.gen(function* () {
     const scanner = yield* FolderScanner;
@@ -155,6 +174,8 @@ const makeRecorder = (limits: ActivityLimits) =>
         const me: LiveTurn = { folders: turn.folders, attemptId: null, overlaps: new Set() };
         // A later turn of the same Attempt keeps what the turns before it recorded.
         const turnStarted = yield* nowIso;
+        // Its own commands' records are told apart from theirs, as a runtime may reuse step ids.
+        const turnKey = newId();
         for (const other of live) {
           if (other.folders.some((folder) => turn.folders.some((mine) => foldersOverlap(folder, mine)))) {
             other.overlaps.add(me);
@@ -185,6 +206,15 @@ const makeRecorder = (limits: ActivityLimits) =>
         const writers = new Set<string>();
         let logsUsed = 0;
         let taskId: TaskId | null = null;
+        // The Attempt's budgets hold across its turns: what earlier turns kept counts here too.
+        const resumed = yield* turn.attempt;
+        if (resumed !== null) {
+          const earlier = yield* Effect.map(repo.read(resumed), Option.map(attemptUse));
+          if (Option.isSome(earlier)) {
+            heldBytes += earlier.value.contents;
+            logsUsed += earlier.value.logs;
+          }
+        }
 
         const keep = (id: ContentId) => {
           if (mine.has(id)) return;
@@ -433,7 +463,7 @@ const makeRecorder = (limits: ActivityLimits) =>
             if (event.command === undefined || commands.has(event.id)) return;
             commands.set(event.id, {
               id: CommandId.make(newId()),
-              stepId: event.id,
+              stepId: `${turnKey}/${event.id}`,
               command: turn.redactor.text(event.command.line),
               folder: event.command.folder,
               sandboxed: event.command.sandboxed,
