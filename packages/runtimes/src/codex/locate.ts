@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { binaryLocator, findBinary } from "../binary.ts";
@@ -40,6 +41,25 @@ export const codexEnv = (binary: string, env: NodeJS.ProcessEnv = process.env, h
   ...env,
   PATH: codexPath(binary, env, home),
 });
+
+/** macOS's own bundle of the system's trusted roots. */
+const MACOS_CA_BUNDLE = "/etc/ssl/cert.pem";
+
+/**
+ * The CA bundle Codex verifies TLS with inside the sandbox: the user's own `CODEX_CA_CERTIFICATE` or
+ * `SSL_CERT_FILE`, or on macOS the system's bundle. On macOS Codex reads its roots from `trustd`,
+ * which the sandbox keeps closed, so without a bundle every request fails (#648). Codex treats an
+ * empty value as unset, and so does this.
+ */
+export const codexCaBundle = (
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  exists: (path: string) => boolean = existsSync,
+): string | undefined => {
+  const own = env.CODEX_CA_CERTIFICATE || env.SSL_CERT_FILE;
+  if (own && isAbsolute(own)) return own;
+  return platform === "darwin" && exists(MACOS_CA_BUNDLE) ? MACOS_CA_BUNDLE : undefined;
+};
 
 /** The configured binary, or the first executable candidate on this machine. */
 export const findCodex = (
