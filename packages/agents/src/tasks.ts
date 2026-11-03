@@ -190,6 +190,14 @@ type TaskChange = TaskRefused | StaleTask | IllegalTaskTransition;
  * its events in one transaction; a refused write changes nothing. Changes to a Task name the
  * revision they were decided on, and a stale one is refused (EX-002).
  */
+/** How a move is made, beyond where it goes. */
+export interface TaskMoveOptions {
+  /** The backpack items the turn that ended read, which a move to `blocked` settles. */
+  readonly carried?: ReadonlyArray<CarriedItem>;
+  /** Who asked for a cancel this move makes: the hob that cancelled the Task, or you. */
+  readonly cancelledBy?: AgentId | "you";
+}
+
 export class TaskRepository extends Context.Service<
   TaskRepository,
   {
@@ -235,14 +243,16 @@ export class TaskRepository extends Context.Service<
     /**
      * Moves a Task to another state. It fails or is cancelled only once its Attempt and every Task
      * under it have ended, and ends its Quest with it. A move to `blocked` settles the backpack items
-     * in `carried`, those the turn that ended read, as a completion settles them; other moves ignore them.
+     * in `carried`, those the turn that ended read, as a completion settles them; other moves ignore
+     * them. A move that asks for a cancel records who asked (`cancelledBy`), which an Attempt the
+     * cancel stops names (#669, #674).
      */
     readonly moveTask: (
       taskId: TaskId,
       revision: number,
       to: TaskTarget,
       at: string,
-      carried?: ReadonlyArray<CarriedItem>,
+      options?: TaskMoveOptions,
     ) => Changed<Task, TaskChange>;
     /**
      * Completes a Task with a result from its current Attempt once its responsibility ledger is

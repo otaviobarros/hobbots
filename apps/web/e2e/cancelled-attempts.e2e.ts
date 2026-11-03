@@ -102,7 +102,7 @@ test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in the Workb
     const bench = page.getByRole("region", { name: `Workbench for ${title}` });
     const summary = bench.getByRole("tabpanel", { name: /^Summary/ });
     await expect(summary).toContainText("This attempt stopped before it finished.");
-    await expect(summary).toContainText("Why: Its Task was cancelled before this turn ended.");
+    await expect(summary).toContainText("Why: You cancelled this Task.");
     await bench.getByRole("button", { name: "← Back to chat" }).click();
     await page.getByRole("tab", { name: "Quest" }).click();
   }

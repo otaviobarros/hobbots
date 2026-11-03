@@ -430,7 +430,8 @@ export const TaskRepositoryLive = Layer.effect(
             return yield* refuse("attempt-live", `Attempt ${attemptId} is already running`);
           }
           const owner = yield* loadTask(before.taskId);
-          const ended = update._tag === "Ended" ? AttemptTransitions.end(owner, update.end) : null;
+          const ended =
+            update._tag === "Ended" ? AttemptTransitions.end(owner, update.end, yield* cancelledBy(owner)) : null;
           const attempt = new Attempt({
             ...before,
             state: ended?.state ?? "running",
@@ -448,6 +449,27 @@ export const TaskRepositoryLive = Layer.effect(
           };
         }),
       );
+
+    /**
+     * Who cancelled `task`, as its Attempt names them: "You", or the hob's name, by the cancel asked
+     * for on it or, for one cancelled with its parent, on its nearest ancestor. Null when its cancel
+     * was not asked for, or was asked for before who asked was recorded.
+     */
+    const cancelledBy = (task: Task) =>
+      Effect.gen(function* () {
+        if (task.state !== "cancelling" && task.state !== "cancelled") return null;
+        const line = [task, ...ancestorsOf(task, yield* read.treeOf(task.rootId))];
+        const rows = yield* sql<{ readonly taskId: string; readonly requestedBy: string | null }>`
+          SELECT task_id, requested_by FROM task_cancels WHERE ${sql.in(
+            "task_id",
+            line.map((each) => each.id),
+          )}`;
+        const nearest = line.flatMap((each) => rows.filter((row) => row.taskId === each.id))[0];
+        if (nearest === undefined) return null;
+        if (nearest.requestedBy === null) return "You";
+        const [hob] = yield* sql<{ readonly name: string }>`SELECT name FROM agents WHERE id = ${nearest.requestedBy}`;
+        return hob?.name ?? nearest.requestedBy;
+      });
 
     /** The Attempt a Task last ran, which its next turn resumes when nothing makes it a new one. */
     const resumable = (task: Task, resume: AttemptResume) =>
@@ -492,13 +514,20 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
-    const moveTask: TaskRepository["Service"]["moveTask"] = (taskId, expected, to: TaskTarget, at, carried = []) =>
+    const moveTask: TaskRepository["Service"]["moveTask"] = (taskId, expected, to: TaskTarget, at, options = {}) =>
       change((revision) =>
         Effect.gen(function* () {
+          const { carried = [], cancelledBy } = options;
           const before = yield* current(taskId, expected);
           if (to === "failed" || to === "cancelled") yield* endable(before);
           const task = new Task({ ...(yield* orFail(TaskTransitions.moveTo(before, to, at))), revision });
           yield* saveTask(task);
+          if (cancelledBy !== undefined && (to === "cancelling" || to === "cancelled")) {
+            const requestedBy = cancelledBy === "you" ? null : cancelledBy;
+            yield* sql`INSERT INTO task_cancels (task_id, requested_by, requested_at)
+              VALUES (${task.id}, ${requestedBy}, ${at})
+              ON CONFLICT (task_id) DO UPDATE SET requested_by = ${requestedBy}, requested_at = ${at}`;
+          }
           const quest = yield* endQuest(task, at, revision);
           const events: Array<JournaledEvent> = [
             { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null },

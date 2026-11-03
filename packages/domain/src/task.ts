@@ -190,18 +190,26 @@ export type AttemptEnd =
   | { readonly _tag: "Stopped"; readonly reason: string | null }
   | { readonly _tag: "Unconfirmed"; readonly reason: string };
 
-/** What an Attempt that ended because its Task was cancelled says. */
+/** What an Attempt that ended because its Task was cancelled says, when who cancelled it is not known. */
 export const CANCELLED_ATTEMPT = "Its Task was cancelled before this turn ended.";
+
+/** What an Attempt says that ended because `by` cancelled its Task: a hob's name, "You", or null when not known. */
+export const cancelledOutcome = (by: string | null): string =>
+  by === null ? CANCELLED_ATTEMPT : `${by} cancelled this Task.`;
 
 /** Pure transitions for an Attempt, beside the Task's. */
 export const AttemptTransitions = {
   /**
    * The state an Attempt ends in, and why, for `end`, with its Task as it is when it ends. An
-   * Attempt whose Task's cancel was asked for ends cancelled however its session stopped, unless it
-   * failed on its own or its stop could not be confirmed; one that ended before the cancel keeps
-   * its own end.
+   * Attempt whose Task's cancel was asked for ends cancelled, naming who cancelled it (`cancelledBy`),
+   * whether it finished or was stopped; one that failed on its own stays failed, and one whose stop
+   * could not be confirmed stays unresolved. One that ended before the cancel keeps its own end.
    */
-  end: (task: Task, end: AttemptEnd): { readonly state: AttemptState; readonly outcome: string | null } => {
+  end: (
+    task: Task,
+    end: AttemptEnd,
+    cancelledBy: string | null = null,
+  ): { readonly state: AttemptState; readonly outcome: string | null } => {
     switch (end._tag) {
       case "Failed":
         return { state: "failed", outcome: end.reason };
@@ -209,7 +217,7 @@ export const AttemptTransitions = {
         return { state: "unresolved", outcome: end.reason };
       default:
         if (task.state === "cancelling" || task.state === "cancelled")
-          return { state: "cancelled", outcome: CANCELLED_ATTEMPT };
+          return { state: "cancelled", outcome: cancelledOutcome(cancelledBy) };
         return end._tag === "Finished"
           ? { state: "completed", outcome: end.outcome }
           : { state: "interrupted", outcome: end.reason };

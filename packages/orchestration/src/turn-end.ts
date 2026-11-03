@@ -58,7 +58,7 @@ const moveAfter = (
         : Option.flatMap(yield* deps.tasks.readTree(taskId), (tree) => Option.fromNullishOr(tree.tasks[0]));
     if (Option.isSome(now) && !isTerminalTask(now.value.state))
       yield* deps.attempt(
-        deps.tasks.moveTask(now.value.id, now.value.revision, move.to, at, carried),
+        deps.tasks.moveTask(now.value.id, now.value.revision, move.to, at, { carried }),
         `move a Task to ${move.to}`,
       );
   });

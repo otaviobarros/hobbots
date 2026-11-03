@@ -40,6 +40,8 @@ const task = (state: TaskState) =>
     revision: 1,
   });
 
+const ENDINGS_END = { stopped: { _tag: "Stopped", reason: "Stopped by Hobbots" } } as const;
+
 const ENDINGS: Record<"replied" | "failed" | "stopped", TurnEnding> = {
   replied: { _tag: "Replied", text: "Reviewed it" },
   failed: { _tag: "Failed", reason: "The runtime broke" },
@@ -197,6 +199,13 @@ describe("turnEnded", () => {
       state: "interrupted",
       outcome: "Stopped by Hobbots",
     });
+    // The record names who cancelled it, when it knows.
+    expect(AttemptTransitions.end(task("cancelled"), ENDINGS_END.stopped, "Pip").outcome).toBe(
+      "Pip cancelled this Task.",
+    );
+    expect(AttemptTransitions.end(task("cancelling"), ENDINGS_END.stopped, "You").outcome).toBe(
+      "You cancelled this Task.",
+    );
     // A stop Hobbots could not confirm stays unresolved, cancel or not.
     expect(AttemptTransitions.end(task("cancelling"), { _tag: "Unconfirmed", reason: "Not confirmed" }).state).toBe(
       "unresolved",

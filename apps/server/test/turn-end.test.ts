@@ -90,13 +90,15 @@ const turnRunning = (milestones: ReadonlyArray<string> = []) =>
     yield* tasks.updateAttempt(attemptId, { _tag: "Running", sessionId: "s1", at: now });
   });
 
-/** Asks to cancel the Task the turn works on, as Cancel Task does. */
-const cancel = Effect.gen(function* () {
-  const tasks = yield* TaskRepository;
-  const [task] = Option.getOrThrow(yield* tasks.readTree(work)).tasks;
-  if (task === undefined) throw new Error("no Task");
-  yield* tasks.moveTask(work, task.revision, "cancelling", later);
-});
+/** Asks to cancel `id`, as Cancel Task (you) or a lead's cancel_task (a hob) does; with nobody named, as before who asked was kept. */
+const cancelOf = (id: TaskId, cancelledBy?: AgentId | "you") =>
+  Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const [task] = Option.getOrThrow(yield* tasks.readTree(id)).tasks;
+    if (task === undefined) throw new Error("no Task");
+    yield* tasks.moveTask(id, task.revision, "cancelling", later, cancelledBy === undefined ? {} : { cancelledBy });
+  });
+const cancel = cancelOf(work);
 
 const endsWith = (runner: TurnRunner) =>
   Effect.gen(function* () {
@@ -119,7 +121,7 @@ const endsWith = (runner: TurnRunner) =>
 
 describe("ending a turn under a cancel", () => {
   // covers EX-001, OR-006
-  it("[TC-OR-458] a member's or step's turn that ends after its Task's cancel was asked records a cancelled Attempt, and one that ended first keeps completed", async () => {
+  it("[TC-OR-458] a member's or step's turn that ends after its Task's cancel was asked records a cancelled Attempt naming who cancelled it, and one that ended first keeps completed", async () => {
     for (const runner of ["member", "step"] as const) {
       // The cancel arrives while the turn runs; the turn then ends with its reply.
       const underCancel = await run(Effect.andThen(Effect.andThen(turnRunning(), cancel), endsWith(runner)));
@@ -128,6 +130,17 @@ describe("ending a turn under a cancel", () => {
         { task: "cancelled", attempts: [{ number: 1, state: "cancelled", outcome: CANCELLED_ATTEMPT }] },
       ]);
     }
+
+    // The Attempt names who cancelled its Task: you, or the hob that did, on the Task or on one above it.
+    const named = async (runner: TurnRunner, cancels: Effect.Effect<void, unknown, TaskRepository>) => {
+      const ended = await run(Effect.andThen(Effect.andThen(turnRunning(), cancels), endsWith(runner)));
+      return ended.attempts[0]?.outcome;
+    };
+    expect([
+      await named("member", cancelOf(work, "you")),
+      await named("step", cancelOf(work, PIP)),
+      await named("member", Effect.andThen(cancelOf(top, PIP), cancel)),
+    ]).toEqual(["You cancelled this Task.", "Pip cancelled this Task.", "Pip cancelled this Task."]);
 
     // A member's turn that ended before the cancel keeps its own end; its Task, blocked on its milestone, is then cancelled.
     const memberFirst = await run(
