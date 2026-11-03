@@ -565,28 +565,39 @@ describe("Disconnect on a connected desktop", () => {
   });
 
   // covers DP-001, DP-004
-  it("[TC-DP-218] a keychain that cannot delete the token fails Disconnect and keeps the connection, so it can be asked again", async () => {
+  it("[TC-DP-218] a keychain that cannot delete the token fails Disconnect before the hub revokes anything, so it can be asked again", async () => {
     const hub = fakeHub();
-    hub.setReachable(false);
-    const desktop = await connectedTo(hub, tailnet().lookup);
-    const stuck = { remove: async () => Promise.reject(new Error("The keychain is locked")) };
-    const attempt = (token: Pick<typeof desktop.token, "remove">) =>
+    const { lookup } = tailnet();
+    const desktop = await connectedTo(hub, lookup);
+    const connected = connectedHub({
+      origins: ORIGINS,
+      nodeId: STUDIO.nodeId,
+      fallbackName: STUDIO.nodeName,
+      nodeCheck: makeNodeCheck(lookup),
+      token: desktop.token.read,
+      fetch: hub.fetch,
+    });
+    const attempt = (token: Pick<typeof desktop.token, "read" | "remove">) =>
       disconnectFromHub({
         connection: CONNECTION,
-        state: () => ({ state: "unreachable" }),
-        hub: { fetchAsDevice: hub.fetch },
+        state: () => ({ state: "connected", version: "0.5.0" }),
+        hub: connected,
         token,
         clearCookies: async () => void desktop.cookies.cleared++,
         settings: desktop.settings,
       });
+    const stuck = { read: desktop.token.read, remove: async () => Promise.reject(new Error("The keychain is locked")) };
+
+    // The hub is reachable, yet nothing was sent to it: it still knows this Mac, whose pages keep working.
     await expect(attempt(stuck)).rejects.toThrow("The keychain is locked");
-    // Nothing else changed: the token, the cookies and the connection all stay.
+    expect(hub.withSecrets()).toEqual([]);
     expect(await desktop.token.read()).toBe("hbd_token");
     expect(desktop.cookies.cleared).toBe(0);
     expect(desktopMode(desktop.settings.read())).toEqual({ mode: "connected", connection: CONNECTION });
 
-    // Asked again with the keychain working, it finishes.
-    expect(await attempt(desktop.token)).toEqual({ stillListed: true });
+    // Asked again with the keychain working, it finishes, and the hub revokes the token it held.
+    expect(await attempt(desktop.token)).toEqual({ stillListed: false });
+    expect(hub.withSecrets()).toMatchObject([{ path: "/api/devices/dev1/revoke", authorization: "Bearer hbd_token" }]);
     await forgotten(desktop);
   });
 });
