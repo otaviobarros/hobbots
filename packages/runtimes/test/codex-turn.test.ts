@@ -505,6 +505,36 @@ describe("a Codex turn", () => {
     expect(hubCalls).toHaveLength(1);
   });
 
+  // covers EX-004, IN-002, ADR 024
+  it("[TC-RT-086] starts the turn only once the hub has taken the session, so no hub call comes before it", async () => {
+    const server = fakeServer({ script: [completed("completed")] });
+    let taken = false;
+    let startedAfterTaken: boolean | undefined;
+    const original = server.start;
+    const watched: StartAppServer = (command, options) =>
+      Effect.map(original(command, options), (app) => ({
+        ...app,
+        requestUnknown: (method: string, params: unknown) => {
+          if (method === "turn/start") startedAfterTaken = taken;
+          return app.requestUnknown(method, params);
+        },
+        request: ((method: string, params: unknown) => {
+          if (method === "turn/start") startedAfterTaken = taken;
+          return app.request(method as "turn/start", params as never);
+        }) as AppServer["request"],
+      }));
+    await Effect.runPromise(
+      runCodexTurn(config(watched), prompt({ hubTools: hub })).pipe(
+        Stream.runForEach((event) =>
+          event._tag === "SessionStarted"
+            ? Effect.sleep("50 millis").pipe(Effect.andThen(Effect.sync(() => (taken = true))))
+            : Effect.void,
+        ),
+      ),
+    );
+    expect(startedAfterTaken).toBe(true);
+  });
+
   // covers EX-004, ADR 024
   it("[TC-RT-082] marks a hub tool call uncertain when Codex stops before it recorded the answer", async () => {
     hubCalls.length = 0;

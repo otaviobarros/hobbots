@@ -269,14 +269,11 @@ const finish = (
   }
 };
 
-/**
- * Runs one turn on Codex (ADR 024): its own App Server process, signed in through the protocol, on
- * the Hobbots thread's Codex thread. Interrupting the stream sends `turn/interrupt` and waits for
- * `turn/completed` to acknowledge it; an App Server that exits first ends the turn as uncertain.
- */
-export const runCodexTurn = (
+/** The turn's events, which start the turn only once `accepted` holds. */
+const turnEvents = (
   config: CodexTurnConfig,
   request: PromptRequest,
+  accepted: Deferred.Deferred<void>,
 ): Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached> =>
   Stream.callback<RuntimeEvent, RuntimeError | RuntimeLimitReached>((queue) =>
     Effect.gen(function* () {
@@ -321,6 +318,7 @@ export const runCodexTurn = (
       const mapper = codexTurnEvents(threadId);
       turn = { events: mapper, report, redact: request.redaction?.text ?? ((text) => text) };
       report({ _tag: "SessionStarted", sessionId: threadId, billing: billingOf(tokens) });
+      yield* Deferred.await(accepted);
 
       // Subscribed before the turn starts, so its first notifications are not missed.
       const notifications = yield* server.subscribe;
@@ -358,4 +356,29 @@ export const runCodexTurn = (
 
       return yield* finish(yield* Deferred.await(ended), mapper, report, Queue.end(queue));
     }),
+  );
+
+/**
+ * Runs one turn on Codex (ADR 024): its own App Server process, signed in through the protocol, on
+ * the Hobbots thread's Codex thread. Interrupting the stream sends `turn/interrupt` and waits for
+ * `turn/completed` to acknowledge it; an App Server that exits first ends the turn as uncertain.
+ */
+export const runCodexTurn = (
+  config: CodexTurnConfig,
+  request: PromptRequest,
+): Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached> =>
+  Stream.unwrap(
+    Effect.map(Deferred.make<void>(), (accepted) =>
+      // The turn starts once the hub has taken `SessionStarted`: it accepts the work the turn carries
+      // then, and a hub tool call that came first would find that work not yet accepted. The stream is
+      // pulled one event at a time, so pulling past that event means the hub is done with it.
+      turnEvents(config, request, accepted).pipe(
+        Stream.flatMap(
+          (event): Stream.Stream<RuntimeEvent> =>
+            event._tag === "SessionStarted"
+              ? Stream.concat(Stream.make(event), Stream.fromEffectDrain(Deferred.succeed(accepted, undefined)))
+              : Stream.make(event),
+        ),
+      ),
+    ),
   );
