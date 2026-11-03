@@ -28,7 +28,9 @@ const codexWith = (options: FakeCodexOptions, checkTimeout: Duration.Input = "10
   const executable = fakeCodex(dir, options);
   return {
     dir,
-    adapter: run(makeCodex({ executable, clientVersion: "test", checkTimeout })) as Promise<RuntimeAdapterShape>,
+    adapter: run(
+      makeCodex({ executable, clientVersion: "test", checkTimeout, workspaceDir: folder() }),
+    ) as Promise<RuntimeAdapterShape>,
   };
 };
 
@@ -182,14 +184,15 @@ describe("the App Server client", () => {
 
 // covers AG-005, RT-001
 describe("Codex's provider health", () => {
-  it("[TC-RT-001] reports a ChatGPT sign-in as unverified until Codex turns run, read without a token or a refresh", async () => {
+  // TC-RT-001 is retired: Codex turns run now (#438), so a ChatGPT sign-in is ready (TC-RT-034).
+  it("[TC-RT-034] reports a ChatGPT sign-in as ready, read without a token or a refresh", async () => {
     const { dir, adapter } = codexWith({
       account: { type: "chatgpt", email: "me@example.com", planType: "pro", workspaceName: null },
     });
     const health = await Effect.runPromise((await adapter).health);
     expect(health).toMatchObject({
       runtime: "codex",
-      availability: "unverified",
+      availability: "ready",
       billing: "subscription (pro)",
       version: "0.166.0",
       detail: "me@example.com",
@@ -218,7 +221,9 @@ describe("Codex's provider health", () => {
   });
 
   it("[TC-RT-005] reports a missing or broken Codex as unavailable, with no version", async () => {
-    const missing = await run(makeCodex({ executable: join(folder(), "codex"), clientVersion: "test" }));
+    const missing = await run(
+      makeCodex({ executable: join(folder(), "codex"), clientVersion: "test", workspaceDir: folder() }),
+    );
     expect(await Effect.runPromise(missing.health)).toMatchObject({ availability: "unavailable", version: null });
     const broken = await Effect.runPromise((await codexWith({ version: "" }).adapter).health);
     expect(broken).toMatchObject({ availability: "unavailable", version: null });
@@ -229,12 +234,14 @@ describe("Codex's provider health", () => {
     expect(health).toMatchObject({ availability: "unavailable", version: "0.166.0" });
   });
 
-  it("[TC-RT-007] enforces nothing until Codex turns run, and refuses a turn", async () => {
+  // TC-RT-007 is retired: Codex turns run now (#438), and TC-RT-032 checks what they enforce.
+  // covers PE-005, ADR 024
+  it("[TC-RT-032] offers no tool as safe while Codex's tool calls are refused, and cancels a turn through Codex", async () => {
     const codex = await codexWith({}).adapter;
     const enforcement = await Effect.runPromise(codex.enforcement);
-    expect(Object.values(enforcement).every((capability) => capability.status === "unsupported")).toBe(true);
-    const turn = await Effect.runPromise(Effect.exit(Stream.runDrain(codex.sendPrompt({} as never))));
-    expect(Exit.isFailure(turn)).toBe(true);
+    const { toolInterruption, ...tools } = enforcement;
+    expect(Object.values(tools).every((capability) => capability.status === "unsupported")).toBe(true);
+    expect(toolInterruption.status).toBe("verified");
   });
 });
 
@@ -268,14 +275,16 @@ describe("Codex's models for the brain picker", () => {
     expect(fakeCodexLog(dir).filter((message) => message.method === "model/list")).toHaveLength(2);
   });
 
-  it("[TC-RT-016] offers no models to pick while Codex turns do not run, even signed in", async () => {
+  // TC-RT-016 is retired: Codex turns run now (#438), so a signed-in Codex offers its models (TC-RT-035).
+  it("[TC-RT-035] offers a signed-in Codex's models to pick", async () => {
     const { dir, adapter } = codexWith({
       account: { type: "chatgpt", email: null, planType: "plus", workspaceName: null },
       pages: [[{ model: "gpt-6", supportedReasoningEfforts: efforts("low") }]],
     });
     const models = await Effect.runPromise((await adapter).models);
-    expect(models).toMatchObject({ runtime: "codex", source: "fallback", models: [] });
-    expect(fakeCodexLog(dir).some((message) => message.method === "model/list")).toBe(false);
+    expect(models).toMatchObject({ runtime: "codex", source: "runtime" });
+    expect(models.models.map((entry) => entry.id)).toEqual(["gpt-6"]);
+    expect(fakeCodexLog(dir).some((message) => message.method === "model/list")).toBe(true);
   });
 
   it("[TC-RT-009] offers no models while Codex is missing or outdated", async () => {

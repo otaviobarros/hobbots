@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+import { RuntimeError } from "@hobbots/agents";
 import type { RuntimeHealth, RuntimeModels } from "@hobbots/domain";
 import { Clock, DateTime, Duration, Effect } from "effect";
 
@@ -113,6 +114,33 @@ export const binaryLocator = (options: {
   });
 };
 
+/** What a runtime's messages call it and how to install or update it. */
+export interface RuntimeWords {
+  readonly name: string;
+  readonly install: string;
+  readonly notStarted: string;
+  readonly outdated: string;
+}
+
+/** The binary a turn runs, or why it cannot run: only one health would show as ready to start. */
+export const runnableBinary = (
+  locate: Effect.Effect<LocatedBinary>,
+  words: RuntimeWords,
+): Effect.Effect<string, RuntimeError> =>
+  Effect.gen(function* () {
+    const located = yield* locate;
+    switch (located._tag) {
+      case "Found":
+        return located.binary;
+      case "Missing":
+        return yield* new RuntimeError({ message: `${words.name} was not found. ${words.install}` });
+      case "Broken":
+        return yield* new RuntimeError({ message: words.notStarted });
+      case "Outdated":
+        return yield* new RuntimeError({ message: `${words.name} ${located.version} is too old. ${words.outdated}` });
+    }
+  });
+
 /** What provider health says about a runtime that was not found ready to start. */
 export interface NotFoundHealth {
   readonly availability: "unavailable" | "outdated";
@@ -149,12 +177,7 @@ export const expiringCache = <A>(maxAge: (value: A) => Duration.Duration) => {
  */
 export const installedRuntimeChecks = (options: {
   readonly locate: Effect.Effect<LocatedBinary>;
-  readonly words: {
-    readonly name: string;
-    readonly install: string;
-    readonly notStarted: string;
-    readonly outdated: string;
-  };
+  readonly words: RuntimeWords;
   readonly notFound: (health: NotFoundHealth) => RuntimeHealth;
   readonly probe: (binary: string, version: string, checkedAt: string) => Effect.Effect<RuntimeHealth>;
   readonly fallbackModels: RuntimeModels;

@@ -50,7 +50,14 @@ import {
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
 import { type CallDecision, decideCall, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
-import { binaryLocator, expiringCache, findBinary, installedRuntimeChecks, isExecutable } from "./binary.ts";
+import {
+  binaryLocator,
+  expiringCache,
+  findBinary,
+  installedRuntimeChecks,
+  isExecutable,
+  runnableBinary,
+} from "./binary.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox, withCommitIdentity } from "./sandbox.ts";
 import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
@@ -925,19 +932,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       "Claude Code is not signed in. Run `claude` in a terminal and sign in with your claude.ai account.";
     const outdated = `Hobbots needs Claude Code ${minimumClaudeCodeVersion} or later. Run \`claude update\`.`;
 
-    const executable = Effect.gen(function* () {
-      const located = yield* locate;
-      switch (located._tag) {
-        case "Found":
-          return located.binary;
-        case "Missing":
-          return yield* new RuntimeError({ message: `Claude Code was not found. ${installGuidance}` });
-        case "Broken":
-          return yield* new RuntimeError({ message: notStarted });
-        case "Outdated":
-          return yield* new RuntimeError({ message: `Claude Code ${located.version} is too old. ${outdated}` });
-      }
-    });
+    const words = { name: "Claude Code", install: installGuidance, notStarted, outdated };
+    const executable = runnableBinary(locate, words);
 
     const sandboxed = sandbox.state === "on";
     const declared: RuntimeEnforcement = {
@@ -1177,7 +1173,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
     // policy can change it without a new binary, so it is fetched again when it expires.
     const { health, models } = installedRuntimeChecks({
       locate,
-      words: { name: "Claude Code", install: installGuidance, notStarted, outdated },
+      words,
       notFound: runtimeHealth,
       probe,
       fallbackModels,

@@ -84,8 +84,6 @@ export const messages = {
         "Codex is signed in to another provider. Hobbots runs Codex only on your ChatGPT plan: run {command} and sign in with ChatGPT.",
       notStarted: "Codex is installed but did not start. Run {command} in a terminal to check it.",
       startCommand: "codex",
-      turnsNotYet:
-        "Codex is signed in with ChatGPT, but this version of Hobbots cannot run Codex turns yet, so no hob can think with it.",
     },
   },
 } as const;
