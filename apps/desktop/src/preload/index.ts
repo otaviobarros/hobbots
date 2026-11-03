@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { folderDialogChannel } from "../main/folder-dialog.ts";
 import { keepRunningChannels } from "../main/keep-running.ts";
 import { loginItemChannels } from "../main/login-item.ts";
+import { notificationChannels } from "../main/notification-choices.ts";
 import { openRequestChannel } from "../main/open-request.ts";
 
 // A request whose notification was clicked, kept until the page listens: a window opened by the
@@ -36,6 +37,10 @@ contextBridge.exposeInMainWorld("hobbots", {
   keepRunning: {
     get: () => ipcRenderer.invoke(keepRunningChannels.get),
     set: (on: boolean) => ipcRenderer.invoke(keepRunningChannels.set, on),
+  },
+  notifications: {
+    get: () => ipcRenderer.invoke(notificationChannels.get),
+    set: (patch: Record<string, boolean>) => ipcRenderer.invoke(notificationChannels.set, patch),
   },
   // Opens the system folder picker; it takes nothing from the page and answers a path or null.
   chooseFolder: () => ipcRenderer.invoke(folderDialogChannel),

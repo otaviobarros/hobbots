@@ -28,7 +28,7 @@ Every interactive element is reachable and usable by keyboard, shows the moonlig
 
 ### STD-UI-004 Motion is stepped and stops with Reduce motion
 
-Animate only with the stepped `--animate-hb-*` tokens. Every animation stops when the system asks for reduced motion. The `prefers-reduced-motion` block in `apps/web/src/styles.css` does this for CSS animations. Motion driven from script checks the same media query.
+Animate only with the stepped `--animate-hb-*` tokens. Every animation stops with Reduce motion: the system's setting, unless the device chose otherwise in Settings › This app. The Reduce motion rules at the end of `apps/web/src/styles.css` do this for CSS animations, and the `motion-reduce:` variant follows the same choice. Motion driven from script checks `motionReduced()` from `apps/web/src/lib/motion.ts`.
 
 - **Why:** stepped timing is part of the pixel style, and some users get sick from motion.
 - **Enforced by:** review.

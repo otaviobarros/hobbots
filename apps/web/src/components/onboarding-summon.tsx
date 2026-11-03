@@ -9,6 +9,7 @@ import { type FirstHobDraft, hobLine, keepDraft, reopenDraft, submitDraft } from
 import { modelsQuery, useCreateHob } from "../api/queries.ts";
 import { foldersShared, presetInfo } from "../api/safety.ts";
 import { setupQuery, useUpdateSetup } from "../api/setup.ts";
+import { motionReduced } from "../lib/motion.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 import { useFirstHobDraft } from "./onboarding-safety.tsx";
@@ -42,8 +43,6 @@ const SPARKS = [
 /** idle → charging (runes light one by one while the hub creates the hob) → poof → done. */
 type Ritual = "idle" | "charging" | "poof" | "done";
 
-const reducedMotion = () => globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-
 /**
  * Onboarding step 5: the summon. It creates the first hob from the draft, marks setup complete
  * and, once the circle is lit, shows the hob with its chat and Home one click away.
@@ -70,7 +69,7 @@ export function OnboardingReady() {
   }, [ritual, lit]);
   // The hob appears once the circle is lit and the hub has made it and finished setup.
   useEffect(() => {
-    if (ritual === "charging" && lit >= RUNES && hob) setRitual(reducedMotion() ? "done" : "poof");
+    if (ritual === "charging" && lit >= RUNES && hob) setRitual(motionReduced() ? "done" : "poof");
   }, [ritual, lit, hob]);
   useEffect(() => {
     if (ritual !== "poof") return;
@@ -81,7 +80,7 @@ export function OnboardingReady() {
   const summon = async () => {
     if (ritual !== "idle") return;
     setRitual("charging");
-    setLit(reducedMotion() ? RUNES : 0);
+    setLit(motionReduced() ? RUNES : 0);
     // Once sent, the hob may exist even when no answer comes back, so the draft locks and every
     // retry repeats the same request; the hub returns the hob it made the first time.
     const sent = submitDraft(draft);
