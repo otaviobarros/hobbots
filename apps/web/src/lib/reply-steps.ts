@@ -16,6 +16,7 @@ const UNITS = [
   { unit: "byte", size: 1 },
   { unit: "kilobyte", size: 1024 },
   { unit: "megabyte", size: 1024 * 1024 },
+  { unit: "gigabyte", size: 1024 * 1024 * 1024 },
 ] as const;
 
 /** A size in the reader's locale, in the largest unit that keeps it at 1 or more: "12 kB", "3.4 MB". */

@@ -1,4 +1,4 @@
-import { EventPublisher, HobbotsRepository, TaskRepository } from "@hobbots/agents";
+import { EventPublisher, HobbotsRepository, TaskRepository, workHeld } from "@hobbots/agents";
 import { AgentNotFound, HobbotsApi, QuestNotFound } from "@hobbots/api";
 import { Backpack, type BackpackScope, DispatcherHost } from "@hobbots/inbox";
 import { EventJournal } from "@hobbots/persistence";
@@ -39,13 +39,16 @@ export const BackpackHandlers = HttpApiBuilder.group(HobbotsApi, "backpack", (ha
   }),
 );
 
-/** What the dispatcher reads and announces through: the Task trees, and the hub's event bus. */
+/** What the dispatcher reads and announces through: the Task trees, the hub's event bus, and whether work is held. */
 export const DispatcherHostLive = Layer.effect(
   DispatcherHost,
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
     const publisher = yield* EventPublisher;
+    // After a restore nothing is delivered until you resume work (ADR 026).
+    const held = yield* workHeld;
     return DispatcherHost.of({
+      held,
       treeOf: (taskId) =>
         tasks.readTree(taskId).pipe(
           Effect.flatMap(

@@ -87,6 +87,25 @@ function DeviceRow({ device, now, context }: { device: Device; now: Date; contex
   );
 }
 
+/** The devices a restore revoked (ADR 026), so you know which to pair again. */
+function RevokedByRestore({ devices }: { devices: ReadonlyArray<Device> }) {
+  const revoked = devices.filter((device) => device.revokedAt !== null && device.revokedReason === "restore");
+  if (revoked.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1 pt-2">
+      <span className="lbl text-xs text-label">{copy.revokedByRestore}</span>
+      <ul className="m-0 flex list-none flex-col p-0">
+        {revoked.map((device) => (
+          <li key={device.id} className="flex flex-col gap-0.5 border-b-2 border-line py-2 opacity-70 last:border-b-0">
+            <span className="font-bold wrap-anywhere">{deviceName(device)}</span>
+            <span className="text-[13px] text-secondary-text">{copy.pairAgain}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /**
  * Settings › Devices: every device that may reach the hub, with its last activity and Revoke (ADR 021).
  * The list follows the journal, so a device allowed or revoked anywhere shows here at once. On a
@@ -117,6 +136,7 @@ export function DeviceList() {
           ))}
         </ul>
       )}
+      {devices.data && <RevokedByRestore devices={devices.data} />}
       <span className="pt-1.5 text-[13px] text-label">{copy.footer}</span>
     </div>
   );

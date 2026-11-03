@@ -53,6 +53,8 @@ declare global {
       };
       /** Opens the system folder picker; resolves with the chosen folder, or null when cancelled. */
       readonly chooseFolder?: () => Promise<string | null>;
+      /** The same picker for a backup: where to save one, or which one to restore (ADR 026). */
+      readonly chooseBackupFolder?: (purpose: "save" | "restore") => Promise<string | null>;
       /**
        * Shows one of an Attempt's files in Finder, selected. The desktop app asks the hub which
        * file the id names, so the page never hands it a path; resolves false when the hub does not

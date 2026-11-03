@@ -19,7 +19,7 @@ const within = (location: string, folder: string) =>
  * The folder `typed` names on the hub, canonical, unless it is inside one of `hobFolders`
  * (canonical). `~` is the hub user's home, as for the folders hobs work in.
  */
-const checkDestination = (
+export const checkDestination = (
   typed: string,
   hobFolders: ReadonlyArray<string>,
   home: string = homedir(),

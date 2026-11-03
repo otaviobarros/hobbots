@@ -5,6 +5,7 @@ import {
   formatCount,
   formatDuration,
   formatIn,
+  formatMoment,
   formatMoney,
   formatPercent,
   plural,
@@ -49,5 +50,9 @@ describe("format", () => {
     expect(formatDuration(3_900_000, "en-US")).toBe("1 hr 5 min");
     expect(formatDuration(30, "en-US")).toBe("0.1 sec");
     expect(formatDuration(-5, "en-US")).toBe("0 sec");
+  });
+
+  it("names a moment by its day and time", () => {
+    expect(formatMoment("2026-11-03T12:00:00.000Z", "en-US")).toMatch(/^Nov [34], 2026, \d{1,2}:\d{2}\s?[AP]M$/);
   });
 });

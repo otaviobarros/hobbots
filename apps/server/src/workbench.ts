@@ -12,6 +12,7 @@ import type { AttemptId } from "@hobbots/domain";
 import { EventJournal } from "@hobbots/persistence";
 import { Effect, Layer, Option, Schedule } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
+import { BackupHolds } from "./backup-holds.ts";
 import { formatCursor } from "./event-stream.ts";
 
 // What an Attempt ran, changed and made (ADR 023). The cursor is taken before the read, so resuming
@@ -47,10 +48,16 @@ export const WorkbenchHandlers = HttpApiBuilder.group(HobbotsApi, "workbench", (
   }),
 );
 
-/** Clears the Workbench's details past the retention window at startup and then hourly (ADR 023). */
+/**
+ * Clears the Workbench's details past the retention window at startup and then hourly (ADR 023).
+ * Nothing is deleted while a backup holds cleanup (ADR 026); the next hour's run catches up.
+ */
 export const ActivityRetention = Layer.effectDiscard(
   Effect.gen(function* () {
     const recorder = yield* ActivityRecorder;
-    yield* recorder.prune.pipe(Effect.repeat(Schedule.spaced("1 hour")), Effect.forkScoped);
+    const holds = yield* Effect.serviceOption(BackupHolds);
+    const held = Option.isSome(holds) ? holds.value.cleanupHeld : Effect.succeed(false);
+    const prune = Effect.flatMap(held, (isHeld) => (isHeld ? Effect.void : recorder.prune));
+    yield* prune.pipe(Effect.repeat(Schedule.spaced("1 hour")), Effect.forkScoped);
   }),
 );

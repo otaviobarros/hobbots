@@ -36,7 +36,7 @@ describe("the preload bridge", () => {
     expect(await bridgeWith([CONNECTED_MODE_ARGUMENT])).toEqual([...shared, "connection"].sort());
     // The hub it uses, and Disconnect, which takes nothing from the page.
     expect(Object.keys(exposed.bridge?.connection as object).sort()).toEqual(["disconnect", "get"]);
-    // On the hub, the folder picker and Show in Finder stay.
-    expect(await bridgeWith([])).toEqual([...shared, "chooseFolder", "showFile"].sort());
+    // On the hub, the folder pickers, the backup folder picker included, and Show in Finder stay.
+    expect(await bridgeWith([])).toEqual([...shared, "chooseBackupFolder", "chooseFolder", "showFile"].sort());
   });
 });

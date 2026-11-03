@@ -32,6 +32,10 @@ export const formatIn = (value: number, unit: "minute" | "hour", locale?: string
 export const formatDay = (iso: string, locale?: string): string =>
   new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(iso));
 
+/** A day and time in the reader's locale: "Nov 2, 2026, 3:05 PM". */
+export const formatMoment = (iso: string, locale?: string): string =>
+  new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
+
 /** The first line of a text, trimmed: the title of a brief, or the gist of a longer note. */
 export const firstLine = (text: string): string => text.split("\n", 1)[0]?.trim() ?? "";
 
