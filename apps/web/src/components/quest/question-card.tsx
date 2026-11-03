@@ -1,4 +1,4 @@
-import type { Question, TaskId, TaskTree } from "@hobbots/domain";
+import type { Question, QuestionSurface, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -10,6 +10,7 @@ import { enterSends } from "./enter-sends.ts";
 import { messages } from "./messages.ts";
 import type { HobLookup } from "./use-work.ts";
 import { taskTitle } from "./work-model.ts";
+import { yourAnswer } from "./your-answer.ts";
 
 const copy = messages.question;
 
@@ -51,21 +52,30 @@ export function QuestionCard({
       </div>
       <p className="m-0 leading-normal whitespace-pre-wrap">{question.text}</p>
       {open ? (
-        <AnswerForm question={question} askerName={asker.name} />
+        <AnswerForm question={question} askerName={asker.name} via="chat" />
       ) : question.state === "withdrawn" ? (
         <p className="m-0 animate-hb-in text-sm text-secondary-text">{copy.withdrawn}</p>
       ) : (
         question.answer !== null && (
-          <p className="m-0 animate-hb-in text-sm text-mint">{copy.youAnswered({ answer: question.answer })}</p>
+          <p className="m-0 animate-hb-in text-sm text-mint">{yourAnswer(question, "chat")}</p>
         )
       )}
     </section>
   );
 }
 
-export function AnswerForm({ question, askerName }: { question: Question; askerName: string }) {
+/** The answer box, wherever a question waits for you; `via` names that place, which your answer records (#671). */
+export function AnswerForm({
+  question,
+  askerName,
+  via,
+}: {
+  question: Question;
+  askerName: string;
+  via: QuestionSurface;
+}) {
   const [answer, setAnswer] = useState("");
-  const send = useAnswerQuestion();
+  const send = useAnswerQuestion(via);
   const text = answer.trim();
   const submit = () => {
     if (text === "" || send.isPending) return;

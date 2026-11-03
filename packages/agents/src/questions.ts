@@ -1,5 +1,5 @@
 import { NoteRefused, QuestionClosed, QuestionNotFound, TaskNotFound, UserSession } from "@hobbots/api";
-import type { NoteId, Question, QuestionId, TaskId, TaskNote } from "@hobbots/domain";
+import type { NoteId, Question, QuestionId, QuestionSurface, TaskId, TaskNote } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer } from "effect";
 import { EventPublisher } from "./ports.ts";
 import { TaskRepository, type WaitingQuestion } from "./tasks.ts";
@@ -14,12 +14,14 @@ export class QuestionService extends Context.Service<
     /** The questions that climbed every lead and wait for you, oldest first. */
     readonly listWaiting: Effect.Effect<ReadonlyArray<WaitingQuestion>>;
     /**
-     * Records your answer to a question waiting for you. Only the user answers here (PE-006): it
-     * needs a `UserSession`, which no hob, Charm or runtime tool has.
+     * Records your answer to a question waiting for you, with the device it came from and `via`,
+     * where you answered it (#671). Only the user answers here (PE-006): it needs a `UserSession`,
+     * which no hob, Charm or runtime tool has.
      */
     readonly answer: (
       questionId: QuestionId,
       answer: string,
+      via?: QuestionSurface,
     ) => Effect.Effect<Question, QuestionNotFound | QuestionClosed, UserSession>;
     /**
      * Leaves your note on a Task for its nearest lead, as a message about that Task. `key` is the
@@ -40,11 +42,12 @@ export class QuestionService extends Context.Service<
       const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
       return QuestionService.of({
         listWaiting: tasks.listWaitingQuestions,
-        answer: (questionId, answer) =>
+        answer: (questionId, answer, via) =>
           Effect.gen(function* () {
-            yield* UserSession;
+            const session = yield* UserSession;
+            const from = { deviceId: session.deviceId, via: via ?? null };
             const committed = yield* tasks
-              .answerQuestion(questionId, { _tag: "User" }, answer, yield* nowIso)
+              .answerQuestion(questionId, { _tag: "User" }, answer, yield* nowIso, from)
               .pipe(
                 Effect.catchTag("TaskRefused", (refused) =>
                   Effect.fail(

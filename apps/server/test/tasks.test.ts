@@ -23,6 +23,7 @@ import {
   TaskId,
   Thread,
   ThreadId,
+  WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import {
@@ -37,7 +38,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Effect, Layer, ManagedRuntime, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
@@ -118,7 +119,9 @@ const post = async (path: string, body: unknown, device = true) => {
       body: JSON.stringify(body),
     }),
   );
-  return { status: response.status, body: await response.json() };
+  // A payload the API refuses has no body.
+  const text = await response.text();
+  return { status: response.status, body: text === "" ? null : JSON.parse(text) };
 };
 
 const now = "2026-11-01T00:00:00.000Z";
@@ -296,6 +299,51 @@ describe("Task and Quest reads", () => {
       }),
     );
     expect(events.filter((entry) => entry.type === "QuestionAnswered")).toHaveLength(1);
+  });
+
+  // covers OR-004, PE-006
+  it("[TC-OR-485] records the device and the place you answered from, and a second answer keeps the first's", async () => {
+    const asked = ["q-chat", "q-inbox", "q-task", "q-unsaid"];
+    await runtime.runPromise(
+      Effect.gen(function* () {
+        yield* quest;
+        const tasks = yield* TaskRepository;
+        for (const id of asked)
+          yield* tasks.askQuestion({
+            id: QuestionId.make(id),
+            taskId: TaskId.make("campaign"),
+            askerId: ALDRIC,
+            text: `Question ${id}?`,
+            createdAt: now,
+          });
+      }),
+    );
+    for (const via of ["chat", "inbox", "task"]) {
+      expect(await post(`/api/questions/q-${via}/answer`, { answer: "Yes", via })).toMatchObject({
+        status: 200,
+        body: { answeredByDeviceId: WINDOW_DEVICE_ID, answeredVia: via },
+      });
+    }
+    // An older client says nothing of where; a place the hub does not know is refused.
+    expect(await post("/api/questions/q-unsaid/answer", { answer: "Yes" })).toMatchObject({
+      body: { answeredByDeviceId: WINDOW_DEVICE_ID, answeredVia: null },
+    });
+    expect((await post("/api/questions/q-chat/answer", { answer: "No", via: "email" })).status).toBe(400);
+    expect((await post("/api/questions/q-chat/answer", { answer: "No", via: "inbox" })).status).toBe(409);
+
+    const tree = await runtime.runPromise(TaskRepository.use((tasks) => tasks.readTree(TaskId.make("campaign"))));
+    const stored = Option.getOrThrow(tree).questions.map(({ id, answer, answeredByDeviceId, answeredVia }) => ({
+      id,
+      answer,
+      answeredByDeviceId,
+      answeredVia,
+    }));
+    expect(stored.toSorted((a, b) => a.id.localeCompare(b.id))).toEqual([
+      { id: "q-chat", answer: "Yes", answeredByDeviceId: WINDOW_DEVICE_ID, answeredVia: "chat" },
+      { id: "q-inbox", answer: "Yes", answeredByDeviceId: WINDOW_DEVICE_ID, answeredVia: "inbox" },
+      { id: "q-task", answer: "Yes", answeredByDeviceId: WINDOW_DEVICE_ID, answeredVia: "task" },
+      { id: "q-unsaid", answer: "Yes", answeredByDeviceId: WINDOW_DEVICE_ID, answeredVia: null },
+    ]);
   });
 
   // covers OR-004, IN-002

@@ -1,5 +1,13 @@
 import type { WaitingQuestion } from "@hobbots/api";
-import { isTerminalTask, type NoteId, type Question, type QuestionId, type Task, type TaskId } from "@hobbots/domain";
+import {
+  isTerminalTask,
+  type NoteId,
+  type Question,
+  type QuestionId,
+  type QuestionSurface,
+  type Task,
+  type TaskId,
+} from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
@@ -74,12 +82,15 @@ export const useWaitingQuestionsQuery = () => useQuery(waitingQuestionsQuery);
 /** The questions waiting for you, oldest first; none until read. */
 export const useWaitingQuestions = (): ReadonlyArray<WaitingQuestion> => useWaitingQuestionsQuery().data ?? NONE;
 
-/** Sends your answer to a question that reached you; the card shows it at once, before its event. */
-export const useAnswerQuestion = () => {
+/**
+ * Sends your answer to a question that reached you, saying `via` where you answered it, which the
+ * hub records with the device (#671); the card shows it at once, before its event.
+ */
+export const useAnswerQuestion = (via: QuestionSurface) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ questionId, answer }: { questionId: QuestionId; answer: string }) =>
-      call((c) => c.questions.answer({ params: { questionId }, payload: { answer } })),
+      call((c) => c.questions.answer({ params: { questionId }, payload: { answer, via } })),
     onSuccess: (question) => {
       applyTaskEvent(queryClient, { _tag: "QuestionAnswered", question });
       void questionChanged(queryClient, question);

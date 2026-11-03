@@ -72,7 +72,7 @@ export const QuestionsHandlers = HttpApiBuilder.group(HobbotsApi, "questions", (
           const head = yield* journal.head;
           return { cursor: formatCursor(head.epoch, head.sequence), questions: yield* questions.listWaiting };
         }),
-      answer: ({ params, payload }) => questions.answer(params.questionId, payload.answer),
+      answer: ({ params, payload }) => questions.answer(params.questionId, payload.answer, payload.via),
       leaveNote: ({ params, payload }) => questions.leaveNote(params.taskId, payload.key, payload.text),
     });
   }),
