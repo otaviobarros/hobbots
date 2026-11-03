@@ -686,7 +686,15 @@ export const TaskRepositoryLive = Layer.effect(
         if (isTerminalTask(task.state) || isTerminalTask(top.state))
           return yield* refuse("task-ended", `The work question ${questionId} is about has ended`);
         const recipient = by._tag === "User" ? null : by.agentId;
-        if (question.recipientId !== recipient) return yield* refuse("not-recipient", "Only its recipient answers it");
+        if (question.recipientId !== recipient) {
+          // Said so a hob does not tell the user an answer is on its way when it never went (#569, #575).
+          return yield* refuse(
+            "not-recipient",
+            question.recipientId === null
+              ? `Question ${questionId} was passed up to the user, so only the user answers it now. Your answer was not sent.`
+              : `Only the hob question ${questionId} is waiting on answers it. Your answer was not sent.`,
+          );
+        }
         return question;
       });
 
