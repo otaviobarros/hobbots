@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,21 +9,27 @@ import {
   type RuntimeEvent,
   RuntimeLimitReached,
 } from "@hobbots/agents";
-import { ApprovalId } from "@hobbots/domain";
+import { ApprovalId, EMPTY_HOB_POLICY } from "@hobbots/domain";
+import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Exit, Fiber, PubSub, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
+import { SANDBOX_NOTE } from "../src/claude-code.ts";
 import type { AppServer, AppServerCommand, AppServerNotification } from "../src/codex/app-server.ts";
 import type { ChatGptTokens } from "../src/codex/auth.ts";
 import { codexTurnEvents, LOST_CALL, LOST_TURN } from "../src/codex/events.ts";
 import { notOffered } from "../src/codex/hub-tools.ts";
 import {
+  CODEX_MODEL_HOSTS,
   type CodexTurnConfig,
   codexFolders,
+  codexWrites,
   NO_ATTRIBUTION_NOTE,
   runCodexTurn,
   type StartAppServer,
+  sandboxedCommand,
   TOOLS_CLOSED,
 } from "../src/codex/turn.ts";
+import { ProcessSandbox, type ProcessSandboxShape, type SandboxScope, sandboxFilesystem } from "../src/sandbox.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-codex-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -299,7 +306,7 @@ describe("a Codex turn", () => {
   });
 
   // covers PE-005, ADR 024
-  it("[TC-RT-025] refuses every tool call while the policy is not enforced on Codex, and the turn goes on", async () => {
+  it("[TC-RT-025] refuses every tool call on a turn without tools, and the turn goes on", async () => {
     const ask = (method: string, params: Record<string, unknown>) => ({
       method,
       params: { threadId: THREAD, turnId: TURN, ...params },
@@ -557,6 +564,109 @@ describe("a Codex turn", () => {
   });
 });
 
+describe("a Codex turn with tools", () => {
+  // covers PE-005, ADR 014, ADR 024
+  it("[TC-RT-067] starts Codex in the sandbox, in the hob's folder, with its home closed but for what it writes", async () => {
+    const root = realpathSync(mkdtempSync(join(temp, "tools-")));
+    const repository = join(root, "repo");
+    const project = join(repository, "app");
+    mkdirSync(join(repository, ".git"), { recursive: true });
+    mkdirSync(project);
+    const runtimeFolder = join(root, "runtimes", "hob-1");
+    const { home } = codexFolders(runtimeFolder);
+    const scopes: Array<Omit<SandboxScope, "tempFolder">> = [];
+    let released = 0;
+    const sandbox: ProcessSandboxShape = {
+      state: "on",
+      evidence: "a stand-in sandbox",
+      prepare: (scope) =>
+        Effect.sync(() => {
+          scopes.push(scope);
+          return {
+            // Like the wrap on macOS, it hands back what it was given and adds Claude Code's own settings.
+            spawnArgs: (command, args, env) => ({
+              command: "/sandbox",
+              args: [command, ...args],
+              env: { ...env, CLAUDE_CODE_OAUTH_TOKEN: "claude-sign-in", CLAUDE_CONFIG_DIR: runtimeFolder },
+            }),
+            release: () => {
+              released += 1;
+            },
+          };
+        }),
+    };
+    const engine = await Effect.runPromise(Effect.service(PolicyEngine).pipe(Effect.provide(PolicyEngine.node)));
+    const binary = join(root, "codex");
+    writeFileSync(binary, "");
+    const server = fakeServer({ script: [completed("completed")] });
+    const turnConfig: CodexTurnConfig = {
+      ...config(server.start),
+      binary: Effect.succeed(binary),
+      policy: { engine, sandboxState: "on", sandbox },
+    };
+    const tools = {
+      policy: {
+        preset: "balanced",
+        sharedFolders: [project],
+        hob: EMPTY_HOB_POLICY,
+        dataFolder: join(root, "data"),
+        restrictions: [],
+      },
+      folders: [project],
+      runtimeFolder,
+    } as const;
+    // The hub was started with Claude Code's sign-in, which Codex would hand to every command.
+    const hubEnv = { CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN };
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = "claude-sign-in";
+    try {
+      await run(turnConfig, prompt({ tools }));
+    } finally {
+      if (hubEnv.CLAUDE_CODE_OAUTH_TOKEN === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+      else process.env.CLAUDE_CODE_OAUTH_TOKEN = hubEnv.CLAUDE_CODE_OAUTH_TOKEN;
+    }
+    // Neither Codex outside the sandbox nor inside it gets a Claude variable (STD-SEC-002).
+    for (const command of server.commands) {
+      expect(Object.keys(command.env).filter((key) => key.startsWith("CLAUDE_"))).toEqual([]);
+      expect(Object.values(command.env)).not.toContain("claude-sign-in");
+    }
+    // Codex started once outside the sandbox to set up its home, then inside it for the turn.
+    expect(server.commands.map((command) => command.command)).toEqual([binary, "/sandbox"]);
+    expect(server.commands[1]).toMatchObject({ args: [binary, "app-server"], env: { CODEX_HOME: home }, cwd: project });
+    expect(scopes).toEqual([
+      expect.objectContaining({
+        folders: [project],
+        folderAccess: { read: true, write: true },
+        runtimeFolder,
+        runtimeAccess: { read: [join(home, "config.toml"), join(home, "rules")], write: codexWrites(runtimeFolder) },
+        allowedHosts: CODEX_MODEL_HOSTS,
+      }),
+    ]);
+    // What Codex writes it reads back, such as its state database, which on macOS needs both.
+    const filesystem = sandboxFilesystem({ ...(scopes[0] as Omit<SandboxScope, "tempFolder">), tempFolder: temp });
+    for (const path of codexWrites(runtimeFolder)) {
+      expect(filesystem.allowWrite).toContain(path);
+      expect(filesystem.allowRead).toContain(path);
+    }
+    // Codex makes its installation ID on its first start, outside the sandbox; the folders are made before it.
+    for (const folder of codexWrites(runtimeFolder).filter((path) => !path.endsWith("installation_id"))) {
+      expect(existsSync(folder)).toBe(true);
+    }
+    expect(released).toBe(1);
+    // The folder and its repository are untrusted, so Codex loads no rules, hooks or MCP servers from them.
+    const settings = readFileSync(join(home, "config.toml"), "utf8");
+    expect(settings).toContain(`[projects.${JSON.stringify(project)}]\ntrust_level = "untrusted"`);
+    expect(settings).toContain(`[projects.${JSON.stringify(repository)}]\ntrust_level = "untrusted"`);
+    expect(settings).toContain("shell_tool = true");
+    expect(server.requests.find((request) => request.method === "thread/start")).toMatchObject({
+      params: { cwd: project, developerInstructions: expect.stringContaining(SANDBOX_NOTE) },
+    });
+
+    // Without a verified sandbox the policy decides commands as if it were missing, so Codex offers none.
+    await run({ ...turnConfig, policy: { engine, sandboxState: "unavailable", sandbox } }, prompt({ tools }));
+    expect(readFileSync(join(home, "config.toml"), "utf8")).toContain("shell_tool = false");
+  });
+});
+
 describe("reading a Codex turn", () => {
   it("shows reasoning as a thinking step, and leaves out other threads' notifications", () => {
     const read = codexTurnEvents(THREAD);
@@ -603,4 +713,63 @@ describe("reading a Codex turn", () => {
       error: new RuntimeError({ message: LOST_TURN }),
     });
   });
+});
+
+/** The real sandbox: on macOS, or on Linux with HOBBOTS_SANDBOX_TESTS=1 and bubblewrap. */
+const realSandbox = process.platform === "darwin" || process.env.HOBBOTS_SANDBOX_TESTS === "1";
+
+describe.runIf(realSandbox)("Codex's command in the real sandbox", () => {
+  // covers ADR 014, ADR 024, STD-SEC-002
+  it("[TC-RT-071] keeps the turn's temporary folder and no Claude variable in the command that starts Codex", async () => {
+    const root = realpathSync(mkdtempSync(join(temp, "launch-")));
+    const project = join(root, "project");
+    mkdirSync(project);
+    const hubEnv = { CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN };
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = "claude-sign-in";
+    try {
+      await Effect.gen(function* () {
+        const sandbox = yield* ProcessSandbox;
+        const prepared = yield* sandbox.prepare({
+          folders: [project],
+          folderAccess: { read: true, write: true },
+          dataFolder: join(root, "data"),
+          binary: "/bin/sh",
+          runtimeFolder: join(root, "runtimes", "hob-1"),
+          allowedHosts: [],
+        });
+        try {
+          // Codex's command as a turn builds it, with a shell in Codex's place.
+          const launch = sandboxedCommand(
+            {
+              command: "/bin/sh",
+              args: ["-c", 'echo "$TMPDIR"; mktemp "$TMPDIR/tmp.XXXXXX"; env | cut -d= -f1 | grep "^CLAUDE_" || true'],
+              env: { PATH: "/usr/bin:/bin", CODEX_HOME: join(root, "codex") },
+              cwd: project,
+            },
+            prepared,
+            undefined,
+          );
+          const ran = spawnSync(launch.command, [...launch.args], {
+            cwd: project,
+            env: launch.env,
+            encoding: "utf8",
+          });
+          expect(ran.status, ran.stderr).toBe(0);
+          const [folder, made, ...claude] = ran.stdout.trim().split("\n");
+          // The launcher takes the turn's temporary folder back from sandbox-runtime's, and files can be made there.
+          // (macOS's mktemp ignores TMPDIR without a template.)
+          expect(folder).not.toBe("/tmp/claude");
+          expect(made?.startsWith(`${folder}/`)).toBe(true);
+          // sandbox-runtime adds its proxy ports inside the wrap; no Claude credential gets in.
+          expect(claude.filter((key) => /TOKEN|SECRET|KEY|AUTH|CREDENTIAL/.test(key))).toEqual([]);
+          expect(ran.stdout).not.toContain("claude-sign-in");
+        } finally {
+          prepared.release();
+        }
+      }).pipe(Effect.provide(ProcessSandbox.layer), Effect.scoped, Effect.runPromise);
+    } finally {
+      if (hubEnv.CLAUDE_CODE_OAUTH_TOKEN === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+      else process.env.CLAUDE_CODE_OAUTH_TOKEN = hubEnv.CLAUDE_CODE_OAUTH_TOKEN;
+    }
+  }, 30_000);
 });

@@ -1,7 +1,15 @@
 import { RuntimeError, type RuntimeEvent, RuntimeLimitReached } from "@hobbots/agents";
 import type { ReplyUsage } from "@hobbots/domain";
+import { Deferred, type Duration, Effect, Option } from "effect";
 import type { AppServerNotification } from "./app-server.ts";
-import type { ThreadItem, TokenUsageBreakdown, Turn, TurnError, TurnNotification } from "./protocol.ts";
+import type {
+  FileUpdateChange,
+  ThreadItem,
+  TokenUsageBreakdown,
+  Turn,
+  TurnError,
+  TurnNotification,
+} from "./protocol.ts";
 
 /**
  * How a Codex turn ended, from its `turn/completed` (ADR 024). `interrupted` is the acknowledgement
@@ -72,6 +80,15 @@ export const codexTurnEvents = (threadId: string) => {
   const messages = new Map<string, string>();
   const thinking = new Set<string>();
   const running = new Set<string>();
+  // Each file change's files, from its `item/started`, which Codex sends before it asks about the change.
+  const patches = new Map<string, Deferred.Deferred<ReadonlyArray<FileUpdateChange>>>();
+  const patch = (itemId: string) => {
+    const known = patches.get(itemId);
+    if (known !== undefined) return known;
+    const made = Deferred.makeUnsafe<ReadonlyArray<FileUpdateChange>>();
+    patches.set(itemId, made);
+    return made;
+  };
   let baseline: TokenUsageBreakdown | null = null;
   let latest: TokenUsageBreakdown | null = null;
   let lastError: TurnError | null = null;
@@ -94,12 +111,16 @@ export const codexTurnEvents = (threadId: string) => {
         return { events: [{ _tag: "StepStarted", id: item.id, kind: "thinking", label: "Thinking" }] };
       case "agentMessage":
         return { events: separator(item.id) };
+      case "fileChange":
+        Deferred.doneUnsafe(patch(item.id), Effect.succeed(item.changes));
+        return NOTHING;
       default:
         return NOTHING;
     }
   };
 
   const toolFinished = (item: Extract<ThreadItem, { readonly status: string }>): TurnStep => {
+    patches.delete(item.id);
     if (!running.delete(item.id)) return NOTHING;
     const output =
       item.type === "commandExecution"
@@ -216,6 +237,12 @@ export const codexTurnEvents = (threadId: string) => {
     follow: (id: string) => {
       turnId ??= id;
     },
+    /**
+     * The files a file change touches, once its `item/started` has been read, or none when it does not
+     * arrive within `wait`.
+     */
+    changes: (itemId: string, wait: Duration.Input = "5 seconds") =>
+      Deferred.await(patch(itemId)).pipe(Effect.timeoutOption(wait), Effect.map(Option.getOrUndefined)),
     /** A tool call the hub decided, recorded and let run: its output and end are reported from now on. */
     started: (itemId: string) => {
       running.add(itemId);

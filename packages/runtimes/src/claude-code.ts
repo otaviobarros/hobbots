@@ -29,7 +29,6 @@ import {
   RuntimeError,
   type RuntimeEvent,
   RuntimeLimitReached,
-  refusal,
   type ToolAccess,
   type TurnApprovals,
   UNRECORDED_TOOL_CALL,
@@ -49,7 +48,7 @@ import {
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
-import { type CallDecision, decideCall, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
+import { type CallDecision, decideCall, grantedHosts, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
 import {
   binaryLocator,
   expiringCache,
@@ -59,7 +58,13 @@ import {
   runnableBinary,
 } from "./binary.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
-import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox, withCommitIdentity } from "./sandbox.ts";
+import {
+  CLAUDE_CODE_MODEL_HOSTS,
+  folderAccessFor,
+  onePasswordAgentSocket,
+  ProcessSandbox,
+  withCommitIdentity,
+} from "./sandbox.ts";
 import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
 import { fullToolOutput } from "./tool-output.ts";
 
@@ -685,6 +690,7 @@ export const toolTurn = (
   access: ToolAccess | null | undefined,
   sandbox: SandboxState,
   hubTools?: HubTools | null,
+  modelHosts: ReadonlyArray<string> = CLAUDE_CODE_MODEL_HOSTS,
 ): ToolTurn | null => {
   if (!access) return null;
   const folders = [
@@ -699,7 +705,7 @@ export const toolTurn = (
     ),
   ];
   if (folders.length === 0) return null;
-  const context: PolicyContext = { ...access.policy, sandbox, modelHosts: CLAUDE_CODE_MODEL_HOSTS };
+  const context: PolicyContext = { ...access.policy, sandbox, modelHosts };
   if (operationDecision(context, "read-files") === "deny") return null;
   const tools = offeredTools(context);
   if (tools.length === 0) return null;
@@ -996,11 +1002,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
             ? yield* Effect.acquireRelease(
                 sandbox.prepare({
                   folders: tools.folders,
-                  // What any call the policy lets through may need; a denied operation stays closed.
-                  folderAccess: {
-                    read: operationDecision(tools.context, "read-files") !== "deny",
-                    write: operationDecision(tools.context, "edit-files") !== "deny",
-                  },
+                  folderAccess: folderAccessFor(tools.context),
                   dataFolder: tools.context.dataFolder,
                   binary: absoluteBinary,
                   runtimeFolder: tools.runtimeFolder,
@@ -1008,20 +1010,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                   ...(commitAs ? { commitAs } : {}),
                   allowedHosts: CLAUDE_CODE_MODEL_HOSTS,
                   // The hob's own grants as they are now can answer the preset's Ask for a host (ADR 015).
-                  decideHost: (host) =>
-                    Effect.runPromise(
-                      (request.approvals?.grants ?? Effect.succeed([])).pipe(
-                        Effect.flatMap((grants) =>
-                          engine.decide({ ...tools.context, grants }, { _tag: "Web", host, addresses: [] }),
-                        ),
-                        Effect.tap((verdict) =>
-                          verdict.decision === "allow" && verdict.grantIds.length > 0
-                            ? (request.approvals?.used(verdict.grantIds) ?? Effect.void)
-                            : Effect.void,
-                        ),
-                        Effect.map((verdict) => (verdict.decision === "allow" ? true : refusal(verdict))),
-                      ),
-                    ),
+                  decideHost: grantedHosts(engine, tools.context, request.approvals),
                 }),
                 (prepared) => Effect.sync(prepared.release),
               )

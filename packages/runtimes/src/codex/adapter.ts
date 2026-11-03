@@ -1,8 +1,10 @@
 import { AdditionalRuntimes, RuntimeAdapter, RuntimeError } from "@hobbots/agents";
-import { type RuntimeEnforcement, RuntimeHealth } from "@hobbots/domain";
+import { policySandbox, type RuntimeEnforcement, RuntimeHealth } from "@hobbots/domain";
+import { PolicyEngine } from "@hobbots/permissions";
 import { type Duration, Effect, Layer } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { installedRuntimeChecks, runnableBinary } from "../binary.ts";
+import { ProcessSandbox, type ProcessSandboxShape } from "../sandbox.ts";
 import { type AppServer, type AppServerCommand, type AppServerOptions, startAppServer } from "./app-server.ts";
 import { billingOf, chatGptTokens, readSignIn } from "./auth.ts";
 import { codexEnv, codexLocator, minimumCodexVersion } from "./locate.ts";
@@ -24,34 +26,49 @@ const installGuidance = "Install Codex with `npm install -g @openai/codex`, then
 const notStarted = `Codex could not be started. ${installGuidance}`;
 const outdated = `Hobbots needs Codex ${minimumCodexVersion} or later. Run \`npm install -g @openai/codex\`.`;
 
-const toolsClosed = {
-  status: "unsupported",
-  evidence: "Codex's tool calls are refused until Hobbots' policy decides them.",
-} as const;
-
 /**
- * What the Codex adapter enforces: every call Codex would run itself is refused until the policy
- * decides it, so no such tool is offered as safe (PE-005); hub tools are decided by the hub. Cancelling
- * a turn waits for Codex to stop it (ADR 024).
+ * What the Codex adapter enforces on this hub (ADR 024, PE-005). Codex asks the hub about every
+ * command and file change, which the policy decides and records before it runs, and reports each
+ * call's output as it runs; charms and coordination tools are decided by the hub. Codex starts in
+ * the sandbox Claude Code starts in, with the same rules, which is verified on macOS; elsewhere it is
+ * not verified yet, so commands stay closed there.
  */
-const codexEnforcement: RuntimeEnforcement = {
-  toolInterception: toolsClosed,
-  processSandbox: { status: "unsupported", evidence: "Codex does not run inside Hobbots' sandbox yet." },
+export const codexEnforcement = (sandbox: Pick<ProcessSandboxShape, "state" | "evidence">): RuntimeEnforcement => ({
+  toolInterception: {
+    status: "verified",
+    evidence:
+      "Codex asks the hub before every command and file change; no execution rules, hooks or MCP servers are loaded.",
+  },
+  processSandbox:
+    sandbox.state !== "on"
+      ? { status: "unsupported", evidence: sandbox.evidence }
+      : process.platform === "darwin"
+        ? { status: "verified", evidence: `Codex starts inside ${sandbox.evidence}, with its own sandbox off.` }
+        : {
+            status: "unverified",
+            evidence: `Codex starts inside ${sandbox.evidence}, not yet verified on this platform.`,
+          },
   hubTools: {
     status: "verified",
     evidence:
       "Charms and coordination tools are Codex dynamic tools, answered on the App Server's channel and decided by the hub.",
   },
-  toolEvents: toolsClosed,
+  toolEvents: {
+    status: "verified",
+    evidence: "Codex reports each call's start, streamed output and end, and the hub records each before it runs.",
+  },
   toolInterruption: {
     status: "verified",
     evidence: "Cancelling a turn sends turn/interrupt and waits for Codex's turn/completed before it ends the process.",
   },
-};
+});
 
 export const makeCodex = (config: CodexConfig) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const engine = yield* PolicyEngine;
+    const sandbox = yield* ProcessSandbox;
+    const declared = codexEnforcement(sandbox);
     const locate = codexLocator(config.executable);
     const checkTimeout = config.checkTimeout ?? "30 seconds";
 
@@ -70,7 +87,7 @@ export const makeCodex = (config: CodexConfig) =>
 
     const runtimeHealth = (
       fields: Pick<RuntimeHealth, "availability" | "billing" | "version" | "detail" | "checkedAt">,
-    ) => new RuntimeHealth({ runtime: "codex", enforcement: codexEnforcement, ...fields });
+    ) => new RuntimeHealth({ runtime: "codex", enforcement: declared, ...fields });
 
     const probe = (binary: string, version: string, checkedAt: string) =>
       askAppServer(binary, readSignIn).pipe(
@@ -118,12 +135,14 @@ export const makeCodex = (config: CodexConfig) =>
         ),
       clientVersion: config.clientVersion,
       workspaceDir: config.workspaceDir,
+      // Tools are decided as if the sandbox were missing until it is verified here (ADR 014).
+      policy: { engine, sandboxState: policySandbox(declared), sandbox },
     };
 
     return RuntimeAdapter.of({
       health,
       models,
-      enforcement: Effect.succeed(codexEnforcement),
+      enforcement: Effect.succeed(declared),
       sendPrompt: (request) => runCodexTurn(turnConfig, request),
     });
   });

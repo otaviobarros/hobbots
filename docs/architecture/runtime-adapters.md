@@ -6,7 +6,7 @@
 
 | Target | Planned route | Status in this foundation |
 |---|---|---|
-| Codex | Codex App Server over stdio, 0.166.0 or later ([ADR 024](../decisions/024-codex-adapter.md)) | Selected; App Server behavior verified with a stand-in model; the sandbox, macOS and a real sign-in still need verification. |
+| Codex | Codex App Server over stdio, 0.166.0 or later ([ADR 024](../decisions/024-codex-adapter.md)) | Selected; App Server behavior, the policy on its tool calls and a whole turn in the sandbox on macOS verified with a stand-in model; the sandbox on Linux and a real sign-in still need verification. |
 | Claude Code | Supported CLI/SDK integration | Selected; exact route/version needs compatibility validation. |
 | ACP agents | ACP client adapter with capability negotiation | Foundation selected; per-agent interoperability is not yet demonstrated. |
 | Other CLIs/local-model runtimes | Individually validated future adapters | Outside initial support guarantees. |
@@ -42,10 +42,10 @@ Codex 0.166.0, probed on 2026-11-03 on Linux with a stand-in model ([ADR 024](..
 | Concurrency | One App Server process per turn; two turns of one hob at once | Unverified |
 | Streaming | Item notifications and text deltas; command output streams (`ToolOutput`) | Verified |
 | Interruption | `turn/interrupt`, acknowledged by `turn/completed` with status `interrupted` | Verified |
-| Tool interception | Approval requests for every command, file change and MCP call under `untrusted`, with execution rules closed off (folders untrusted, `CODEX_HOME/rules` read-only) | Verified; the read-only home unverified |
-| Process sandbox | Hobbots' sandbox around the App Server; Codex's own off (`externalSandbox`) | Unverified |
+| Tool interception | Approval requests for every command, file change and MCP call under `untrusted`, decided by the policy and recorded before they run, with execution rules closed off (folders untrusted, `CODEX_HOME` read-only but for what Codex writes) | Verified ([evidence](../evidence/2026-11-03-codex-tool-policy.md)); the read-only home checked at start only |
+| Process sandbox | Hobbots' sandbox around the App Server; Codex's own off (`externalSandbox`) | Verified on macOS; Codex starts inside it on Linux, a whole turn there unverified |
 | Hub tools | Dynamic tools, called back on the App Server channel | Verified |
-| Tool events | `item/started`, `item/completed`, output deltas | Verified |
+| Tool events | `item/started`, `item/completed`, output deltas, reported to the Workbench as Claude Code's are | Verified |
 | Usage | `thread/tokenUsage/updated` per turn; no cost | Verified; rate limits unverified |
 | Sign-in for a turn | `chatgptAuthTokens` with refresh requests answered by the hub | Unverified |
 | Commit attribution | Hob instructions; Codex's own trailer request when signed in | Unverified |

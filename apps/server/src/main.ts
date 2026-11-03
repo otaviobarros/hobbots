@@ -177,13 +177,14 @@ const ServerLive = Layer.unwrap(
             ClaudeCodeLayer({
               workspaceDir: join(config.dataDir, "workspaces", "default"),
               executable: Option.getOrUndefined(config.claudeExecutable),
-            }).pipe(Layer.provide(ProcessSandbox.layer)),
+            }),
             CodexLayer({
               executable: Option.getOrUndefined(config.codexExecutable),
               clientVersion: config.version,
               workspaceDir: join(config.dataDir, "workspaces", "codex"),
             }).pipe(Layer.provide(NodeServices.layer)),
-          )
+            // One sandbox serves both runtimes' turns (ADR 014).
+          ).pipe(Layer.provide(ProcessSandbox.layer))
     ).pipe(Layer.provide(PolicyEngine.node), Layer.provide(Remote));
     // Turns that can write to the default workspace wait while a backup copies it (ADR 026).
     const HeldRuntime = HeldRuntimes.pipe(Layer.provide(Runtime), Layer.provideMerge(BackupHolds.layer));

@@ -1,12 +1,20 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { type PromptRequest, RuntimeError, type RuntimeEvent, type RuntimeLimitReached } from "@hobbots/agents";
-import type { PolicyOperation } from "@hobbots/domain";
+import type { PolicyOperation, SandboxState } from "@hobbots/domain";
+import type { PolicyEngine } from "@hobbots/permissions";
 import { Deferred, type Duration, Effect, Queue, type Scope, Stream } from "effect";
-import { turnPrompt } from "../claude-code.ts";
-import { sandboxEnv } from "../sandbox.ts";
-import { toolLabel } from "../tool-calls.ts";
+import { grantedHosts } from "../approval.ts";
+import { type ToolTurn, toolTurn, turnInstructions, turnPrompt, turnSigningAgent } from "../claude-code.ts";
+import {
+  folderAccessFor,
+  type PreparedSandbox,
+  type ProcessSandboxShape,
+  sandboxEnv,
+  withCommitIdentity,
+} from "../sandbox.ts";
+import { offeredTools, toolLabel } from "../tool-calls.ts";
 import {
   type AppServer,
   type AppServerCommand,
@@ -18,6 +26,7 @@ import type { ChatGptTokens } from "./auth.ts";
 import { type CodexTurnEvents, codexTurnEvents, type TurnEnd } from "./events.ts";
 import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
 import { codexPath } from "./locate.ts";
+import { POLICY_REQUESTS, type PolicyRequest, policyGate } from "./policy.ts";
 import { TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
 
 /** Starts a turn's App Server for as long as the scope lasts. */
@@ -33,11 +42,13 @@ export type StartAppServer = (
  */
 type TurnSignIn = (binary: string) => Effect.Effect<ChatGptTokens | null, RuntimeError>;
 
-/** What a tool gate is given about the turn: its events, and how it reports a call. */
+/** What a tool gate is given about the turn: its events, how it reports a call, and the gate itself. */
 interface CodexToolTurn {
   readonly events: CodexTurnEvents;
   readonly report: (event: RuntimeEvent) => void;
   readonly redact: (text: string) => string;
+  /** Decides the turn's tool calls: the policy for a turn with tools, otherwise every one is refused. */
+  readonly gate: CodexToolGate;
 }
 
 /** A request Codex sends about a tool call it would run itself. Hub tool calls go to the hub instead. */
@@ -46,15 +57,11 @@ type ToolRequest = Exclude<
   { readonly method: "account/chatgptAuthTokens/refresh" | "item/tool/call" }
 >;
 
-/**
- * Decides the tool calls Codex asks about: commands, file changes and MCP calls. The policy (#439)
- * plugs in here; until then every call is refused.
- */
+/** Decides the tool calls Codex asks about: commands, file changes and MCP calls. */
 type CodexToolGate = (request: ToolRequest, turn: CodexToolTurn) => Effect.Effect<unknown, RuntimeError>;
 
-/** Why a Codex hob's tool calls are refused while Hobbots cannot yet enforce its policy on them. */
-export const TOOLS_CLOSED =
-  "Hobbots cannot enforce your permissions on Codex's tools yet, so this did not run. Answer without tools.";
+/** Why a tool call is refused on a turn without tools. */
+export const TOOLS_CLOSED = "You have no tools in this conversation, so this did not run. Answer without tools.";
 
 const denied = (
   turn: CodexToolTurn,
@@ -63,8 +70,9 @@ const denied = (
 ) => turn.report({ _tag: "ToolDenied", ...call, targets, reason: TOOLS_CLOSED, decidedBy: "policy" });
 
 /**
- * Refuses every tool call, reporting each as denied by the policy. Approvals are declined, never
- * cancelled, so the turn goes on and the model hears that the call did not run.
+ * Refuses every tool call, as on a turn without tools, reporting each as denied by the policy.
+ * Approvals are declined, never cancelled, so the turn goes on and the model hears that the call did
+ * not run.
  */
 const refuseTools: CodexToolGate = (request, turn) =>
   Effect.sync(() => {
@@ -92,17 +100,40 @@ const refuseTools: CodexToolGate = (request, turn) =>
 export const NO_ATTRIBUTION_NOTE =
   "Never add Codex attribution to commits or pull requests: no `Co-authored-by: Codex` trailer and no note that Codex made them.";
 
-/** The instructions a Codex thread starts with, and that a changed hob carries inside its next turn. */
+/**
+ * The instructions a Codex thread starts with, and that a changed hob carries inside its next turn:
+ * the hob's own, the notes a turn with tools gets as on Claude Code, and the no-attribution rule.
+ */
 const codexInstructions = (instructions: string) =>
   [instructions, NO_ATTRIBUTION_NOTE].filter((part) => part !== "").join("\n\n");
+
+/** The Git repository a folder is in, by the folder that holds its `.git`, or undefined outside one. */
+const repositoryRoot = (folder: string): string | undefined => {
+  for (let at = folder; ; at = dirname(at)) {
+    if (existsSync(join(at, ".git"))) return at;
+    if (dirname(at) === at) return undefined;
+  }
+};
+
+/** What a turn's Codex settings depend on. */
+interface CodexSettings {
+  /** The hob's folders, which Codex must load no project configuration from. */
+  readonly folders: ReadonlyArray<string>;
+  /** Whether Codex offers its shell tool: only when the policy would let a command run. */
+  readonly shell: boolean;
+}
 
 /**
  * Codex's settings for a hob, written into its own `CODEX_HOME` before every turn (ADR 024): tools that
  * read or reach beyond the folders without asking are off, and so are Codex's own sub-agents. The
- * databases and logs live in a state folder of their own.
+ * databases and logs live in a state folder of their own. Each folder, and the repository it is in,
+ * is untrusted, so Codex loads no execution rules, hooks or MCP servers from it.
  */
-const codexConfig = (state: string) =>
-  [
+const codexConfig = (state: string, settings: CodexSettings) => {
+  const untrusted = [
+    ...new Set(settings.folders.flatMap((folder) => [folder, repositoryRoot(folder) ?? folder])),
+  ].flatMap((folder) => [`[projects.${JSON.stringify(folder)}]`, `trust_level = "untrusted"`, ""]);
+  return [
     `sqlite_home = ${JSON.stringify(state)}`,
     `log_dir = ${JSON.stringify(join(state, "log"))}`,
     `web_search = "disabled"`,
@@ -110,8 +141,11 @@ const codexConfig = (state: string) =>
     "[features]",
     "view_image = false",
     "multi_agent = false",
+    `shell_tool = ${settings.shell}`,
     "",
+    ...untrusted,
   ].join("\n");
+};
 
 /** Where Codex keeps a hob's threads (`CODEX_HOME`), and its databases and logs, in the hob's runtime folder. */
 export const codexFolders = (runtimeFolder: string) => ({
@@ -119,15 +153,45 @@ export const codexFolders = (runtimeFolder: string) => ({
   state: join(runtimeFolder, "codex-state"),
 });
 
-const prepareHome = (runtimeFolder: string, workspaceDir: string) =>
+/** The folders Codex writes in its home: its threads, shell snapshots, locks and helper programs. */
+const HOME_FOLDERS = ["sessions", "shell_snapshots", "thread-writer-locks", ".tmp", "tmp"];
+
+/** The files it writes there: its installation's ID, which it opens for writing at every start. */
+const HOME_FILES = ["installation_id"];
+
+const HOME_WRITES = [...HOME_FOLDERS, ...HOME_FILES];
+
+/**
+ * The only places a sandboxed Codex may write in its home, beside its state folder (ADR 024). The
+ * rest, its configuration, execution rules and skills among them, stays read-only, so nothing a turn
+ * runs can change what later turns load.
+ */
+export const codexWrites = (runtimeFolder: string): ReadonlyArray<string> => {
+  const { home, state } = codexFolders(runtimeFolder);
+  return [...HOME_WRITES.map((folder) => join(home, folder)), state];
+};
+
+/** What else a sandboxed Codex reads in its home: everything there now but what it writes. */
+const codexReads = (runtimeFolder: string): ReadonlyArray<string> => {
+  const { home } = codexFolders(runtimeFolder);
+  return readdirSync(home)
+    .sort()
+    .filter((entry) => !HOME_WRITES.includes(entry))
+    .map((entry) => join(home, entry));
+};
+
+const prepareHome = (runtimeFolder: string, workspaceDir: string, settings: CodexSettings) =>
   Effect.try({
     try: () => {
       mkdirSync(workspaceDir, { recursive: true });
       const { home, state } = codexFolders(runtimeFolder);
       // The hub keeps `rules/` empty, so no execution rule lets a command skip the policy (ADR 024).
       mkdirSync(join(home, "rules"), { recursive: true, mode: 0o700 });
-      mkdirSync(state, { recursive: true, mode: 0o700 });
-      writeFileSync(join(home, "config.toml"), codexConfig(state), { mode: 0o600 });
+      // The sandbox opens only folders that exist when it starts.
+      for (const folder of [...HOME_FOLDERS.map((name) => join(home, name)), state]) {
+        mkdirSync(folder, { recursive: true, mode: 0o700 });
+      }
+      writeFileSync(join(home, "config.toml"), codexConfig(state, settings), { mode: 0o600 });
       return home;
     },
     catch: (error) => new RuntimeError({ message: `Could not prepare Codex's folder: ${String(error)}` }),
@@ -145,13 +209,43 @@ export interface CodexTurnConfig {
    * runtime folder.
    */
   readonly workspaceDir: string;
-  /** Decides tool calls; by default every one is refused. */
-  readonly tools?: CodexToolGate;
+  /**
+   * Decides the tool calls of a turn with tools under the hob's policy (ADR 014). Absent, every turn
+   * is chat-only and every call is refused.
+   */
+  readonly policy?: CodexPolicy;
   /** How long a cancelled turn waits for Codex's acknowledgement before its process is ended. */
   readonly interruptGrace?: Duration.Input;
   /** More `codex app-server` arguments, such as `-c` settings for a stand-in model. */
   readonly extraArgs?: ReadonlyArray<string>;
 }
+
+/** How a turn with tools is decided and confined. */
+interface CodexPolicy {
+  readonly engine: PolicyEngine["Service"];
+  /** The sandbox the policy decides under: "on" only once it is verified on this hub (ADR 014). */
+  readonly sandboxState: SandboxState;
+  /** The sandbox Codex starts in when it started on this hub, verified or not. */
+  readonly sandbox: ProcessSandboxShape;
+}
+
+/**
+ * Hosts Codex reaches for its model with a ChatGPT sign-in. Its sign-in is refreshed outside the
+ * sandbox (ADR 024), so the sign-in hosts stay closed.
+ */
+export const CODEX_MODEL_HOSTS: ReadonlyArray<string> = ["chatgpt.com", "api.openai.com"];
+
+/**
+ * What must stay readable for Codex to start. An npm install runs a script whose platform binary is
+ * a package of its own, inside the script's package or beside it under `@openai`, so all of
+ * `@openai` opens.
+ */
+const codexPackage = (binary: string): ReadonlyArray<string> => {
+  const real = realpathSync(binary);
+  if (!real.endsWith(join("bin", "codex.js"))) return [];
+  const root = dirname(dirname(real));
+  return basename(dirname(root)) === "@openai" ? [dirname(root)] : [root];
+};
 
 /** The settings every turn applies (ADR 024): ask about every call, Hobbots' sandbox around Codex's. */
 const THREAD_SETTINGS = { approvalPolicy: "untrusted", sandbox: "danger-full-access" } as const;
@@ -191,7 +285,7 @@ const requestHandlers = (
     if (current === undefined) return Effect.fail(new RuntimeError({ message: "No Codex turn is running." }));
     // Hub tools reach the hub on this channel, so the sandbox holds no hub address or token (ADR 024).
     if (request.method === "item/tool/call") return callHubTool(hub, request.params, current);
-    return (config.tools ?? refuseTools)(request, current);
+    return current.gate(request, current);
   };
   return Object.fromEntries(
     TURN_SERVER_REQUESTS.map((method) => [
@@ -269,6 +363,176 @@ const finish = (
   }
 };
 
+/** Decides commands and file changes with the policy; anything else as on a turn without tools. */
+const withPolicy =
+  (decide: ReturnType<typeof policyGate>): CodexToolGate =>
+  (request, turn) =>
+    (POLICY_REQUESTS as ReadonlyArray<string>).includes(request.method)
+      ? decide(request as PolicyRequest, turn)
+      : refuseTools(request, turn);
+
+/**
+ * Starts Codex once outside the sandbox before a hob's first sandboxed turn, so the files it makes in
+ * its home on first start exist before the sandbox makes the home read-only (ADR 024).
+ */
+const firstStart = (config: CodexTurnConfig, command: AppServerCommand, home: string) =>
+  existsSync(join(home, "installation_id"))
+    ? Effect.void
+    : config.start(command, { clientVersion: config.clientVersion }).pipe(
+        Effect.flatMap((server) => server.request("model/list", {})),
+        Effect.scoped,
+        Effect.mapError(failed),
+      );
+
+/**
+ * Prepares the sandbox Codex runs in for one turn (ADR 014, ADR 024): the hob's folders as the
+ * policy opens them, Codex's model hosts, and in the hob's runtime folder only what Codex must write.
+ */
+const prepareSandbox = (
+  sandbox: ProcessSandboxShape,
+  tools: ToolTurn,
+  request: PromptRequest,
+  policy: CodexPolicy,
+  binary: string,
+  runtimeFolder: string,
+) =>
+  Effect.gen(function* () {
+    // The sandbox opens the binary's folder and its real location's, so it must be a path that exists.
+    const { files, reads } = yield* Effect.try({
+      try: () => ({ files: codexPackage(binary), reads: codexReads(runtimeFolder) }),
+      catch: () => new RuntimeError({ message: `Could not find ${binary}, so the sandbox cannot start it.` }),
+    });
+    const signingAgent = turnSigningAgent(tools);
+    return yield* sandbox.prepare({
+      folders: tools.folders,
+      folderAccess: folderAccessFor(tools.context),
+      dataFolder: tools.context.dataFolder,
+      binary,
+      runtimeFolder,
+      runtimeAccess: { read: reads, write: codexWrites(runtimeFolder) },
+      runtimeFiles: files,
+      ...(signingAgent ? { signingAgent } : {}),
+      ...(tools.commitAs ? { commitAs: tools.commitAs } : {}),
+      allowedHosts: CODEX_MODEL_HOSTS,
+      decideHost: grantedHosts(policy.engine, tools.context, request.approvals),
+    });
+  });
+
+/**
+ * An environment without Claude Code's variables. The sandbox passes Claude Code's sign-in on for
+ * Claude Code, which keeps it from its commands itself; Codex hands every variable to its commands,
+ * so none of them reaches Codex (STD-SEC-002).
+ */
+const withoutClaude = (env: NodeJS.ProcessEnv): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined && !entry[0].startsWith("CLAUDE_"),
+    ),
+  );
+
+/** The command that starts Codex in the turn's sandbox, or as it is, committing as the hob's bot if it has one. */
+export const sandboxedCommand = (
+  command: AppServerCommand,
+  prepared: PreparedSandbox | null,
+  commitAs: ToolTurn["commitAs"],
+): AppServerCommand => {
+  if (prepared === null) {
+    return { ...command, env: withCommitIdentity(command.env, commitAs) as Record<string, string> };
+  }
+  const wrapped = prepared.spawnArgs(command.command, command.args, command.env);
+  return {
+    command: wrapped.command,
+    args: wrapped.args,
+    // Codex's home is not a variable the sandbox passes on by itself. What the wrap adds for Claude
+    // Code stays out, and with it any Claude credential it brings back.
+    env: { ...withoutClaude(wrapped.env), CODEX_HOME: command.env.CODEX_HOME as string },
+    cwd: command.cwd,
+  };
+};
+
+/**
+ * How a turn starts Codex: in the hob's first folder with tools, or the hub's own folder without,
+ * with the instructions a turn with tools gets, inside the sandbox when it started on this hub, and
+ * with its calls decided by the policy (ADR 014, ADR 024).
+ */
+const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: string) =>
+  Effect.gen(function* () {
+    const governed = governedTurn(config, request);
+    const runtimeFolder = request.tools?.runtimeFolder ?? join(config.workspaceDir, "codex-chat");
+    const home = yield* prepareHome(runtimeFolder, config.workspaceDir, codexSettings(governed));
+    const command = appServerCommand(config, binary, home, governed?.tools.folders[0] ?? config.workspaceDir);
+    if (governed === null) {
+      return {
+        command,
+        cwd: config.workspaceDir,
+        instructions: codexInstructions(turnInstructions(request.instructions, false)),
+        gate: refuseTools,
+      };
+    }
+    const { tools, sandbox, policy } = governed;
+    const prepared = yield* sandboxFor(config, governed, request, command, runtimeFolder);
+    return {
+      command: sandboxedCommand(command, prepared, tools.commitAs),
+      cwd: tools.folders[0] as string,
+      instructions: codexInstructions(
+        turnInstructions(request.instructions, sandbox !== null, Boolean(request.approvals), tools.commitAs),
+      ),
+      gate: withPolicy(policyGate(policy.engine, tools, request, sandbox !== null)),
+    };
+  });
+
+/** Codex's settings for the turn: its folders untrusted, and its shell offered only when commands may run. */
+const codexSettings = (governed: ReturnType<typeof governedTurn>): CodexSettings => ({
+  folders: governed?.tools.folders ?? [],
+  shell: governed !== null && offeredTools(governed.tools.context).includes("Bash"),
+});
+
+/**
+ * The sandbox prepared for the turn, released when the turn ends, or null when none started on this
+ * hub. Codex first starts once outside it if it never has, so its home is set up.
+ */
+const sandboxFor = (
+  config: CodexTurnConfig,
+  governed: NonNullable<ReturnType<typeof governedTurn>>,
+  request: PromptRequest,
+  command: AppServerCommand,
+  runtimeFolder: string,
+) => {
+  const { sandbox, tools, policy } = governed;
+  if (sandbox === null) return Effect.succeed(null);
+  return Effect.acquireRelease(
+    Effect.flatMap(firstStart(config, command, command.env.CODEX_HOME as string), () =>
+      prepareSandbox(sandbox, tools, request, policy, command.command, runtimeFolder),
+    ),
+    (prepared) => Effect.sync(prepared.release),
+  );
+};
+
+/**
+ * The turn's tools under the hob's policy, and the sandbox Codex starts in, or null for a turn
+ * without tools. A sandbox that started wraps Codex even before it is verified here, as on Claude
+ * Code (ADR 014).
+ */
+const governedTurn = (config: CodexTurnConfig, request: PromptRequest) => {
+  const policy = config.policy;
+  const tools = policy ? toolTurn(request.tools, policy.sandboxState, request.hubTools, CODEX_MODEL_HOSTS) : null;
+  if (!policy || tools === null) return null;
+  return { policy, tools, sandbox: policy.sandbox.state === "on" ? policy.sandbox : null };
+};
+
+/** Starts `codex app-server` in `cwd` with its own home and only named variables (ADR 014). */
+const appServerCommand = (config: CodexTurnConfig, binary: string, home: string, cwd: string): AppServerCommand => ({
+  command: binary,
+  args: ["app-server", ...(config.extraArgs ?? [])],
+  // Codex hands its whole environment to its commands, so Claude Code's sign-in and settings stay out.
+  env: {
+    ...withoutClaude(sandboxEnv(process.env)),
+    PATH: codexPath(binary, process.env, homedir()),
+    CODEX_HOME: home,
+  },
+  cwd,
+});
+
 /** The turn's events, which start the turn only once `accepted` holds. */
 const turnEvents = (
   config: CodexTurnConfig,
@@ -279,32 +543,14 @@ const turnEvents = (
     Effect.gen(function* () {
       const report = (event: RuntimeEvent) => Queue.offerUnsafe(queue, event);
       const binary = yield* config.binary;
-      const home = yield* prepareHome(
-        request.tools?.runtimeFolder ?? join(config.workspaceDir, "codex-chat"),
-        config.workspaceDir,
-      );
-      const instructions = codexInstructions(request.instructions);
-      const cwd = config.workspaceDir;
+      const launch = yield* prepareLaunch(config, request, binary);
       // A tool gate needs the turn's events, which need its thread, which only Codex names.
       let turn: CodexToolTurn | undefined;
       const server = yield* config
-        .start(
-          {
-            command: binary,
-            args: ["app-server", ...(config.extraArgs ?? [])],
-            // Only named variables reach Codex, which hands its whole environment to its commands (ADR 014).
-            env: {
-              ...(sandboxEnv(process.env) as Record<string, string>),
-              PATH: codexPath(binary, process.env, homedir()),
-              CODEX_HOME: home,
-            },
-            cwd,
-          },
-          {
-            handlers: requestHandlers(config, binary, request.hubTools, () => turn),
-            clientVersion: config.clientVersion,
-          },
-        )
+        .start(launch.command, {
+          handlers: requestHandlers(config, binary, request.hubTools, () => turn),
+          clientVersion: config.clientVersion,
+        })
         .pipe(Effect.mapError(failed));
 
       const tokens = yield* config.signIn(binary);
@@ -313,10 +559,15 @@ const turnEvents = (
           .request("account/login/start", { type: "chatgptAuthTokens", ...tokens })
           .pipe(Effect.mapError(failed));
       }
-      const opened = yield* openThread(server, request, cwd, instructions).pipe(Effect.mapError(failed));
+      const opened = yield* openThread(server, request, launch.cwd, launch.instructions).pipe(Effect.mapError(failed));
       const threadId = opened.thread.id;
       const mapper = codexTurnEvents(threadId);
-      turn = { events: mapper, report, redact: request.redaction?.text ?? ((text) => text) };
+      turn = {
+        events: mapper,
+        report,
+        redact: request.redaction?.text ?? ((text) => text),
+        gate: launch.gate,
+      };
       report({ _tag: "SessionStarted", sessionId: threadId, billing: billingOf(tokens) });
       yield* Deferred.await(accepted);
 
@@ -328,7 +579,7 @@ const turnEvents = (
       const started: TurnStartResponse = yield* server
         .request("turn/start", {
           threadId,
-          input: [{ type: "text", text: turnPrompt(request, instructions), text_elements: [] }],
+          input: [{ type: "text", text: turnPrompt(request, launch.instructions), text_elements: [] }],
           ...TURN_SETTINGS,
           ...(request.model ? { model: request.model } : {}),
           ...(request.effort ? { effort: request.effort } : {}),

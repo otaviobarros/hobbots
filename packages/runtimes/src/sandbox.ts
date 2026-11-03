@@ -3,8 +3,9 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:f
 import { homedir, platform, tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
-import { RuntimeError } from "@hobbots/agents";
+import { operationDecision, RuntimeError } from "@hobbots/agents";
 import type { CommitIdentity, SandboxState } from "@hobbots/domain";
+import type { PolicyContext } from "@hobbots/permissions";
 import { Context, Effect, Layer } from "effect";
 import { gitConfigAccess } from "./git-config.ts";
 
@@ -53,6 +54,15 @@ export interface SandboxScope {
    * holds every hob's stays closed, and so does the user's own runtime state.
    */
   readonly runtimeFolder: string;
+  /**
+   * The only places inside `runtimeFolder` the turn's processes may read and write, for a runtime
+   * that would load what it wrote outside the policy, such as Codex's configuration and execution
+   * rules (ADR 024). Absent, the whole runtime folder is open. Listed one by one, since on Linux a
+   * folder opened for reading hides what is writable inside it. What it may write it may also read.
+   */
+  readonly runtimeAccess?: { readonly read: ReadonlyArray<string>; readonly write: ReadonlyArray<string> };
+  /** More places that must stay readable for the runtime to start, such as the package its binary runs from. */
+  readonly runtimeFiles?: ReadonlyArray<string>;
   /** The turn's own temporary folder. */
   readonly tempFolder: string;
   /** Hosts the turn always reaches, such as its model API. */
@@ -142,15 +152,21 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
     allowRead: [
       ...new Set([
         ...(scope.folderAccess.read ? scope.folders : []),
-        scope.runtimeFolder,
+        // On macOS, writing a path does not open it for reading, and the runtime reads back what it writes.
+        ...(scope.runtimeAccess ? [...scope.runtimeAccess.read, ...scope.runtimeAccess.write] : [scope.runtimeFolder]),
         scope.tempFolder,
         ...binaryDirs,
+        ...(scope.runtimeFiles ?? []),
         ...homeTools,
         ...(scope.gitConfigFiles ?? []),
         ...(scope.signingAgent ? [scope.signingAgent] : []),
       ]),
     ],
-    allowWrite: [...(scope.folderAccess.write ? scope.folders : []), scope.runtimeFolder, scope.tempFolder],
+    allowWrite: [
+      ...(scope.folderAccess.write ? scope.folders : []),
+      ...(scope.runtimeAccess?.write ?? [scope.runtimeFolder]),
+      scope.tempFolder,
+    ],
     denyWrite: [
       scope.dataFolder,
       // Loaded later by the user's own Claude Code, outside any policy.
@@ -214,6 +230,15 @@ export const sandboxEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
           (PASSED_PREFIXES.some((prefix) => key.startsWith(prefix)) && !SECRET_NAME.test(key))),
     ),
   );
+
+/**
+ * Whether a turn's processes may read, and write, its folders at all: what any call the policy lets
+ * through may need. A denied operation stays closed (STD-SEC-002).
+ */
+export const folderAccessFor = (context: PolicyContext): SandboxScope["folderAccess"] => ({
+  read: operationDecision(context, "read-files") !== "deny",
+  write: operationDecision(context, "edit-files") !== "deny",
+});
 
 /** Quotes a word for a POSIX shell. */
 export const shellQuote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
@@ -319,8 +344,10 @@ export const withCommitIdentity = (env: NodeJS.ProcessEnv, commitAs: CommitIdent
 
 // sandbox-runtime puts `TMPDIR=` ahead of the sandbox in the wrapped command line, from the hub's own
 // environment (`/tmp/claude` when it has no CLAUDE_CODE_TMPDIR), which overrides the turn's. That folder
-// is often missing and cannot be made inside the sandbox, so the shell takes the turn's back first.
-const LAUNCHER = `[ -n "$CLAUDE_CODE_TMPDIR" ] && export TMPDIR="$CLAUDE_CODE_TMPDIR"; c=$${COMMAND_VARIABLE}; unset ${COMMAND_VARIABLE}; eval "exec $c"`;
+// is often missing and cannot be made inside the sandbox, so the shell takes the turn's back first,
+// from a variable of Hobbots' own that every runtime keeps.
+const TEMP_VARIABLE = "HOBBOTS_SANDBOX_TMPDIR";
+const LAUNCHER = `[ -n "$${TEMP_VARIABLE}" ] && export TMPDIR="$${TEMP_VARIABLE}"; c=$${COMMAND_VARIABLE}; unset ${COMMAND_VARIABLE}; eval "exec $c"`;
 
 export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandboxShape>()(
   "@hobbots/runtimes/ProcessSandbox",
@@ -454,6 +481,7 @@ export class ProcessSandbox extends Context.Service<ProcessSandbox, ProcessSandb
                       // The runtime keeps its state for this hob there, never in the user's own.
                       CLAUDE_CONFIG_DIR: scope.runtimeFolder,
                       TMPDIR: tempFolder,
+                      [TEMP_VARIABLE]: tempFolder,
                       // Claude Code keeps its own temporary files under /tmp otherwise, outside the sandbox's reach.
                       CLAUDE_CODE_TMPDIR: tempFolder,
                       // Claude Code keeps its sign-in to itself: commands, hooks and MCP servers start without it.

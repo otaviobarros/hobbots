@@ -1,5 +1,14 @@
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  type ApprovalAction,
+  type ApprovalOutcome,
+  actionDigest,
+  type ToolAccess,
+  type TurnApprovals,
+} from "@hobbots/agents";
+import { ApprovalId } from "@hobbots/domain";
+import { Effect } from "effect";
 import type { Account, Model } from "../src/codex/protocol.ts";
 
 /** What the stand-in Codex answers, playing `codex --version` and `codex app-server`. */
@@ -112,3 +121,34 @@ export const fakeCodexLog = (
     return [];
   }
 };
+
+/** Approvals that answer every request with `answer`, recording what was asked. */
+export const approvalsAnswering = (
+  answer: (action: ApprovalAction) => Effect.Effect<ApprovalOutcome>,
+  current: ToolAccess | null,
+) => {
+  const asked: Array<ApprovalAction> = [];
+  const approvals: TurnApprovals = {
+    request: (action) =>
+      Effect.sync(() => {
+        asked.push(action);
+        return { approvalId: ApprovalId.make(`approval-${asked.length}`), decision: answer(action) };
+      }),
+    currentAccess: Effect.succeed(current),
+    grants: Effect.succeed([]),
+    used: () => Effect.void,
+  };
+  return { asked, approvals };
+};
+
+/** The user allows the action once. */
+export const approve = (action: ApprovalAction) =>
+  Effect.map(
+    actionDigest(action),
+    (digest): ApprovalOutcome => ({
+      _tag: "Approved",
+      actionDigest: digest,
+      policyVersion: action.policyVersion,
+      lifetime: "once",
+    }),
+  );

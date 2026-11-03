@@ -635,9 +635,46 @@ export const toolRequests = (
         ? [{ _tag: "Command", operation: "run-commands", cwd }]
         : commandRequests(command, cwd);
     }
+    case "apply_patch":
+      return patchRequests(input, cwd);
     default:
       return null;
   }
+};
+
+/** The changes of a Codex patch, as `policyGate` records them. */
+const patchChanges = (input: Record<string, unknown>): ReadonlyArray<Record<string, unknown>> =>
+  Array.isArray(input.changes) ? (input.changes as ReadonlyArray<Record<string, unknown>>) : [];
+
+/**
+ * The policy requests of a Codex patch (ADR 024): the files it deletes as a deletion, and the files
+ * it adds, changes, moves and moves to as an edit, so a patch that deletes is decided as one
+ * (STD-SEC-002). A patch that names no file is an edit of nothing, which the gate refuses first.
+ */
+const patchRequests = (input: Record<string, unknown>, cwd: string): ReadonlyArray<ToolRequest> => {
+  const changes = patchChanges(input);
+  const deleted = changes.filter((change) => change.kind === "delete");
+  const edited = changes.filter((change) => change.kind !== "delete");
+  const requests: Array<ToolRequest> = [];
+  if (edited.length > 0 || deleted.length === 0) {
+    requests.push({ _tag: "Files", operation: "edit-files", paths: patchPaths({ changes: edited }), cwd });
+  }
+  if (deleted.length > 0) {
+    requests.push({ _tag: "Files", operation: "delete-files", paths: patchPaths({ changes: deleted }), cwd });
+  }
+  return requests;
+};
+
+/** Every path a Codex patch touches: each file it adds, changes or deletes, and where it moves one. */
+export const patchPaths = (input: Record<string, unknown>): ReadonlyArray<string> => {
+  const changes = patchChanges(input);
+  return [
+    ...new Set(
+      changes
+        .flatMap((change) => [text(change, "path"), text(change, "move_path")])
+        .filter((path) => path !== undefined),
+    ),
+  ];
 };
 
 const shorten = (value: string, limit = 60) => (value.length > limit ? `${value.slice(0, limit - 1)}…` : value);
@@ -845,6 +882,11 @@ export const toolLabel = (
     case "Bash": {
       const command = text(input, "command");
       return `Running ${command === undefined ? "a command" : redactedCommandLabel(command, redact)}`;
+    }
+    case "apply_patch": {
+      const paths = patchPaths(input);
+      const verb = patchChanges(input).every((change) => change.kind === "delete") ? "Deleting" : "Editing";
+      return paths.length === 1 ? `${verb} ${basename(redact(paths[0] as string))}` : `${verb} ${paths.length} files`;
     }
     default:
       return `Using ${tool}`;
