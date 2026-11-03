@@ -9,7 +9,7 @@ const isEffort = Schema.is(Effort);
  * The efforts Hobbots offers for a Codex model: those it lists that Hobbots knows. `ultra` starts
  * Codex's own sub-agents, which Hobbots turns off (ADR 024), so it is never offered.
  */
-export const codexEfforts = (model: Model): ReadonlyArray<Effort> =>
+const codexEfforts = (model: Model): ReadonlyArray<Effort> =>
   model.supportedReasoningEfforts
     .map((option) => option.reasoningEffort)
     .filter((effort) => effort !== "ultra")

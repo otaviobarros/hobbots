@@ -1,8 +1,8 @@
 import { AdditionalRuntimes, RuntimeAdapter, RuntimeError } from "@hobbots/agents";
 import { type RuntimeEnforcement, RuntimeHealth } from "@hobbots/domain";
-import { DateTime, type Duration, Effect, Layer, Stream } from "effect";
+import { type Duration, Effect, Layer, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/process";
-import { expiringCache, modelListMaxAge } from "../claude-code.ts";
+import { installedRuntimeChecks } from "../binary.ts";
 import { type AppServer, startAppServer } from "./app-server.ts";
 import { billingOf, readSignIn } from "./auth.ts";
 import { codexEnv, codexLocator, minimumCodexVersion } from "./locate.ts";
@@ -24,7 +24,7 @@ const outdated = `Hobbots needs Codex ${minimumCodexVersion} or later. Run \`npm
 const notYet = { status: "unsupported", evidence: "Hobbots does not run Codex turns yet." } as const;
 
 /** What the Codex adapter enforces until it runs turns: nothing, so nothing is offered as safe. */
-export const codexEnforcement: RuntimeEnforcement = {
+const codexEnforcement: RuntimeEnforcement = {
   toolInterception: notYet,
   processSandbox: notYet,
   hubTools: notYet,
@@ -72,53 +72,18 @@ export const makeCodex = (config: CodexConfig) =>
         ),
       );
 
-    // Finds Codex and checks its version before starting it.
-    const health = Effect.gen(function* () {
-      const checkedAt = DateTime.formatIso(yield* DateTime.now);
-      const located = yield* locate;
-      switch (located._tag) {
-        case "Missing":
-          return runtimeHealth({
-            availability: "unavailable",
-            billing: null,
-            version: null,
-            detail: installGuidance,
-            checkedAt,
-          });
-        case "Broken":
-          return runtimeHealth({
-            availability: "unavailable",
-            billing: null,
-            version: null,
-            detail: `${located.binary} did not report a Codex version. ${notStarted}`,
-            checkedAt,
-          });
-        case "Outdated":
-          return runtimeHealth({
-            availability: "outdated",
-            billing: null,
-            version: located.version,
-            detail: outdated,
-            checkedAt,
-          });
-        case "Found":
-          return yield* probe(located.binary, located.version, checkedAt);
-      }
-    });
-
-    // Each binary's list is kept for a while, since starting Codex takes a moment. A sign-in can
-    // change the list without a new binary, so it is fetched again when it expires.
-    const modelCache = expiringCache(modelListMaxAge);
-    const models = Effect.gen(function* () {
-      const located = yield* locate;
-      if (located._tag !== "Found") return codexFallbackModels;
-      return yield* modelCache(
-        `${located.binary}@${located.version}`,
-        askAppServer(located.binary, listModels).pipe(
+    // Finds Codex and checks its version before starting it. A sign-in can change the model list
+    // without a new binary, so the list is fetched again when it expires.
+    const { health, models } = installedRuntimeChecks({
+      locate,
+      words: { name: "Codex", install: installGuidance, notStarted, outdated },
+      notFound: (found) => runtimeHealth({ ...found, billing: null }),
+      probe,
+      fallbackModels: codexFallbackModels,
+      listModels: (binary) =>
+        askAppServer(binary, listModels).pipe(
           Effect.map((listed) => (listed.length === 0 ? codexFallbackModels : toCodexModels(listed))),
-          Effect.orElseSucceed(() => codexFallbackModels),
         ),
-      );
     });
 
     return RuntimeAdapter.of({

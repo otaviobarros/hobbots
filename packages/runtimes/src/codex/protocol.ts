@@ -9,7 +9,7 @@
 /** A JSON-RPC request ID. Codex answers with the ID it was sent. */
 export type RequestId = string | number;
 
-export interface JsonRpcError {
+interface JsonRpcError {
   readonly code: number;
   readonly message: string;
   readonly data?: unknown;
@@ -24,13 +24,13 @@ export interface JsonRpcMessage {
   readonly error?: JsonRpcError;
 }
 
-export interface ClientInfo {
+interface ClientInfo {
   readonly name: string;
   readonly title: string | null;
   readonly version: string;
 }
 
-export interface InitializeParams {
+interface InitializeParams {
   readonly clientInfo: ClientInfo;
   readonly capabilities: {
     /** Dynamic tools and other experimental methods need it (ADR 024). */
@@ -48,7 +48,7 @@ export interface InitializeResponse {
 }
 
 /** ChatGPT plans, as Codex names them; a newer Codex may add more. */
-export type PlanType = string;
+type PlanType = string;
 
 /** How Codex is signed in. Only `chatgpt` runs hobs (ADR 024). */
 export type Account =
@@ -62,12 +62,12 @@ export type Account =
   | { readonly type: "amazonBedrock"; readonly usesCodexManagedCredentials: boolean }
   | { readonly type: "gcp" };
 
-export interface GetAccountParams {
+interface GetAccountParams {
   /** Asks Codex to refresh its login first. Health checks never do. */
   readonly refreshToken?: boolean;
 }
 
-export interface WorkspaceRouting {
+interface WorkspaceRouting {
   /** The ChatGPT workspace the sign-in uses. */
   readonly chatgptAccountId: string;
   readonly backendOrigin: string;
@@ -79,7 +79,7 @@ export interface GetAccountResponse {
   readonly workspaceRouting: WorkspaceRouting | null;
 }
 
-export type AuthMode =
+type AuthMode =
   | "apikey"
   | "chatgpt"
   | "chatgptAuthTokens"
@@ -89,25 +89,25 @@ export type AuthMode =
   | "bedrockApiKey"
   | "bedrockAccessKeys";
 
-export interface GetAuthStatusParams {
+interface GetAuthStatusParams {
   readonly includeToken: boolean | null;
   readonly refreshToken: boolean | null;
 }
 
-export interface GetAuthStatusResponse {
+interface GetAuthStatusResponse {
   readonly authMethod: AuthMode | null;
   /** Only with `includeToken`. Hobbots asks for it only to sign a turn in, never for health. */
   readonly authToken: string | null;
   readonly requiresOpenaiAuth: boolean | null;
 }
 
-export interface ModelListParams {
+interface ModelListParams {
   readonly cursor?: string | null;
   readonly limit?: number | null;
   readonly includeHidden?: boolean | null;
 }
 
-export interface ReasoningEffortOption {
+interface ReasoningEffortOption {
   /** Codex's effort name, such as "low" or "ultra"; a newer Codex may add more. */
   readonly reasoningEffort: string;
   readonly description: string;

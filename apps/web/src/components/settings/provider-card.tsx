@@ -55,6 +55,47 @@ const fixHint = (runtime: RuntimeKind, health: RuntimeHealth | undefined) => {
   }
 };
 
+/** Claude Code that bills an API key instead of the user's subscription, which costs them extra. */
+const billsElsewhere = (health: RuntimeHealth | undefined) =>
+  health?.runtime === "claude-code" &&
+  health.availability === "ready" &&
+  !(health.billing?.startsWith("subscription") ?? false) &&
+  health.billing !== "fake";
+
+function ProviderFacts({ health }: { health: RuntimeHealth }) {
+  return (
+    <>
+      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt className="text-label">{copy.billing}</dt>
+        <dd className={billsElsewhere(health) ? "m-0 text-lantern" : "m-0"}>{health.billing ?? "—"}</dd>
+        <dt className="text-label">{copy.version}</dt>
+        <dd className="m-0">{health.version ?? "—"}</dd>
+      </dl>
+      <h3 className="lbl mt-3 mb-1.5 text-xs text-label">{sharedMessages.enforcement.providerHeading}</h3>
+      <EnforcementList enforcement={health.enforcement} />
+    </>
+  );
+}
+
+function FixActions({ guide, notFound }: { guide: string; notFound: boolean }) {
+  const runtimes = useQuery(runtimesQuery);
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      {notFound && (
+        <Button asChild variant="outline" size="sm">
+          <a href={guide} target="_blank" rel="noreferrer">
+            {copy.installGuide}
+          </a>
+        </Button>
+      )}
+      <Button variant="outline" size="sm" onClick={() => void runtimes.refetch()} disabled={runtimes.isFetching}>
+        {runtimes.isFetching ? copy.lookingAgain : copy.checkAgain}
+      </Button>
+      <span className="text-xs text-label">{copy.noRestart}</span>
+    </div>
+  );
+}
+
 /**
  * One provider's health in Settings › AI providers, with how to fix it when it cannot think.
  * Detail is never shown: it can carry account names.
@@ -65,9 +106,7 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
   const name = RUNTIME_NAMES[runtime];
   const look = PROVIDER_LOOK[runtime];
   const hint = fixHint(runtime, health);
-  const onSubscription = health?.billing?.startsWith("subscription") ?? false;
-  const warnBilling =
-    runtime === "claude-code" && health?.availability === "ready" && !onSubscription && health.billing !== "fake";
+  const availability = health?.availability ?? "unavailable";
 
   return (
     <section aria-label={name} className="cut bg-card p-3">
@@ -76,39 +115,14 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
           {look.mark}
         </span>
         <span className="font-pixel flex-1 text-base font-semibold">{name}</span>
-        <Badge variant={health?.availability === "ready" ? "working" : "waiting"}>
-          {runtimes.isPending ? copy.checking : copy.availability[health?.availability ?? "unavailable"]}
+        <Badge variant={availability === "ready" ? "working" : "waiting"}>
+          {runtimes.isPending ? copy.checking : copy.availability[availability]}
         </Badge>
       </div>
-      {health && (
-        <>
-          <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-            <dt className="text-label">{copy.billing}</dt>
-            <dd className={warnBilling ? "m-0 text-lantern" : "m-0"}>{health.billing ?? "—"}</dd>
-            <dt className="text-label">{copy.version}</dt>
-            <dd className="m-0">{health.version ?? "—"}</dd>
-          </dl>
-          <h3 className="lbl mt-3 mb-1.5 text-xs text-label">{sharedMessages.enforcement.providerHeading}</h3>
-          <EnforcementList enforcement={health.enforcement} />
-        </>
-      )}
+      {health && <ProviderFacts health={health} />}
       {hint && <p className="mt-2 mb-0 text-sm text-lantern">{hint}</p>}
-      {hint && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {health?.version === null && (
-            <Button asChild variant="outline" size="sm">
-              <a href={look.guide} target="_blank" rel="noreferrer">
-                {copy.installGuide}
-              </a>
-            </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={() => void runtimes.refetch()} disabled={runtimes.isFetching}>
-            {runtimes.isFetching ? copy.lookingAgain : copy.checkAgain}
-          </Button>
-          <span className="text-xs text-label">{copy.noRestart}</span>
-        </div>
-      )}
-      {warnBilling && <p className="mt-2 mb-0 text-sm text-lantern">{copy["claude-code"].billingWarning}</p>}
+      {hint && <FixActions guide={look.guide} notFound={health?.version === null} />}
+      {billsElsewhere(health) && <p className="mt-2 mb-0 text-sm text-lantern">{copy["claude-code"].billingWarning}</p>}
     </section>
   );
 }
