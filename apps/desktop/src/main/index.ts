@@ -9,11 +9,12 @@ import { followHub } from "./hub-events.ts";
 import { handleKeepRunningIpc } from "./keep-running.ts";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
 import { startMenuBar } from "./menu-bar.ts";
+import { handleNotificationIpc, notificationChoices, notifyWhenOn } from "./notification-choices.ts";
 import { openRequestIn } from "./open-request.ts";
 import { deviceNotices, type RequestNoticesOptions, requestNotices } from "./request-notices.ts";
 import { ServerSupervisor, StartTimedOut } from "./server.ts";
 import { checkServer, requireOurs, ServerProblem, serverProblem } from "./server-identity.ts";
-import { fileSettingsStore } from "./settings.ts";
+import { fileSettingsStore, type SettingsStore } from "./settings.ts";
 import { loginShellPath, mergePaths } from "./shell-path.ts";
 import { handleShowFileIpc } from "./show-file.ts";
 import { claimSingleInstance, onSecondLaunch } from "./single-instance.ts";
@@ -182,7 +183,14 @@ const renewOnRefusal = () =>
  * no Hobbots window is focused, from the main process so it works with every window closed. The
  * main process reads the Inbox as the hub's window, with the window key (PE-006).
  */
-const noticesOn = (open: (requestId: string) => void) => {
+const noticesOn = (open: (requestId: string) => void, settings: SettingsStore) => {
+  const show = ({ title, body, silent }: { title: string; body: string; silent: boolean }, onClick: () => void) => {
+    const notice = new Notification({ title, body, silent });
+    notice.on("click", onClick);
+    notice.show();
+    return notice;
+  };
+  const choices = () => notificationChoices(settings);
   const options: RequestNoticesOptions = {
     read: async (path) => {
       try {
@@ -193,17 +201,12 @@ const noticesOn = (open: (requestId: string) => void) => {
       }
     },
     isFocused: () => BrowserWindow.getFocusedWindow() !== null,
-    notify: ({ title, body }, onClick) => {
-      const notice = new Notification({ title, body });
-      notice.on("click", onClick);
-      notice.show();
-      return notice;
-    },
+    notify: notifyWhenOn("requests", choices, show),
     open,
   };
   const requests = requestNotices(options);
   // A device's prompt shows over the window, so its notification only needs to bring the window forward.
-  const devices = deviceNotices({ ...options, open: () => open("") });
+  const devices = deviceNotices({ ...options, notify: notifyWhenOn("devices", choices, show), open: () => open("") });
   return { requests, devices };
 };
 
@@ -277,6 +280,7 @@ app.whenReady().then(async () => {
     openSystemSettings: () => shell.openExternal(loginItemsSettingsUrl),
   });
   handleKeepRunningIpc({ ipcMain, settings, isTrusted });
+  handleNotificationIpc({ ipcMain, settings, isTrusted });
   handleFolderDialogIpc({
     ipcMain,
     isTrusted,
@@ -324,7 +328,7 @@ app.whenReady().then(async () => {
   const notices = noticesOn(async (requestId) => {
     const window = await menuBar.showWindow();
     if (window && requestId !== "") openRequestIn(window, requestId);
-  });
+  }, settings);
   followHubFor(menuBar, notices);
   // The Dock icon or opening the app from Finder; macOS already fronts a visible window.
   app.on("activate", (_event, hasVisibleWindows) => {

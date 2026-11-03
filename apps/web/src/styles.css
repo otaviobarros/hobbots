@@ -3,6 +3,18 @@
 @import "@fontsource-variable/atkinson-hyperlegible-next";
 @import "@fontsource-variable/pixelify-sans";
 
+/* `motion-reduce:` follows this device's Reduce motion choice as well as the system's (lib/motion.ts). */
+@custom-variant motion-reduce {
+  @media (prefers-reduced-motion: reduce) {
+    :root:not([data-motion="full"]) & {
+      @slot;
+    }
+  }
+  :root[data-motion="reduce"] & {
+    @slot;
+  }
+}
+
 /* Hobbots design tokens (docs/design/ui-ux.md). The shadcn/ui names map onto them so
    generated components pick up the theme; the named tokens are for everything else. */
 @theme {
@@ -615,14 +627,23 @@ body {
   font-weight: 700;
 }
 
-/* Every animation and transition stops with Reduce motion. */
+/* Every animation and transition stops with Reduce motion: the system's setting, unless this device
+   chose otherwise in Settings, which marks the root with data-motion (apps/web/src/lib/motion.ts). */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  :root:not([data-motion="full"]) *,
+  :root:not([data-motion="full"]) *::before,
+  :root:not([data-motion="full"]) *::after {
     /* biome-ignore lint/complexity/noImportantStyles: Reduce motion must win over every animation. */
     animation: none !important;
     /* biome-ignore lint/complexity/noImportantStyles: Reduce motion must win over every transition. */
     transition: none !important;
   }
+}
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  /* biome-ignore lint/complexity/noImportantStyles: Reduce motion must win over every animation. */
+  animation: none !important;
+  /* biome-ignore lint/complexity/noImportantStyles: Reduce motion must win over every transition. */
+  transition: none !important;
 }

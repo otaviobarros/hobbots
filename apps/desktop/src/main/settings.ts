@@ -10,6 +10,10 @@ interface DesktopSettings {
   readonly openAtLogin?: boolean;
   /** Closing the last window keeps the app, the server and running work alive (ADR 012). */
   readonly keepRunningInMenuBar?: boolean;
+  /** Which system notifications the app sends, each on until the user turns it off. */
+  readonly notifyRequests?: boolean;
+  readonly notifyDevices?: boolean;
+  readonly notifySound?: boolean;
 }
 
 export interface SettingsStore {
@@ -17,14 +21,21 @@ export interface SettingsStore {
   readonly update: (patch: DesktopSettings) => DesktopSettings;
 }
 
+const BOOLEAN_KEYS = [
+  "openAtLogin",
+  "keepRunningInMenuBar",
+  "notifyRequests",
+  "notifyDevices",
+  "notifySound",
+] as const satisfies ReadonlyArray<keyof DesktopSettings>;
+
 const parse = (raw: string): DesktopSettings => {
   const value: unknown = JSON.parse(raw);
   if (typeof value !== "object" || value === null) return {};
-  const { openAtLogin, keepRunningInMenuBar } = value as Record<string, unknown>;
-  return {
-    ...(typeof openAtLogin === "boolean" ? { openAtLogin } : {}),
-    ...(typeof keepRunningInMenuBar === "boolean" ? { keepRunningInMenuBar } : {}),
-  };
+  const record = value as Record<string, unknown>;
+  return Object.fromEntries(
+    BOOLEAN_KEYS.flatMap((key) => (typeof record[key] === "boolean" ? [[key, record[key]]] : [])),
+  );
 };
 
 /** A small JSON file in the app's data folder. A missing or unreadable file reads as no choices made. */

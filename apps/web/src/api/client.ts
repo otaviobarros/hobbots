@@ -11,6 +11,13 @@ export interface LoginItemState {
   readonly status: LoginItemStatus;
 }
 
+/** Which system notifications the desktop app sends, each on until turned off. */
+export interface NotificationChoices {
+  readonly requests: boolean;
+  readonly devices: boolean;
+  readonly sound: boolean;
+}
+
 declare global {
   interface Window {
     /** Set by the Electron preload script. */
@@ -24,6 +31,11 @@ declare global {
       readonly keepRunning?: {
         readonly get: () => Promise<boolean>;
         readonly set: (on: boolean) => Promise<boolean>;
+      };
+      /** Which system notifications the desktop app sends; `set` changes the ones it names. */
+      readonly notifications?: {
+        readonly get: () => Promise<NotificationChoices>;
+        readonly set: (patch: Partial<NotificationChoices>) => Promise<NotificationChoices>;
       };
       /** Opens the system folder picker; resolves with the chosen folder, or null when cancelled. */
       readonly chooseFolder?: () => Promise<string | null>;

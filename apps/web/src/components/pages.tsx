@@ -14,6 +14,10 @@ import { WaitingDevices } from "./pairing/waiting-devices.tsx";
 import { RemoteAccessSettings } from "./remote-access-settings.tsx";
 import { RuntimeCard } from "./runtime.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
+import { AboutSettings } from "./settings/about-settings.tsx";
+import { messages as settingsMessages } from "./settings/messages.ts";
+import { NotificationSettings } from "./settings/notification-settings.tsx";
+import { ReduceMotionRow } from "./settings/reduce-motion.tsx";
 import { StandingRuleSettings } from "./standing-rules/standing-rules.tsx";
 
 function Page({
@@ -111,8 +115,12 @@ function PermissionSettings() {
 export function SettingsPage() {
   return (
     <Page icon="Settings" title="Settings" intro="How Hobbots starts, AI providers, devices, backups and diagnostics.">
-      <Panel label="General">
+      <Panel label={settingsMessages.thisApp.heading} id="this-app">
+        <span className="lbl text-label">{settingsMessages.thisApp.starts}</span>
         <GeneralSettings />
+        <ReduceMotionRow />
+        <span className="lbl pt-2 text-label">{settingsMessages.thisApp.notifications}</span>
+        <NotificationSettings />
       </Panel>
       <Panel label="Permissions">
         <PermissionSettings />
@@ -138,6 +146,9 @@ export function SettingsPage() {
       </Panel>
       <Panel label="Archived hobs">
         <ArchivedHobs />
+      </Panel>
+      <Panel label={settingsMessages.about.heading} id="about">
+        <AboutSettings />
       </Panel>
     </Page>
   );
