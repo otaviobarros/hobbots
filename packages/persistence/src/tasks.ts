@@ -879,6 +879,7 @@ export const TaskRepositoryLive = Layer.effect(
       listStrandedSteps: read.strandedSteps.pipe(Effect.orDie),
       listCancellingTasks: read.cancelling.pipe(Effect.orDie),
       listLiveAttempts: read.liveAttempts.pipe(Effect.orDie),
+      listRootsAtWork: read.rootsAtWork.pipe(Effect.orDie),
     });
   }),
 );

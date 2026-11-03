@@ -57,7 +57,7 @@ const rook = task("badge", ROOK);
 const pip = task("review", PIP);
 
 describe("Overlapping changes", () => {
-  it("leaves out the writer, its own hob's Tasks, ended Tasks and Tasks with no Attempt", () => {
+  it("leaves out the writer, its own hob's Tasks and Tasks with no Attempt, and keeps ended ones", () => {
     const tree = new TaskTree({
       tasks: [lead, rook, pip, task("step", PIP), task("old", ROOK, "completed"), task("queued", ROOK, "queued", null)],
       quests: [],
@@ -71,7 +71,7 @@ describe("Overlapping changes", () => {
       notes: [],
       waits: [],
     });
-    expect(othersAtWork(tree, pip).map((each) => each.id)).toEqual(["site", "badge"]);
+    expect(othersAtWork(tree, pip).map((each) => each.id)).toEqual(["site", "badge", "old"]);
   });
 
   it("pins the file on the Task that changed it last, and matches full paths and moves", () => {
@@ -88,6 +88,21 @@ describe("Overlapping changes", () => {
       ["review", "badge", "/work/test/web", "badge.png"],
       ["site", "review", "/work/test/", "web/old.md"],
     ]);
+  });
+
+  it("keeps a change recorded after its own Task ended, but not one made after the other Task ended", () => {
+    // Rook's turn completed his Task at 01:06:00, and its last scan recorded the badge a second later.
+    const done = task("badge", ROOK, "completed");
+    const late = { taskId: done.id, folder: "/work/test", changes: [change(done, "/work/test", "web/badge.png", 1)] };
+    const stepped = overlapsOf(done, late, [{ task: pip, changes: [change(pip, "/work/test", "web/badge.png", 0)] }]);
+    expect(stepped.map((each) => [each.writer.id, each.other.id])).toEqual([["badge", "review"]]);
+    // Pip changes the badge after Rook's Task ended: Rook was no longer at work, so it is no overlap.
+    const after = { taskId: pip.id, folder: "/work/test", changes: [change(pip, "/work/test", "web/badge.png", 2)] };
+    expect(overlapsOf(pip, after, [{ task: done, changes: [change(done, "/work/test", "web/badge.png", 0)] }])).toEqual(
+      [],
+    );
+    // Both ended: nobody is left at work to tell.
+    expect(overlapsOf(task("review", PIP, "failed"), late, [{ task: done, changes: late.changes }])).toEqual([]);
   });
 
   it("gives a pair of Tasks and a file one id, whichever of them wrote last", () => {

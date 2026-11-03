@@ -285,6 +285,8 @@ export class TaskRepository extends Context.Service<
     readonly listCancellingTasks: Effect.Effect<ReadonlyArray<Task>>;
     /** Every Attempt still starting or running, oldest first: after a restart, none of them runs. */
     readonly listLiveAttempts: Effect.Effect<ReadonlyArray<Attempt>>;
+    /** The top Tasks of work that has not ended where a Task has an Attempt, for the hub to look over again. */
+    readonly listRootsAtWork: Effect.Effect<ReadonlyArray<TaskId>>;
   }
 >()("@hobbots/agents/TaskRepository") {}
 
