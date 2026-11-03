@@ -216,7 +216,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "hand_off",
     description:
-      "Give an artifact one Task under you made to another Task under you, as context for its brief. Members never message each other; results move only this way.",
+      "Give an artifact one Task under you made to another Task under you, as context for its brief. A Task already gets what the Tasks it depends on returned when it starts, so use this for anything else, or for a Task that is already running. Members never message each other.",
     label: "Handing off a result",
   },
   {

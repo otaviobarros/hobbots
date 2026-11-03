@@ -115,6 +115,17 @@ const milestonesToReport = (task: Task, tree: TaskTree): ReadonlyArray<string> =
 };
 
 /**
+ * How results move between the members of a Quest (ADR 018). Its lead and its members are told the
+ * same words, so a lead never answers a member with a rule the hub does not follow.
+ */
+export const RESULTS_RULE =
+  "A Task that comes after others starts once they have completed, and the hub gives it what they returned. Members never message each other: anything else one member made reaches another only when the lead calls hand_off.";
+
+/** What the lead of a Quest is told in each turn on its Task, after the rule itself. */
+const LEAD_DUTY =
+  "So never hand a Task what the Tasks it comes after returned. Call hand_off when a member needs something else, or needs a result while it is already running.";
+
+/**
  * The prompt a party member's session starts from (ADR 018): the lead's brief first, then what the
  * lead expects back, what each Task it comes after returned and anything handed to it, then how to
  * report. The member works with its lead only: the hub gives it what the Tasks it comes after
@@ -132,6 +143,7 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
     task.brief,
     "---",
     `${lead} gave you this Task as part of a Quest ${lead} leads. You work on it in your own session, and you deal only with ${lead}, never with the other hobs on the Quest.`,
+    RESULTS_RULE,
     ...(delegation?.expectedOutput == null ? [] : [`${lead} expects back: ${delegation.expectedOutput}`]),
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(task, tree),
@@ -253,8 +265,8 @@ export const stepPromptShows = (step: Task, tree: TaskTree): ((item: BackpackIte
 
 /**
  * What the owner's chat turn is told of the open Task it works on: the Task, and for each Task
- * under it, and under its own steps, its state, result or latest checkpoint. Transcripts never
- * reach it.
+ * under it, and under its own steps, its state, result or latest checkpoint, and when it leads a
+ * Quest, how results move between its members. Transcripts never reach it.
  */
 export const ownerBriefing = (task: Task, tree: TaskTree): string => {
   const under = briefedUnder(task, tree);
@@ -262,8 +274,10 @@ export const ownerBriefing = (task: Task, tree: TaskTree): string => {
   const answers = answeredFor(task, tree).map(
     (question) => `- ${cut(question.text, SUMMARY_LIMIT)} Answer: ${cut(question.answer ?? "", SUMMARY_LIMIT)}`,
   );
+  const leads = tree.quests.some((quest) => quest.taskId === task.id);
   return [
     `You are working on Task ${task.id} (${task.state}) for this conversation${above === 0 ? "" : ", under another Task"}: ${firstLine(task.brief)}`,
+    ...(leads ? [`You lead the Quest on this Task. ${RESULTS_RULE} ${LEAD_DUTY}`] : []),
     ...(answers.length === 0 ? [] : ["Answers to the questions you asked about it:", ...answers]),
     ...(under.length === 0
       ? []
