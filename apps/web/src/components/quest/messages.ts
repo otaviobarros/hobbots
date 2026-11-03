@@ -142,6 +142,8 @@ export const messages = {
     leadsParty: ({ names }: { names: string }) => `Leads ${names}`,
     /** Another Task of the work changed a file this one changed too (#570). */
     sameFile: ({ names }: { names: string }) => `Same file as ${names}`,
+    /** A member that started a Quest of its own but has brought nobody into it (#576). */
+    nobodyYet: "No one brought in yet",
     pick: "Pick a Task to retry, reassign or cancel it.",
     workbench: "Open in Workbench",
     controls: ({ title }: { title: string }) => `Controls for ${title}`,
