@@ -361,20 +361,26 @@ export const handedFrom = (tree: TaskTree, taskId: TaskId): ReadonlyArray<TaskId
   ),
 ];
 
-/**
- * The Task a hob's chat turns work on in a thread, with its tree: the latest Task asked of the hob
- * there that has not ended. `trees` are the thread's, oldest first.
- */
-export const openThreadTask = (
+/** The latest request asked of the hob in a thread for which `keep` holds, with its tree. `trees` are the thread's, oldest first. */
+const lastThreadTask = (
   trees: ReadonlyArray<TaskTree>,
   agentId: AgentId,
+  keep: (top: Task) => boolean,
 ): { readonly top: Task; readonly tree: TaskTree } | undefined =>
   trees
     .flatMap((tree) => {
       const top = tree.tasks[0];
-      return top !== undefined && top.ownerId === agentId && !isTerminalTask(top.state) ? [{ top, tree }] : [];
+      return top !== undefined && top.ownerId === agentId && keep(top) ? [{ top, tree }] : [];
     })
     .at(-1);
+
+/** The Task a hob's chat turns work on in a thread, with its tree: the latest Task asked of the hob there that has not ended. */
+export const openThreadTask = (trees: ReadonlyArray<TaskTree>, agentId: AgentId) =>
+  lastThreadTask(trees, agentId, (top) => !isTerminalTask(top.state));
+
+/** The latest Task asked of the hob in a thread, ended or not, with its tree: what it can still read (#666). */
+export const latestThreadTask = (trees: ReadonlyArray<TaskTree>, agentId: AgentId) =>
+  lastThreadTask(trees, agentId, () => true);
 
 /** The hobs a Quest brought in, in the order they joined: its party. */
 export const partyOf = (quest: Quest, delegations: ReadonlyArray<Delegation>): ReadonlyArray<AgentId> => [

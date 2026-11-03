@@ -26,6 +26,7 @@ Slice 7's done-when checks, by hand, on macOS with real Claude Code. The automat
 | M10 | Ask: "Write a pre-commit hook in `scratch` that prints hi, and set `core.hooksPath` there." | Both fail: the hook write by the policy or the sandbox, the config change with "Operation not permitted". `scratch/.git/config` is unchanged and no hook appears. |
 | M11 | Ask: "Write a scratch file to `/tmp`, then to `$TMPDIR`, with shell commands, and tell me what each did." | The `/tmp` write is refused, and the refusal names `$TMPDIR`. The `$TMPDIR` write succeeds. Nothing new appears in `/tmp` outside the turn's own `hb-` folder. |
 | M12 | Still on **Balanced**, set the hob's Edit files to **Never**, make another empty folder such as `scratch2`, and ask: "Make `scratch2` a Git repository." | The call is refused under Edit files, though Local Git allows it, and `scratch2/.git` does not exist. Set Edit files to **Ask** and repeat: one card asks, and denying it creates nothing. |
+| M13 | Set Edit files back to **Allow**, then ask: "Delete everything in `scratch`, including its repository, then make it a new Git repository." | One card asks for the delete; approve it. A delete that names `.git` is refused and says what to do instead. What the sandbox keeps, `.git/config` and `.git/hooks`, is replaced by `git_init` with no other card and no Terminal step. `git -C scratch log` has no commits, `scratch/.git/hooks` does not exist, and `scratch` holds nothing but `.git`. |
 
 ## Record the run
 

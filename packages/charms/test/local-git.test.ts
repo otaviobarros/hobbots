@@ -24,7 +24,7 @@ import {
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer } from "effect";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { LocalGitToolsLive, NEXT_TURN, PUBLISH_SCRIPT } from "../src/index.ts";
+import { KEPT, LocalGitToolsLive, NEXT_TURN, PUBLISH_SCRIPT, REPLACED } from "../src/index.ts";
 
 // #578: in the sandbox `git init` cannot write a new repository's config, so the hub creates the
 // repository for the hob, under its policy, with Git's defaults and no hooks (ADR 014).
@@ -106,6 +106,17 @@ const callInit = (
     const answer = yield* tools.call(GIT_INIT_TOOL, input, { id: "step-1", report: (event) => events.push(event) });
     return { offered: true, names: tools.tools.map((tool) => tool.name), answer, events };
   }).pipe(Effect.provide(layer), Effect.runPromise);
+
+/** Runs `PUBLISH_SCRIPT` with `args`, as the tool does, and answers how it ended. */
+const runPublish = (args: ReadonlyArray<unknown>) => {
+  try {
+    execFileSync(process.execPath, ["-e", PUBLISH_SCRIPT, JSON.stringify(args)], { encoding: "utf8" });
+    return { code: 0, out: "" };
+  } catch (error) {
+    const failed = error as { status: number; stdout: string };
+    return { code: failed.status, out: failed.stdout };
+  }
+};
 
 const gitIn = (folder: string, ...args: Array<string>) =>
   execFileSync("git", ["-C", folder, ...args], {
@@ -237,22 +248,7 @@ describe("creating a repository for a hob", () => {
     // The copy binds to the folder decided: a level, or .git, laid as a link after the decision leads nowhere.
     const made = path.join(root, `made-${count}`);
     execFileSync("git", ["init", "--quiet", "--template=", made]);
-    const publish = (levels: Array<string>) =>
-      (() => {
-        try {
-          execFileSync(
-            process.execPath,
-            ["-e", PUBLISH_SCRIPT, JSON.stringify([project, levels, path.join(made, ".git")])],
-            {
-              encoding: "utf8",
-            },
-          );
-          return { code: 0, out: "" };
-        } catch (error) {
-          const failed = error as { status: number; stdout: string };
-          return { code: failed.status, out: failed.stdout };
-        }
-      })();
+    const publish = (levels: Array<string>) => runPublish([project, levels, path.join(made, ".git"), null]);
     fs.symlinkSync(outside, path.join(project, "swapped"));
     expect(publish(["swapped", "app"])).toMatchObject({ code: 3, out: expect.stringContaining("moved") });
     fs.symlinkSync(outside, path.join(project, ".git"));
@@ -264,5 +260,85 @@ describe("creating a repository for a hob", () => {
     expect(fs.readdirSync(path.join(project, "app", ".git")).sort()).toEqual(
       fs.readdirSync(path.join(made, ".git")).sort(),
     );
+  });
+});
+
+/** What a turn's sandbox leaves of a repository a hob deletes: its config and hooks (#663, TC-PE-443). */
+const leaveStub = (folder: string) => {
+  gitIn(folder, "init", "--quiet");
+  gitIn(folder, "remote", "add", "origin", "https://example.com/earlier.git");
+  fs.writeFileSync(path.join(folder, ".git", "hooks", "pre-commit"), "echo earlier\n");
+  for (const name of fs.readdirSync(path.join(folder, ".git"))) {
+    if (name !== "config" && name !== "hooks") fs.rmSync(path.join(folder, ".git", name), { recursive: true });
+  }
+};
+
+describe("replacing what a deleted repository leaves", () => {
+  // covers PE-005, PE-001
+  it("[TC-PE-440] replaces a .git that holds only a config and hooks, and refuses any other .git, saying what to do", async () => {
+    leaveStub(project);
+    const replaced = await callInit(accessFor(project), { folder: project });
+    expect(replaced.answer).toMatchObject({ refused: false });
+    expect(replaced.answer?.text).toContain(REPLACED);
+    // The turn sees a stub's replacement at once, on Linux too.
+    expect(replaced.answer?.text).not.toContain(NEXT_TURN);
+    expect(gitIn(project, "rev-parse", "--is-inside-work-tree")).toBe("true");
+    // Git's defaults and no hooks: nothing of the earlier repository is left.
+    expect(fs.existsSync(path.join(project, ".git", "hooks"))).toBe(false);
+    expect(fs.readFileSync(path.join(project, ".git", "config"), "utf8")).not.toContain("earlier.git");
+    expect(fs.readdirSync(staging)).toEqual([]);
+    // Edit files is decided on the new HEAD, which the stub's config and hooks are not in.
+    expect(replaced.events).toContainEqual(
+      expect.objectContaining({ _tag: "ToolStarted", tool: GIT_INIT_TOOL, targets: [project] }),
+    );
+    // Never on Edit files still refuses, and leaves the stub as it is.
+    const other = path.join(project, "other");
+    fs.mkdirSync(other);
+    leaveStub(other);
+    const never = await callInit(accessFor(project, "balanced", { "edit-files": "deny" }), { folder: other });
+    expect(never.answer).toMatchObject({ refused: true });
+    expect(fs.readdirSync(path.join(other, ".git")).sort()).toEqual(["config", "hooks"]);
+
+    // A repository is left as it is.
+    const repository = await callInit(accessFor(project), { folder: project });
+    expect(repository.answer?.text).toContain("already a Git repository");
+    // A .git with more than a stub holds is named, with what to delete for git_init to replace it.
+    fs.rmSync(path.join(project, ".git", "HEAD"));
+    fs.mkdirSync(path.join(project, ".git", "objects", "ab"), { recursive: true });
+    fs.writeFileSync(path.join(project, ".git", "objects", "ab", "cdef"), "x");
+    const broken = await callInit(accessFor(project), { folder: project });
+    expect(broken.answer).toMatchObject({ refused: true });
+    expect(broken.answer?.text).toMatch(
+      /not a repository.*Delete .*\.git\/objects\/ab\/cdef.*then call git_init again/,
+    );
+    expect(fs.existsSync(path.join(project, ".git", "config"))).toBe(true);
+  });
+
+  // covers PE-001, PE-005
+  it("[TC-PE-441] removes a stub by name, never through a link, and stops at any file a stub does not hold", async () => {
+    const made = path.join(root, `made-${count}`);
+    execFileSync("git", ["init", "--quiet", "--template=", made]);
+    const publish = () => runPublish([project, [], path.join(made, ".git"), KEPT.source]);
+    // A hook laid as a link is removed as a link: what it points to stays.
+    leaveStub(project);
+    fs.writeFileSync(path.join(outside, "kept.txt"), "kept\n");
+    fs.symlinkSync(path.join(outside, "kept.txt"), path.join(project, ".git", "hooks", "post-commit"));
+    expect(publish()).toMatchObject({ code: 0 });
+    expect(fs.readFileSync(path.join(outside, "kept.txt"), "utf8")).toBe("kept\n");
+    expect(fs.existsSync(path.join(project, ".git", "hooks"))).toBe(false);
+
+    // A hooks folder laid as a link is not a stub's: nothing is removed, here or there.
+    fs.rmSync(path.join(project, ".git"), { recursive: true });
+    fs.mkdirSync(path.join(project, ".git"));
+    fs.writeFileSync(path.join(project, ".git", "config"), "[core]\n");
+    fs.symlinkSync(outside, path.join(project, ".git", "hooks"));
+    expect(publish()).toMatchObject({ code: 4, out: expect.stringContaining("holds hooks") });
+    expect(fs.readdirSync(outside)).toEqual(["kept.txt"]);
+    expect(fs.existsSync(path.join(project, ".git", "config"))).toBe(true);
+    // Nor is a .git laid as a link.
+    fs.rmSync(path.join(project, ".git"), { recursive: true });
+    fs.symlinkSync(outside, path.join(project, ".git"));
+    expect(publish()).toMatchObject({ code: 4, out: expect.stringContaining("already has a .git") });
+    expect(fs.readdirSync(outside)).toEqual(["kept.txt"]);
   });
 });

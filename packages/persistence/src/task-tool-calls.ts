@@ -21,7 +21,7 @@ const cut = (input: string) =>
  * call is still writing waits for it and then returns its result. The calling turn's backpack
  * claims are checked next, in the same transaction, by one conditional update each (ADR 019).
  * Refused calls are recorded in `task_tool_refusals` (migration 0039). Both are keyed by hob, scope
- * and key (migration 0043): the work the calling turn is on, so a key is reused only within it.
+ * and key (migration 0044): the work the calling turn is on, so a key is reused only within it.
  */
 export const TaskToolCallsLive = Layer.effect(
   TaskToolCalls,

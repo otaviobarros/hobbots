@@ -20,7 +20,7 @@
     "lint:complexity": "node scripts/check-complexity.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "format": "biome check --write .",
-    "check": "node scripts/check-standards.mjs && node scripts/check-layers.mjs && node scripts/check-complexity.mjs && node --test \"scripts/*.test.mjs\" && knip && jscpd && biome check . && turbo run typecheck test --concurrency=4"
+    "check": "node scripts/check-standards.mjs && node scripts/check-layers.mjs && node scripts/check-complexity.mjs && node --test \"scripts/*.test.mjs\" && knip && jscpd && biome check . && turbo run typecheck --concurrency=4 && turbo run test --concurrency=4"
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {

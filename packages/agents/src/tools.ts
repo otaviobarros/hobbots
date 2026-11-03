@@ -23,6 +23,25 @@ export const operationDecision = (
   );
 
 /**
+ * Which of a hob's tools its answers open (ADR 014), whatever the runtime calls them: file reads,
+ * file edits, and commands. Since a command reads and writes the folders without a call per file,
+ * commands, Git's included, are open only when Read files and Edit files are both Allow, and a
+ * runtime also needs its sandbox to offer them. `git_init` is decided as Local Git and Edit files.
+ */
+export const openTools = (decide: (operation: PolicyOperation) => PolicyDecision) => {
+  const open = (operation: PolicyOperation) => decide(operation) !== "deny";
+  return {
+    read: open("read-files"),
+    edit: open("edit-files"),
+    commands:
+      (open("run-commands") || open("local-git")) &&
+      decide("read-files") === "allow" &&
+      decide("edit-files") === "allow",
+    gitInit: open("local-git") && open("edit-files"),
+  };
+};
+
+/**
  * Whether the hob's override or a restriction answers the operation with Ask or Never: an answer
  * someone gave on purpose, which no grant answers (ADR 015).
  */

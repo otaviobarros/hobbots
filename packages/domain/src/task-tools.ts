@@ -40,7 +40,8 @@ const Step = Schema.Struct({
 const Authority = Schema.Struct({
   decisions: Schema.optionalKey(
     PolicyOverrides.annotate({
-      description: "allow, ask or deny for each operation. Each must be at least as narrow as your own.",
+      description:
+        "allow, ask or deny for each operation. Each must be at least as narrow as your own. Commands, Git's included, need read-files and edit-files both allow.",
     }),
   ),
   folders: Schema.optionalKey(
@@ -136,7 +137,9 @@ export const TaskToolInputs = {
   read_tasks: Schema.Struct({
     key,
     task_id: Schema.optionalKey(
-      id("A Task you own, or one under it, to read everything under. Leave it out for the Task you are working on."),
+      id(
+        "A Task you own, or one under it, to read everything under. Leave it out for the Task you are working on. Once that request has ended, you read only the last request you led in this conversation, and the Tasks under it.",
+      ),
     ),
   }),
   message_task: Schema.Struct({
@@ -229,7 +232,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "read_tasks",
     description:
-      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its open questions, its latest checkpoints and its result. Read it instead of guessing; it changes nothing.",
+      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its questions with their state and answer, its latest checkpoints and its result. Read it instead of guessing, and before you tell anyone a question is unanswered; it changes nothing.",
     label: "Reading the work",
   },
   {
@@ -278,6 +281,7 @@ export const TaskToolRefusal = Schema.Literals([
   "depth-limit",
   "concurrency-limit",
   "authority-wider",
+  "authority-unusable",
   "deadline-passed",
   "key-reused",
   "no-attempt",

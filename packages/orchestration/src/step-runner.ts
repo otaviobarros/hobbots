@@ -33,18 +33,21 @@ import {
   isTerminalTask,
   type Task,
   type TaskId,
+  TaskReadiness,
   type TaskToolName,
   type TaskTree,
+  type TurnEnding,
 } from "@hobbots/domain";
 import { DateTime, Effect, FiberMap, Layer, Option, Semaphore } from "effect";
 import type { PathSeparator } from "./authority.ts";
 import { cut, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { makeCancelSettler } from "./cancels.ts";
-import { delegatedAccess, dependenciesDone, makeMemberRunner } from "./members.ts";
+import { delegatedAccess, makeMemberRunner } from "./members.ts";
 import { type Ending, type Running, runSessionTurn, STOPPED, type StopReason } from "./session.ts";
 import { TaskSignal } from "./signal.ts";
 import { TaskTools } from "./task-tools.ts";
+import { endTurn } from "./turn-end.ts";
 
 /**
  * How many steps run at once (orchestration contract): per hob, and per request's tree, which is
@@ -209,7 +212,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
               Effect.asVoid(
                 Effect.flatMap(nowIso, (at) =>
                   attempt(
-                    tasks.updateAttempt(attemptId, { state: "running", sessionId, at }),
+                    tasks.updateAttempt(attemptId, { _tag: "Running", sessionId, at }),
                     "record a step's session",
                   ),
                 ),
@@ -234,85 +237,32 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
         );
 
       /**
-       * Records how the step's session ended. A step that replied completes with that reply first,
-       * unless it returned a result itself, and its Attempt ends after: a restart in between finds
-       * the Attempt live and keeps the result. A step that failed ends its Attempt first, as ending
-       * a Task needs, and then fails; a restart in between leaves it to `endStranded`.
+       * Records how the step's session ended, by the one turn-end decision (#674). A step that
+       * replied completes with that reply first, unless it returned a result itself, and its Attempt
+       * ends after: a restart in between finds the Attempt live and keeps the result. One that
+       * replied after reporting a finding or blocker is blocked instead, so the steps after it wait
+       * (#667). One that failed, was stopped or could not complete ends its Attempt, then fails, or
+       * is cancelled when its cancel was asked for; a restart in between leaves it to `endStranded`.
        */
-      const settle = (stepId: TaskId, attemptId: AttemptId, ending: Ending, carried: ReadonlyArray<CarriedItem>) =>
+      const settle = (stepId: TaskId, attemptId: AttemptId, ending: TurnEnding, carried: ReadonlyArray<CarriedItem>) =>
         Effect.gen(function* () {
           const at = yield* nowIso;
-          const completed =
-            ending._tag === "Replied" ? yield* complete(stepId, attemptId, ending.text, carried, at) : false;
-          yield* attempt(
-            tasks.updateAttempt(attemptId, {
-              state: ending._tag === "Failed" ? "failed" : "completed",
-              outcome: ending._tag === "Failed" ? ending.reason : "The step's session finished.",
-              at,
-            }),
-            "end a step's Attempt",
+          yield* endTurn(
+            { tasks, attempt, explain },
+            { runner: "step", taskId: stepId, attemptId, ending, carried, at },
           );
-          if (completed) return;
-          const latest = yield* currentTask(stepId);
-          if (Option.isNone(latest) || isTerminalTask(latest.value.state)) return;
-          yield* attempt(tasks.moveTask(stepId, latest.value.revision, endOf(latest.value), at), "end a step");
         });
 
-      /**
-       * Completes a step with its session's final reply, unless it has ended or is being cancelled.
-       * Whether the step has ended now, by this completion or before it.
-       */
-      const complete = (
-        stepId: TaskId,
-        attemptId: AttemptId,
-        text: string,
-        carried: ReadonlyArray<CarriedItem>,
-        at: string,
-      ) =>
-        Effect.gen(function* () {
-          const task = yield* currentTask(stepId);
-          if (Option.isNone(task) || isTerminalTask(task.value.state)) return true;
-          const step = task.value;
-          if (step.state === "cancelling") return false;
-          const done = yield* attempt(
-            tasks
-              .completeTask(step.id, step.revision, {
-                summary: cut(redactor.text(text), RESULT_LIMIT) || "The step finished without a reply.",
-                attemptId,
-                artifacts: [],
-                at,
-                carried,
-              })
-              .pipe(
-                Effect.tapError((error) =>
-                  error._tag === "TaskRefused" ? explain(step.id, error.message, at) : Effect.void,
-                ),
-              ),
-            "complete a step",
-          );
-          return Option.isSome(done);
-        });
+      /** How a step's session ended, for the turn-end decision: its reply cut to a result's length. */
+      const endingOf = (ending: Ending): TurnEnding =>
+        ending._tag === "Failed"
+          ? { _tag: "Failed", reason: ending.reason }
+          : { _tag: "Replied", text: cut(redactor.text(ending.text), RESULT_LIMIT) };
 
       /** A stopped step: cancelled when its cancel was asked for, failed when Hobbots stopped it. */
       const stopped = (stepId: TaskId, attemptId: AttemptId, reason: StopReason | null) =>
-        Effect.gen(function* () {
-          // Stopped with the hub: the next start finds the Attempt live and ends it.
-          if (reason === null) return;
-          const at = yield* nowIso;
-          const task = yield* currentTask(stepId);
-          const cancelling = Option.isSome(task) && task.value.state === "cancelling";
-          yield* attempt(
-            tasks.updateAttempt(attemptId, {
-              state: cancelling ? "cancelled" : "interrupted",
-              outcome: cancelling ? STOPPED.cancel : STOPPED[reason],
-              at,
-            }),
-            "end a stopped step's Attempt",
-          );
-          const latest = yield* currentTask(stepId);
-          if (Option.isNone(latest) || isTerminalTask(latest.value.state)) return;
-          yield* attempt(tasks.moveTask(stepId, latest.value.revision, endOf(latest.value), at), "end a stopped step");
-        });
+        // Stopped with the hub: the next start finds the Attempt live and ends it.
+        reason === null ? Effect.void : settle(stepId, attemptId, { _tag: "Stopped", reason: STOPPED[reason] }, []);
 
       // Confirms every cancel asked for once nothing runs in its Task or under it, one pass at a time.
       const cancels = yield* Semaphore.make(1);
@@ -407,7 +357,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                   fibers,
                   step.id,
                   runSession(agent.value, config.value, step, shown, access, attemptId, carried, grants).pipe(
-                    Effect.flatMap((ending) => settle(step.id, attemptId, ending, carried)),
+                    Effect.flatMap((ending) => settle(step.id, attemptId, endingOf(ending), carried)),
                     Effect.onInterrupt(() => stopped(step.id, attemptId, run.stop)),
                     Effect.ensuring(
                       Effect.sync(() => running.delete(step.id)).pipe(
@@ -478,7 +428,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           const tree = trees.get(step.rootId) ?? Option.getOrUndefined(yield* tasks.readTree(step.rootId));
           if (tree === undefined) continue;
           trees.set(step.rootId, tree);
-          if (dependenciesDone(step, tree)) yield* start(step, tree);
+          // A step starts once every step it comes after has completed (ADR 018).
+          if (TaskReadiness.of(step, tree.tasks)._tag === "Ready") yield* start(step, tree);
         }
         if (members !== null) yield* members.round;
       }).pipe(
@@ -491,7 +442,11 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       for (const live of yield* tasks.listLiveAttempts) {
         const at = yield* nowIso;
         yield* recover(
-          tasks.updateAttempt(live.id, { state: "interrupted", outcome: "Hobbots stopped while this ran.", at }),
+          tasks.updateAttempt(live.id, {
+            _tag: "Ended",
+            end: { _tag: "Stopped", reason: "Hobbots stopped while this ran." },
+            at,
+          }),
           "end an Attempt left from before a restart",
           "endAttempt",
           { taskId: live.taskId, attemptId: live.id },

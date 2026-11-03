@@ -1,7 +1,7 @@
 import { ArtifactId, ArtifactRef, AttemptId, HandOff, Task, type TaskId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ADA, BUILD, CAMPAIGN, COPY, QUILL, task, tree } from "../../test/quests.ts";
-import { rowStatus, taskDetail } from "./work-model.ts";
+import { rowStatus, taskDetail, waitsOnOf } from "./work-model.ts";
 
 // Issues #564 and #567: a queued Task that comes after another waits on it, and once that one
 // completes, the drawer's "Handed to it" shows what it returned, its result and its artifacts,
@@ -35,6 +35,16 @@ describe("a dependent Task in the Quest views", () => {
     expect(rowStatus(running, queued)).toBe("waiting");
     const after = tree({ tasks: [task(CAMPAIGN), done(COPY, "Playful copy"), queued] });
     expect(rowStatus(after, queued)).toBe("running");
+  });
+
+  // covers UX-002, OR-002
+  it("[TC-OR-404] reads Blocked while a Task it comes after is blocked or failed, and still names its hob", () => {
+    const queued = task(BUILD, { ownerId: ADA, state: "queued", dependsOn: [COPY] });
+    for (const state of ["blocked", "failed"] as const) {
+      const held = tree({ tasks: [task(CAMPAIGN), task(COPY, { ownerId: QUILL, state }), queued] });
+      expect(rowStatus(held, queued)).toBe("blocked");
+      expect(waitsOnOf(held, queued)).toEqual([QUILL]);
+    }
   });
 
   // covers UX-002, OR-003

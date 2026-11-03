@@ -32,6 +32,7 @@ import {
   Thread,
   ThreadCheckpoint,
   ThreadId,
+  type TurnEnding,
   titleFromPrompt,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semaphore, Stream } from "effect";
@@ -52,7 +53,7 @@ import {
 } from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
 import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
-import { type ChatTaskTurn, type ChatTurnOutcome, TaskTurns } from "./task-turns.ts";
+import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
 import { callScope } from "./tasks.ts";
 import { keepToolOutput } from "./tool-output.ts";
 import { accessNow, HobTools, narrows } from "./tools.ts";
@@ -107,9 +108,13 @@ const continuePrompt = (reply: Message) => {
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
-/** How a turn ended, for the Attempt it may have started on a Task: a reply still running was interrupted. */
-const turnOutcome = (status: MessageStatus): ChatTurnOutcome =>
-  status === "complete" ? "completed" : status === "failed" || status === "limited" ? "failed" : "interrupted";
+/** How a turn ended, for the Attempt it may have started on a Task: a reply still running was stopped. */
+const turnEnding = (message: Message): TurnEnding =>
+  message.status === "complete"
+    ? { _tag: "Replied", text: message.content }
+    : message.status === "failed" || message.status === "limited"
+      ? { _tag: "Failed", reason: message.error }
+      : { _tag: "Stopped", reason: null };
 
 /** How a turn that carried work ended early, as a code: a reply still running was interrupted. */
 const turnEnd = (status: MessageStatus): BackpackTurnEnd =>
@@ -598,8 +603,7 @@ export class ChatService extends Context.Service<
                   configVersion: config.version,
                   holding: carry.holding,
                 }),
-                (turn) =>
-                  Ref.get(reply.current).pipe(Effect.flatMap((m) => turn.end(turnOutcome(m.status), turnSession))),
+                (turn) => Ref.get(reply.current).pipe(Effect.flatMap((m) => turn.end(turnEnding(m), turnSession))),
               )
             : null;
           onTask = taskTurn;

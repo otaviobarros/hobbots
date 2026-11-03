@@ -62,7 +62,7 @@ test("[TC-OR-034] a Task split into four steps shows step 2 of 4 in the chat and
   });
   const steps = [
     step("Outline the launch", "Outline: three channels.", []),
-    { brief: `Write the copy for every channel. ${"Keep each paragraph short and friendly. ".repeat(30)}`, after: [1] },
+    { brief: `Write the copy for every channel. ${"Keep each paragraph short and friendly. ".repeat(15)}`, after: [1] },
     step("Pick the images", "Four images picked.", [2]),
     step("Proofread everything", "No typos left.", [3]),
   ];

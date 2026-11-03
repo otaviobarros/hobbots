@@ -89,7 +89,8 @@ describe("a lead that follows the hand-off rule", () => {
     expect(first?.prompt).toContain(RULE);
     expect(resumed?.prompt).toContain("/project/core.py");
     expect(done.handOffs).toHaveLength(1);
-    expect(attemptsOf(done, rook)).toEqual(["completed", "completed"]);
+    // Both of his turns are one Attempt of his Task (#668).
+    expect(attemptsOf(done, rook)).toEqual(["completed"]);
     expect(rook.result?.summary).toBe("Frontend reads core.py");
     expect(taskOf(done, QUILL).state).toBe("completed");
     expect(done.tasks[0]?.result?.summary).toBe("The app is built");

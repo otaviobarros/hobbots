@@ -3,7 +3,7 @@ import { CharmCall, isCharmCallSettled } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Redacted } from "effect";
 import { GitHubCredential, GitHubError } from "../src/index.ts";
 
-/** Charm call records in memory, with the rules of the SQL ones (migrations 0028 and 0043), by hob, scope and key. */
+/** Charm call records in memory, with the rules of the SQL ones (migrations 0028 and 0044), by hob, scope and key. */
 const idOf = (agentId: string, scope: string, key: string) => `${agentId} ${scope} ${key}`;
 
 export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) => {
