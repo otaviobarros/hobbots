@@ -270,6 +270,19 @@ interface ChatgptAuthTokensLogin {
   readonly chatgptPlanType?: string | null;
 }
 
+/** How a patch changes a file: adds, deletes, or updates it, and moves it when `move_path` is set. */
+type PatchChangeKind =
+  | { readonly type: "add" }
+  | { readonly type: "delete" }
+  | { readonly type: "update"; readonly move_path: string | null };
+
+/** One file a patch changes, by its absolute path, and the change as a diff. */
+export interface FileUpdateChange {
+  readonly path: string;
+  readonly kind: PatchChangeKind;
+  readonly diff: string;
+}
+
 type CommandExecutionStatus = "inProgress" | "completed" | "failed" | "declined";
 
 /** An item of a turn, trimmed to the kinds and fields Hobbots reads. */
@@ -286,7 +299,12 @@ export type ThreadItem =
       readonly aggregatedOutput: string | null;
       readonly exitCode: number | null;
     }
-  | { readonly type: "fileChange"; readonly id: string; readonly status: CommandExecutionStatus }
+  | {
+      readonly type: "fileChange";
+      readonly id: string;
+      readonly changes: ReadonlyArray<FileUpdateChange>;
+      readonly status: CommandExecutionStatus;
+    }
   | {
       readonly type: "mcpToolCall";
       readonly id: string;
@@ -339,7 +357,10 @@ export type TurnServerRequest =
   | {
       readonly method: "item/commandExecution/requestApproval";
       readonly params: InTurn & {
+        /** `writeStdin` asks to type into a command already running. */
+        readonly kind?: "command" | "writeStdin";
         readonly itemId: string;
+        /** The command line as Codex runs it, wrapped in the user's shell (`/bin/bash -lc '…'`). */
         readonly command?: string | null;
         readonly cwd?: string | null;
       };

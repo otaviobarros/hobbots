@@ -3,15 +3,18 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { RuntimeAdapterShape } from "@hobbots/agents";
-import { type Duration, Effect, Exit, Fiber, Stream } from "effect";
+import { policySandbox } from "@hobbots/domain";
+import { PolicyEngine } from "@hobbots/permissions";
+import { type Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { binaryLocator } from "../src/binary.ts";
-import { makeCodex } from "../src/codex/adapter.ts";
+import { codexEnforcement, makeCodex } from "../src/codex/adapter.ts";
 import { startAppServer } from "../src/codex/app-server.ts";
 import { billingOf, chatGptTokens, signInOf } from "../src/codex/auth.ts";
 import { codexCandidates, codexPath, findCodex, minimumCodexVersion, parseCodexVersion } from "../src/codex/locate.ts";
 import { listModels, toCodexModels } from "../src/codex/models.ts";
 import type { Model } from "../src/codex/protocol.ts";
+import { ProcessSandbox } from "../src/sandbox.ts";
 import { type FakeCodexOptions, fakeCodex, fakeCodexLog } from "./codex-fixture.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-codex-"));
@@ -19,8 +22,18 @@ afterAll(() => rmSync(temp, { recursive: true, force: true }));
 let folders = 0;
 const folder = () => join(temp, String(++folders));
 
-const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+const run = <A, E>(effect: Effect.Effect<A, E, NodeServices.NodeServices | PolicyEngine | ProcessSandbox>) =>
+  Effect.runPromise(
+    effect.pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          NodeServices.layer,
+          PolicyEngine.node,
+          ProcessSandbox.unavailable("not needed for these checks"),
+        ),
+      ),
+    ),
+  );
 
 /** The Codex adapter, running the stand-in written with `options`. */
 const codexWith = (options: FakeCodexOptions, checkTimeout: Duration.Input = "10 seconds") => {
@@ -234,16 +247,23 @@ describe("Codex's provider health", () => {
     expect(health).toMatchObject({ availability: "unavailable", version: "0.166.0" });
   });
 
-  // TC-RT-007 is retired: Codex turns run now (#438), and TC-RT-032 checks what they enforce.
+  // TC-RT-007 is retired: Codex turns run now (#438). TC-RT-032 is retired: the policy decides Codex's
+  // tool calls now (#439), and TC-RT-060 checks what it enforces.
   // covers PE-005, ADR 024
-  it("[TC-RT-032] offers no tool as safe while Codex's tool calls are refused, serves hub tools, and cancels a turn through Codex", async () => {
+  it("[TC-RT-060] declares the policy, events and interruption enforced, and the sandbox only where it started", async () => {
     const codex = await codexWith({}).adapter;
-    const enforcement = await Effect.runPromise(codex.enforcement);
-    const { toolInterruption, hubTools, ...tools } = enforcement;
-    expect(Object.values(tools).every((capability) => capability.status === "unsupported")).toBe(true);
-    // Hub tools are decided by the hub, so serving them offers no tool of Codex's own as safe (#440).
-    expect(hubTools.status).toBe("verified");
-    expect(toolInterruption.status).toBe("verified");
+    const off = await Effect.runPromise(codex.enforcement);
+    expect(off).toMatchObject({
+      toolInterception: { status: "verified" },
+      processSandbox: { status: "unsupported", evidence: "not needed for these checks" },
+      hubTools: { status: "verified" },
+      toolEvents: { status: "verified" },
+      toolInterruption: { status: "verified" },
+    });
+    // Commands stay closed without the sandbox: the profile decides them as if it were missing.
+    expect(policySandbox(off)).toBe("unavailable");
+    const on = codexEnforcement({ state: "on", evidence: "sandbox-runtime on linux" });
+    expect(on.processSandbox.status).toBe(process.platform === "darwin" ? "verified" : "unverified");
   });
 });
 

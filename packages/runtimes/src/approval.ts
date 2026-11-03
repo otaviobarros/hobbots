@@ -4,6 +4,7 @@ import {
   type PromptRequest,
   type Redactor,
   type RuntimeEvent,
+  refusal,
   type ToolStartedEvent,
   type TurnApprovals,
 } from "@hobbots/agents";
@@ -121,3 +122,22 @@ export const decideCall = (
           unknown: UNKNOWN_TOOL(call.tool),
         }),
   );
+
+/**
+ * Decides a host a turn's processes reach that its sandbox has no rule for, under the hob's own
+ * grants as they are now, which can answer the preset's Ask for it (ADR 015): true, or why not.
+ */
+export const grantedHosts =
+  (engine: PolicyEngine["Service"], context: PolicyContext, approvals: TurnApprovals | null | undefined) =>
+  (host: string): Promise<true | string> =>
+    Effect.runPromise(
+      (approvals?.grants ?? Effect.succeed([])).pipe(
+        Effect.flatMap((grants) => engine.decide({ ...context, grants }, { _tag: "Web", host, addresses: [] })),
+        Effect.tap((verdict) =>
+          verdict.decision === "allow" && verdict.grantIds.length > 0
+            ? (approvals?.used(verdict.grantIds) ?? Effect.void)
+            : Effect.void,
+        ),
+        Effect.map((verdict) => (verdict.decision === "allow" ? true : refusal(verdict))),
+      ),
+    );

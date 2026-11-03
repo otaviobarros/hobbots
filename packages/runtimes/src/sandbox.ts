@@ -3,8 +3,9 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:f
 import { homedir, platform, tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { SandboxManager, type SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
-import { RuntimeError } from "@hobbots/agents";
+import { operationDecision, RuntimeError } from "@hobbots/agents";
 import type { CommitIdentity, SandboxState } from "@hobbots/domain";
+import type { PolicyContext } from "@hobbots/permissions";
 import { Context, Effect, Layer } from "effect";
 import { gitConfigAccess } from "./git-config.ts";
 
@@ -53,6 +54,15 @@ export interface SandboxScope {
    * holds every hob's stays closed, and so does the user's own runtime state.
    */
   readonly runtimeFolder: string;
+  /**
+   * The only places inside `runtimeFolder` the turn's processes may read and write, for a runtime
+   * that would load what it wrote outside the policy, such as Codex's configuration and execution
+   * rules (ADR 024). Absent, the whole runtime folder is open. Listed one by one, since on Linux a
+   * folder opened for reading hides what is writable inside it.
+   */
+  readonly runtimeAccess?: { readonly read: ReadonlyArray<string>; readonly write: ReadonlyArray<string> };
+  /** More places that must stay readable for the runtime to start, such as the package its binary runs from. */
+  readonly runtimeFiles?: ReadonlyArray<string>;
   /** The turn's own temporary folder. */
   readonly tempFolder: string;
   /** Hosts the turn always reaches, such as its model API. */
@@ -142,15 +152,20 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
     allowRead: [
       ...new Set([
         ...(scope.folderAccess.read ? scope.folders : []),
-        scope.runtimeFolder,
+        ...(scope.runtimeAccess?.read ?? [scope.runtimeFolder]),
         scope.tempFolder,
         ...binaryDirs,
+        ...(scope.runtimeFiles ?? []),
         ...homeTools,
         ...(scope.gitConfigFiles ?? []),
         ...(scope.signingAgent ? [scope.signingAgent] : []),
       ]),
     ],
-    allowWrite: [...(scope.folderAccess.write ? scope.folders : []), scope.runtimeFolder, scope.tempFolder],
+    allowWrite: [
+      ...(scope.folderAccess.write ? scope.folders : []),
+      ...(scope.runtimeAccess?.write ?? [scope.runtimeFolder]),
+      scope.tempFolder,
+    ],
     denyWrite: [
       scope.dataFolder,
       // Loaded later by the user's own Claude Code, outside any policy.
@@ -214,6 +229,15 @@ export const sandboxEnv = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
           (PASSED_PREFIXES.some((prefix) => key.startsWith(prefix)) && !SECRET_NAME.test(key))),
     ),
   );
+
+/**
+ * Whether a turn's processes may read, and write, its folders at all: what any call the policy lets
+ * through may need. A denied operation stays closed (STD-SEC-002).
+ */
+export const folderAccessFor = (context: PolicyContext): SandboxScope["folderAccess"] => ({
+  read: operationDecision(context, "read-files") !== "deny",
+  write: operationDecision(context, "edit-files") !== "deny",
+});
 
 /** Quotes a word for a POSIX shell. */
 export const shellQuote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -8,21 +8,26 @@ import {
   type RuntimeEvent,
   RuntimeLimitReached,
 } from "@hobbots/agents";
-import { ApprovalId } from "@hobbots/domain";
+import { ApprovalId, EMPTY_HOB_POLICY } from "@hobbots/domain";
+import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Exit, Fiber, PubSub, Stream } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
+import { SANDBOX_NOTE } from "../src/claude-code.ts";
 import type { AppServer, AppServerCommand, AppServerNotification } from "../src/codex/app-server.ts";
 import type { ChatGptTokens } from "../src/codex/auth.ts";
 import { codexTurnEvents, LOST_CALL, LOST_TURN } from "../src/codex/events.ts";
 import { notOffered } from "../src/codex/hub-tools.ts";
 import {
+  CODEX_MODEL_HOSTS,
   type CodexTurnConfig,
   codexFolders,
+  codexWrites,
   NO_ATTRIBUTION_NOTE,
   runCodexTurn,
   type StartAppServer,
   TOOLS_CLOSED,
 } from "../src/codex/turn.ts";
+import type { ProcessSandboxShape, SandboxScope } from "../src/sandbox.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-codex-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -299,7 +304,7 @@ describe("a Codex turn", () => {
   });
 
   // covers PE-005, ADR 024
-  it("[TC-RT-025] refuses every tool call while the policy is not enforced on Codex, and the turn goes on", async () => {
+  it("[TC-RT-025] refuses every tool call on a turn without tools, and the turn goes on", async () => {
     const ask = (method: string, params: Record<string, unknown>) => ({
       method,
       params: { threadId: THREAD, turnId: TURN, ...params },
@@ -554,6 +559,89 @@ describe("a Codex turn", () => {
       { _tag: "StepStarted", id: "call_1", kind: "tool", label: "Delegating a Task" },
       { _tag: "ToolUncertain", id: "call_1", reason: LOST_CALL },
     ]);
+  });
+});
+
+describe("a Codex turn with tools", () => {
+  // covers PE-005, ADR 014, ADR 024
+  it("[TC-RT-067] starts Codex in the sandbox, in the hob's folder, with its home closed but for what it writes", async () => {
+    const root = realpathSync(mkdtempSync(join(temp, "tools-")));
+    const repository = join(root, "repo");
+    const project = join(repository, "app");
+    mkdirSync(join(repository, ".git"), { recursive: true });
+    mkdirSync(project);
+    const runtimeFolder = join(root, "runtimes", "hob-1");
+    const { home } = codexFolders(runtimeFolder);
+    const scopes: Array<Omit<SandboxScope, "tempFolder">> = [];
+    let released = 0;
+    const sandbox: ProcessSandboxShape = {
+      state: "on",
+      evidence: "a stand-in sandbox",
+      prepare: (scope) =>
+        Effect.sync(() => {
+          scopes.push(scope);
+          return {
+            spawnArgs: (command, args, env) => ({
+              command: "/sandbox",
+              args: [command, ...args],
+              env: { PATH: env.PATH },
+            }),
+            release: () => {
+              released += 1;
+            },
+          };
+        }),
+    };
+    const engine = await Effect.runPromise(Effect.service(PolicyEngine).pipe(Effect.provide(PolicyEngine.node)));
+    const binary = join(root, "codex");
+    writeFileSync(binary, "");
+    const server = fakeServer({ script: [completed("completed")] });
+    const turnConfig: CodexTurnConfig = {
+      ...config(server.start),
+      binary: Effect.succeed(binary),
+      policy: { engine, sandboxState: "on", sandbox },
+    };
+    const tools = {
+      policy: {
+        preset: "balanced",
+        sharedFolders: [project],
+        hob: EMPTY_HOB_POLICY,
+        dataFolder: join(root, "data"),
+        restrictions: [],
+      },
+      folders: [project],
+      runtimeFolder,
+    } as const;
+    await run(turnConfig, prompt({ tools }));
+    // Codex started once outside the sandbox to set up its home, then inside it for the turn.
+    expect(server.commands.map((command) => command.command)).toEqual([binary, "/sandbox"]);
+    expect(server.commands[1]).toMatchObject({ args: [binary, "app-server"], env: { CODEX_HOME: home }, cwd: project });
+    expect(scopes).toEqual([
+      expect.objectContaining({
+        folders: [project],
+        folderAccess: { read: true, write: true },
+        runtimeFolder,
+        runtimeAccess: { read: [join(home, "config.toml"), join(home, "rules")], write: codexWrites(runtimeFolder) },
+        allowedHosts: CODEX_MODEL_HOSTS,
+      }),
+    ]);
+    // Codex makes its installation ID on its first start, outside the sandbox; the folders are made before it.
+    for (const folder of codexWrites(runtimeFolder).filter((path) => !path.endsWith("installation_id"))) {
+      expect(existsSync(folder)).toBe(true);
+    }
+    expect(released).toBe(1);
+    // The folder and its repository are untrusted, so Codex loads no rules, hooks or MCP servers from them.
+    const settings = readFileSync(join(home, "config.toml"), "utf8");
+    expect(settings).toContain(`[projects.${JSON.stringify(project)}]\ntrust_level = "untrusted"`);
+    expect(settings).toContain(`[projects.${JSON.stringify(repository)}]\ntrust_level = "untrusted"`);
+    expect(settings).toContain("shell_tool = true");
+    expect(server.requests.find((request) => request.method === "thread/start")).toMatchObject({
+      params: { cwd: project, developerInstructions: expect.stringContaining(SANDBOX_NOTE) },
+    });
+
+    // Without a verified sandbox the policy decides commands as if it were missing, so Codex offers none.
+    await run({ ...turnConfig, policy: { engine, sandboxState: "unavailable", sandbox } }, prompt({ tools }));
+    expect(readFileSync(join(home, "config.toml"), "utf8")).toContain("shell_tool = false");
   });
 });
 

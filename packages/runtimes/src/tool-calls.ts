@@ -635,9 +635,24 @@ export const toolRequests = (
         ? [{ _tag: "Command", operation: "run-commands", cwd }]
         : commandRequests(command, cwd);
     }
+    case "apply_patch":
+      // Codex's file changes, each path a file it adds, changes, deletes or moves to (ADR 024).
+      return [{ _tag: "Files", operation: "edit-files", paths: patchPaths(input), cwd }];
     default:
       return null;
   }
+};
+
+/** Every path a Codex patch touches: each file it adds, changes or deletes, and where it moves one. */
+export const patchPaths = (input: Record<string, unknown>): ReadonlyArray<string> => {
+  const changes = Array.isArray(input.changes) ? (input.changes as ReadonlyArray<Record<string, unknown>>) : [];
+  return [
+    ...new Set(
+      changes
+        .flatMap((change) => [text(change, "path"), text(change, "move_path")])
+        .filter((path) => path !== undefined),
+    ),
+  ];
 };
 
 const shorten = (value: string, limit = 60) => (value.length > limit ? `${value.slice(0, limit - 1)}…` : value);
@@ -845,6 +860,10 @@ export const toolLabel = (
     case "Bash": {
       const command = text(input, "command");
       return `Running ${command === undefined ? "a command" : redactedCommandLabel(command, redact)}`;
+    }
+    case "apply_patch": {
+      const paths = patchPaths(input);
+      return paths.length === 1 ? `Editing ${basename(redact(paths[0] as string))}` : `Editing ${paths.length} files`;
     }
     default:
       return `Using ${tool}`;

@@ -41,7 +41,7 @@ import {
   TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { CodexLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
+import { CodexLayer, FakeRuntimeLayer, ProcessSandbox } from "@hobbots/runtimes";
 import { Effect, Layer, ManagedRuntime, Schedule } from "effect";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { DispatcherHostLive } from "../src/backpack.ts";
@@ -163,7 +163,13 @@ const Hub = Layer.mergeAll(WakeOnArrival, HobLifecycle.layer, TaskControls.layer
       HobAdmission.layer,
       RecordedClaude,
       CodexLayer({ executable: codex, clientVersion: "0.0.0", workspaceDir: join(temp, "workspace") }).pipe(
-        Layer.provide(NodeServices.layer),
+        Layer.provide(
+          Layer.mergeAll(
+            NodeServices.layer,
+            PolicyEngine.node,
+            ProcessSandbox.unavailable("Hub tools need no sandbox."),
+          ),
+        ),
       ),
       Layer.succeed(UserSession, {
         deviceId: WINDOW_DEVICE_ID,
