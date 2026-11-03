@@ -121,6 +121,31 @@ export const USER_DATA_ROOTS: ReadonlyArray<string> = [
   "/private/var/folders",
 ];
 
+/** The shared temporary folders, closed to a turn's processes like `USER_DATA_ROOTS` (#578). */
+const SHARED_TEMP_ROOTS = [...USER_DATA_ROOTS.filter((root) => /tmp|folders/.test(root)), tmpdir()];
+
+/**
+ * What a sandboxed turn is told about temporary files: its commands have a folder of their own for
+ * them, named by `TMPDIR`, which the shared temporary folders are not (#578). The policy decides a
+ * path as written, so the folder is named by the variable rather than by its full path.
+ */
+export const TEMP_NOTE =
+  'Your commands have their own temporary folder for this turn in $TMPDIR, removed when the turn ends: write temporary files there from a command, as "$TMPDIR/name". /tmp and the other shared temporary folders are closed to you.';
+
+const under = (path: string, root: string) => path === root || path.startsWith(root.endsWith("/") ? root : `${root}/`);
+
+/**
+ * Whether `path` lies in a shared temporary folder, where a turn's processes never write. A turn's
+ * own folder there (`hb-…`, see `TEMP_BASE`) is not shared: the sandbox opens it to its turn alone.
+ */
+export const inSharedTemp = (path: string): boolean =>
+  SHARED_TEMP_ROOTS.some((root) => under(path, root)) &&
+  ![TEMP_BASE, realOrSelf(TEMP_BASE)].some((base) => path.startsWith(join(base, "hb-")));
+
+/** What a refusal to write in a shared temporary folder adds, so the hob finds its own (#578). */
+export const TEMP_HINT =
+  'Write temporary files from a command in $TMPDIR, your own temporary folder for this turn, as "$TMPDIR/name".';
+
 /** The user's own Claude Code state, which its later runs load outside any policy. */
 const userClaudeCode = (home: string) => {
   const folder = process.env.CLAUDE_CONFIG_DIR || join(home, ".claude");

@@ -35,6 +35,7 @@ import {
   KeychainMemory,
   LocalGitHubSignInsFake,
   LocalGitHubSignInsLive,
+  LocalGitToolsLive,
 } from "@hobbots/charms";
 import { DEFAULT_HUB_PORT, DEFAULT_SERVE_PORT, secretsFromEnv } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
@@ -245,6 +246,8 @@ const ServerLive = Layer.unwrap(
       Layer.provideMerge(GitHub),
       Layer.provide(NodeServices.layer),
     );
+    // The hub creates a repository for a hob, whose sandbox cannot write its config (ADR 014).
+    const LocalGit = LocalGitToolsLive.pipe(Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)));
     // The hub's own path separator, which alone divides the folders a hob may be given (STD-SEC-003).
     const separator = sep === "\\" ? "\\" : "/";
     const App = HobLifecycle.layer
@@ -327,7 +330,7 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(ApprovalService.layer))
       .pipe(Layer.provideMerge(HobToolsLive))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
-      .pipe(Layer.provideMerge(Layer.merge(Charms, CharmCallService.layer)))
+      .pipe(Layer.provideMerge(Layer.mergeAll(Charms, LocalGit, CharmCallService.layer)))
       // Before approvals, so a decision can save grants and every call reads the hob's live ones; before
       // the hob's own GitHub app, which revokes GitHub grants whenever the hob's identity changes (ADR 022).
       .pipe(Layer.provideMerge(GrantService.layer))

@@ -22,6 +22,9 @@ Slice 7's done-when checks, by hand, on macOS with real Claude Code. The automat
 | M6 | Wait a minute, then pick **Deny** with a reason. | The step is denied with your reason, and the reply says it did not push. The remote has no new branch. |
 | M7 | Ask for the push again and pick **Allow once**. | The turn resumes. With no credentials in the sandbox, the push fails against a remote that needs them. The step shows the outcome, and no second card appears. |
 | M8 | Switch setup to **Careful** and repeat M1 in a new thread. | The edit asks first. Commands are offered only when reading and editing are both Allow, so the hob cannot run the tests and says so. |
+| M9 | Back on **Balanced**, make an empty folder inside the project, such as `scratch`, and ask: "Make `scratch` a Git repository, add a README and commit it." | No card. The steps show "Creating a Git repository" and the commit command as done (a `git init` command, if the hob tries one first, is refused and points to the `git_init` tool). `git -C scratch log` shows the commit, and `scratch/.git/hooks` does not exist. |
+| M10 | Ask: "Write a pre-commit hook in `scratch` that prints hi, and set `core.hooksPath` there." | Both fail: the hook write by the policy or the sandbox, the config change with "Operation not permitted". `scratch/.git/config` is unchanged and no hook appears. |
+| M11 | Ask: "Write a scratch file to `/tmp`, then to `$TMPDIR`, with shell commands, and tell me what each did." | The `/tmp` write is refused, and the refusal names `$TMPDIR`. The `$TMPDIR` write succeeds. Nothing new appears in `/tmp` outside the turn's own `hb-` folder. |
 
 ## Record the run
 
