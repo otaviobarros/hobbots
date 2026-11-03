@@ -228,7 +228,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
         const outcome = yield* runner.run(
           {
             agentId: turn.agentId,
-            scope: turn.scope,
+            scope: turn.scope(),
             also: turn.also,
             tool: planned.tool,
             key: planned.key,

@@ -58,12 +58,11 @@ const COULD_NOT_RECORD = "Hobbots could not record this call, so it did not happ
 
 /**
  * Who a call comes from: a turn on a known Task, or a chat turn whose Task is found, or started,
- * inside the call's own transaction. `turn` tells a retried key from another turn's.
+ * inside the call's own transaction. `scope` tells a retried key from another work's.
  */
 interface CallSource {
-  readonly turn: Record<string, string>;
-  /** The work the call's key belongs to (#660), from `callScope`. */
-  readonly scope: string;
+  /** The work the call's key belongs to now (#660), from `callScope`: a call can start the turn's Task. */
+  readonly scope: () => string;
   /** Another scope a retry of the key is found in: a chat turn's reply. */
   readonly also?: string;
   /** The backpack claims the turn holds, which fence each of its calls (ADR 019). */
@@ -174,11 +173,11 @@ export class TaskTools extends Context.Service<
             const outcome = yield* ledger.once(
               {
                 agentId,
-                scope: source.scope,
+                scope: source.scope(),
                 ...(source.also === undefined ? {} : { also: source.also }),
                 key,
                 tool: name,
-                input: stableJson({ ...rest, ...source.turn }),
+                input: stableJson(rest),
                 at,
                 fence: source.fence,
               },
@@ -187,7 +186,13 @@ export class TaskTools extends Context.Service<
                 seen.resolved = resolved;
                 const scope = yield* scopeOf(resolved.caller, at);
                 const made = yield* handlers[name](scope, rest as never);
-                return { done: made.done, entries: [...resolved.entries, ...made.entries] };
+                // A call that starts the turn's Task takes the turn's calls into that Task's work.
+                const started = resolved.entries.some((entry) => entry.type === "TaskCreated");
+                return {
+                  done: made.done,
+                  entries: [...resolved.entries, ...made.entries],
+                  ...(started ? { scope: callScope.task(resolved.caller.taskId) } : {}),
+                };
               }),
             );
             if (seen.resolved !== null) committed(seen.resolved);
@@ -213,8 +218,7 @@ export class TaskTools extends Context.Service<
           callFrom(
             caller.agentId,
             {
-              turn: { turn_task: caller.taskId },
-              scope: callScope.task(caller.taskId),
+              scope: () => callScope.task(caller.taskId),
               fence: caller.carried ?? [],
               taskId: () => caller.taskId,
               resolve: () => Effect.succeed({ caller, entries: [], attemptId: null }),
@@ -261,7 +265,7 @@ export class TaskTools extends Context.Service<
                 : notOffered(name).pipe(
                     refusals.recorded({
                       agentId: caller.agentId,
-                      scope: callScope.task(caller.taskId),
+                      scope: () => callScope.task(caller.taskId),
                       tool: name,
                       raw: input,
                       taskOf: () => caller.taskId,
@@ -280,8 +284,7 @@ export class TaskTools extends Context.Service<
             const briefing = yield* chat.briefing;
             let known: TaskId | null = yield* chat.workingOn;
             const source: CallSource = {
-              turn: { turn_reply: turn.messageId },
-              scope: known === null ? callScope.reply(turn.messageId) : callScope.task(known),
+              scope: () => (known === null ? callScope.reply(turn.messageId) : callScope.task(known)),
               also: callScope.reply(turn.messageId),
               fence: turn.holding ?? [],
               taskId: () => known,

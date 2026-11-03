@@ -9,8 +9,8 @@ export interface CharmTurn {
   /** The thread and reply the turn writes, so a Charm call's record names the step it showed as. */
   readonly threadId: ThreadId | null;
   readonly messageId: MessageId | null;
-  /** The work the turn's call keys belong to (#660), from `callScope`, as its Task tools key theirs. */
-  readonly scope: string;
+  /** The work the turn's call keys belong to now (#660), from `callScope`, as its Task tools key theirs. */
+  readonly scope: () => string;
   /** Another scope a retry of a key is found in: the turn's reply, as for its Task tools. */
   readonly also?: string;
   /** The hob's tool access now, read again for every call so a narrower policy applies to the next (PE-008). */

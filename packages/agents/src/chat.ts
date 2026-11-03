@@ -627,7 +627,7 @@ export class ChatService extends Context.Service<
                     agentId: agent.id,
                     threadId: thread.id,
                     messageId,
-                    scope: taskTurn?.scope ?? callScope.reply(messageId),
+                    scope: taskTurn?.scope ?? (() => callScope.reply(messageId)),
                     also: callScope.reply(messageId),
                     currentAccess: currentAccess(agent.id),
                     redactor,

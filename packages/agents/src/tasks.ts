@@ -360,6 +360,12 @@ export interface TaskToolCall {
 export interface TaskToolOutcome {
   readonly done: TaskToolDone;
   readonly entries: ReadonlyArray<EventEnvelope>;
+  /**
+   * The work the call started, when it started the turn's Task (#660): the call, and every call
+   * and Charm write its turn made before in the call's scope, move into it, so a later reply on the
+   * Task finds them.
+   */
+  readonly scope?: string;
 }
 
 /** A Task tool call the hub refused, to record (#575). */

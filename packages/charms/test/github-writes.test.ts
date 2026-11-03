@@ -259,7 +259,7 @@ const makeHub = (
         agentId: AgentId.make("hob"),
         threadId: ThreadId.make("t1"),
         messageId: MessageId.make("m1"),
-        scope: "reply:m1",
+        scope: () => "reply:m1",
         currentAccess: Effect.succeed(access),
         redactor: makeRedactor(),
         approvals: userApprovals(turn, access),

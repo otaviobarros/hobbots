@@ -5,8 +5,8 @@ import { DateTime, Effect } from "effect";
 /** Who made a refused call and what it sent, as far as the hub could read it. */
 export interface RefusedFrom {
   readonly agentId: Parameters<TaskToolCalls["Service"]["refused"]>[0]["agentId"];
-  /** The work the call's key belongs to (#660). */
-  readonly scope: string;
+  /** The work the call's key belongs to (#660), read once the call is refused. */
+  readonly scope: () => string;
   readonly tool: string;
   readonly raw: unknown;
   /** The Task the calling turn worked on, read once the call is refused: a chat turn learns it during the call. */
@@ -45,7 +45,7 @@ export const makeRefusals = (
       const key = keyOf(from.raw);
       const committed = yield* ledger.refused({
         agentId: from.agentId,
-        scope: from.scope,
+        scope: from.scope(),
         key: key === null ? null : redactor.text(key),
         tool: redactor.text(from.tool),
         // Redacted whole, before the ledger cuts it, so a cut never leaves part of a secret behind.

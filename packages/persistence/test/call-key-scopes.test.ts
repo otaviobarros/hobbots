@@ -177,7 +177,7 @@ describe("tool call keys per Task", () => {
   });
 
   // covers DP-003
-  it("[TC-OR-423] 0043 keeps every stored call and refusal readable, each in the work its input names", async () => {
+  it("[TC-OR-423] 0043 keeps every stored call and refusal readable, each in the work its input names, compared without its turn", async () => {
     const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0043")) as typeof migrations;
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
@@ -229,7 +229,7 @@ describe("tool call keys per Task", () => {
       })}`;
       yield* callKeyScopes;
       return {
-        calls: yield* sql`SELECT call_key, scope FROM task_tool_calls ORDER BY call_key`,
+        calls: yield* sql`SELECT call_key, scope, input FROM task_tool_calls ORDER BY call_key`,
         refusals: yield* sql`SELECT call_key, scope FROM task_tool_refusals`,
         charms: yield* sql`SELECT call_key, scope FROM charm_calls`,
       };
@@ -240,8 +240,8 @@ describe("tool call keys per Task", () => {
 
     expect(rows).toEqual({
       calls: [
-        { callKey: "chat", scope: "reply:m1" },
-        { callKey: "step", scope: "task:t1" },
+        { callKey: "chat", scope: "reply:m1", input: "{}" },
+        { callKey: "step", scope: "task:t1", input: "{}" },
       ],
       refusals: [{ callKey: "cut", scope: "" }],
       charms: [{ callKey: "push", scope: "reply:m2" }],

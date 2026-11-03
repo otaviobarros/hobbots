@@ -1,3 +1,4 @@
+import { stableJson } from "@hobbots/domain";
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
 
@@ -10,24 +11,22 @@ import { SqlClient } from "effect/sql";
 // SQLite cannot change a primary key, so each table is rebuilt, on both databases alike: the new
 // table is made beside the old one, the rows are copied with a scope, and the old table is dropped
 // before the new one takes its name. A stored Task tool call keeps the turn its input names, as
-// `task:` or `reply:`, and a Charm call its reply; a chat turn's retry also looks in its reply's scope,
-// so Continue still finds them. A refusal's input names no turn, and a row that names nothing keeps
-// an empty scope, which no new call has. Every stored row stays readable and no two collide. No table
+// `task:` or `reply:`, and its input loses that turn, since calls are now compared without it. A Charm
+// call keeps its reply. A chat turn's retry also looks in its reply's scope, so Continue still finds
+// them. A refusal's input names no turn, and a row that names nothing keeps an empty scope, which no
+// new call has. Every stored row stays readable and no two collide. No table
 // refers to these, and the constraints are named so they never meet the old tables' own.
 
 type Stored = Record<string, unknown>;
 
-/** The scope a stored Task tool call's input names, or an empty one, as `callScope` in `@hobbots/agents` writes it. */
-const scopeOfInput = (input: unknown): string => {
-  if (typeof input !== "string") return "";
-  try {
-    const turn = JSON.parse(input) as { readonly turn_reply?: unknown; readonly turn_task?: unknown };
-    if (typeof turn.turn_reply === "string") return `reply:${turn.turn_reply}`;
-    if (typeof turn.turn_task === "string") return `task:${turn.turn_task}`;
-  } catch {
-    // A refusal's input is cut when long, so it may not parse.
-  }
-  return "";
+/**
+ * A stored Task tool call's scope, from the turn its input names, as `callScope` in `@hobbots/agents`
+ * writes it, and its input without that turn, as calls are compared now: the scope names the turn.
+ */
+const scoped = (row: Stored): Stored => {
+  const { turn_reply: reply, turn_task: task, ...input } = JSON.parse(String(row.input)) as Record<string, unknown>;
+  const scope = typeof reply === "string" ? `reply:${reply}` : typeof task === "string" ? `task:${task}` : "";
+  return { ...row, scope, input: stableJson(input) };
 };
 
 /** Swaps `${table}_next`, which the rows were copied into, in for `table`. */
@@ -37,18 +36,6 @@ const swap = (sql: SqlClient.SqlClient, table: string) =>
     yield* sql.unsafe(`ALTER TABLE ${table}_next RENAME TO ${table}`);
   });
 
-/** Copies a Task tool call table's rows into `${table}_next`, each with the scope its input names, a hundred at a time. */
-const copyByInput = (sql: SqlClient.SqlClient, table: string) =>
-  Effect.gen(function* () {
-    const rows = yield* sql.unsafe<Stored>(`SELECT * FROM ${table}`);
-    for (let start = 0; start < rows.length; start += 100) {
-      const [first, ...rest] = rows
-        .slice(start, start + 100)
-        .map((row) => ({ ...row, scope: scopeOfInput(row.input) }));
-      if (first !== undefined) yield* sql`INSERT INTO ${sql(`${table}_next`)} ${sql.insert([first, ...rest])}`;
-    }
-    yield* swap(sql, table);
-  });
 export default Effect.gen(function* () {
   // Rows are read and written by their column names, as they are stored.
   const sql = (yield* SqlClient.SqlClient).withoutTransforms();
@@ -65,7 +52,12 @@ export default Effect.gen(function* () {
       CONSTRAINT task_tool_calls_scoped_key PRIMARY KEY (agent_id, scope, call_key)
     )
   `;
-  yield* copyByInput(sql, "task_tool_calls");
+  const calls = (yield* sql`SELECT * FROM task_tool_calls`).map(scoped);
+  for (let start = 0; start < calls.length; start += 100) {
+    const [first, ...rest] = calls.slice(start, start + 100);
+    if (first !== undefined) yield* sql`INSERT INTO task_tool_calls_next ${sql.insert([first, ...rest])}`;
+  }
+  yield* swap(sql, "task_tool_calls");
 
   yield* sql`DROP INDEX task_tool_refusals_task`;
   yield* sql`

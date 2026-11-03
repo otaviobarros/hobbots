@@ -1065,7 +1065,7 @@ const callAs = (agentId: AgentId, w: World, folder: string, tool: string, input:
       agentId,
       threadId: ThreadId.make("t1"),
       messageId: MessageId.make("m1"),
-      scope: "reply:m1",
+      scope: () => "reply:m1",
       currentAccess: Effect.succeed(access),
       redactor: w.redactor,
       approvals: {
@@ -1457,7 +1457,7 @@ const pushAs = (
       agentId: FRODO,
       threadId: ThreadId.make("t1"),
       messageId: MessageId.make("m1"),
-      scope: "reply:m1",
+      scope: () => "reply:m1",
       currentAccess: Effect.succeed(access),
       redactor: makeRedactor(),
       approvals: approveAll(access, asked, whileAsking),

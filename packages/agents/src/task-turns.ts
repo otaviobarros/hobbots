@@ -40,7 +40,7 @@ export interface ChatTaskTurn {
    * The work the turn's tool call keys belong to (#660), from `callScope`: the Task it was briefed on,
    * else its reply. Fixed for the whole turn, so a retry of a call that started a Task is still a retry.
    */
-  readonly scope: string;
+  readonly scope: () => string;
   /**
    * `charms`, with each Charm call's refusal recorded as a Task tool's is, and a repository it created
    * recorded on the Task the turn works on (#664).

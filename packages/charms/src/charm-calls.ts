@@ -83,8 +83,8 @@ const earlierAnswer = (call: CharmCall, input: string): string => {
 };
 
 /** The scopes a turn's retried key is found in: its own, then its reply's (#660). */
-export const scopesOf = (turn: { readonly scope: string; readonly also?: string | undefined }) =>
-  turn.also === undefined ? [turn.scope] : [turn.scope, turn.also];
+export const scopesOf = (turn: { readonly scope: () => string; readonly also?: string | undefined }) =>
+  turn.also === undefined ? [turn.scope()] : [turn.scope(), turn.also];
 
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
