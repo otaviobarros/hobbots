@@ -1,19 +1,22 @@
 import { join } from "node:path";
 import { readInstallationId } from "@hobbots/server/installation";
-import { app, dialog, ipcMain, shell } from "electron";
+import { app, ipcMain, shell } from "electron";
 import { startMode } from "./app-mode.ts";
-import { pairWith, startConnected } from "./connected-mode.ts";
+import { startConnected } from "./connected-mode.ts";
 import { startHub } from "./hub-mode.ts";
 import { handleKeepRunningIpc } from "./keep-running.ts";
 import { handleLoginItemIpc, loginItemsSettingsUrl, makeLoginItem } from "./login-item.ts";
-import { messages } from "./messages.ts";
 import { handleNotificationIpc } from "./notification-choices.ts";
 import { fileSettingsStore } from "./settings.ts";
+import { registerLocalScheme, startSetup } from "./setup-mode.ts";
 import { claimSingleInstance } from "./single-instance.ts";
 import { thisComputer } from "./tailnet.ts";
 
 // Same name as the server's default data folder, so `pnpm dev` and the app share one installation.
 app.setName("Hobbots");
+
+// Setup's local pages have their own scheme, which must be known before the app is ready (ADR 025).
+registerLocalScheme();
 
 // A second launch quits at once; the running instance shows its window instead.
 const primary = claimSingleInstance();
@@ -62,37 +65,20 @@ app.whenReady().then(async () => {
 
   const start = startMode(settings, {
     installationId: readInstallationId(dataDir),
-    connectTo: process.env.HOBBOTS_CONNECT_TO,
+    // Scripts that test the hub on a new data folder start it as Run here would.
+    asHub: process.env.HOBBOTS_MODE === "hub",
   });
-  if (start.start === "pair") {
-    // It becomes a connected desktop only once the hub allowed it.
-    const outcome = await pairWith(start.address, computer());
-    if (outcome.kind !== "allowed") {
-      console.error(`Hobbots did not connect to ${start.address}: ${outcome.kind}`);
-      await computer().dispose();
-      app.quit();
-      return;
-    }
-    settings.update({ mode: "connected", connection: outcome.connection, leftHub: undefined });
-    await startConnected(appShell, outcome.connection, computer());
-  } else if (start.start === "choose") {
-    // Until setup's own first screen runs without a hub (#446), this computer is asked here, so a
-    // disconnected Mac never becomes a hub by itself.
-    const copy = messages.choose;
-    const { response } = await dialog.showMessageBox({
-      type: "question",
-      message: copy.title,
-      detail: copy.detail,
-      buttons: [copy.runHere, copy.quit],
-      defaultId: 0,
-      cancelId: 1,
-    });
-    if (response !== 0) {
-      app.quit();
-      return;
-    }
-    settings.update({ leftHub: undefined });
-    await startHub(appShell);
+  if (start.start === "setup") {
+    // Welcome and Where Hobbots runs, with no server until the user chose Run here.
+    await startSetup(
+      appShell,
+      computer,
+      {
+        startHub: (firstPage) => startHub(appShell, { firstPage }),
+        startConnected: (connection) => startConnected(appShell, connection, computer()),
+      },
+      { start: start.page },
+    );
   } else if (start.start === "connected") {
     // No server, no database, no installation ID and no network settings on this computer.
     await startConnected(appShell, start.connection, computer());

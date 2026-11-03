@@ -219,12 +219,8 @@ describe("the connected desktop", () => {
     });
     // An existing hub stays a hub, and writes that down without asking.
     const hubSettings = fileSettingsStore(join(dataDir, "hub-settings.json"));
-    expect(startMode(hubSettings, { installationId: "id", connectTo: ORIGINS.origin })).toEqual({ start: "hub" });
+    expect(startMode(hubSettings, { installationId: "id" })).toEqual({ start: "hub" });
     expect(hubSettings.read().mode).toBe("hub");
-    // A computer that chose nothing pairs before it becomes a connected desktop.
-    expect(
-      startMode(fileSettingsStore(join(dataDir, "new.json")), { installationId: undefined, connectTo: "x" }),
-    ).toEqual({ start: "pair", address: "x" });
   });
 
   // covers DP-001
@@ -512,12 +508,8 @@ describe("Disconnect on a connected desktop", () => {
     // No mode is chosen, and this Mac's own choices stay.
     expect(desktopMode(settings.read())).toBeUndefined();
     expect(settings.read()).toEqual({ openAtLogin: true, leftHub: true });
-    // The next start asks what this Mac is for: it never starts a hub, which would make it one for good.
-    expect(startMode(settings, { installationId: undefined })).toEqual({ start: "choose" });
-    // Choosing again still works: pairing with a hub, or a hub's own installation.
-    expect(startMode(settings, { installationId: undefined, connectTo: ORIGINS.origin })).toMatchObject({
-      start: "pair",
-    });
+    // The next start opens setup at Where Hobbots runs: it never starts a hub, which would make it one for good.
+    expect(startMode(settings, { installationId: undefined })).toEqual({ start: "setup", page: "where" });
   };
 
   // covers DP-001, DP-004

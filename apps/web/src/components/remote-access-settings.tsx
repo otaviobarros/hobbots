@@ -8,11 +8,9 @@ import { HttpsSettings, ServeLeftOver } from "./devices/https-settings.tsx";
 import { PortField } from "./devices/port-field.tsx";
 import { RemoteAddress } from "./devices/remote-address.tsx";
 import { messages } from "./messages.ts";
+import { TAILSCALE_DOWNLOAD } from "./tailscale-not-ready.tsx";
 
 const copy = messages.remoteAccess;
-
-/** Where Tailscale is downloaded, for every platform. */
-export const TAILSCALE_DOWNLOAD = "https://tailscale.com/download";
 
 /** Why the hub is not on the tailnet, in the words Settings uses; null while it listens everywhere. */
 export const remoteAccessWhy = (status: RemoteAccessStatus): string | null => {

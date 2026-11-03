@@ -7,8 +7,16 @@
 import { isIP } from "node:net";
 import { NodeServices } from "@effect/platform-node";
 import { DeviceTokenKeychain, DeviceTokenKeychainLive, DeviceTokenKeychainMemory } from "@hobbots/server/device-token";
+import {
+  type AddressRefused,
+  findHubs,
+  type HubScan,
+  type HubTarget,
+  resolveHubAddress,
+} from "@hobbots/server/hub-discovery";
 import { type TailnetSnapshot, Tailscale, TailscaleFakeFile, TailscaleLive } from "@hobbots/server/tailscale";
-import { Effect, Layer, ManagedRuntime, Option, Redacted } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Redacted, Result } from "effect";
+import { FetchHttpClient } from "effect/http";
 import { type HubNodeState, hubNodeState, type NodeLookup, type TailnetNode } from "./hub-connection.ts";
 
 /** Where the device token lives: the keychain item, read and written as plain promises. */
@@ -20,10 +28,19 @@ export interface DeviceTokenStore {
   readonly remove: () => Promise<void>;
 }
 
+/** A typed address as the hub it names, or why it was refused before any request (ADR 025). */
+export type ResolvedAddress =
+  | { readonly kind: "hub"; readonly target: HubTarget }
+  | { readonly kind: "refused"; readonly refused: AddressRefused };
+
 /** This computer's Tailscale, as connecting needs it. */
-interface ThisTailnet extends NodeLookup {
+export interface ThisTailnet extends NodeLookup {
   /** This computer's own Tailscale user, or null when Tailscale is not running or signed in. */
   readonly ownLogin: () => Promise<string | null>;
+  /** The Hobbots hubs on the user's own online computers, or why Tailscale could not be read. */
+  readonly findHubs: () => Promise<HubScan>;
+  /** What the user typed, completed from `tailscale status`, or why it is not one of their computers. */
+  readonly resolveAddress: (typed: string) => Promise<ResolvedAddress>;
   /** What `tailscale status` says now: this computer's state and its peers. */
   readonly snapshot: () => Promise<TailnetSnapshot>;
   /** Whether Tailscale runs here and the hub's node is online, from a fresh `tailscale status`. */
@@ -48,10 +65,12 @@ export interface TailnetOptions {
   readonly dataDir: string;
   readonly env: NodeJS.ProcessEnv;
   readonly platform: NodeJS.Platform;
+  /** What asks each computer for a hub's health answer; the platform's own unless a test gives one. */
+  readonly fetch?: typeof globalThis.fetch;
 }
 
 /** Builds the services once for the app's lifetime; `dispose` releases them on quit. */
-export const thisComputer = ({ dataDir, env, platform }: TailnetOptions) => {
+export const thisComputer = ({ dataDir, env, platform, fetch }: TailnetOptions) => {
   const tailscale =
     env.HOBBOTS_FAKE_TAILSCALE === "on"
       ? TailscaleFakeFile(dataDir)
@@ -60,19 +79,19 @@ export const thisComputer = ({ dataDir, env, platform }: TailnetOptions) => {
     env.HOBBOTS_FAKE_KEYCHAIN === "memory"
       ? DeviceTokenKeychainMemory
       : DeviceTokenKeychainLive(platform, env).pipe(Layer.provide(NodeServices.layer));
-  const runtime = ManagedRuntime.make(Layer.mergeAll(tailscale, keychain));
+  const http =
+    fetch === undefined
+      ? FetchHttpClient.layer
+      : FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetch)));
+  const runtime = ManagedRuntime.make(Layer.mergeAll(tailscale, keychain, http));
+  const readSnapshot = Tailscale.use((service) => service.snapshot);
 
-  const snapshot = () => runtime.runPromise(Tailscale.use((service) => service.snapshot));
+  const snapshot = () => runtime.runPromise(readSnapshot);
   const tailnet: ThisTailnet = {
     snapshot,
     nodeState: async (nodeId) => hubNodeState(await snapshot(), nodeId),
     resolve: (host) =>
-      runtime.runPromise(
-        Effect.map(
-          Tailscale.use((service) => service.snapshot),
-          (snapshot) => tailnetAddresses(snapshot.nodes, host),
-        ),
-      ),
+      runtime.runPromise(Effect.map(readSnapshot, (snapshot) => tailnetAddresses(snapshot.nodes, host))),
     whois: (address) =>
       runtime.runPromise(
         Effect.map(
@@ -82,9 +101,18 @@ export const thisComputer = ({ dataDir, env, platform }: TailnetOptions) => {
       ),
     ownLogin: () =>
       runtime.runPromise(
-        Effect.map(
-          Tailscale.use((service) => service.snapshot),
-          (snapshot) => (snapshot.self?.owner._tag === "User" ? snapshot.self.owner.login : null),
+        Effect.map(readSnapshot, (snapshot) =>
+          snapshot.self?.owner._tag === "User" ? snapshot.self.owner.login : null,
+        ),
+      ),
+    findHubs: () => runtime.runPromise(findHubs),
+    resolveAddress: (typed) =>
+      runtime.runPromise(
+        Effect.map(readSnapshot, (snapshot) =>
+          Result.match(resolveHubAddress(typed, snapshot), {
+            onSuccess: (target): ResolvedAddress => ({ kind: "hub", target }),
+            onFailure: (refused): ResolvedAddress => ({ kind: "refused", refused }),
+          }),
         ),
       ),
   };

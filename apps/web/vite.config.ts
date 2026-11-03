@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -9,6 +10,16 @@ export default defineConfig({
   // the server (ADR 012).
   base: "/",
   plugins: [react(), tailwindcss()],
+  // Two entries: the hub's pages, and setup's local pages that the desktop app serves from its own
+  // resources before this computer is a hub or connected to one (ADR 025).
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(import.meta.dirname, "index.html"),
+        local: resolve(import.meta.dirname, "local.html"),
+      },
+    },
+  },
   // The dev server forwards what the hub answers to the hub on loopback (see hub-proxy.ts).
   server: {
     // 127.0.0.1, not `localhost`: the hub links its pages, and GitHub sends the user back, at

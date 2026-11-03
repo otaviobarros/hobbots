@@ -5,12 +5,10 @@
  * only in the keychain. Every connection first checks that the hub's address still belongs to the
  * node the user chose.
  */
-import { hostname } from "node:os";
 import { app, type BrowserWindow, dialog, ipcMain, Menu, powerMonitor, session, shell, Tray } from "electron";
 import { newAppWindow } from "./app-window.ts";
 import { connectionChannels, connectionView, handleConnectionIpc } from "./connection-ipc.ts";
 import { connectionStateOf } from "./connection-state.ts";
-import { type PairingOutcome, pairAsDesktop } from "./desktop-pairing.ts";
 import { type Disconnected, disconnectFromHub } from "./disconnect.ts";
 import {
   type ConnectionState,
@@ -45,31 +43,6 @@ import { deviceCookies, guardWindowRequests, withoutDeviceCookies } from "./wind
 const RETRY_MS = 5000;
 
 const copy = messages.connection;
-
-/** What the hub's prompt calls this computer, as the hub's own window names its own. */
-const deviceName = () => `Hobbots on ${hostname().replace(/\.local$/i, "")}`;
-const platformName = () => (process.platform === "darwin" ? "macOS" : process.platform);
-
-/**
- * Pairs with the hub at `address` until #446 builds Connect: the waiting text, with the computer as
- * Tailscale names it and the code the hub's prompt shows, goes to the app's log.
- */
-export const pairWith = async (address: string, computer: ReturnType<typeof thisComputer>): Promise<PairingOutcome> => {
-  const origins = hubOrigins(address);
-  if (origins === undefined) return { kind: "notYourNode" };
-  return pairAsDesktop({
-    origins,
-    device: { name: deviceName(), platform: platformName() },
-    nodeCheck: makeNodeCheck(computer.tailnet),
-    ownLogin: await computer.tailnet.ownLogin(),
-    fetch: globalThis.fetch,
-    keepToken: computer.token.write,
-    onWaiting: ({ node, hubName, code }) =>
-      console.log(
-        `Approve this Mac on ${node.nodeName} (${hubName}). You should see a prompt with this code there: ${code}`,
-      ),
-  });
-};
 
 /** Removes both device cookies from the window's session, as after the hub revoked this device. */
 const clearCookies = async (origins: HubOrigins) => {
@@ -154,8 +127,6 @@ const startAgain = async (connection: HubConnection, stillListed: boolean) => {
       buttons: [copy.ok],
     });
   }
-  // A development start that paired from the environment would pair again at once.
-  delete process.env.HOBBOTS_CONNECT_TO;
   app.relaunch();
   app.quit();
 };

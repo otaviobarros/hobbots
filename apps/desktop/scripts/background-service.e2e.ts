@@ -119,7 +119,8 @@ describe("Hobbots.app as the hub's background service", { concurrency: false }, 
   const dataDir = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-e2e-")));
   const launch = (...args: string[]) =>
     spawn(executable, [`--user-data-dir=${dataDir}`, ...args], {
-      env: { ...process.env, HOBBOTS_RUNTIME: "fake", HOBBOTS_PORT: String(port) },
+      // A new data folder starts setup with no server; this one is the hub, as Run here makes it.
+      env: { ...process.env, HOBBOTS_RUNTIME: "fake", HOBBOTS_MODE: "hub", HOBBOTS_PORT: String(port) },
       stdio: ["ignore", "inherit", "inherit"],
     });
   let first: ChildProcess;
