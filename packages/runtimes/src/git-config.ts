@@ -1,4 +1,5 @@
 import { readFileSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { secretShapeIn } from "@hobbots/domain";
 
@@ -124,6 +125,14 @@ const sectionOf = (line: string) => {
   return trimmed.slice(1, end).toLowerCase();
 };
 
+/** A path a config names, absolute: from the home folder for `~/`, else from the config's own folder. */
+const pathFrom = (value: string, file: string, home: string) =>
+  value === "~" || value.startsWith("~/")
+    ? join(home, value.slice(1))
+    : isAbsolute(value)
+      ? value
+      : resolve(dirname(file), value);
+
 /**
  * The other files a config makes Git read, absolute: those it includes through `include.path` or
  * `includeIf.<condition>.path`, and the ignore and attributes files `core.excludesFile` and
@@ -149,13 +158,7 @@ export const includedFiles = (
     if (kind === null) continue;
     const value = unquote(line.slice(line.indexOf("=") + 1));
     if (value === "") continue;
-    const path =
-      value === "~" || value.startsWith("~/")
-        ? join(home, value.slice(1))
-        : isAbsolute(value)
-          ? value
-          : resolve(dirname(file), value);
-    found.push({ file: path, kind });
+    found.push({ file: pathFrom(value, file, home), kind });
   }
   return found;
 };
@@ -222,4 +225,87 @@ export const gitConfigAccess = (
     if (kind === "config") queue.push(...includedFiles(text, file, home));
   }
   return { _tag: "Open", files: [...new Set(files)] };
+};
+
+/** The name and email the user's own Git config sets, either of which may be missing. */
+export interface GitIdentity {
+  readonly name: string | null;
+  readonly email: string | null;
+}
+
+/**
+ * The identity the user's own Git config sets (#586): `user.name` and `user.email` from
+ * `~/.gitconfig`, the XDG config and the files they include unconditionally, the last setting
+ * winning as in Git. `includeIf` files are left out, since their conditions depend on the
+ * repository. Only these two settings are read, so a file that also holds a secret still gives them.
+ */
+export const userGitIdentity = (
+  home: string,
+  env: NodeJS.ProcessEnv = process.env,
+  read: ReadText = readText,
+): GitIdentity => {
+  const identity: { name: string | null; email: string | null } = { name: null, email: null };
+  const seen = new Set<string>();
+  const visit = (file: string) => {
+    const text = seen.has(file) || seen.size >= MAX_FILES ? null : read(file);
+    seen.add(file);
+    if (text === null) return;
+    let section: string | null = null;
+    for (const line of text.split("\n")) {
+      section = sectionOf(line) ?? section;
+      const key = keyOf(line);
+      if (key === null) continue;
+      const value = unquote(line.slice(line.indexOf("=") + 1));
+      if (section === "user" && (key === "name" || key === "email")) identity[key] = value === "" ? null : value;
+      else if (section === "include" && key === "path" && value !== "") visit(pathFrom(value, file, home));
+    }
+  };
+  for (const { file, kind } of userGitConfigFiles(home, env)) if (kind === "config") visit(file);
+  return identity;
+};
+
+/**
+ * The environment a hob's commands commit with when no app identity applies (#586). Git would
+ * otherwise make an email up from the user's account and the computer's name when it finds none,
+ * as a sandbox that cannot read the user's config does. With the user's email known, `EMAIL` gives
+ * it to Git below every config, so a repository's own `user.email` still wins. With none, Git is
+ * told to take an identity from config only, so a commit without one fails, and the hob asks.
+ * Settings already in `GIT_CONFIG_COUNT` are kept.
+ */
+export const withUserIdentity = (env: NodeJS.ProcessEnv, identity: GitIdentity): NodeJS.ProcessEnv => {
+  if (identity.email !== null) return { ...env, EMAIL: identity.email };
+  const count = Number.parseInt(env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
+  return {
+    ...env,
+    GIT_CONFIG_COUNT: String(count + 1),
+    [`GIT_CONFIG_KEY_${count}`]: "user.useConfigOnly",
+    [`GIT_CONFIG_VALUE_${count}`]: "true",
+  };
+};
+
+/** What a hob is told when no identity applies to its commits (#586). */
+export const NO_GIT_IDENTITY_NOTE =
+  "No Git identity is set for your commits: neither yours nor the user's. Ask the user who to commit as before you commit, and never set one yourself.";
+
+/** How a turn's commands commit, and what its hob is told about it. */
+export interface UserCommits {
+  readonly note: string;
+  readonly env: (env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv;
+}
+
+/**
+ * The user's identity for a turn with tools, whose commands may commit, when its hob has no app of
+ * its own to commit as (`commitAs`), read from the user's config now. Anything else commits as it would.
+ */
+export const userCommits = (
+  hasTools: boolean,
+  commitAs: { readonly name: string; readonly email: string } | undefined,
+  home: string = homedir(),
+): UserCommits => {
+  if (!hasTools || commitAs !== undefined) return { note: "", env: (env) => env };
+  const identity = userGitIdentity(home);
+  return {
+    note: identity.email === null ? NO_GIT_IDENTITY_NOTE : "",
+    env: (env) => withUserIdentity(env, identity),
+  };
 };

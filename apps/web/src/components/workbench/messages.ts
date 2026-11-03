@@ -149,6 +149,7 @@ export const messages = {
     questionForYou: "A question for you",
     questionFor: ({ name }: { name: string }) => `A question for ${name}`,
     approval: "Waiting for your approval",
+    uncommitted: "Uncommitted changes",
     answerInChat: "Answer in the chat",
     decideInChat: "Decide in the chat",
     waitingList: "What the hobs on this task are waiting on",

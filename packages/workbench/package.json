@@ -13,7 +13,8 @@
     "@hobbots/agents": "workspace:*",
     "@hobbots/domain": "workspace:*",
     "effect": "catalog:",
-    "ignore": "7.0.14"
+    "ignore": "7.0.14",
+    "isomorphic-git": "1.44.10"
   },
   "devDependencies": {
     "@types/node": "26.6.5",

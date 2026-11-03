@@ -59,6 +59,7 @@ import {
   runnableBinary,
 } from "./binary.ts";
 import { toolFinished } from "./command-exit.ts";
+import { userCommits } from "./git-config.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import {
   CLAUDE_CODE_MODEL_HOSTS,
@@ -152,8 +153,20 @@ export const botCommitNote = (commitAs: CommitIdentity) =>
  * the turn can ask the user, the sandbox note when sandboxed, and the bot note when the hob commits
  * as its own app.
  */
-export const turnInstructions = (instructions: string, sandboxed: boolean, asks = false, commitAs?: CommitIdentity) =>
-  [instructions, asks ? APPROVAL_NOTE : "", sandboxed ? SANDBOX_NOTE : "", commitAs ? botCommitNote(commitAs) : ""]
+export const turnInstructions = (
+  instructions: string,
+  sandboxed: boolean,
+  asks = false,
+  commitAs?: CommitIdentity,
+  identityNote = "",
+) =>
+  [
+    instructions,
+    asks ? APPROVAL_NOTE : "",
+    sandboxed ? SANDBOX_NOTE : "",
+    commitAs ? botCommitNote(commitAs) : "",
+    identityNote,
+  ]
     .filter((part) => part !== "")
     .join("\n\n");
 
@@ -984,11 +997,14 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           const tools = toolTurn(request.tools, policySandbox(declared), request.hubTools);
           const sandboxed = tools !== null && sandbox.state === "on";
           const commitAs = tools?.commitAs;
+          // A hob without its own app commits as the user, never as an identity Git makes up (#586).
+          const commits = userCommits(tools !== null, commitAs);
           const instructions = turnInstructions(
             request.instructions,
             sandboxed,
             tools !== null && Boolean(request.approvals),
             commitAs,
+            commits.note,
           );
           // The sandbox opens the binary's folder, so it must be a real path, never the hub's own folder.
           const absoluteBinary = sandboxed ? yield* resolveBinary(binary) : binary;
@@ -1033,7 +1049,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
               : { ...options, env: withCommitIdentity(options.env, commitAs) };
             const spawned = spawn(command, args, {
               cwd: options.cwd,
-              env,
+              env: commits.env(env),
               signal: options.signal,
               // Its own process group, so what its commands leave running ends with the turn.
               detached: prepared !== null,

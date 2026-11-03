@@ -120,6 +120,11 @@ export interface TaskCompletion {
    * completion resolves them as consumed; any other open item still blocks it. None by default.
    */
   readonly carried?: ReadonlyArray<CarriedItem>;
+  /**
+   * What the Task changed in a Git repository and left uncommitted (#586), recorded as an automatic
+   * `uncommitted` checkpoint with the completion, so the Task's Summary keeps it. None by default.
+   */
+  readonly uncommitted?: { readonly id: CheckpointId; readonly summary: string };
 }
 
 /**

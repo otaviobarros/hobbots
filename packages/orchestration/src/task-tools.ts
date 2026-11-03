@@ -45,6 +45,7 @@ import { makeDelegating } from "./delegating.ts";
 import { makePlanning } from "./planning.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
 import { TaskSignal } from "./signal.ts";
+import { makeWrapUp } from "./wrap-up.ts";
 
 type ToolHandler = (scope: CallScope, input: never) => Effect.Effect<TaskToolOutcome, TaskToolRefused>;
 
@@ -112,8 +113,9 @@ export class TaskTools extends Context.Service<
         const authority = yield* makeAuthorityOf(separator);
         const folderChecks = yield* FolderChecks;
         const hobs = yield* HobbotsRepository;
+        const wrapUp = yield* makeWrapUp;
         const handlers: Record<TaskToolName, ToolHandler> = {
-          ...makePlanning({ tasks, capacity, limits }),
+          ...makePlanning({ tasks, capacity, limits, wrapUp }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
           ...makeAsking({ tasks }),
         };

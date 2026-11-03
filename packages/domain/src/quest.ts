@@ -115,6 +115,7 @@ export const CheckpointKind = Schema.Literals([
   "done",
   "failed",
   "cancelled",
+  "uncommitted",
 ]);
 export type CheckpointKind = typeof CheckpointKind.Type;
 
@@ -122,12 +123,15 @@ export type CheckpointKind = typeof CheckpointKind.Type;
 export const CHECKPOINT_KINDS: Record<CheckpointSource, ReadonlyArray<CheckpointKind>> = {
   planned: ["milestone"],
   unplanned: ["finding", "blocker", "question", "progress"],
-  automatic: ["started", "waiting", "done", "failed", "cancelled", "finding"],
+  automatic: ["started", "waiting", "done", "failed", "cancelled", "finding", "uncommitted"],
 };
 
-/** Whether a checkpoint says more than its Task's state: anything its owner reported, or a finding the hub made. */
+/**
+ * Whether a checkpoint says more than its Task's state: anything its owner reported, a finding the
+ * hub made, or the changes it left uncommitted when it completed.
+ */
 export const saysMore = (checkpoint: { readonly source: CheckpointSource; readonly kind: CheckpointKind }) =>
-  checkpoint.source !== "automatic" || checkpoint.kind === "finding";
+  checkpoint.source !== "automatic" || checkpoint.kind === "finding" || checkpoint.kind === "uncommitted";
 
 /** Whether a checkpoint of this kind reaches the lead's context and can wake it; routine progress never does (IN-005). */
 export const wakesLead = (kind: CheckpointKind): boolean =>
