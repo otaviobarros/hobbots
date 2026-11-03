@@ -2,9 +2,8 @@
  * This computer's Tailscale and keychain for a connected desktop (ADR 025), read through the same
  * services the hub uses: `tailscale` only to read, never to change its settings, and the device
  * token's keychain item. `HOBBOTS_FAKE_TAILSCALE=on` and `HOBBOTS_FAKE_KEYCHAIN=memory` swap in the
- * fakes, as on the hub.
+ * fakes, as on the hub. The hub's name is resolved from `tailscale status`, never from another resolver.
  */
-import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { NodeServices } from "@effect/platform-node";
 import { DeviceTokenKeychain, DeviceTokenKeychainLive, DeviceTokenKeychainMemory } from "@hobbots/server/device-token";
@@ -26,11 +25,18 @@ interface ThisTailnet extends NodeLookup {
   readonly ownLogin: () => Promise<string | null>;
 }
 
-/** The addresses a host resolves to: a tailnet address is itself, a MagicDNS name asks the resolver. */
-const resolveHost = async (host: string): Promise<ReadonlyArray<string>> => {
+/**
+ * The addresses a host has on the tailnet: a tailnet address is itself, and a MagicDNS name is the
+ * node `tailscale status` lists under it, so no resolver outside Tailscale is asked.
+ */
+const tailnetAddresses = (
+  nodes: ReadonlyArray<{ readonly nodeName: string; readonly addresses: ReadonlyArray<string> }>,
+  host: string,
+) => {
   const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
   if (isIP(bare) !== 0) return [bare];
-  return (await lookup(bare, { all: true })).map((entry) => entry.address);
+  const name = bare.toLowerCase().replace(/\.$/, "");
+  return nodes.find((node) => node.nodeName.toLowerCase() === name)?.addresses ?? [];
 };
 
 export interface TailnetOptions {
@@ -52,7 +58,13 @@ export const thisComputer = ({ dataDir, env, platform }: TailnetOptions) => {
   const runtime = ManagedRuntime.make(Layer.mergeAll(tailscale, keychain));
 
   const tailnet: ThisTailnet = {
-    resolve: resolveHost,
+    resolve: (host) =>
+      runtime.runPromise(
+        Effect.map(
+          Tailscale.use((service) => service.snapshot),
+          (snapshot) => tailnetAddresses(snapshot.nodes, host),
+        ),
+      ),
     whois: (address) =>
       runtime.runPromise(
         Effect.map(

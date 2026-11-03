@@ -1,4 +1,5 @@
 import { isIPv6 } from "node:net";
+import { connectSupport, SUPPORTED_CONNECT } from "@hobbots/api";
 import { HubPort, type TailscaleState } from "@hobbots/domain";
 import { Duration, Effect, Option, Result, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -12,12 +13,6 @@ import { addressRanges, TAILNET_RANGES, type TailnetNode, type TailnetSnapshot, 
 
 /** The port a hub listens on unless the user moved it (ADR 021); the scan asks only this one. */
 export const DEFAULT_HUB_PORT = 4317;
-
-/**
- * The connect protocols this app can use (ADR 025). It counts changes to what the connected
- * desktop's main process relies on; a hub outside the range is listed but never paired with.
- */
-export const SUPPORTED_CONNECT = { min: 1, max: 1 } as const;
 
 /** At most this many health requests at once in a scan, each given this long to answer. */
 export const SCAN_CONCURRENCY = 8;
@@ -200,9 +195,10 @@ export const judgeHubHealth = (
   Option.match(decodeHealth(body), {
     onNone: () => ({ _tag: "NotHobbots" }),
     onSome: (health) => {
-      const connect = health.connect ?? 0;
-      const support = connect < range.min ? "hubOlder" : connect > range.max ? "appOlder" : "supported";
-      return { _tag: "Hub", name: health.name ?? null, version: health.version, connect, support };
+      // A hub outside the connect protocols this app supports (ADR 025) is listed but never paired with.
+      const side = connectSupport(health.connect, range);
+      const support = side === "ok" ? "supported" : side;
+      return { _tag: "Hub", name: health.name ?? null, version: health.version, connect: health.connect ?? 0, support };
     },
   });
 
