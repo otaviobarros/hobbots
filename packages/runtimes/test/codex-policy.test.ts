@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type PromptRequest, type RuntimeEvent, type ToolAccess, UNRECORDED_TOOL_CALL } from "@hobbots/agents";
-import { EMPTY_HOB_POLICY, type SafetyPreset, type SandboxState } from "@hobbots/domain";
+import { EMPTY_HOB_POLICY, type HobPolicy, type SafetyPreset, type SandboxState } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
@@ -24,8 +24,8 @@ const engine = Effect.runSync(Effect.service(PolicyEngine).pipe(Effect.provide(P
 const THREAD = "thr-1";
 const TURN = "turn-1";
 
-const access = (preset: SafetyPreset = "balanced"): ToolAccess => ({
-  policy: { preset, sharedFolders: [project], hob: EMPTY_HOB_POLICY, dataFolder: join(root, "data"), restrictions: [] },
+const access = (preset: SafetyPreset = "balanced", hob: HobPolicy = EMPTY_HOB_POLICY): ToolAccess => ({
+  policy: { preset, sharedFolders: [project], hob, dataFolder: join(root, "data"), restrictions: [] },
   folders: [project],
   runtimeFolder: join(root, "runtimes", "hob-1"),
 });
@@ -54,12 +54,13 @@ const decide = async (
   asked: PolicyRequest,
   options: {
     readonly preset?: SafetyPreset;
+    readonly hob?: HobPolicy;
     readonly sandbox?: SandboxState;
     readonly request?: Partial<PromptRequest>;
     readonly before?: ReadonlyArray<AppServerNotification>;
   } = {},
 ) => {
-  const tools = toolTurn(access(options.preset), options.sandbox ?? "on", null, CODEX_MODEL_HOSTS);
+  const tools = toolTurn(access(options.preset, options.hob), options.sandbox ?? "on", null, CODEX_MODEL_HOSTS);
   if (tools === null) throw new Error("expected a tool turn");
   const events: Array<RuntimeEvent> = [];
   const mapper = codexTurnEvents(THREAD);
@@ -203,6 +204,44 @@ describe("Codex's tool calls under the hob's policy", () => {
     const unknown = await decide(fileChange("f4"));
     expect(unknown.answer).toEqual({ decision: "decline" });
     expect(unknown.events).toEqual([expect.objectContaining({ _tag: "ToolDenied", reason: UNKNOWN_PATCH })]);
+  });
+
+  // covers PE-001, PE-003, STD-SEC-002
+  it("[TC-RT-070] decides a file change that deletes a file as a deletion, alone or with edits", async () => {
+    const removed = { path: join(project, "old.txt"), kind: { type: "delete" }, diff: "" };
+    const added = { path: join(project, "new.txt"), kind: { type: "add" }, diff: "hi\n" };
+
+    // Balanced allows edits but asks before a deletion.
+    for (const [id, changes] of [
+      ["d1", [removed]],
+      ["d2", [added, removed]],
+    ] as const) {
+      const { asked, approvals } = answering(approve, access());
+      const result = await decide(fileChange(id), { request: { approvals }, before: [patchStarted(id, changes)] });
+      expect(result.answer).toEqual({ decision: "accept" });
+      expect(asked).toEqual([expect.objectContaining({ stepId: id, operation: "delete-files" })]);
+      expect(result.events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval", "ToolStarted"]);
+      expect(result.events[1]).toMatchObject({ label: id === "d1" ? "Deleting old.txt" : "Editing 2 files" });
+    }
+
+    // With nobody to ask, the deletion does not run, nor the edits that come with it.
+    const alone = await decide(fileChange("d3"), { before: [patchStarted("d3", [added, removed])] });
+    expect(alone.answer).toEqual({ decision: "decline" });
+    expect(alone.events).toEqual([expect.objectContaining({ _tag: "ToolDenied", operation: "delete-files" })]);
+
+    // A hob that may never delete has a deleting patch refused, even with nobody to ask.
+    const never = await decide(fileChange("d4"), {
+      hob: { ...EMPTY_HOB_POLICY, overrides: { "delete-files": "deny" } },
+      before: [patchStarted("d4", [added, removed])],
+    });
+    expect(never.answer).toEqual({ decision: "decline" });
+    expect(never.events).toEqual([
+      expect.objectContaining({ _tag: "ToolDenied", operation: "delete-files", decidedBy: "policy" }),
+    ]);
+
+    // An edit alone still runs without asking.
+    const edit = await decide(fileChange("d5"), { before: [patchStarted("d5", [added])] });
+    expect(edit.answer).toEqual({ decision: "accept" });
   });
 
   // covers ADR 024

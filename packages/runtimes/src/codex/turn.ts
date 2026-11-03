@@ -418,6 +418,18 @@ const prepareSandbox = (
     });
   });
 
+/**
+ * An environment without Claude Code's variables. The sandbox passes Claude Code's sign-in on for
+ * Claude Code, which keeps it from its commands itself; Codex hands every variable to its commands,
+ * so none of them reaches Codex (STD-SEC-002).
+ */
+const withoutClaude = (env: NodeJS.ProcessEnv): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined && !entry[0].startsWith("CLAUDE_"),
+    ),
+  );
+
 /** The command that starts Codex in the turn's sandbox, or as it is, committing as the hob's bot if it has one. */
 const sandboxed = (
   command: AppServerCommand,
@@ -431,8 +443,9 @@ const sandboxed = (
   return {
     command: wrapped.command,
     args: wrapped.args,
-    // Codex's home is not a variable the sandbox passes on by itself.
-    env: { ...(wrapped.env as Record<string, string>), CODEX_HOME: command.env.CODEX_HOME as string },
+    // Codex's home is not a variable the sandbox passes on by itself. What the wrap adds for Claude
+    // Code stays out, and with it any Claude credential it brings back.
+    env: { ...withoutClaude(wrapped.env), CODEX_HOME: command.env.CODEX_HOME as string },
     cwd: command.cwd,
   };
 };
@@ -511,9 +524,9 @@ const governedTurn = (config: CodexTurnConfig, request: PromptRequest) => {
 const appServerCommand = (config: CodexTurnConfig, binary: string, home: string, cwd: string): AppServerCommand => ({
   command: binary,
   args: ["app-server", ...(config.extraArgs ?? [])],
-  // Codex hands its whole environment to its commands.
+  // Codex hands its whole environment to its commands, so Claude Code's sign-in and settings stay out.
   env: {
-    ...(sandboxEnv(process.env) as Record<string, string>),
+    ...withoutClaude(sandboxEnv(process.env)),
     PATH: codexPath(binary, process.env, homedir()),
     CODEX_HOME: home,
   },

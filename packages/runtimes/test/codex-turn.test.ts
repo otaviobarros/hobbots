@@ -581,10 +581,11 @@ describe("a Codex turn with tools", () => {
         Effect.sync(() => {
           scopes.push(scope);
           return {
+            // Like the wrap on macOS, it hands back what it was given and adds Claude Code's own settings.
             spawnArgs: (command, args, env) => ({
               command: "/sandbox",
               args: [command, ...args],
-              env: { PATH: env.PATH },
+              env: { ...env, CLAUDE_CODE_OAUTH_TOKEN: "claude-sign-in", CLAUDE_CONFIG_DIR: runtimeFolder },
             }),
             release: () => {
               released += 1;
@@ -612,7 +613,20 @@ describe("a Codex turn with tools", () => {
       folders: [project],
       runtimeFolder,
     } as const;
-    await run(turnConfig, prompt({ tools }));
+    // The hub was started with Claude Code's sign-in, which Codex would hand to every command.
+    const hubEnv = { CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN };
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = "claude-sign-in";
+    try {
+      await run(turnConfig, prompt({ tools }));
+    } finally {
+      if (hubEnv.CLAUDE_CODE_OAUTH_TOKEN === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+      else process.env.CLAUDE_CODE_OAUTH_TOKEN = hubEnv.CLAUDE_CODE_OAUTH_TOKEN;
+    }
+    // Neither Codex outside the sandbox nor inside it gets a Claude variable (STD-SEC-002).
+    for (const command of server.commands) {
+      expect(Object.keys(command.env).filter((key) => key.startsWith("CLAUDE_"))).toEqual([]);
+      expect(Object.values(command.env)).not.toContain("claude-sign-in");
+    }
     // Codex started once outside the sandbox to set up its home, then inside it for the turn.
     expect(server.commands.map((command) => command.command)).toEqual([binary, "/sandbox"]);
     expect(server.commands[1]).toMatchObject({ args: [binary, "app-server"], env: { CODEX_HOME: home }, cwd: project });
