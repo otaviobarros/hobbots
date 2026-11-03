@@ -825,7 +825,8 @@ export const TaskRepositoryLive = Layer.effect(
       sql`UPDATE questions SET recipient_id = ${question.recipientId}, chain = ${JSON.stringify(question.chain)},
         state = ${question.state}, answer = ${question.answer},
         answered_by = ${question.answeredBy === null ? null : JSON.stringify(question.answeredBy)},
-        answered_at = ${question.answeredAt}, revision = ${question.revision} WHERE id = ${question.id}`;
+        answered_at = ${question.answeredAt}, answered_by_device_id = ${question.answeredByDeviceId},
+        answered_via = ${question.answeredVia}, revision = ${question.revision} WHERE id = ${question.id}`;
 
     /** The copies of `question` still waiting for the hob that just handled it, resolved as answered (#573). */
     const settleCopies = (question: Question, first: number) =>
@@ -833,7 +834,7 @@ export const TaskRepositoryLive = Layer.effect(
         ? Effect.succeed([])
         : ledger.settleQuestionCopies(question.id, question.recipientId, first);
 
-    const answerQuestion: TaskRepository["Service"]["answerQuestion"] = (questionId, by, answer, at) =>
+    const answerQuestion: TaskRepository["Service"]["answerQuestion"] = (questionId, by, answer, at, from) =>
       change((revision) =>
         Effect.gen(function* () {
           const before = yield* openQuestion(questionId, by);
@@ -843,6 +844,8 @@ export const TaskRepositoryLive = Layer.effect(
             answer,
             answeredBy: by,
             answeredAt: at,
+            answeredByDeviceId: from?.deviceId ?? null,
+            answeredVia: from?.via ?? null,
             revision,
           });
           yield* saveQuestion(question);

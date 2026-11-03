@@ -133,7 +133,7 @@ Hobs act through Hobbots tools on the runtime's control channel, as Charms are e
 | Tool | Who may call it | What it does | Stores |
 |---|---|---|---|
 | `plan_steps` | A Task's owner | Splits its own Task into steps, each with a brief | Child Tasks with the same owner |
-| `start_quest` | A Task's owner | Turns its Task into a Quest with a goal, milestones and limits | Quest |
+| `start_quest` | A Task's owner | Turns its Task into a Quest with a goal, milestones, limits and the folders its work is in | Quest |
 | `delegate_task` | A Task's owner, which becomes or already is its lead | Gives another hob a Task with a brief, milestones and dependencies; the first call makes the Task a Quest | Task, Delegation |
 | `report_checkpoint` | A Task's owner | Reports a milestone, finding, blocker or progress | Checkpoint |
 | `ask` | A Task's owner | Asks a question; the server routes it to the nearest lead | Question |

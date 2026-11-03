@@ -1,6 +1,8 @@
 import type { FolderChecksShape } from "@hobbots/agents";
+import type { QuestLimits, TaskToolRefused } from "@hobbots/domain";
 import { Effect } from "effect";
 import { holds, type PathSeparator } from "./authority.ts";
+import { refuse } from "./call-scope.ts";
 
 /**
  * The folders a member gets when its lead names none (#582, ADR 018): the narrowest the work
@@ -59,6 +61,28 @@ export const pathsIn = (text: string, separator: PathSeparator): ReadonlyArray<s
   return [...new Set(found)].filter((path) => path.length > 1);
 };
 
+/** Each existing folder `text` names inside one of `lead`, as the hub stores it. */
+export const namedFolders = (
+  checks: FolderChecksShape,
+  lead: ReadonlyArray<string>,
+  text: string,
+  separator: PathSeparator,
+) =>
+  Effect.gen(function* () {
+    const named = yield* Effect.forEach(
+      pathsIn(text, separator),
+      (path) => checks.check(path).pipe(Effect.orElseSucceed(() => null)),
+      { concurrency: 8 },
+    );
+    return [
+      ...new Set(
+        named.filter(
+          (folder): folder is string => folder !== null && lead.some((own) => holds(own, folder, separator)),
+        ),
+      ),
+    ];
+  });
+
 /**
  * The member's default folders: each existing folder the brief names inside one of the lead's,
  * as the hub stores it, or else the lead's first folder. None when the lead has none.
@@ -69,17 +93,28 @@ export const defaultFolders = (
   brief: string,
   separator: PathSeparator,
 ) =>
-  Effect.gen(function* () {
-    const named = yield* Effect.forEach(pathsIn(brief, separator), (path) =>
-      checks.check(path).pipe(Effect.orElseSucceed(() => null)),
-    );
-    const inside = [
-      ...new Set(
-        named.filter(
-          (folder): folder is string => folder !== null && lead.some((own) => holds(own, folder, separator)),
+  Effect.map(namedFolders(checks, lead, brief, separator), (inside) => (inside.length > 0 ? inside : lead.slice(0, 1)));
+
+/** The folders a lead names for its Quest's work (#670), as the hub stores them: each one of its own or inside one. */
+export const requestedFolders = (
+  checks: FolderChecksShape,
+  lead: ReadonlyArray<string>,
+  requested: ReadonlyArray<string>,
+  separator: PathSeparator,
+): Effect.Effect<ReadonlyArray<string>, TaskToolRefused> =>
+  Effect.map(
+    Effect.forEach(requested, (typed) =>
+      checks.check(typed).pipe(
+        Effect.catch(() => refuse("invalid-input", `${typed} is not a folder on this hub.`)),
+        Effect.filterOrElse(
+          (folder) => lead.some((own) => holds(own, folder, separator)),
+          () => refuse("authority-wider", `${typed} is not one of your folders or inside one.`),
         ),
       ),
-    ];
-    if (inside.length > 0) return inside;
-    return lead.slice(0, 1);
-  });
+    ),
+    (folders) => [...new Set(folders)],
+  );
+
+/** A Quest's limits with the folders its work is in (#670); none leaves all of its lead's. */
+export const withFolders = (limits: QuestLimits, folders: ReadonlyArray<string>): QuestLimits =>
+  folders.length === 0 ? limits : { ...limits, folders };

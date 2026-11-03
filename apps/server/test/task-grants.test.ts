@@ -44,7 +44,7 @@ import {
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Deferred, Effect, Layer, ManagedRuntime, Schedule, Stream } from "effect";
+import { Deferred, Effect, Layer, ManagedRuntime, Option, Schedule, Stream } from "effect";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { DispatcherHostLive } from "../src/backpack.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
@@ -295,6 +295,21 @@ describe("an approval for This Task", () => {
     expect((await run(asked())).map((each) => each.id)).toEqual([request.id]);
     const [used] = await run(GrantService.use((grants) => grants.list({ agentId: ALDRIC })));
     expect(used?.lastUsedAt).not.toBeNull();
+  }, 30_000);
+
+  // covers PE-007, OR-001
+  it("[TC-OR-484] asked from the chat turn on the Task, names that Task, and the Task's ledger still holds it open", async () => {
+    const { run } = setUp();
+    const { request, top } = await run(taskWithPush(["Wait for the go-ahead"]));
+    if (top === undefined) throw new Error("no Task");
+
+    // Issue #670: a chat turn's request had only the top Task, while a member's named its own.
+    expect(request).toMatchObject({ taskId: top.id, rootTaskId: top.id });
+    expect(request.messageId).not.toBeNull();
+    const ledger = await run(TaskRepository.use((tasks) => tasks.readLedger(top.id)));
+    expect(ledger.pipe(Option.map((each) => each.open.filter((entry) => entry._tag === "Approval").length))).toEqual(
+      Option.some(1),
+    );
   }, 30_000);
 
   // covers PE-004, PE-007, OR-002

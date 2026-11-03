@@ -30,7 +30,7 @@ export function InboxDetail({
 }) {
   const pending = request.state === "pending";
   // A party member asks in its lead's thread, whose hob is known only once the threads load.
-  const chatHob = threadHob ?? (request.taskId === null ? request.agentId : undefined);
+  const chatHob = threadHob ?? (request.messageId !== null ? request.agentId : undefined);
   const retired = hob.status === "retired";
   const title = requestTitle(request);
   return (
