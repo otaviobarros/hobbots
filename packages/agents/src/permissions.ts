@@ -26,6 +26,12 @@ export const effectiveFolders = (folders: FolderChecksShape, sharedFolders: Read
     return [...new Set([...visible, ...policy.ownFolders])];
   });
 
+/** The folders a hob works in now, each as the hub finds it now (canonical while it is there), once. */
+export const hobFoldersNow = (folders: FolderChecksShape, sharedFolders: ReadonlyArray<string>, policy: HobPolicy) =>
+  Effect.flatMap(effectiveFolders(folders, sharedFolders, policy), (each) =>
+    Effect.map(Effect.forEach(each, folders.identity), (canonical) => [...new Set(canonical)]),
+  );
+
 /**
  * Per operation, the narrower of the preset and the hob's override. Taking the narrower one keeps an
  * override stored under one preset from widening a stricter preset picked later.

@@ -33,7 +33,8 @@
     "./hub-discovery": "./src/hub-discovery.ts",
     "./installation": "./src/installation.ts",
     "./network-settings": "./src/network-settings.ts",
+    "./window-key": "./src/window-key.ts",
     "./tailscale": "./src/tailscale.ts",
-    "./window-key": "./src/window-key.ts"
+    "./device-token": "./src/device-token.ts"
   }
 }

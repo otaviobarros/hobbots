@@ -12,7 +12,7 @@ import {
   runtimeAdapters,
   ToolLogs,
 } from "@hobbots/agents";
-import { HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
+import { CONNECT_PROTOCOL, HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
 import type { ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { HttpServerRequest } from "effect/http";
@@ -24,6 +24,7 @@ import { CharmCallsHandlers } from "./charm-calls.ts";
 import { DevicesHandlers } from "./device-handlers.ts";
 import { DeviceGate } from "./devices.ts";
 import { DiagnosticsHandlers } from "./diagnostics.ts";
+import { ExportsHandlers } from "./exports.ts";
 import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobGitHubAppHandlers } from "./hob-github-app.ts";
@@ -165,7 +166,10 @@ const HealthHandlers = HttpApiBuilder.group(HobbotsApi, "health", (handlers) =>
           const place = yield* gate.placeOf(yield* HttpServerRequest.HttpServerRequest);
           if (Option.isSome(place)) yield* devices.throttleAnonymous(place.value);
           const local = Option.exists(place, (where) => where._tag === "Local");
-          return local ? { ...installation, name } : { app: installation.app, name, version: installation.version };
+          const connect = CONNECT_PROTOCOL;
+          return local
+            ? { ...installation, name, connect }
+            : { app: installation.app, name, version: installation.version, connect };
         }).pipe(withRetryAfter),
     });
   }),
@@ -211,6 +215,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     WorkbenchHandlers,
     RemoteAccessHandlers,
     DiagnosticsHandlers,
+    ExportsHandlers,
     UsageHandlers,
   ]),
   Layer.provide(DeviceSessionLive),

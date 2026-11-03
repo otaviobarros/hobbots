@@ -13,6 +13,8 @@ import {
 } from "@hobbots/ui/components/menu";
 import { cn } from "@hobbots/ui/lib/utils";
 import { type ComponentType, type ReactNode, useState } from "react";
+import { ExportDialog } from "../export/export-dialog.tsx";
+import { messages as exportCopy } from "../export/messages.ts";
 import { useArchive } from "./archive-context.tsx";
 import { isMac } from "./archive-rules.ts";
 import { messages as copy } from "./messages.ts";
@@ -106,19 +108,24 @@ export function ThreadRowMenu({
   );
 }
 
-/** The chat header's ⋯ menu for the open thread. */
+/** The chat header's ⋯ menu for the open thread: export it, or archive it. */
 export function ThreadHeaderMenu({ hob, thread }: { hob: Agent; thread: Thread }) {
   const [open, setOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   return (
-    <DropdownMenu onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="icon" size="icon" aria-label={copy.headerMenu} title={copy.headerMenu}>
-          ⋯
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <ArchiveItem Item={DropdownMenuItem} hob={hob} thread={thread} current open={open} />
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="icon" size="icon" aria-label={copy.headerMenu} title={copy.headerMenu}>
+            ⋯
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => setExporting(true)}>{exportCopy.menuThread}</DropdownMenuItem>
+          <ArchiveItem Item={DropdownMenuItem} hob={hob} thread={thread} current open={open} />
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {exporting && <ExportDialog target={{ thread }} onClose={() => setExporting(false)} />}
+    </>
   );
 }

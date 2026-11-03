@@ -7,6 +7,7 @@ import {
   ApprovalService,
   CharmCallService,
   ChatService,
+  DataExport,
   DeviceService,
   GrantService,
   HobAdmission,
@@ -58,6 +59,7 @@ import {
 } from "@hobbots/persistence";
 import {
   ClaudeCodeLayer,
+  CodexLayer,
   FakeAdditionalRuntimesLayer,
   FakeRuntimeLayer,
   FolderSandboxLive,
@@ -70,9 +72,11 @@ import { DispatcherHostLive } from "./backpack.ts";
 import { BlockOnRetirement } from "./blockers.ts";
 import { ServerConfig } from "./config.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "./continuations.ts";
+import { SaveDestinationsLive } from "./destination.ts";
 import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from "./devices.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
+import { ExportFoldersLive } from "./exports.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
@@ -162,10 +166,16 @@ const ServerLive = Layer.unwrap(
             FakeRuntimeLayer({ ...fake, availability: config.fakeAvailability }),
             FakeAdditionalRuntimesLayer({ ...fake, availability: config.fakeCodexAvailability }),
           )
-        : ClaudeCodeLayer({
-            workspaceDir: join(config.dataDir, "workspaces", "default"),
-            executable: Option.getOrUndefined(config.claudeExecutable),
-          }).pipe(Layer.provide(ProcessSandbox.layer))
+        : Layer.mergeAll(
+            ClaudeCodeLayer({
+              workspaceDir: join(config.dataDir, "workspaces", "default"),
+              executable: Option.getOrUndefined(config.claudeExecutable),
+            }).pipe(Layer.provide(ProcessSandbox.layer)),
+            CodexLayer({
+              executable: Option.getOrUndefined(config.codexExecutable),
+              clientVersion: config.version,
+            }).pipe(Layer.provide(NodeServices.layer)),
+          )
     ).pipe(Layer.provide(PolicyEngine.node), Layer.provide(Remote));
     // The GitHub Charm reads and pushes on the hub, outside the sandbox (#317, #323), as the GitHub
     // account the user connected in Settings, whose tokens stay in the OS keychain (ADR 020). A push
@@ -267,9 +277,20 @@ const ServerLive = Layer.unwrap(
       // folder, out of every hob's reach.
       .pipe(
         Layer.provideMerge(
-          Layer.merge(ActivityRecorder.layer(), TaskFiles.layer.pipe(Layer.provide(HobFilesLive))).pipe(
-            Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity")))),
-          ),
+          Layer.mergeAll(
+            ActivityRecorder.layer(),
+            TaskFiles.layer.pipe(Layer.provide(HobFilesLive)),
+            // Exports of your threads and work history (ADR 026), never inside a hob's folder.
+            DataExport.layer(config.version).pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  HobFilesLive,
+                  ExportFoldersLive,
+                  SaveDestinationsLive(join(config.dataDir, "workspaces", "default")),
+                ),
+              ),
+            ),
+          ).pipe(Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity"))))),
         ),
       )
       // One dispatcher for the whole hub, so the claims it expires at start are an earlier process's.

@@ -16,7 +16,7 @@ import {
 import { Context, Effect, Layer, Option } from "effect";
 import { ActivityRepository } from "./activity.ts";
 import { readAttemptActivity } from "./activity-reads.ts";
-import { effectiveFolders } from "./permissions.ts";
+import { hobFoldersNow } from "./permissions.ts";
 import { FolderChecks, InstallationSettings } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { makeRedactor, SecretRedaction } from "./secrets.ts";
@@ -109,8 +109,7 @@ export class TaskFiles extends Context.Service<
           const agent = yield* repo.findAgent(activity.attempt.agentId);
           if (Option.isNone(agent)) return [];
           const { approvedFolders } = yield* setup.get;
-          const folders = yield* effectiveFolders(folderChecks, approvedFolders, agent.value.policy);
-          return [...new Set(yield* Effect.forEach(folders, folderChecks.identity))];
+          return yield* hobFoldersNow(folderChecks, approvedFolders, agent.value.policy);
         });
 
       const placedArtifacts = (activity: AttemptActivity, folders: ReadonlyArray<string>) =>

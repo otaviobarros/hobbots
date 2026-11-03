@@ -196,21 +196,50 @@ export const KeychainLive = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv) 
     }),
   );
 
+/** One keychain item held in memory, checked as the real keychain checks what it stores. */
+const memoryItem = (described: Item): Effect.Effect<ItemAccess> =>
+  Effect.map(Ref.make(Option.none<Redacted.Redacted<string>>()), (item) => ({
+    read: Ref.get(item),
+    write: (secret) => checkSafe(described, secret).pipe(Effect.andThen(Ref.set(item, Option.some(secret)))),
+    remove: Ref.set(item, Option.none()),
+  }));
+
+/**
+ * A connected desktop's device token (ADR 025): one item, the token the hub it is connected to
+ * gave it. Never written to a file; without a usable keychain, connecting stops.
+ */
+export class DeviceTokenKeychain extends Context.Service<DeviceTokenKeychain, Keychain["Service"]>()(
+  "@hobbots/charms/DeviceTokenKeychain",
+) {}
+
+/** The item's service name in the keychain of a connected desktop. */
+export const DEVICE_KEYCHAIN_SERVICE = "ai.hobbots.device";
+
+const DEVICE_ITEM: Item = {
+  service: DEVICE_KEYCHAIN_SERVICE,
+  account: "hub",
+  what: "this computer's device token",
+  label: "Hobbots device",
+};
+
+/** The device token in the keychain of this computer's platform: macOS Keychain, the Secret Service on Linux. */
+export const DeviceTokenKeychainLive = (platform: NodeJS.Platform, env: NodeJS.ProcessEnv) =>
+  Layer.effect(
+    DeviceTokenKeychain,
+    Effect.gen(function* () {
+      const run = runner(yield* ChildProcessSpawner.ChildProcessSpawner, env);
+      return DeviceTokenKeychain.of(platformItems(platform, run)(DEVICE_ITEM));
+    }),
+  );
+
+/** The device token held in memory, for tests and an app started with `HOBBOTS_FAKE_KEYCHAIN=memory`. */
+export const DeviceTokenKeychainMemory = Layer.effect(DeviceTokenKeychain, memoryItem(DEVICE_ITEM));
+
 /**
  * A keychain held in memory for the hub's lifetime, for tests and for a hub started with
  * `HOBBOTS_FAKE_KEYCHAIN=memory` to try the flow without touching the real keychain.
  */
-export const KeychainMemory = Layer.effect(
-  Keychain,
-  Effect.gen(function* () {
-    const item = yield* Ref.make(Option.none<Redacted.Redacted<string>>());
-    return Keychain.of({
-      read: Ref.get(item),
-      write: (secret) => checkSafe(SIGN_IN_ITEM, secret).pipe(Effect.andThen(Ref.set(item, Option.some(secret)))),
-      remove: Ref.set(item, Option.none()),
-    });
-  }),
-);
+export const KeychainMemory = Layer.effect(Keychain, memoryItem(SIGN_IN_ITEM));
 
 /**
  * Each hob's own GitHub App private key (ADR 022): one keychain item per hob, beside the connected

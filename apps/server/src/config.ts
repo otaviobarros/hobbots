@@ -22,6 +22,8 @@ export const ServerConfig = Config.all({
   webDir: Config.String("HOBBOTS_WEB_DIR").pipe(Config.withDefault(resolve(import.meta.dirname, "../../web/dist"))),
   // Overrides the host Claude Code the runtime finds on its own.
   claudeExecutable: Config.String("HOBBOTS_CLAUDE_EXECUTABLE").pipe(Config.option),
+  // Overrides the host Codex the runtime finds on its own.
+  codexExecutable: Config.String("HOBBOTS_CODEX_EXECUTABLE").pipe(Config.option),
   // The least severe log lines the hub writes. `Debug` adds routine reads to the request log.
   logLevel: Config.LogLevel("HOBBOTS_LOG_LEVEL").pipe(Config.withDefault("Info" as const)),
   runtime: Config.Literals(["claude", "fake"], "HOBBOTS_RUNTIME").pipe(Config.withDefault("claude" as const)),

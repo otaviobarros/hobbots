@@ -41,7 +41,8 @@ export interface MenuBarOptions {
   readonly createWindow: () => Promise<BrowserWindow>;
 }
 
-const trayImage = (state: ServerState) => {
+/** The menu-bar icon for a state, at 1× and 2×, as a template image macOS tints. */
+export const trayImage = (state: ServerState) => {
   const image = nativeImage.createEmpty();
   for (const scale of [1, 2] as const) {
     image.addRepresentation({
