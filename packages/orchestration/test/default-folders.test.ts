@@ -20,6 +20,13 @@ const defaults = (brief: string, folders: ReadonlyArray<string> = lead) =>
   Effect.runPromise(defaultFolders(hub, folders, brief, "/"));
 
 describe("A member's default folders", () => {
+  it("are the quoted folder the brief names with a space in it, not the one its first word names", async () => {
+    const spaced = checks([...lead, "/work/test/my site", "/work/test/my"]);
+    expect(await Effect.runPromise(defaultFolders(spaced, lead, 'Work only in "/work/test/my site".', "/"))).toEqual([
+      "/work/test/my site",
+    ]);
+  });
+
   it("are the folders the brief names inside the lead's, as the hub stores them", async () => {
     expect(await defaults("Build the site in /work/test/site, and keep the shop (/work/test/shop) as it is.")).toEqual([
       "/work/test/site",
@@ -54,6 +61,27 @@ describe("Paths in a brief", () => {
       "/c/d",
       "/g",
     ]);
+  });
+
+  it("keep the spaces of a quoted path, and end an unquoted one at the first space", () => {
+    expect(pathsIn("Work only in \"/work/test/my site\". Then '/a b/c' and `/d e`, not /f g.", "/")).toEqual([
+      "/work/test/my site",
+      "/a b/c",
+      "/d e",
+      "/f",
+    ]);
+    // A quote left open on its line is no quote: the path ends as an unquoted one would.
+    expect(pathsIn('Use "/a/b c\nand "/d', "/")).toEqual(["/a/b", "/d"]);
+  });
+
+  // STD-SEC-005: a crafted brief cannot stall the hub.
+  it("are found in one pass, however the text is shaped", () => {
+    const long = 200_000;
+    const started = performance.now();
+    expect(pathsIn(`/${".".repeat(long)}x`, "/")).toEqual([`/${".".repeat(long)}x`]);
+    expect(pathsIn(`/${".".repeat(long)} `, "/")).toEqual([]);
+    expect(pathsIn('"/a'.repeat(long / 3), "/")).toEqual(["/a"]);
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 
   it("start at a drive on Windows", () => {

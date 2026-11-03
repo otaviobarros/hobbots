@@ -198,6 +198,19 @@ describe("A member its lead names no folders for", () => {
   });
 
   // covers PE-002
+  it("[TC-PE-304] works in a quoted folder its brief names with a space in it, not the folder its first word names", async () => {
+    const spaced = join(test, "my site");
+    for (const folder of [spaced, join(test, "my")]) mkdirSync(folder, { recursive: true });
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        return yield* quillOn(yield* delegate("spaced", `Make the shop badge.\nWork only in "${spaced}".`));
+      }),
+    );
+    expect(result.folders).toEqual([spaced]);
+  });
+
+  // covers PE-002
   it("[TC-PE-302] gets all of its lead's folders only when the lead asks for all, and never one the lead does not have", async () => {
     const result = await run(
       Effect.gen(function* () {
