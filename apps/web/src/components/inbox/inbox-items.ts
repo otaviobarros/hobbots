@@ -92,13 +92,9 @@ export const deciderText = (approval: ApprovalRequest, deviceName: (deviceId: De
   if (approval.decidedVia === "expired") return copy.history.expiredUndecided;
   if (approval.decidedByDeviceId === null) return null;
   if (approval.state !== "approved" && approval.state !== "denied") return null;
-  const decision =
-    approval.state === "denied" ? copy.history.decided.denied : copy.history.decided[approval.lifetime ?? "once"];
-  return copy.history.decider({
-    decision,
-    device: deviceName(approval.decidedByDeviceId),
-    surface: approval.decidedVia === null ? null : copy.history.surface[approval.decidedVia],
-  });
+  const decision = approval.state === "denied" ? "denied" : (approval.lifetime ?? "once");
+  const surface = approval.decidedVia ?? "unknown";
+  return copy.history.decider[decision][surface]({ device: deviceName(approval.decidedByDeviceId) });
 };
 
 /**
