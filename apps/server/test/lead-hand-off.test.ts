@@ -15,7 +15,7 @@ import {
   startHub,
   taskOf,
   treeWhen,
-} from "./party-hub.ts";
+} from "./dependency-hub.ts";
 
 /** The rule's heart, as packages/orchestration/src/briefs.ts states it to leads and members alike. */
 const RULE = "anything else one member made reaches another only when the lead calls hand_off";
@@ -39,7 +39,10 @@ describe("a lead that follows the hand-off rule", () => {
         on: "was answered by hob aldric",
         lines: [hub("complete_task", { key: "frontend-done", summary: "Frontend reads core.py" })],
       },
-      { on: "(Write the frontend) finished", lines: [hub("complete_task", { key: "wrap", summary: "The app is built" })] },
+      {
+        on: "(Write the frontend) finished",
+        lines: [hub("complete_task", { key: "wrap", summary: "The app is built" })],
+      },
     ]);
     await run(
       send([
@@ -60,9 +63,10 @@ describe("a lead that follows the hand-off rule", () => {
         hub("delegate_task", {
           key: "frontend",
           hob: "Rook",
-          brief: ["Write the frontend", hub("ask", { key: "need", question: "Will you hand me Quill's core.py?" })].join(
-            "\n",
-          ),
+          brief: [
+            "Write the frontend",
+            hub("ask", { key: "need", question: "Will you hand me Quill's core.py?" }),
+          ].join("\n"),
         }),
       ]),
     );
