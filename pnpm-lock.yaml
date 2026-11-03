@@ -220,6 +220,12 @@ importers:
 
   apps/desktop:
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.3.0(@opentelemetry/api@1.10.0))
+      '@hobbots/api':
+        specifier: workspace:*
+        version: link:../../packages/api
       '@hobbots/domain':
         specifier: workspace:*
         version: link:../../packages/domain

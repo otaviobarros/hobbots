@@ -11,8 +11,12 @@ import { frameChange, type HubChange } from "./hub-events-model.ts";
 export interface HubEventsOptions {
   /** The hub's `/api/events` URL, read for each connection, since the hub's port can change. */
   readonly url: () => string;
-  /** Headers for each connection, read again every time, as the window key changes when the hub restarts. */
-  readonly headers?: () => Readonly<Record<string, string>>;
+  /**
+   * Headers for each connection, read again every time, as the window key changes when the hub
+   * restarts. A connected desktop checks the hub's node first, so they may come later; a refusal
+   * counts as a lost connection.
+   */
+  readonly headers?: () => Readonly<Record<string, string>> | Promise<Readonly<Record<string, string>>>;
   /** Whether the hub may answer now; the stream is followed only while it may. */
   readonly canConnect: () => boolean;
   /**
@@ -69,15 +73,18 @@ const follow = (options: HubEventsOptions) => {
   let cursor: string | undefined;
   // Any bytes, keep-alives included, show the hub still answers; silence past the limit ends it.
   const bytes = HttpClientResponse.stream(
-    Effect.suspend(() =>
-      HttpClient.get(url(), {
-        headers: {
-          accept: "text/event-stream",
-          ...headers(),
-          ...(cursor !== undefined && { "last-event-id": cursor }),
-        },
-      }),
-    ).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk)),
+    Effect.tryPromise(async () => headers()).pipe(
+      Effect.flatMap((own) =>
+        HttpClient.get(url(), {
+          headers: {
+            accept: "text/event-stream",
+            ...own,
+            ...(cursor !== undefined && { "last-event-id": cursor }),
+          },
+        }),
+      ),
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+    ),
   ).pipe(Stream.timeout(Duration.millis(options.silenceMs ?? SILENCE_MS)));
   const retry = Schedule.min([
     Schedule.exponential(Duration.millis(options.firstRetryMs ?? 1_000)),
