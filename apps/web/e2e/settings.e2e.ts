@@ -1,6 +1,16 @@
 import { realpathSync } from "node:fs";
 import type { Page } from "@playwright/test";
-import { emptyDataDir, expect, type Hub, removeDataDir, signedOutClaudeCode, startHub, test } from "./hub.ts";
+import {
+  emptyDataDir,
+  expect,
+  type FakeCodexState,
+  fakeCodexAt,
+  type Hub,
+  removeDataDir,
+  signedOutClaudeCode,
+  startHub,
+  test,
+} from "./hub.ts";
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -81,12 +91,49 @@ test("[TC-UX-024] a signed-out runtime shows how to fix it in Settings › AI pr
     HOBBOTS_RUNTIME: "claude",
     HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir),
   });
-  const providers = page.getByRole("region", { name: "AI providers" });
+  const providers = page.getByRole("region", { name: "AI providers" }).getByRole("region", { name: "Claude Code" });
 
   await expect(providers.getByText("Signed out")).toBeVisible();
   await expect(providers.getByText(/installed but not signed in/)).toBeVisible();
   await expect(providers.getByRole("button", { name: "Check again" })).toBeVisible();
   await expect(providers.getByRole("heading", { name: "Enforcement on this hub" })).toBeVisible();
+});
+
+// covers AG-005, RT-001
+test("[TC-RT-012] Settings › AI providers shows a signed-in Codex, and each state that stops it with its fix", async ({
+  page,
+}) => {
+  await openSettings(page, { HOBBOTS_RUNTIME: "claude", HOBBOTS_CLAUDE_EXECUTABLE: signedOutClaudeCode(dataDir) });
+  const codex = page.getByRole("region", { name: "AI providers" }).getByRole("region", { name: "Codex" });
+  const checkAgain = async (state: FakeCodexState) => {
+    fakeCodexAt(dataDir, state);
+    await codex.getByRole("button", { name: "Check again" }).click();
+  };
+
+  // Not installed: the install guide, and no restart needed.
+  await expect(codex.getByText("Unavailable")).toBeVisible();
+  await expect(codex.getByText(/Codex was not found or could not start/)).toBeVisible();
+  await expect(codex.getByRole("link", { name: "Install guide" })).toBeVisible();
+
+  await checkAgain("outdated");
+  await expect(codex.getByText("Outdated")).toBeVisible();
+  await expect(codex.getByText(/older than Hobbots supports/)).toBeVisible();
+
+  await checkAgain("signedOut");
+  await expect(codex.getByText("Signed out")).toBeVisible();
+  await expect(codex.getByText(/installed but not signed in/)).toBeVisible();
+  await expect(codex.getByText("codex login")).toBeVisible();
+
+  await checkAgain("apiKey");
+  await expect(codex.getByText(/signed in with an API key/)).toBeVisible();
+
+  // Signed in with ChatGPT: found and ready to sign turns in, but not offered until Codex turns run.
+  await checkAgain("ready");
+  await expect(codex.getByText("Unverified")).toBeVisible();
+  await expect(codex.getByText(/cannot run Codex turns yet/)).toBeVisible();
+  await expect(codex.getByText("subscription (plus)")).toBeVisible();
+  await expect(codex.getByText("0.166.0")).toBeVisible();
+  await expect(codex.getByRole("button", { name: "Check again" })).toBeHidden();
 });
 
 // covers UX-005

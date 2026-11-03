@@ -7,13 +7,14 @@ import {
   type GrantId,
   type GrantRule,
   type HobPolicy,
+  type PlanUsage,
   type PolicyOperation,
   type PolicyOverrides,
   type ReplyUsage,
   RUNTIME_NAMES,
   type RuntimeEnforcement,
   RuntimeHealth,
-  type RuntimeKind,
+  RuntimeKind,
   RuntimeModels,
   type SafetyPreset,
 } from "@hobbots/domain";
@@ -322,6 +323,11 @@ export interface RuntimeAdapterShape {
   readonly models: Effect.Effect<RuntimeModels>;
   /** What this adapter enforces on this hub, for the hob profile; health reports the same. */
   readonly enforcement: Effect.Effect<RuntimeEnforcement>;
+  /**
+   * The plan's meters as the runtime reports them, without spending any of it (OP-002). Absent when
+   * the runtime cannot report them, which the Usage screen says.
+   */
+  readonly planUsage?: Effect.Effect<PlanUsage>;
   /** Runs one turn. Interrupting the stream cancels the turn. */
   readonly sendPrompt: (request: PromptRequest) => Stream.Stream<RuntimeEvent, RuntimeError | RuntimeLimitReached>;
 }
@@ -365,6 +371,12 @@ export const missingRuntimeHealth = (runtime: RuntimeKind): RuntimeHealth =>
       toolEvents: unsupported,
       toolInterruption: unsupported,
     },
+  });
+
+/** Every runtime's health, Claude Code first; one the hub has no adapter for is listed as unavailable. */
+export const everyRuntimeHealth = (adapters: RuntimeAdapters): Effect.Effect<ReadonlyArray<RuntimeHealth>> =>
+  Effect.forEach(RuntimeKind.literals, (kind) => adapters(kind)?.health ?? Effect.succeed(missingRuntimeHealth(kind)), {
+    concurrency: "unbounded",
   });
 
 /** The models of a runtime this hub has no adapter for: none. */

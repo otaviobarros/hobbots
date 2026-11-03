@@ -1152,11 +1152,12 @@ describe("a nested Quest", () => {
     const rook = taskOf(started, ROOK);
     const pip = taskOf(started, PIP);
     const rookItems = () => Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId: ROOK }));
-    const [waiting] = await run(
+    // Rook's own Task can still be open beside it, so wait for the progress item itself.
+    const waiting = await run(
       retry(
         Effect.filterOrFail(
-          rookItems(),
-          (items) => items.length > 0,
+          rookItems().pipe(Effect.map((items) => items.find((item) => item.kind === "progress"))),
+          (item) => item !== undefined,
           () => "not yet" as const,
         ),
       ),

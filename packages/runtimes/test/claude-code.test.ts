@@ -11,13 +11,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, relative, resolve } from "node:path";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKMessage, SDKUsageReport } from "@anthropic-ai/claude-agent-sdk";
 import { RuntimeLimitReached } from "@hobbots/agents";
 import { hobAppCommitIdentity, policySandbox } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, describe, expect, it } from "vitest";
+import { expiringCache, isAtLeast, modelListMaxAge } from "../src/binary.ts";
 import {
   APPROVAL_NOTE,
   baseOptions,
@@ -26,13 +27,11 @@ import {
   type ClaudeCodeConfig,
   claudeCandidates,
   exited,
-  expiringCache,
   fallbackModels,
   findClaudeCode,
-  isAtLeast,
   makeClaudeCode as makeAdapter,
-  modelListMaxAge,
   parseVersion,
+  planFromReport,
   runtimePath,
   SANDBOX_NOTE,
   stderrTail,
@@ -487,6 +486,91 @@ describe("reading a Claude Code turn", () => {
     expect(turnEvents()(result({ ttft_stream_ms: 900, ttft_ms: 1250 }))).toMatchObject([
       { usage: { timeToRequestMs: null, timeToFirstStreamMs: 900, timeToFirstTokenMs: 1250, ...tokens } },
     ]);
+  });
+
+  // covers OP-002
+  it("[TC-OP-072] reads the plan's meters from the /usage report as sent, and nothing from a report without them", () => {
+    const at = "2026-11-03T01:00:00.000Z";
+    const report = (rateLimits: SDKUsageReport["rate_limits"]) =>
+      ({
+        session: {
+          total_cost_usd: 0,
+          total_api_duration_ms: 0,
+          total_duration_ms: 0,
+          total_lines_added: 0,
+          total_lines_removed: 0,
+          model_usage: {},
+        },
+        rate_limits: rateLimits,
+      }) satisfies SDKUsageReport;
+    const meters = [
+      {
+        kind: "session",
+        group: "session",
+        percent: 41,
+        resets_at: "2026-11-03T03:00:00Z",
+        severity: "normal",
+        is_active: true,
+      },
+      {
+        kind: "weekly_scoped",
+        group: "weekly",
+        percent: 88,
+        resets_at: null,
+        scope: { model: { display_name: "Opus" } },
+        severity: "warning",
+        is_active: false,
+      },
+    ];
+    expect(
+      planFromReport(
+        report({
+          limits: meters,
+          extra_usage: { is_enabled: true, monthly_limit: 5000, used_credits: 1250, utilization: 25 },
+        }),
+        at,
+      ),
+    ).toEqual({
+      runtime: "claude-code",
+      reported: true,
+      checkedAt: at,
+      meters: [
+        {
+          kind: "session",
+          group: "session",
+          percent: 41,
+          resetsAt: "2026-11-03T03:00:00Z",
+          scope: null,
+          severity: "normal",
+          active: true,
+        },
+        {
+          kind: "weekly_scoped",
+          group: "weekly",
+          percent: 88,
+          resetsAt: null,
+          scope: "Opus",
+          severity: "warning",
+          active: false,
+        },
+      ],
+      extraUsage: { enabled: true, monthlyLimit: 5000, usedCredits: 1250, currency: null },
+    });
+    // An API key or a token without the profile scope gets no report; a failing fetch gets no rows.
+    const nothing = { runtime: "claude-code", reported: false, meters: [], extraUsage: null, checkedAt: at };
+    expect(planFromReport(undefined, at)).toEqual(nothing);
+    expect(planFromReport(report(null), at)).toEqual(nothing);
+    expect(planFromReport(report({ limits: null }), at)).toEqual(nothing);
+    // Spend reported without rows is kept, also once credits can no longer pay for requests.
+    expect(
+      planFromReport(
+        report({
+          limits: null,
+          extra_usage: { is_enabled: false, monthly_limit: null, used_credits: 900, utilization: null },
+        }),
+        at,
+      ),
+    ).toEqual({ ...nothing, extraUsage: { enabled: false, monthlyLimit: null, usedCredits: 900, currency: null } });
   });
 
   it("[TC-CH-097] ends the turn at a rejected rate limit, with when it resets, unless overage covers it", () => {

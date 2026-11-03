@@ -31,8 +31,11 @@
   },
   "exports": {
     "./main": "./src/main.ts",
+    "./hub-discovery": "./src/hub-discovery.ts",
     "./installation": "./src/installation.ts",
     "./network-settings": "./src/network-settings.ts",
-    "./window-key": "./src/window-key.ts"
+    "./window-key": "./src/window-key.ts",
+    "./tailscale": "./src/tailscale.ts",
+    "./device-token": "./src/device-token.ts"
   }
 }

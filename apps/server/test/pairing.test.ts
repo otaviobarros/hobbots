@@ -201,6 +201,28 @@ describe("pairing a device", () => {
     expect(failureTag(result.anonymous)).toBe("PairingThrottled");
     expect(failureTag(result.local)).toBe("Success");
   });
+  // covers DP-001, DP-004
+  it("[TC-DP-175] the desktop app's claim carries its device ID with the token, so it can revoke itself", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const devices = yield* DeviceService;
+        const opened = yield* devices.openPairing(
+          { name: "Hobbots on MacBook Air", platform: "macOS", kind: "desktop" },
+          { place: LAPTOP, hub: HUB, secret: Option.none() },
+        );
+        const waiting = yield* devices.pairingStatus(opened.secret, LAPTOP);
+        yield* devices.allow(opened.status.id);
+        const claimed = yield* devices.pairingStatus(opened.secret, LAPTOP);
+        const listed = yield* devices.list;
+        return { waiting, claimed, listed };
+      }),
+    );
+    expect(result.waiting).not.toHaveProperty("deviceId");
+    expect(result.claimed.token).toMatch(/^hbd_/);
+    const device = result.listed.find((each) => each.id === result.claimed.deviceId);
+    expect(device).toMatchObject({ kind: "desktop", name: "Hobbots on MacBook Air" });
+  });
+
   // covers DP-004
   it("[TC-DP-117] a secret that names no request waiting here, a claimed one included, counts against the node's limit like no secret at all", async () => {
     const result = await run(

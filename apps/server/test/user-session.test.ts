@@ -12,7 +12,7 @@ import {
   HobService,
   PermissionSummary,
 } from "@hobbots/agents";
-import { DeviceSession, HobbotsApi } from "@hobbots/api";
+import { CONNECT_PROTOCOL, DeviceSession, HobbotsApi } from "@hobbots/api";
 import {
   type Agent,
   type ApprovalRequest,
@@ -292,7 +292,10 @@ describe("only approved devices reach the hub", () => {
     expect(local.body).toHaveProperty("dataDir");
     const tailnet = await request({ ...SCRIPT, [NODE_HEADER]: "nPHONE" }, "GET", "/api/health");
     expect(tailnet).toMatchObject({ status: 200, body: { app: "hobbots", version: local.body.version } });
-    expect(Object.keys(tailnet.body as object).sort()).toEqual(["app", "name", "version"]);
+    expect(Object.keys(tailnet.body as object).sort()).toEqual(["app", "connect", "name", "version"]);
+    // Both say which connect protocol the hub speaks, for a connected desktop (ADR 025).
+    expect(local.body.connect).toBe(CONNECT_PROTOCOL);
+    expect(tailnet.body).toMatchObject({ connect: CONNECT_PROTOCOL });
     // The hub's window passes, on the routes and the stream.
     expect((await request(APP, "GET", "/api/agents")).status).toBe(200);
     const stream = await send(APP, "GET", "/api/events");

@@ -9,20 +9,24 @@ import { ArchivedHobs } from "./archived-hobs.tsx";
 import { BackupSettings } from "./backup/backup-settings.tsx";
 import { messages as backupMessages } from "./backup/messages.ts";
 import { DeviceList } from "./devices/device-list.tsx";
+import { DiagnosticsSettings } from "./diagnostics/diagnostics-settings.tsx";
+import { messages as diagnosticsMessages } from "./diagnostics/messages.ts";
+import { ExportSettings } from "./export/export-settings.tsx";
+import { messages as exportMessages } from "./export/messages.ts";
 import { GeneralSettings } from "./general-settings.tsx";
 import { GitHubSettings } from "./github-settings.tsx";
 import { messages } from "./messages.ts";
 import { WaitingDevices } from "./pairing/waiting-devices.tsx";
 import { RemoteAccessSettings } from "./remote-access-settings.tsx";
-import { RuntimeCard } from "./runtime.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
 import { AboutSettings } from "./settings/about-settings.tsx";
 import { messages as settingsMessages } from "./settings/messages.ts";
 import { NotificationSettings } from "./settings/notification-settings.tsx";
+import { ProviderCard } from "./settings/provider-card.tsx";
 import { ReduceMotionRow } from "./settings/reduce-motion.tsx";
 import { StandingRuleSettings } from "./standing-rules/standing-rules.tsx";
 
-function Page({
+export function Page({
   icon,
   title,
   intro,
@@ -70,22 +74,8 @@ function Panel({
   );
 }
 
-export function UsagePage() {
-  return (
-    <Page icon="Usage" title="Usage" intro="One potion per connected AI plan, and who used what.">
-      <Panel label="AI plans">
-        <p className="m-0 text-secondary-text">
-          Subscription windows drain and refill, API keys show spend and local models are unlimited. Numbers appear here
-          once each provider reports them.
-        </p>
-      </Panel>
-    </Page>
-  );
-}
-
-// Providers from the Hobbots design. Only Claude Code is wired in this build.
+// Providers from the Hobbots design. Only Claude Code and Codex are wired in this build.
 const LATER_PROVIDERS = [
-  { name: "ChatGPT (Codex)", mark: "G", color: "#8fd3a8" },
   { name: "Gemini", mark: "G", color: "#8fb4f0" },
   { name: "Grok", mark: "X", color: "#c9c3e8" },
   { name: "Local models (Ollama)", mark: "L", color: "#f3e9b5" },
@@ -128,7 +118,8 @@ export function SettingsPage() {
         <PermissionSettings />
       </Panel>
       <Panel label="AI providers" id="ai-providers">
-        <RuntimeCard />
+        <ProviderCard runtime="claude-code" />
+        <ProviderCard runtime="codex" />
         <div className="flex flex-col">
           {LATER_PROVIDERS.map((p) => (
             <ProviderRow key={p.name} name={p.name} mark={p.mark} color={p.color}>
@@ -148,6 +139,12 @@ export function SettingsPage() {
         <RemoteAccessSettings />
         <WaitingDevices />
         <DeviceList />
+      </Panel>
+      <Panel label={exportMessages.heading} id="export">
+        <ExportSettings />
+      </Panel>
+      <Panel label={diagnosticsMessages.heading} id="diagnostics">
+        <DiagnosticsSettings />
       </Panel>
       <Panel label="Archived hobs">
         <ArchivedHobs />

@@ -1,8 +1,8 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { accessSync, constants, lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { lstatSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { delimiter, dirname, isAbsolute, join } from "node:path";
 import type { Readable } from "node:stream";
 import { promisify } from "node:util";
 import {
@@ -16,6 +16,7 @@ import {
   type SDKMessage,
   type SDKRateLimitInfo,
   type SDKResultSuccess,
+  type SDKUsageReport,
   type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import {
@@ -35,6 +36,7 @@ import {
 } from "@hobbots/agents";
 import {
   type CommitIdentity,
+  type PlanUsage,
   policySandbox,
   type ReplyUsage,
   type RuntimeEnforcement,
@@ -43,10 +45,12 @@ import {
   RuntimeModels,
   type SandboxState,
   stableJson,
+  unreportedPlan,
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
-import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
+import { DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
 import { type CallDecision, decideCall, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
+import { binaryLocator, expiringCache, findBinary, installedRuntimeChecks, isExecutable } from "./binary.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox, withCommitIdentity } from "./sandbox.ts";
 import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
@@ -301,15 +305,6 @@ const resolveBinary = (binary: string): Effect.Effect<string, RuntimeError> => {
     : Effect.fail(new RuntimeError({ message: `Could not find ${binary} on PATH, so the sandbox cannot start it.` }));
 };
 
-const isExecutable = (path: string) => {
-  try {
-    accessSync(path, constants.X_OK);
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
-};
-
 /**
  * The configured binary, or the first executable candidate on this machine. A relative path is
  * resolved here, because Claude Code is started from the workspace folder; a bare name stays a PATH lookup.
@@ -319,23 +314,10 @@ export const findClaudeCode = (
   env: NodeJS.ProcessEnv = process.env,
   home: string = homedir(),
   system = systemDirs,
-): string | undefined => {
-  const configured = executable?.trim();
-  if (configured) return configured.includes(sep) ? resolve(configured) : configured;
-  return claudeCandidates(env, home, system).find(isExecutable);
-};
+): string | undefined => findBinary(executable, () => claudeCandidates(env, home, system));
 
 /** The `major.minor.patch` that `claude --version` starts with. */
 export const parseVersion = (output: string): string | undefined => /^\s*(\d+\.\d+\.\d+)/.exec(output)?.[1];
-
-export const isAtLeast = (version: string, minimum: string): boolean => {
-  const [a, b] = [version, minimum].map((v) => v.split(".").map(Number));
-  for (let i = 0; i < 3; i++) {
-    const diff = (a?.[i] ?? 0) - (b?.[i] ?? 0);
-    if (diff !== 0) return diff > 0;
-  }
-  return true;
-};
 
 /**
  * Reports where requests are billed, from the SDK's own credential fields.
@@ -495,27 +477,6 @@ export const fallbackModels = new RuntimeModels({
   ].map((model) => new RuntimeModel({ ...model, efforts: allEfforts, main: true })),
 });
 
-/**
- * How long a model list is trusted: a reported list for five minutes, the fallback for one, so a
- * Claude Code that did not answer is asked again soon without being started on every request.
- */
-export const modelListMaxAge = (models: RuntimeModels): Duration.Duration =>
-  models.source === "runtime" ? Duration.minutes(5) : Duration.minutes(1);
-
-/** Keeps each key's value until `maxAge` of that value has passed, then loads it again. */
-export const expiringCache = <A>(maxAge: (value: A) => Duration.Duration) => {
-  const entries = new Map<string, { readonly value: A; readonly expiresAt: number }>();
-  return <E, R>(key: string, load: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    Effect.gen(function* () {
-      const now = yield* Clock.currentTimeMillis;
-      const entry = entries.get(key);
-      if (entry !== undefined && now < entry.expiresAt) return entry.value;
-      const value = yield* load;
-      entries.set(key, { value, expiresAt: now + Duration.toMillis(maxAge(value)) });
-      return value;
-    });
-};
-
 /** The rate limit refused the turn and no paid overage covers it. */
 const limitReached = (info: SDKRateLimitInfo) =>
   info.status === "rejected" && info.overageStatus !== "allowed" && info.overageStatus !== "allowed_warning";
@@ -534,6 +495,43 @@ export const turnUsage = (result: SDKResultSuccess): ReplyUsage => ({
   cacheReadTokens: result.usage.cache_read_input_tokens,
   cacheWriteTokens: result.usage.cache_creation_input_tokens,
 });
+
+/**
+ * A plan's meters from Claude Code's `/usage` report, as the server sent them
+ * (https://code.claude.com/docs/en/agent-sdk/typescript#sdkusagereport). An API-key session or a token
+ * without the profile scope gets no report, and a failed fetch no rows: neither reports any meter.
+ */
+export const planFromReport = (report: SDKUsageReport | undefined, checkedAt: string): PlanUsage => {
+  const rates = report?.rate_limits;
+  if (!rates) return unreportedPlan("claude-code", checkedAt);
+  const extra = rates.extra_usage;
+  return {
+    runtime: "claude-code",
+    // Rows can be missing while usage credits are still reported, and spend shows either way.
+    reported: rates.limits !== null,
+    checkedAt,
+    meters: (rates.limits ?? []).map((row) => ({
+      kind: row.kind,
+      group: row.group,
+      percent: row.percent,
+      resetsAt: row.resets_at,
+      scope: row.scope?.model?.display_name ?? row.scope?.surface?.display_name ?? null,
+      severity: row.severity,
+      active: row.is_active,
+    })),
+    extraUsage: extra
+      ? {
+          enabled: extra.is_enabled,
+          monthlyLimit: extra.monthly_limit,
+          usedCredits: extra.used_credits,
+          currency: extra.currency ?? null,
+        }
+      : null,
+  };
+};
+
+/** How long the plan's meters are kept before Claude Code is asked again. */
+const planMaxAge = Duration.minutes(1);
 
 /**
  * Maps one turn's SDK messages to runtime events. Stateful, so make one per turn: a thinking block
@@ -913,32 +911,13 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
     const sandbox = yield* ProcessSandbox;
     yield* Effect.sync(() => mkdirSync(config.workspaceDir, { recursive: true }));
 
-    // `claude --version` per binary, rerun when the file changes (as `claude update` does).
-    const versions = new Map<string, { readonly modified: number; readonly version: string }>();
-    const versionOf = (binary: string) =>
-      Effect.gen(function* () {
-        // A configured path may not exist, and an update can remove the binary between lookups.
-        const modified = yield* Effect.try(() => statSync(binary).mtimeMs).pipe(Effect.orElseSucceed(() => -1));
-        const cached = versions.get(binary);
-        if (cached !== undefined && cached.modified === modified) return cached.version;
-        const output = yield* Effect.tryPromise(() =>
-          execFileAsync(binary, ["--version"], { timeout: 10_000, env: runtimeEnv(binary) }).then(
-            (result) => result.stdout,
-          ),
-        ).pipe(Effect.orElseSucceed(() => ""));
-        const version = parseVersion(output);
-        if (version !== undefined) versions.set(binary, { modified, version });
-        return version;
-      });
-
-    // Looked up on every use, so installing, moving or updating Claude Code needs no restart.
-    const locate = Effect.gen(function* () {
-      const binary = findClaudeCode(config.executable);
-      if (binary === undefined) return { _tag: "Missing" } as const;
-      const version = yield* versionOf(binary);
-      if (version === undefined) return { _tag: "Broken", binary } as const;
-      if (!isAtLeast(version, minimumClaudeCodeVersion)) return { _tag: "Outdated", binary, version } as const;
-      return { _tag: "Found", binary, version } as const;
+    // Looked up on every use, so installing, moving or updating Claude Code needs no restart;
+    // `claude --version` reruns when the file changes (as `claude update` does).
+    const locate = binaryLocator({
+      find: () => findClaudeCode(config.executable),
+      parse: parseVersion,
+      env: runtimeEnv,
+      minimum: minimumClaudeCodeVersion,
     });
 
     const notStarted = `Claude Code could not be started. ${installGuidance}`;
@@ -1193,43 +1172,61 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
         ),
       );
 
-    // Finds the host's Claude Code and checks its version before starting it.
-    const health = Effect.gen(function* () {
-      const checkedAt = DateTime.formatIso(yield* DateTime.now);
-      const located = yield* locate;
-      switch (located._tag) {
-        case "Missing":
-          return runtimeHealth({ availability: "unavailable", version: null, detail: installGuidance, checkedAt });
-        case "Broken":
-          return runtimeHealth({
-            availability: "unavailable",
-            version: null,
-            detail: `${located.binary} did not report a Claude Code version. ${notStarted}`,
-            checkedAt,
-          });
-        case "Outdated":
-          return runtimeHealth({ availability: "outdated", version: located.version, detail: outdated, checkedAt });
-        case "Found":
-          return yield* probe(located.binary, located.version, checkedAt);
-      }
+    // Finds the host's Claude Code and checks its version before starting it. Starting Claude Code
+    // takes seconds, so each binary's model list is kept for a while; the account or a managed model
+    // policy can change it without a new binary, so it is fetched again when it expires.
+    const { health, models } = installedRuntimeChecks({
+      locate,
+      words: { name: "Claude Code", install: installGuidance, notStarted, outdated },
+      notFound: runtimeHealth,
+      probe,
+      fallbackModels,
+      listModels: (binary) =>
+        askIdleSession(binary, (session) => session.supportedModels()).pipe(
+          Effect.map((listed) => (listed.length === 0 ? fallbackModels : toRuntimeModels(listed))),
+        ),
     });
 
-    // Starting Claude Code takes seconds, so each binary's list is kept for a while. The account or a
-    // managed model policy can change it without a new binary, so it is fetched again when it expires.
-    const modelCache = expiringCache(modelListMaxAge);
-    const models = Effect.gen(function* () {
+    // `/usage` is a local command: Claude Code answers it from the plan's usage endpoint without a
+    // model request, so reading the meters spends none of them. The session is not saved.
+    const readPlan = (binary: string) =>
+      Effect.acquireRelease(
+        Effect.sync(() =>
+          query({ prompt: "/usage", options: { ...baseOptions(config, binary), persistSession: false } }),
+        ),
+        (session) => Effect.sync(() => session.close()),
+      ).pipe(
+        Effect.flatMap((session) =>
+          Effect.tryPromise({
+            try: async () => {
+              for await (const message of session) {
+                if (message.type === "assistant" && message.usage_report !== undefined) return message.usage_report;
+                if (message.type === "result") return undefined;
+              }
+              return undefined;
+            },
+            catch: errorMessage,
+          }),
+        ),
+        Effect.timeout(checkTimeout),
+        Effect.scoped,
+      );
+
+    const planCache = expiringCache<PlanUsage>(() => planMaxAge);
+    const planUsage = Effect.gen(function* () {
+      const checkedAt = DateTime.formatIso(yield* DateTime.now);
       const located = yield* locate;
-      if (located._tag !== "Found") return fallbackModels;
-      return yield* modelCache(
+      if (located._tag !== "Found") return unreportedPlan("claude-code", checkedAt);
+      return yield* planCache(
         `${located.binary}@${located.version}`,
-        askIdleSession(located.binary, (session) => session.supportedModels()).pipe(
-          Effect.map((listed) => (listed.length === 0 ? fallbackModels : toRuntimeModels(listed))),
-          Effect.orElseSucceed(() => fallbackModels),
+        readPlan(located.binary).pipe(
+          Effect.map((report) => planFromReport(report, checkedAt)),
+          Effect.orElseSucceed(() => unreportedPlan("claude-code", checkedAt)),
         ),
       );
     });
 
-    return RuntimeAdapter.of({ health, models, enforcement: Effect.succeed(declared), sendPrompt });
+    return RuntimeAdapter.of({ health, models, enforcement: Effect.succeed(declared), planUsage, sendPrompt });
   });
 
 /** Claude Code with tools under the hub's policy engine and process sandbox. */

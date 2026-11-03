@@ -108,7 +108,7 @@ export const PairingHandlers = HttpApiBuilder.group(HobbotsApi, "pairing", (hand
           const secure = throughServe(request);
           yield* setDeviceCookie(status.token, secure);
           yield* pairingCookie("", "0 seconds", secure);
-          const { token: _, ...rest } = status;
+          const { token: _, deviceId: __, ...rest } = status;
           return rest;
         }).pipe(withRetryAfter),
     });

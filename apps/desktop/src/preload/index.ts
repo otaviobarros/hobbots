@@ -1,7 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
+import { connectionChannels } from "../main/connection-ipc.ts";
 import { backupDialogChannels, folderDialogChannel } from "../main/folder-dialog.ts";
 import { keepRunningChannels } from "../main/keep-running.ts";
 import { loginItemChannels } from "../main/login-item.ts";
+import { CONNECTED_MODE_ARGUMENT } from "../main/mode-argument.ts";
 import { notificationChannels } from "../main/notification-choices.ts";
 import { openRequestChannel } from "../main/open-request.ts";
 import { showFileChannel } from "../main/show-file.ts";
@@ -29,7 +31,8 @@ const onOpenRequest = (listener: (requestId: string) => void) => {
   };
 };
 
-contextBridge.exposeInMainWorld("hobbots", {
+/** What the bridge offers on every computer: this app's own settings and opening a request. */
+const shared = {
   loginItem: {
     get: () => ipcRenderer.invoke(loginItemChannels.get),
     set: (openAtLogin: boolean) => ipcRenderer.invoke(loginItemChannels.set, openAtLogin),
@@ -43,12 +46,25 @@ contextBridge.exposeInMainWorld("hobbots", {
     get: () => ipcRenderer.invoke(notificationChannels.get),
     set: (patch: Record<string, boolean>) => ipcRenderer.invoke(notificationChannels.set, patch),
   },
-  // Opens the system folder picker; it takes nothing from the page and answers a path or null.
-  chooseFolder: () => ipcRenderer.invoke(folderDialogChannel),
-  // The same picker for a backup: where to save one, or which one to restore.
-  chooseBackupFolder: (purpose: "save" | "restore") =>
-    ipcRenderer.invoke(purpose === "restore" ? backupDialogChannels.restore : backupDialogChannels.save),
-  // Shows a Task's file in Finder: the page names it only by ids, and the hub says where it is.
-  showFile: (attemptId: string, fileId: string) => ipcRenderer.invoke(showFileChannel, attemptId, fileId),
   onOpenRequest,
-});
+};
+
+// A connected desktop's bridge is narrower (ADR 025): a hob's folders and files are the hub's, so
+// nothing here reaches this computer's files; the pages fall back to typing a path, as in a browser.
+const connected = process.argv.includes(CONNECTED_MODE_ARGUMENT);
+
+contextBridge.exposeInMainWorld(
+  "hobbots",
+  connected
+    ? { ...shared, connection: { get: () => ipcRenderer.invoke(connectionChannels.get) } }
+    : {
+        ...shared,
+        // Opens the system folder picker; it takes nothing from the page and answers a path or null.
+        chooseFolder: () => ipcRenderer.invoke(folderDialogChannel),
+        // The same picker for a backup: where to save one, or which one to restore.
+        chooseBackupFolder: (purpose: "save" | "restore") =>
+          ipcRenderer.invoke(purpose === "restore" ? backupDialogChannels.restore : backupDialogChannels.save),
+        // Shows a Task's file in Finder: the page names it only by ids, and the hub says where it is.
+        showFile: (attemptId: string, fileId: string) => ipcRenderer.invoke(showFileChannel, attemptId, fileId),
+      },
+);

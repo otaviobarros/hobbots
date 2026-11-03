@@ -7,12 +7,14 @@ import {
   ApprovalService,
   CharmCallService,
   ChatService,
+  DataExport,
   DeviceService,
   GrantService,
   HobAdmission,
   HobLifecycle,
   HobService,
   PermissionSummary,
+  RecoveryLog,
   SecretRedaction,
   TaskFiles,
 } from "@hobbots/agents";
@@ -58,6 +60,7 @@ import {
 } from "@hobbots/persistence";
 import {
   ClaudeCodeLayer,
+  CodexLayer,
   FakeAdditionalRuntimesLayer,
   FakeRuntimeLayer,
   FolderSandboxLive,
@@ -76,6 +79,7 @@ import { SaveDestinationsLive } from "./destination.ts";
 import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from "./devices.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
+import { ExportFoldersLive } from "./exports.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
@@ -169,10 +173,16 @@ const ServerLive = Layer.unwrap(
             FakeRuntimeLayer({ ...fake, availability: config.fakeAvailability }),
             FakeAdditionalRuntimesLayer({ ...fake, availability: config.fakeCodexAvailability }),
           )
-        : ClaudeCodeLayer({
-            workspaceDir: join(config.dataDir, "workspaces", "default"),
-            executable: Option.getOrUndefined(config.claudeExecutable),
-          }).pipe(Layer.provide(ProcessSandbox.layer))
+        : Layer.mergeAll(
+            ClaudeCodeLayer({
+              workspaceDir: join(config.dataDir, "workspaces", "default"),
+              executable: Option.getOrUndefined(config.claudeExecutable),
+            }).pipe(Layer.provide(ProcessSandbox.layer)),
+            CodexLayer({
+              executable: Option.getOrUndefined(config.codexExecutable),
+              clientVersion: config.version,
+            }).pipe(Layer.provide(NodeServices.layer)),
+          )
     ).pipe(Layer.provide(PolicyEngine.node), Layer.provide(Remote));
     // Turns that can write to the default workspace wait while a backup copies it (ADR 026).
     const HeldRuntime = HeldRuntimes.pipe(Layer.provide(Runtime), Layer.provideMerge(BackupHolds.layer));
@@ -279,9 +289,20 @@ const ServerLive = Layer.unwrap(
       // folder, out of every hob's reach.
       .pipe(
         Layer.provideMerge(
-          Layer.merge(ActivityRecorder.layer(), TaskFiles.layer.pipe(Layer.provide(HobFilesLive))).pipe(
-            Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity")))),
-          ),
+          Layer.mergeAll(
+            ActivityRecorder.layer(),
+            TaskFiles.layer.pipe(Layer.provide(HobFilesLive)),
+            // Exports of your threads and work history (ADR 026), never inside a hob's folder.
+            DataExport.layer(config.version).pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  HobFilesLive,
+                  ExportFoldersLive,
+                  SaveDestinationsLive(join(config.dataDir, "workspaces", "default")),
+                ),
+              ),
+            ),
+          ).pipe(Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity"))))),
         ),
       )
       // One dispatcher for the whole hub, so the claims it expires at start are an earlier process's.
@@ -314,6 +335,8 @@ const ServerLive = Layer.unwrap(
             NodeFolderChecks,
             HeldRuntime,
             identity,
+            // What the startup recovery could not do, for Settings › Diagnostics (ADR 026).
+            RecoveryLog.layer,
             // The hub's credentials, provider keys included, are redacted by value from what tools report.
             SecretRedaction.layer(secretsFromEnv(process.env)),
             // The whole output of long tool calls, which their steps show cut.

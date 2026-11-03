@@ -2,18 +2,18 @@ import { hostname } from "node:os";
 import {
   ChatService,
   DeviceService,
+  everyRuntimeHealth,
   foundAgent,
   HobbotsRepository,
   HobLifecycle,
   HobService,
-  missingRuntimeHealth,
   missingRuntimeModels,
   readToolLog,
   runtimeAdapters,
   ToolLogs,
 } from "@hobbots/agents";
-import { HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
-import { RuntimeKind, type ThreadId } from "@hobbots/domain";
+import { CONNECT_PROTOCOL, HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
+import type { ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { HttpServerRequest } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
@@ -24,6 +24,8 @@ import { BlockersHandlers } from "./blockers.ts";
 import { CharmCallsHandlers } from "./charm-calls.ts";
 import { DevicesHandlers } from "./device-handlers.ts";
 import { DeviceGate } from "./devices.ts";
+import { DiagnosticsHandlers } from "./diagnostics.ts";
+import { ExportsHandlers } from "./exports.ts";
 import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
 import { HobGitHubAppHandlers } from "./hob-github-app.ts";
@@ -35,6 +37,7 @@ import { RemoteAccessHandlers } from "./remote-access.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
 import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
+import { UsageHandlers } from "./usage.ts";
 import { DeviceSessionLive } from "./user-session.ts";
 import { WorkbenchHandlers } from "./workbench.ts";
 
@@ -142,15 +145,7 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
 
     return handlers.handleAll({
       activity: () => activity,
-      // Every runtime, Claude Code first; one the hub has no adapter for is listed as unavailable.
-      runtimes: () =>
-        Effect.forEach(
-          RuntimeKind.literals,
-          (kind) => adapters(kind)?.health ?? Effect.succeed(missingRuntimeHealth(kind)),
-          {
-            concurrency: "unbounded",
-          },
-        ),
+      runtimes: () => everyRuntimeHealth(adapters),
     });
   }),
 );
@@ -172,7 +167,10 @@ const HealthHandlers = HttpApiBuilder.group(HobbotsApi, "health", (handlers) =>
           const place = yield* gate.placeOf(yield* HttpServerRequest.HttpServerRequest);
           if (Option.isSome(place)) yield* devices.throttleAnonymous(place.value);
           const local = Option.exists(place, (where) => where._tag === "Local");
-          return local ? { ...installation, name } : { app: installation.app, name, version: installation.version };
+          const connect = CONNECT_PROTOCOL;
+          return local
+            ? { ...installation, name, connect }
+            : { app: installation.app, name, version: installation.version, connect };
         }).pipe(withRetryAfter),
     });
   }),
@@ -218,6 +216,9 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     WorkbenchHandlers,
     RemoteAccessHandlers,
     BackupHandlers,
+    DiagnosticsHandlers,
+    ExportsHandlers,
+    UsageHandlers,
   ]),
   Layer.provide(DeviceSessionLive),
 );

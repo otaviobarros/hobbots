@@ -6,6 +6,20 @@
 /** A count in the reader's locale: "1,240". */
 export const formatCount = (count: number, locale?: string): string => new Intl.NumberFormat(locale).format(count);
 
+/** A large count, shortened in the reader's locale: "12K", "1.4M". */
+export const formatCompact = (count: number, locale?: string): string =>
+  new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(count);
+
+/** A share out of 100 in the reader's locale: "38%". */
+export const formatPercent = (percent: number, locale?: string): string =>
+  new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 0 }).format(percent / 100);
+
+/** An amount in minor units of `currency` (cents for USD), in the reader's locale: "$12.50". */
+export const formatMoney = (minor: number, currency: string, locale?: string): string => {
+  const format = new Intl.NumberFormat(locale, { style: "currency", currency });
+  return format.format(minor / 10 ** (format.resolvedOptions().maximumFractionDigits ?? 2));
+};
+
 /** The form of a message that fits the count, chosen by the locale's plural rules. */
 export const plural = <T>(count: number, forms: { readonly one: T; readonly other: T }, locale?: string): T =>
   new Intl.PluralRules(locale).select(count) === "one" ? forms.one : forms.other;

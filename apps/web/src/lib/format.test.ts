@@ -1,11 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { formatAgo, formatCount, formatDuration, formatIn, formatMoment, plural } from "./format.ts";
+import {
+  formatAgo,
+  formatCompact,
+  formatCount,
+  formatDuration,
+  formatIn,
+  formatMoment,
+  formatMoney,
+  formatPercent,
+  plural,
+} from "./format.ts";
 
 describe("format", () => {
   it("formats counts and times ahead in the locale", () => {
     expect(formatCount(1240, "en-US")).toBe("1,240");
     expect(formatIn(23, "hour", "en-US")).toBe("in 23 hours");
     expect(formatIn(1, "minute", "en-US")).toBe("in 1 minute");
+  });
+
+  it("shortens large counts and formats shares and money in the locale", () => {
+    expect([formatCompact(950, "en-US"), formatCompact(12_340, "en-US"), formatCompact(1_420_000, "en-US")]).toEqual([
+      "950",
+      "12.3K",
+      "1.4M",
+    ]);
+    expect(formatPercent(38, "en-US")).toBe("38%");
+    expect([formatMoney(1250, "USD", "en-US"), formatMoney(500, "JPY", "en-US")]).toEqual(["$12.50", "¥500"]);
   });
 
   it("picks the plural form by the locale's rules", () => {

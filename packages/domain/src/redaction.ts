@@ -111,6 +111,13 @@ export const secretShapeIn = (text: string): string | null =>
   SHAPES.find((shape) => text.search(shape.pattern) !== -1)?.kind ?? null;
 
 /**
+ * What kind of secret `text` holds, a known value or a secret shape, or null when it holds none.
+ * Text that was already redacted holds none: a marker matches no shape.
+ */
+export const secretIn = (text: string, known: ReadonlyArray<KnownSecret> = []): string | null =>
+  known.find((secret) => usableSecret(secret.value) && text.includes(secret.value))?.kind ?? secretShapeIn(text);
+
+/**
  * `text` with every known secret and every secret shape replaced by a marker that says what kind
  * of value was there. Known values go first, longest first, so a value one shape also matches is
  * named by what the hub knows it to be.

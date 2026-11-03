@@ -57,7 +57,7 @@ export const checkBrain = (
 
 /**
  * Checks a brain against the runtimes this hub serves and what its runtime offers (ADR 017): a
- * runtime with no adapter, or a model or effort it does not offer, is refused.
+ * runtime with no adapter or no models, or a model or effort it does not offer, is refused.
  */
 export const checkRuntimeBrain = (
   adapters: RuntimeAdapters,
@@ -69,7 +69,12 @@ export const checkRuntimeBrain = (
       new InvalidHob({ field: "runtime", message: `Hobbots cannot run ${RUNTIME_NAMES[brain.runtime]} on this hub` }),
     );
   }
-  return Effect.map(adapter.models, (offered) => checkBrain(offered, brain));
+  return Effect.map(adapter.models, (offered) =>
+    // A runtime that offers no model, such as one not installed or not yet able to run turns, cannot think.
+    offered.models.length === 0
+      ? new InvalidHob({ field: "runtime", message: `${RUNTIME_NAMES[brain.runtime]} cannot think on this hub yet` })
+      : checkBrain(offered, brain),
+  );
 };
 
 /** The hob a lookup found, or `AgentNotFound` when there is none with this ID. */

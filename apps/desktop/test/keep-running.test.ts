@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { IpcMainInvokeEvent } from "electron";
 import { afterAll, describe, expect, it } from "vitest";
 import { handleKeepRunningIpc, keepRunningChannels, keepsRunning } from "../src/main/keep-running.ts";
-import { fileSettingsStore } from "../src/main/settings.ts";
+import { desktopMode, fileSettingsStore } from "../src/main/settings.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-keep-running-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -35,5 +35,25 @@ describe("keep running in the menu bar", () => {
     expect(handlers.get(keepRunningChannels.get)?.(trusted)).toBe(false);
     expect(() => handlers.get(keepRunningChannels.set)?.(stranger, true)).toThrow("Not allowed from this page");
     expect(keepsRunning(settings)).toBe(false);
+  });
+});
+
+describe("the mode in the app's settings", () => {
+  it("keeps a connected desktop's connection, and reads a broken one as nothing chosen", () => {
+    const file = join(temp, "mode.json");
+    const settings = fileSettingsStore(file);
+    const connection = {
+      address: "http://studio.example.ts.net:4317",
+      name: "Studio",
+      nodeId: "nSTUDIO",
+      nodeName: "studio.example.ts.net",
+      deviceId: "dev1",
+    };
+    settings.update({ mode: "connected", connection });
+    expect(desktopMode(fileSettingsStore(file).read())).toEqual({ mode: "connected", connection });
+    settings.update({ connection: { ...connection, nodeId: "" } });
+    expect(desktopMode(fileSettingsStore(file).read())).toBeUndefined();
+    settings.update({ mode: "hub", connection: undefined });
+    expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ mode: "hub" });
   });
 });

@@ -22,6 +22,8 @@ import {
 } from "../api/profile.ts";
 import { agentsQuery, modelsQuery, threadsQuery, usePauseHob, useRetireHob, useUpdateHob } from "../api/queries.ts";
 import { hobState, stateLabel } from "../lib/hob-state.ts";
+import { ExportDialog } from "./export/export-dialog.tsx";
+import { messages as exportCopy } from "./export/messages.ts";
 import { CharmsTab } from "./hob-charms.tsx";
 import { Choice, ModelsBrain } from "./hob-form.tsx";
 import { PermissionsTab } from "./hob-permissions.tsx";
@@ -101,6 +103,7 @@ function Profile({
   const pause = usePauseHob(hob.id);
   const [tab, setTab] = useState<Tab>("profile");
   const [retireOpen, setRetireOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [hops, setHops] = useState(0);
   const paused = hob.status === "paused";
   const good = goodAt(hob);
@@ -159,7 +162,12 @@ function Profile({
             >
               {paused ? `Wake ${hob.name}` : `Pause ${hob.name}`}
             </Button>
-            <MoreActions name={hob.name} disabled={retired !== null} onRetire={() => setRetireOpen(true)} />
+            <MoreActions
+              name={hob.name}
+              disabled={retired !== null}
+              onExport={() => setExportOpen(true)}
+              onRetire={() => setRetireOpen(true)}
+            />
           </div>
           {pause.isError && (
             <span id="pause-error" role="alert" className="text-[13px] text-rose">
@@ -189,6 +197,7 @@ function Profile({
         )}
       </div>
 
+      {exportOpen && <ExportDialog target={{ hob }} onClose={() => setExportOpen(false)} />}
       {(retireOpen || retired) && (
         <RetireDialog
           hob={hob}
@@ -466,7 +475,17 @@ function RoleCard({
  * The actions kept out of the way: Retire, for now. The list closes on Escape, on a click outside
  * or when focus leaves it.
  */
-function MoreActions({ name, disabled, onRetire }: { name: string; disabled: boolean; onRetire: () => void }) {
+function MoreActions({
+  name,
+  disabled,
+  onExport,
+  onRetire,
+}: {
+  name: string;
+  disabled: boolean;
+  onExport: () => void;
+  onRetire: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
@@ -510,6 +529,16 @@ function MoreActions({ name, disabled, onRetire }: { name: string; disabled: boo
           id={listId}
           className="cut absolute top-full right-0 z-10 mt-1.5 flex min-w-[180px] animate-hb-in flex-col border-2 border-control bg-panel p-1"
         >
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onExport();
+            }}
+            className="cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-sm text-text hover:bg-hover"
+          >
+            {exportCopy.menuHob}
+          </button>
           <button
             type="button"
             onClick={() => {
