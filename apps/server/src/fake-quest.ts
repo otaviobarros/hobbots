@@ -37,7 +37,8 @@ import { EventBus } from "./event-bus.ts";
  * Quill's banner and Ada's email have failed, so they can be retried or given to another hob, and
  * Quill's signs are under way, so they can be cancelled. Asking for the shop badge has Quill make
  * it while Ada reviews the shop, and both change the badge's file while both are at work, so the
- * hub's finding on the two Tasks can be followed (#570). Only `HOBBOTS_FAKE_QUEST=black-friday`
+ * hub's finding on the two Tasks can be followed (#570); Quill then finishes with the badge left
+ * uncommitted (#586). Only `HOBBOTS_FAKE_QUEST=black-friday`
  * with the fake runtime turns any of them on.
  */
 
@@ -187,7 +188,13 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
           .askQuestion({ id: QuestionId.make(id(questionId)), taskId, askerId, text, createdAt: yield* iso })
           .pipe(Effect.flatMap(announce));
       });
-    const complete = (taskId: TaskId, attempt: string, summary: string, artifact: [string, string] | null) =>
+    const complete = (
+      taskId: TaskId,
+      attempt: string,
+      summary: string,
+      artifact: [string, string] | null,
+      uncommitted: string | null = null,
+    ) =>
       Effect.gen(function* () {
         const [task] = Option.getOrThrow(yield* tasks.readTree(taskId)).tasks;
         if (task === undefined) return;
@@ -210,6 +217,9 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
                   ],
             at: yield* iso,
             carried: carriedFrom(ledger, () => true),
+            ...(uncommitted === null
+              ? {}
+              : { uncommitted: { id: CheckpointId.make(id(`uncommitted-${attempt}`)), summary: uncommitted } }),
           })
           .pipe(Effect.flatMap(announce));
       }).pipe(
@@ -315,11 +325,20 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
     }
     // The shop badge stops with Quill and Ada both at work, after both changed the badge.
     if (script === "shop-badge") {
-      yield* member("badge", cast.quill, "Make the shop badge\nA badge in the agreed colour.", [], []);
+      const badge = yield* member("badge", cast.quill, "Make the shop badge\nA badge in the agreed colour.", [], []);
       yield* changeInShop(AttemptId.make(id("a-badge")), "web/badge.png", "green", bus);
       yield* pause;
       yield* member("review", cast.ada, "Review the shop\nCheck the shop's page before it goes out.", [], []);
       yield* changeInShop(AttemptId.make(id("a-review")), "web/badge.png", "grey-again", bus);
+      yield* pause;
+      // Quill finishes with the badge left uncommitted, as the hub reads it from a repository (#586).
+      yield* complete(
+        badge.id,
+        "a-badge",
+        "Badge made in green",
+        null,
+        `Left 1 file uncommitted since the last commit: web/badge.png in ${SHOP}.`,
+      );
       return;
     }
     const copy = yield* member(

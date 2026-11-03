@@ -116,6 +116,7 @@ export const messages = {
     done: "Done",
     failed: "Failed",
     cancelled: "Cancelled",
+    uncommitted: "Left uncommitted",
   } satisfies Record<CheckpointKind, string>,
   room: {
     label: ({ title }: { title: string }) => `Control room for ${title}`,

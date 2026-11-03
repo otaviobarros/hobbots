@@ -67,7 +67,7 @@ import {
   FolderSandboxLive,
   ProcessSandbox,
 } from "@hobbots/runtimes";
-import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
+import { ActivityStoreLive, FolderScannerLive, GitWorkspaceLive, HobFilesLive } from "@hobbots/workbench";
 import { Deferred, Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
@@ -314,8 +314,10 @@ const ServerLive = Layer.unwrap(
             ),
           ).pipe(
             Layer.provideMerge(
-              Layer.merge(
+              Layer.mergeAll(
                 FolderScannerLive,
+                // What a Task leaves uncommitted when it completes, read without running Git (#586).
+                GitWorkspaceLive,
                 // Nothing is deleted from it while a backup holds cleanup (ADR 026).
                 HeldActivityStore.pipe(Layer.provide(ActivityStoreLive(join(dataDir, "activity")))),
               ),

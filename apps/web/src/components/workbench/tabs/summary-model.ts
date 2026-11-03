@@ -70,6 +70,8 @@ export interface Summary {
     readonly questions: ReadonlyArray<Question>;
     /** Tool calls in this Task's work that wait for your decision. */
     readonly approvals: ReadonlyArray<ApprovalRequest>;
+    /** What this Task or one under it left uncommitted in a Git repository when it completed (#586). */
+    readonly uncommitted: ReadonlyArray<Checkpoint>;
   };
   readonly result: TaskResult | null;
   /** How much of each other tab the Attempt used, for the buttons at the end. */
@@ -108,6 +110,7 @@ const CHECKPOINT_MARK: Readonly<Record<Checkpoint["kind"], Mark>> = {
   done: "done",
   failed: "failed",
   cancelled: "cancelled",
+  uncommitted: "waiting",
 };
 
 const ENDED_EARLY: ReadonlySet<Attempt["state"]> = new Set(["failed", "interrupted", "cancelled", "unresolved"]);
@@ -161,6 +164,8 @@ const reportLines = (
       (checkpoint) =>
         checkpoint.taskId === task.id &&
         saysMore(checkpoint) &&
+        // What it left uncommitted is still open, not something that happened.
+        checkpoint.kind !== "uncommitted" &&
         !(checkpoint.kind === "milestone" && milestones.some((each) => each.id === checkpoint.milestoneId)) &&
         (attempt === null || checkpoint.attemptId === null || checkpoint.attemptId === attempt.id),
     )
@@ -243,6 +248,7 @@ export const summaryOf = (
     open: {
       questions: tree.questions.filter((each) => each.state === "open" && under.has(each.taskId)),
       approvals: approvals.filter((each) => approvalFor(each, task, under)),
+      uncommitted: tree.checkpoints.filter((each) => each.kind === "uncommitted" && under.has(each.taskId)),
     },
     result: task.result,
     used: {

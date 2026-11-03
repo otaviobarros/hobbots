@@ -25,6 +25,7 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
+import type { WrapUp } from "./wrap-up.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -34,6 +35,8 @@ interface Deps {
     adding: number,
   ) => Effect.Effect<void, TaskToolRefused>;
   readonly limits: TaskToolLimits;
+  /** What the Task leaves uncommitted in its folders, read as it completes (#586). */
+  readonly wrapUp: (task: Task) => Effect.Effect<WrapUp>;
 }
 
 /**
@@ -107,7 +110,7 @@ const newMilestones = (titles: ReadonlyArray<string> | undefined) =>
  * Tools a Task's owner runs its own work with: steps, a Quest, waits, the result, and cancelling
  * work under it.
  */
-export const makePlanning = ({ tasks, capacity, limits }: Deps) => ({
+export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
   plan_steps: (scope: CallScope, input: Omit<TaskToolInput<"plan_steps">, "key">) =>
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
@@ -233,6 +236,7 @@ export const makePlanning = ({ tasks, capacity, limits }: Deps) => ({
         return yield* refuse("no-attempt", `Task ${task.id} has not started, so it has no result yet.`);
       }
       const artifacts = (input.artifacts ?? []).map((artifact) => ({ ...artifact, id: ArtifactId.make(newId()) }));
+      const left = yield* wrapUp(task);
       const journal = journalOf();
       journal.keep(
         yield* fromRecords(
@@ -242,13 +246,18 @@ export const makePlanning = ({ tasks, capacity, limits }: Deps) => ({
             artifacts,
             at: scope.at,
             carried: scope.caller.carried ?? [],
+            ...(left.uncommitted === undefined ? {} : { uncommitted: left.uncommitted }),
           }),
         ),
       );
       return {
         done: {
-          message: `Task ${task.id} is complete.`,
-          details: { artifacts: artifacts.map((artifact) => artifact.id as string) },
+          message:
+            left.warning === null ? `Task ${task.id} is complete.` : `Task ${task.id} is complete. ${left.warning}`,
+          details: {
+            artifacts: artifacts.map((artifact) => artifact.id as string),
+            ...(left.uncommitted === undefined ? {} : { uncommitted: left.uncommitted.summary }),
+          },
         },
         entries: journal.entries,
       };

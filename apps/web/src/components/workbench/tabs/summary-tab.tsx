@@ -375,12 +375,13 @@ function StillOpen({
 }) {
   const now = useNow();
   const waiting = waitingView(reads.items, reads.blockers, subtreeScope(tree, task), now);
-  const { questions, approvals } = summary.open;
-  const none = questions.length === 0 && approvals.length === 0 && waiting.open.length === 0;
+  const { questions, approvals, uncommitted } = summary.open;
+  const none =
+    questions.length === 0 && approvals.length === 0 && uncommitted.length === 0 && waiting.open.length === 0;
   if (none && reads.status === "success") return <Empty>{copy.nothingOpen}</Empty>;
   return (
     <div className="flex flex-col gap-1.5">
-      {(questions.length > 0 || approvals.length > 0) && (
+      {(questions.length > 0 || approvals.length > 0 || uncommitted.length > 0) && (
         <ul className="m-0 flex list-none flex-col gap-1 p-0">
           {questions.map((question) => (
             <li key={question.id}>
@@ -404,6 +405,11 @@ function StillOpen({
                 action={copy.decideInChat}
                 onAction={() => onChat(approval.messageId)}
               />
+            </li>
+          ))}
+          {uncommitted.map((checkpoint) => (
+            <li key={checkpoint.id}>
+              <OpenRow label={copy.uncommitted} text={checkpoint.summary} action={null} onAction={() => {}} />
             </li>
           ))}
         </ul>

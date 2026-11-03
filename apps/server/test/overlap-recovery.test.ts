@@ -323,8 +323,11 @@ describe("A finding on two Tasks changing the same file", () => {
     );
     expect(result.pip?.state).toBe("completed");
     expect(result.found).toHaveLength(1);
-    // Pip's Task has ended, so the finding sits on Rook's, which is still at work, and names Pip's.
-    expect(result.found[0]).toMatchObject({ taskId: ROOK_TASK, aboutTaskId: PIP_TASK, source: "automatic" });
+    // complete_task has Pip's edit recorded first, and the finding is heard as it is: on Pip's Task
+    // when it is heard before his Task ends, else on Rook's, still at work. Either names the other.
+    const pair = [result.found[0]?.taskId, result.found[0]?.aboutTaskId].sort();
+    expect(pair).toEqual([ROOK_TASK, PIP_TASK].sort());
+    expect(result.found[0]?.source).toBe("automatic");
     expect(result.found[0]?.summary).toContain("Pip changed web/badge.png");
   });
 

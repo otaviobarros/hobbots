@@ -628,6 +628,21 @@ export const TaskRepositoryLive = Layer.effect(
           }
           const events: Array<JournaledEvent> = [{ _tag: "TaskCompleted", task, artifacts }];
           events.push(...(yield* automatic(task, completion.at, revision + 1)));
+          if (completion.uncommitted !== undefined) {
+            const checkpoint = new Checkpoint({
+              id: completion.uncommitted.id,
+              taskId: task.id,
+              attemptId: completion.attemptId,
+              source: "automatic",
+              kind: "uncommitted",
+              milestoneId: null,
+              summary: completion.uncommitted.summary,
+              createdAt: completion.at,
+              revision: revision + events.length,
+            });
+            yield* insertCheckpoint(checkpoint);
+            events.push({ _tag: "CheckpointRecorded", checkpoint, milestone: null });
+          }
           const quest = yield* endQuest(task, completion.at, revision + events.length);
           if (quest !== null) events.push({ _tag: "QuestCompleted", quest });
           const by = yield* ledger.consumer(completion.attemptId);
@@ -671,7 +686,8 @@ export const TaskRepositoryLive = Layer.effect(
       change((revision) =>
         Effect.gen(function* () {
           const task = yield* workingTask(input.taskId);
-          // The hub records only findings this way; the automatic states follow the Task's own changes.
+          // The hub records only findings this way; the automatic states follow the Task's own changes,
+          // and what it left uncommitted is recorded with its completion.
           if (
             !CHECKPOINT_KINDS[input.source].includes(input.kind) ||
             (input.source === "automatic" && input.kind !== "finding")
