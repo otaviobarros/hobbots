@@ -17,9 +17,13 @@ export const stopAldricHub = async () => {
 
 /**
  * A hub past setup with Aldric, who works in a folder of his own beside the hub's data, holding
- * `files` (text or bytes, by their path inside it) when the hub starts.
+ * `files` (text or bytes, by their path inside it) when the hub starts, and a hob for each of
+ * `members`, with no folders of its own.
  */
-export const aldricHub = async (files: Readonly<Record<string, string | Uint8Array>> = { "notes.md": "# Notes\n" }) => {
+export const aldricHub = async (
+  files: Readonly<Record<string, string | Uint8Array>> = { "notes.md": "# Notes\n" },
+  members: ReadonlyArray<string> = [],
+) => {
   dataDir = emptyDataDir();
   folder = realpathSync(mkdtempSync(`${dataDir}-aldric-`));
   for (const [path, content] of Object.entries(files)) {
@@ -38,21 +42,24 @@ export const aldricHub = async (files: Readonly<Record<string, string | Uint8Arr
     return response.json() as Promise<{ readonly id: string }>;
   };
   await api("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
-  const aldric = await api("POST", "/agents", {
-    id: randomUUID(),
-    name: "Aldric",
-    role: "assistant",
-    roleTitle: "Assistant",
-    sigil: "assistant",
-    hat: null,
-    tool: null,
-    lookSeed: 4000,
-    lookColor: "amber",
-    runtime: "claude-code",
-    model: null,
-    effort: null,
-    instructions: "",
-  });
+  const hobNamed = (name: string, lookSeed: number) =>
+    api("POST", "/agents", {
+      id: randomUUID(),
+      name,
+      role: "assistant",
+      roleTitle: "Assistant",
+      sigil: "assistant",
+      hat: null,
+      tool: null,
+      lookSeed,
+      lookColor: "amber",
+      runtime: "claude-code",
+      model: null,
+      effort: null,
+      instructions: "",
+    });
+  const aldric = await hobNamed("Aldric", 4000);
+  for (const [index, name] of members.entries()) await hobNamed(name, 4911 + index * 911);
   await api("PATCH", `/agents/${aldric.id}/permissions`, { ownFolders: [folder] });
   return { url, aldric: aldric.id, hub, dataDir, folder };
 };
