@@ -14,7 +14,7 @@ export type OpenPairingPayload = typeof OpenPairingPayload.Type;
 /**
  * Where a device's pairing request stands, as the waiting device sees it. `expired` once its time
  * ran out undecided. The device token comes only once, after Allow: as the device cookie for a
- * browser, in `token` for the desktop app.
+ * browser, in `token` and with `deviceId` for the desktop app.
  */
 export const PairingStatus = Schema.Struct({
   id: Schema.String,
@@ -22,6 +22,8 @@ export const PairingStatus = Schema.Struct({
   state: Schema.Union([PairingState, Schema.Literal("expired")]),
   expiresAt: Schema.String,
   token: Schema.optionalKey(Schema.String),
+  /** The new device's ID, with the token, so the desktop app can revoke itself on Disconnect (ADR 025). */
+  deviceId: Schema.optionalKey(DeviceId),
 });
 export type PairingStatus = typeof PairingStatus.Type;
 

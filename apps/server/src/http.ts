@@ -12,7 +12,7 @@ import {
   runtimeAdapters,
   ToolLogs,
 } from "@hobbots/agents";
-import { HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
+import { CONNECT_PROTOCOL, HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
 import { RuntimeKind, type ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { HttpServerRequest } from "effect/http";
@@ -171,7 +171,10 @@ const HealthHandlers = HttpApiBuilder.group(HobbotsApi, "health", (handlers) =>
           const place = yield* gate.placeOf(yield* HttpServerRequest.HttpServerRequest);
           if (Option.isSome(place)) yield* devices.throttleAnonymous(place.value);
           const local = Option.exists(place, (where) => where._tag === "Local");
-          return local ? { ...installation, name } : { app: installation.app, name, version: installation.version };
+          const connect = CONNECT_PROTOCOL;
+          return local
+            ? { ...installation, name, connect }
+            : { app: installation.app, name, version: installation.version, connect };
         }).pipe(withRetryAfter),
     });
   }),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   closeAction,
+  connectedTrayModel,
   listNames,
   pauseItem,
   quitWhileWorkingDialog,
@@ -101,5 +102,28 @@ describe("closing the window", () => {
       detail: "Aldric and Pip will stop. Their unfinished work comes back as interrupted next time you open Hobbots.",
       buttons: ["Quit", "Cancel"],
     });
+  });
+});
+
+describe("the menu-bar icon on a connected desktop", () => {
+  const hub = { nodeName: "studio.example.ts.net", address: "http://studio.example.ts.net:4317" };
+
+  it("names the hub by its computer and says which side to update", () => {
+    expect(connectedTrayModel({ state: "connected", version: "0.5.0" }, hub)).toEqual({
+      icon: "running",
+      title: "Connected to studio",
+      detail: hub.address,
+    });
+    expect(connectedTrayModel({ state: "unsupported", side: "hubOlder", version: "0.3.0" }, hub)).toMatchObject({
+      icon: "error",
+      title: "studio runs an older Hobbots (0.3.0).",
+      detail: "Update Hobbots on studio to connect.",
+    });
+    expect(connectedTrayModel({ state: "unsupported", side: "appOlder", version: "9.0.0" }, hub).detail).toBe(
+      "Update Hobbots on this Mac.",
+    );
+    expect(connectedTrayModel({ state: "otherNode" }, hub).title).toBe(`${hub.address} is now a different computer.`);
+    expect(connectedTrayModel({ state: "revoked" }, hub).title).toBe("This Mac was removed from studio.");
+    expect(connectedTrayModel({ state: "unreachable" }, hub).icon).toBe("stopped");
   });
 });

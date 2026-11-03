@@ -2,10 +2,12 @@
  * What the menu-bar icon draws and says, and what closing the window does (design screen 14,
  * ADR 012). Pure, so the rules are testable without Electron; menu-bar.ts puts them on screen.
  */
+import type { ConnectionState } from "./hub-connection.ts";
 import { messages } from "./messages.ts";
 import type { ServerState, ServerStatus } from "./server.ts";
 
 const copy = messages.remoteAccess;
+const connection = messages.connection;
 
 /** The chief of the hobs in 10 × 10 cells, as the design draws it for the menu bar; "." and "k" (eyes) are clear. */
 const TRAY_CHIEF = [
@@ -177,3 +179,64 @@ export const quitWhileWorkingDialog = (working: ReadonlyArray<string> | null) =>
         detail: `${listNames(working)} will stop. Their unfinished work comes back as interrupted next time you open Hobbots.`,
         buttons: ["Quit", "Cancel"],
       };
+
+/** The menu's header on a connected desktop: the hub's state, and the icon that goes with it (ADR 025). */
+export interface ConnectedTrayModel {
+  readonly icon: ServerState;
+  readonly title: string;
+  readonly detail: string;
+}
+
+/** The short name of the hub's computer, from its Tailscale node name, such as `studio` for `studio.example.ts.net`. */
+const shortNodeName = (nodeName: string) => nodeName.split(".")[0] || nodeName;
+
+type Copy = { readonly hub: string; readonly address: string };
+type StateModel<S extends ConnectionState["state"]> = (
+  state: Extract<ConnectionState, { state: S }>,
+  copy: Copy,
+) => ConnectedTrayModel;
+
+const CONNECTED_MODELS: { readonly [S in ConnectionState["state"]]: StateModel<S> } = {
+  connected: (_, values) => ({ icon: "running", title: connection.connected(values), detail: values.address }),
+  connecting: (_, values) => ({ icon: "starting", title: connection.connecting(values), detail: values.address }),
+  noToken: (_, values) => ({
+    icon: "stopped",
+    title: connection.noToken(values),
+    detail: connection.noTokenDetail(values),
+  }),
+  otherNode: (_, values) => ({ icon: "error", title: connection.otherNode(values), detail: values.address }),
+  unreachable: (_, values) => ({
+    icon: "stopped",
+    title: connection.unreachable(values),
+    detail: connection.unreachableDetail,
+  }),
+  notHobbots: (_, values) => ({ icon: "error", title: connection.notHobbots(values), detail: values.address }),
+  unsupported: (state, values) =>
+    state.side === "hubOlder"
+      ? {
+          icon: "error",
+          title: connection.hubOlder({ hub: values.hub, version: state.version }),
+          detail: connection.hubOlderDetail(values),
+        }
+      : { icon: "error", title: connection.appOlder(values), detail: connection.appOlderDetail },
+  revoked: (_, values) => ({
+    icon: "error",
+    title: connection.revoked(values),
+    detail: connection.askAgainDetail(values),
+  }),
+  unknownDevice: (_, values) => ({
+    icon: "error",
+    title: connection.unknownDevice(values),
+    detail: connection.askAgainDetail(values),
+  }),
+};
+
+/** What the menu-bar icon draws and says for where the connection to the hub stands. */
+export const connectedTrayModel = (
+  state: ConnectionState,
+  hub: { readonly nodeName: string; readonly address: string },
+): ConnectedTrayModel =>
+  (CONNECTED_MODELS[state.state] as StateModel<typeof state.state>)(state as never, {
+    hub: shortNodeName(hub.nodeName),
+    address: hub.address,
+  });

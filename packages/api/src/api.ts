@@ -145,19 +145,23 @@ export const ServerIdentity = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   installationId: Schema.NonEmptyString,
   version: Schema.String,
+  /** The hub's connect protocol (ADR 025); a hub that reports none predates it. */
+  connect: Schema.optionalKey(Schema.Int),
   dataDir: Schema.String,
 });
 export type ServerIdentity = typeof ServerIdentity.Type;
 
 /**
  * What the health endpoint tells a request that did not come from this computer: only that this is
- * Hobbots and which version, for the waiting screen. The installation ID and data folder stay local
+ * Hobbots, which version and which connect protocol, for the waiting screen and a connected desktop. The installation ID and data folder stay local
  * (ADR 021).
  */
 export const PublicServerIdentity = Schema.Struct({
   app: Schema.Literal("hobbots"),
   name: Schema.optionalKey(Schema.String),
   version: Schema.String,
+  /** The hub's connect protocol, so a connected desktop knows which side to update (ADR 025). */
+  connect: Schema.optionalKey(Schema.Int),
 });
 export type PublicServerIdentity = typeof PublicServerIdentity.Type;
 

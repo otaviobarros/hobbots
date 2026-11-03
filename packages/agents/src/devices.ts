@@ -163,6 +163,7 @@ const statusOf = (request: PairingRequest, now: string, token?: string): Pairing
   state: pairingExpired(request, now) ? "expired" : request.state,
   expiresAt: request.expiresAt,
   ...(token === undefined ? {} : { token }),
+  ...(token === undefined || request.deviceId === null ? {} : { deviceId: request.deviceId }),
 });
 
 const samePlace = (approvedOn: string | null, place: DevicePlace) => approvedOn === nodeOf(place);

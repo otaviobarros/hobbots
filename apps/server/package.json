@@ -32,6 +32,8 @@
     "./main": "./src/main.ts",
     "./installation": "./src/installation.ts",
     "./network-settings": "./src/network-settings.ts",
-    "./window-key": "./src/window-key.ts"
+    "./window-key": "./src/window-key.ts",
+    "./tailscale": "./src/tailscale.ts",
+    "./device-token": "./src/device-token.ts"
   }
 }
