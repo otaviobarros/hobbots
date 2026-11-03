@@ -157,6 +157,11 @@ export const TaskToolInputs = {
     key,
     task_id: taskId,
     summary: text("The result, in a few sentences."),
+    leave_uncommitted: Schema.optionalKey(
+      text(
+        "Why you leave the files you changed uncommitted. Only when you mean to: completing a Quest you lead with uncommitted changes is refused without it.",
+      ),
+    ),
     artifacts: Schema.optionalKey(
       Schema.Array(
         Schema.Struct({
@@ -294,6 +299,7 @@ export const TaskToolRefusal = Schema.Literals([
   "no-task",
   "task-state",
   "claim-stale",
+  "uncommitted-changes",
 ]);
 export type TaskToolRefusal = typeof TaskToolRefusal.Type;
 

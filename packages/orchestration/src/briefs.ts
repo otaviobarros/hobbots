@@ -240,15 +240,28 @@ const answeredFor = (task: Task, tree: TaskTree): ReadonlyArray<Question> =>
  * backpack after the tree it was briefed from was read (ADR 019).
  */
 export const briefingShows = (task: Task, tree: TaskTree): ((item: BackpackItem) => boolean) => {
-  const listed = new Map(briefedUnder(task, tree).map((each) => [each.task.id as string, each.task]));
+  const outcomes = outcomeShows(briefedUnder(task, tree).map((each) => each.task));
   const answers = new Map(answeredFor(task, tree).map((question) => [question.id as string, question]));
-  return ({ payload }) => {
+  return (item) => {
+    const { payload } = item;
     if (payload._tag === "answer") {
       const shown = answers.get(payload.question.id);
       return shown !== undefined && shown.revision >= payload.question.revision;
     }
+    return outcomes(item);
+  };
+};
+
+/**
+ * Whether `item` is the result or failure of one of `listed` that has ended, at the version the
+ * item was recorded from or later: what a briefing, or a tool result, that shows those Tasks as
+ * they are tells of them (ADR 019).
+ */
+export const outcomeShows = (listed: ReadonlyArray<Task>): ((item: BackpackItem) => boolean) => {
+  const byId = new Map(listed.map((each) => [each.id as string, each]));
+  return ({ payload }) => {
     if (payload._tag !== "result" && payload._tag !== "failure") return false;
-    const shown = listed.get(payload.task.id);
+    const shown = byId.get(payload.task.id);
     return shown !== undefined && isTerminalTask(shown.state) && shown.revision >= payload.task.revision;
   };
 };

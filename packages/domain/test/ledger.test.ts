@@ -165,6 +165,30 @@ describe("ledgerRefusal", () => {
     expect(refusal?.message).toMatch(/; and 2 more\.$/);
   });
 
+  it("says what clears an unread item other than a result or failure: ending the turn (#662)", () => {
+    const answered = new Question({
+      id: QuestionId.make("q1"),
+      taskId: TaskId.make("top"),
+      askerId: ALDRIC,
+      recipientId: null,
+      chain: [],
+      text: "Which tone?",
+      state: "answered",
+      answer: "Playful",
+      answeredBy: null,
+      createdAt: at,
+      answeredAt: at,
+      revision: 2,
+    });
+    const ledger = new ResponsibilityLedger({
+      taskId: TaskId.make("top"),
+      open: [{ _tag: "Item", item: item("i-answer", { _tag: "answer", question: answered }) }],
+    });
+    expect(ledgerRefusal(ledger)?.message).toMatch(
+      /not yet read\. End your turn: what still waits for you reaches you as your next message, and you complete the Task then\. Calling complete_task again without doing either is refused the same way\.$/,
+    );
+  });
+
   it("names an unread result by its Task, and a turn that was shown it carries it", () => {
     const child = task("child", "top", "completed");
     const ledger = new ResponsibilityLedger({
@@ -178,7 +202,9 @@ describe("ledgerRefusal", () => {
       reason: "items-open",
       message:
         "Task top cannot complete yet: the result of Task child (Brief for child) is in your backpack, not yet read; " +
-        "Task other (Brief for other) failed, and you have not read it yet.",
+        "Task other (Brief for other) failed, and you have not read it yet. " +
+        "Call read_tasks to read what ended, which counts as reading it, then complete the Task; or end your turn, and it reaches you as your next message. " +
+        "Calling complete_task again without doing either is refused the same way.",
     });
     expect(carriedFrom(ledger, (each) => each.kind === "result")).toEqual([
       { itemId: "i-result", owner: null, token: 0 },
