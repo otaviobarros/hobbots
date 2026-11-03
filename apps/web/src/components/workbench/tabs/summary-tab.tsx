@@ -1,4 +1,4 @@
-import { AgentId, type ArtifactRef, isLiveAttempt, type TaskId, ThreadId } from "@hobbots/domain";
+import { AgentId, type ArtifactRef, isLiveAttempt, TASK_TOOLS, type TaskId, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -133,6 +133,8 @@ const lineKey = (line: HappenedLine): string => {
       return line.checkpoint.id;
     case "milestone":
       return line.milestone.id;
+    case "refused":
+      return `refused-${line.refusal.id}`;
     case "ended":
       return `ended-${line.attempt.id}`;
   }
@@ -161,6 +163,7 @@ function Happened({ line, hobs, onOpen }: { line: HappenedLine; hobs: HobLookup;
       </button>
     );
   }
+  if (line.kind === "refused") return <Refused line={line} hobs={hobs} mark={mark} row={row} />;
   return (
     <div className={row}>
       {mark}
@@ -178,6 +181,34 @@ function Happened({ line, hobs, onOpen }: { line: HappenedLine; hobs: HobLookup;
           <span className="block text-secondary-text">{copy.endedWhy({ why: line.attempt.outcome })}</span>
         )}
       </span>
+    </div>
+  );
+}
+
+/** A Task tool call the hub refused: the step it was, what the hob was told, and how many times it tried. */
+function Refused({
+  line,
+  hobs,
+  mark,
+  row,
+}: {
+  line: Extract<HappenedLine, { kind: "refused" }>;
+  hobs: HobLookup;
+  mark: ReactNode;
+  row: string;
+}) {
+  const { refusal } = line;
+  const label = TASK_TOOLS.find((tool) => tool.name === refusal.tool)?.label ?? refusal.tool;
+  return (
+    <div data-slot="refused-call" className={row}>
+      {mark}
+      <span className="min-w-0 flex-1 whitespace-pre-wrap">
+        {copy.refused({ label })}
+        <span className="block text-secondary-text">
+          {copy.refusedTold({ name: hobs(refusal.agentId).name, message: refusal.message })}
+        </span>
+      </span>
+      {refusal.tries > 1 && <span className="shrink-0 text-xs text-label">{copy.tries({ count: refusal.tries })}</span>}
     </div>
   );
 }

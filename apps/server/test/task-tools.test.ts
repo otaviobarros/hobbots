@@ -175,6 +175,15 @@ const tree = () =>
 
 const head = () => run(Effect.flatMap(Effect.service(EventJournal), (journal) => journal.head));
 
+/** What was journaled since `before`: only the refusals recorded (#575), so nothing else was written. */
+const onlyRefusalsSince = async (before: { readonly sequence: number }) => {
+  const entries = await run(
+    Effect.flatMap(Effect.service(EventJournal), (journal) => journal.readAfter(before.sequence)),
+  );
+  expect(entries.filter((entry) => entry.type !== "ToolCallRefused")).toEqual([]);
+  return entries;
+};
+
 /** Delegates a Task under `taskId` and returns the new Task's id. */
 const delegate = async (agentId: AgentId, taskId: TaskId, hob: string, key: string, extra: object = {}) =>
   TaskIdSchema.make(
@@ -353,7 +362,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await refused(ADA, ada, "hand_off", { key: "k5", artifact_id: "nope", to_task_id: quill })).reason).toBe(
       "artifact-missing",
     );
-    expect(await head()).toEqual(before);
+    await onlyRefusalsSince(before);
   });
 
   // covers OR-004
@@ -451,7 +460,8 @@ describe("hob tools for Tasks and Quests", () => {
     const waiting = await done(ALDRIC, TOP, "wait_for", { key: "w", tasks: [quill, ada], mode: "all" });
     expect(waiting.details.states).toEqual({ [quill]: "queued", [ada]: "queued" });
     const after = await tree();
-    expect(after.tasks[0]?.state).toBe("waiting");
+    // Aldric's turn still runs, so his Task stays active until it ends (#572).
+    expect(after.tasks[0]?.state).toBe("active");
     expect(after.waits).toEqual([expect.objectContaining({ taskId: TOP, on: [quill, ada], mode: "all" })]);
     expect((await refused(ALDRIC, TOP, "wait_for", { key: "w2", tasks: ["other"] })).reason).toBe(
       "wait-outside-subtree",
@@ -543,7 +553,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect((await refused(ALDRIC, TOP, "delegate_task", { key: "k", hob: "Nobody", brief: "x" })).reason).toBe(
       "hob-missing",
     );
-    expect(await head()).toEqual(before);
+    expect(await onlyRefusalsSince(before)).toHaveLength(5);
     // A key that only ever led to refusals is still free.
     const planned = await done(ALDRIC, TOP, "plan_steps", { key: "k", steps: [{ brief: "Now it works" }] });
     const [step] = planned.details.steps as Array<{ readonly task_id: string }>;
@@ -595,7 +605,7 @@ describe("hob tools for Tasks and Quests", () => {
     const before = await head();
     await run(turn);
     expect((await tree()).tasks).toHaveLength(3);
-    expect(await head()).toEqual(before);
+    await onlyRefusalsSince(before);
   });
 
   it("announces what a call journaled once it commits", async () => {
@@ -663,7 +673,7 @@ describe("hob tools for Tasks and Quests", () => {
       ).reason,
     ).toBe("claim-stale");
 
-    expect(await head()).toEqual(before);
+    await onlyRefusalsSince(before);
     expect((await tree()).tasks).toEqual(tasksBefore);
     expect((await tree()).delegations).toHaveLength(1);
 

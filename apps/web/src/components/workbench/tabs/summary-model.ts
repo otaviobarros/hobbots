@@ -9,6 +9,7 @@ import {
   type FileChange,
   type Milestone,
   type Question,
+  type RefusedCall,
   type Task,
   type TaskResult,
   type TaskState,
@@ -40,6 +41,8 @@ export type HappenedLine =
   | { readonly kind: "checkpoint"; readonly checkpoint: Checkpoint; readonly mark: Mark }
   /** A milestone the brief planned: reached, or still next. */
   | { readonly kind: "milestone"; readonly milestone: Milestone; readonly mark: Mark }
+  /** A Task tool call the hub refused on this Task, with how many times it was tried (#575). */
+  | { readonly kind: "refused"; readonly refusal: RefusedCall; readonly mark: Mark }
   /** The chosen Attempt ended without finishing the Task, with why when the hub knows. */
   | { readonly kind: "ended"; readonly attempt: Attempt; readonly mark: Mark };
 
@@ -177,7 +180,11 @@ const happenedOf = (tree: TaskTree, task: Task, attempt: Attempt | null): Readon
       ? []
       : [{ at: milestone.reachedAt, line: { kind: "milestone", milestone, mark: "done" } }],
   );
-  const timed = [...childLines(tree, task), ...reportLines(tree, task, attempt, milestones), ...reached];
+  // A refused call is the hub's record, not a report, so it shows whichever Attempt is chosen.
+  const refused: Array<Timed> = tree.refusals
+    .filter((refusal) => refusal.taskId === task.id)
+    .map((refusal) => ({ at: refusal.refusedAt, line: { kind: "refused", refusal, mark: "failed" } }));
+  const timed = [...childLines(tree, task), ...reportLines(tree, task, attempt, milestones), ...reached, ...refused];
   // A stable sort keeps lines that share a time, such as steps planned together, in their order.
   const lines = timed.sort((a, b) => a.at.localeCompare(b.at)).map((each) => each.line);
   for (const milestone of milestones) {

@@ -59,7 +59,7 @@ export function InboxDetail({
         )}
         {request.decidedAt !== null && <Fact term={copy.detail.decided}>{formatWhen(request.decidedAt)}</Fact>}
       </dl>
-      <ApprovalCard approval={request} hob={hob} />
+      <ApprovalCard approval={request} hob={hob} via="inbox" />
       {!retired && chatHob !== undefined && (
         <div className="flex flex-wrap gap-2.5">
           <Button asChild variant="outline">

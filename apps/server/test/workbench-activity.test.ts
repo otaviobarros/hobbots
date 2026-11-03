@@ -306,7 +306,7 @@ describe("a Task's activity", () => {
       sandboxed: true,
       liveOutput: false,
       state: "succeeded",
-      exitCode: null,
+      exitCode: 0,
     });
     expect(command?.command).toBe("npm run format -- --token [redacted: GitHub token]");
     expect(command?.output?.head).toBe(
@@ -398,14 +398,19 @@ describe("a Task's activity", () => {
 
     expect(pagesActivity.commands.map((each) => each.command)).toEqual(["make pages"]);
     expect(stylesActivity.commands.map((each) => each.command)).toEqual(["make styles"]);
-    // Each step changed its own file while the other worked in the same folder, so each says so.
-    // (The turn that planned them worked there too, until it ended.)
-    expect(pagesActivity.changes.find((each) => each.path === "pages.html")?.sharedWith).toContain(styles.id);
-    expect(stylesActivity.changes.find((each) => each.path === "site.css")?.sharedWith).toContain(pages.id);
-    expect(pagesActivity.changes.find((each) => each.path === "pages.html")?.sharedWith).not.toContain(pages.id);
-    // Each names the hob of the Attempt it worked beside.
-    expect(pagesActivity.sharedWithHobs).toContainEqual({ attemptId: styles.id, agentId: styles.agentId });
-    expect(stylesActivity.sharedWithHobs).toContainEqual({ attemptId: pages.id, agentId: pages.agentId });
+    // Each step records its own file. The two commands ran at once in the same folder, so a step may
+    // also hold the other's file, but only labeled as shared with that step, naming its hob (#595).
+    const ownFile = (activity: typeof pagesActivity, file: string, other: typeof pages) => {
+      expect(activity.changes.map((each) => each.path)).toContain(file);
+      for (const change of activity.changes) {
+        expect(change.sharedWith).not.toContain(activity.attempt.id);
+        if (change.path === file) continue;
+        expect(change.sharedWith).toContain(other.id);
+        expect(activity.sharedWithHobs).toContainEqual({ attemptId: other.id, agentId: other.agentId });
+      }
+    };
+    ownFile(pagesActivity, "pages.html", styles);
+    ownFile(stylesActivity, "site.css", pages);
     // The output is long: its record keeps its start and end, and its whole output is a log.
     const [command] = pagesActivity.commands;
     expect(command?.output).toMatchObject({ logged: true });
@@ -460,13 +465,16 @@ describe("a Task's activity", () => {
     const text = (mark: string) => `${mark.repeat(999)}\n`;
     const setUpWith = (contentsPerAttempt: number) =>
       setUp({}, { limits: { ...limits, contentsPerAttempt }, others: [second] });
-    // The turn waits after its baseline while the test writes in both folders, then rewrites a.txt twice.
+    // The turn waits after its baseline while the test writes in the second folder, then rewrites a.txt twice.
     const turn = [
       "Tidy both",
       HOLD,
       run({ command: "draft one", writes: { "a.txt": text("1") } }),
       run({ command: "draft two", writes: { "a.txt": text("2") } }),
       run({ command: "draft three", writes: { "a.txt": text("3") } }),
+      run({ command: "draft c", writes: { "c.txt": text("c") } }),
+      // The fake writes only in the first folder: the test writes b.txt, and the hob's Write names it (#595).
+      `fake:write ${join(second, "b.txt")} ${JSON.stringify(text("b"))}`,
       hub("start_quest", { key: "quest", goal: "Tidy both" }),
     ].join("\n");
     const recorded = async (contentsPerAttempt: number) => {
@@ -476,7 +484,6 @@ describe("a Task's activity", () => {
       const sent = inHub(say(turn));
       // The prompt reaches the runtime once the turn's baseline is taken.
       await inHub(retry(Effect.suspend(() => (requests.length > 0 ? Effect.void : Effect.fail("not yet" as const)))));
-      writeFileSync(join(project, "c.txt"), text("c"));
       writeFileSync(join(second, "b.txt"), text("b"));
       await release();
       await sent;

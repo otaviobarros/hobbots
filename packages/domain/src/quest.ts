@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { AgentId, ThreadId } from "./ids.ts";
 import { PolicyOverrides } from "./policy.ts";
 import { Revision } from "./revision.ts";
@@ -273,6 +273,31 @@ export class TaskWait extends Schema.Class<TaskWait>("TaskWait")({
   createdAt: Schema.String,
 }) {}
 
+export const RefusedCallId = Schema.String.pipe(Schema.brand("RefusedCallId"));
+export type RefusedCallId = typeof RefusedCallId.Type;
+
+/**
+ * A Task tool call the hub refused (ADR 018), recorded so the user and an audit can see it. A call
+ * retried with its key and refused again is the same record, with one more try; a call that came
+ * with no usable key, such as one whose input did not decode, is a record of its own. `taskId` is
+ * the Task the calling turn worked on, when the hub knew it; `input` is the call's input as stable
+ * JSON, cut when long; `reason` is the refusal's code, such as `not-owner`.
+ */
+export class RefusedCall extends Schema.Class<RefusedCall>("RefusedCall")({
+  id: RefusedCallId,
+  agentId: AgentId,
+  taskId: Schema.NullOr(TaskId),
+  tool: Schema.String,
+  key: Schema.NullOr(Schema.String),
+  input: Schema.String,
+  reason: Schema.String,
+  message: Schema.String,
+  tries: Schema.Int,
+  createdAt: Schema.String,
+  /** When it was last refused: `createdAt` for a call refused once. */
+  refusedAt: Schema.String,
+}) {}
+
 /** A Task and everything under it. */
 export class TaskTree extends Schema.Class<TaskTree>("TaskTree")({
   /** The Task asked for first, then its descendants, oldest first. */
@@ -289,6 +314,11 @@ export class TaskTree extends Schema.Class<TaskTree>("TaskTree")({
   notes: Schema.Array(TaskNote),
   /** The latest wait of each Task in the tree that has one. */
   waits: Schema.Array(TaskWait),
+  /** The Task tool calls the hub refused for its Tasks, oldest first. */
+  refusals: Schema.Array(RefusedCall).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
 }) {}
 
 /**

@@ -1,5 +1,6 @@
-import type { Agent, AgentId, ApprovalRequest, ThreadId } from "@hobbots/domain";
+import type { Agent, AgentId, ApprovalRequest, DeviceId, ThreadId } from "@hobbots/domain";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { devicesQuery } from "../../api/devices.ts";
 import { agentsQuery, archivedAgentsQuery, threadsQuery } from "../../api/queries.ts";
 import { messages } from "./messages.ts";
 
@@ -13,6 +14,8 @@ export interface InboxDirectory {
    * that one asks in its lead's thread (ADR 018). Undefined while the threads load.
    */
   readonly threadHob: (threadId: ThreadId) => AgentId | undefined;
+  /** The name of the device a request was decided from, revoked devices included (#598). */
+  readonly deviceName: (deviceId: DeviceId) => string;
 }
 
 /**
@@ -26,11 +29,14 @@ export const useInboxDirectory = (approvals: ReadonlyArray<ApprovalRequest>): In
   const askers = new Set(approvals.map((approval) => approval.agentId));
   const owners = Array.from(new Set([...askers, ...(active.data ?? []).map((hob) => hob.id)]));
   const threadLists = useQueries({ queries: owners.map((agentId) => threadsQuery(agentId)) });
+  const devices = useQuery(devicesQuery);
+  const deviceNames = new Map((devices.data ?? []).map((device) => [device.id, device.name]));
   const threads = new Map(threadLists.flatMap((list) => (list.data ?? []).map((thread) => [thread.id, thread])));
   return {
     hob: (agentId) => hobs.get(agentId),
     hobName: (agentId) => hobs.get(agentId)?.name ?? messages.unknownHob,
     threadTitle: (threadId) => threads.get(threadId)?.title || messages.untitledThread,
     threadHob: (threadId) => threads.get(threadId)?.agentId,
+    deviceName: (deviceId) => deviceNames.get(deviceId) ?? messages.unknownDevice,
   };
 };

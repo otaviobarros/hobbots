@@ -1,4 +1,12 @@
-import { type AgentId, isTerminalTask, type Task, type TaskId, type TaskTree, type ThreadId } from "@hobbots/domain";
+import {
+  type AgentId,
+  isTerminalTask,
+  type Question,
+  type Task,
+  type TaskId,
+  type TaskTree,
+  type ThreadId,
+} from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { type ReactNode, useEffect, useRef } from "react";
 import { formatTime } from "../../lib/time.ts";
@@ -7,15 +15,17 @@ import { useOpenWorkbench } from "../workbench/use-workbench.ts";
 import { roomStatus, roomStatusLabel, roomTone } from "./control-room.ts";
 import { messages } from "./messages.ts";
 import { NoteBox, type NoteDrafts } from "./note-box.tsx";
+import { AnswerForm } from "./question-card.tsx";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
-import { findTask, taskDetail, taskTitle } from "./work-model.ts";
+import { findTask, noteRecipient, taskDetail, taskTitle } from "./work-model.ts";
 
 const copy = messages.drawer;
 
 /**
  * The drawer beside the chat that opens a Task or step (ADR 018): its brief, checkpoints, questions
- * and output, the Tasks under it, and a note that goes to its nearest lead. The Task is in the
+ * and output, the Tasks under it, and a note that goes to its nearest lead. A question waiting for
+ * you is answered here, in place; a note is never an answer, and its box says so while one waits. The Task is in the
  * address, so a link opens it; Escape or Close shuts it. A Task of a Quest pinned from another
  * thread opens here too, and its note still goes to that Quest's lead.
  */
@@ -90,6 +100,7 @@ export function TaskDrawer({
           tree={found.tree}
           task={found.task}
           hobs={hobs}
+          {...notAnAnswer(found.tree, found.task, hobs)}
           draft={drafts.get(found.task.id)}
           setDraft={(draft) => drafts.set(found.task.id, draft)}
         />
@@ -184,8 +195,9 @@ function Detail({
         <Section title={copy.questions}>
           <ul className="m-0 flex list-none flex-col gap-2 p-0 text-detail">
             {detail.questions.map((question) => (
-              <li key={question.id} className="flex flex-col gap-0.5">
+              <li key={question.id} className="flex flex-col gap-1">
                 <span>{question.text}</span>
+                {question.state === "open" && <OpenQuestion question={question} hobs={hobs} />}
                 {question.answer !== null && (
                   <span className="text-mint">
                     {copy.answer({
@@ -232,6 +244,36 @@ function Detail({
     </div>
   );
 }
+
+/** An open question: answered right here when it waits for you, else who it waits on. */
+function OpenQuestion({ question, hobs }: { question: Question; hobs: HobLookup }) {
+  const asker = hobs(question.askerId).name;
+  if (question.recipientId !== null) {
+    return <span className="text-label">{copy.waitingOn({ name: hobs(question.recipientId).name })}</span>;
+  }
+  return (
+    <div className="flex flex-col gap-1.5 border-2 border-lantern bg-card px-2.5 py-2">
+      <span className="text-xs font-bold text-lantern">{copy.asksYou({ name: asker })}</span>
+      <AnswerForm question={question} askerName={asker} />
+    </div>
+  );
+}
+
+/**
+ * While a question on the Task waits for you, the note box says it sends a note to the lead and
+ * points at the answer box, so nobody types an answer into it.
+ */
+const notAnAnswer = (tree: TaskTree, task: Task, hobs: HobLookup) => {
+  const waiting = tree.questions.find(
+    (question) => question.taskId === task.id && question.state === "open" && question.recipientId === null,
+  );
+  if (waiting === undefined) return {};
+  const lead = hobs(noteRecipient(tree, task)).name;
+  return {
+    label: copy.noteNotAnswer({ name: lead }),
+    hint: copy.noteNotAnswerHint({ lead, asker: hobs(waiting.askerId).name }),
+  };
+};
 
 function Artifacts({ artifacts }: { artifacts: ReturnType<typeof taskDetail>["output"] }) {
   return (

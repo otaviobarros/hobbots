@@ -1,4 +1,4 @@
-import { type ApprovalRequest, exactAction, type ThreadId } from "@hobbots/domain";
+import { type ApprovalRequest, type DeviceId, exactAction, type ThreadId } from "@hobbots/domain";
 import { byClosing } from "../../api/inbox-window.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
 import { messages } from "./messages.ts";
@@ -81,6 +81,20 @@ export const verdictText = (approval: ApprovalRequest): string => {
   if (approval.state === "denied") return copy.history.verdict.denied;
   if (approval.state === "expired") return copy.history.verdict.expired;
   return copy.history.verdict[approval.lifetime ?? "once"];
+};
+
+/**
+ * Who decided a closed request, from which device and where, as History shows it (#598): "Allowed
+ * once from Mac in the Inbox". An expired one says nobody decided. Null for a pending request and
+ * for one closed before deciders were recorded.
+ */
+export const deciderText = (approval: ApprovalRequest, deviceName: (deviceId: DeviceId) => string): string | null => {
+  if (approval.decidedVia === "expired") return copy.history.expiredUndecided;
+  if (approval.decidedByDeviceId === null) return null;
+  if (approval.state !== "approved" && approval.state !== "denied") return null;
+  const decision = approval.state === "denied" ? "denied" : (approval.lifetime ?? "once");
+  const surface = approval.decidedVia ?? "unknown";
+  return copy.history.decider[decision][surface]({ device: deviceName(approval.decidedByDeviceId) });
 };
 
 /**

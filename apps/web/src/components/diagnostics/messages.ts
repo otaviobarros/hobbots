@@ -145,5 +145,6 @@ export const messages = {
     CommandRecorded: "Command recorded",
     FileChangesRecorded: "Files changed",
     FolderScanned: "Folder scanned",
+    ToolCallRefused: "Tool call refused",
   } as Readonly<Record<string, string>>,
 } as const;

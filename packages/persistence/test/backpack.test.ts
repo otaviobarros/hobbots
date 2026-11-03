@@ -450,15 +450,15 @@ describe("A hob's backpack", () => {
 
     // The answer unblocks Quill, so it comes before Quill's Task.
     expect(result.quill.map((item) => item.kind)).toEqual(["answer", "task"]);
-    expect(result.aldric.map((item) => item.kind)).toEqual(["question"]);
+    // Aldric answered Quill's question, so his copy of it settled with the answer (#573).
+    expect(result.aldric).toEqual([]);
     expect(result.quest.map((item) => [item.recipientId, item.kind])).toEqual([
       [QUILL, "answer"],
       [QUILL, "task"],
       [ADA, "task"],
-      [ALDRIC, "question"],
     ]);
     expect(result.none).toEqual([]);
-    expect(result.workspace).toHaveLength(4);
+    expect(result.workspace).toHaveLength(3);
     expect(result.workspace[0]?.kind).toBe("answer");
     expect(result.missing).toMatchObject({ _tag: "BackpackItemMissing" });
   });

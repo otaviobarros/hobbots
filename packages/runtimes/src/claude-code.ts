@@ -58,6 +58,7 @@ import {
   isExecutable,
   runnableBinary,
 } from "./binary.ts";
+import { toolFinished } from "./command-exit.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import {
   CLAUDE_CODE_MODEL_HOSTS,
@@ -838,25 +839,23 @@ export const policyHooks = (
     };
   };
 
-  const finished =
-    (failed: boolean): HookCallback =>
-    async (input) => {
-      if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") return {};
-      if (started.delete(input.tool_use_id)) {
-        // Claude Code keeps an output too large to return inline in its configuration folder.
-        const output =
-          input.hook_event_name === "PostToolUse"
-            ? await fullToolOutput(input.tool_name, input.tool_response, [turn.runtimeFolder, userConfigFolder()])
-            : input.error;
-        report({ _tag: "ToolFinished", id: input.tool_use_id, failed, ...(output === undefined ? {} : { output }) });
-      }
-      // The note goes with the result, so the hob knows it asked as it would know of a refusal.
-      const note = notes.get(input.tool_use_id);
-      notes.delete(input.tool_use_id);
-      return note === undefined
-        ? {}
-        : { hookSpecificOutput: { hookEventName: input.hook_event_name, additionalContext: note } };
-    };
+  const finished: HookCallback = async (input) => {
+    if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") return {};
+    if (started.delete(input.tool_use_id)) {
+      // Claude Code keeps an output too large to return inline in its configuration folder.
+      const output =
+        input.hook_event_name === "PostToolUse"
+          ? await fullToolOutput(input.tool_name, input.tool_response, [turn.runtimeFolder, userConfigFolder()])
+          : input.error;
+      report(toolFinished(input.tool_use_id, input, output));
+    }
+    // The note goes with the result, so the hob knows it asked as it would know of a refusal.
+    const note = notes.get(input.tool_use_id);
+    notes.delete(input.tool_use_id);
+    return note === undefined
+      ? {}
+      : { hookSpecificOutput: { hookEventName: input.hook_event_name, additionalContext: note } };
+  };
 
   const canUseTool: CanUseTool = async (tool, input, options) => {
     const hooked = seen.get(options.toolUseID);
@@ -891,8 +890,8 @@ export const policyHooks = (
   return {
     hooks: {
       PreToolUse: [{ hooks: [preToolUse] }],
-      PostToolUse: [{ hooks: [finished(false)] }],
-      PostToolUseFailure: [{ hooks: [finished(true)] }],
+      PostToolUse: [{ hooks: [finished] }],
+      PostToolUseFailure: [{ hooks: [finished] }],
     },
     canUseTool,
   };
