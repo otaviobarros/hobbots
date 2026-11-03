@@ -9,6 +9,7 @@ import {
   type HobPolicy,
   type PolicyOperation,
   type PolicyOverrides,
+  type ReplyUsage,
   RUNTIME_NAMES,
   type RuntimeEnforcement,
   RuntimeHealth,
@@ -117,6 +118,8 @@ export type RuntimeEvent =
       readonly _tag: "Completed";
       readonly sessionId: string;
       readonly text: string;
+      /** What the turn took and used, when the runtime reports it; a field it does not know is null. */
+      readonly usage?: ReplyUsage;
     };
 
 export class RuntimeError extends Schema.TaggedError<RuntimeError>()("RuntimeError", {

@@ -24,7 +24,7 @@ const SKIPPED = new Set([".git", "node_modules"]);
 const SETTLE_NS = 2_000_000_000n;
 
 /** What an earlier scan hashed, and when that scan began, to reuse the hash while the file provably did not change. */
-interface Seen {
+export interface Seen {
   readonly ino: bigint;
   readonly size: bigint;
   readonly mtimeNs: bigint;
@@ -39,7 +39,7 @@ interface Seen {
  * put a modification time back, but none without root can set the change time, which every write
  * and every attempt to restore the modification time moves.
  */
-const unchangedSince = (seen: Seen | undefined, stats: BigIntStats): seen is Seen =>
+export const unchangedSince = (seen: Seen | undefined, stats: BigIntStats): seen is Seen =>
   seen !== undefined &&
   seen.ino === stats.ino &&
   seen.size === stats.size &&
@@ -87,6 +87,18 @@ const openInside = async (root: string, full: string): Promise<FileHandle | null
   if ((await handle.stat().catch(() => null))?.isFile() === true) return handle;
   await handle.close();
   return null;
+};
+
+/**
+ * A regular file at `path` (`/`-separated, no `.` or `..`) inside `folder`, opened through no link,
+ * or null. The folder is the canonical one the hob was given, never resolved again: a folder
+ * swapped for a link since is refused by the open, which allows no link on the path.
+ */
+export const openFileIn = async (folder: string, path: string): Promise<FileHandle | null> => {
+  const parts = path.split("/");
+  if (parts.some((part) => part === "" || part === "." || part === "..")) return null;
+  if (!isAbsolute(folder) || normalize(folder) !== folder) return null;
+  return openInside(folder, join(folder, ...parts));
 };
 
 /** The SHA-256 of a regular file's contents inside `root`, or null. */
@@ -276,12 +288,7 @@ export const makeFolderScanner = () => {
 
   /** The first `maxBytes` of a regular file inside `folder`, reached through no link. */
   const read = async (folder: string, path: string, maxBytes: number): Promise<Uint8Array | null> => {
-    const parts = path.split("/");
-    if (parts.some((part) => part === "" || part === "." || part === "..")) return null;
-    // The folder as the hob was given it, canonical, never resolved again: a folder swapped for a
-    // link since is refused by the open, which allows no link on the path, not followed.
-    if (!isAbsolute(folder) || normalize(folder) !== folder) return null;
-    const handle = await openInside(folder, join(folder, ...parts));
+    const handle = await openFileIn(folder, path);
     if (handle === null) return null;
     try {
       const buffer = new Uint8Array(maxBytes);

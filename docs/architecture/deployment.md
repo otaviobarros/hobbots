@@ -8,7 +8,7 @@
 |---|---|---|
 | Hub | A computer where Hobbots was installed and set to run here. | The server, the database, artifacts, runtime connections and every hob's execution environment. |
 | The hub's window | The desktop app's own window on the hub. | Nothing of its own; it is trusted through the window key the hub writes to its data folder on every start. |
-| Connected desktop | The desktop app set to connect to another computer. | Only the hub address and its device token, in the OS keychain; no server and no database. |
+| Connected desktop | The desktop app set to connect to another computer. | Only the hub address in its settings and its device token in the OS keychain; no server and no database. Its window shows the hub's own pages ([ADR 025](../decisions/025-connected-desktop.md)). |
 | Browser | Any browser on the hub, or on the tailnet once remote access is on. | A device token in an `HttpOnly` cookie. |
 
 Every client gets the full experience: chat, Quests, Inbox, approvals and the Workbench. The Workbench shows the hub's files, terminals and browsers; connecting a device never gives hobs access to that device.

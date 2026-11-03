@@ -25,4 +25,5 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [021 — Devices and remote access](021-devices-and-remote-access.md)
 - [022 — A hob's own GitHub App](022-hob-github-app.md)
 - [023 — The Workbench](023-workbench.md)
+- [025 — The connected desktop](025-connected-desktop.md)
 - [026 — Backup, restore, export and diagnostics](026-backup-export-diagnostics.md)

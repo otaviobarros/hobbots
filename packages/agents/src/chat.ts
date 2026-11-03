@@ -528,7 +528,7 @@ export class ChatService extends Context.Service<
                     }),
                 );
               case "Completed":
-                return update((m) => MessageTransitions.complete(m, reply.prefix + event.text));
+                return update((m) => MessageTransitions.complete(m, reply.prefix + event.text, event.usage));
               // What the call printed is cut to its start and end before the step is saved; a long
               // output is kept whole in the step's log.
               case "ToolFinished":

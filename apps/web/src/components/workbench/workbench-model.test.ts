@@ -4,6 +4,7 @@ import {
   Attempt,
   AttemptActivity,
   AttemptId,
+  Checkpoint,
   CommandId,
   CommandRecord,
   FileChange,
@@ -14,8 +15,27 @@ import {
   TaskId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { ADA, ALDRIC, attempt, BUILD, blackFriday, CAMPAIGN, QUILL, task, tree } from "../../test/quests.ts";
-import { askedBy, attemptsOf, chosenAttempt, tabAfterKey, tabStates } from "./workbench-model.ts";
+import {
+  ADA,
+  ALDRIC,
+  attempt,
+  BUILD,
+  blackFriday,
+  CAMPAIGN,
+  checkpoint,
+  QUILL,
+  task,
+  tree,
+} from "../../test/quests.ts";
+import {
+  askedBy,
+  attemptsOf,
+  chosenAttempt,
+  openingAttempt,
+  type ProbedRead,
+  tabAfterKey,
+  tabStates,
+} from "./workbench-model.ts";
 
 const AT = "2026-11-01T10:00:00.000Z";
 const done = attempt(CAMPAIGN, "completed");
@@ -143,14 +163,60 @@ describe("the Workbench's Attempt", () => {
   const third = new Attempt({ ...done, id: AttemptId.make("a-3"), number: 3, state: "running" });
   const campaign = (current: AttemptId | null): Task => new Task({ ...task(CAMPAIGN), currentAttemptId: current });
 
-  it("lists a Task's Attempts first to last and shows its current one unless another is chosen", () => {
+  const first = new Attempt({ ...done, state: "failed" });
+  const empty = activity({ scans: [] });
+  const readOf =
+    (reads: Readonly<Record<string, ProbedRead>>) =>
+    (each: Attempt): ProbedRead =>
+      reads[each.id] ?? "unread";
+
+  it("lists a Task's Attempts first to last and shows the one chosen over the one it opens on", () => {
     const withAttempts = tree({ attempts: [third, attempt(BUILD, "running"), done, second] });
     const attempts = attemptsOf(withAttempts, campaign(null));
     expect(attempts.map((each) => each.number)).toEqual([1, 2, 3]);
-    expect(chosenAttempt(attempts, campaign(second.id), undefined)?.number).toBe(2);
-    expect(chosenAttempt(attempts, campaign(null), undefined)?.number).toBe(3);
-    expect(chosenAttempt(attempts, campaign(second.id), done.id)?.number).toBe(1);
-    expect(chosenAttempt([], campaign(null), undefined)).toBeNull();
+    expect(chosenAttempt(attempts, done.id, () => third)?.number).toBe(1);
+    expect(chosenAttempt(attempts, undefined, () => second)?.number).toBe(2);
+    expect(chosenAttempt([], undefined, () => null)).toBeNull();
+  });
+
+  it("opens on the latest Attempt that recorded work, passing over retries that recorded nothing", () => {
+    const attempts = [first, second];
+    const records = tree({ attempts });
+    const opening = (reads: Readonly<Record<string, ProbedRead>>) =>
+      openingAttempt(records, campaign(second.id), attempts, readOf(reads))?.number;
+    // Nothing read yet: the newest is the one to read, and it shows meanwhile.
+    expect(opening({})).toBe(2);
+    expect(opening({ [second.id]: empty })).toBe(1);
+    expect(opening({ [second.id]: empty, [first.id]: activity({ commands: [command()] }) })).toBe(1);
+    // A read that failed is shown, so its tabs read Unavailable rather than being skipped.
+    expect(opening({ [second.id]: "failed" })).toBe(2);
+    expect(opening({ [second.id]: activity({ changes: [change("edited")] }) })).toBe(2);
+    // With none that recorded anything, the Task's current Attempt.
+    expect(opening({ [second.id]: empty, [first.id]: empty })).toBe(2);
+    expect(openingAttempt(records, campaign(first.id), attempts, () => empty)?.number).toBe(1);
+    expect(openingAttempt(tree({}), campaign(null), [], () => empty)).toBeNull();
+  });
+
+  it("shows a running Attempt, an unconfirmed stop and one the Task's records name without reading them", () => {
+    const unresolved = new Attempt({ ...second, state: "unresolved" });
+    const never = () => {
+      throw new Error("read");
+    };
+    expect(openingAttempt(tree({}), campaign(null), [first, third], never)?.number).toBe(3);
+    expect(openingAttempt(tree({}), campaign(null), [first, unresolved], never)?.number).toBe(2);
+    const reported = new Checkpoint({ ...checkpoint(CAMPAIGN, "finding", "Prices change", 4), attemptId: second.id });
+    const automatic = new Checkpoint({ ...checkpoint(CAMPAIGN, "started", "", 5), attemptId: second.id });
+    expect(openingAttempt(tree({ checkpoints: [reported] }), campaign(null), [first, second], never)?.number).toBe(2);
+    expect(
+      openingAttempt(
+        tree({ checkpoints: [automatic] }),
+        campaign(null),
+        [first, second],
+        readOf({ [second.id]: empty }),
+      )?.number,
+    ).toBe(1);
+    const resulted = new Task({ ...campaign(null), result: { summary: "Done", attemptId: second.id } });
+    expect(openingAttempt(tree({}), resulted, [first, second], never)?.number).toBe(2);
   });
 });
 

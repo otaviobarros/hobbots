@@ -1,7 +1,14 @@
 import { RuntimeError, RuntimeLimitReached } from "@hobbots/agents";
 import { Effect, Exit, Stream } from "effect";
 import { describe, expect, it } from "vitest";
-import { FAKE_DIRECTIVES, fakeCutOffError, fakeInstructionsPrompt, makeFakeRuntime } from "../src/fake.ts";
+import {
+  FAKE_DIRECTIVES,
+  FAKE_FAIL_DIRECTIVE,
+  FAKE_ONCE_DIRECTIVE,
+  fakeCutOffError,
+  fakeInstructionsPrompt,
+  makeFakeRuntime,
+} from "../src/fake.ts";
 
 const request = (prompt: string) => ({
   prompt,
@@ -29,6 +36,29 @@ describe("fake runtime", () => {
       .sendPrompt(request(`${FAKE_DIRECTIVES.cutOff} now`))
       .pipe(Stream.runCollect, Effect.runPromiseExit);
     expect(exit).toStrictEqual(Exit.fail(new RuntimeError({ message: fakeCutOffError })));
+  });
+
+  it("fails a reply when any line of the prompt asks for it, not only the first", async () => {
+    const exit = await makeFakeRuntime()
+      .sendPrompt(request(`Write the notes\n  ${FAKE_FAIL_DIRECTIVE}  \nmore`))
+      .pipe(Stream.runCollect, Effect.runPromiseExit);
+    expect(exit).toStrictEqual(Exit.fail(new RuntimeError({ message: fakeCutOffError })));
+    const kept = await makeFakeRuntime()
+      .sendPrompt(request(`Write the notes ${FAKE_FAIL_DIRECTIVE}`))
+      .pipe(Stream.runCollect, Effect.runPromiseExit);
+    expect(Exit.isSuccess(kept)).toBe(true);
+  });
+
+  it("runs a once line the first time it sees it, in any session, and drops it after", async () => {
+    const fake = makeFakeRuntime();
+    const reply = async (prompt: string) =>
+      Array.from(await fake.sendPrompt(request(prompt)).pipe(Stream.runCollect, Effect.runPromise)).flatMap((e) =>
+        e._tag === "Completed" ? [e.text] : [],
+      );
+    const prompt = `Tidy\n${FAKE_ONCE_DIRECTIVE} ${FAKE_FAIL_DIRECTIVE}`;
+    const first = await fake.sendPrompt(request(prompt)).pipe(Stream.runCollect, Effect.runPromiseExit);
+    expect(Exit.isFailure(first)).toBe(true);
+    expect(await reply(prompt)).toHaveLength(1);
   });
 
   it("reaches the provider limit when the prompt asks for it", async () => {

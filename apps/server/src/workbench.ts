@@ -5,6 +5,7 @@ import {
   readActivityContent,
   readAttemptActivity,
   readCommandLog,
+  TaskFiles,
 } from "@hobbots/agents";
 import { ActivityDetailNotFound, AttemptNotFound, HobbotsApi } from "@hobbots/api";
 import type { AttemptId } from "@hobbots/domain";
@@ -21,6 +22,7 @@ export const WorkbenchHandlers = HttpApiBuilder.group(HobbotsApi, "workbench", (
     const repo = yield* Effect.serviceOption(ActivityRepository);
     const store = yield* Effect.serviceOption(ActivityStore);
     const journal = yield* EventJournal;
+    const files = yield* Effect.serviceOption(TaskFiles);
     const missing = (attemptId: AttemptId) => Effect.fail(new AttemptNotFound({ attemptId }));
     const noDetail = (attemptId: AttemptId) => Effect.fail(new ActivityDetailNotFound({ attemptId }));
     return handlers.handleAll({
@@ -40,6 +42,7 @@ export const WorkbenchHandlers = HttpApiBuilder.group(HobbotsApi, "workbench", (
         Option.isNone(repo) || Option.isNone(store)
           ? noDetail(params.attemptId)
           : readActivityContent(repo.value, store.value, params.attemptId, params.contentId),
+      files: ({ params }) => (Option.isNone(files) ? missing(params.attemptId) : files.value.list(params.attemptId)),
     });
   }),
 );
