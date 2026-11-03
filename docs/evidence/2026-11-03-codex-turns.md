@@ -3,7 +3,7 @@
 - **Date:** 2026-11-03
 - **Issue:** [#438](https://github.com/otaviobarros/hobbots/issues/438)
 - **Pull request:** [#562](https://github.com/otaviobarros/hobbots/pull/562)
-- **Commit:** `59edbb1` on the pull request's branch, not yet on `main`
+- **Commit:** `ba833d9` on the pull request's branch, not yet on `main`
 - **Setup:** Linux x86_64 container (Ubuntu 24.04, Node 22). Codex 0.166.0 (`@openai/codex` from npm, the native `codex` binary of `@openai/codex-linux-x64`), started by the adapter's turn runner as `codex app-server` with a hob's own `CODEX_HOME`. No account: a scripted stand-in for the Responses API, set as a custom model provider, played the model and recorded each request. No macOS, no Hobbots sandbox around Codex, no real model or ChatGPT sign-in. Run with `HOBBOTS_CODEX=<codex> pnpm --filter @hobbots/runtimes exec vitest run test/codex-live.test.ts`.
 - **Result:** Passed with gaps. On an installed Codex, a turn answered, was stopped mid-turn once Codex acknowledged the interrupt, resumed its thread in a new process with changed instructions, and a turn whose Codex was killed ended as uncertain; a real model, a real sign-in and macOS are not verified.
 
