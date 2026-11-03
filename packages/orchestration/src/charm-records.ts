@@ -1,29 +1,13 @@
 import type { HubCallStep, HubTools, TaskRepository } from "@hobbots/agents";
-import {
-  type AgentId,
-  CheckpointId,
-  type EventEnvelope,
-  GIT_INIT_TOOL,
-  type TaskId,
-  TaskToolRefused,
-} from "@hobbots/domain";
-import { DateTime, Effect } from "effect";
+import { CheckpointId, type EventEnvelope, GIT_INIT_TOOL, GitInitInput, TaskToolRefused } from "@hobbots/domain";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { newId } from "./call-scope.ts";
-import { type makeRefusals, showRefusal } from "./refusals.ts";
+import { type makeRefusals, type RefusedFrom, showRefusal } from "./refusals.ts";
 
 /** The chat turn a Charm call comes from, as its Task tools know it. */
-export interface CharmCaller {
-  readonly agentId: AgentId;
-  readonly scope: string;
-  /** The Task the turn works on now, if any. */
-  readonly taskId: () => TaskId | null;
-}
+export type CharmCaller = Omit<RefusedFrom, "tool" | "raw">;
 
-/** The folder a `git_init` call named, as the hob sent it. */
-const folderOf = (input: unknown): string | null => {
-  const folder = input !== null && typeof input === "object" ? (input as { readonly folder?: unknown }).folder : null;
-  return typeof folder === "string" ? folder : null;
-};
+const decodeGitInit = Schema.decodeUnknownOption(GitInitInput);
 
 /**
  * Records what a turn's Charm calls, such as `git_init` and the GitHub writes, did beyond their own
@@ -41,16 +25,17 @@ export const makeCharmRecords = (
     Effect.gen(function* () {
       showRefusal(step, text);
       yield* refusals.record(
-        { agentId: caller.agentId, scope: caller.scope, tool: name, raw: input, taskOf: caller.taskId },
+        { ...caller, tool: name, raw: input },
         new TaskToolRefused({ reason: "charm-refused", message: text }),
       );
     });
 
   const created = (caller: CharmCaller, input: unknown) =>
     Effect.gen(function* () {
-      const taskId = caller.taskId();
-      const folder = folderOf(input);
-      if (taskId === null || folder === null) return;
+      const taskId = caller.taskOf();
+      const decoded = decodeGitInit(input);
+      if (taskId === null || Option.isNone(decoded)) return;
+      const { folder } = decoded.value;
       const committed = yield* tasks.recordCheckpoint({
         id: CheckpointId.make(newId()),
         taskId,

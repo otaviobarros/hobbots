@@ -16,7 +16,7 @@ import { SqlClient } from "effect/sql";
 
 type Stored = Record<string, unknown>;
 
-/** The scope a stored Task tool call's input names, or an empty one. */
+/** The scope a stored Task tool call's input names, or an empty one, as `callScope` in `@hobbots/agents` writes it. */
 const scopeOfInput = (input: unknown): string => {
   if (typeof input !== "string") return "";
   try {
@@ -29,17 +29,25 @@ const scopeOfInput = (input: unknown): string => {
   return "";
 };
 
-/** Copies `table`'s rows into `${table}_next`, each with its scope. */
-const copy = (sql: SqlClient.SqlClient, table: string, scopeOf: (row: Stored) => string) =>
+/** Swaps `${table}_next`, which the rows were copied into, in for `table`. */
+const swap = (sql: SqlClient.SqlClient, table: string) =>
   Effect.gen(function* () {
-    const next = sql(`${table}_next`);
-    for (const row of yield* sql.unsafe<Stored>(`SELECT * FROM ${table}`)) {
-      yield* sql`INSERT INTO ${next} ${sql.insert({ ...row, scope: scopeOf(row) })}`;
-    }
     yield* sql.unsafe(`DROP TABLE ${table}`);
     yield* sql.unsafe(`ALTER TABLE ${table}_next RENAME TO ${table}`);
   });
 
+/** Copies a Task tool table's rows into `${table}_next`, each with the scope its input names, a hundred at a time. */
+const copyByInput = (sql: SqlClient.SqlClient, table: string) =>
+  Effect.gen(function* () {
+    const rows = yield* sql.unsafe<Stored>(`SELECT * FROM ${table}`);
+    for (let start = 0; start < rows.length; start += 100) {
+      const [first, ...rest] = rows
+        .slice(start, start + 100)
+        .map((row) => ({ ...row, scope: scopeOfInput(row.input) }));
+      if (first !== undefined) yield* sql`INSERT INTO ${sql(`${table}_next`)} ${sql.insert([first, ...rest])}`;
+    }
+    yield* swap(sql, table);
+  });
 export default Effect.gen(function* () {
   // Rows are read and written by their column names, as they are stored.
   const sql = (yield* SqlClient.SqlClient).withoutTransforms();
@@ -56,7 +64,7 @@ export default Effect.gen(function* () {
       CONSTRAINT task_tool_calls_scoped_key PRIMARY KEY (agent_id, scope, call_key)
     )
   `;
-  yield* copy(sql, "task_tool_calls", (row) => scopeOfInput(row.input));
+  yield* copyByInput(sql, "task_tool_calls");
 
   yield* sql`DROP INDEX task_tool_refusals_task`;
   yield* sql`
@@ -76,7 +84,7 @@ export default Effect.gen(function* () {
       CONSTRAINT task_tool_refusals_scoped_key UNIQUE (agent_id, scope, call_key)
     )
   `;
-  yield* copy(sql, "task_tool_refusals", (row) => scopeOfInput(row.input));
+  yield* copyByInput(sql, "task_tool_refusals");
   yield* sql`CREATE INDEX task_tool_refusals_task ON task_tool_refusals (task_id)`;
 
   yield* sql`DROP INDEX charm_calls_site`;
@@ -101,7 +109,11 @@ export default Effect.gen(function* () {
       CONSTRAINT charm_calls_scoped_key PRIMARY KEY (agent_id, scope, call_key)
     )
   `;
-  yield* copy(sql, "charm_calls", (row) => (typeof row.message_id === "string" ? `reply:${row.message_id}` : ""));
+  const charmColumns = `agent_id, call_key, attempt, tool, input, site, plan, state, result, thread_id, message_id,
+    step_id, created_at, updated_at`;
+  yield* sql.unsafe(`INSERT INTO charm_calls_next (scope, ${charmColumns})
+    SELECT CASE WHEN message_id IS NULL THEN '' ELSE 'reply:' || message_id END, ${charmColumns} FROM charm_calls`);
+  yield* swap(sql, "charm_calls");
   yield* sql`CREATE INDEX charm_calls_site ON charm_calls (tool, site, state)`;
   yield* sql`CREATE INDEX charm_calls_step ON charm_calls (thread_id, message_id, step_id)`;
 });

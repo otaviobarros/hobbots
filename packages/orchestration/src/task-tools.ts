@@ -274,9 +274,8 @@ export class TaskTools extends Context.Service<
             // The Attempt this turn started on its Task, known once the call that started it commits.
             let attemptId: AttemptId | null = null;
             // The committed Task the turn works on: the one it was briefed on, then one a call of its committed.
-            let known: TaskId | null = null;
             const briefing = yield* chat.briefing;
-            known = yield* chat.workingOn;
+            let known: TaskId | null = yield* chat.workingOn;
             const source: CallSource = {
               turn: { turn_reply: turn.messageId },
               scope: known === null ? callScope.reply(turn.messageId) : callScope.task(known),
@@ -332,7 +331,7 @@ export class TaskTools extends Context.Service<
               end,
               workingOn: chat.workingOn,
               scope: source.scope,
-              recordCharms: charmRecords({ agentId: turn.agentId, scope: source.scope, taskId: () => known }),
+              recordCharms: charmRecords({ agentId: turn.agentId, scope: source.scope, taskOf: () => known }),
               attempt: Effect.sync(() => attemptId),
             } satisfies ChatTaskTurn;
           });

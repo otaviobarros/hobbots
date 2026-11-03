@@ -4,13 +4,15 @@ import { Context, Effect, Layer, Option, Redacted } from "effect";
 import { GitHubCredential, GitHubError } from "../src/index.ts";
 
 /** Charm call records in memory, with the rules of the SQL ones (migrations 0028 and 0043), by hob, scope and key. */
+const idOf = (agentId: string, scope: string, key: string) => `${agentId} ${scope} ${key}`;
+
 export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
   Layer.succeed(
     CharmCalls,
     CharmCalls.of({
       begin: (call) =>
         Effect.sync(() => {
-          const id = `${call.agentId} ${call.scope} ${call.key}`;
+          const id = idOf(call.agentId, call.scope, call.key);
           const stored = rows.get(id);
           const replaces = stored?.state === "not-sent" && stored.input === call.input;
           if (stored !== undefined && !replaces) return { _tag: "Existing", call: stored } as const;
@@ -23,7 +25,7 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
         }),
       settle: (call, state, result, at) =>
         Effect.sync(() => {
-          const id = `${call.agentId} ${call.scope} ${call.key}`;
+          const id = idOf(call.agentId, call.scope, call.key);
           const stored = rows.get(id);
           if (stored === undefined || stored.attempt !== call.attempt || isCharmCallSettled(stored.state)) {
             return Option.none();
@@ -32,7 +34,7 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
           rows.set(id, next);
           return Option.some(next);
         }),
-      find: (agentId, scope, key) => Effect.sync(() => Option.fromUndefinedOr(rows.get(`${agentId} ${scope} ${key}`))),
+      find: (agentId, scope, key) => Effect.sync(() => Option.fromUndefinedOr(rows.get(idOf(agentId, scope, key)))),
       findByStep: (threadId, messageId, stepId) =>
         Effect.sync(() =>
           Option.fromUndefinedOr(
