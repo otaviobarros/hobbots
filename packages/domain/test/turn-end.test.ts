@@ -165,6 +165,16 @@ describe("turnEnded", () => {
         expect([runner, state, decided.map((each) => shown(each.task))]).toEqual([runner, state, MOVES[runner][state]]);
       }
     }
+    // A step that replied after reporting a finding or blocker is held for its owner (#667), unless its cancel was asked for.
+    const held = (state: TaskState, ending: TurnEnding, lastReport: "finding" | "blocker" | "milestone") =>
+      shown(turnEnded({ runner: "step", task: task(state), ending, ledger: [], carried: new Set(), lastReport }).task);
+    expect([
+      held("active", ENDINGS.replied, "finding"),
+      held("active", ENDINGS.replied, "blocker"),
+      held("active", ENDINGS.replied, "milestone"),
+      held("active", ENDINGS.failed, "finding"),
+      held("cancelling", ENDINGS.replied, "finding"),
+    ]).toEqual(["→blocked", "→blocked", "complete|→failed", "→failed", "→cancelled"]);
   });
 
   // covers EX-001, OR-006

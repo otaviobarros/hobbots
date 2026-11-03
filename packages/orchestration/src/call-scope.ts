@@ -94,6 +94,10 @@ export const journalOf = () => {
 
 export const newId = () => crypto.randomUUID();
 
+/** A hob as the caller's tools name it: "you" for the caller, its id for another hob, and null for the user. */
+export const nameFor = (agentId: string | null, caller: string): string =>
+  agentId === caller ? "you" : (agentId ?? "the user");
+
 /** A Task of the call's tree, or a refusal naming it. */
 /**
  * The Tasks a turn reaches: the Task it works on and everything under it. A step's session never

@@ -1,18 +1,8 @@
 import { HobbotsRepository, TaskRepository } from "@hobbots/agents";
-import {
-  Agent,
-  AgentId,
-  CANCELLED_ATTEMPT,
-  Message,
-  MessageId,
-  type Task,
-  type TaskTree,
-  Thread,
-  ThreadId,
-} from "@hobbots/domain";
+import { Agent, AgentId, Message, MessageId, type Task, type TaskTree, Thread, ThreadId } from "@hobbots/domain";
 import { BackpackLive, EventJournal, HobbotsRepositoryLive, TaskRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { Duration, Effect, Layer, ManagedRuntime, Option } from "effect";
+import { Duration, Effect, Layer, ManagedRuntime } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { FakeQuestLive } from "../src/fake-quest.ts";
@@ -87,7 +77,7 @@ const until = <A>(found: Effect.Effect<A | undefined, never, Layer.Success<typeo
   });
 
 describe("FakeQuestLive", () => {
-  it("[TC-OR-166] cancelling Ada's Task before Quill finishes stops only Ada's, and Quill's copy still completes", async () => {
+  it("[TC-OR-166] cancelling Ada's Task before Quill finishes cancels only Ada's, and Quill's copy still completes", async () => {
     runtime = ManagedRuntime.make(App);
     await runtime.runPromise(
       Effect.gen(function* () {
@@ -110,28 +100,16 @@ describe("FakeQuestLive", () => {
         yield* Effect.sleep(Duration.millis(100));
         yield* bus.publish(asked.entries);
 
-        // Ada's Task waits on Quill's copy; you cancel it as the Quest tab would.
+        // Ada's Task waits, queued, on Quill's copy; you cancel it as the Quest tab would. Nothing
+        // of hers runs yet, so the cancel is confirmed at once.
         const build = yield* until(
           Effect.map(treeNow, (tree) => {
             const found = named(tree, "Build the campaign");
-            return found?.state === "waiting" ? found : undefined;
+            return found?.state === "queued" ? found : undefined;
           }),
         );
         expect(named(yield* treeNow, "Draft the landing copy")?.state).toBe("active");
-        const cancelling = yield* tasks.moveTask(build.id, build.revision, "cancelling", now);
-        yield* bus.publish(cancelling.entries);
-
-        // Ada's session stops, and her Task can be confirmed cancelled.
-        const stopped = yield* until(
-          Effect.map(treeNow, (tree) => {
-            const attempt = tree?.attempts.find((each) => each.taskId === build.id);
-            return attempt?.state === "cancelled" ? attempt : undefined;
-          }),
-        );
-        expect(stopped.outcome).toBe(CANCELLED_ATTEMPT);
-        const latest = Option.getOrThrow(yield* tasks.readTree(build.id)).tasks[0];
-        if (latest === undefined) throw new Error("No Task for Ada");
-        yield* bus.publish((yield* tasks.moveTask(build.id, latest.revision, "cancelled", now)).entries);
+        yield* bus.publish((yield* tasks.moveTask(build.id, build.revision, "cancelled", now)).entries);
 
         // The play goes on: Quill finishes the copy, and Ada's Task is never touched again.
         const copy = yield* until(

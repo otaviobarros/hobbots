@@ -313,7 +313,7 @@ export class TaskTools extends Context.Service<
                       attemptId = resolved.attemptId;
                       attemptOn = resolved.caller.taskId;
                     }
-                    known = resolved.caller.taskId;
+                    if (resolved.readOnly !== true) known = resolved.caller.taskId;
                   }),
                   step,
                 ),

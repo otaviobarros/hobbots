@@ -33,6 +33,7 @@ import {
   isTerminalTask,
   type Task,
   type TaskId,
+  TaskReadiness,
   type TaskToolName,
   type TaskTree,
   type TurnEnding,
@@ -42,7 +43,7 @@ import type { PathSeparator } from "./authority.ts";
 import { cut, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { makeCancelSettler } from "./cancels.ts";
-import { delegatedAccess, dependenciesDone, makeMemberRunner } from "./members.ts";
+import { delegatedAccess, makeMemberRunner } from "./members.ts";
 import { type Ending, type Running, runSessionTurn, STOPPED, type StopReason } from "./session.ts";
 import { TaskSignal } from "./signal.ts";
 import { TaskTools } from "./task-tools.ts";
@@ -239,8 +240,9 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
        * Records how the step's session ended, by the one turn-end decision (#674). A step that
        * replied completes with that reply first, unless it returned a result itself, and its Attempt
        * ends after: a restart in between finds the Attempt live and keeps the result. One that
-       * failed, was stopped or could not complete ends its Attempt, then fails, or is cancelled when
-       * its cancel was asked for; a restart in between leaves it to `endStranded`.
+       * replied after reporting a finding or blocker is blocked instead, so the steps after it wait
+       * (#667). One that failed, was stopped or could not complete ends its Attempt, then fails, or
+       * is cancelled when its cancel was asked for; a restart in between leaves it to `endStranded`.
        */
       const settle = (stepId: TaskId, attemptId: AttemptId, ending: TurnEnding, carried: ReadonlyArray<CarriedItem>) =>
         Effect.gen(function* () {
@@ -426,7 +428,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           const tree = trees.get(step.rootId) ?? Option.getOrUndefined(yield* tasks.readTree(step.rootId));
           if (tree === undefined) continue;
           trees.set(step.rootId, tree);
-          if (dependenciesDone(step, tree)) yield* start(step, tree);
+          // A step starts once every step it comes after has completed (ADR 018).
+          if (TaskReadiness.of(step, tree.tasks)._tag === "Ready") yield* start(step, tree);
         }
         if (members !== null) yield* members.round;
       }).pipe(

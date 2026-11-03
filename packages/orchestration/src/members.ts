@@ -28,6 +28,7 @@ import {
   isTerminalTask,
   type Task,
   type TaskId,
+  TaskReadiness,
   type TaskTree,
   type TurnEnding,
 } from "@hobbots/domain";
@@ -111,14 +112,6 @@ export const delegatedAccess = (
     folders,
   };
 };
-
-/**
- * Every Task `task` comes after has completed (ADR 018). Until then neither a step nor a member's
- * Task starts: it stays queued, waiting on them. One that fails or is cancelled keeps it queued
- * until its lead retries that Task, or cancels this one.
- */
-export const dependenciesDone = (task: Task, tree: TaskTree): boolean =>
-  task.dependsOn.every((id) => tree.tasks.find((each) => each.id === id)?.state === "completed");
 
 /**
  * The session the member's last turn on the Task ran in, to resume, or null before its first. Only
@@ -376,7 +369,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         if (liveAttemptOn(task, tree)) return;
         // Its work waits, queued, until every Task it comes after has completed: that completion
         // wakes the runner again, as it does for a step (ADR 018).
-        if (!dependenciesDone(task, tree)) return;
+        if (TaskReadiness.of(task, tree.tasks)._tag !== "Ready") return;
         const narrowed = (own: ToolAccess | null) => delegatedAccess(own, task, tree, deps.separator);
         // Registered and forked under one permit, so a narrower policy either sees neither or can
         // stop the fiber it finds (PE-008).

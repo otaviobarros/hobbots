@@ -12,6 +12,7 @@ import {
   saysMore,
   type Task,
   type TaskId,
+  TaskReadiness,
   type TaskTree,
 } from "@hobbots/domain";
 import { firstLine } from "../../lib/format.ts";
@@ -83,11 +84,12 @@ export const rowStatus = (tree: TaskTree, task: Task): RowStatus => {
       return "blocked";
     case "waiting":
       return "waiting";
-    // A Task that comes after others starts only once they have completed (ADR 018): until then it waits on them.
-    case "queued":
-      return task.dependsOn.some((id) => tree.tasks.find((each) => each.id === id)?.state !== "completed")
-        ? "waiting"
-        : "running";
+    // A Task that comes after others starts only once they have completed (ADR 018): until then it
+    // waits on them, or is blocked when one of them needs someone to act first.
+    case "queued": {
+      const readiness = TaskReadiness.of(task, tree.tasks)._tag;
+      return readiness === "Ready" ? "running" : readiness === "Blocked" ? "blocked" : "waiting";
+    }
     case "completed":
     case "cancelled":
       return "done";
@@ -103,12 +105,12 @@ export const rowStatus = (tree: TaskTree, task: Task): RowStatus => {
 const latestOf = (tree: TaskTree, task: Task): string | null =>
   tree.checkpoints.findLast((checkpoint) => checkpointOn(checkpoint, task.id) && saysMore(checkpoint))?.summary ?? null;
 
+/** The hobs whose Tasks this one comes after and that have not completed, failed ones included. */
 export const waitsOnOf = (tree: TaskTree, task: Task): ReadonlyArray<AgentId> => [
   ...new Set(
-    task.dependsOn.flatMap((id) => {
-      const dependency = tree.tasks.find((each) => each.id === id);
-      return dependency === undefined || isTerminalTask(dependency.state) ? [] : [dependency.ownerId];
-    }),
+    TaskReadiness.unmet(TaskReadiness.of(task, tree.tasks)).flatMap((id) =>
+      tree.tasks.filter((each) => each.id === id).map((each) => each.ownerId),
+    ),
   ),
 ];
 

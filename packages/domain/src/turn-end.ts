@@ -1,4 +1,5 @@
 import type { LedgerEntry } from "./ledger.ts";
+import type { CheckpointKind } from "./quest.ts";
 import {
   type AttemptEnd,
   type AttemptState,
@@ -61,6 +62,8 @@ export interface TurnEndInput {
   readonly carried: ReadonlySet<string>;
   /** The root's state before the turn, which a turn that recorded no wait gives back. */
   readonly was?: TaskState;
+  /** What the turn last reported in its Attempt, other than progress: a step that stopped on a finding or blocker is held (#667). */
+  readonly lastReport?: CheckpointKind;
 }
 
 /** What each runner's Attempt says when its session ran to its end. */
@@ -121,7 +124,11 @@ const taskAfter = (input: TurnEndInput): TaskMove => {
   const open = input.ledger.filter((entry) => entry._tag !== "Item" || !input.carried.has(entry.item.id));
   switch (runner) {
     case "step":
-      // A step that ended without its result fails; one that replied completes with the reply.
+      // A step that ended without its result fails; one that replied completes with the reply. One
+      // that replied after reporting a finding or blocker stopped for its owner to decide: it is
+      // blocked, so the steps after it wait (#667).
+      if (ending._tag === "Replied" && (input.lastReport === "finding" || input.lastReport === "blocker"))
+        return move("blocked");
       return ending._tag === "Replied"
         ? {
             _tag: "Complete",

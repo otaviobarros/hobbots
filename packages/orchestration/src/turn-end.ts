@@ -48,7 +48,7 @@ const moveAfter = (
   taskId: TaskId,
   move: Extract<TaskMove, { _tag: "Move" }>,
   after: Option.Option<{ readonly task: Task }>,
-  at: string,
+  { at, carried }: TurnOnTask,
 ) =>
   Effect.gen(function* () {
     if (move.reason !== undefined) yield* deps.explain(taskId, move.reason, at);
@@ -58,7 +58,7 @@ const moveAfter = (
         : Option.flatMap(yield* deps.tasks.readTree(taskId), (tree) => Option.fromNullishOr(tree.tasks[0]));
     if (Option.isSome(now) && !isTerminalTask(now.value.state))
       yield* deps.attempt(
-        deps.tasks.moveTask(now.value.id, now.value.revision, move.to, at),
+        deps.tasks.moveTask(now.value.id, now.value.revision, move.to, at, carried),
         `move a Task to ${move.to}`,
       );
   });
@@ -82,13 +82,21 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
         }),
         "end a turn's Attempt",
       );
-    const found = yield* tasks.readTree(turn.taskId);
-    const task = Option.isSome(found) ? found.value.tasks[0] : undefined;
+    const tree = Option.getOrUndefined(yield* tasks.readTree(turn.taskId));
+    const task = tree?.tasks[0];
     // A Task retried or reassigned meanwhile is no longer this turn's to move: only its Attempt ends.
     if (task?.currentAttemptId !== turn.attemptId) {
       yield* ended(attemptEndOf(turn.runner, turn.ending));
       return { decided: null, completed: false };
     }
+    // What the turn last reported in its Attempt; a tree lists its checkpoints in the order they were recorded.
+    const report = tree?.checkpoints.findLast(
+      (each) =>
+        each.taskId === task.id &&
+        each.attemptId === turn.attemptId &&
+        each.source !== "automatic" &&
+        each.kind !== "progress",
+    );
     // A step's move does not depend on what is open, so only the other runners read it.
     const ledger =
       turn.runner === "step" || isTerminalTask(task.state) ? Option.none() : yield* tasks.readLedger(task.id);
@@ -99,6 +107,7 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
       ledger: Option.match(ledger, { onNone: () => [], onSome: (each) => each.open }),
       carried: new Set(turn.carried.map((each) => each.itemId as string)),
       ...(turn.was === undefined ? {} : { was: turn.was }),
+      ...(report === undefined ? {} : { lastReport: report.kind }),
     };
     const decided = turnEnded(input);
     let move = decided.task;
@@ -135,6 +144,6 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
       const again = turnEnded({ ...input, task: after.value.task }).task;
       move = again._tag === "Complete" ? again.otherwise : again;
     }
-    if (move._tag === "Move") yield* moveAfter(deps, task.id, move, after, turn.at);
+    if (move._tag === "Move") yield* moveAfter(deps, task.id, move, after, turn);
     return { decided, completed: false };
   });
