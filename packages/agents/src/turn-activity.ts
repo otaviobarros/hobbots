@@ -10,6 +10,7 @@ import {
   type FileVersion,
   type FolderListing,
   FolderScanId,
+  fileLocation,
   foldersOverlap,
   foldLog,
   type KeepPlan,
@@ -81,11 +82,18 @@ export const trackTurn = (
 ): Effect.Effect<TurnActivity, never, Scope.Scope> =>
   Option.isSome(recorder) && turn.folders.length > 0 ? recorder.value.forTurn(turn) : Effect.succeed(UNTRACKED);
 
-/** A turn running now, for labeling changes made while another turn worked in the same folder. */
+/**
+ * A turn running now, and what it claims to have changed, so overlapping turns in one folder each
+ * record only their own changes (#595).
+ */
 interface LiveTurn {
   readonly folders: ReadonlyArray<string>;
   attemptId: AttemptId | null;
   readonly overlaps: Set<LiveTurn>;
+  /** The files its file tools named, as `folder/path`: certainly its own. */
+  readonly named: Set<string>;
+  /** Every file it claims: those its file tools named, and those that changed while its commands ran. */
+  readonly claims: Set<string>;
 }
 
 /** A folder at the turn's start: its files and the versions kept of them, or why it is not tracked. */
@@ -106,6 +114,12 @@ export const textOf = (bytes: Uint8Array): string | null => {
     return null;
   }
 };
+
+/** Where a change is, as `folder/path`, and where a moved file was. */
+const placesOf = (folder: string, change: ListingChange): ReadonlyArray<string> => [
+  fileLocation(folder, change.path),
+  ...(change.movedFrom === null ? [] : [fileLocation(folder, change.movedFrom)]),
+];
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 const encoder = new TextEncoder();
@@ -152,7 +166,13 @@ const makeRecorder = (limits: ActivityLimits) =>
 
     const forTurn = (turn: ActivityTurn) =>
       Effect.gen(function* () {
-        const me: LiveTurn = { folders: turn.folders, attemptId: null, overlaps: new Set() };
+        const me: LiveTurn = {
+          folders: turn.folders,
+          attemptId: null,
+          overlaps: new Set(),
+          named: new Set(),
+          claims: new Set(),
+        };
         for (const other of live) {
           if (other.folders.some((folder) => turn.folders.some((mine) => foldersOverlap(folder, mine)))) {
             other.overlaps.add(me);
@@ -181,6 +201,10 @@ const makeRecorder = (limits: ActivityLimits) =>
         const dirtyFolders = new Set<string>();
         const changeIds = new Map<string, FileChangeId>();
         const writers = new Set<string>();
+        // Each running command's folders as they were just before it ran, to see what it changed.
+        const windows = new Map<string, ReadonlyArray<readonly [string, FolderListing]>>();
+        // Folders whose changes could not be told apart from other hobs', recorded whole and labeled.
+        const unattributed = new Set<string>();
         let logsUsed = 0;
         let taskId: TaskId | null = null;
 
@@ -260,16 +284,47 @@ const makeRecorder = (limits: ActivityLimits) =>
             return { ...withoutContents(file, plan.kind, null), contentId: id };
           });
 
-        /** The Attempts that worked in `folder` alongside this turn. */
-        const sharedIn = (folder: string): ReadonlyArray<AttemptId> => [
-          ...new Set(
-            [...me.overlaps].flatMap((other) =>
-              other.attemptId !== null && other.folders.some((each) => foldersOverlap(each, folder))
-                ? [other.attemptId]
-                : [],
+        /**
+         * The Attempts that may share a change with this turn: those that claim the same file, or in a
+         * folder recorded whole, every one that worked in it alongside this turn.
+         */
+        const sharedIn = (folder: string, change: ListingChange): ReadonlyArray<AttemptId> => {
+          const places = placesOf(folder, change);
+          return [
+            ...new Set(
+              [...me.overlaps].flatMap((other) =>
+                other.attemptId !== null &&
+                (unattributed.has(folder)
+                  ? other.folders.some((each) => foldersOverlap(each, folder))
+                  : places.some((place) => other.claims.has(place)))
+                  ? [other.attemptId]
+                  : [],
+              ),
             ),
-          ),
-        ];
+          ];
+        };
+
+        /** Whether the turn made `change`: it claims the file, or its folder is recorded whole. */
+        const ownChange = (folder: string, change: ListingChange) =>
+          unattributed.has(folder) || placesOf(folder, change).some((place) => me.claims.has(place));
+
+        /** What a command changed between `before` and now, less the files another turn's file tools named. */
+        const claimWindow = (id: string) =>
+          Effect.gen(function* () {
+            const window = windows.get(id);
+            if (window === undefined) return;
+            windows.delete(id);
+            for (const [folder, before] of window) {
+              const after = yield* scanner.scan(folder, limits);
+              if (after.stopped !== null) {
+                unattributed.add(folder);
+                continue;
+              }
+              for (const change of compareListings(before, after.listing))
+                for (const place of placesOf(folder, change))
+                  if (![...me.overlaps].some((other) => other.named.has(place))) me.claims.add(place);
+            }
+          });
 
         /** A change as the turn records it, with the versions it keeps. */
         const draftOf = (folder: string, baseline: Baseline, change: ListingChange, settled: boolean, at: string) =>
@@ -290,7 +345,7 @@ const makeRecorder = (limits: ActivityLimits) =>
               movedFrom: change.movedFrom,
               before,
               after,
-              sharedWith: sharedIn(folder),
+              sharedWith: sharedIn(folder, change),
               settled,
               recordedAt: at,
             } satisfies FileChangeDraft;
@@ -337,8 +392,9 @@ const makeRecorder = (limits: ActivityLimits) =>
                 if (scanned.stopped !== null) return;
                 // What this folder's last changes held is freed first, so the new ones can use it.
                 for (const id of release(folder)) freed.add(id);
-                const drafts = yield* Effect.forEach(compareListings(baseline.listing, scanned.listing), (change) =>
-                  draftOf(folder, baseline, change, settled, at),
+                const drafts = yield* Effect.forEach(
+                  compareListings(baseline.listing, scanned.listing).filter((change) => ownChange(folder, change)),
+                  (change) => draftOf(folder, baseline, change, settled, at),
                 );
                 yield* Semaphore.withPermit(
                   lock,
@@ -425,10 +481,24 @@ const makeRecorder = (limits: ActivityLimits) =>
           ).pipe(Effect.asVoid);
         });
 
-        const started = (event: ToolStartedEvent) =>
+        /**
+         * A tool call starting. `beforeRun` when the runtime waits for its start to be recorded before
+         * running it, so the folders a command may change are listed first; a command reported only
+         * once it runs leaves its folders recorded whole.
+         */
+        const started = (event: ToolStartedEvent, beforeRun: boolean) =>
           Effect.gen(function* () {
-            if (event.operation === "edit-files" || event.operation === "delete-files") writers.add(event.id);
+            if (event.operation === "edit-files" || event.operation === "delete-files") {
+              writers.add(event.id);
+              // A file tool names canonical paths, as the folders and `fileLocation` give them.
+              for (const target of event.targets) {
+                me.named.add(target);
+                me.claims.add(target);
+              }
+            }
             if (event.command === undefined || commands.has(event.id)) return;
+            if (beforeRun) yield* openWindow(event.id);
+            else for (const folder of baselines.keys()) unattributed.add(folder);
             commands.set(event.id, {
               id: CommandId.make(newId()),
               stepId: event.id,
@@ -492,8 +562,22 @@ const makeRecorder = (limits: ActivityLimits) =>
             };
           });
 
+        /** Lists the tracked folders just before a command runs. */
+        const openWindow = (id: string) =>
+          Effect.gen(function* () {
+            const window: Array<readonly [string, FolderListing]> = [];
+            for (const [folder, baseline] of baselines) {
+              if (baseline.stopped !== null) continue;
+              const before = yield* scanner.scan(folder, limits);
+              if (before.stopped === null) window.push([folder, before.listing]);
+              else unattributed.add(folder);
+            }
+            windows.set(id, window);
+          });
+
         const finished = (event: Extract<RuntimeEvent, { readonly _tag: "ToolFinished" }>) =>
           Effect.gen(function* () {
+            yield* claimWindow(event.id);
             const wrote = writers.delete(event.id);
             const command = commands.get(event.id);
             if (command !== undefined) {
@@ -532,7 +616,7 @@ const makeRecorder = (limits: ActivityLimits) =>
         const observe = (event: RuntimeEvent): Effect.Effect<void> => {
           switch (event._tag) {
             case "ToolStarted":
-              return started(event);
+              return started(event, false);
             case "ToolOutput":
               return printing(event.id, event.text);
             case "ToolFinished":
@@ -568,6 +652,8 @@ const makeRecorder = (limits: ActivityLimits) =>
         const end = Effect.gen(function* () {
           const at = yield* nowIso;
           for (const id of commands.keys()) uncertain(id, at);
+          // A command still running when the turn ended claims what changed up to now.
+          yield* Effect.forEach([...windows.keys()], claimWindow, { discard: true });
           yield* Semaphore.withPermit(scanLock, compare(true));
           live.delete(me);
           const pinned = [...mine];
@@ -591,7 +677,7 @@ const makeRecorder = (limits: ActivityLimits) =>
                   ? null
                   : (event) =>
                       Effect.tap(request.recordToolStart?.(event) ?? Effect.succeed(false), (recorded) =>
-                        recorded ? observe(event) : Effect.void,
+                        recorded ? started(event, true) : Effect.void,
                       ),
             }).pipe(Stream.tap(observe)),
         } satisfies TurnActivity;

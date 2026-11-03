@@ -73,7 +73,7 @@ const ProjectTools = Layer.effect(
 );
 
 /** The fake runtime, with every session whose prompt holds `HOLD` waiting for the gate. */
-const held = (gate: Deferred.Deferred<void>) =>
+const held = (gate: Deferred.Deferred<void>, prompts: Array<string>) =>
   Layer.effect(
     RuntimeAdapter,
     Effect.gen(function* () {
@@ -81,6 +81,7 @@ const held = (gate: Deferred.Deferred<void>) =>
       return RuntimeAdapter.of({
         ...fake,
         sendPrompt: (request) => {
+          prompts.push(request.prompt);
           const stream = fake.sendPrompt(request);
           return request.prompt.split("\n").some((line) => line.trim() === HOLD)
             ? Stream.unwrap(Effect.as(Deferred.await(gate), stream))
@@ -114,7 +115,7 @@ const Seed = Layer.effectDiscard(
   }),
 );
 
-const makeApp = (gate: Deferred.Deferred<void>) =>
+const makeApp = (gate: Deferred.Deferred<void>, prompts: Array<string>) =>
   ChatService.layer.pipe(
     Layer.provideMerge(
       StepRunnerLive().pipe(Layer.provideMerge(TaskTools.layer("/")), Layer.provideMerge(TaskSignal.layer)),
@@ -137,7 +138,7 @@ const makeApp = (gate: Deferred.Deferred<void>) =>
         ProjectTools,
         HobAdmission.layer,
         SecretRedaction.layer([]),
-        held(gate),
+        held(gate, prompts),
       ),
     ),
     Layer.provideMerge(TestDatabase),
@@ -160,10 +161,23 @@ export const setUp = (files: Record<string, string>) => {
     writeFileSync(join(project, path), contents);
   }
   const gate = Deferred.makeUnsafe<void>();
-  const app = ManagedRuntime.make(makeApp(gate));
+  // Every prompt the runtime was sent, each once its turn's baseline was taken.
+  const prompts: Array<string> = [];
+  const app = ManagedRuntime.make(makeApp(gate, prompts));
   runtime = app;
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<App>>) => app.runPromise(effect);
-  return { run, folder: project, release: () => run(Deferred.succeed(gate, undefined)) };
+  /** Waits until `count` turns holding `HOLD` have taken their baselines. */
+  const holding = (count: number) =>
+    run(
+      retry(
+        Effect.suspend(() =>
+          prompts.filter((prompt) => prompt.split("\n").some((line) => line.trim() === HOLD)).length >= count
+            ? Effect.void
+            : Effect.fail("not yet" as const),
+        ),
+      ),
+    );
+  return { run, folder: project, holding, release: () => run(Deferred.succeed(gate, undefined)) };
 };
 
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
