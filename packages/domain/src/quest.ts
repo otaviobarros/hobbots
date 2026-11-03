@@ -33,6 +33,11 @@ export const QuestLimits = Schema.Struct({
   maxDepth: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   /** When its work must be done (ISO 8601), or null for no deadline. */
   deadline: Schema.NullOr(Schema.String),
+  /**
+   * The folders its work is in, as the hub stores them: its lead's turns on it track only its own
+   * folders that hold or sit in one of these (#670). Absent, all of the lead's folders.
+   */
+  folders: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type QuestLimits = typeof QuestLimits.Type;
 

@@ -72,6 +72,12 @@ export const TaskToolInputs = {
         description: "When its work must be done, ISO 8601. It cannot be later than the one above it.",
       }),
     ),
+    folders: Schema.optionalKey(
+      Schema.Array(Schema.String).check(Schema.isMinLength(1)).annotate({
+        description:
+          "Absolute folders the Quest's work is in, each one of yours or inside one. Leave out for the folders the Task's brief and the goal name.",
+      }),
+    ),
   }),
   delegate_task: Schema.Struct({
     key,

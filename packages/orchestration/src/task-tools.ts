@@ -117,7 +117,7 @@ export class TaskTools extends Context.Service<
         const wrapUp = yield* makeWrapUp;
         const settle = yield* makeSettle;
         const handlers: Record<TaskToolName, ToolHandler> = {
-          ...makePlanning({ tasks, capacity, limits, wrapUp }),
+          ...makePlanning({ tasks, capacity, limits, wrapUp, folderChecks, authority: authority.of, separator }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
           ...makeAsking({ tasks }),
           ...makeLeading({ tasks }),
@@ -311,6 +311,15 @@ export class TaskTools extends Context.Service<
               end,
               workingOn: chat.workingOn,
               attempt: Effect.sync(() => attemptId),
+              workIn: Effect.suspend(() =>
+                known === null
+                  ? Effect.succeed(null)
+                  : Effect.map(tasks.readTree(known), (tree) =>
+                      Option.isNone(tree)
+                        ? null
+                        : (tree.value.quests.find((quest) => quest.taskId === known)?.limits.folders ?? null),
+                    ),
+              ),
             } satisfies ChatTaskTurn;
           });
 

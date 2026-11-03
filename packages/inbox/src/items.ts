@@ -283,7 +283,7 @@ const approvalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolC
       {
         recipientId: approval.agentId,
         // A party member's request continues the session that works its Task; a chat turn's, its thread.
-        taskId: approval.taskId,
+        taskId: approval.messageId === null ? approval.taskId : null,
         questId: null,
         attemptId: null,
         threadId: approval.threadId,

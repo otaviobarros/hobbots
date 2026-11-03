@@ -32,7 +32,7 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
-import { defaultFolders } from "./default-folders.ts";
+import { defaultFolders, namedFolders, withFolders } from "./default-folders.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -134,7 +134,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
           narrowed.authority.overrides[operation] === undefined ? [] : [[operation, both.decisions[operation]]],
         ),
       );
-      return { overrides, folders: [...both.folders] };
+      return { given: { overrides, folders: [...both.folders] }, lead: lead.folders };
     });
 
   /**
@@ -150,6 +150,26 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
     return ` ${member.name} already has open work under this Task: ${listed}. If the new Task repeats it, cancel one of them, or hand the open one what it needs instead.`;
   };
 
+  /**
+   * The Quest the first delegate_task call turns its Task into: the Task's brief is its goal, and
+   * its work is in the folders the brief names, if any (#670).
+   */
+  const startQuest = (scope: CallScope, task: Task, lead: ReadonlyArray<string>) =>
+    Effect.gen(function* () {
+      const quest = yield* questLimitsFor(scope, limits, task, {});
+      const folders = yield* namedFolders(folderChecks, lead, task.brief, separator);
+      return yield* fromRecords(
+        tasks.startQuest({
+          id: QuestId.make(newId()),
+          taskId: task.id,
+          goal: task.brief,
+          acceptance: [],
+          limits: withFolders(quest, folders),
+          createdAt: scope.at,
+        }),
+      );
+    });
+
   return {
     delegate_task: (scope: CallScope, input: DelegateInput) =>
       Effect.gen(function* () {
@@ -157,26 +177,13 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const member = yield* findHob(hobs, input.hob);
         yield* checkMember(scope, task, member);
         yield* capacity(scope, member.id, 1);
-        const given = yield* memberAuthority(scope, task, member, input);
+        const { given, lead } = yield* memberAuthority(scope, task, member, input);
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         const journal = journalOf();
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
         // A Quest started above this one later may allow less depth than when this one started.
         if (existing !== undefined) yield* depthWithin(scope, limits, task);
-        const quest =
-          existing ??
-          journal.keep(
-            yield* fromRecords(
-              tasks.startQuest({
-                id: QuestId.make(newId()),
-                taskId: task.id,
-                goal: task.brief,
-                acceptance: [],
-                limits: yield* questLimitsFor(scope, limits, task, {}),
-                createdAt: scope.at,
-              }),
-            ),
-          );
+        const quest = existing ?? journal.keep(yield* startQuest(scope, task, lead));
         const milestones = (input.milestones ?? []).map((title) => ({ id: MilestoneId.make(newId()), title }));
         const delegationId = DelegationId.make(newId());
         const created = journal.keep(

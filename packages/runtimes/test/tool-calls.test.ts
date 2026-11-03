@@ -290,10 +290,22 @@ describe("Claude Code tool calls as policy requests", () => {
 
   it("names no exact paths or words in a line that changes folder", () => {
     expect(commandRequests("cd sub && rm build", "/work")).toEqual([
-      { _tag: "Command", operation: "run-commands", cwd: "/work", words: null },
       { _tag: "Files", operation: "delete-files", paths: ["build"], cwd: "/work/sub", exact: false },
       { _tag: "Command", operation: "run-commands", cwd: "/work/sub", words: null },
     ]);
+  });
+
+  it("[TC-RT-486] decides a command after cd only in the folder cd moved to, not the one the line started in", () => {
+    const folders = (command: string) =>
+      commandRequests(command, "/work/hobbots", "/home/me").map((r) => (r._tag === "Web" ? r.host : r.cwd));
+    expect(folders("cd /work/test && ls")).toEqual(["/work/test"]);
+    expect(folders("cd /work/test && pnpm test; popd")).toEqual(["/work/test"]);
+    expect(folders("cd sub")).toEqual(["/work/hobbots"]);
+    // A cd whose folder only the shell settles may run code, so it is still decided where it runs.
+    expect(folders('cd "$(make dir)" && ls')[0]).toBe("/work/hobbots");
+    // A redirection or a process substitution on the line may act where it started.
+    expect(folders("cd /work/test > out.txt && ls")).toEqual(["/work/hobbots", "/work/test"]);
+    expect(folders("cd <(rm -rf x) && ls")[0]).toBe("/work/hobbots");
   });
 
   it("labels each step from the call's own arguments", () => {
@@ -428,7 +440,7 @@ describe("[#210] the folder a Git command works in", () => {
       commandRequests("cd /outside && git --work-tree=/hob add f", "/work").map((r) =>
         r._tag === "Web" ? r.host : r.cwd,
       ),
-    ).toEqual(["/work", "/outside", "/hob"]);
+    ).toEqual(["/outside", "/hob"]);
   });
 
   it("also names the folder Git runs in when a Git directory has no working tree", () => {

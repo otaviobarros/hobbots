@@ -47,6 +47,12 @@ export interface ActivityTurn {
    * dropped when the turn ends without one.
    */
   readonly attempt: Effect.Effect<AttemptId | null>;
+  /**
+   * The folders the turn's Task works in, read once its Attempt is known: the turn tracks only its
+   * folders that hold or sit in one of them (#670). Null or absent, as for a step or a member, which
+   * already works only in its Task's folders, it tracks all of them.
+   */
+  readonly workIn?: Effect.Effect<ReadonlyArray<string> | null>;
   readonly redactor: Redactor;
 }
 
@@ -94,7 +100,8 @@ export const trackTurn = (
  * record only their own changes (#595).
  */
 interface LiveTurn {
-  readonly folders: ReadonlyArray<string>;
+  /** The folders it tracks: its hob's, narrowed to those its Task works in once that is known (#670). */
+  folders: ReadonlyArray<string>;
   attemptId: AttemptId | null;
   readonly overlaps: Set<LiveTurn>;
   /** The files its file tools named, as `folder/path`, each with the tick it was last named at. */
@@ -276,6 +283,20 @@ const makeRecorder = (limits: ActivityLimits) =>
         // and a file kept then is not read or counted again.
         const earlier = new Set<ContentId>();
         const resumed = yield* turn.attempt;
+        /** Stops weighing the live turns that work in none of the folders it still tracks. */
+        const unlinkElsewhere = () => {
+          for (const other of me.overlaps) {
+            if (other.folders.some((folder) => me.folders.some((mine) => foldersOverlap(folder, mine)))) continue;
+            me.overlaps.delete(other);
+            other.overlaps.delete(me);
+          }
+        };
+        /** Those of `folders` that hold or sit in one its Task works in; all of them when none does. */
+        const within = (folders: ReadonlyArray<string>) =>
+          Effect.map(turn.workIn ?? Effect.succeed(null), (work) => {
+            const kept = folders.filter((folder) => work?.some((each) => foldersOverlap(each, folder)) === true);
+            return kept.length > 0 ? kept : folders;
+          });
         const before = resumed === null ? Option.none() : yield* repo.read(resumed);
         if (Option.isSome(before)) {
           const use = yield* attemptUse(store, before.value);
@@ -510,6 +531,8 @@ const makeRecorder = (limits: ActivityLimits) =>
                 yield* Semaphore.withPermit(
                   lock,
                   Effect.sync(() => {
+                    // A folder the turn stopped tracking while it was scanned stays dropped.
+                    if (!tracks(folder)) return;
                     changeSets.set(folder, drafts);
                     dirtyFolders.add(folder);
                   }),
@@ -539,12 +562,30 @@ const makeRecorder = (limits: ActivityLimits) =>
           endedAt: string,
         ) => ({ id: FolderScanId.make(newId()), folder, phase, filesScanned, stopped, startedAt, endedAt });
 
+        /** Whether the turn still tracks `folder`, which it stops doing once its Task works elsewhere. */
+        const tracks = (folder: string) => me.folders.includes(folder);
+
+        /**
+         * Drops the folders its Task does not work in, once its Attempt is known. Nothing is on the
+         * record before then, so nothing of theirs is ever written (#670).
+         */
+        const narrow = Effect.gen(function* () {
+          me.folders = yield* within(me.folders);
+          for (const folder of [...baselines.keys()]) {
+            if (tracks(folder)) continue;
+            baselines.delete(folder);
+            changeSets.delete(folder);
+          }
+          unlinkElsewhere();
+        });
+
         /** Writes what the turn recorded since the last write, once the Attempt it works on is known. */
         const sync = Semaphore.withPermit(
           lock,
           Effect.gen(function* () {
             const attemptId = me.attemptId ?? (yield* turn.attempt);
             if (attemptId === null) return;
+            if (me.attemptId === null) yield* narrow;
             me.attemptId = attemptId;
             const entries = [];
             for (const stepId of [...dirtyCommands]) {
@@ -558,12 +599,14 @@ const makeRecorder = (limits: ActivityLimits) =>
             }
             for (const folder of [...dirtyFolders]) {
               dirtyFolders.delete(folder);
+              if (!tracks(folder)) continue;
               const drafts = changeSets.get(folder) ?? [];
               const saved = yield* repo.saveChanges(attemptId, folder, drafts, turnStarted);
               if (Option.isSome(saved)) entries.push(...saved.value.entries);
             }
             // The scans last: an end scan on the record means the changes it found are too.
             for (const scan of scans.splice(0)) {
+              if (!tracks(scan.folder)) continue;
               const saved = yield* repo.saveScan({ ...scan, attemptId });
               if (Option.isSome(saved)) entries.push(...saved.value.entries);
             }
@@ -801,7 +844,13 @@ const makeRecorder = (limits: ActivityLimits) =>
           Effect.catchCause((cause) => Effect.logWarning("Could not record the end of a turn's activity", cause)),
         );
 
-        yield* Effect.forEach(turn.folders, takeBaseline, { discard: true });
+        // A turn that resumes its Attempt knows its Task's folders from the start, and narrows once.
+        if (resumed !== null) {
+          me.folders = yield* within(turn.folders);
+          me.attemptId = resumed;
+          unlinkElsewhere();
+        }
+        yield* Effect.forEach(me.folders, takeBaseline, { discard: true });
         yield* sync;
         yield* Effect.addFinalizer(() => end);
 
