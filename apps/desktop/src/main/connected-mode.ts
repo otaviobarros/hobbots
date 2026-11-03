@@ -22,7 +22,13 @@ import {
 } from "./hub-connection.ts";
 import { followHub } from "./hub-events.ts";
 import type { AppShell } from "./hub-mode.ts";
-import { type AddressChange, checkNewAddress, followedAddress } from "./hub-move.ts";
+import {
+  type AddressChange,
+  checkNewAddress,
+  followedAddress,
+  type RemoteAccessChange,
+  windowAfterRemoteAccess,
+} from "./hub-move.ts";
 import { keepsRunning } from "./keep-running.ts";
 import { trayImage } from "./menu-bar.ts";
 import { type ConnectedTrayModel, connectedTrayModel } from "./menu-bar-model.ts";
@@ -277,7 +283,8 @@ export const startConnected = async (
       else if (change._tag === "Pairing") void notices.devices.check();
       else if (change._tag === "RemoteAccess") {
         const next = followedAddress(connection.address, change);
-        if (next !== null) void moveTo(next);
+        if (next !== null) void moveTo(next, change);
+        else followWindows(change);
       }
     },
     onLost: tryAgain,
@@ -288,7 +295,15 @@ export const startConnected = async (
    * Moves to another address of the same computer (ADR 025): saved in the settings, the cookies set
    * again, the stream connected again and each page loaded again at the same path. The token stays.
    */
-  const moveTo = async (address: string) => {
+  /** Moves each page off the hub's HTTPS address once it stops answering, as after the hub redirected it there. */
+  const followWindows = (change: RemoteAccessChange) => {
+    for (const window of windows) {
+      const target = windowAfterRemoteAccess(window.webContents.getURL(), connection.address, change);
+      if (target !== null) void window.loadURL(target);
+    }
+  };
+
+  const moveTo = async (address: string, change?: RemoteAccessChange) => {
     const before = origins;
     const next = originsOf(address);
     if (next.origin === before.origin) return;
@@ -301,7 +316,9 @@ export const startConnected = async (
     await events.reconnect();
     for (const window of windows) {
       const url = window.webContents.getURL();
+      const target = change === undefined ? null : windowAfterRemoteAccess(url, connection.address, change);
       if (url.startsWith(`${before.origin}/`)) void window.loadURL(samePathOn(url, origins.origin));
+      else if (target !== null) void window.loadURL(target);
       else window.webContents.reload();
     }
   };

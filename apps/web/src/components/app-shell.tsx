@@ -1,6 +1,6 @@
 import { Button } from "@hobbots/ui/components/button";
 import { Outlet } from "@tanstack/react-router";
-import { hasProblem, useConnectedDesktop } from "../api/connected-desktop.ts";
+import { reasonOf, useConnectedDesktop } from "../api/connected-desktop.ts";
 import { useHobbotsEvents } from "../api/events.ts";
 import { useDeviceAccess } from "../api/live.ts";
 import { hubNameOf, isLoopbackHost } from "../lib/hub-name.ts";
@@ -46,13 +46,13 @@ export function AppShell() {
   const connection = useHobbotsEvents();
   const unreachable = useDeviceAccess() === "unreachable";
   // On a connected desktop, the app says why the hub cannot be reached, which a page cannot tell.
-  const desktop = useConnectedDesktop();
+  const reason = reasonOf(useConnectedDesktop());
   useOpenRequests();
 
   return (
     <>
-      {hasProblem(desktop) && <ConnectionBanner view={desktop} onRetry={connection.retry} />}
-      {!hasProblem(desktop) && connection.state === "reconnecting" && (
+      {reason !== null && <ConnectionBanner view={reason} onRetry={connection.retry} />}
+      {reason === null && connection.state === "reconnecting" && (
         <div
           role="status"
           className="flex flex-none items-center gap-2 bg-lantern px-3 py-1.5 text-xs font-bold text-ground"

@@ -1,6 +1,7 @@
 import { Button } from "@hobbots/ui/components/button";
 import { useId, useState } from "react";
-import type { ConnectionAction, ConnectionView } from "../api/client.ts";
+import type { ConnectionAction } from "../api/client.ts";
+import type { ConnectionReason } from "../api/connected-desktop.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.connectionBanner;
@@ -8,7 +9,7 @@ const copy = messages.connectionBanner;
 const BUTTON = "border-ground text-ground hover:bg-lantern-hover";
 
 /** The actions this banner can take with the bridge it has; the rest wait for screens that offer them. */
-const offered = (view: ConnectionView): ReadonlyArray<ConnectionAction> => {
+const offered = (view: ConnectionReason): ReadonlyArray<ConnectionAction> => {
   const bridge = globalThis.window?.hobbots?.connection;
   return view.actions.filter(
     (action) =>
@@ -74,7 +75,7 @@ function ChangeAddress({ address, onDone }: { address: string; onDone: () => voi
  * app's words, and what the user can do. The page stays, so the open thread and its unsent message
  * stay too.
  */
-export function ConnectionBanner({ view, onRetry }: { view: ConnectionView; onRetry: () => void }) {
+export function ConnectionBanner({ view, onRetry }: { view: ConnectionReason; onRetry: () => void }) {
   const [changing, setChanging] = useState(false);
   const bridge = globalThis.window?.hobbots?.connection;
   const actions = offered(view);

@@ -11,7 +11,7 @@ import {
   makeNodeCheck,
   type TailnetNode,
 } from "../src/main/hub-connection.ts";
-import { checkNewAddress, followedAddress } from "../src/main/hub-move.ts";
+import { checkNewAddress, followedAddress, windowAfterRemoteAccess } from "../src/main/hub-move.ts";
 
 // A connected desktop whose hub goes away and comes back (ADR 025, #448): why it cannot be reached,
 // trying again with the same token, and following the hub to another port of the same computer.
@@ -203,6 +203,25 @@ describe("a hub that moved to another address", () => {
     expect(followedAddress("https://studio.example.ts.net", remoteAccess(4400, false))).toBe(
       "http://studio.example.ts.net:4400",
     );
+  });
+
+  // covers DP-001
+  it("[TC-DP-171] moves a page the hub redirected to HTTPS back to HTTP when HTTPS turns off, at the same path", () => {
+    // The stored address is HTTP and its port is unchanged, so the address itself does not move.
+    expect(followedAddress(ORIGINS.origin, remoteAccess(4317, false))).toBeNull();
+    const page = "https://studio.example.ts.net/#/hobs/h1/threads/t1?draft=1";
+    expect(windowAfterRemoteAccess(page, ORIGINS.origin, remoteAccess(4317, false))).toBe(
+      "http://studio.example.ts.net:4317/#/hobs/h1/threads/t1?draft=1",
+    );
+    // It follows the hub's port too, and stays while HTTPS answers or the hub does not say.
+    expect(windowAfterRemoteAccess(page, ORIGINS.origin, remoteAccess(4400, false))).toBe(
+      "http://studio.example.ts.net:4400/#/hobs/h1/threads/t1?draft=1",
+    );
+    expect(windowAfterRemoteAccess(page, ORIGINS.origin, remoteAccess(4317, true))).toBeNull();
+    expect(windowAfterRemoteAccess(page, ORIGINS.origin, remoteAccess(4317, null))).toBeNull();
+    // A page already on the HTTP address, or not the hub's, is left alone.
+    expect(windowAfterRemoteAccess(`${ORIGINS.origin}/`, ORIGINS.origin, remoteAccess(4317, false))).toBeNull();
+    expect(windowAfterRemoteAccess("https://example.com/", ORIGINS.origin, remoteAccess(4317, false))).toBeNull();
   });
 
   // covers DP-001, DP-004

@@ -33,9 +33,10 @@ export interface ConnectionView {
   readonly appVersion: string;
   readonly hubVersion: string | null;
   readonly state: string;
-  readonly title: string;
-  readonly detail: string;
-  readonly actions: ReadonlyArray<ConnectionAction>;
+  /** Absent from an app from before the reasons (ADR 025): a page then shows its own generic text. */
+  readonly title?: string;
+  readonly detail?: string;
+  readonly actions?: ReadonlyArray<ConnectionAction>;
 }
 
 /** The answer to a typed address: taken, or why not in the user's words. */

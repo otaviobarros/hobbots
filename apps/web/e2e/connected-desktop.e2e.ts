@@ -72,7 +72,14 @@ const standInBridge = (page: Page) =>
       testing.__connection = {
         calls,
         set: (next: Record<string, unknown>) => {
-          view = { ...view, ...next };
+          // A view from an app from before the reasons has no title, detail or actions at all.
+          const { older, ...rest } = next;
+          view = { ...view, ...rest };
+          if (older === true) {
+            delete view.title;
+            delete view.detail;
+            delete view.actions;
+          }
           for (const listener of listeners) listener(view);
         },
       };
@@ -203,4 +210,27 @@ test("[TC-DP-169] Tailscale off on this Mac offers to open Tailscale", async ({ 
   await banner(page).getByRole("button", { name: "Open Tailscale" }).click();
   expect(await bridgeCalls(page)).toEqual(["openTailscale"]);
   await page.screenshot({ path: test.info().outputPath("tailscale-off.png") });
+});
+
+// covers DP-001
+test("[TC-DP-169] a bridge from before the reasons keeps the generic banner instead of breaking the page", async ({
+  page,
+}) => {
+  const { composer } = await openHub(page);
+  const errors: Array<string> = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.evaluate(() =>
+    (globalThis as unknown as { __connection: { set: (v: unknown) => void } }).__connection.set({
+      state: "unreachable",
+      older: true,
+    }),
+  );
+  await hub?.stop();
+  hub = undefined;
+  await expect(
+    page.getByRole("status").filter({ hasText: /Reconnecting to Hobbots|Hobbots cannot reach/ }),
+  ).toBeVisible();
+  await expect(banner(page)).toBeHidden();
+  await expect(composer).toHaveValue("sent once the hub is back");
+  expect(errors).toEqual([]);
 });

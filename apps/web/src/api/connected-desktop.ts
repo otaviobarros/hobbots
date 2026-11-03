@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ConnectionView } from "./client.ts";
+import type { ConnectionAction, ConnectionView } from "./client.ts";
 
 /**
  * The connected desktop's view of its hub (ADR 025), followed as it changes; null in a browser or
@@ -23,6 +23,31 @@ export const useConnectedDesktop = (): ConnectionView | null => {
   return view;
 };
 
-/** Whether the connected desktop says the hub cannot be used now; connecting is not a problem yet. */
-export const hasProblem = (view: ConnectionView | null): view is ConnectionView =>
-  view !== null && view.state !== "connected" && view.state !== "connecting";
+/** Why the hub cannot be used now, in the app's words, and what the user can do about it. */
+export interface ConnectionReason {
+  readonly title: string;
+  readonly detail: string;
+  readonly address: string;
+  readonly actions: ReadonlyArray<ConnectionAction>;
+}
+
+const ACTIONS: ReadonlySet<string> = new Set(["tryAgain", "openTailscale", "changeAddress", "askAgain", "disconnect"]);
+
+/**
+ * The reason the connected desktop gives for a problem, or null while connected, connecting, or when
+ * the app is from before the reasons and sends none (ADR 025): the page then keeps its own generic
+ * banner. Anything the app sends is checked, since it may be of another version.
+ */
+export const reasonOf = (view: unknown): ConnectionReason | null => {
+  if (typeof view !== "object" || view === null) return null;
+  const { state, title, detail, address, actions } = view as Record<string, unknown>;
+  if (state === "connected" || state === "connecting" || typeof title !== "string" || title === "") return null;
+  return {
+    title,
+    detail: typeof detail === "string" ? detail : "",
+    address: typeof address === "string" ? address : "",
+    actions: Array.isArray(actions)
+      ? actions.filter((action): action is ConnectionAction => typeof action === "string" && ACTIONS.has(action))
+      : [],
+  };
+};

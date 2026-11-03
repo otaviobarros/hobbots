@@ -14,7 +14,7 @@ import { messages } from "./messages.ts";
 
 const copy = messages.changeAddress;
 
-type RemoteAccessChange = Extract<HubChange, { readonly _tag: "RemoteAccess" }>;
+export type RemoteAccessChange = Extract<HubChange, { readonly _tag: "RemoteAccess" }>;
 
 /**
  * The address to move to after the hub's remote access changed, or null to stay. An HTTP address
@@ -27,6 +27,25 @@ export const followedAddress = (address: string, change: RemoteAccessChange): st
   const httpAddress = `${origins.http}:${change.port}`;
   if (origins.origin.startsWith("https:")) return change.servesHttps === false ? httpAddress : null;
   return origins.origin === httpAddress ? null : httpAddress;
+};
+
+/**
+ * Where a window goes once the hub's remote access changed, or null to leave it: a page on the hub's
+ * HTTPS address, which the hub may have redirected it to from an HTTP address, moves to the same
+ * path on the HTTP address once HTTPS no longer answers. The stored address may still be the HTTP
+ * one, so the window's own address decides, not the stored one.
+ */
+export const windowAfterRemoteAccess = (url: string, address: string, change: RemoteAccessChange): string | null => {
+  const origins = hubOrigins(address);
+  if (origins === undefined || change.servesHttps !== false) return null;
+  let page: URL;
+  try {
+    page = new URL(url);
+  } catch {
+    return null;
+  }
+  if (page.origin !== origins.https) return null;
+  return `${origins.http}:${change.port}${page.pathname}${page.search}${page.hash}`;
 };
 
 /** What became of an address the user typed: the hub's new address, or why it was not taken. */
