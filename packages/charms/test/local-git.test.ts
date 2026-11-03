@@ -24,8 +24,7 @@ import {
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer } from "effect";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { LocalGitToolsLive, NEXT_TURN } from "../src/index.ts";
-import { directRepositories } from "./support.ts";
+import { LocalGitToolsLive, NEXT_TURN, PUBLISH_SCRIPT } from "../src/index.ts";
 
 // #578: in the sandbox `git init` cannot write a new repository's config, so the hub creates the
 // repository for the hob, under its policy, with Git's defaults and no hooks (ADR 014).
@@ -81,8 +80,9 @@ const userApprovals = (
   used: () => Effect.void,
 });
 
-const layer = LocalGitToolsLive.pipe(
-  Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer, directRepositories)),
+const staging = path.join(root, "hub", "local-git");
+const layer = LocalGitToolsLive({ stagingFolder: staging }).pipe(
+  Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)),
 );
 
 /** One call of the tool on a turn with `access`, with a step when the user can be asked. */
@@ -215,5 +215,53 @@ describe("creating a repository for a hob", () => {
     expect(approved.answer).toMatchObject({ refused: false });
     expect(asked).toHaveLength(2);
     expect(fs.existsSync(path.join(project, ".git", "HEAD"))).toBe(true);
+  });
+
+  // covers PE-001, PE-005
+  it("[TC-PE-329] makes the repository where no hob's command reaches, then copies it to the decided folder without following links, below the hub's own folder too", async () => {
+    // Below the hub's working folder, where sandbox-runtime keeps every .git/config read-only for a sandbox.
+    const beneathHub = fs.realpathSync(fs.mkdtempSync(path.join(import.meta.dirname, ".local-git-")));
+    try {
+      expect(beneathHub.startsWith(`${fs.realpathSync(process.cwd())}${path.sep}`)).toBe(true);
+      expect((await callInit(accessFor(beneathHub), { folder: beneathHub })).answer).toMatchObject({ refused: false });
+      expect(gitIn(beneathHub, "rev-parse", "--show-toplevel")).toBe(beneathHub);
+      expect(gitIn(beneathHub, "config", "--local", "core.bare")).toBe("false");
+      expect(fs.readdirSync(beneathHub)).toEqual([".git"]);
+    } finally {
+      fs.rmSync(beneathHub, { recursive: true, force: true });
+    }
+    // Git made it in the hub's own staging folder, outside the hob's folders, and nothing is left there.
+    expect(fs.readdirSync(staging)).toEqual([]);
+
+    // The copy binds to the folder decided: a level, or .git, laid as a link after the decision leads nowhere.
+    const made = path.join(root, `made-${count}`);
+    execFileSync("git", ["init", "--quiet", "--template=", made]);
+    const publish = (levels: Array<string>) =>
+      (() => {
+        try {
+          execFileSync(
+            process.execPath,
+            ["-e", PUBLISH_SCRIPT, JSON.stringify([project, levels, path.join(made, ".git")])],
+            {
+              encoding: "utf8",
+            },
+          );
+          return { code: 0, out: "" };
+        } catch (error) {
+          const failed = error as { status: number; stdout: string };
+          return { code: failed.status, out: failed.stdout };
+        }
+      })();
+    fs.symlinkSync(outside, path.join(project, "swapped"));
+    expect(publish(["swapped", "app"])).toMatchObject({ code: 3, out: expect.stringContaining("moved") });
+    fs.symlinkSync(outside, path.join(project, ".git"));
+    expect(publish([])).toMatchObject({ code: 4, out: expect.stringContaining("already has a .git") });
+    expect(fs.readdirSync(outside)).toEqual([]);
+    // Into a folder it holds, it copies Git's files and nothing else.
+    expect(publish(["app"])).toMatchObject({ code: 0 });
+    expect(gitIn(path.join(project, "app"), "rev-parse", "--show-toplevel")).toBe(path.join(project, "app"));
+    expect(fs.readdirSync(path.join(project, "app", ".git")).sort()).toEqual(
+      fs.readdirSync(path.join(made, ".git")).sort(),
+    );
   });
 });

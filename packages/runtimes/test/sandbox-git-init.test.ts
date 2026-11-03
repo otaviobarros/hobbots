@@ -1,27 +1,15 @@
 import { execFile, execFileSync } from "node:child_process";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { type HubTools, RepositorySandbox, type RuntimeEvent, type ToolAccess } from "@hobbots/agents";
+import type { HubTools, RuntimeEvent, ToolAccess } from "@hobbots/agents";
 import { EMPTY_HOB_POLICY, GIT_INIT_DESCRIPTION, GIT_INIT_LABEL, GIT_INIT_TOOL } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { policyHooks, toolTurn, turnInstructions } from "../src/claude-code.ts";
-import { RepositorySandboxLive } from "../src/folder-sandbox.ts";
 import { type PreparedSandbox, ProcessSandbox, TEMP_BASE } from "../src/sandbox.ts";
 import { initsRepository } from "../src/tool-calls.ts";
 
@@ -134,7 +122,7 @@ const commitReadme =
 describe("a Git repository in the sandbox", () => {
   // covers PE-005
   it.runIf(sandboxed)(
-    "[TC-PE-320] a hob commits in a repository the hub creates in its empty folder, while the repository's hooks and config stay read-only",
+    "[TC-PE-320] a hob commits in a repository the hub creates in its empty folder, while the repository's hooks and config stay read-only, and cannot reach where the hub makes it",
     async () => {
       const project = newProject();
       await inTurn(project, async (prepared) => {
@@ -171,6 +159,21 @@ describe("a Git repository in the sandbox", () => {
         expect(committed.ok, committed.stderr).toBe(true);
       });
       expect(hubGit("-C", nested, "log", "-1", "--format=%s").trim()).toBe("First");
+
+      // git_init makes a repository in the hub's data folder before it copies it (apps/server), and a
+      // turn's commands cannot write there, so none can lay a hook or config in it meanwhile.
+      const staging = join(data, "charms", "local-git", "init-test");
+      mkdirSync(staging, { recursive: true });
+      await inTurn(project, async (prepared) => {
+        const injected = await runIn(
+          prepared,
+          project,
+          `mkdir -p ${staging}/.git/hooks && echo 'echo hi' > ${staging}/.git/hooks/pre-commit; echo x > ${staging}/config`,
+        );
+        // macOS refuses the writes; on Linux they land in the turn's own empty view of the folder.
+        expect(injected.ok).toBe(linux);
+      });
+      expect(readdirSync(staging)).toEqual([]);
     },
     60_000,
   );
@@ -197,108 +200,6 @@ describe("a Git repository in the sandbox", () => {
       });
     },
     30_000,
-  );
-});
-
-/**
- * The hub's `git init` of `folder` in the sandbox it runs in, writable below `writable`, with `PATH`
- * first searching `bin`, where a test lays a `git` that acts as a hob's command racing the call.
- */
-const sandboxedInit = (writable: string, folder: string, bin: string) =>
-  Effect.gen(function* () {
-    const repositories = yield* RepositorySandbox;
-    const path = `${bin}:${process.env.PATH ?? ""}`;
-    const saved = process.env.PATH;
-    process.env.PATH = path;
-    const program = yield* repositories
-      .gitInit(writable, folder, null)
-      .pipe(Effect.ensuring(Effect.sync(() => (process.env.PATH = saved))));
-    return yield* Effect.promise(() =>
-      promisify(execFile)("/bin/sh", ["-c", program.commandLine], {
-        env: { PATH: path, ...program.env },
-        encoding: "utf8",
-      }).then(
-        () => ({ ok: true, stderr: "" }),
-        (error: { stderr?: string }) => ({ ok: false, stderr: error.stderr ?? "" }),
-      ),
-    );
-  }).pipe(
-    Effect.scoped,
-    Effect.provide(
-      RepositorySandboxLive({ dataFolder: data, stateFolder: join(root, "hub-git") }).pipe(
-        Layer.provide(ProcessSandbox.layer),
-      ),
-    ),
-    Effect.runPromise,
-  );
-
-// Outside the shared temporary folder, which a turn on Linux sees as its own empty one, so the
-// sandboxed program finds the test's `git` and the folder a link leads to.
-const away = realpathSync(mkdtempSync(join(import.meta.dirname, ".git-init-")));
-afterAll(() => rmSync(away, { recursive: true, force: true }));
-
-/** A `git` that runs `before` in the folder it is started in, then the real Git. */
-const racingGit = (name: string, before: string) => {
-  const bin = join(away, `bin-${name}`);
-  mkdirSync(bin);
-  const real = execFileSync("/bin/sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
-  writeFileSync(join(bin, "git"), `#!/bin/sh\n${before}\nexec ${real} "$@"\n`);
-  chmodSync(join(bin, "git"), 0o755);
-  return bin;
-};
-
-describe("the hub's git init, bound to the folder decided", () => {
-  // covers PE-001, PE-005
-  it.runIf(sandboxed)(
-    "[TC-PE-329] creates the repository in a folder below the hub's own too, writes nothing outside the hob's folder through a link a command lays while the call runs, and refuses a folder that moved",
-    async () => {
-      const project = newProject();
-      const outside = join(away, "outside");
-      mkdirSync(outside);
-      const plain = racingGit("plain", ":");
-
-      // Without a race it creates the repository, with no hooks, in the folder and in a new one below.
-      expect(await sandboxedInit(project, project, plain)).toMatchObject({ ok: true });
-      expect(existsSync(join(project, ".git", "HEAD"))).toBe(true);
-      expect(existsSync(join(project, ".git", "hooks"))).toBe(false);
-      const nested = join(project, "tools", "cli");
-      expect(await sandboxedInit(project, nested, plain)).toMatchObject({ ok: true });
-      expect(hubGit("-C", nested, "rev-parse", "--show-toplevel").trim()).toBe(nested);
-
-      // Below the hub's own working folder too, where sandbox-runtime keeps every .git/config read-only.
-      const beneathHub = join(away, "beneath-hub");
-      mkdirSync(beneathHub);
-      expect(beneathHub.startsWith(`${realpathSync(process.cwd())}/`)).toBe(true);
-      expect(await sandboxedInit(beneathHub, beneathHub, plain)).toMatchObject({ ok: true });
-      expect(hubGit("-C", beneathHub, "rev-parse", "--show-toplevel").trim()).toBe(beneathHub);
-      expect(hubGit("-C", beneathHub, "config", "--local", "core.bare").trim()).toBe("false");
-      expect(readdirSync(beneathHub)).toEqual([".git"]);
-      const below = join(beneathHub, "tools");
-      expect(await sandboxedInit(beneathHub, below, plain)).toMatchObject({ ok: true });
-      expect(hubGit("-C", below, "rev-parse", "--show-toplevel").trim()).toBe(below);
-
-      // A .git link to outside, laid after every check and just before Git writes, leads nowhere.
-      const other = newProject();
-      const linked = racingGit("link", `ln -s ${outside} .git`);
-      expect(await sandboxedInit(other, other, linked)).toMatchObject({ ok: false });
-      expect(readdirSync(outside)).toEqual([]);
-      const sub = join(other, "sub");
-      rmSync(join(other, ".git"));
-      expect(await sandboxedInit(other, sub, linked)).toMatchObject({ ok: false });
-      expect(readdirSync(outside)).toEqual([]);
-
-      // A link already there, or a folder swapped for a link to outside, is refused before Git runs.
-      const swapped = join(project, "swapped");
-      symlinkSync(outside, swapped);
-      const moved = await sandboxedInit(project, swapped, plain);
-      expect(moved).toMatchObject({ ok: false, stderr: expect.stringContaining("moved") });
-      const third = newProject();
-      symlinkSync(outside, join(third, ".git"));
-      const existing = await sandboxedInit(third, third, plain);
-      expect(existing).toMatchObject({ ok: false, stderr: expect.stringContaining("already has a .git") });
-      expect(readdirSync(outside)).toEqual([]);
-    },
-    60_000,
   );
 });
 

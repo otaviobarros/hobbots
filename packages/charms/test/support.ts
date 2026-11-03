@@ -1,5 +1,5 @@
-import { CharmCalls, FolderSandbox, RepositorySandbox } from "@hobbots/agents";
-import { CharmCall, GIT_INIT_SCRIPT, isCharmCallSettled } from "@hobbots/domain";
+import { CharmCalls, FolderSandbox } from "@hobbots/agents";
+import { CharmCall, isCharmCallSettled } from "@hobbots/domain";
 import { Context, Effect, Layer, Option, Redacted } from "effect";
 import { GitHubCredential, GitHubError } from "../src/index.ts";
 
@@ -57,21 +57,6 @@ export const directSandbox = Layer.succeed(
   FolderSandbox.of({
     readOnly: (_folders, program, args) =>
       Effect.succeed({ commandLine: `sh -c ${quote([program, ...args].map(quote).join(" "))}`, env: {} }),
-  }),
-);
-
-/**
- * Stands in for the sandbox the hub creates a repository in: runs the hub's script as it is, so
- * these tests check the hub's decision and the script's own checks.
- */
-export const directRepositories = Layer.succeed(
-  RepositorySandbox,
-  RepositorySandbox.of({
-    gitInit: (_writable, folder, branch) =>
-      Effect.succeed({
-        commandLine: ["sh", "-c", GIT_INIT_SCRIPT, "sh", folder, branch ?? ""].map(quote).join(" "),
-        env: {},
-      }),
   }),
 );
 

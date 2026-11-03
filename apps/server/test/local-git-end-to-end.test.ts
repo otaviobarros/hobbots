@@ -12,21 +12,12 @@ import {
   HobLifecycle,
   HobService,
   PermissionSummary,
-  RepositorySandbox,
   SecretRedaction,
   TaskFiles,
 } from "@hobbots/agents";
 import type { AttemptActivityRead, ThreadTasksRead } from "@hobbots/api";
 import { LocalGitToolsLive } from "@hobbots/charms";
-import {
-  type Agent,
-  GIT_INIT_LABEL,
-  GIT_INIT_SCRIPT,
-  isInProgress,
-  type Message,
-  roleFields,
-  type Thread,
-} from "@hobbots/domain";
+import { type Agent, GIT_INIT_LABEL, isInProgress, type Message, roleFields, type Thread } from "@hobbots/domain";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -60,36 +51,19 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // making the scripted calls, and the records on SQLite or PostgreSQL (TestDatabase). A `git init`
 // command is pointed to `git_init`, the hub creates the repository, and the Workbench shows the
 // commit command as succeeded. The fake runs no command, so the commit inside the real sandbox is
-// TC-PE-320's, and the hub's init inside it TC-PE-329's.
+// TC-PE-320's.
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-local-git-e2e-")));
 const project = join(temp, "nettle-project");
 const dataDir = join(temp, "data");
 for (const folder of [project, dataDir]) mkdirSync(folder, { recursive: true });
 
-const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
-
-/**
- * Runs the hub's `git init` script as it is, in place of the OS sandbox it runs in on a hub, which
- * TC-PE-329 covers: this test checks the hub's composition and what the Workbench shows.
- */
-const directRepositories = Layer.succeed(
-  RepositorySandbox,
-  RepositorySandbox.of({
-    gitInit: (_writable, folder, branch) =>
-      Effect.succeed({
-        commandLine: ["sh", "-c", GIT_INIT_SCRIPT, "sh", folder, branch ?? ""].map(quote).join(" "),
-        env: {},
-      }),
-  }),
-);
-
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
 beforeAll(() => {
-  const LocalGit = LocalGitToolsLive.pipe(
-    Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer, directRepositories)),
+  const LocalGit = LocalGitToolsLive({ stagingFolder: join(dataDir, "charms", "local-git") }).pipe(
+    Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)),
   );
   const App = HobLifecycle.layer
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))

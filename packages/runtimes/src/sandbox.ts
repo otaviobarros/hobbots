@@ -69,11 +69,6 @@ export interface SandboxScope {
   readonly allowedHosts: ReadonlyArray<string>;
   /** Decides any other host the turn's processes try to reach. */
   readonly decideHost?: HostDecider;
-  /**
-   * Whether Git's hooks and config in the folders are read-only, as they are for every turn. Only the
-   * hub's own `git init` runs without, since it must write a new repository's config (#578).
-   */
-  readonly gitUnprotected?: true;
   /** The user's own Git config files, opened read-only so Git runs (see `gitConfigAccess`). */
   readonly gitConfigFiles?: ReadonlyArray<string>;
   /**
@@ -205,7 +200,7 @@ export const sandboxFilesystem = (scope: SandboxScope): SandboxRuntimeConfig["fi
       // the user's own Git would run what a hob writes there outside the sandbox. sandbox-runtime
       // protects these only under the hub's own working folder on macOS. A repository a hob lays out
       // itself, such as one a `.git` file points to, is not covered (ADR 014).
-      ...(scope.gitUnprotected ? [] : scope.folders).flatMap((folder) => [
+      ...scope.folders.flatMap((folder) => [
         join(folder, ".git", "hooks"),
         join(folder, ".git", "config"),
         `${folder}/**/.git/**/hooks/**`,
