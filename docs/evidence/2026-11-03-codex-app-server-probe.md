@@ -2,7 +2,7 @@
 
 - **Date:** 2026-11-03
 - **Issue:** [#436](https://github.com/otaviobarros/hobbots/issues/436)
-- **Pull request:** [#444](https://github.com/otaviobarros/hobbots/pull/444)
+- **Pull request:** [#460](https://github.com/otaviobarros/hobbots/pull/460)
 - **Commit:** `05e0658` on `main`, for the probe; no Hobbots code ran
 - **Setup:** Manual probe in a Linux x86_64 container (Ubuntu 24.04, Node 22). Codex 0.166.0 (`@openai/codex` from npm, `codex-cli 0.166.0`), started as `codex app-server` over stdio with a throwaway `CODEX_HOME` and no account. A small JSON-RPC client drove it. A scripted stand-in for the Responses API, set as a custom model provider (`wire_api = "responses"`, no OpenAI sign-in), returned fixed tool calls through Codex's code mode (`exec`) and recorded each request. The protocol types came from `codex app-server generate-ts --experimental`. No macOS, no Hobbots sandbox, no real model.
 - **Result:** Passed with gaps. Every App Server behavior ADR 024 relies on was observed, except those that need macOS, the sandbox or a real sign-in.
