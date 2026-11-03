@@ -21,7 +21,7 @@ export interface AppServerCommand {
 }
 
 /** A notification from the App Server, such as `turn/completed`. */
-interface AppServerNotification {
+export interface AppServerNotification {
   readonly method: string;
   readonly params: unknown;
 }
@@ -30,7 +30,7 @@ interface AppServerNotification {
  * Answers the App Server's requests to the client, such as approvals, by method. The result is
  * sent as the response; a failure is sent as an error. A method without a handler is refused.
  */
-type ServerRequestHandlers = Readonly<
+export type ServerRequestHandlers = Readonly<
   Record<string, (params: unknown, id: RequestId) => Effect.Effect<unknown, AppServerError>>
 >;
 

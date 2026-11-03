@@ -173,6 +173,7 @@ const ServerLive = Layer.unwrap(
             CodexLayer({
               executable: Option.getOrUndefined(config.codexExecutable),
               clientVersion: config.version,
+              workspaceDir: join(config.dataDir, "workspaces", "codex"),
             }).pipe(Layer.provide(NodeServices.layer)),
           )
     ).pipe(Layer.provide(PolicyEngine.node), Layer.provide(Remote));

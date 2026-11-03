@@ -140,4 +140,211 @@ export interface ClientRequests {
   readonly "account/read": { readonly params: GetAccountParams; readonly result: GetAccountResponse };
   readonly getAuthStatus: { readonly params: GetAuthStatusParams; readonly result: GetAuthStatusResponse };
   readonly "model/list": { readonly params: ModelListParams; readonly result: ModelListResponse };
+  readonly "account/login/start": { readonly params: ChatgptAuthTokensLogin; readonly result: unknown };
+  readonly "thread/start": { readonly params: ThreadStartParams; readonly result: ThreadStartResponse };
+  readonly "thread/resume": { readonly params: ThreadResumeParams; readonly result: ThreadResumeResponse };
+  readonly "turn/start": { readonly params: TurnStartParams; readonly result: TurnStartResponse };
+  readonly "turn/interrupt": { readonly params: TurnInterruptParams; readonly result: unknown };
 }
+
+// Turns (#438): threads, turns, the notifications a turn reads and the requests Codex sends it.
+
+/** How often Codex asks the client. Hobbots always asks about every call (ADR 024). */
+type AskForApproval = "untrusted" | "on-request" | "never";
+
+/** Codex's own sandbox. Hobbots turns it off inside its own (ADR 024). */
+type SandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+
+type SandboxPolicy =
+  | { readonly type: "dangerFullAccess" }
+  | { readonly type: "externalSandbox"; readonly networkAccess: "restricted" | "enabled" };
+
+/** A hub tool the thread offers, which Codex calls back as `item/tool/call` (ADR 024, #440). */
+interface DynamicToolSpec {
+  readonly type: "function";
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: unknown;
+}
+
+interface ThreadSettings {
+  readonly cwd?: string | null;
+  readonly approvalPolicy?: AskForApproval | null;
+  readonly sandbox?: SandboxMode | null;
+  readonly model?: string | null;
+  /** Settings for this thread only, as `config.toml` keys. */
+  readonly config?: Readonly<Record<string, unknown>> | null;
+}
+
+interface ThreadStartParams extends ThreadSettings {
+  /** Kept for the thread's life: a resumed thread ignores new ones (ADR 024). */
+  readonly developerInstructions?: string | null;
+  readonly dynamicTools?: ReadonlyArray<DynamicToolSpec> | null;
+}
+
+interface ThreadResumeParams extends ThreadSettings {
+  readonly threadId: string;
+  /** Leaves the earlier turns out of the answer; the thread keeps them. */
+  readonly excludeTurns?: boolean;
+}
+
+interface Thread {
+  /** The thread's ID, which Hobbots keeps as the Hobbots thread's Codex session. */
+  readonly id: string;
+}
+
+interface ThreadStartResponse {
+  readonly thread: Thread;
+  readonly model: string;
+}
+
+type ThreadResumeResponse = ThreadStartResponse;
+
+interface UserInputText {
+  readonly type: "text";
+  readonly text: string;
+  readonly text_elements: ReadonlyArray<never>;
+}
+
+interface TurnStartParams {
+  readonly threadId: string;
+  readonly input: ReadonlyArray<UserInputText>;
+  readonly approvalPolicy?: AskForApproval | null;
+  readonly sandboxPolicy?: SandboxPolicy | null;
+  readonly model?: string | null;
+  /** Codex's effort name, such as "high". */
+  readonly effort?: string | null;
+}
+
+type TurnStatus = "completed" | "interrupted" | "failed" | "inProgress";
+
+/** Codex's error kind; only a reached usage limit is told apart. A newer Codex may add more. */
+type CodexErrorInfo = "usageLimitExceeded" | string | Readonly<Record<string, unknown>>;
+
+export interface TurnError {
+  readonly message: string;
+  readonly codexErrorInfo: CodexErrorInfo | null;
+  readonly additionalDetails: string | null;
+}
+
+export interface Turn {
+  readonly id: string;
+  readonly status: TurnStatus;
+  /** Why a failed or interrupted turn ended. */
+  readonly error: TurnError | null;
+}
+
+export interface TurnStartResponse {
+  readonly turn: Turn;
+}
+
+interface TurnInterruptParams {
+  readonly threadId: string;
+  readonly turnId: string;
+}
+
+/** Codex's external sign-in mode: the token stays in memory and no `auth.json` is written (ADR 024). */
+interface ChatgptAuthTokensLogin {
+  readonly type: "chatgptAuthTokens";
+  readonly accessToken: string;
+  /** The ChatGPT workspace the token is for. */
+  readonly chatgptAccountId: string;
+  readonly chatgptPlanType?: string | null;
+}
+
+type CommandExecutionStatus = "inProgress" | "completed" | "failed" | "declined";
+
+/** An item of a turn, trimmed to the kinds and fields Hobbots reads. */
+export type ThreadItem =
+  | { readonly type: "agentMessage"; readonly id: string; readonly text: string }
+  | { readonly type: "reasoning"; readonly id: string }
+  | {
+      readonly type: "commandExecution";
+      readonly id: string;
+      readonly command: string;
+      readonly cwd: string;
+      readonly status: CommandExecutionStatus;
+      /** What the command printed, stdout and stderr together. */
+      readonly aggregatedOutput: string | null;
+      readonly exitCode: number | null;
+    }
+  | { readonly type: "fileChange"; readonly id: string; readonly status: CommandExecutionStatus }
+  | {
+      readonly type: "mcpToolCall";
+      readonly id: string;
+      readonly status: "inProgress" | "completed" | "failed";
+      readonly result: unknown;
+      readonly error: unknown;
+    }
+  | { readonly type: "dynamicToolCall"; readonly id: string; readonly status: "inProgress" | "completed" | "failed" }
+  | { readonly type: "userMessage" | "plan" | "webSearch" | "imageView" | "contextCompaction"; readonly id: string };
+
+export interface TokenUsageBreakdown {
+  readonly totalTokens: number;
+  /** Input tokens, cached input included. */
+  readonly inputTokens: number;
+  readonly cachedInputTokens: number;
+  readonly cacheWriteInputTokens: number;
+  readonly outputTokens: number;
+  readonly reasoningOutputTokens: number;
+}
+
+interface InTurn {
+  readonly threadId: string;
+  readonly turnId: string;
+}
+
+/** The notifications a turn reads. Others arrive too and are left out. */
+export type TurnNotification =
+  | { readonly method: "turn/started"; readonly params: { readonly threadId: string; readonly turn: Turn } }
+  | { readonly method: "turn/completed"; readonly params: { readonly threadId: string; readonly turn: Turn } }
+  | { readonly method: "item/started"; readonly params: InTurn & { readonly item: ThreadItem } }
+  | { readonly method: "item/completed"; readonly params: InTurn & { readonly item: ThreadItem } }
+  | {
+      readonly method: "item/agentMessage/delta" | "item/commandExecution/outputDelta";
+      readonly params: InTurn & { readonly itemId: string; readonly delta: string };
+    }
+  | {
+      readonly method: "thread/tokenUsage/updated";
+      readonly params: InTurn & {
+        /** `last` is the latest model request's, `total` the thread's so far. */
+        readonly tokenUsage: { readonly last: TokenUsageBreakdown; readonly total: TokenUsageBreakdown };
+      };
+    }
+  | {
+      readonly method: "error";
+      readonly params: InTurn & { readonly error: TurnError; readonly willRetry: boolean };
+    };
+
+/** The requests Codex sends a turn's client, which Hobbots answers. Others are refused. */
+export type TurnServerRequest =
+  | {
+      readonly method: "item/commandExecution/requestApproval";
+      readonly params: InTurn & {
+        readonly itemId: string;
+        readonly command?: string | null;
+        readonly cwd?: string | null;
+      };
+    }
+  | { readonly method: "item/fileChange/requestApproval"; readonly params: InTurn & { readonly itemId: string } }
+  | {
+      readonly method: "mcpServer/elicitation/request";
+      readonly params: { readonly threadId: string; readonly turnId: string | null; readonly serverName: string };
+    }
+  | {
+      readonly method: "item/tool/call";
+      readonly params: InTurn & { readonly callId: string; readonly tool: string; readonly arguments: unknown };
+    }
+  | {
+      readonly method: "account/chatgptAuthTokens/refresh";
+      readonly params: { readonly reason: "unauthorized"; readonly previousAccountId?: string | null };
+    };
+
+/** The methods of `TurnServerRequest`, which a turn's App Server is given handlers for. */
+export const TURN_SERVER_REQUESTS = [
+  "item/commandExecution/requestApproval",
+  "item/fileChange/requestApproval",
+  "mcpServer/elicitation/request",
+  "item/tool/call",
+  "account/chatgptAuthTokens/refresh",
+] as const satisfies ReadonlyArray<TurnServerRequest["method"]>;

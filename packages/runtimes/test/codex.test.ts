@@ -28,7 +28,9 @@ const codexWith = (options: FakeCodexOptions, checkTimeout: Duration.Input = "10
   const executable = fakeCodex(dir, options);
   return {
     dir,
-    adapter: run(makeCodex({ executable, clientVersion: "test", checkTimeout })) as Promise<RuntimeAdapterShape>,
+    adapter: run(
+      makeCodex({ executable, clientVersion: "test", checkTimeout, workspaceDir: folder() }),
+    ) as Promise<RuntimeAdapterShape>,
   };
 };
 
@@ -218,7 +220,9 @@ describe("Codex's provider health", () => {
   });
 
   it("[TC-RT-005] reports a missing or broken Codex as unavailable, with no version", async () => {
-    const missing = await run(makeCodex({ executable: join(folder(), "codex"), clientVersion: "test" }));
+    const missing = await run(
+      makeCodex({ executable: join(folder(), "codex"), clientVersion: "test", workspaceDir: folder() }),
+    );
     expect(await Effect.runPromise(missing.health)).toMatchObject({ availability: "unavailable", version: null });
     const broken = await Effect.runPromise((await codexWith({ version: "" }).adapter).health);
     expect(broken).toMatchObject({ availability: "unavailable", version: null });
@@ -229,12 +233,14 @@ describe("Codex's provider health", () => {
     expect(health).toMatchObject({ availability: "unavailable", version: "0.166.0" });
   });
 
-  it("[TC-RT-007] enforces nothing until Codex turns run, and refuses a turn", async () => {
+  // TC-RT-007 is retired: Codex turns run now (#438), and TC-RT-032 checks what they enforce.
+  // covers PE-005, ADR 024
+  it("[TC-RT-032] offers no tool as safe while Codex's tool calls are refused, and cancels a turn through Codex", async () => {
     const codex = await codexWith({}).adapter;
     const enforcement = await Effect.runPromise(codex.enforcement);
-    expect(Object.values(enforcement).every((capability) => capability.status === "unsupported")).toBe(true);
-    const turn = await Effect.runPromise(Effect.exit(Stream.runDrain(codex.sendPrompt({} as never))));
-    expect(Exit.isFailure(turn)).toBe(true);
+    const { toolInterruption, ...tools } = enforcement;
+    expect(Object.values(tools).every((capability) => capability.status === "unsupported")).toBe(true);
+    expect(toolInterruption.status).toBe("verified");
   });
 });
 
