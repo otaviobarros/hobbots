@@ -16,6 +16,7 @@ import {
   type SDKMessage,
   type SDKRateLimitInfo,
   type SDKResultSuccess,
+  type SDKUsageReport,
   type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import {
@@ -35,6 +36,7 @@ import {
 } from "@hobbots/agents";
 import {
   type CommitIdentity,
+  type PlanUsage,
   policySandbox,
   type ReplyUsage,
   type RuntimeEnforcement,
@@ -43,6 +45,7 @@ import {
   RuntimeModels,
   type SandboxState,
   stableJson,
+  unreportedPlan,
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
@@ -534,6 +537,42 @@ export const turnUsage = (result: SDKResultSuccess): ReplyUsage => ({
   cacheReadTokens: result.usage.cache_read_input_tokens,
   cacheWriteTokens: result.usage.cache_creation_input_tokens,
 });
+
+/**
+ * A plan's meters from Claude Code's `/usage` report, as the server sent them
+ * (https://code.claude.com/docs/en/agent-sdk/typescript#sdkusagereport). An API-key session, a token
+ * without the profile scope or a failed fetch reports no rows, and so reports nothing.
+ */
+export const planFromReport = (report: SDKUsageReport | undefined, checkedAt: string): PlanUsage => {
+  const limits = report?.rate_limits?.limits;
+  if (!report?.rate_limits || !limits) return unreportedPlan("claude-code", checkedAt);
+  const extra = report.rate_limits.extra_usage;
+  return {
+    runtime: "claude-code",
+    reported: true,
+    checkedAt,
+    meters: limits.map((row) => ({
+      kind: row.kind,
+      group: row.group,
+      percent: row.percent,
+      resetsAt: row.resets_at,
+      scope: row.scope?.model?.display_name ?? row.scope?.surface?.display_name ?? null,
+      severity: row.severity,
+      active: row.is_active,
+    })),
+    extraUsage: extra
+      ? {
+          enabled: extra.is_enabled,
+          monthlyLimit: extra.monthly_limit,
+          usedCredits: extra.used_credits,
+          currency: extra.currency ?? null,
+        }
+      : null,
+  };
+};
+
+/** How long the plan's meters are kept before Claude Code is asked again. */
+const planMaxAge = Duration.minutes(1);
 
 /**
  * Maps one turn's SDK messages to runtime events. Stateful, so make one per turn: a thinking block
@@ -1229,7 +1268,46 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
       );
     });
 
-    return RuntimeAdapter.of({ health, models, enforcement: Effect.succeed(declared), sendPrompt });
+    // `/usage` is a local command: Claude Code answers it from the plan's usage endpoint without a
+    // model request, so reading the meters spends none of them. The session is not saved.
+    const readPlan = (binary: string) =>
+      Effect.acquireRelease(
+        Effect.sync(() =>
+          query({ prompt: "/usage", options: { ...baseOptions(config, binary), persistSession: false } }),
+        ),
+        (session) => Effect.sync(() => session.close()),
+      ).pipe(
+        Effect.flatMap((session) =>
+          Effect.tryPromise({
+            try: async () => {
+              for await (const message of session) {
+                if (message.type === "assistant" && message.usage_report !== undefined) return message.usage_report;
+                if (message.type === "result") return undefined;
+              }
+              return undefined;
+            },
+            catch: errorMessage,
+          }),
+        ),
+        Effect.timeout(checkTimeout),
+        Effect.scoped,
+      );
+
+    const planCache = expiringCache<PlanUsage>(() => planMaxAge);
+    const planUsage = Effect.gen(function* () {
+      const checkedAt = DateTime.formatIso(yield* DateTime.now);
+      const located = yield* locate;
+      if (located._tag !== "Found") return unreportedPlan("claude-code", checkedAt);
+      return yield* planCache(
+        `${located.binary}@${located.version}`,
+        readPlan(located.binary).pipe(
+          Effect.map((report) => planFromReport(report, checkedAt)),
+          Effect.orElseSucceed(() => unreportedPlan("claude-code", checkedAt)),
+        ),
+      );
+    });
+
+    return RuntimeAdapter.of({ health, models, enforcement: Effect.succeed(declared), planUsage, sendPrompt });
   });
 
 /** Claude Code with tools under the hub's policy engine and process sandbox. */

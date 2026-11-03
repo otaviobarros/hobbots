@@ -20,7 +20,7 @@ import { NotificationSettings } from "./settings/notification-settings.tsx";
 import { ReduceMotionRow } from "./settings/reduce-motion.tsx";
 import { StandingRuleSettings } from "./standing-rules/standing-rules.tsx";
 
-function Page({
+export function Page({
   icon,
   title,
   intro,
@@ -65,19 +65,6 @@ function Panel({
       <span className="lbl text-moonlight">{label}</span>
       {children}
     </section>
-  );
-}
-
-export function UsagePage() {
-  return (
-    <Page icon="Usage" title="Usage" intro="One potion per connected AI plan, and who used what.">
-      <Panel label="AI plans">
-        <p className="m-0 text-secondary-text">
-          Subscription windows drain and refill, API keys show spend and local models are unlimited. Numbers appear here
-          once each provider reports them.
-        </p>
-      </Panel>
-    </Page>
   );
 }
 
