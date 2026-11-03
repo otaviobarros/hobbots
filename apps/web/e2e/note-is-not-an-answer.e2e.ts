@@ -54,6 +54,8 @@ const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.string
 test("[TC-OR-254] after your note on a Task whose question waits for you, the question still waits in the Inbox, once", async ({
   page,
 }) => {
+  // The lead's briefing is echoed word by word, so the line about the note arrives late in its turn.
+  test.setTimeout(120_000);
   const current = await startHub(dataDir);
   hub = current;
   await request(current, "PATCH", "/api/setup", {
@@ -95,7 +97,7 @@ test("[TC-OR-254] after your note on a Task whose question waits for you, the qu
   await request(current, "POST", `/api/tasks/${rook}/notes`, { key: "dark-note", text: "dark" });
 
   // Frodo's turn about the note is told the question still waits for you.
-  await expect(page.getByText("The user left a note").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("The user left a note").first()).toBeVisible({ timeout: 45_000 });
   await expect(page.getByText("Questions only the user can answer, waiting in the user's Inbox:").last()).toBeVisible();
 
   // The Inbox still has the question, once, never answered by the note.

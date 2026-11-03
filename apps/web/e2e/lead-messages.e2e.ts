@@ -54,6 +54,8 @@ const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.string
 test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked member, which finishes with nothing cancelled", async ({
   page,
 }) => {
+  // Every lead turn's briefing is echoed word by word, so its turns take longer than a member's.
+  test.setTimeout(120_000);
   const current = await startHub(dataDir);
   hub = current;
   await request(current, "PATCH", "/api/setup", {
@@ -95,7 +97,7 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
   await expect(pip).toContainText("Blocked", { timeout: 20_000 });
 
   // You ran git init yourself and tell Frodo, who reads the work and messages Pip.
-  await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 20_000 });
+  await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 45_000 });
   await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
   await composer.fill(
     [
@@ -106,7 +108,7 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
   );
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await composer.press("Enter");
-  await expect(page.getByText("Sent to hob").first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Sent to hob").first()).toBeVisible({ timeout: 45_000 });
 
   // Pip finishes; nothing on the Quest was cancelled.
   await expect(pip).toContainText("Done", { timeout: 20_000 });
