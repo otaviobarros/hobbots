@@ -11,7 +11,7 @@ import {
   ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { memberPrompt, ownerBriefing, RESULTS_RULE } from "../src/briefs.ts";
+import { memberPrompt, memberReminder, ownerBriefing, RESULTS_RULE } from "../src/briefs.ts";
 
 // Issue #566: a lead answered its member that results "will reach you as context" while the
 // member's prompt said they would come as a hand-off. The lead's and the member's prompts now
@@ -101,5 +101,30 @@ describe("how results move in a Quest", () => {
     }
     expect(RESULTS_RULE).toContain("the hub gives it what they returned");
     expect(RESULTS_RULE).toContain("only when the lead calls hand_off");
+  });
+
+  // covers OR-003, OR-004, OR-005
+  it("[TC-OR-226] a member that leads a nested Quest is told the rule and the lead's duty on every later turn, and one that leads none is not", () => {
+    const nested = new Quest({
+      ...quest,
+      id: QuestId.make("nested"),
+      taskId: TaskId.make("backend"),
+      leadId: QUILL,
+      parentQuestId: quest.id,
+      depth: 2,
+    });
+    const read = tree([quest, nested], task("backend", QUILL, "active"), task("review", PIP, "active"));
+    const leading = memberReminder(read.tasks[1] as Task, read, "Frodo");
+    const lead = ownerBriefing(read.tasks[0] as Task, read);
+    const guidance = `You lead the Quest on this Task. ${RESULTS_RULE}`;
+    expect(leading).toContain(guidance);
+    expect(leading).toContain("never hand a Task what the Tasks it comes after returned");
+    // The same words the chat lead's turn is told, so every lead of the tree hears one rule.
+    expect(lead.split("\n").find((line) => line.startsWith(guidance))).toBe(
+      leading.split("\n").find((line) => line.startsWith(guidance)),
+    );
+    // The finishing line still ends the reminder.
+    expect(leading.endsWith("your final reply becomes its result.")).toBe(true);
+    expect(memberReminder(read.tasks[2] as Task, read, "Frodo")).not.toContain(RESULTS_RULE);
   });
 });

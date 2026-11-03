@@ -6,6 +6,7 @@ import {
   hub,
   memberTask,
   nothingOpen,
+  PIP,
   promptsTo,
   QUILL,
   ROOK,
@@ -19,6 +20,8 @@ import {
 
 /** The rule's heart, as packages/orchestration/src/briefs.ts states it to leads and members alike. */
 const RULE = "anything else one member made reaches another only when the lead calls hand_off";
+/** The lead's duty, which follows the rule in each turn on a Task that leads a Quest. */
+const DUTY = "never hand a Task what the Tasks it comes after returned";
 
 // Issue #566: a lead told its member that results "will reach you as context" when they would not.
 // Now each turn on a Task that leads a Quest states how results move, in the words the member is
@@ -90,6 +93,50 @@ describe("a lead that follows the hand-off rule", () => {
     expect(rook.result?.summary).toBe("Frontend reads core.py");
     expect(taskOf(done, QUILL).state).toBe("completed");
     expect(done.tasks[0]?.result?.summary).toBe("The app is built");
+    await run(nothingOpen);
+  }, 30_000);
+
+  // covers OR-003, OR-004, OR-005
+  it("[TC-OR-227] Rook, who leads a nested Quest under Aldric's, is told the rule and his duty in the turn Pip's result reaches him", async () => {
+    const { run, requests } = await startHub(await sharedDatabase());
+    await run(
+      send([
+        "Build the app",
+        hub("delegate_task", {
+          key: "frontend",
+          hob: "Rook",
+          brief: [
+            "Write the frontend",
+            hub("delegate_task", {
+              key: "styles",
+              hob: "Pip",
+              brief: [
+                "Write the styles",
+                hub("complete_task", { key: "styles-done", summary: "Styles in theme.css" }),
+              ].join("\n"),
+            }),
+            hub("wait_for", { key: "rook-wait", tasks: ["$styles.task_id"] }),
+            `fake:then ${hub("complete_task", { key: "frontend-done", summary: "Frontend uses theme.css" })}`,
+          ].join("\n"),
+        }),
+        hub("wait_for", { key: "wait", tasks: ["$frontend.task_id"] }),
+        `fake:then ${hub("complete_task", { key: "wrap", summary: "The app is built" })}`,
+        `fake:then fake:then ${hub("complete_task", { key: "wrap-later", summary: "The app is built" })}`,
+      ]),
+    );
+    const done = await run(settledTree((tree) => tree.tasks[0]?.state === "completed"));
+    const rook = taskOf(done, ROOK);
+    expect(done.quests.map((quest) => quest.taskId)).toEqual([done.tasks[0]?.id, rook.id]);
+    expect(taskOf(done, PIP).parentId).toBe(rook.id);
+
+    // Rook's first turn is a member's; the one Pip's result reaches is a lead's, and says so.
+    const [first, resumed] = promptsTo(requests, rook);
+    expect(first?.prompt).not.toContain(DUTY);
+    expect(resumed?.prompt).toContain("Styles in theme.css");
+    expect(resumed?.prompt).toContain(`You lead the Quest on this Task.`);
+    expect(resumed?.prompt).toContain(RULE);
+    expect(resumed?.prompt).toContain(DUTY);
+    expect(rook.result?.summary).toBe("Frontend uses theme.css");
     await run(nothingOpen);
   }, 30_000);
 });

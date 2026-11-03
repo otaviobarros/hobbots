@@ -126,6 +126,16 @@ const LEAD_DUTY =
   "So never hand a Task what the Tasks it comes after returned. Call hand_off when a member needs something else, or needs a result while it is already running.";
 
 /**
+ * What a turn on `task` is told when that Task leads a Quest: the rule, then the lead's duty. Both
+ * the owner's chat turns and a member's later turns carry it, so a member that leads a nested Quest
+ * hears it on every turn too.
+ */
+const leadGuidance = (task: Task, tree: TaskTree): ReadonlyArray<string> =>
+  tree.quests.some((quest) => quest.taskId === task.id)
+    ? [`You lead the Quest on this Task. ${RESULTS_RULE} ${LEAD_DUTY}`]
+    : [];
+
+/**
  * The prompt a party member's session starts from (ADR 018): the lead's brief first, then what the
  * lead expects back, what each Task it comes after returned and anything handed to it, then how to
  * report. The member works with its lead only: the hub gives it what the Tasks it comes after
@@ -166,7 +176,7 @@ const standingLine = (task: Task) =>
 
 /**
  * What a later turn of a member's session is reminded of, after the work that arrived for it: its
- * Task, where each Task its work builds on stands now, read when the turn starts, and how to finish.
+ * Task, the lead's guidance when it leads a nested Quest, where each Task its work builds on stands now, read when the turn starts, and how to finish.
  * A session resumed after one of them completed so tells "done, and here is its result" from
  * "still running" without asking its lead. Each result is cut to `SUMMARY_LIMIT`, and the whole list
  * to `STEP_INPUT_LIMIT`.
@@ -175,6 +185,7 @@ export const memberReminder = (task: Task, tree: TaskTree, lead: string): string
   const standing = buildsOn(task, tree).map(standingLine);
   return [
     `You work on Task ${task.id} for ${lead}.`,
+    ...leadGuidance(task, tree),
     // Every later turn carries it, so all of it together stays within the step input limit; the
     // lines around it are never cut.
     ...(standing.length === 0
@@ -274,10 +285,9 @@ export const ownerBriefing = (task: Task, tree: TaskTree): string => {
   const answers = answeredFor(task, tree).map(
     (question) => `- ${cut(question.text, SUMMARY_LIMIT)} Answer: ${cut(question.answer ?? "", SUMMARY_LIMIT)}`,
   );
-  const leads = tree.quests.some((quest) => quest.taskId === task.id);
   return [
     `You are working on Task ${task.id} (${task.state}) for this conversation${above === 0 ? "" : ", under another Task"}: ${firstLine(task.brief)}`,
-    ...(leads ? [`You lead the Quest on this Task. ${RESULTS_RULE} ${LEAD_DUTY}`] : []),
+    ...leadGuidance(task, tree),
     ...(answers.length === 0 ? [] : ["Answers to the questions you asked about it:", ...answers]),
     ...(under.length === 0
       ? []
