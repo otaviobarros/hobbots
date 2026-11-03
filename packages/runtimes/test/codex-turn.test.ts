@@ -52,6 +52,8 @@ const fakeServer = (options: {
   readonly asks?: ReadonlyArray<{ readonly method: string; readonly params: unknown }>;
   /** Ends the process after the script, before any `turn/completed`. */
   readonly dies?: boolean;
+  /** Never answers `turn/interrupt`, as a Codex that stopped answering. */
+  readonly deaf?: boolean;
 }) => {
   const requests: Array<{ readonly method: string; readonly params: unknown }> = [];
   const answers: Array<unknown> = [];
@@ -84,6 +86,7 @@ const fakeServer = (options: {
               yield* Effect.forkDetach(run);
               return { turn: { id: TURN, status: "inProgress", error: null } };
             case "turn/interrupt":
+              if (options.deaf) return yield* Effect.never;
               yield* PubSub.publish(notes, completed("interrupted"));
               return {};
             default:
@@ -257,6 +260,26 @@ describe("a Codex turn", () => {
       threadId: THREAD,
       turnId: TURN,
     });
+    expect(server.closed()).toBe(1);
+  });
+
+  // covers RT-001, EX-004
+  it("[TC-RT-033] ends the process after the grace period when Codex never answers the interrupt", async () => {
+    const server = fakeServer({ script: [delta("m1", "Working")], deaf: true });
+    const seen = await Effect.runPromise(
+      Effect.gen(function* () {
+        const events: Array<RuntimeEvent> = [];
+        const fiber = yield* runCodexTurn({ ...config(server.start), interruptGrace: "50 millis" }, prompt()).pipe(
+          Stream.runForEach((event) => Effect.sync(() => events.push(event))),
+          Effect.forkChild,
+        );
+        yield* Effect.yieldNow.pipe(Effect.repeat({ until: () => events.length >= 2 }));
+        yield* Fiber.interrupt(fiber).pipe(Effect.timeout("5 seconds"));
+        return events;
+      }),
+    );
+    expect(seen.map((event) => event._tag)).toEqual(["SessionStarted", "TextDelta"]);
+    expect(server.requests.map((request) => request.method)).toContain("turn/interrupt");
     expect(server.closed()).toBe(1);
   });
 

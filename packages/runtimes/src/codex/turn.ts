@@ -335,8 +335,16 @@ export const runCodexTurn = (
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           if (yield* Deferred.isDone(ended)) return;
-          yield* server.request("turn/interrupt", { threadId, turnId: started.turn.id }).pipe(Effect.ignore);
-          yield* Deferred.await(ended).pipe(Effect.timeout(config.interruptGrace ?? "10 seconds"), Effect.ignore);
+          // One deadline covers the request and its acknowledgement, so a Codex that stops answering
+          // still has its process ended.
+          yield* server
+            .request("turn/interrupt", { threadId, turnId: started.turn.id })
+            .pipe(
+              Effect.ignore,
+              Effect.andThen(Deferred.await(ended)),
+              Effect.timeout(config.interruptGrace ?? "10 seconds"),
+              Effect.ignore,
+            );
         }),
       );
 
