@@ -6,7 +6,7 @@
 
 | Target | Planned route | Status in this foundation |
 |---|---|---|
-| Codex | Codex App Server over stdio, 0.166.0 or later ([ADR 024](../decisions/024-codex-adapter.md)) | Selected; App Server behavior and the policy on its tool calls verified with a stand-in model; a whole turn in the sandbox, macOS and a real sign-in still need verification. |
+| Codex | Codex App Server over stdio, 0.166.0 or later ([ADR 024](../decisions/024-codex-adapter.md)) | Selected; App Server behavior, the policy on its tool calls and a whole turn in the sandbox on macOS verified with a stand-in model; the sandbox on Linux and a real sign-in still need verification. |
 | Claude Code | Supported CLI/SDK integration | Selected; exact route/version needs compatibility validation. |
 | ACP agents | ACP client adapter with capability negotiation | Foundation selected; per-agent interoperability is not yet demonstrated. |
 | Other CLIs/local-model runtimes | Individually validated future adapters | Outside initial support guarantees. |
@@ -43,7 +43,7 @@ Codex 0.166.0, probed on 2026-11-03 on Linux with a stand-in model ([ADR 024](..
 | Streaming | Item notifications and text deltas; command output streams (`ToolOutput`) | Verified |
 | Interruption | `turn/interrupt`, acknowledged by `turn/completed` with status `interrupted` | Verified |
 | Tool interception | Approval requests for every command, file change and MCP call under `untrusted`, decided by the policy and recorded before they run, with execution rules closed off (folders untrusted, `CODEX_HOME` read-only but for what Codex writes) | Verified ([evidence](../evidence/2026-11-03-codex-tool-policy.md)); the read-only home checked at start only |
-| Process sandbox | Hobbots' sandbox around the App Server; Codex's own off (`externalSandbox`) | Codex starts inside it on Linux; a whole turn inside it unverified; declared verified on macOS, where Claude Code's is |
+| Process sandbox | Hobbots' sandbox around the App Server; Codex's own off (`externalSandbox`) | Verified on macOS; Codex starts inside it on Linux, a whole turn there unverified |
 | Hub tools | Dynamic tools, called back on the App Server channel | Verified |
 | Tool events | `item/started`, `item/completed`, output deltas, reported to the Workbench as Claude Code's are | Verified |
 | Usage | `thread/tokenUsage/updated` per turn; no cost | Verified; rate limits unverified |
