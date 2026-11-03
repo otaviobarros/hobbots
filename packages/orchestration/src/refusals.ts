@@ -58,6 +58,7 @@ export const makeRefusals = (
     }).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not record a refused Task tool call", cause)));
 
   return {
+    record,
     /** `made`, with its refusal recorded. */
     recorded:
       (from: RefusedFrom) =>

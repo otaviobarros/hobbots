@@ -284,6 +284,8 @@ export const TaskToolRefusal = Schema.Literals([
   "no-task",
   "task-state",
   "claim-stale",
+  // A Charm call, such as `git_init` or a GitHub write, the hub refused (#664): its message says why.
+  "charm-refused",
 ]);
 export type TaskToolRefusal = typeof TaskToolRefusal.Type;
 

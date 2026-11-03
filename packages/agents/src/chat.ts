@@ -43,7 +43,13 @@ import { type CarriedEnd, type CarriedWork, Continuations } from "./continuation
 import { checkRuntimeBrain } from "./hobs.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
-import { type RuntimeEvent, runtimeAdapters, type ToolAccess, type ToolStartedEvent } from "./runtime.ts";
+import {
+  type HubTools,
+  type RuntimeEvent,
+  runtimeAdapters,
+  type ToolAccess,
+  type ToolStartedEvent,
+} from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
 import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
 import { type ChatTaskTurn, type ChatTurnOutcome, TaskTurns } from "./task-turns.ts";
@@ -626,10 +632,12 @@ export class ChatService extends Context.Service<
                     redactor,
                     approvals: turnApprovals?.approvals ?? null,
                   };
+                  // A Charm call's refusal is recorded as a Task tool's is, when the turn has Task tools.
+                  const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);
                   return combineHubTools(
                     taskTurn?.hubTools ?? null,
-                    yield* localGitFor(charmTurn),
-                    yield* charmsFor(charmTurn),
+                    recorded(yield* localGitFor(charmTurn)),
+                    recorded(yield* charmsFor(charmTurn)),
                   );
                 }),
               },

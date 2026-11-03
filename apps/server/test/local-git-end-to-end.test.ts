@@ -55,8 +55,9 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-local-git-e2e-")));
 const project = join(temp, "nettle-project");
+const frodoProject = join(temp, "frodo-project");
 const dataDir = join(temp, "data");
-for (const folder of [project, dataDir]) mkdirSync(folder, { recursive: true });
+for (const folder of [project, frodoProject, dataDir]) mkdirSync(folder, { recursive: true });
 
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
@@ -173,7 +174,11 @@ const endedAttempts = (thread: Thread, count: number) =>
 describe("creating a Git repository from the sandbox, end to end", () => {
   // covers PE-005, UX-006
   it("[TC-PE-327] a hob initializes a repository in its empty folder and commits, and the Workbench shows the commit as succeeded", async () => {
-    await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
+    await request("PATCH", "/api/setup", {
+      completed: true,
+      safetyPreset: "balanced",
+      approvedFolders: [project, frodoProject],
+    });
     const nettle = (
       await request<Agent>("POST", "/api/agents", {
         name: "Nettle",
@@ -224,5 +229,56 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     expect(activity.commands.map(({ command, folder, state }) => ({ command, folder, state }))).toEqual([
       { command: "git add README.md && git commit -m 'First'", folder: project, state: "succeeded" },
     ]);
+  });
+  // covers PE-005, OR-007
+  it("[TC-PE-424] a refused git_init is recorded with its reason and fails its step, and one that created a repository is on the Task", async () => {
+    await request("PATCH", "/api/setup", {
+      completed: true,
+      safetyPreset: "balanced",
+      approvedFolders: [project, frodoProject],
+    });
+    const frodo = (
+      await request<Agent>("POST", "/api/agents", {
+        name: "Frodo",
+        ...roleFields("writer"),
+        lookSeed: 664,
+        lookColor: "moss",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+      })
+    ).body;
+    const thread = (await request<Thread>("POST", `/api/agents/${frodo.id}/threads`)).body;
+    await exchange(thread, "Start a repository", hub("start_quest", { key: "quest", goal: "Start a repository" }));
+    // A stub `.git` is already there, so the first git_init is refused; the second makes one in a new folder.
+    mkdirSync(join(frodoProject, ".git"));
+    const inner = join(frodoProject, "app");
+    const reply = await exchange(
+      thread,
+      "Make it a repository",
+      hub("git_init", { folder: frodoProject }),
+      hub("git_init", { folder: inner }),
+    );
+    const [refusedStep, createdStep] = reply.steps.filter((step) => step.label === GIT_INIT_LABEL);
+    expect(refusedStep).toMatchObject({ state: "failed" });
+    expect(JSON.stringify(refusedStep)).toContain("is already a Git repository");
+    expect(createdStep).toMatchObject({ state: "done" });
+
+    const [tree] = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body.trees;
+    expect(tree?.refusals).toEqual([
+      expect.objectContaining({
+        agentId: frodo.id,
+        taskId: tree?.tasks[0]?.id,
+        tool: "git_init",
+        key: null,
+        reason: "charm-refused",
+        message: expect.stringContaining("is already a Git repository"),
+      }),
+    ]);
+    // Whoever reads the work sees who created the repository.
+    expect(tree?.checkpoints.map((checkpoint) => checkpoint.summary)).toContain(
+      `Created a Git repository in ${inner} with git_init.`,
+    );
   });
 });

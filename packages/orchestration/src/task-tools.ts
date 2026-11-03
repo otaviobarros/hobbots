@@ -41,6 +41,7 @@ import {
   type TaskToolCaller,
   type TaskToolLimits,
 } from "./call-scope.ts";
+import { makeCharmRecords } from "./charm-records.ts";
 import { makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeDelegating } from "./delegating.ts";
 import { makeLeading } from "./leading.ts";
@@ -203,6 +204,7 @@ export class TaskTools extends Context.Service<
         // Without the hub's redactor, secret shapes are still redacted.
         const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
         const refusals = makeRefusals(ledger, announce, redactor);
+        const charmRecords = makeCharmRecords(tasks, refusals, announce);
 
         const call = (caller: TaskToolCaller, name: string, raw: unknown) =>
           callFrom(
@@ -330,6 +332,7 @@ export class TaskTools extends Context.Service<
               end,
               workingOn: chat.workingOn,
               scope: source.scope,
+              recordCharms: charmRecords({ agentId: turn.agentId, scope: source.scope, taskId: () => known }),
               attempt: Effect.sync(() => attemptId),
             } satisfies ChatTaskTurn;
           });

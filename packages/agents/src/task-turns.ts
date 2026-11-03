@@ -41,6 +41,11 @@ export interface ChatTaskTurn {
    * else its reply. Fixed for the whole turn, so a retry of a call that started a Task is still a retry.
    */
   readonly scope: string;
+  /**
+   * `charms`, with each Charm call's refusal recorded as a Task tool's is, and a repository it created
+   * recorded on the Task the turn works on (#664).
+   */
+  readonly recordCharms: (charms: HubTools | null) => HubTools | null;
   /** The Attempt the turn runs on its Task: from the start when briefed on one, once a call starts one, else null. */
   readonly attempt: Effect.Effect<AttemptId | null>;
   /** Ends the Attempt the turn started on its Task, if it started one. */

@@ -104,6 +104,32 @@ describe("tool call keys per Task", () => {
     );
   });
 
+  // covers OR-007, EX-003
+  it("[TC-OR-424] a refused Charm call is stored with its code, and a retry with its key is the same record", async () => {
+    await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const ledger = yield* TaskToolCalls;
+        const call = {
+          agentId: FRODO,
+          scope: "task:quest-a",
+          key: "push-1",
+          tool: "github_push",
+          input: '{"branch":"feat/x"}',
+          taskId: null,
+          refused: new TaskToolRefused({ reason: "charm-refused", message: "GitHub refused the push." }),
+          at: now,
+        };
+        const first = yield* ledger.refused(call);
+        const again = yield* ledger.refused(call);
+        expect(first.value).toMatchObject({ tool: "github_push", reason: "charm-refused", tries: 1 });
+        expect(again.value).toMatchObject({ id: first.value.id, tries: 2 });
+        const sql = yield* SqlClient.SqlClient;
+        expect(yield* sql`SELECT id FROM task_tool_refusals`).toHaveLength(1);
+      }),
+    );
+  });
+
   // covers IN-003, EX-003
   it("[TC-OR-422] a Charm call's key is a new call in other work, and returns the first call in its own", async () => {
     const write = (messageId: string, attempt: string) =>
