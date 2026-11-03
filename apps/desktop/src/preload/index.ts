@@ -56,7 +56,14 @@ const connected = process.argv.includes(CONNECTED_MODE_ARGUMENT);
 contextBridge.exposeInMainWorld(
   "hobbots",
   connected
-    ? { ...shared, connection: { get: () => ipcRenderer.invoke(connectionChannels.get) } }
+    ? {
+        ...shared,
+        // The hub this computer uses, and Disconnect, which takes nothing from the page.
+        connection: {
+          get: () => ipcRenderer.invoke(connectionChannels.get),
+          disconnect: () => ipcRenderer.invoke(connectionChannels.disconnect),
+        },
+      }
     : {
         ...shared,
         // Opens the system folder picker; it takes nothing from the page and answers a path or null.

@@ -513,6 +513,30 @@ export const messages = {
       revokeFailed: "Hobbots could not revoke it. Try again in a moment.",
       footer:
         "Each new device asks once, here and with a notification. A revoked device is signed out right away and has to ask again.",
+      windowOn: ({ hub }: { hub: string }) => `The Hobbots window on ${hub}`,
+      onHub: ({ hub }: { hub: string }) => `on ${hub}`,
+      thisMac: "this Mac",
+    },
+    connectedHub: {
+      intro: "This Mac uses Hobbots on another computer. Hobs, chats and files live there, and hobs work there.",
+      connected: ({ hub }: { hub: string }) => `Connected to ${hub}`,
+      notConnected: ({ hub }: { hub: string }) => `Not connected to ${hub} right now`,
+      overTailscale: "over Tailscale",
+      versions: ({ hub, hubVersion, appVersion }: { hub: string; hubVersion: string; appVersion: string }) =>
+        `Hobbots ${hubVersion} on ${hub} · ${appVersion} on this Mac`,
+      appVersion: ({ appVersion }: { appVersion: string }) => `Hobbots ${appVersion} on this Mac`,
+      managedThere: ({ hub }: { hub: string }) =>
+        `Remote access, the port and HTTPS are set on ${hub}, in Settings › Devices.`,
+      disconnect: "Disconnect…",
+      disconnectLabel: ({ hub }: { hub: string }) => `Disconnect from ${hub}`,
+      confirm: ({ hub }: { hub: string }) => `Disconnect this Mac from ${hub}?`,
+      confirmNote: ({ hub }: { hub: string }) =>
+        `${hub} signs this Mac out, and Hobbots here goes back to setup. Your hobs, chats and files stay on ${hub}.`,
+      keep: "Keep",
+      confirmDisconnect: "Disconnect",
+      disconnecting: "Disconnecting…",
+      failed: "Hobbots could not disconnect. Try again in a moment.",
+      readFailed: "Hobbots could not read which hub this Mac uses. Try again in a moment.",
     },
   },
   where: {

@@ -37,7 +37,7 @@ interface DesktopSettings {
   readonly notifyRequests?: boolean;
   readonly notifyDevices?: boolean;
   readonly notifySound?: boolean;
-  readonly mode?: DesktopMode["mode"];
+  readonly mode?: DesktopMode["mode"] | undefined;
   readonly connection?: HubConnection | undefined;
 }
 

@@ -36,4 +36,10 @@ export const messages = {
     askAgainDetail: ({ hub }: { hub: string }) => `Ask ${hub} again, or disconnect.`,
     ok: "OK",
   },
+  disconnect: {
+    stillListed: ({ hub }: { hub: string }) => `Disconnected from ${hub}`,
+    stillListedDetail: ({ hub }: { hub: string }) =>
+      `Hobbots could not reach ${hub}, so it still lists this Mac. Revoke it there, in Settings › Devices.`,
+    ok: "OK",
+  },
 } as const;

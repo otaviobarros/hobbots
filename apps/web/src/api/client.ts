@@ -18,6 +18,20 @@ export interface NotificationChoices {
   readonly sound: boolean;
 }
 
+/** What a connected desktop says about the hub it uses (ADR 025): names, address, versions and state, never the token. */
+export interface DesktopConnection {
+  readonly hubName: string;
+  readonly nodeName: string;
+  readonly address: string;
+  /** This computer's device on the hub. */
+  readonly deviceId: string;
+  readonly appVersion: string;
+  /** The hub's version as it last said, or null before it answered. */
+  readonly hubVersion: string | null;
+  /** `connected`, or why the hub cannot be used right now. */
+  readonly state: string;
+}
+
 declare global {
   interface Window {
     /** Set by the Electron preload script. */
@@ -50,6 +64,15 @@ declare global {
        * notification is clicked; answers a function that stops listening.
        */
       readonly onOpenRequest?: (listener: (requestId: string) => void) => () => void;
+      /**
+       * Only on a connected desktop: the hub it uses, and Disconnect, which revokes this computer
+       * on the hub, forgets the hub here and starts the app again at setup's first screen.
+       * `stillListed` when the hub could not be reached, so it still lists this computer.
+       */
+      readonly connection?: {
+        readonly get: () => Promise<DesktopConnection>;
+        readonly disconnect: () => Promise<{ readonly stillListed: boolean }>;
+      };
     };
   }
 }

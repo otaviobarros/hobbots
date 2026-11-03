@@ -34,6 +34,8 @@ describe("the preload bridge", () => {
   it("[TC-DP-160] offers a connected desktop no folder picker and nothing that reaches this computer's files", async () => {
     const shared = ["keepRunning", "loginItem", "notifications", "onOpenRequest"];
     expect(await bridgeWith([CONNECTED_MODE_ARGUMENT])).toEqual([...shared, "connection"].sort());
+    // The hub it uses, and Disconnect, which takes nothing from the page.
+    expect(Object.keys(exposed.bridge?.connection as object).sort()).toEqual(["disconnect", "get"]);
     // On the hub, the folder picker and Show in Finder stay.
     expect(await bridgeWith([])).toEqual([...shared, "chooseFolder", "showFile"].sort());
   });

@@ -5,7 +5,9 @@ import { CONNECT_PROTOCOL } from "@hobbots/api";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { startMode } from "../src/main/app-mode.ts";
 import { pairAsDesktop } from "../src/main/desktop-pairing.ts";
+import { disconnectFromHub } from "../src/main/disconnect.ts";
 import {
+  type ConnectionState,
   connectedHub,
   type HubOrigins,
   hubOrigins,
@@ -16,7 +18,7 @@ import {
   windowRequestGate,
 } from "../src/main/hub-connection.ts";
 import { followHub } from "../src/main/hub-events.ts";
-import { fileSettingsStore, type HubConnection } from "../src/main/settings.ts";
+import { desktopMode, fileSettingsStore, type HubConnection } from "../src/main/settings.ts";
 import { thisComputer } from "../src/main/tailnet.ts";
 import {
   type BeforeSendHeaders,
@@ -78,10 +80,28 @@ const fakeHub = (options: { health?: unknown; pretend?: boolean } = {}) => {
   const sent: Array<Sent> = [];
   let decision: "pending" | "allowed" = options.pretend ? "allowed" : "pending";
   let revoked = false;
+  let reachable = true;
+  /** This computer's device as the hub lists it. */
+  const device = () => ({
+    id: "dev1",
+    name: DEVICE.name,
+    kind: "desktop",
+    revokedAt: revoked ? "2026-11-03T09:00:00.000Z" : null,
+  });
+  /** The hub's device list, and this device's own revoke with its token. */
+  const deviceRoute = (route: string, headers: Headers) => {
+    if (route === "GET /api/devices") return json([device()]);
+    if (route !== "POST /api/devices/dev1/revoke") return json({}, 404);
+    if (headers.get("authorization") !== "Bearer hbd_token") return json({ _tag: "DeviceRequired" }, 401);
+    if (revoked) return json({ _tag: "DeviceRevoked", message: "This device was removed from this hub." }, 401);
+    revoked = true;
+    return json(device());
+  };
   const fetch = (async (url: string | URL | Request, init: RequestInit = {}) => {
     const parsed = new URL(String(url));
     const headers = new Headers(init.headers);
     const method = init.method ?? "GET";
+    if (!reachable) throw new TypeError("fetch failed");
     sent.push({
       method,
       path: parsed.pathname,
@@ -108,7 +128,7 @@ const fakeHub = (options: { health?: unknown; pretend?: boolean } = {}) => {
       case "GET /api/events":
         return new Response(readyFrame, { headers: { "content-type": "text/event-stream" } });
       default:
-        return json({}, 404);
+        return deviceRoute(`${method} ${parsed.pathname}`, headers);
     }
   }) as typeof globalThis.fetch;
   return {
@@ -119,6 +139,10 @@ const fakeHub = (options: { health?: unknown; pretend?: boolean } = {}) => {
     },
     revoke: () => {
       revoked = true;
+    },
+    /** Turns the hub's computer off, or on again: nothing answers while it is off. */
+    setReachable: (on: boolean) => {
+      reachable = on;
     },
     /** The requests that carried a token or a pairing secret. */
     withSecrets: () => sent.filter((request) => request.authorization !== null),
@@ -445,5 +469,92 @@ describe("the connected desktop", () => {
       expect((await pair(hub, elsewhere.lookup, async () => {}).outcome).kind).toBe("notYourNode");
       expect(hub.sent).toEqual([]);
     }
+  });
+});
+
+describe("Disconnect on a connected desktop", () => {
+  /** A connected desktop with its token in the keychain, its settings, and Disconnect against `hub`. */
+  const connectedTo = async (hub: ReturnType<typeof fakeHub>, lookup: NodeLookup) => {
+    const dataDir = mkdtempSync(join(temp, "disconnect-"));
+    const settings = fileSettingsStore(join(dataDir, "desktop-settings.json"));
+    settings.update({ openAtLogin: true, mode: "connected", connection: CONNECTION });
+    const token = keychain();
+    await token.write("hbd_token");
+    const cookies = { cleared: 0 };
+    const connected = connectedHub({
+      origins: ORIGINS,
+      nodeId: STUDIO.nodeId,
+      fallbackName: STUDIO.nodeName,
+      nodeCheck: makeNodeCheck(lookup),
+      token: token.read,
+      fetch: hub.fetch,
+    });
+    const disconnect = (state: ConnectionState = { state: "connected", version: "0.5.0" }) =>
+      disconnectFromHub({
+        connection: CONNECTION,
+        state: () => state,
+        hub: connected,
+        token,
+        clearCookies: async () => void cookies.cleared++,
+        settings,
+      });
+    return { settings, token, cookies, disconnect };
+  };
+
+  /** What is left on this computer after Disconnect: the token, the mode and the cookies cleared. */
+  const forgotten = async ({ settings, token, cookies }: Awaited<ReturnType<typeof connectedTo>>) => {
+    expect(await token.read()).toBeUndefined();
+    expect(cookies.cleared).toBe(1);
+    // No mode is chosen, so the next start is setup's first screen; this Mac's own choices stay.
+    expect(desktopMode(settings.read())).toBeUndefined();
+    expect(settings.read()).toEqual({ openAtLogin: true });
+  };
+
+  // covers DP-001, DP-004
+  it("[TC-DP-167] revokes this device on the hub as itself, deletes the keychain item and clears the mode", async () => {
+    const hub = fakeHub();
+    const { lookup } = tailnet();
+    const desktop = await connectedTo(hub, lookup);
+    expect(await desktop.disconnect()).toEqual({ stillListed: false });
+
+    // The revoke went to the pinned node with this device's own token, and the hub lists it as revoked.
+    expect(hub.withSecrets()).toEqual([
+      {
+        method: "POST",
+        path: "/api/devices/dev1/revoke",
+        authorization: "Bearer hbd_token",
+        origin: null,
+        body: undefined,
+      },
+    ]);
+    const listed = (await (await hub.fetch(`${ORIGINS.origin}/api/devices`)).json()) as Array<{ revokedAt: unknown }>;
+    expect(listed).toMatchObject([{ id: "dev1", revokedAt: expect.any(String) }]);
+    await forgotten(desktop);
+
+    // A device the hub already removed asks nothing more of it, and nothing is left listed there.
+    const again = fakeHub();
+    again.revoke();
+    const removed = await connectedTo(again, tailnet().lookup);
+    expect(await removed.disconnect({ state: "revoked" })).toEqual({ stillListed: false });
+    expect(again.sent).toEqual([]);
+    await forgotten(removed);
+  });
+
+  // covers DP-001, DP-004
+  it("[TC-DP-168] with the hub out of reach, still forgets the hub here and says the device stays listed there", async () => {
+    const hub = fakeHub();
+    hub.setReachable(false);
+    const desktop = await connectedTo(hub, tailnet().lookup);
+    expect(await desktop.disconnect({ state: "unreachable" })).toEqual({ stillListed: true });
+    await forgotten(desktop);
+
+    // An address that now belongs to another node gets no token, even to revoke it.
+    const moved = tailnet();
+    moved.nodes.set(HUB_ADDRESS, OTHER);
+    const elsewhere = fakeHub();
+    const other = await connectedTo(elsewhere, moved.lookup);
+    expect(await other.disconnect({ state: "otherNode" })).toEqual({ stillListed: true });
+    expect(elsewhere.withSecrets()).toEqual([]);
+    await forgotten(other);
   });
 });
