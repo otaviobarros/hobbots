@@ -3,7 +3,8 @@ import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from ".
 
 // Issue #566 in the browser: Rook, running alongside Quill, asks Aldric for Quill's core.py. Aldric,
 // on Quill's result, hands it off and answers, and Rook's Task finishes with core.py under Handed to
-// it. That the lead's turn states the rule is checked in apps/server/test/lead-hand-off.test.ts.
+// it, beside Quill's result. That the lead's turn states the rule is checked in
+// apps/server/test/lead-hand-off.test.ts.
 
 let hub: Hub | undefined;
 let dataDir = "";
@@ -113,5 +114,6 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
   await expect(drawer.getByRole("heading", { name: "Handed to it" })).toBeVisible();
   await expect(drawer).toContainText("core.py");
   await expect(drawer).toContainText("/project/core.py");
-  await expect(drawer).not.toContainText("Quill's result");
+  // Quill's Task handed core.py to Rook's, so its result is listed too, and only once.
+  await expect(drawer.getByText(/Quill's result/)).toHaveCount(1);
 });
