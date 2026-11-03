@@ -151,6 +151,11 @@ export interface NewWait {
   readonly on: ReadonlyArray<TaskId>;
   readonly mode: WaitMode;
   readonly at: string;
+  /**
+   * Leaves an active Task active, because the turn that records the wait still runs. The turn's end
+   * shows it waiting.
+   */
+  readonly keepActive?: boolean;
 }
 
 type Changed<A, E = TaskRefused> = Effect.Effect<Committed<A>, E>;
@@ -237,7 +242,7 @@ export class TaskRepository extends Context.Service<
     readonly handOff: (artifactId: ArtifactId, toTaskId: TaskId, at: string) => Changed<HandOff>;
     /**
      * Records that the Task's owner waits for Tasks under it, replacing any earlier wait, and shows
-     * the Task as waiting.
+     * the Task as waiting, unless `keepActive` keeps it active while its turn runs.
      */
     readonly waitFor: (
       taskId: TaskId,

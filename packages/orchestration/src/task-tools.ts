@@ -238,15 +238,16 @@ export class TaskTools extends Context.Service<
                   .pipe(Effect.option);
                 if (Option.isNone(ended)) return;
                 yield* announce(ended.value.entries);
-                // A Task that waited, or was blocked, before the turn goes back to that unless the turn moved it.
                 const task = ended.value.value.task;
+                if (task.state !== "active" || task.currentAttemptId !== attemptId) return;
+                // A Task whose turn recorded a wait that still holds shows waiting now the turn has
+                // ended (#572). Otherwise one that waited, or was blocked, before the turn goes back to that.
+                const ledger = yield* tasks.readLedger(task.id);
+                const waits = Option.isSome(ledger) && ledger.value.open.some((entry) => entry._tag === "Wait");
                 const was = begun?.was;
-                if (
-                  (was === "waiting" || was === "blocked") &&
-                  task.state === "active" &&
-                  task.currentAttemptId === attemptId
-                ) {
-                  const back = yield* tasks.moveTask(task.id, task.revision, was, at).pipe(Effect.option);
+                const to = waits ? "waiting" : was === "waiting" || was === "blocked" ? was : null;
+                if (to !== null) {
+                  const back = yield* tasks.moveTask(task.id, task.revision, to, at).pipe(Effect.option);
                   if (Option.isSome(back)) yield* announce(back.value.entries);
                 }
               }).pipe(
