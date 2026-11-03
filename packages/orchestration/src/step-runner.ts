@@ -41,7 +41,7 @@ import type { PathSeparator } from "./authority.ts";
 import { cut, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { makeCancelSettler } from "./cancels.ts";
-import { delegatedAccess, makeMemberRunner } from "./members.ts";
+import { delegatedAccess, dependenciesDone, makeMemberRunner } from "./members.ts";
 import { type Ending, type Running, runSessionTurn, STOPPED, type StopReason } from "./session.ts";
 import { TaskSignal } from "./signal.ts";
 import { TaskTools } from "./task-tools.ts";
@@ -73,10 +73,6 @@ const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
 /** How a step that ends without a result ends: cancelled when its cancel was asked for, failed otherwise. */
 const endOf = (step: Task) => (step.state === "cancelling" ? "cancelled" : "failed");
-
-/** Every Task `step` comes after has completed. */
-const ready = (step: Task, tree: TaskTree) =>
-  step.dependsOn.every((id) => tree.tasks.find((each) => each.id === id)?.state === "completed");
 
 /**
  * Runs a Task's steps (ADR 018), each in a fresh runtime session that starts from its brief alone
@@ -482,7 +478,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           const tree = trees.get(step.rootId) ?? Option.getOrUndefined(yield* tasks.readTree(step.rootId));
           if (tree === undefined) continue;
           trees.set(step.rootId, tree);
-          if (ready(step, tree)) yield* start(step, tree);
+          if (dependenciesDone(step, tree)) yield* start(step, tree);
         }
         if (members !== null) yield* members.round;
       }).pipe(

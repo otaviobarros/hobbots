@@ -258,7 +258,7 @@ const continuations = (all: ReadonlyArray<Message>) =>
 const controls = <A, E>(use: (each: TaskControls["Service"]) => Effect.Effect<A, E, UserSession>) =>
   TaskControls.use(use);
 
-/** Aldric brings in Quill, whose turn is held, and Ada, who waits on Quill's copy with no turn running. */
+/** Aldric brings in Quill, whose turn is held, and Ada, whose Task stays queued on Quill's with no turn running. */
 const questUnderWay = (quillBrief: ReadonlyArray<string> = [HOLD]) =>
   [
     "Plan the Black Friday campaign",
@@ -281,7 +281,7 @@ const questUnderWay = (quillBrief: ReadonlyArray<string> = [HOLD]) =>
   ].join("\n");
 
 const underWay = (tree: TaskTree) =>
-  ownedBy(tree, ADA)?.state === "waiting" && tree.attempts.some((each) => each.agentId === QUILL && isLive(each.state));
+  ownedBy(tree, ADA)?.state === "queued" && tree.attempts.some((each) => each.agentId === QUILL && isLive(each.state));
 
 /** Aldric brings in Rook, who brings in Pip under his own Quest; Pip's turn is held while Rook waits on her. */
 const nestedUnderWay = [
@@ -375,7 +375,8 @@ describe("cancelling with confirmed outcomes", () => {
     const done = await run(treeWhen((tree) => tree.tasks.every((task) => task.state === "cancelled")));
     expect(done.quests[0]?.state).toBe("cancelled");
     expect(attemptsOf(done, ownedBy(done, QUILL))).toEqual([[QUILL, "cancelled"]]);
-    expect(attemptsOf(done, ownedBy(done, ADA))).toEqual([[ADA, "completed"]]);
+    // Ada's Task never started: it was still waiting on Quill's.
+    expect(attemptsOf(done, ownedBy(done, ADA))).toEqual([]);
     expect(done.attempts.some((each) => isLive(each.state))).toBe(false);
 
     // What the cancel sent Aldric about his party resolves as late, so it wakes nobody.

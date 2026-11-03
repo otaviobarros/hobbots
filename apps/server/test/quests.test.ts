@@ -287,40 +287,46 @@ const promptsTo = (requests: ReadonlyArray<PromptRequest>, task: Task | undefine
 const continuations = (all: ReadonlyArray<Message>) =>
   all.filter((m, index) => m.role === "assistant" && all[index - 1]?.role !== "user");
 
-/** Both members started side by side: Ada's first turn ended while Quill's was still held open. */
-const expectBothStarted = (waiting: TaskTree, requests: ReadonlyArray<PromptRequest>) => {
+/** Quill started, and Ada's Task stays queued on his with no turn of its own while his is held open. */
+const expectAdaQueued = (waiting: TaskTree, requests: ReadonlyArray<PromptRequest>) => {
   const quillTask = ownedBy(waiting, QUILL);
   const adaTask = ownedBy(waiting, ADA);
   expect(attemptStates(waiting, QUILL).filter(isLive)).not.toEqual([]);
-  expect(attemptStates(waiting, ADA)).toContain("completed");
+  expect(attemptStates(waiting, ADA)).toEqual([]);
   expect(adaTask?.dependsOn).toEqual([quillTask?.id]);
   expect(waiting.tasks[0]?.state).toBe("waiting");
   expect(waiting.delegations.map((each) => each.memberId).sort()).toEqual([ADA, QUILL].sort());
-  const [adaFirst] = promptsTo(requests, adaTask);
-  expect(adaFirst?.sessionId).toBeNull();
-  expect(adaFirst?.prompt).toContain("Aldric gave you this Task as part of a Quest Aldric leads.");
-  // Quill's Task is queued or already active, whichever runner reached its Task first.
-  expect(adaFirst?.prompt).toMatch(new RegExp(`Task ${quillTask?.id}, (queued|active): Draft the landing copy`));
-  expect(adaFirst?.prompt).not.toContain("20% off everything");
+  expect(promptsTo(requests, adaTask)).toEqual([]);
   const [quillFirst] = promptsTo(requests, quillTask);
   expect(quillFirst?.prompt).toContain("Aldric expects back: Three headlines and a short body");
   return { quillTask, adaTask };
 };
 
-/** Ada's second turn got Quill's copy from Aldric and went on in the same session. */
-const expectAdaResumed = (done: TaskTree, requests: ReadonlyArray<PromptRequest>, adaTask: Task | undefined) => {
+/**
+ * Ada started only once Quill's Task had completed, and finished with his copy from Aldric: in her
+ * first turn when the hand-off was already there, or in a second turn of the same session.
+ */
+const expectAdaFinished = (
+  done: TaskTree,
+  requests: ReadonlyArray<PromptRequest>,
+  { quillTask, adaTask }: { readonly quillTask: Task | undefined; readonly adaTask: Task | undefined },
+) => {
   const adaPrompts = promptsTo(requests, adaTask);
-  expect(adaPrompts).toHaveLength(2);
-  expect(adaPrompts[1]?.prompt).toContain('"Landing copy" was handed to Task');
-  expect(adaPrompts[1]?.prompt).toContain("Black Friday: 20% off everything");
+  const [adaFirst] = adaPrompts;
+  expect(adaFirst?.sessionId).toBeNull();
+  expect(adaFirst?.prompt).toContain("Aldric gave you this Task as part of a Quest Aldric leads.");
+  expect(adaFirst?.prompt).toContain(`Task ${quillTask?.id}, completed: Draft the landing copy`);
+  expect(adaPrompts.some((request) => request.prompt.includes("Black Friday: 20% off everything"))).toBe(true);
   const adaAttempts = done.attempts.filter((each) => each.taskId === adaTask?.id);
-  expect(adaAttempts.map((each) => each.state)).toEqual(["completed", "completed"]);
-  expect(adaPrompts[1]?.sessionId).toBe(adaAttempts[0]?.sessionId);
+  expect(adaAttempts.map((each) => each.state)).toEqual(adaPrompts.map(() => "completed"));
+  expect(adaPrompts.slice(1).every((request) => request.sessionId === adaAttempts[0]?.sessionId)).toBe(true);
+  const quillDone = done.tasks.find((each) => each.id === quillTask?.id)?.updatedAt ?? "";
+  expect(adaAttempts.every((each) => each.startedAt >= quillDone)).toBe(true);
 };
 
 describe("leading a party on a Quest", () => {
   // covers OR-002, OR-003, IN-004
-  it("[TC-OR-090] Aldric delegates to Quill and Ada in parallel; Ada waits on Quill's copy and gets it through Aldric, who wraps up in the chat", async () => {
+  it("[TC-OR-090] Aldric delegates to Quill and Ada; Ada's Task waits for Quill's to complete and gets his copy through Aldric, who wraps up in the chat", async () => {
     const { run, requests, release } = setUp();
     const prompt = [
       "Plan the Black Friday campaign",
@@ -354,15 +360,15 @@ describe("leading a party on a Quest", () => {
     ].join("\n");
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
 
-    // Both members start at once. Ada works while she waits on Quill's copy, which she never gets
-    // from Quill himself; her Task waits.
+    // Quill starts; Ada's Task depends on his, so it stays queued and starts no turn meanwhile.
     const waiting = await run(
       treeWhen((tree) => {
         const quill = ownedBy(tree, QUILL);
-        return ownedBy(tree, ADA)?.state === "waiting" && quill?.state === "active" && tree.quests.length === 1;
+        return ownedBy(tree, ADA)?.state === "queued" && quill?.state === "active" && tree.quests.length === 1;
       }),
     );
-    const { quillTask, adaTask } = expectBothStarted(waiting, requests);
+    const members = expectAdaQueued(waiting, requests);
+    const { adaTask } = members;
 
     // Aldric waits without blocking his chat: you still get an answer from him.
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, "How is it going?")));
@@ -377,7 +383,7 @@ describe("leading a party on a Quest", () => {
     expect(ownedBy(done, ADA)?.state).toBe("completed");
     expect(done.handOffs.map((each) => each.toTaskId)).toEqual([adaTask?.id]);
 
-    expectAdaResumed(done, requests, adaTask);
+    expectAdaFinished(done, requests, members);
 
     // Two continuations in the chat: the hand-off, then the wrap-up with the Quest's result.
     const all = await run(messagesWhen((each) => continuations(each).length === 2));
