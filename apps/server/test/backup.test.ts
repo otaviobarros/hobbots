@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -388,11 +388,12 @@ describe("backup and restore", () => {
 
   // covers OP-003
   it("[TC-OP-026] saves a backup only outside the data folder and every folder hobs work in", async () => {
-    const hobFolder = join(root, "code");
+    // Hob folders and the answer are canonical, which differs where the temp folder is a symlink.
+    const hobFolder = join(await realpath(root), "code");
     await mkdir(join(hobFolder, "site"), { recursive: true });
     const inside = await Effect.runPromiseExit(checkDestination(join(hobFolder, "site"), [hobFolder], root));
     expect(Exit.isFailure(inside) && JSON.stringify(inside.cause)).toMatch(/a folder hobs work in/);
-    expect(await Effect.runPromise(checkDestination(destination, [hobFolder], root))).toBe(destination);
+    expect(await Effect.runPromise(checkDestination(destination, [hobFolder], root))).toBe(await realpath(destination));
 
     const backups = HubBackups.layer.pipe(
       Layer.provide(Layer.succeed(Installation, { app: "hobbots", installationId: "i", version: "0.15.0", dataDir })),
