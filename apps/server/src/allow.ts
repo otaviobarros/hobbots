@@ -4,6 +4,7 @@ import { HobbotsApi } from "@hobbots/api";
 import { Console, Effect } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
+import { exitOnFailure } from "./command-line.ts";
 import { ServerConfig } from "./config.ts";
 import { windowKeyFile } from "./window-key.ts";
 
@@ -35,17 +36,6 @@ const allow = Effect.gen(function* () {
   if (request === undefined) return yield* Effect.fail(`No device is waiting with the code ${code}.`);
   yield* client.pairingRequests.allow({ params: { requestId: request.id } });
   yield* Console.log(`Allowed ${request.name}.`);
-}).pipe(
-  Effect.provide(FetchHttpClient.layer),
-  Effect.catch((error) =>
-    Console.error(typeof error === "string" ? error : String(error)).pipe(
-      Effect.andThen(
-        Effect.sync(() => {
-          process.exitCode = 1;
-        }),
-      ),
-    ),
-  ),
-);
+}).pipe(Effect.provide(FetchHttpClient.layer), exitOnFailure);
 
 NodeRuntime.runMain(allow);

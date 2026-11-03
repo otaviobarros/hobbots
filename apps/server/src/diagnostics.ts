@@ -13,6 +13,7 @@ import {
   SecretRedaction,
   stalledWork,
   TaskRepository,
+  workHeld,
 } from "@hobbots/agents";
 import { DiagnosticsReportRefused, HobbotsApi, QuestNotFound, type QuestTrace } from "@hobbots/api";
 import type { BackpackItem, QuestId } from "@hobbots/domain";
@@ -41,6 +42,8 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
     const adapters = yield* runtimeAdapters;
     const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
     const recovery = yield* Effect.serviceOption(RecoveryLog);
+    // Whether a restore holds work until you resume it (ADR 026).
+    const held = yield* workHeld;
     // The handlers are built once, as the hub starts, after its recovery ran.
     const startedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
 
@@ -68,8 +71,7 @@ export const DiagnosticsHandlers = HttpApiBuilder.group(HobbotsApi, "diagnostics
         }),
         // A recovery error's message can quote what failed, so it is redacted like tool output.
         recovery: errors.map((error) => ({ ...error, message: redactor.text(error.message) })),
-        // A restore's hold on work (ADR 026) is not built yet, so work is never held.
-        workHeld: false,
+        workHeld: yield* held,
         startedAt,
       };
     });

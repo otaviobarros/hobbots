@@ -962,4 +962,36 @@ describe("Blockers", () => {
     expect(result.resumed).toEqual(["t1"]);
     expect(result.runs).toBe(6);
   });
+  // covers OP-003
+  it("[TC-OP-030] runs no turn while work is held after a restore, and delivers the item once it resumes", async () => {
+    let held = true;
+    const HeldHost = Layer.effect(
+      DispatcherHost,
+      Effect.gen(function* () {
+        const host = yield* DispatcherHost;
+        return DispatcherHost.of({ ...host, held: Effect.sync(() => held) });
+      }),
+    ).pipe(Layer.provide(Host));
+    const result = await Effect.gen(function* () {
+      const { item } = yield* campaign;
+      const dispatcher = yield* Dispatcher;
+      const backpack = yield* Backpack;
+      const services = { tasks: yield* TaskRepository, ledger: yield* TaskToolCalls };
+      const runs = { count: 0 };
+      const whileHeld = yield* dispatcher.dispatch(item.id, reportingTurn(services, runs, { consumes: true }));
+      const waiting = (yield* backpack.find(item.id)).state;
+      const ranWhileHeld = runs.count;
+      held = false;
+      const resumed = yield* dispatcher.dispatch(item.id, reportingTurn(services, runs, { consumes: true }));
+      return { whileHeld, waiting, ranWhileHeld, resumed, runs: runs.count };
+    }).pipe(
+      Effect.provide(Dispatcher.layer(LIMITS).pipe(Layer.provide(HeldHost), Layer.provideMerge(Stores))),
+      Effect.runPromise,
+    );
+    expect(result.whileHeld).toEqual({ _tag: "Skipped", reason: "not-ready" });
+    expect(result.waiting).toBe("pending");
+    expect(result.ranWhileHeld).toBe(0);
+    expect(result.resumed._tag).toBe("Consumed");
+    expect(result.runs).toBe(1);
+  });
 });

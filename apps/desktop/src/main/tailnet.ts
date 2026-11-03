@@ -16,6 +16,7 @@ export interface DeviceTokenStore {
   readonly read: () => Promise<string | undefined>;
   /** Keeps the token, or rejects with the keychain's reason; never writes a file. */
   readonly write: (token: string) => Promise<void>;
+  /** Deletes the token, or rejects with the keychain's reason; a missing item counts as deleted. */
   readonly remove: () => Promise<void>;
 }
 
@@ -103,7 +104,12 @@ export const thisComputer = ({ dataDir, env, platform }: TailnetOptions) => {
           Effect.mapError((error) => new Error(error.message)),
         ),
       ),
-    remove: () => runtime.runPromise(DeviceTokenKeychain.use((item) => item.remove).pipe(Effect.ignore)),
+    // A missing item counts as removed; any other failure reaches the caller, so Disconnect never
+    // reports a token gone that is still in the keychain.
+    remove: () =>
+      runtime.runPromise(
+        DeviceTokenKeychain.use((item) => item.remove).pipe(Effect.mapError((error) => new Error(error.message))),
+      ),
   };
 
   return { tailnet, token, dispose: () => runtime.dispose() };

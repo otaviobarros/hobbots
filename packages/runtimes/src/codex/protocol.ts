@@ -159,12 +159,30 @@ type SandboxPolicy =
   | { readonly type: "dangerFullAccess" }
   | { readonly type: "externalSandbox"; readonly networkAccess: "restricted" | "enabled" };
 
-/** A hub tool the thread offers, which Codex calls back as `item/tool/call` (ADR 024, #440). */
-interface DynamicToolSpec {
+/**
+ * A hub tool the thread offers, which Codex calls back as `item/tool/call` (ADR 024). Codex keeps the
+ * tools a thread started with; `thread/resume` takes none.
+ */
+export interface DynamicToolSpec {
   readonly type: "function";
   readonly name: string;
   readonly description: string;
   readonly inputSchema: unknown;
+}
+
+/** A call to a hub tool, which the client runs and answers. `callId` is also the call's item ID. */
+export interface DynamicToolCallParams {
+  readonly threadId: string;
+  readonly turnId: string;
+  readonly callId: string;
+  readonly tool: string;
+  readonly arguments: unknown;
+}
+
+/** The answer to a hub tool call, as the model reads it. A refused call is answered with `success: false`. */
+export interface DynamicToolCallResponse {
+  readonly contentItems: ReadonlyArray<{ readonly type: "inputText"; readonly text: string }>;
+  readonly success: boolean;
 }
 
 interface ThreadSettings {
@@ -331,10 +349,7 @@ export type TurnServerRequest =
       readonly method: "mcpServer/elicitation/request";
       readonly params: { readonly threadId: string; readonly turnId: string | null; readonly serverName: string };
     }
-  | {
-      readonly method: "item/tool/call";
-      readonly params: InTurn & { readonly callId: string; readonly tool: string; readonly arguments: unknown };
-    }
+  | { readonly method: "item/tool/call"; readonly params: DynamicToolCallParams }
   | {
       readonly method: "account/chatgptAuthTokens/refresh";
       readonly params: { readonly reason: "unauthorized"; readonly previousAccountId?: string | null };

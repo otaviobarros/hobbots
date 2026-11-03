@@ -11,6 +11,7 @@ import { newAppWindow } from "./app-window.ts";
 import { connectionChannels, connectionView, handleConnectionIpc } from "./connection-ipc.ts";
 import { connectionStateOf } from "./connection-state.ts";
 import { type PairingOutcome, pairAsDesktop } from "./desktop-pairing.ts";
+import { type Disconnected, disconnectFromHub } from "./disconnect.ts";
 import {
   type ConnectionState,
   connectedHub,
@@ -140,6 +141,26 @@ const connectedMenuBar = (connection: () => HubConnection, actions: ConnectionAc
 };
 
 /**
+ * Starts the app again after Disconnect, so it comes back with no mode at setup's first screen.
+ * A hub that could not be reached still lists this computer, and the user is told so first.
+ */
+const startAgain = async (connection: HubConnection, stillListed: boolean) => {
+  if (stillListed) {
+    const copy = messages.disconnect;
+    await dialog.showMessageBox({
+      type: "info",
+      message: copy.stillListed({ hub: connection.name }),
+      detail: copy.stillListedDetail({ hub: connection.name }),
+      buttons: [copy.ok],
+    });
+  }
+  // A development start that paired from the environment would pair again at once.
+  delete process.env.HOBBOTS_CONNECT_TO;
+  app.relaunch();
+  app.quit();
+};
+
+/**
  * Says why the hub cannot be used with no page open, in the menu bar's words, with the actions a
  * dialog can take: open Tailscale and try again. A page that is open shows the same in its banner.
  */
@@ -203,12 +224,34 @@ export const startConnected = async (
     hub: () => hub,
     forgetNode: nodeCheck.forget,
     forgetToken: async () => {
-      await computer.token.remove();
+      // The hub refuses the token anyway; one the keychain kept is removed again on Disconnect.
+      await computer.token.remove().catch(() => undefined);
       await clearCookies(origins);
     },
   });
   const view = () => connectionView(connection, connectionState.current, app.getVersion(), connectionState.hubVersion);
   const tryAgain = () => void connectionState.check();
+
+  /** Disconnects once, however often it is asked; a Disconnect that failed may be asked again. */
+  let disconnecting: Promise<Disconnected> | undefined;
+  const disconnect = async () => {
+    try {
+      const outcome = await disconnectFromHub({
+        connection,
+        state: () => connectionState.current,
+        hub,
+        token: computer.token,
+        clearCookies: () => clearCookies(origins),
+        settings,
+      });
+      // The answer reaches the page first; then the app starts again with no mode: setup's first screen.
+      setImmediate(() => void startAgain(connection, outcome.stillListed));
+      return outcome;
+    } catch (error) {
+      disconnecting = undefined;
+      throw error;
+    }
+  };
 
   const windows = new Set<BrowserWindow>();
   // Each open page follows the connection, so its banner says why the hub cannot be reached.
@@ -346,6 +389,7 @@ export const startConnected = async (
     retry: () => connectionState.check(),
     changeAddress,
     openTailscale,
+    disconnect: () => (disconnecting ??= disconnect()),
   });
 
   // While the hub cannot be reached, it is checked again every 5 seconds, and at once when the Mac

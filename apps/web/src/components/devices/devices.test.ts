@@ -3,6 +3,7 @@ import { qrRows } from "@hobbots/ui/components/qr-code";
 import { describe, expect, it } from "vitest";
 import { approvedDevices } from "../../api/devices.ts";
 import { tailnetName, tailscaleNotReady } from "../remote-access-settings.tsx";
+import { connectionCalls, versionsLine } from "./connected-hub.tsx";
 import { deviceMeta, deviceName } from "./device-meta.ts";
 import { typedPort } from "./port-field.tsx";
 
@@ -51,6 +52,45 @@ describe("allowed devices", () => {
     expect(deviceMeta(device({ lastActiveAt: null }), now)).toMatch(
       /^A browser · iOS · on this computer · allowed .+, not used yet$/,
     );
+  });
+
+  // covers DP-001
+  it("[TC-DP-215] on a connected desktop, names the hub, marks this Mac's own device and shows both versions", () => {
+    const context = { hub: "Studio", ownDeviceId: "d1" };
+    const window = device({ id: WINDOW_DEVICE_ID, kind: "window", name: "window", platform: "" });
+    expect(deviceName(window, context)).toBe("The Hobbots window on Studio");
+    expect(deviceMeta(device({ kind: "desktop", platform: "macOS" }), now, context)).toBe(
+      "this Mac · The Hobbots app · macOS · on Studio · active 2 hours ago",
+    );
+    expect(deviceMeta(device({ id: DeviceId.make("d2") }), now, context)).toMatch(/^A browser · iOS · on Studio · /);
+
+    const view = {
+      hubName: "Studio",
+      nodeName: "studio-desk.example.ts.net",
+      address: "http://studio-desk.example.ts.net:4317",
+      deviceId: "d1",
+      appVersion: "0.5.1",
+      hubVersion: "0.5.0",
+      state: "connected",
+    };
+    expect(versionsLine(view)).toBe("Hobbots 0.5.0 on Studio · 0.5.1 on this Mac");
+    expect(versionsLine({ ...view, hubVersion: null })).toBe("Hobbots 0.5.1 on this Mac");
+  });
+
+  // covers DP-001
+  it("[TC-DP-219] offers Disconnect only where the desktop app's bridge has it, as ADR 025 asks of every call", () => {
+    const get = async () => {
+      throw new Error("not called");
+    };
+    const disconnect = async () => ({ stillListed: false });
+    expect(connectionCalls({ get, disconnect })).toEqual({ get, disconnect });
+    // The previous desktop app's bridge: the hub it uses, and no Disconnect.
+    expect(connectionCalls({ get })).toEqual({ get, disconnect: undefined });
+    // No bridge, or one that cannot say which hub it uses: the hub's own settings show.
+    expect(connectionCalls(undefined)).toBeUndefined();
+    expect(connectionCalls({ disconnect })).toBeUndefined();
+    // Its answer names no device, so no row is marked as this Mac's and every row keeps Revoke.
+    expect(deviceMeta(device({}), now, { hub: "Studio" })).toMatch(/^A browser · iOS · on Studio · /);
   });
 
   it("lists only devices that were not revoked", () => {

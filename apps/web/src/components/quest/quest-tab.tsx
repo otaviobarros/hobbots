@@ -1,6 +1,7 @@
 import type { AgentId, TaskId, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { WorkspaceBackpack } from "../backpack/quest-backpack.tsx";
+import { WorkHeldNotice } from "../backup/work-held-notice.tsx";
 import { useOpenWorkbench } from "../workbench/use-workbench.ts";
 import { messages } from "./messages.ts";
 import { QuestRoom } from "./quest-room.tsx";
@@ -45,6 +46,7 @@ export function QuestTab({
   if (trees.length === 0) {
     return (
       <>
+        <WorkHeldNotice className="mx-[18px] mt-3" />
         {gone}
         <div className="flex animate-hb-in flex-col gap-2 px-[18px] py-[22px] leading-normal text-secondary-text">
           <span className="font-pixel text-lg text-moonlight">{copy.emptyTitle}</span>
@@ -56,6 +58,7 @@ export function QuestTab({
   }
   return (
     <div className="flex flex-col">
+      <WorkHeldNotice className="mx-[18px] mt-3" />
       {gone}
       {trees.map(({ tree, own }) => (
         <QuestRoom

@@ -24,6 +24,7 @@ import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema } from "effect/http-api";
 import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
 import { BackpackGroup, BlockersGroup } from "./backpack.ts";
+import { BackupGroup } from "./backup.ts";
 import { CharmCallsGroup } from "./charm-calls.ts";
 import { DevicesGroup, PairingGroup, PairingRequestsGroup, PairingThrottled } from "./devices.ts";
 import { DiagnosticsGroup } from "./diagnostics.ts";
@@ -349,6 +350,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(HobGitHubAppGroup)
   .add(RemoteAccessGroup)
   .add(WorkbenchGroup)
+  .add(BackupGroup)
   .add(DiagnosticsGroup)
   .add(ExportsGroup)
   .add(UsageGroup) {}

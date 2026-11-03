@@ -22,16 +22,20 @@ export interface NotificationChoices {
 export type ConnectionAction = "tryAgain" | "openTailscale" | "changeAddress" | "askAgain" | "disconnect";
 
 /**
- * A connected desktop's view of its hub: names, address, versions and state. The app writes `title`
- * and `detail` itself, since it knows its own states and this computer's language, and a hub's pages
- * may be from another version that does not know a newer state.
+ * What a connected desktop says about the hub it uses (ADR 025): names, address, versions and state,
+ * never the token. The app writes `title` and `detail` itself, since it knows its own states and this
+ * computer's language, and a hub's pages may be from another version that does not know a newer state.
  */
-export interface ConnectionView {
+export interface DesktopConnection {
   readonly hubName: string;
   readonly nodeName: string;
   readonly address: string;
+  /** This computer's device on the hub; an older desktop app does not say. */
+  readonly deviceId?: string;
   readonly appVersion: string;
+  /** The hub's version as it last said, or null before it answered. */
   readonly hubVersion: string | null;
+  /** `connected`, or why the hub cannot be used right now. */
   readonly state: string;
   /** Absent from an app from before the reasons (ADR 025): a page then shows its own generic text. */
   readonly title?: string;
@@ -63,6 +67,8 @@ declare global {
       };
       /** Opens the system folder picker; resolves with the chosen folder, or null when cancelled. */
       readonly chooseFolder?: () => Promise<string | null>;
+      /** The same picker for a backup: where to save one, or which one to restore (ADR 026). */
+      readonly chooseBackupFolder?: (purpose: "save" | "restore") => Promise<string | null>;
       /**
        * Shows one of an Attempt's files in Finder, selected. The desktop app asks the hub which
        * file the id names, so the page never hands it a path; resolves false when the hub does not
@@ -75,15 +81,18 @@ declare global {
        */
       readonly onOpenRequest?: (listener: (requestId: string) => void) => () => void;
       /**
-       * Only on a connected desktop (ADR 025): the hub it uses and where the connection stands. A
-       * page checks each call before it uses it, since the app may be of another version.
+       * Only on a connected desktop (ADR 025): the hub it uses, where the connection stands, and
+       * Disconnect, which revokes this computer on the hub, forgets the hub here and starts the app
+       * again at setup's first screen; `stillListed` when the hub could not be reached, so it still
+       * lists this computer. An older desktop app offers fewer calls: check each before using it.
        */
       readonly connection?: {
-        readonly get: () => Promise<ConnectionView>;
-        readonly retry?: () => Promise<ConnectionView>;
+        readonly get?: () => Promise<DesktopConnection>;
+        readonly disconnect?: () => Promise<{ readonly stillListed: boolean }>;
+        readonly retry?: () => Promise<DesktopConnection>;
         readonly changeAddress?: (address: string) => Promise<AddressChangeAnswer>;
         readonly openTailscale?: () => Promise<boolean>;
-        readonly onChange?: (listener: (view: ConnectionView) => void) => () => void;
+        readonly onChange?: (listener: (view: DesktopConnection) => void) => () => void;
       };
     };
   }

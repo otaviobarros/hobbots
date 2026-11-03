@@ -246,18 +246,21 @@ export const connectedHub = (options: ConnectedHubOptions) => {
   };
 
   /** The headers that make a request this device's, once the pinned node checks out. */
-  const headers = async (): Promise<Record<string, string>> => {
+  const headers = async (held?: string): Promise<Record<string, string>> => {
     if (!(await nodeCheck.isPinned(origins.host, nodeId))) throw new HubNotVerified({ state: "otherNode" });
-    const token = await options.token();
+    const token = held ?? (await options.token());
     if (token === undefined) throw new HubNotVerified({ state: "noToken" });
     return { authorization: `Bearer ${token}` };
   };
 
-  /** Fetches a hub route as this device, never sending the token to another node. */
-  const fetchAsDevice = async (path: string, init: RequestInit = {}): Promise<Response> =>
+  /**
+   * Fetches a hub route as this device, never sending the token to another node. `held` is a token
+   * already read from the keychain, as Disconnect holds it after deleting the keychain item.
+   */
+  const fetchAsDevice = async (path: string, init: RequestInit = {}, held?: string): Promise<Response> =>
     options.fetch(`${origins.origin}${path}`, {
       ...init,
-      headers: { ...(init.headers as Record<string, string>), ...(await headers()) },
+      headers: { ...(init.headers as Record<string, string>), ...(await headers(held)) },
     });
 
   /** Whether the hub still knows this device: `null` while it does or cannot say. */
