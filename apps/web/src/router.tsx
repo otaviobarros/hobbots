@@ -23,15 +23,17 @@ import { OnboardingFirstHob } from "./components/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
-import { ArchivedHobsPage, SettingsPage, UsagePage } from "./components/pages.tsx";
+import { ArchivedHobsPage, SettingsPage } from "./components/pages.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
 import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
 import { Summon } from "./components/summon.tsx";
+import { UsagePage } from "./components/usage/usage-page.tsx";
 import { Welcome } from "./components/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/where-hobbots-runs.tsx";
 import type { WorkbenchSearch } from "./components/workbench/use-workbench.ts";
 import { isWorkbenchTab } from "./components/workbench/workbench-model.ts";
 import { readStored, writeStored } from "./lib/storage.ts";
+import { isUsagePeriod } from "./lib/usage.ts";
 
 const lastHobKey = "lastHob";
 const lastThreadKey = (hobId: string) => `lastThread.${hobId}`;
@@ -266,7 +268,18 @@ const inboxRoute = createRoute({
     return <InboxPage tab={tab ?? "needs"} requestId={request} />;
   },
 });
-const usageRoute = createRoute({ getParentRoute: () => shellRoute, path: "usage", component: UsagePage });
+// `?days=` picks the period: the last 7 days, or 30. The router reads the number as a number.
+const usageRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "usage",
+  validateSearch: (search: Record<string, unknown>): { days?: number | undefined } => ({
+    days: isUsagePeriod(String(search.days)) ? Number(search.days) : undefined,
+  }),
+  component: function Usage() {
+    const { days } = usageRoute.useSearch();
+    return <UsagePage days={days === 30 ? "30" : "7"} />;
+  },
+});
 const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "settings", component: SettingsPage });
 // Settings › Archived hobs: retired hobs, whose threads open read-only (AG-006).
 const archivedRoute = createRoute({
