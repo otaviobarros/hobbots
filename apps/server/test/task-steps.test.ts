@@ -505,7 +505,11 @@ describe("a Task's steps in fresh sessions", () => {
     const step = stepsOf(running)[0] as Task;
     await run(send(thread.id, hub("cancel_task", { key: "stop", task_id: step.id })));
     const cancelled = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "cancelled"));
-    expect(cancelled.attempts.find((each) => each.taskId === step.id)?.state).toBe("cancelled");
+    // Its Attempt names the hob that cancelled it (#674).
+    expect(cancelled.attempts.find((each) => each.taskId === step.id)).toMatchObject({
+      state: "cancelled",
+      outcome: "Aldric cancelled this Task.",
+    });
   });
 
   // covers OR-001

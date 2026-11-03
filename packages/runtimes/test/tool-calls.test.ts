@@ -493,6 +493,24 @@ describe("tools offered for a turn", () => {
     ] as const)
       expect(offeredTools(context({ restrictions: [restriction] }))).not.toContain("Bash");
   });
+
+  it("[TC-PE-430] offers each combination of file and command answers the tools it opens, and no command tool without both file answers Allow", () => {
+    // covers PE-005
+    // Issue #661: Local Git Allow with Edit files Never left a member with nothing to commit with.
+    const decisions = ["allow", "ask", "deny"] as const;
+    for (const read of decisions)
+      for (const edit of decisions)
+        for (const run of decisions)
+          for (const git of decisions) {
+            const overrides = { "read-files": read, "edit-files": edit, "run-commands": run, "local-git": git };
+            const tools = offeredTools(context({ preset: "trusting", hob: { ...EMPTY_HOB_POLICY, overrides } }));
+            expect(tools.includes("Read"), JSON.stringify(overrides)).toBe(read !== "deny");
+            expect(tools.includes("Edit"), JSON.stringify(overrides)).toBe(edit !== "deny");
+            expect(tools.includes("Bash"), JSON.stringify(overrides)).toBe(
+              read === "allow" && edit === "allow" && (run !== "deny" || git !== "deny"),
+            );
+          }
+  });
 });
 
 describe("combining verdicts", () => {

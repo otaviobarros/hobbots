@@ -1,4 +1,4 @@
-import type { FolderChecksShape, HobbotsRepository, TaskRepository } from "@hobbots/agents";
+import { type FolderChecksShape, type HobbotsRepository, openTools, type TaskRepository } from "@hobbots/agents";
 import {
   type Agent,
   AgentId,
@@ -8,6 +8,9 @@ import {
   isTerminalTask,
   MilestoneId,
   POLICY_OPERATIONS,
+  type PolicyDecision,
+  type PolicyOperation,
+  type PolicyOverrides,
   type Quest,
   QuestId,
   questsAbove,
@@ -96,6 +99,55 @@ const timeoutFor = (scope: CallScope, task: Task, minutes: number | undefined) =
   return Effect.succeed(asked ?? most);
 };
 
+const COMMAND_OPERATIONS: ReadonlyArray<PolicyOperation> = ["run-commands", "local-git"];
+const FILE_OPERATIONS: ReadonlyArray<PolicyOperation> = ["read-files", "edit-files"];
+
+/**
+ * What the member's tools will be under `decisions`, in words for the lead, refusing a request whose
+ * own answers open commands and close the file operations they run with, so no member is given work
+ * it has no tool for (#661). The same gap left by the lead's or the member's own policy is a warning.
+ * With no folder, or reading denied, the member's turns are chat-only, as `toolTurn` makes them.
+ * Commands also need the member's sandbox, which is decided when its turn starts.
+ */
+const toolsFor = (
+  member: Agent,
+  asked: PolicyOverrides | undefined,
+  { decisions, folders }: Pick<Authority, "decisions" | "folders">,
+) => {
+  const open = openTools((operation) => decisions[operation]);
+  const chatOnly =
+    folders.length === 0 ? "no folder is both yours and its own" : open.read ? null : "it would have read-files deny";
+  const tools = [
+    [open.read, "file reads"],
+    [open.edit, "file edits"],
+    [open.commands, "commands"],
+    [open.gitInit, "git_init"],
+  ] as const;
+  const has = tools.flatMap(([on, name]) => (on ? [name] : []));
+  const lacks = tools.flatMap(([on, name]) => (on ? [] : [`no ${name}`]));
+  const summary =
+    chatOnly === null
+      ? ` ${member.name} will have: ${[has.join(", "), ...(lacks.length === 0 ? [] : [lacks.join(", ")])].join("; ")}.`
+      : ` ${member.name} will have no tools: ${chatOnly}, so its turns are chat-only. Do the Task's file work yourself, or give it work that needs no files.`;
+  const commands = COMMAND_OPERATIONS.filter((operation) => decisions[operation] !== "deny");
+  if (open.commands || commands.length === 0) return Effect.succeed(summary);
+  const closing = FILE_OPERATIONS.filter((operation) => decisions[operation] !== "allow");
+  const rule = `commands, Git's included, need read-files and edit-files both allow, and ${member.name} would have ${closing.map((operation) => `${operation} ${decisions[operation]}`).join(" and ")}`;
+  // Refused only when the request's own answers make the gap; one the lead or member already has warns.
+  const gives = commands.filter((operation) => asked?.[operation] !== undefined);
+  const takes = closing.filter((operation) => (asked?.[operation] ?? "allow") !== "allow");
+  if (gives.length > 0 && takes.length > 0) {
+    return refuse(
+      "authority-unusable",
+      `${member.name} could not use ${gives.join(" or ")}: ${rule}. Give ${takes.join(" and ")} allow, or give ${gives.join(" and ")} deny and run the commands yourself.${summary}`,
+    );
+  }
+  if (chatOnly !== null) return Effect.succeed(summary);
+  return Effect.succeed(
+    `${summary} It cannot use ${commands.join(" or ")} though it has them: ${rule}. Run any commands the Task needs yourself.`,
+  );
+};
+
 /** Tools a lead brings in other hobs and moves results between them with. */
 export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority, limits, separator }: Deps) => {
   /**
@@ -134,7 +186,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
           narrowed.authority.overrides[operation] === undefined ? [] : [[operation, both.decisions[operation]]],
         ),
       );
-      return { given: { overrides, folders: [...both.folders] }, lead: lead.folders };
+      return { given: { overrides, folders: [...both.folders] }, decisions: both.decisions, lead: lead.folders };
     });
 
   /**
@@ -177,7 +229,8 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const member = yield* findHob(hobs, input.hob);
         yield* checkMember(scope, task, member);
         yield* capacity(scope, member.id, 1);
-        const { given, lead } = yield* memberAuthority(scope, task, member, input);
+        const { given, decisions, lead } = yield* memberAuthority(scope, task, member, input);
+        const tools = yield* toolsFor(member, input.authority?.decisions, { decisions, folders: given.folders });
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         const journal = journalOf();
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
@@ -211,7 +264,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         );
         return {
           done: {
-            message: `Delegated Task ${created.id} to ${member.name}. You lead Quest ${quest.id}.${alreadyOpen(scope.tree, task, member)}`,
+            message: `Delegated Task ${created.id} to ${member.name}. You lead Quest ${quest.id}.${tools}${alreadyOpen(scope.tree, task, member)}`,
             details: {
               task_id: created.id,
               quest_id: quest.id,

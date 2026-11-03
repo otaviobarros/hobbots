@@ -148,7 +148,7 @@ describe("a wait ends the turn", () => {
     // No automatic "waiting" checkpoint while the turn still runs.
     expect(during.checkpoints.filter((each) => each.taskId === top && each.kind === "waiting")).toEqual([]);
 
-    await run(turn.end("completed", null));
+    await run(turn.end({ _tag: "Replied", text: "" }, null));
     const after = await treeOf(top);
     expect(after.tasks[0]?.state).toBe("waiting");
     expect(after.checkpoints.filter((each) => each.taskId === top && each.kind === "waiting")).toHaveLength(1);
@@ -157,7 +157,7 @@ describe("a wait ends the turn", () => {
     const next = await run(chatTurn("m-2"));
     const again = await run(next.hubTools.call("wait_for", { key: "wait-later", tasks: [pip] }));
     expect(again.text).toContain("End your turn now.");
-    await run(next.end("completed", null));
+    await run(next.end({ _tag: "Replied", text: "" }, null));
     expect((await treeOf(top)).tasks[0]?.state).toBe("waiting");
   });
 });

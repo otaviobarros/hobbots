@@ -184,7 +184,14 @@ const stepWhoseSessionEnded = (ended: "completed" | "failed") =>
     yield* createTask("quest", null);
     const { attempt, task } = yield* startSession(yield* createTask("pass", "quest"));
     yield* TaskRepository.use((tasks) =>
-      tasks.updateAttempt(attempt.id, { state: ended, outcome: "The step's session finished.", at: now }),
+      tasks.updateAttempt(attempt.id, {
+        _tag: "Ended",
+        end:
+          ended === "completed"
+            ? { _tag: "Finished", outcome: "The step's session finished." }
+            : { _tag: "Failed", reason: null },
+        at: now,
+      }),
     );
     return task.id;
   });

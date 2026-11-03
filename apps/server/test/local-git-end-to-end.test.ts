@@ -1,5 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeHttpServer, NodeServices } from "@effect/platform-node";
@@ -17,7 +26,15 @@ import {
 } from "@hobbots/agents";
 import type { AttemptActivityRead, ThreadTasksRead } from "@hobbots/api";
 import { LocalGitToolsLive } from "@hobbots/charms";
-import { type Agent, GIT_INIT_LABEL, isInProgress, type Message, roleFields, type Thread } from "@hobbots/domain";
+import {
+  type Agent,
+  type ApprovalRequest,
+  GIT_INIT_LABEL,
+  isInProgress,
+  type Message,
+  roleFields,
+  type Thread,
+} from "@hobbots/domain";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -55,8 +72,9 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-local-git-e2e-")));
 const project = join(temp, "nettle-project");
+const earlier = join(temp, "earlier-run");
 const dataDir = join(temp, "data");
-for (const folder of [project, dataDir]) mkdirSync(folder, { recursive: true });
+for (const folder of [project, earlier, dataDir]) mkdirSync(folder, { recursive: true });
 
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
@@ -158,6 +176,9 @@ const exchange = async (thread: Thread, ...lines: Array<string>) => {
   });
 };
 
+const approvals = async (thread: Thread) =>
+  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/threads/${thread.id}/approvals`)).body;
+
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
 /** The thread's Quest attempts, once every one has ended. */
@@ -224,5 +245,94 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     expect(activity.commands.map(({ command, folder, state }) => ({ command, folder, state }))).toEqual([
       { command: "git add README.md && git commit -m 'First'", folder: project, state: "succeeded" },
     ]);
+  });
+
+  // covers PE-005, PE-003
+  it("[TC-PE-442] a hob clears a folder holding an earlier repository and starts a new one, with no step for the user beyond approving the delete", async () => {
+    await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [earlier] });
+    const git = (...args: Array<string>) =>
+      execFileSync("git", ["-C", earlier, ...args], {
+        encoding: "utf8",
+        env: { PATH: process.env.PATH, HOME: temp, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+      }).trim();
+    git("init", "--quiet");
+    writeFileSync(join(earlier, "README.md"), "# Earlier run\n");
+    git("add", "README.md");
+    git(
+      "-c",
+      "user.name=Frodo",
+      "-c",
+      "user.email=frodo@example.com",
+      "commit",
+      "--quiet",
+      "--no-gpg-sign",
+      "-m",
+      "Earlier",
+    );
+    git("remote", "add", "origin", "https://example.com/earlier.git");
+    writeFileSync(join(earlier, ".git", "hooks", "pre-commit"), "echo earlier\n");
+
+    const frodo = (
+      await request<Agent>("POST", "/api/agents", {
+        name: "Frodo",
+        ...roleFields("writer"),
+        lookSeed: 663,
+        lookColor: "moss",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+      })
+    ).body;
+    const thread = (await request<Thread>("POST", `/api/agents/${frodo.id}/threads`)).body;
+
+    // A delete the hub can read is refused, since the repository's config and hooks are in it, and
+    // the hob is told what it can do instead.
+    const refused = await exchange(thread, "Start clean", `fake:tool Bash rm -rf ${earlier}`);
+    expect(refused.steps.find((step) => step.kind === "tool")).toMatchObject({
+      state: "denied",
+      reason: expect.stringContaining("the git_init tool replaces it"),
+    });
+    expect(git("rev-parse", "HEAD")).toMatch(/^[0-9a-f]{40}$/);
+
+    // One the hub cannot read in full is asked about on Balanced: the user approves it, the one step they take.
+    const sent = await request("POST", `/api/threads/${thread.id}/messages`, {
+      content: [
+        "Delete everything",
+        `fake:run ${JSON.stringify({
+          command: "rm -rf ./* ./.[!.]*",
+          writes: { "README.md": null },
+          output: `rm: ${earlier}/.git/config: Operation not permitted\n`,
+          exitCode: 1,
+        })}`,
+      ].join("\n"),
+    });
+    expect(sent.status).toBe(200);
+    const pending = await eventually(async () => {
+      return (await approvals(thread)).find((approval) => approval.state === "pending");
+    });
+    await request("POST", `/api/approvals/${pending.id}/decision`, {
+      decision: "approve",
+      actionDigest: pending.actionDigest,
+    });
+    await eventually(async () => {
+      const last = (await messages(thread)).at(-1);
+      return last?.role === "assistant" && !isInProgress(last.status) ? last : undefined;
+    });
+    // The fake runs no command, so the test leaves what the real sandbox does (TC-PE-440): only the
+    // repository's config and hooks.
+    for (const name of readdirSync(join(earlier, ".git"))) {
+      if (name !== "config" && name !== "hooks") rmSync(join(earlier, ".git", name), { recursive: true });
+    }
+
+    // git_init replaces that .git with a new repository, and asks nothing more.
+    const created = await exchange(thread, "Make it a repository", hub("git_init", { folder: earlier }));
+    expect(created.steps.find((step) => step.label === GIT_INIT_LABEL)).toMatchObject({ state: "done" });
+    expect(git("rev-parse", "--is-inside-work-tree")).toBe("true");
+    expect(() => git("rev-parse", "--verify", "--quiet", "HEAD")).toThrow();
+    expect(existsSync(join(earlier, ".git", "hooks"))).toBe(false);
+    expect(readFileSync(join(earlier, ".git", "config"), "utf8")).not.toContain("earlier.git");
+    expect(readdirSync(earlier)).toEqual([".git"]);
+    expect(await approvals(thread)).toHaveLength(1);
   });
 });

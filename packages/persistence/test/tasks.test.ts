@@ -287,15 +287,11 @@ describe("Task records", () => {
         if (created === undefined) throw new Error("no Task");
         const first = yield* tasks.startAttempt(copy, created.revision, attempt("a1"));
         const twice = yield* tasks.startAttempt(copy, first.value.task.revision, attempt("a-twice")).pipe(Effect.flip);
-        const running = yield* tasks.updateAttempt(AttemptId.make("a1"), {
-          state: "running",
-          sessionId: "s1",
-          at: now,
-        });
+        const running = yield* tasks.updateAttempt(AttemptId.make("a1"), { _tag: "Running", sessionId: "s1", at: now });
         const stale = yield* tasks.moveTask(copy, created.revision, "waiting", now).pipe(Effect.flip);
         const failed = yield* tasks.updateAttempt(AttemptId.make("a1"), {
-          state: "failed",
-          outcome: "Timed out",
+          _tag: "Ended",
+          end: { _tag: "Failed", reason: "Timed out" },
           at: now,
         });
         const moved = yield* tasks.moveTask(copy, failed.value.task.revision, "failed", now);
@@ -895,7 +891,11 @@ describe("Task records", () => {
           ],
           { concurrency: "unbounded" },
         );
-        yield* tasks.updateAttempt(AttemptId.make("a1"), { state: "failed", outcome: "Lost", at: now });
+        yield* tasks.updateAttempt(AttemptId.make("a1"), {
+          _tag: "Ended",
+          end: { _tag: "Failed", reason: "Lost" },
+          at: now,
+        });
         const failed = yield* tasks.moveTask(copy, (yield* latest("copy")).revision, "failed", now);
         const retry = yield* tasks.startAttempt(copy, failed.value.revision, attempt("a2"));
         const staleResult = yield* reason(
@@ -909,19 +909,15 @@ describe("Task records", () => {
         // The parent cannot end while its members still work.
         const root = yield* latest("campaign");
         yield* tasks.startAttempt(campaignId, root.revision, attempt("a-root"));
-        yield* tasks.updateAttempt(AttemptId.make("a-root"), { state: "completed", at: now });
+        yield* tasks.updateAttempt(AttemptId.make("a-root"), {
+          _tag: "Ended",
+          end: { _tag: "Finished", outcome: null },
+          at: now,
+        });
         const failOpen = yield* reason(tasks.moveTask(campaignId, (yield* latest("campaign")).revision, "failed", now));
-        // Ada's Task waits on Quill's copy before it can complete.
+        // Ada's Task cannot start before Quill's copy completes (#667).
         const build = yield* latest("build");
-        const buildStarted = yield* tasks.startAttempt(build.id, build.revision, attempt("a-build"));
-        const waiting = yield* reason(
-          tasks.completeTask(build.id, buildStarted.value.task.revision, {
-            summary: "Built",
-            attemptId: AttemptId.make("a-build"),
-            artifacts: [],
-            at: now,
-          }),
-        );
+        const waiting = yield* reason(tasks.startAttempt(build.id, build.revision, attempt("a-build")));
         const notSibling = yield* reason(
           tasks.createTask({ task: newTask("ada-step", ADA, "build", ["campaign"]), delegation: null, milestones: [] }),
         );
@@ -1168,7 +1164,11 @@ describe("waits and Task tool calls", () => {
         const tasks = yield* TaskRepository;
         const copy = TaskId.make("copy");
         yield* tasks.startAttempt(copy, (yield* latest("copy")).revision, attempt("a1"));
-        yield* tasks.updateAttempt(AttemptId.make("a1"), { state: "failed", outcome: "It broke.", at: now });
+        yield* tasks.updateAttempt(AttemptId.make("a1"), {
+          _tag: "Ended",
+          end: { _tag: "Failed", reason: "It broke." },
+          at: now,
+        });
         const failed = yield* tasks.moveTask(copy, (yield* latest("copy")).revision, "failed", now);
         const notFailed = yield* tasks
           .retryTask(TaskId.make("build"), (yield* latest("build")).revision, now)
@@ -1259,7 +1259,11 @@ describe("waits and Task tool calls", () => {
         const reassign = (ownerId: AgentId) =>
           Effect.flatMap(latest("copy"), (task) => tasks.reassignTask(copy, task.revision, ownerId, later));
         const live = yield* reassign(PIP).pipe(Effect.flip);
-        yield* tasks.updateAttempt(AttemptId.make("a1"), { state: "completed", at: now });
+        yield* tasks.updateAttempt(AttemptId.make("a1"), {
+          _tag: "Ended",
+          end: { _tag: "Finished", outcome: null },
+          at: now,
+        });
         const toLead = yield* reassign(ALDRIC).pipe(Effect.flip);
         const toSelf = yield* reassign(QUILL).pipe(Effect.flip);
         const top = yield* tasks

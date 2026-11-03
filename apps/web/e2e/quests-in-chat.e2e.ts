@@ -31,7 +31,7 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   const drawer = page.getByRole("complementary", { name: "Build the campaign, Task details" });
   await expect(drawer.getByRole("heading", { name: "Build the campaign" })).toBeFocused();
   await expect(drawer).toContainText("Aldric gave it");
-  await expect(drawer).toContainText("Keyword research done while waiting on Quill");
+  await expect(drawer).toContainText("Keyword research done");
   await expect(drawer).toContainText("Black Friday: 20% off everything, this weekend only.");
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();

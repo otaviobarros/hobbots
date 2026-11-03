@@ -6,6 +6,7 @@ import {
   isTerminalTask,
   type Question,
   type Task,
+  TaskReadiness,
   type TaskTree,
 } from "@hobbots/domain";
 
@@ -45,13 +46,6 @@ const stepPlace = (step: Task, tree: TaskTree): { readonly index: number; readon
   return { index: steps.findIndex((each) => each.id === step.id) + 1, total: steps.length };
 };
 
-/** The Tasks `task` comes after that ended without completing, so it can never start. */
-const endedBefore = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<Task> =>
-  task.dependsOn.flatMap((id) => {
-    const before = tree.find((each) => each.id === id);
-    return before !== undefined && isTerminalTask(before.state) && before.state !== "completed" ? [before] : [];
-  });
-
 /** An artifact as a line, its value cut to `limit`. */
 const artifactLine = (artifact: TaskTree["artifacts"][number], limit: number) =>
   `  - ${artifact.label} (${artifact.kind}, artifact ${artifact.id}): ${cut(artifact.value, limit)}`;
@@ -80,7 +74,7 @@ export const stepPrompt = (step: Task, tree: TaskTree): string => {
     `This is step ${index} of ${total} of a Task you own, running in a fresh session with only its brief and what it refers to.`,
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(step, tree),
-    `Report findings or blockers with report_checkpoint. When the step is done, call complete_task with its result; otherwise your final reply becomes its result. Task id: ${step.id}.`,
+    `Report findings or blockers with report_checkpoint. If the work is already done or you cannot do it as briefed, report a finding or blocker and end without complete_task: the step then waits for its owner. When the step is done, call complete_task with its result; otherwise your final reply becomes its result. Task id: ${step.id}.`,
   ].join("\n");
 };
 
@@ -162,18 +156,6 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
 };
 
 /**
- * Why a member's Task is blocked when its turn ended with only its own `milestones` unreported, in
- * words its lead can act on: nothing it waits on is open, so it goes on only when someone acts, and
- * delegating the same work again leaves this Task behind (#571).
- */
-export const stoppedShort = (milestones: ReadonlyArray<string>): string =>
-  [
-    `Its member ended a turn without completing it, and only its own milestones are unreported: ${milestones.map((title) => `"${title}"`).join(", ")}.`,
-    "It waits on no question, approval or other Task, so nothing moves it on by itself.",
-    "Hand it what it needs, or cancel or reassign it; delegating the same work again leaves this Task open.",
-  ].join(" ");
-
-/**
  * The Tasks a member's work builds on: those its Task comes after, then those whose artifacts were
  * handed to it, once each, in that order.
  */
@@ -228,7 +210,8 @@ const briefedUnder = (task: Task, tree: TaskTree): ReadonlyArray<{ readonly task
 const childLine = (child: Task, tree: TaskTree, place: string) => {
   const own = tree.checkpoints.filter((checkpoint) => checkpoint.taskId === child.id);
   const latest = own.filter((checkpoint) => checkpoint.kind !== "progress").at(-1) ?? own.at(-1);
-  const stuck = child.state === "queued" && endedBefore(child, tree.tasks).length > 0;
+  // Held by a Task it comes after that failed, was cancelled or is blocked: it waits for its owner.
+  const stuck = child.state === "queued" && TaskReadiness.of(child, tree.tasks)._tag === "Blocked";
   const outcome =
     child.result !== null
       ? ` Result: ${cut(child.result.summary, SUMMARY_LIMIT)}`
@@ -286,6 +269,10 @@ export const stepPromptShows = (step: Task, tree: TaskTree): ((item: BackpackIte
     (payload._tag === "hand-off" && payload.handOff.toTaskId === step.id && handed.has(payload.handOff.artifactId));
 };
 
+/** What the owner can do about a step that stopped on a finding or blocker, which holds the steps after it (#667). */
+const STOPPED_STEP =
+  "A blocked step stopped on a finding or blocker, and the steps after it wait for you. To go on, call complete_task on that step with the result the steps after it should work from; to change the plan, cancel it and the steps after it with cancel_task, then plan again.";
+
 /**
  * What the owner's chat turn is told of the open Task it works on: the Task, and for each Task
  * under it, and under its own steps, its state, result or latest checkpoint, and when it leads a
@@ -306,6 +293,9 @@ export const ownerBriefing = (task: Task, tree: TaskTree): string => {
       : [
           "The work under it, each running in its own session, with what it reported:",
           ...under.flatMap(({ task: child, place }) => childLine(child, tree, place)),
+          ...(under.some(({ task: child }) => child.state === "blocked" && isStep(child, tree.tasks))
+            ? [STOPPED_STEP]
+            : []),
           "Call complete_task with the Task's result once everything under it has ended.",
         ]),
   ].join("\n");

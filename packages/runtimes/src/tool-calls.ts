@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
-import { type CommandStart, operationDecision } from "@hobbots/agents";
-import { narrowest, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
+import { type CommandStart, openTools, operationDecision } from "@hobbots/agents";
+import { narrowest, type PolicyDecision, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
 import {
   type PolicyContext,
   type PolicyRequest,
@@ -38,22 +38,17 @@ export const CLAUDE_CODE_TOOLS = [
  * asking. Every call is still decided one by one.
  */
 export const offeredTools = (context: Pick<PolicyContext, "preset" | "hob" | "restrictions" | "sandbox">) => {
-  const open = (...operations: ReadonlyArray<PolicyOperation>) =>
-    operations.some((operation) => operationDecision(context, operation) !== "deny");
-  const free = (...operations: ReadonlyArray<PolicyOperation>) =>
-    operations.every((operation) => operationDecision(context, operation) === "allow");
+  const open = openTools((operation) => operationDecision(context, operation));
   return CLAUDE_CODE_TOOLS.filter((tool) => {
     switch (tool) {
       case "Read":
       case "Glob":
       case "Grep":
-        return open("read-files");
+        return open.read;
       case "Bash":
-        return (
-          context.sandbox !== "unavailable" && open("run-commands", "local-git") && free("read-files", "edit-files")
-        );
+        return context.sandbox !== "unavailable" && open.commands;
       default:
-        return open("edit-files");
+        return open.edit;
     }
   });
 };

@@ -42,7 +42,8 @@ import taskToolRefusals from "./0039_task_tool_refusals.ts";
 import approvalDeciders from "./0040_approval_deciders.ts";
 import checkpointAboutTask from "./0041_checkpoint_about_task.ts";
 import leadMessages from "./0042_lead_messages.ts";
-import questionAnswerers from "./0043_question_answerers.ts";
+import cancelRequests from "./0043_cancel_requests.ts";
+import questionAnswerers from "./0044_question_answerers.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -92,5 +93,6 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0040_approval_deciders": approvalDeciders,
   "0041_checkpoint_about_task": checkpointAboutTask,
   "0042_lead_messages": leadMessages,
-  "0043_question_answerers": questionAnswerers,
+  "0043_cancel_requests": cancelRequests,
+  "0044_question_answerers": questionAnswerers,
 };
