@@ -14,6 +14,7 @@ import {
   HobService,
   PermissionSummary,
   SecretRedaction,
+  TaskFiles,
 } from "@hobbots/agents";
 import {
   GitHubAccountLive,
@@ -61,7 +62,7 @@ import {
   FolderSandboxLive,
   ProcessSandbox,
 } from "@hobbots/runtimes";
-import { ActivityStoreLive, FolderScannerLive } from "@hobbots/workbench";
+import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
 import { Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
@@ -89,6 +90,7 @@ import {
 import { QuietRoutineReads } from "./request-log.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
+import { TaskFileRoute } from "./task-files.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
@@ -244,15 +246,6 @@ const ServerLive = Layer.unwrap(
         ),
       )
       .pipe(Layer.provideMerge(ChatService.layer))
-      // Before the chat service and the step runner: every turn records what it ran and changed for
-      // the Workbench (ADR 023), its details kept in the data folder, out of every hob's reach.
-      .pipe(
-        Layer.provideMerge(
-          ActivityRecorder.layer().pipe(
-            Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity")))),
-          ),
-        ),
-      )
       // Before the chat service: every turn you did not start with Send starts from the backpack, and
       // at start the dispatcher expires the claims an earlier process held (ADR 019).
       .pipe(Layer.provideMerge(ContinuationsLive))
@@ -265,6 +258,16 @@ const ServerLive = Layer.unwrap(
             Layer.provideMerge(MemberContinuationsLive),
             Layer.provideMerge(TaskTools.layer(separator, config.taskLimits)),
             Layer.provideMerge(TaskSignal.layer),
+          ),
+        ),
+      )
+      // Before the chat service and the step runner: every turn, a step's and a party member's too,
+      // records what it ran and changed for the Workbench (ADR 023), its details kept in the data
+      // folder, out of every hob's reach.
+      .pipe(
+        Layer.provideMerge(
+          Layer.merge(ActivityRecorder.layer(), TaskFiles.layer.pipe(Layer.provide(HobFilesLive))).pipe(
+            Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity")))),
           ),
         ),
       )
@@ -322,6 +325,7 @@ const ServerLive = Layer.unwrap(
           Layer.mergeAll(
             ApiRoutes,
             EventStreamRoute,
+            TaskFileRoute,
             HobGitHubAppPages,
             WebClientRoutes(config.webDir),
             OwnHostsOnly,

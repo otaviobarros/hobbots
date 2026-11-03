@@ -1,4 +1,4 @@
-import { AttemptActivity, AttemptId, CommandId, ContentId } from "@hobbots/domain";
+import { AttemptActivity, AttemptFiles, AttemptId, CommandId, ContentId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
 import { DeviceSession } from "./user-session.ts";
@@ -47,6 +47,14 @@ export class WorkbenchGroup extends HttpApiGroup.make("workbench")
       params: { attemptId: AttemptId, contentId: ContentId },
       success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array({ contentType: "application/octet-stream" })),
       error: ActivityDetailNotFound,
+    }),
+    // The files the Attempt made or touched, as they are now in the hob's folders. One is served
+    // for a preview or a download at `/api/attempts/:attemptId/files/:fileId`, outside this group,
+    // since each kind of file goes with its own media type.
+    HttpApiEndpoint.get("files", "/attempts/:attemptId/files", {
+      params: { attemptId: AttemptId },
+      success: AttemptFiles,
+      error: AttemptNotFound,
     }),
   )
   .middleware(DeviceSession)

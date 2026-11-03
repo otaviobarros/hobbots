@@ -36,6 +36,7 @@ import withdrawnQuestions from "./0033_withdrawn_questions.ts";
 import hobGitHubApps from "./0034_hob_github_apps.ts";
 import taskGrants from "./0035_task_grants.ts";
 import attemptActivity from "./0036_attempt_activity.ts";
+import replyUsage from "./0037_reply_usage.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -79,4 +80,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0034_hob_github_apps": hobGitHubApps,
   "0035_task_grants": taskGrants,
   "0036_attempt_activity": attemptActivity,
+  "0037_reply_usage": replyUsage,
 };

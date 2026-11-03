@@ -176,6 +176,39 @@ describe("a reply that ends early", () => {
     expect(result.again._tag).toBe("ReplyNotResumable");
   });
 
+  // covers CH-004 and ADR 017; regression for #398
+  it("[TC-RT-050] keeps each reply's latency and token usage next to its runtime and model", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const repo = yield* HobbotsRepository;
+      const thread = yield* chat.createThread(HOB_ID);
+      yield* replyTo(thread.id, "hello");
+      yield* replyTo(thread.id, "again");
+      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      return { stored: yield* repo.listMessages(thread.id), cut };
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+
+    const [first, second] = result.stored.filter((m) => m.role === "assistant");
+    // The fake reports a quarter token a character, and a cache its session's first turn writes.
+    expect(first).toMatchObject({
+      runtime: "claude-code",
+      usage: {
+        timeToRequestMs: 5,
+        timeToFirstStreamMs: 15,
+        timeToFirstTokenMs: 20,
+        inputTokens: 2,
+        outputTokens: 3,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 1000,
+      },
+    });
+    // The resumed session reads what the first turn wrote.
+    expect(second?.usage).toMatchObject({ cacheReadTokens: 1000, cacheWriteTokens: 0 });
+    // A turn that ends without a result reports nothing.
+    expect(result.cut.usage).toBeNull();
+    expect(result.stored.find((m) => m.role === "user")?.usage).toBeNull();
+  });
+
   // covers CH-004, AG-004
   it("[TC-CH-101] stores the configuration a continued reply runs on, after the hob was edited", async () => {
     const result = await Effect.gen(function* () {

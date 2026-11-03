@@ -9,6 +9,7 @@ import {
   Message,
   type MessageId,
   messageEvents,
+  type ReplyUsage,
   Thread,
   ThreadCheckpoint,
   ThreadId,
@@ -84,9 +85,41 @@ export const threadRows = (
   }));
 const checkpointRows = (rows: ReadonlyArray<{ readonly lines?: unknown; readonly omitted?: unknown }>) =>
   rows.map((row) => ({ ...row, lines: JSON.parse(String(row.lines)), omitted: Number(row.omitted) }));
+// A reply's usage is one column per field (migration 0037), read as numbers: PostgreSQL reads
+// BIGINT as a bigint. A reply with none of them has no usage.
+const measured = (value: unknown) => (value === null || value === undefined ? null : Number(value));
+
+const usageOf = (row: Readonly<Record<string, unknown>>): ReplyUsage | null => {
+  const usage: ReplyUsage = {
+    timeToRequestMs: measured(row.timeToRequestMs),
+    timeToFirstStreamMs: measured(row.timeToFirstStreamMs),
+    timeToFirstTokenMs: measured(row.timeToFirstTokenMs),
+    inputTokens: measured(row.inputTokens),
+    outputTokens: measured(row.outputTokens),
+    cacheReadTokens: measured(row.cacheReadTokens),
+    cacheWriteTokens: measured(row.cacheWriteTokens),
+  };
+  return Object.values(usage).every((value) => value === null) ? null : usage;
+};
+
+const usageColumns = (usage: ReplyUsage | null) => ({
+  time_to_request_ms: usage?.timeToRequestMs ?? null,
+  time_to_first_stream_ms: usage?.timeToFirstStreamMs ?? null,
+  time_to_first_token_ms: usage?.timeToFirstTokenMs ?? null,
+  input_tokens: usage?.inputTokens ?? null,
+  output_tokens: usage?.outputTokens ?? null,
+  cache_read_tokens: usage?.cacheReadTokens ?? null,
+  cache_write_tokens: usage?.cacheWriteTokens ?? null,
+});
+
 // A message's steps are one JSON text column (migration 0017).
-const messageRows = (rows: ReadonlyArray<{ readonly revision?: unknown; readonly steps?: unknown }>) =>
-  rows.map((row) => ({ ...row, revision: Number(row.revision), steps: JSON.parse(String(row.steps ?? "[]")) }));
+const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
+  rows.map((row) => ({
+    ...row,
+    revision: Number(row.revision),
+    steps: JSON.parse(String(row.steps ?? "[]")),
+    usage: usageOf(row),
+  }));
 
 /** The SQL store of hobs, threads and messages, for SQLite and PostgreSQL (ADR 011). */
 export const HobbotsRepositoryLive = Layer.effect(
@@ -270,10 +303,17 @@ export const HobbotsRepositoryLive = Layer.effect(
 
     // Writes the message row only; the caller journals its events in the same transaction.
     const writeMessage = (message: Message) =>
-      sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, runtime, model, resets_at, steps, created_at, revision, seq)
+      Effect.suspend(() => {
+        const usage = usageColumns(message.usage);
+        return sql`INSERT INTO messages (id, thread_id, role, content, status, error, config_version, runtime, model,
+          time_to_request_ms, time_to_first_stream_ms, time_to_first_token_ms,
+          input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+          resets_at, steps, created_at, revision, seq)
         VALUES (
           ${message.id}, ${message.threadId}, ${message.role}, ${message.content},
           ${message.status}, ${message.error}, ${message.configVersion}, ${message.runtime}, ${message.model},
+          ${usage.time_to_request_ms}, ${usage.time_to_first_stream_ms}, ${usage.time_to_first_token_ms},
+          ${usage.input_tokens}, ${usage.output_tokens}, ${usage.cache_read_tokens}, ${usage.cache_write_tokens},
           ${message.resetsAt}, ${JSON.stringify(message.steps)},
           ${message.createdAt}, ${message.revision},
           (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE thread_id = ${message.threadId})
@@ -285,9 +325,17 @@ export const HobbotsRepositoryLive = Layer.effect(
           config_version = excluded.config_version,
           runtime = excluded.runtime,
           model = excluded.model,
+          time_to_request_ms = excluded.time_to_request_ms,
+          time_to_first_stream_ms = excluded.time_to_first_stream_ms,
+          time_to_first_token_ms = excluded.time_to_first_token_ms,
+          input_tokens = excluded.input_tokens,
+          output_tokens = excluded.output_tokens,
+          cache_read_tokens = excluded.cache_read_tokens,
+          cache_write_tokens = excluded.cache_write_tokens,
           resets_at = excluded.resets_at,
           steps = excluded.steps,
           revision = excluded.revision`;
+      });
 
     // The message's revision is its MessageUpserted entry, the first of its events.
     const upsertMessage = (input: Message) =>

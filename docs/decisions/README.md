@@ -26,3 +26,4 @@ These ADRs record decisions. They are not evidence of implemented runtime capabi
 - [022 — A hob's own GitHub App](022-hob-github-app.md)
 - [023 — The Workbench](023-workbench.md)
 - [024 — The Codex adapter](024-codex-adapter.md)
+- [025 — The connected desktop](025-connected-desktop.md)

@@ -1,6 +1,6 @@
 # ADR 012 — The hub service on macOS
 
-Status: **Accepted.** Refines [ADR 010](010-desktop-hub.md) for how the hub's background service runs on macOS.
+Status: **Accepted.** Refines [ADR 010](010-desktop-hub.md) for how the hub's background service runs on macOS. [ADR 025](025-connected-desktop.md) starts the server only once the computer is a hub: a new installation starts it after Run here, and a connected desktop never does.
 
 ## Context
 

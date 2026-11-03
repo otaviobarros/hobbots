@@ -454,6 +454,41 @@ describe("reading a Claude Code turn", () => {
     expect(read(stream({ type: "message_stop" }))).toEqual([{ _tag: "StepEnded", id: "thinking-2" }]);
   });
 
+  // regression for #398
+  it("[TC-RT-051] completes a turn with its timings and its main loop's token usage, null where Claude Code omits one", () => {
+    const result = (timings: Record<string, number>) =>
+      ({
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        result: "Done.",
+        session_id: "s",
+        ...timings,
+        usage: {
+          input_tokens: 12,
+          output_tokens: 34,
+          cache_read_input_tokens: 5600,
+          cache_creation_input_tokens: 78,
+        },
+        // Cumulative across a resumed session's turns, so never this turn's own.
+        modelUsage: { opus: { inputTokens: 99_999, outputTokens: 99_999 } },
+      }) as unknown as SDKMessage;
+    const tokens = { inputTokens: 12, outputTokens: 34, cacheReadTokens: 5600, cacheWriteTokens: 78 };
+
+    expect(turnEvents()(result({ time_to_request_ms: 310, ttft_stream_ms: 900, ttft_ms: 1250 }))).toEqual([
+      {
+        _tag: "Completed",
+        sessionId: "s",
+        text: "Done.",
+        usage: { timeToRequestMs: 310, timeToFirstStreamMs: 900, timeToFirstTokenMs: 1250, ...tokens },
+      },
+    ]);
+    // Claude Code before 2.1.162 does not report how long it took to send the request.
+    expect(turnEvents()(result({ ttft_stream_ms: 900, ttft_ms: 1250 }))).toMatchObject([
+      { usage: { timeToRequestMs: null, timeToFirstStreamMs: 900, timeToFirstTokenMs: 1250, ...tokens } },
+    ]);
+  });
+
   it("[TC-CH-097] ends the turn at a rejected rate limit, with when it resets, unless overage covers it", () => {
     const read = turnEvents();
     const limit = (info: Record<string, unknown>) =>

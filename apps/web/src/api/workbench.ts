@@ -1,6 +1,6 @@
 import type { AttemptActivityRead } from "@hobbots/api";
-import type { AttemptId, CommandId, CommandOutput, ContentId, HobbotsEvent } from "@hobbots/domain";
-import { type QueryClient, queryOptions } from "@tanstack/react-query";
+import type { AttemptId, CommandId, CommandOutput, ContentId, HobbotsEvent, TaskFileId } from "@hobbots/domain";
+import { keepPreviousData, type QueryClient, queryOptions } from "@tanstack/react-query";
 import { API_URL, call } from "./client.ts";
 import { syncState } from "./sync.ts";
 
@@ -59,6 +59,46 @@ export const activityChanged = async (queryClient: QueryClient, attemptId: Attem
   await queryClient.cancelQueries({ queryKey, exact: true });
   await queryClient.invalidateQueries({ queryKey, exact: true });
 };
+
+/**
+ * The files an Attempt made or touched, as they are now (ADR 023). `stamp` changes whenever the
+ * Attempt's records do, so the list is read again with them; a file changed on the hub meanwhile is
+ * seen when the list is next read.
+ */
+export const attemptFilesQuery = (attemptId: AttemptId, stamp: string) =>
+  queryOptions({
+    queryKey: ["workbench", "files", attemptId, stamp] as const,
+    queryFn: () => call((c) => c.workbench.files({ params: { attemptId } })),
+    placeholderData: keepPreviousData,
+    // A file can change outside the Task too: coming back to the app looks at the files again.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+
+/** Where the hub serves one of an Attempt's files: a preview, or the file itself as a download. */
+export const taskFileUrl = (
+  attemptId: AttemptId,
+  fileId: TaskFileId,
+  { download = false, version = null }: { download?: boolean; version?: string | null } = {},
+): string => {
+  const query = new URLSearchParams();
+  if (download) query.set("download", "1");
+  // What the file holds now, so a preview loads again when the file changes under the same id.
+  if (version !== null) query.set("v", version);
+  const search = query.size === 0 ? "" : `?${query.toString()}`;
+  return `${API_URL}/api/attempts/${encodeURIComponent(attemptId)}/files/${encodeURIComponent(fileId)}${search}`;
+};
+
+/** A text file's preview, as the hub serves it: redacted and cut to its first MiB. */
+export const taskFileTextQuery = (attemptId: AttemptId, fileId: TaskFileId, version: string | null) =>
+  queryOptions({
+    queryKey: ["workbench", "file-text", attemptId, fileId, version] as const,
+    queryFn: async ({ signal }) => {
+      const response = await fetch(taskFileUrl(attemptId, fileId, { version }), { signal, credentials: "same-origin" });
+      if (!response.ok) throw new Error(`The hub answered ${response.status}`);
+      return response.text();
+    },
+  });
 
 /**
  * Kept contents a file change of an Attempt names: text redacted, images as they were. Contents are

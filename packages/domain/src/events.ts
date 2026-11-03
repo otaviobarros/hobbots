@@ -215,6 +215,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // 2: a thread carries its `sessions` and its own `brain`. 3: its `archivedAt`.
   ThreadUpserted: 3,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
+  // A reply's `usage` was added with a default, compatibly.
   MessageUpserted: 4,
   MessageQueued: 1,
   MessageDequeued: 1,
