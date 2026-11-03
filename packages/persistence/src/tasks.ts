@@ -794,9 +794,10 @@ export const TaskRepositoryLive = Layer.effect(
           if (input.on.length === 0 || input.on.some((id) => !under.has(id))) {
             return yield* refuse("wait-outside-subtree", "A Task waits only for Tasks under it");
           }
-          // A new wait replaces the one the Task is already waiting on.
-          const moved =
-            before.state === "waiting" ? before : yield* orFail(TaskTransitions.moveTo(before, "waiting", input.at));
+          // A new wait replaces the one the Task is already waiting on. A Task whose turn still runs
+          // stays active until that turn ends.
+          const stays = before.state === "waiting" || (input.keepActive === true && before.state === "active");
+          const moved = stays ? before : yield* orFail(TaskTransitions.moveTo(before, "waiting", input.at));
           const task = new Task({ ...moved, updatedAt: input.at, revision });
           const wait = new TaskWait({ taskId, on: [...new Set(input.on)], mode: input.mode, createdAt: input.at });
           yield* sql`DELETE FROM task_waits WHERE task_id = ${taskId}`;
@@ -807,7 +808,7 @@ export const TaskRepositoryLive = Layer.effect(
             created_at: wait.createdAt,
           })}`;
           yield* saveTask(task);
-          const automatically = before.state === "waiting" ? [] : yield* automatic(task, input.at, revision + 1);
+          const automatically = stays ? [] : yield* automatic(task, input.at, revision + 1);
           return {
             value: { task, wait },
             events: [{ _tag: "TaskStateChanged", task, attempt: null, quest: null, wait } as const, ...automatically],

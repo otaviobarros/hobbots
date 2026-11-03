@@ -460,7 +460,8 @@ describe("hob tools for Tasks and Quests", () => {
     const waiting = await done(ALDRIC, TOP, "wait_for", { key: "w", tasks: [quill, ada], mode: "all" });
     expect(waiting.details.states).toEqual({ [quill]: "queued", [ada]: "queued" });
     const after = await tree();
-    expect(after.tasks[0]?.state).toBe("waiting");
+    // Aldric's turn still runs, so his Task stays active until it ends (#572).
+    expect(after.tasks[0]?.state).toBe("active");
     expect(after.waits).toEqual([expect.objectContaining({ taskId: TOP, on: [quill, ada], mode: "all" })]);
     expect((await refused(ALDRIC, TOP, "wait_for", { key: "w2", tasks: ["other"] })).reason).toBe(
       "wait-outside-subtree",
