@@ -7,7 +7,8 @@
     "start": "tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "allow": "tsx src/allow.ts"
+    "allow": "tsx src/allow.ts",
+    "restore": "tsx src/restore-command.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",

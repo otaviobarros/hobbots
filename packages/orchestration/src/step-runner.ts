@@ -17,6 +17,7 @@ import {
   type ToolAccess,
   type ToolStartedEvent,
   type TurnApprovals,
+  workHeld,
 } from "@hobbots/agents";
 import {
   type Agent,
@@ -89,6 +90,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       const repo = yield* HobbotsRepository;
       const tools = yield* TaskTools;
       const signal = yield* TaskSignal;
+      const held = yield* workHeld;
       const hobTools = yield* HobTools;
       const admission = yield* HobAdmission;
       const publisher = yield* EventPublisher;
@@ -449,6 +451,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           }
         }
         yield* settleCancels;
+        // After a restore no queued step or member's turn starts until you resume work (ADR 026).
+        if (yield* held) return;
         const trees = new Map<TaskId, TaskTree>();
         for (const step of yield* tasks.listQueuedSteps) {
           if (running.has(step.id)) continue;

@@ -49,6 +49,7 @@ import {
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   HobGitHubAppRepository,
+  RestoreRepository,
   SearchIndex,
   SetupRepository,
   SqliteLive,
@@ -63,12 +64,15 @@ import {
   ProcessSandbox,
 } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
-import { Effect, Layer, Option, References } from "effect";
+import { Deferred, Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
+import { BackupHolds, HeldRuntimes } from "./backup-holds.ts";
+import { HubBackups } from "./backups.ts";
 import { BlockOnRetirement } from "./blockers.ts";
 import { ServerConfig } from "./config.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "./continuations.ts";
+import { SaveDestinationsLive } from "./destination.ts";
 import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from "./devices.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
@@ -79,6 +83,7 @@ import { ApiRoutes } from "./http.ts";
 import { ensureInstallationId, Installation } from "./installation.ts";
 import { JournalCompaction } from "./journal-compaction.ts";
 import { HubListenersLive } from "./listeners.ts";
+import { backupBeforeMigrations } from "./migration-backup.ts";
 import { readNetworkSettings } from "./network-settings.ts";
 import {
   HubHostsLive,
@@ -88,6 +93,7 @@ import {
   RemoteAccessStateLive,
 } from "./remote-access.ts";
 import { QuietRoutineReads } from "./request-log.ts";
+import { HubRestart, HubRestores, performRestore, RestoreOutcome, RestoreRulesLive, WorkHoldLive } from "./restores.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
 import { TaskFileRoute } from "./task-files.ts";
@@ -135,8 +141,9 @@ const ServerLive = Layer.unwrap(
     // New installations start without hobs; the user summons the first one during setup.
     const database = join(config.dataDir, "hobbots.sqlite");
     // Search reads the same file from a worker thread, so a long search never blocks the server.
-    // One SQLite client for the hub: the layer is shared, so it is built once.
-    const Sqlite = SqliteLive(database);
+    // One SQLite client for the hub: the layer is shared, so it is built once. On the first start
+    // after a restore, its rules apply before anything reads the database (ADR 026).
+    const Sqlite = RestoreRulesLive(dataDir).pipe(Layer.provideMerge(SqliteLive(database)));
     const Persistence = Layer.mergeAll(
       HobbotsRepositoryLive,
       ApprovalRepositoryLive,
@@ -147,6 +154,7 @@ const ServerLive = Layer.unwrap(
       ActivityRepositoryLive,
       BackpackLive,
       DeviceRepositoryLive,
+      RestoreRepository.layer,
       EventJournal.layer,
       SetupRepository.layer,
       SearchIndex.sqliteWorker(database),
@@ -166,6 +174,8 @@ const ServerLive = Layer.unwrap(
             executable: Option.getOrUndefined(config.claudeExecutable),
           }).pipe(Layer.provide(ProcessSandbox.layer))
     ).pipe(Layer.provide(PolicyEngine.node), Layer.provide(Remote));
+    // Turns that can write to the default workspace wait while a backup copies it (ADR 026).
+    const HeldRuntime = HeldRuntimes.pipe(Layer.provide(Runtime), Layer.provideMerge(BackupHolds.layer));
     // The GitHub Charm reads and pushes on the hub, outside the sandbox (#317, #323), as the GitHub
     // account the user connected in Settings, whose tokens stay in the OS keychain (ADR 020). A push
     // reads the hob's branch with Git in the hob's sandbox.
@@ -239,6 +249,9 @@ const ServerLive = Layer.unwrap(
             WakeOnArrival,
             // A retired hob's work fails as blockers that wait for you (IN-007).
             BlockOnRetirement,
+            // Settings › Backup & export (ADR 026).
+            HubBackups.layer,
+            HubRestores.layer,
             config.runtime === "fake" && config.fakeQuest === "black-friday"
               ? FakeQuestLive(FAKE_QUEST_STEP)
               : Layer.empty,
@@ -289,14 +302,17 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(GrantService.layer))
       // Before any request, so every hob's hidden folders compare against canonical shared folders.
       .pipe(Layer.provideMerge(CanonicalSharedFolders))
+      // Where exports and backups may be saved: never inside a folder a hob works in (ADR 026).
+      .pipe(Layer.provideMerge(SaveDestinationsLive(join(dataDir, "workspaces", "default"))))
       .pipe(
         Layer.provideMerge(
           Layer.mergeAll(
-            Persistence,
+            // After a restore, work waits until you resume it (ADR 026).
+            WorkHoldLive.pipe(Layer.provideMerge(Persistence)),
             EventBus.layer,
             HobAdmission.layer,
             NodeFolderChecks,
-            Runtime,
+            HeldRuntime,
             identity,
             // The hub's credentials, provider keys included, are redacted by value from what tools report.
             SecretRedaction.layer(secretsFromEnv(process.env)),
@@ -352,7 +368,35 @@ const ServerLive = Layer.unwrap(
   }),
 );
 
-Layer.launch(ServerLive).pipe(
+/**
+ * Runs the hub until a restore asks it to stop (ADR 026): the hub stops, the backup is restored with
+ * nothing using the data folder, and the hub starts again on the restored data, in the same process.
+ * Before each start, a data folder that a migration will change is backed up first.
+ */
+const Hub = Effect.gen(function* () {
+  const config = yield* ServerConfig;
+  let failed: string | null = null;
+  for (;;) {
+    mkdirSync(config.dataDir, { recursive: true });
+    const dataDir = realpathSync(config.dataDir);
+    yield* backupBeforeMigrations(dataDir, config.version);
+    const asked = yield* Deferred.make<string>();
+    const restart = Layer.succeed(HubRestart, {
+      restore: (backup: string) => Deferred.succeed(asked, backup).pipe(Effect.asVoid),
+    });
+    const backup: string = yield* Effect.raceFirst(
+      Layer.launch(ServerLive.pipe(Layer.provide(Layer.merge(restart, Layer.succeed(RestoreOutcome, { failed }))))),
+      Deferred.await(asked),
+    );
+    yield* Effect.log(`Stopped to restore the backup in ${backup}`);
+    failed = yield* performRestore(dataDir, backup).pipe(
+      Effect.as(null),
+      Effect.catchTag("RestoreRefused", (refused) => Effect.logWarning(refused.reason).pipe(Effect.as(refused.reason))),
+    );
+  }
+});
+
+Hub.pipe(
   // HOBBOTS_LOG_LEVEL sets the least severe line the hub writes; Debug adds routine reads.
   Effect.provideServiceEffect(
     References.MinimumLogLevel,
