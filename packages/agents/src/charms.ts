@@ -34,7 +34,7 @@ export class CharmTools extends Context.Service<
 >()("@hobbots/agents/CharmTools") {}
 
 /**
- * The local Git work a turn's hob asks the hub to do outside its sandbox (ADR 014), such as creating
+ * The local Git work a turn's hob asks the hub to do outside its turn's sandbox (ADR 014), such as creating
  * a repository, whose config and hooks the sandbox keeps read-only. The hub decides every call under
  * the hob's policy. Absent, a turn offers none.
  */
@@ -100,3 +100,22 @@ export class FolderSandbox extends Context.Service<
     ) => Effect.Effect<SandboxedProgram, SandboxUnavailable, Scope.Scope>;
   }
 >()("@hobbots/agents/FolderSandbox") {}
+
+/**
+ * Creates a Git repository for a hob in the same OS sandbox as its turns (ADR 014, #578), able to
+ * write only below `writable`, a canonical folder of the hob's that holds `folder`, and to reach no
+ * network. Git's own files are not protected there, since the program is the hub's fixed `git init`
+ * with no template, and whatever links a hob lays on the way, nothing is written outside `writable`.
+ * The program fails, writing nothing, when `folder` does not resolve to itself or already holds a
+ * `.git`. The sandbox lasts as long as the scope.
+ */
+export class RepositorySandbox extends Context.Service<
+  RepositorySandbox,
+  {
+    readonly gitInit: (
+      writable: string,
+      folder: string,
+      initialBranch: string | null,
+    ) => Effect.Effect<SandboxedProgram, SandboxUnavailable, Scope.Scope>;
+  }
+>()("@hobbots/agents/RepositorySandbox") {}

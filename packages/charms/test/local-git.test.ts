@@ -25,6 +25,7 @@ import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer } from "effect";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { LocalGitToolsLive, NEXT_TURN } from "../src/index.ts";
+import { directRepositories } from "./support.ts";
 
 // #578: in the sandbox `git init` cannot write a new repository's config, so the hub creates the
 // repository for the hob, under its policy, with Git's defaults and no hooks (ADR 014).
@@ -43,11 +44,15 @@ beforeEach(() => {
   fs.mkdirSync(outside);
 });
 
-const accessFor = (folder: string, preset: SafetyPreset = "balanced", localGit?: PolicyDecision): ToolAccess => ({
+const accessFor = (
+  folder: string,
+  preset: SafetyPreset = "balanced",
+  overrides: Partial<Record<"local-git" | "edit-files", PolicyDecision>> = {},
+): ToolAccess => ({
   policy: {
     preset,
     sharedFolders: [folder],
-    hob: { ...EMPTY_HOB_POLICY, overrides: localGit === undefined ? {} : { "local-git": localGit } },
+    hob: { ...EMPTY_HOB_POLICY, overrides },
     dataFolder: path.join(root, "data"),
     restrictions: [],
   },
@@ -76,7 +81,9 @@ const userApprovals = (
   used: () => Effect.void,
 });
 
-const layer = LocalGitToolsLive.pipe(Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)));
+const layer = LocalGitToolsLive.pipe(
+  Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer, directRepositories)),
+);
 
 /** One call of the tool on a turn with `access`, with a step when the user can be asked. */
 const callInit = (
@@ -163,7 +170,7 @@ describe("creating a repository for a hob", () => {
 
   // covers PE-001, PE-003
   it("[TC-PE-326] decides the call as Local Git under the hob's policy: Never refuses, and Careful asks first", async () => {
-    const never = await callInit(accessFor(project, "balanced", "deny"), { folder: project });
+    const never = await callInit(accessFor(project, "balanced", { "local-git": "deny" }), { folder: project });
     expect(never.answer).toMatchObject({ refused: true });
     expect(fs.existsSync(path.join(project, ".git"))).toBe(false);
 
@@ -177,6 +184,34 @@ describe("creating a repository for a hob", () => {
     expect(approved.answer).toMatchObject({ refused: false });
     expect(asked).toHaveLength(2);
     expect(asked[1]).toMatchObject({ tool: GIT_INIT_TOOL, operation: "local-git", targets: [project] });
+    expect(fs.existsSync(path.join(project, ".git", "HEAD"))).toBe(true);
+  });
+
+  // covers PE-001, PE-003
+  it("[TC-PE-328] decides Edit files on the new .git too: Never refuses though Local Git allows, and Ask asks", async () => {
+    // Balanced allows Local Git; Edit files set to Never still refuses, and writes nothing.
+    const never = await callInit(accessFor(project, "balanced", { "edit-files": "deny" }), { folder: project });
+    expect(never.answer).toMatchObject({ refused: true });
+    expect(fs.existsSync(path.join(project, ".git"))).toBe(false);
+    // Local Git set to Never refuses though Edit files allows.
+    const gitNever = await callInit(accessFor(project, "balanced", { "local-git": "deny" }), { folder: project });
+    expect(gitNever.answer).toMatchObject({ refused: true });
+    expect(fs.existsSync(path.join(project, ".git"))).toBe(false);
+
+    // Edit files set to Ask asks once, for the call, though Local Git allows; a denial writes nothing.
+    const asked: Array<ApprovalAction> = [];
+    const askEdit = accessFor(project, "balanced", { "edit-files": "ask" });
+    const denied = await callInit(askEdit, { folder: project }, { asked, answer: "deny" });
+    expect(denied.answer).toMatchObject({ refused: true });
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatchObject({ tool: GIT_INIT_TOOL, targets: [project] });
+    expect(fs.existsSync(path.join(project, ".git"))).toBe(false);
+    // Without anyone to ask, the call is refused; once approved, it runs.
+    expect((await callInit(askEdit, { folder: project })).answer).toMatchObject({ refused: true });
+    expect(fs.existsSync(path.join(project, ".git"))).toBe(false);
+    const approved = await callInit(askEdit, { folder: project }, { asked, answer: "approve" });
+    expect(approved.answer).toMatchObject({ refused: false });
+    expect(asked).toHaveLength(2);
     expect(fs.existsSync(path.join(project, ".git", "HEAD"))).toBe(true);
   });
 });

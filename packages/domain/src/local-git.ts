@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { toolInputJsonSchema } from "./task-tools.ts";
 
 /**
- * Local Git work the hub does for a hob outside its sandbox (ADR 014): creating a repository. In the
+ * Local Git work the hub does for a hob outside its turn's sandbox (ADR 014): creating a repository. In the
  * sandbox a repository's `.git/config` and `.git/hooks` are read-only, since the user's own Git would
  * later run what a hob wrote there, so `git init` cannot write the config a new repository needs.
  * The hub creates it instead, with Git's defaults and no hooks, and the hob commits as usual.
@@ -30,3 +30,17 @@ export const gitInitToolJsonSchema = (): Record<string, unknown> => toolInputJso
 /** Why a `git init` command is refused when the turn offers the tool, in words for the hob. */
 export const steerGitInit = (tool: string) =>
   `Create the repository with the ${tool} tool instead of git init: in your sandbox a repository's .git/config and .git/hooks are read-only, so git init cannot write them. Hobbots creates it for you with Git's defaults and no hooks, under your policy.`;
+
+/**
+ * The hub's `git init` for a hob (#578), as a shell script: it makes the folder, moves into it
+ * without following links and checks it is the folder decided, refuses one that already holds a
+ * `.git` of any kind, and creates the repository there with no template, so it has no hooks. Its
+ * arguments are the folder and the initial branch, empty for Git's default.
+ */
+export const GIT_INIT_SCRIPT = [
+  'mkdir -p -- "$1" && cd -P -- "$1" || exit 3',
+  '[ "$(pwd -P)" = "$1" ] || { echo "$1 moved while Hobbots was creating the repository." >&2; exit 3; }',
+  'if [ -e .git ] || [ -L .git ]; then echo "$1 already has a .git." >&2; exit 4; fi',
+  'if [ -n "$2" ]; then exec git init --quiet --template= --initial-branch="$2" .; fi',
+  "exec git init --quiet --template= .",
+].join("\n");

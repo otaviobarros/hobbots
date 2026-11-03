@@ -66,6 +66,7 @@ import {
   FakeRuntimeLayer,
   FolderSandboxLive,
   ProcessSandbox,
+  RepositorySandboxLive,
 } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
 import { Deferred, Effect, Layer, Option, References } from "effect";
@@ -247,7 +248,14 @@ const ServerLive = Layer.unwrap(
       Layer.provide(NodeServices.layer),
     );
     // The hub creates a repository for a hob, whose sandbox cannot write its config (ADR 014).
-    const LocalGit = LocalGitToolsLive.pipe(Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)));
+    // The hub creates a hob's repository in the OS sandbox, writable only below the hob's folder (#578).
+    const Repositories = RepositorySandboxLive({
+      dataFolder: dataDir,
+      stateFolder: join(dataDir, "charms", "local-git", "sandbox"),
+    }).pipe(Layer.provide(ProcessSandbox.layer));
+    const LocalGit = LocalGitToolsLive.pipe(
+      Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer, Repositories)),
+    );
     // The hub's own path separator, which alone divides the folders a hob may be given (STD-SEC-003).
     const separator = sep === "\\" ? "\\" : "/";
     const App = HobLifecycle.layer
