@@ -74,12 +74,24 @@ const hob = (id: AgentId, name: string) =>
 /** A prompt line that makes the fake call a Task tool. */
 export const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-/** The request with its hub calls' answers kept in `answers`. */
-const answering = (request: PromptRequest, answers: Map<string, string>): PromptRequest => {
+/**
+ * The request with its hub calls' answers kept in `answers`. A call whose key has a gate in `gates`
+ * is made once that gate resolves, as a model would call it only after something happened.
+ */
+const answering = (
+  request: PromptRequest,
+  answers: Map<string, string>,
+  gates: ReadonlyMap<string, () => Promise<void>>,
+): PromptRequest => {
   const hubTools = request.hubTools;
   if (!hubTools) return request;
+  const gateOf = (input: unknown) => {
+    const key = (input as { readonly key?: unknown } | null)?.key;
+    const gate = typeof key === "string" ? gates.get(key) : undefined;
+    return gate === undefined ? Effect.void : Effect.promise(gate);
+  };
   const call: typeof hubTools.call = (name, input, step) =>
-    Effect.tap(hubTools.call(name, input, step), (answer) =>
+    Effect.tap(Effect.andThen(gateOf(input), hubTools.call(name, input, step)), (answer) =>
       Effect.sync(() => {
         const key = (input as { readonly key?: unknown } | null)?.key;
         if (typeof key === "string") answers.set(key, answer.text);
@@ -96,6 +108,8 @@ export const partyHub = () => {
   const requests: Array<PromptRequest> = [];
   /** What the hub answered each scripted call, by the call's key: what the hob read back. */
   const answers = new Map<string, string>();
+  /** Gates on scripted calls, by the call's key: see `answering`. */
+  const gates = new Map<string, () => Promise<void>>();
 
   const tools = Layer.succeed(
     HobTools,
@@ -122,7 +136,7 @@ export const partyHub = () => {
       return RuntimeAdapter.of({
         ...fake,
         sendPrompt: (sent) => {
-          const request = answering(sent, answers);
+          const request = answering(sent, answers, gates);
           requests.push(request);
           return fake.sendPrompt(request);
         },
@@ -190,7 +204,7 @@ export const partyHub = () => {
     await runtime.dispose();
     rmSync(temp, { recursive: true, force: true });
   };
-  return { run, dispose, requests, answers };
+  return { run, dispose, requests, answers, gates };
 };
 
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>

@@ -533,7 +533,8 @@ describe("Task records", () => {
     expect(result.asked.entries[0]?.correlation).toEqual({ agentId: PIP, threadId, messageId: null });
     expect(result.wrong).toMatchObject({ _tag: "TaskRefused", reason: "not-recipient" });
     expect(result.up.value).toMatchObject({ recipientId: ALDRIC, chain: [ADA] });
-    expect(tags(result.up.entries)).toEqual(["QuestionEscalated", "BackpackItemRecorded"]);
+    // Ada's copy settles as she passes it on (#573), and the question lands in Aldric's backpack.
+    expect(tags(result.up.entries)).toEqual(["QuestionEscalated", "BackpackItemChanged", "BackpackItemRecorded"]);
     expect(result.top.value).toMatchObject({ recipientId: null, chain: [ADA, ALDRIC] });
     expect(result.byLead).toMatchObject({ _tag: "TaskRefused", reason: "not-recipient" });
     expect(result.answered.value).toMatchObject({ state: "answered", answer: "EU", answeredBy: { _tag: "User" } });
@@ -724,12 +725,11 @@ describe("Task records", () => {
       }),
     );
     expect(result.before.map(({ question }) => question.id)).toEqual(["q-cutoff"]);
-    // Aldric's copy of the question he passed up resolves as late, and the cancel reaches him as a failure item.
+    // Aldric's copy of the question settled when he passed it up (#573); the cancel reaches him as a failure item.
     expect(tags(result.cancelled.entries)).toEqual([
       "TaskStateChanged",
       "CheckpointRecorded",
       "QuestionWithdrawn",
-      "BackpackItemChanged",
       "BackpackItemRecorded",
     ]);
     expect(result.cancelled.entries[2]?.payload).toMatchObject({
@@ -781,7 +781,6 @@ describe("Task records", () => {
       "CheckpointRecorded",
       "QuestionWithdrawn",
       "BackpackItemChanged",
-      "BackpackItemChanged",
       "BackpackItemRecorded",
     ]);
     // An answered question stays answered; only the open one is withdrawn.
@@ -792,6 +791,8 @@ describe("Task records", () => {
     expect(result.ledgerAfter.open.map((entry) => entry._tag)).not.toContain("Question");
     expect(result.items.map((each) => each.state)).toEqual(["resolved", "resolved"]);
     expect(JSON.parse(result.items[0]?.disposition ?? "null")).toMatchObject({ _tag: "late" });
+    // The lead's copy of the question it answered settled with its answer (#573).
+    expect(JSON.parse(result.items[1]?.disposition ?? "null")).toMatchObject({ _tag: "answered" });
   });
 
   // covers OR-003, OR-004
