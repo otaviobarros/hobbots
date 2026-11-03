@@ -96,6 +96,8 @@ const standInBridge = (page: Page) =>
           },
           changeAddress: async (typed: string) => {
             calls.push(`changeAddress ${typed}`);
+            // A slow answer, held until the test releases it, as when the hub takes its time to answer.
+            if (typed.startsWith("slow")) await new Promise((release) => (testing.__release = release));
             return typed.startsWith("other")
               ? {
                   ok: false,
@@ -199,6 +201,32 @@ test("[TC-DP-171] Change address takes the hub's new address in the banner, and 
   await banner(page).getByRole("button", { name: "Connect" }).click();
   await expect(field).toBeHidden();
   expect(await bridgeCalls(page)).toEqual(["changeAddress other:4400", "changeAddress studio:4400"]);
+});
+
+// covers DP-001
+test("[TC-DP-171] an address being checked stays locked until the app answers, so no second change starts", async ({
+  page,
+}) => {
+  await openHub(page);
+  await setView(page, VIEWS.unreachable);
+  await banner(page).getByRole("button", { name: "Change address" }).click();
+  const field = banner(page).getByRole("textbox", { name: "Hub address" });
+  await field.fill("slow:4400");
+  await banner(page).getByRole("button", { name: "Connect" }).click();
+  const checking = banner(page).getByRole("button", { name: "Checking…" });
+  await expect(checking).toBeDisabled();
+  await expect(field).toHaveAttribute("readonly", "");
+
+  // Typing while it waits changes nothing, and the change stays pending.
+  await field.press("End");
+  await field.pressSequentially("9");
+  await expect(field).toHaveValue("slow:4400");
+  await expect(checking).toBeDisabled();
+
+  // The app answers: the form closes on that answer, and only one change was ever asked.
+  await page.evaluate(() => (globalThis as unknown as { __release: (v?: unknown) => void }).__release());
+  await expect(field).toBeHidden();
+  expect(await bridgeCalls(page)).toEqual(["changeAddress slow:4400"]);
 });
 
 // covers DP-001

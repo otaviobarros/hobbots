@@ -49,7 +49,11 @@ function ChangeAddress({ address, onDone }: { address: string; onDone: () => voi
         spellCheck={false}
         aria-invalid={refusal !== null}
         aria-describedby={refusal === null ? undefined : `${id}-refusal`}
+        // Locked while the app checks an address: reset would detach the pending change, and its
+        // answer would no longer reach this form while another change could start beside it.
+        readOnly={change.isPending}
         onChange={(event) => {
+          if (change.isPending) return;
           change.reset();
           setText(event.target.value);
         }}
