@@ -40,7 +40,8 @@ const Step = Schema.Struct({
 const Authority = Schema.Struct({
   decisions: Schema.optionalKey(
     PolicyOverrides.annotate({
-      description: "allow, ask or deny for each operation. Each must be at least as narrow as your own.",
+      description:
+        "allow, ask or deny for each operation. Each must be at least as narrow as your own. Commands, Git's included, need read-files and edit-files both allow.",
     }),
   ),
   folders: Schema.optionalKey(
@@ -280,6 +281,7 @@ export const TaskToolRefusal = Schema.Literals([
   "depth-limit",
   "concurrency-limit",
   "authority-wider",
+  "authority-unusable",
   "deadline-passed",
   "key-reused",
   "no-attempt",
