@@ -2,7 +2,14 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { ActivityRepository, type FileChangeDraft, HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
+import {
+  ActivityRepository,
+  type FileChangeDraft,
+  HobbotsRepository,
+  HobTools,
+  RuntimeAdapter,
+  TaskRepository,
+} from "@hobbots/agents";
 import {
   Agent,
   AgentId,
@@ -25,7 +32,7 @@ import {
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { GitWorkspaceLive } from "@hobbots/workbench";
-import { Effect, Layer, ManagedRuntime, Option } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Stream } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
@@ -204,6 +211,51 @@ describe("Completing a Task that changed a Git repository", () => {
       attemptId: ATTEMPT,
       summary: `Left 2 files uncommitted since the last commit: NOTES.md and docs/SPEC.md in ${site}.`,
     });
+  });
+
+  // covers OR-004 (#665)
+  it("[TC-OR-461] holds the Quest's top Task once on files it left uncommitted, and completes when its lead says why", async () => {
+    const site = repository();
+    writeFileSync(join(site, "docs", "SPEC.md"), "# Spec\n\nEdited after the commit.\n");
+    // One turn of the fake runtime: the lead completes, is told which file, and leaves it on purpose.
+    const prompt = [
+      "Wrap up the Quest",
+      'fake:hub complete_task {"key":"done-1","summary":"Spec wrapped up"}',
+      'fake:hub complete_task {"key":"done-2","summary":"Spec wrapped up","leave_uncommitted":"You asked to review the spec before it is committed."}',
+    ].join("\n");
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed(["site/docs/SPEC.md"]);
+        const tools = yield* TaskTools;
+        yield* tools.call({ agentId: FRODO, taskId: TASK }, "start_quest", { key: "quest", goal: "Wrap up the spec" });
+        const adapter = yield* RuntimeAdapter;
+        const events = yield* Stream.runCollect(
+          adapter.sendPrompt({
+            prompt,
+            sessionId: null,
+            instructions: "",
+            instructionsChanged: false,
+            model: null,
+            effort: null,
+            hubTools: tools.forTurn({ agentId: FRODO, taskId: TASK }),
+          }),
+        );
+        return { events, ...(yield* checkpoints) };
+      }),
+    );
+    const completed = result.events.find((event) => event._tag === "Completed");
+    const text = completed?._tag === "Completed" ? completed.text : "";
+    expect(text).toContain(
+      `complete_task: Refused (uncommitted-changes): Task ${TASK} changed 1 file it has not committed: docs/SPEC.md in ${site}. Commit them if the work asked for a commit`,
+    );
+    expect(text).toContain(`complete_task: Task ${TASK} is complete.`);
+    expect(result.task?.state).toBe("completed");
+    expect(result.checkpoints).toEqual([
+      expect.objectContaining({
+        kind: "uncommitted",
+        summary: `Left 1 file uncommitted since the last commit: docs/SPEC.md in ${site}. Left on purpose: You asked to review the spec before it is committed.`,
+      }),
+    ]);
   });
 
   // covers OR-004

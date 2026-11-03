@@ -38,7 +38,8 @@ import { EventBus } from "./event-bus.ts";
  * Quill's signs are under way, so they can be cancelled. Asking for the shop badge has Quill make
  * it while Ada reviews the shop, and both change the badge's file while both are at work, so the
  * hub's finding on the two Tasks can be followed (#570); Quill then finishes with the badge left
- * uncommitted (#586). Only `HOBBOTS_FAKE_QUEST=black-friday`
+ * uncommitted (#586). Asking to wrap up the spec has the lead edit the spec itself and complete
+ * the Quest leaving it uncommitted on purpose, as its hold on the top Task lets it (#665). Only `HOBBOTS_FAKE_QUEST=black-friday`
  * with the fake runtime turns any of them on.
  */
 
@@ -47,6 +48,7 @@ const SCRIPTS = {
   "black-friday": /black friday/i,
   "spring-sale": /spring sale/i,
   "shop-badge": /shop badge/i,
+  "spec-wrap": /wrap up the spec/i,
 } as const;
 type Script = keyof typeof SCRIPTS;
 
@@ -57,6 +59,7 @@ const BRIEFS: Record<Script, { readonly title: string; readonly goal: string }> 
   },
   "spring-sale": { title: "Plan the spring sale", goal: "A spring sale: a banner, an email and window signs" },
   "shop-badge": { title: "Make the shop badge", goal: "A badge on the shop's page, in the agreed colour" },
+  "spec-wrap": { title: "Wrap up the spec", goal: "The shop's spec, final and committed" },
 };
 
 /** The folder the shop badge's play says its files are in. */
@@ -259,7 +262,8 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
             id: QuestId.make(id(name)),
             taskId,
             goal,
-            acceptance: name === "quest" ? ["Landing copy approved", "Campaign scheduled"] : [],
+            acceptance:
+              name === "quest" && script !== "spec-wrap" ? ["Landing copy approved", "Campaign scheduled"] : [],
             limits: DEFAULT_QUEST_LIMITS,
             createdAt: yield* iso,
           })
@@ -322,6 +326,19 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
         "The mailing tool rejected the sign-in.",
       );
       yield* member("signs", cast.quill, "Order the sale signs\nOrder window signs for the shop.", [], []);
+      return;
+    }
+    // The lead edits the spec after the last commit and completes the Quest, leaving it on purpose (#665).
+    if (script === "spec-wrap") {
+      yield* changeInShop(AttemptId.make(id("a-campaign")), "docs/SPEC.md", "final", bus);
+      yield* pause;
+      yield* complete(
+        campaign.id,
+        "a-campaign",
+        "Spec wrapped up",
+        null,
+        `Left 1 file uncommitted since the last commit: docs/SPEC.md in ${SHOP}. Left on purpose: You asked to review it before it is committed.`,
+      );
       return;
     }
     // The shop badge stops with Quill and Ada both at work, after both changed the badge.

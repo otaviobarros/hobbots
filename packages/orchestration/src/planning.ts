@@ -14,6 +14,7 @@ import {
   type TaskToolRefused,
 } from "@hobbots/domain";
 import { Effect } from "effect";
+import { cut } from "./briefs.ts";
 import {
   type CallScope,
   fromRecords,
@@ -26,7 +27,10 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
-import type { WrapUp } from "./wrap-up.ts";
+import type { WrapUp, WrapUpPolicy } from "./wrap-up.ts";
+
+/** Longest reason a lead's `leave_uncommitted` keeps on the Task (#665). */
+const REASON_LIMIT = 600;
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -37,7 +41,7 @@ interface Deps {
   ) => Effect.Effect<void, TaskToolRefused>;
   readonly limits: TaskToolLimits;
   /** What the Task leaves uncommitted in its folders, read as it completes (#586). */
-  readonly wrapUp: (task: Task) => Effect.Effect<WrapUp>;
+  readonly wrapUp: (task: Task, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
 }
 
 /**
@@ -237,7 +241,13 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
         return yield* refuse("no-attempt", `Task ${task.id} has not started, so it has no result yet.`);
       }
       const artifacts = (input.artifacts ?? []).map((artifact) => ({ ...artifact, id: ArtifactId.make(newId()) }));
-      const left = yield* wrapUp(task);
+      // The Quest's own result is the user's, so its lead commits what it changed or says why not (#665).
+      const left = yield* wrapUp(task, {
+        hold: task.parentId === null && scope.tree.quests.some((quest) => quest.taskId === task.id),
+        // A blank reason is none; a long one is cut, as every text the Summary shows is.
+        reason: input.leave_uncommitted?.trim() ? cut(input.leave_uncommitted, REASON_LIMIT) : undefined,
+      });
+      if (left.held !== null) return yield* refuse("uncommitted-changes", left.held);
       const journal = journalOf();
       journal.keep(
         yield* fromRecords(
