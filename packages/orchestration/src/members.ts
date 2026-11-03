@@ -23,7 +23,6 @@ import {
   type AttemptId,
   AttemptId as AttemptIdSchema,
   ancestorsOf,
-  attemptEndOf,
   type Committed,
   isLiveAttempt,
   isTerminalTask,
@@ -256,14 +255,14 @@ export const makeMemberRunner = (deps: MemberDeps) => {
     Effect.gen(function* () {
       // Stopped with the hub: the next start finds the Attempt live and ends it.
       if (run.stop === null) return;
-      const ending: TurnEnding = { _tag: "Stopped", reason: STOPPED[run.stop] };
+      const reason = STOPPED[run.stop];
       const hob = yield* repo.findAgent(run.agentId);
       if (Option.isSome(hob) && hob.value.status !== "retired")
-        return yield* endMemberTurn(taskId, attemptId, ending, []);
+        return yield* endMemberTurn(taskId, attemptId, { _tag: "Stopped", reason }, []);
       // A retired hob's Task fails rather than wait, once its Attempt has ended.
       const at = yield* nowIso;
       yield* deps.attempt(
-        tasks.updateAttempt(attemptId, { _tag: "Ended", end: attemptEndOf("member", ending), at }),
+        tasks.updateAttempt(attemptId, { _tag: "Ended", end: { _tag: "Stopped", reason }, at }),
         "end a stopped member's turn",
       );
       yield* retire(taskId, run.agentId, at);

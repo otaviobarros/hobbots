@@ -163,7 +163,6 @@ describe("turnEnded", () => {
         const decided = (["replied", "failed", "stopped"] as const).map((name) => decide(runner, state, ENDINGS[name]));
         expect([runner, state, decided.map((each) => each.attempt.state)]).toEqual([runner, state, ATTEMPTS[state]]);
         expect([runner, state, decided.map((each) => shown(each.task))]).toEqual([runner, state, MOVES[runner][state]]);
-        expect(decided.every((each) => each.reason === null)).toBe(true);
       }
     }
   });
@@ -203,7 +202,7 @@ describe("turnEnded", () => {
     // Only its own milestones left: blocked, with a reason its lead can act on (#571).
     const short = decide("member", "active", ENDINGS.replied, [milestone("Reviewed")]);
     expect(shown(short.task)).toBe("→blocked");
-    expect(short.reason).toContain('"Reviewed"');
+    expect(short.task).toMatchObject({ reason: expect.stringContaining('"Reviewed"') });
     // Anything else open: it waits, and nothing is completed.
     expect(shown(decide("member", "active", ENDINGS.replied, [milestone("Reviewed"), deadline("n1")]).task)).toBe(
       "→waiting",

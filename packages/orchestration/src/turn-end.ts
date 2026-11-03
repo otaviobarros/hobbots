@@ -1,5 +1,6 @@
 import type { TaskRepository } from "@hobbots/agents";
 import {
+  type AttemptEnd,
   type AttemptId,
   attemptEndOf,
   type CarriedItem,
@@ -7,7 +8,6 @@ import {
   isTerminalTask,
   type TaskId,
   type TaskState,
-  type TurnEnd,
   type TurnEnding,
   type TurnRunner,
   turnEnded,
@@ -45,65 +45,71 @@ export interface TurnOnTask {
 export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
   Effect.gen(function* () {
     const { tasks, attempt } = deps;
+    const ended = (end: AttemptEnd) =>
+      attempt(
+        tasks.updateAttempt(turn.attemptId, {
+          _tag: "Ended",
+          end,
+          at: turn.at,
+          ...(turn.sessionId == null ? {} : { sessionId: turn.sessionId }),
+        }),
+        "end a turn's Attempt",
+      );
     const found = yield* tasks.readTree(turn.taskId);
-    // A Task retried or reassigned meanwhile is no longer this turn's to move: only its Attempt ends.
     const task = Option.isSome(found) ? found.value.tasks[0] : undefined;
-    const current = task?.currentAttemptId === turn.attemptId ? task : undefined;
-    const ledger =
-      current === undefined || isTerminalTask(current.state) ? Option.none() : yield* tasks.readLedger(current.id);
-    const decided: TurnEnd | null =
-      current === undefined
-        ? null
-        : turnEnded({
-            runner: turn.runner,
-            task: current,
-            ending: turn.ending,
-            ledger: Option.match(ledger, { onNone: () => [], onSome: (each) => each.open }),
-            carried: new Set(turn.carried.map((each) => each.itemId as string)),
-            ...(turn.was === undefined ? {} : { was: turn.was }),
-          });
-    const completed =
-      current !== undefined && decided?.task._tag === "Complete"
-        ? Option.isSome(
-            yield* attempt(
-              tasks
-                .completeTask(current.id, current.revision, {
-                  summary: decided.task.summary,
-                  attemptId: turn.attemptId,
-                  artifacts: [],
-                  at: turn.at,
-                  carried: turn.carried,
-                })
-                .pipe(
-                  // A step whose reply cannot complete it fails, saying what was left open.
-                  Effect.tapError((error) =>
-                    turn.runner === "step" && error._tag === "TaskRefused"
-                      ? deps.explain(current.id, error.message, turn.at)
-                      : Effect.void,
-                  ),
-                ),
-              "complete a Task with its turn's reply",
-            ),
-          )
-        : false;
-    yield* attempt(
-      tasks.updateAttempt(turn.attemptId, {
-        _tag: "Ended",
-        end: decided?.cause ?? attemptEndOf(turn.runner, turn.ending),
-        at: turn.at,
-        ...(turn.sessionId == null ? {} : { sessionId: turn.sessionId }),
-      }),
-      "end a turn's Attempt",
-    );
-    const move =
-      decided === null || completed ? null : decided.task._tag === "Complete" ? decided.task.otherwise : decided.task;
-    if (move?._tag === "Move") {
-      if (move.to === "blocked" && decided?.reason) yield* deps.explain(turn.taskId, decided.reason, turn.at);
-      // Read again: ending the Attempt, and a blocker, change the Task's version.
-      const latest = yield* tasks.readTree(turn.taskId);
-      const now = Option.isSome(latest) ? latest.value.tasks[0] : undefined;
-      if (now !== undefined && !isTerminalTask(now.state))
-        yield* attempt(tasks.moveTask(now.id, now.revision, move.to, turn.at), `move a Task to ${move.to}`);
+    // A Task retried or reassigned meanwhile is no longer this turn's to move: only its Attempt ends.
+    if (task?.currentAttemptId !== turn.attemptId) {
+      yield* ended(attemptEndOf(turn.runner, turn.ending));
+      return { decided: null, completed: false };
     }
-    return { decided, completed };
+    const ledger = isTerminalTask(task.state) ? Option.none() : yield* tasks.readLedger(task.id);
+    const decided = turnEnded({
+      runner: turn.runner,
+      task,
+      ending: turn.ending,
+      ledger: Option.match(ledger, { onNone: () => [], onSome: (each) => each.open }),
+      carried: new Set(turn.carried.map((each) => each.itemId as string)),
+      ...(turn.was === undefined ? {} : { was: turn.was }),
+    });
+    let move = decided.task;
+    if (move._tag === "Complete") {
+      const explainRefusal = move.explainRefusal;
+      const done = yield* attempt(
+        tasks
+          .completeTask(task.id, task.revision, {
+            summary: move.summary,
+            attemptId: turn.attemptId,
+            artifacts: [],
+            at: turn.at,
+            carried: turn.carried,
+          })
+          .pipe(
+            // A reply that cannot complete its Task says what was left open, when its runner asks.
+            Effect.tapError((error) =>
+              explainRefusal && error._tag === "TaskRefused"
+                ? deps.explain(task.id, error.message, turn.at)
+                : Effect.void,
+            ),
+          ),
+        "complete a Task with its turn's reply",
+      );
+      if (Option.isSome(done)) {
+        yield* ended(decided.cause);
+        return { decided, completed: true };
+      }
+      move = move.otherwise;
+    }
+    const after = yield* ended(decided.cause);
+    if (move._tag !== "Move") return { decided, completed: false };
+    if (move.reason !== undefined) yield* deps.explain(task.id, move.reason, turn.at);
+    // Ending the Attempt gives the Task's version; a blocker, or an Attempt already ended, needs it read again.
+    const now =
+      Option.isSome(after) && move.reason === undefined
+        ? Option.some(after.value.task)
+        : Option.flatMap(yield* tasks.readTree(task.id), (tree) => Option.fromNullishOr(tree.tasks[0]));
+    if (Option.isSome(now) && !isTerminalTask(now.value.state)) {
+      const to = move.to;
+      yield* attempt(tasks.moveTask(now.value.id, now.value.revision, to, turn.at), `move a Task to ${to}`);
+    }
+    return { decided, completed: false };
   });
