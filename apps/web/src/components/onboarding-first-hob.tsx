@@ -1,4 +1,4 @@
-import type { RuntimeModel } from "@hobbots/domain";
+import { RUNTIME_NAMES, type RuntimeKind, type RuntimeModel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -18,7 +18,9 @@ import {
   roleTitleOf,
   rollLook,
 } from "../api/first-hob.ts";
-import { modelsQuery } from "../api/queries.ts";
+import { modelsQuery, runtimesQuery } from "../api/queries.ts";
+import { setupQuery } from "../api/setup.ts";
+import { connectedLines, readyProviders } from "../lib/providers.ts";
 import {
   ChoresField,
   ColorSwatches,
@@ -32,9 +34,11 @@ import {
   RolePicker,
   useDraftLook,
   useSettledBrain,
+  useSettledRuntime,
 } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
+import { ProviderChoices } from "./provider-choices.tsx";
 
 const GUIDE = "Now the fun part. Every hob has a role on your team. Pick one, a name and a cloak.";
 
@@ -126,30 +130,56 @@ function LookPreview({
   );
 }
 
+/** What still stops the first hob, in words for the footer; undefined when it can go on. */
+const firstHobProblem = (
+  draft: FirstHobDraft,
+  checking: boolean,
+  ready: ReadonlyArray<RuntimeKind>,
+  modelFound: boolean,
+): string | undefined => {
+  const problem = draftProblem(draft);
+  if (problem) return problem;
+  if (checking) return "Checking your AI providers";
+  if (!ready.includes(draft.runtime)) return "Connect a provider that is ready first";
+  return modelFound ? undefined : `Waiting for ${RUNTIME_NAMES[draft.runtime]}'s models`;
+};
+
+/** The footer's line: the hob on its way once sent, what still stops it, or that it is ready. */
+const firstHobHint = (draft: FirstHobDraft, problem: string | undefined): string => {
+  if (draft.submitted !== null) return `${draft.name.trim()} is on the way. Finish summoning to change it.`;
+  return problem ?? `${draft.name.trim()} the ${roleTitleOf(draft)} is ready`;
+};
+
 /**
  * Onboarding step 2: the user makes their first hob, with a role, a name from the dice, a seeded
- * look in one of the hob colors, and Claude Code's model and effort. The summon creates it.
+ * look in one of the hob colors, and the provider, model and effort it thinks with. The summon creates it.
  */
 export function OnboardingFirstHob() {
   const navigate = useNavigate();
   const router = useRouter();
   const canGoBack = useCanGoBack();
-  const models = useQuery(modelsQuery("claude-code"));
+  const runtimes = useQuery(runtimesQuery);
+  const setup = useQuery(setupQuery);
+  const connected = setup.data?.connectedProviders;
   const [draft, setDraft] = useState<FirstHobDraft>(() => restoreDraft(keptDraftOrStored()));
   const [nameRolls, setNameRolls] = useState(0);
   const [lookRolls, setLookRolls] = useState(0);
   const [tried, setTried] = useState(false);
+  const models = useQuery(modelsQuery(draft.runtime));
 
   // Coming back to this step keeps what was chosen; a model the runtime dropped falls back,
   // unless the hob was already sent with it.
   useEffect(() => keepDraft(draft), [draft]);
+  // The first hob thinks with a provider the user connected in the step before.
+  const ready = readyProviders(runtimes.data, connected ?? []);
+  useSettledRuntime(ready, setDraft);
   useSettledBrain(models.data, setDraft);
 
   const model = models.data?.models.find((m) => m.id === draft.model);
   const locked = draft.submitted !== null;
   const problem = locked
     ? undefined
-    : (draftProblem(draft) ?? (model ? undefined : "Waiting for Claude Code's models"));
+    : firstHobProblem(draft, runtimes.isPending || setup.isPending, ready, model !== undefined);
 
   const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/providers" }));
   // The draft waits in storage; the summon at the end of setup creates the hob.
@@ -160,15 +190,13 @@ export function OnboardingFirstHob() {
   };
 
   const roleLine = kindLine(draft);
-  const hint = locked
-    ? `${draft.name.trim()} is on the way. Finish summoning to change it.`
-    : (problem ?? `${draft.name.trim()} the ${roleTitleOf(draft)} is ready`);
+  const hint = firstHobHint(draft, problem);
 
   return (
     <OnboardingFrame
       step={1}
       guide={GUIDE}
-      sofar={["Claude connected"]}
+      sofar={connectedLines(connected)}
       footer={
         <>
           <Button variant="outline" onClick={back}>
@@ -252,18 +280,18 @@ export function OnboardingFirstHob() {
 
           <div className="flex flex-col gap-2">
             <span className="lbl text-label">Thinks with</span>
-            <div className="flex flex-wrap gap-2">
-              <span className="cut flex items-center gap-2 border-2 border-moonlight bg-line px-3 py-[7px] text-sm">
-                <span
-                  aria-hidden
-                  className="grid size-5 place-items-center bg-[#e39a74] text-[13px] font-bold text-ground"
-                >
-                  C
-                </span>
-                Claude
-              </span>
-            </div>
-            <ModelsBrain models={models} draft={draft} onChange={setDraft} waitingClassName="py-2" />
+            {runtimes.data && (
+              <ProviderChoices
+                runtimes={runtimes.data}
+                draft={draft}
+                onChange={setDraft}
+                only={connected ?? []}
+                markClassName="size-5 text-[13px]"
+              />
+            )}
+            {ready.includes(draft.runtime) && (
+              <ModelsBrain models={models} draft={draft} onChange={setDraft} waitingClassName="py-2" />
+            )}
           </div>
         </div>
 

@@ -21,7 +21,8 @@ import {
 import { agentsQuery, modelsQuery, runtimesQuery, useCreateHob } from "../api/queries.ts";
 import { presetInfo, type RuleAnswer } from "../api/safety.ts";
 import { setupQuery } from "../api/setup.ts";
-import { openSummonDraft, providerNotice, summonProblem } from "../api/summon.ts";
+import { openSummonDraft, summonProblem } from "../api/summon.ts";
+import { readyProviders } from "../lib/providers.ts";
 import {
   Choice,
   ChoresField,
@@ -35,9 +36,11 @@ import {
   RolePicker,
   useDraftLook,
   useSettledBrain,
+  useSettledRuntime,
 } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
+import { ProviderChoices } from "./provider-choices.tsx";
 import { Stars } from "./scene.tsx";
 
 const ANSWER: Readonly<Record<RuleAnswer, { text: string; className: string }>> = {
@@ -57,12 +60,12 @@ export function Summon() {
   const canGoBack = useCanGoBack();
   const hobs = useQuery(agentsQuery);
   const runtimes = useQuery(runtimesQuery);
-  const models = useQuery(modelsQuery("claude-code"));
   const setup = useQuery(setupQuery);
   const create = useCreateHob();
   // The route loads the hob list first, so a fresh name avoids the hobs the user already has and a
   // draft whose hob already joined is not brought back.
   const [draft, setDraft] = useState<FirstHobDraft>(() => openSummonDraft(keptSummonDraft(), hobs.data ?? []));
+  const models = useQuery(modelsQuery(draft.runtime));
   const [nameRolls, setNameRolls] = useState(0);
   const [lookRolls, setLookRolls] = useState(0);
   const [tried, setTried] = useState(false);
@@ -77,20 +80,20 @@ export function Summon() {
 
   // Leaving and coming back keeps what was chosen, until the hob exists.
   useEffect(() => keepSummonDraft(draft), [draft]);
+  useSettledRuntime(readyProviders(runtimes.data), setDraft);
   useSettledBrain(models.data, setDraft);
 
   const gear = gearOf(draft);
   const look = useDraftLook(draft);
-  const claude = runtimes.data?.find((r) => r.runtime === "claude-code");
-  const notice = providerNotice(claude);
-  const connected = notice === undefined;
+  const health = runtimes.data?.find((r) => r.runtime === draft.runtime);
+  const ready = health?.availability === "ready";
   const model = models.data?.models.find((m) => m.id === draft.model);
   const locked = draft.submitted !== null;
   const name = draft.name.trim() || "your hob";
   const rejected = create.error instanceof ApiError && create.error.tag === "InvalidHob" ? create.error : undefined;
   const problem = summonProblem(
     draft,
-    { pending: runtimes.isPending, failed: runtimes.isError, health: claude },
+    { pending: runtimes.isPending, failed: runtimes.isError, health },
     model !== undefined,
   );
   const hint = create.isPending
@@ -311,36 +314,25 @@ export function Summon() {
 
                 <div className="flex flex-col gap-1.5 border-t-2 border-line pt-[9px]">
                   <span className="text-sm text-label">Thinks with</span>
-                  <fieldset className="m-0 flex flex-wrap gap-1.5 border-0 p-0">
-                    <legend className="sr-only">Provider</legend>
-                    {connected && (
-                      <Choice name="hob-provider" checked onPick={() => {}} className="px-[9px] py-1 text-[13px]">
-                        <span
-                          aria-hidden
-                          className="grid size-4 place-items-center bg-[#e39a74] text-[11px] font-bold text-ground"
-                        >
-                          C
-                        </span>
-                        Claude
-                      </Choice>
-                    )}
-                  </fieldset>
                   {runtimes.isPending ? (
                     <span className="py-1 text-sm text-lantern">
-                      Checking Claude Code <span className="animate-hb-blink">•••</span>
+                      {messages.summon.checkingProviders} <span className="animate-hb-blink">•••</span>
                     </span>
                   ) : !runtimes.data ? (
                     <span role="alert" className="flex items-center gap-3 text-sm text-rose">
-                      Hobbots could not check Claude Code.
-                      <CheckAgain checking={runtimes.isFetching} onCheck={() => void runtimes.refetch()} />
-                    </span>
-                  ) : !connected ? (
-                    <span role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-lantern">
-                      {notice} <Link to="/settings">Open Settings</Link>
+                      {messages.summon.checkFailed}
                       <CheckAgain checking={runtimes.isFetching} onCheck={() => void runtimes.refetch()} />
                     </span>
                   ) : (
-                    <ModelsBrain models={models} draft={draft} onChange={setDraft} />
+                    <>
+                      <ProviderChoices
+                        runtimes={runtimes.data}
+                        draft={draft}
+                        onChange={setDraft}
+                        chipClassName="px-[9px] py-1 text-[13px]"
+                      />
+                      {ready && <ModelsBrain models={models} draft={draft} onChange={setDraft} />}
+                    </>
                   )}
                 </div>
 

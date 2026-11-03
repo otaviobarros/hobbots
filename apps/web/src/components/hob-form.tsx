@@ -8,6 +8,8 @@ import {
   type RoleHat,
   type RoleId,
   type RoleTool,
+  RUNTIME_NAMES,
+  type RuntimeKind,
   type RuntimeModel,
   type RuntimeModels,
   starterRole,
@@ -31,6 +33,7 @@ import {
   pickRole,
   roleRequestUrl,
   settleBrain,
+  settleRuntime,
   splitModels,
   thinksWith,
 } from "../api/first-hob.ts";
@@ -723,14 +726,15 @@ export function ModelsBrain<D extends BrainChoice>({
   if (models.isPending) {
     return (
       <span className={cn("text-sm text-lantern", waitingClassName)}>
-        {messages.models.loading} <span className="animate-hb-blink">•••</span>
+        {messages.models.loading({ runtime: RUNTIME_NAMES[draft.runtime] })}{" "}
+        <span className="animate-hb-blink">•••</span>
       </span>
     );
   }
   if (models.isError) {
     return (
       <span role="alert" className="flex items-center gap-3 text-sm text-rose">
-        {messages.models.failed}
+        {messages.models.failed({ runtime: RUNTIME_NAMES[draft.runtime] })}
         <Button type="button" variant="outline" size="xs" onClick={() => void models.refetch()}>
           {messages.models.retry}
         </Button>
@@ -757,4 +761,19 @@ export const useSettledBrain = (
   useEffect(() => {
     if (models) setDraft((d) => (d.submitted ? d : settleBrain(d, models)));
   }, [models, setDraft]);
+};
+
+/**
+ * Moves an unsent draft off a provider that cannot think now, to the first ready one, each time the
+ * ready providers change. With none ready, the draft keeps its provider.
+ */
+export const useSettledRuntime = (
+  ready: ReadonlyArray<RuntimeKind>,
+  setDraft: Dispatch<SetStateAction<FirstHobDraft>>,
+) => {
+  const key = ready.join(" ");
+  useEffect(() => {
+    const runtimes = key === "" ? [] : (key.split(" ") as ReadonlyArray<RuntimeKind>);
+    setDraft((d) => settleRuntime(d, runtimes));
+  }, [key, setDraft]);
 };

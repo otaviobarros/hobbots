@@ -6,6 +6,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useId, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { ApiError } from "../api/client.ts";
+import { settleBrain } from "../api/first-hob.ts";
 import {
   aboutLine,
   goodAt,
@@ -20,7 +21,15 @@ import {
   retiredSummary,
   roleProblem,
 } from "../api/profile.ts";
-import { agentsQuery, modelsQuery, threadsQuery, usePauseHob, useRetireHob, useUpdateHob } from "../api/queries.ts";
+import {
+  agentsQuery,
+  modelsQuery,
+  runtimesQuery,
+  threadsQuery,
+  usePauseHob,
+  useRetireHob,
+  useUpdateHob,
+} from "../api/queries.ts";
 import { hobState, stateLabel } from "../lib/hob-state.ts";
 import { ExportDialog } from "./export/export-dialog.tsx";
 import { messages as exportCopy } from "./export/messages.ts";
@@ -28,6 +37,7 @@ import { CharmsTab } from "./hob-charms.tsx";
 import { Choice, ModelsBrain } from "./hob-form.tsx";
 import { PermissionsTab } from "./hob-permissions.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
+import { ProviderChoices } from "./provider-choices.tsx";
 import { RoleSheet } from "./role-sheet.tsx";
 import { RoleSigil } from "./role-sigil.tsx";
 import { TonePicker } from "./tone-picker.tsx";
@@ -284,6 +294,15 @@ function ProfileTab({ hob }: { hob: Agent }) {
     setDraft((d) => rebaseDraft(from, fresh, d, sendingRef.current));
   }, [hob, models.data]);
 
+  // Another provider's models settle the model and effort once its list arrives.
+  const runtimes = useQuery(runtimesQuery);
+  const draftModels = useQuery(modelsQuery(draft.runtime));
+  const draftReady = runtimes.data?.some((h) => h.runtime === draft.runtime && h.availability === "ready") ?? false;
+  useEffect(() => {
+    const list = draftModels.data;
+    if (list) setDraft((d) => settleBrain(d, list));
+  }, [draftModels.data]);
+
   const edit = profileEdit(hob, draft);
   const problem = roleProblem(draft);
   const changes = Object.keys(edit).length > 0 && problem === undefined;
@@ -375,19 +394,16 @@ function ProfileTab({ hob }: { hob: Agent }) {
 
           <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-2.5 border-0 p-0">
             <legend className="lbl mb-2 text-moonlight">Brain</legend>
-            <div className="flex flex-wrap gap-1.5">
-              <Choice name="hob-provider" checked onPick={() => {}} label="Claude" className="px-2.5 py-[5px]">
-                <span
-                  aria-hidden
-                  className="grid size-[18px] place-items-center bg-[#e39a74] text-xs font-bold text-ground"
-                >
-                  C
-                </span>
-                Claude
-              </Choice>
-            </div>
-            <ModelsBrain models={models} draft={draft} onChange={setDraft} />
-            <span className="text-[13px] text-label">Other providers arrive later.</span>
+            {runtimes.data && (
+              <ProviderChoices
+                runtimes={runtimes.data}
+                draft={draft}
+                onChange={setDraft}
+                chipClassName="px-2.5 py-[5px]"
+                markClassName="size-[18px] text-xs"
+              />
+            )}
+            {draftReady && <ModelsBrain models={draftModels} draft={draft} onChange={setDraft} />}
           </fieldset>
 
           <p className="m-0 text-[13px] text-label">{aboutLine(hob)}</p>

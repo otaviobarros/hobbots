@@ -10,6 +10,7 @@ import { modelsQuery, useCreateHob } from "../api/queries.ts";
 import { foldersShared, presetInfo } from "../api/safety.ts";
 import { setupQuery, useUpdateSetup } from "../api/setup.ts";
 import { motionReduced } from "../lib/motion.ts";
+import { connectedLines, PROVIDER_NAMES } from "../lib/providers.ts";
 import { HobSprite } from "./hob-sprite.tsx";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 import { useFirstHobDraft } from "./onboarding-safety.tsx";
@@ -53,10 +54,10 @@ export function OnboardingReady() {
   const router = useRouter();
   const canGoBack = useCanGoBack();
   const setup = useQuery(setupQuery);
-  const models = useQuery(modelsQuery("claude-code"));
   const create = useCreateHob();
   const update = useUpdateSetup();
   const [draft, setDraft] = useState<FirstHobDraft>(useFirstHobDraft());
+  const models = useQuery(modelsQuery(draft.runtime));
   const [ritual, setRitual] = useState<Ritual>("idle");
   const [lit, setLit] = useState(0);
   const [hob, setHob] = useState<Agent | null>(null);
@@ -119,8 +120,8 @@ export function OnboardingReady() {
       step={4}
       guide={done ? DONE_GUIDE : READY_GUIDE}
       sofar={[
-        "Claude connected",
-        `${hobLine(draft)} on Claude`,
+        ...connectedLines(setup.data?.connectedProviders),
+        `${hobLine(draft)} on ${PROVIDER_NAMES[draft.runtime]}`,
         ...(setup.data
           ? [`${presetInfo(setup.data.safetyPreset).label} safety`, foldersShared(setup.data.approvedFolders.length)]
           : []),

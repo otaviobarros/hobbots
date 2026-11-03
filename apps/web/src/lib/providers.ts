@@ -1,0 +1,46 @@
+import type { RuntimeHealth, RuntimeKind } from "@hobbots/domain";
+import { formatList } from "./format.ts";
+
+/** Every provider a hob can think with, in the order the pickers list them. */
+export const PROVIDERS: ReadonlyArray<RuntimeKind> = ["claude-code", "codex"];
+
+/** The provider's name as the pickers and the hob's summary say it. */
+export const PROVIDER_NAMES: Readonly<Record<RuntimeKind, string>> = { "claude-code": "Claude", codex: "Codex" };
+
+/** Who makes the provider and what runs it on this computer, under its name in onboarding. */
+export const PROVIDER_MAKERS: Readonly<Record<RuntimeKind, string>> = {
+  "claude-code": "Anthropic · Claude Code",
+  codex: "OpenAI · ChatGPT plan",
+};
+
+/** The provider's square mark and its tile color, as a Tailwind class. */
+export const PROVIDER_MARKS: Readonly<Record<RuntimeKind, { readonly mark: string; readonly tile: string }>> = {
+  "claude-code": { mark: "C", tile: "bg-[#e39a74]" },
+  codex: { mark: "G", tile: "bg-[#8fd3a8]" },
+};
+
+/**
+ * The providers the user connected in onboarding, in the order the pickers list them, as the
+ * steps after it sum them up, such as "Claude and Codex connected". Null before any is connected.
+ */
+const connectedLine = (connected: ReadonlyArray<RuntimeKind> | undefined): string | null => {
+  const names = PROVIDERS.filter((runtime) => connected?.includes(runtime)).map((runtime) => PROVIDER_NAMES[runtime]);
+  return names.length === 0 ? null : `${formatList(names)} connected`;
+};
+
+/** The connected providers' line, as a list of at most one line for the steps' summary. */
+export const connectedLines = (connected: ReadonlyArray<RuntimeKind> | undefined): ReadonlyArray<string> => {
+  const line = connectedLine(connected);
+  return line === null ? [] : [line];
+};
+
+/** The providers ready to think now, in the order the pickers list them. */
+export const readyProviders = (
+  runtimes: ReadonlyArray<RuntimeHealth> | undefined,
+  only?: ReadonlyArray<RuntimeKind>,
+): ReadonlyArray<RuntimeKind> =>
+  PROVIDERS.filter(
+    (runtime) =>
+      (only?.includes(runtime) ?? true) &&
+      runtimes?.some((health) => health.runtime === runtime && health.availability === "ready"),
+  );

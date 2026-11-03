@@ -11,9 +11,14 @@ const plural = new Intl.PluralRules("en");
 
 export const messages = {
   models: {
-    loading: "Asking Claude Code for its models",
-    failed: "Hobbots could not get Claude Code's models.",
+    loading: ({ runtime }: { runtime: string }) => `Asking ${runtime} for its models`,
+    failed: ({ runtime }: { runtime: string }) => `Hobbots could not get ${runtime}'s models.`,
     retry: "Try again",
+  },
+  providerChoice: {
+    legend: "Provider",
+    /** A provider that cannot be picked, as a screen reader hears its choice. */
+    unavailable: ({ provider, state }: { provider: string; state: string }) => `${provider}, ${state.toLowerCase()}`,
   },
   setup: {
     failed: "Hobbots could not read your setup.",
@@ -22,6 +27,8 @@ export const messages = {
   summon: {
     checkAgain: "Check again",
     checking: "Checking…",
+    checkingProviders: "Checking your AI providers",
+    checkFailed: "Hobbots could not check your AI providers.",
   },
   chief: {
     home: "Hobbots home",
