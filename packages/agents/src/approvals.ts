@@ -15,6 +15,7 @@ import {
   type ApprovalLifetime,
   ApprovalRequest,
   type ApprovalState,
+  type ApprovalSurface,
   type Committed,
   decidedState,
   Grant,
@@ -100,6 +101,8 @@ export interface ApprovalDecisionInput {
   readonly lifetime?: ApprovalLifetime | undefined;
   /** The rules to save, as the card showed them; the request's own when absent. */
   readonly rules?: ReadonlyArray<GrantRule> | undefined;
+  /** Where the user decided it: the chat card or the Inbox. Unknown when absent. */
+  readonly via?: ApprovalSurface | undefined;
 }
 
 /** How long a pending request stays open at most, while its turn waits (ADR 015). */
@@ -272,7 +275,17 @@ export class ApprovalService extends Context.Service<
         );
 
       const expired = (approval: ApprovalRequest) =>
-        Effect.map(nowIso, (now) => new ApprovalRequest({ ...approval, state: "expired", decidedAt: now }));
+        Effect.map(
+          nowIso,
+          (now) =>
+            new ApprovalRequest({
+              ...approval,
+              state: "expired",
+              decidedAt: now,
+              decidedByDeviceId: null,
+              decidedVia: "expired",
+            }),
+        );
 
       // What a decided request tells the turn waiting on it.
       const outcomeOf = (approval: ApprovalRequest): ApprovalOutcome | undefined => {
@@ -378,6 +391,7 @@ export class ApprovalService extends Context.Service<
                       createdAt: now,
                       expiresAt: DateTime.formatIso(DateTime.addDuration(at, APPROVAL_TTL)),
                       decidedAt: asking ? null : now,
+                      decidedVia: asking ? null : "expired",
                     });
                     const saved = yield* repo.insert(approval).pipe(Effect.flatMap(announce));
                     if (!asking) {
@@ -545,7 +559,16 @@ export class ApprovalService extends Context.Service<
               return yield* new ApprovalClosed({ approvalId: id, state: "expired" });
             }
             const denyReason = input.decision === "deny" ? input.reason?.trim() || null : null;
-            const next = new ApprovalRequest({ ...approval, state, lifetime, denyReason, decidedAt: now });
+            // The decider is the approved device the request came from (#598).
+            const next = new ApprovalRequest({
+              ...approval,
+              state,
+              lifetime,
+              denyReason,
+              decidedAt: now,
+              decidedByDeviceId: session.deviceId,
+              decidedVia: input.via ?? null,
+            });
             const saved = yield* store(approval, next, grantsFor(approval, input, now), session.whileApproved);
             return yield* stored(id, saved, lifetime);
           }).pipe(

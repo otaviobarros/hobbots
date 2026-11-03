@@ -3,7 +3,7 @@ import { Badge } from "@hobbots/ui/components/badge";
 import { formatWhen } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { StandingRules } from "../standing-rules/standing-rules.tsx";
-import { requestTitle, verdictText } from "./inbox-items.ts";
+import { deciderText, requestTitle, verdictText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
 import type { InboxDirectory } from "./use-inbox-directory.ts";
 
@@ -38,6 +38,7 @@ export function InboxHistory({
             {requests.map((request) => {
               const hob = directory.hob(request.agentId);
               const title = requestTitle(request);
+              const decider = deciderText(request, directory.deviceName);
               return (
                 <li
                   key={request.id}
@@ -59,6 +60,11 @@ export function InboxHistory({
                         thread: directory.threadTitle(request.threadId),
                       })}
                     </span>
+                    {decider !== null && (
+                      <span data-testid="decider" className="text-xs text-secondary-text">
+                        {decider}
+                      </span>
+                    )}
                   </span>
                 </li>
               );

@@ -13,6 +13,7 @@ export const messages = {
   group: ({ name, thread }: { name: string; thread: string }) => `${name} · ${thread}`,
   untitledThread: "A thread",
   unknownHob: "A hob",
+  unknownDevice: "a device",
   kind: { approval: "Approval", expired: "Expired" },
   status: {
     pending: ({ expiry }: { expiry: string }) => `Waiting on you · ${expiry}`,
@@ -60,6 +61,17 @@ export const messages = {
     verdict: { once: "Once", always: "Always", task: "Task", denied: "Denied", expired: "Expired" },
     meta: ({ when, thread }: { when: string; thread: string }) => `${when} · ${thread}`,
     action: ({ name, action }: { name: string; action: string }) => `${name}: ${action}`,
+    /** Who decided a request and where (#598). */
+    decided: {
+      once: "Allowed once",
+      always: "Allowed always",
+      task: "Allowed for its Task",
+      denied: "Denied",
+    },
+    surface: { chat: "in the chat", inbox: "in the Inbox" },
+    decider: ({ decision, device, surface }: { decision: string; device: string; surface: string | null }) =>
+      surface === null ? `${decision} from ${device}` : `${decision} from ${device} ${surface}`,
+    expiredUndecided: "Expired before anyone decided",
   },
   /** A question no lead could answer, in Needs you. */
   question: {

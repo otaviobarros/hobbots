@@ -1,4 +1,10 @@
-import { type Agent, type ApprovalRequest, type ApprovalState, exactAction } from "@hobbots/domain";
+import {
+  type Agent,
+  type ApprovalRequest,
+  type ApprovalState,
+  type ApprovalSurface,
+  exactAction,
+} from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useEffect, useRef } from "react";
 import { useDecideApproval } from "../../api/approvals.ts";
@@ -22,12 +28,12 @@ const TONE: Record<ApprovalState, { readonly ring: string; readonly text: string
  * A tool call waiting for the user, inline in the reply it paused (PE-003): the exact action, what
  * it acts on, who asked, why the policy asks now, the risk and when it expires, with Allow once,
  * Always for this site with the rule it saves, and Deny with an optional reason. It follows the durable request, so a decision made elsewhere or an expiry shows
- * here as it happens.
+ * here as it happens. `via` names where it shows, the chat or the Inbox, which a decision records.
  */
-export function ApprovalCard({ approval, hob }: { approval: ApprovalRequest; hob: Agent }) {
+export function ApprovalCard({ approval, hob, via }: { approval: ApprovalRequest; hob: Agent; via: ApprovalSurface }) {
   const tone = TONE[approval.state];
   const pending = approval.state === "pending";
-  const decide = useDecideApproval(approval);
+  const decide = useDecideApproval(approval, via);
   const sending = decide.isPending ? copy.sending : "";
   const statusText = pending ? sending : resultText(approval, hob.name);
   const status = useRef<HTMLSpanElement>(null);

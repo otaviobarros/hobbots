@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { DeviceId } from "./device.ts";
 import { ApprovalLifetime, GrantRule } from "./grant-rule.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { PolicyOperation } from "./policy.ts";
@@ -18,6 +19,14 @@ export type ApprovalId = typeof ApprovalId.Type;
  */
 export const ApprovalState = Schema.Literals(["pending", "approved", "denied", "expired"]);
 export type ApprovalState = typeof ApprovalState.Type;
+
+/** Where the user decided a request: its card in the chat, or the Inbox. */
+export const ApprovalSurface = Schema.Literals(["chat", "inbox"]);
+export type ApprovalSurface = typeof ApprovalSurface.Type;
+
+/** What closed a request: the user on one of the surfaces, or its expiry, which has no decider. */
+export const ApprovalDecidedVia = Schema.Union([ApprovalSurface, Schema.Literal("expired")]);
+export type ApprovalDecidedVia = typeof ApprovalDecidedVia.Type;
 
 /**
  * A tool call the policy answered Ask for, waiting for the user's decision (PE-003). It names the
@@ -103,6 +112,22 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   ),
   /** When it left `pending`. */
   decidedAt: Schema.NullOr(Schema.String),
+  /**
+   * The approved device the user decided it from; null while pending, once expired, and for
+   * requests decided before deciders were recorded.
+   */
+  decidedByDeviceId: Schema.NullOr(DeviceId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
+   * Where it was decided, or `expired` when nobody did; null while pending, when the client did not
+   * say, and for requests closed before this was recorded.
+   */
+  decidedVia: Schema.NullOr(ApprovalDecidedVia).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   revision: Revision,
 }) {}
 
