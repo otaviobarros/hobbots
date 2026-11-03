@@ -49,7 +49,15 @@ import {
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
-import { type CallDecision, decideCall, grantedHosts, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
+import {
+  type CallDecision,
+  decideCall,
+  grantedHosts,
+  keptGitHint,
+  startCall,
+  type ToolCall,
+  UNKNOWN_TOOL,
+} from "./approval.ts";
 import {
   binaryLocator,
   expiringCache,
@@ -122,7 +130,7 @@ const execFileAsync = promisify(execFile);
 export const SANDBOX_NOTE = [
   "Your commands run in a sandbox. In every Git repository, .git/config and .git/hooks are read-only.",
   "Git prints `could not write config file .git/config: Operation not permitted` when it tries to change them, for example when deleting a branch; if the command otherwise succeeded, that warning is expected and not worth mentioning.",
-  "To create a repository, use the git_init tool instead of git init, which cannot write a new repository's config here.",
+  "To create a repository, use the git_init tool instead of git init, which cannot write a new repository's config here; it also replaces the .git/config and .git/hooks a deleted repository leaves behind.",
   "Any other change that needs .git/config or a hook, such as adding a remote, setting an upstream or installing a hook, fails here: ask the user to make it.",
   TEMP_NOTE,
 ].join(" ");
@@ -854,16 +862,19 @@ export const policyHooks = (
 
   const finished: HookCallback = async (input) => {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") return {};
+    let output: string | undefined;
     if (started.delete(input.tool_use_id)) {
       // Claude Code keeps an output too large to return inline in its configuration folder.
-      const output =
+      output =
         input.hook_event_name === "PostToolUse"
           ? await fullToolOutput(input.tool_name, input.tool_response, [turn.runtimeFolder, userConfigFolder()])
           : input.error;
       report(toolFinished(input.tool_use_id, input, output));
     }
-    // The note goes with the result, so the hob knows it asked as it would know of a refusal.
-    const note = notes.get(input.tool_use_id);
+    // The notes go with the result, so the hob knows it asked as it would know of a refusal, and
+    // what to do with a .git its sandbox kept from a delete (#663).
+    const kept = keptGitHint(input.tool_name, output, turn.initTool);
+    const note = [notes.get(input.tool_use_id), kept].filter((part) => part !== undefined).join(" ") || undefined;
     notes.delete(input.tool_use_id);
     return note === undefined
       ? {}
