@@ -108,4 +108,26 @@ describe("a member's later turn", () => {
     const alone = tree([task("review", PIP, "waiting")]);
     expect(memberReminder(alone.tasks[1] as Task, alone, "Frodo")).not.toContain("stand now");
   });
+
+  // covers OR-003
+  it("[TC-OR-225] keeps every Task its work builds on within the step input limit together, and still ends with how to finish", () => {
+    const long = "x".repeat(5_000);
+    const many = Array.from({ length: 60 }, (_, index) => task(`dep${index}`, QUILL, "completed", [], long));
+    const read = tree([
+      ...many,
+      task(
+        "review",
+        PIP,
+        "waiting",
+        many.map((each) => each.id),
+      ),
+    ]);
+    const reminder = memberReminder(read.tasks.at(-1) as Task, read, "Frodo");
+    // 60 results of 600 characters each would pass 36,000; the list is cut to 16,000.
+    expect(reminder.length).toBeLessThan(16_500);
+    expect(
+      reminder.startsWith("You work on Task review for Frodo.\nWhere the Tasks your work builds on stand now:"),
+    ).toBe(true);
+    expect(reminder.endsWith("your final reply becomes its result.")).toBe(true);
+  });
 });

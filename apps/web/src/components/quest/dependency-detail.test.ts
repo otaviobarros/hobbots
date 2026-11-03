@@ -55,3 +55,31 @@ describe("a dependent Task in the Quest views", () => {
     expect(taskDetail(early, build).given).toEqual([]);
   });
 });
+
+describe("a Task given another Task's artifact by hand-off", () => {
+  // covers UX-002, OR-005
+  it("[TC-OR-224] shows that Task's result once under Handed to it, with only the artifact handed on", () => {
+    const build = task(BUILD, { ownerId: ADA, state: "active" });
+    const read = tree({
+      tasks: [task(CAMPAIGN), done(COPY, "Playful copy"), build],
+      artifacts: [artifact("copy-text", COPY, "Landing copy"), artifact("copy-notes", COPY, "Copy notes")],
+      handOffs: [
+        new HandOff({ artifactId: ArtifactId.make("copy-text"), toTaskId: BUILD, createdAt: at }),
+        new HandOff({ artifactId: ArtifactId.make("copy-text"), toTaskId: BUILD, createdAt: at }),
+      ],
+    });
+    const detail = taskDetail(read, build);
+    expect(detail.returned.map((each) => [each.id, each.result?.summary])).toEqual([[COPY, "Playful copy"]]);
+    expect(detail.given.map((each) => each.label)).toEqual(["Landing copy"]);
+
+    // Also a Task it comes after: listed once, with all of its artifacts.
+    const both = new Task({ ...build, dependsOn: [COPY] });
+    const again = tree({ ...read, tasks: [task(CAMPAIGN), done(COPY, "Playful copy"), both] });
+    expect(taskDetail(again, both).returned.map((each) => each.id)).toEqual([COPY]);
+    expect(
+      taskDetail(again, both)
+        .given.map((each) => each.label)
+        .sort(),
+    ).toEqual(["Copy notes", "Landing copy"]);
+  });
+});

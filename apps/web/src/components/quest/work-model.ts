@@ -1,6 +1,7 @@
 import {
   type AgentId,
   checkpointOn,
+  handedFrom,
   isTerminalTask,
   type Message,
   type MessageId,
@@ -249,11 +250,14 @@ export const findTask = (trees: ReadonlyArray<TaskTree>, taskId: TaskId) => {
 };
 
 /**
- * The completed Tasks the Task comes after, oldest first: the hub gives the Task what they returned,
- * their results and artifacts, when it starts (ADR 018).
+ * The completed Tasks the Task's work builds on, once each: those it comes after, whose results and
+ * artifacts the hub gives it when it starts (ADR 018), then those whose artifacts were handed to it,
+ * whose results its later turns are told (#567).
  */
 const returnedTo = (tree: TaskTree, task: Task): ReadonlyArray<Task> =>
-  task.dependsOn.flatMap((id) => tree.tasks.filter((each) => each.id === id && each.result !== null));
+  [...new Set([...task.dependsOn, ...handedFrom(tree, task.id)])].flatMap((id) =>
+    tree.tasks.filter((each) => each.id === id && each.id !== task.id && each.result !== null),
+  );
 
 /** What the drawer shows for a Task: its brief, checkpoints, questions and output, and what it was given. */
 export const taskDetail = (tree: TaskTree, task: Task) => {
@@ -261,7 +265,10 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
   const returned = returnedTo(tree, task);
   const received = new Set([
     ...tree.handOffs.filter((each) => each.toTaskId === task.id).map((each) => each.artifactId),
-    ...tree.artifacts.filter((each) => returned.some((done) => done.id === each.taskId)).map((each) => each.id),
+    // Every artifact of a Task it comes after reaches it; of another Task, only what was handed on.
+    ...tree.artifacts
+      .filter((each) => task.dependsOn.includes(each.taskId) && returned.some((done) => done.id === each.taskId))
+      .map((each) => each.id),
   ]);
   return {
     brief: delegation?.brief ?? task.brief,

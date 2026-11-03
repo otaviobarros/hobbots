@@ -348,6 +348,20 @@ export class TaskTree extends Schema.Class<TaskTree>("TaskTree")({
 }) {}
 
 /**
+ * The Tasks whose artifacts were handed to `taskId` in `tree`, once each, in hand-off order: what
+ * its work builds on beyond the Tasks it comes after (ADR 018).
+ */
+export const handedFrom = (tree: TaskTree, taskId: TaskId): ReadonlyArray<TaskId> => [
+  ...new Set(
+    tree.handOffs.flatMap((handOff) => {
+      if (handOff.toTaskId !== taskId) return [];
+      const artifact = tree.artifacts.find((each) => each.id === handOff.artifactId);
+      return artifact === undefined ? [] : [artifact.taskId];
+    }),
+  ),
+];
+
+/**
  * The Task a hob's chat turns work on in a thread, with its tree: the latest Task asked of the hob
  * there that has not ended. `trees` are the thread's, oldest first.
  */

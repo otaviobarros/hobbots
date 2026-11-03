@@ -2,6 +2,7 @@ import { clip } from "@hobbots/agents";
 import {
   ancestorsOf,
   type BackpackItem,
+  handedFrom,
   isTerminalTask,
   type Question,
   type Task,
@@ -143,12 +144,7 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
  * handed to it, once each, in that order.
  */
 const buildsOn = (task: Task, tree: TaskTree): ReadonlyArray<Task> => {
-  const handedFrom = tree.handOffs.flatMap((handOff) => {
-    if (handOff.toTaskId !== task.id) return [];
-    const artifact = tree.artifacts.find((each) => each.id === handOff.artifactId);
-    return artifact === undefined ? [] : [artifact.taskId];
-  });
-  const ids = [...new Set([...task.dependsOn, ...handedFrom])];
+  const ids = [...new Set([...task.dependsOn, ...handedFrom(tree, task.id)])];
   return ids.flatMap((id) => tree.tasks.filter((each) => each.id === id && each.id !== task.id));
 };
 
@@ -160,13 +156,18 @@ const standingLine = (task: Task) =>
  * What a later turn of a member's session is reminded of, after the work that arrived for it: its
  * Task, where each Task its work builds on stands now, read when the turn starts, and how to finish.
  * A session resumed after one of them completed so tells "done, and here is its result" from
- * "still running" without asking its lead.
+ * "still running" without asking its lead. Each result is cut to `SUMMARY_LIMIT`, and the whole list
+ * to `STEP_INPUT_LIMIT`.
  */
 export const memberReminder = (task: Task, tree: TaskTree, lead: string): string => {
   const standing = buildsOn(task, tree).map(standingLine);
   return [
     `You work on Task ${task.id} for ${lead}.`,
-    ...(standing.length === 0 ? [] : ["Where the Tasks your work builds on stand now:", ...standing]),
+    // Every later turn carries it, so all of it together stays within the step input limit; the
+    // lines around it are never cut.
+    ...(standing.length === 0
+      ? []
+      : [cut(["Where the Tasks your work builds on stand now:", ...standing].join("\n"), STEP_INPUT_LIMIT)]),
     "When it is done, call complete_task with its result; while nothing else keeps it open, your final reply becomes its result.",
   ].join("\n");
 };
