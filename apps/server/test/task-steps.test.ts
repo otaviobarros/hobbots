@@ -11,6 +11,7 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  isLiveAttempt,
   type Message,
   type Task,
   TaskId,
@@ -720,7 +721,16 @@ describe("a Task's steps in fresh sessions", () => {
     const thread = await run(seed);
     const steps = [{ brief: `Outline\n${hub("complete_task", { key: "o", summary: "Outlined" })}` }];
     await run(send(thread.id, `Plan the launch\n${hub("plan_steps", { key: "plan", steps })}`));
-    const planned = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    // The planning turn has ended its Attempt, so its own end-of-turn ledger read does not take the hook.
+    const planned = await run(
+      treeWhen(
+        thread.id,
+        (tree) =>
+          states(tree)[0] === "active" &&
+          tree.attempts.some((each) => each.taskId === tree.tasks[0]?.id) &&
+          tree.attempts.every((each) => each.taskId !== tree.tasks[0]?.id || !isLiveAttempt(each.state)),
+      ),
+    );
     const top = planned.tasks[0] as Task;
     // The step completes after the briefing read the tree and before the ledger is read.
     beforeLedger = {
