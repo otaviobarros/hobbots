@@ -3,7 +3,7 @@ import { qrRows } from "@hobbots/ui/components/qr-code";
 import { describe, expect, it } from "vitest";
 import { approvedDevices } from "../../api/devices.ts";
 import { tailnetName, tailscaleNotReady } from "../remote-access-settings.tsx";
-import { versionsLine } from "./connected-hub.tsx";
+import { connectionCalls, versionsLine } from "./connected-hub.tsx";
 import { deviceMeta, deviceName } from "./device-meta.ts";
 import { typedPort } from "./port-field.tsx";
 
@@ -75,6 +75,22 @@ describe("allowed devices", () => {
     };
     expect(versionsLine(view)).toBe("Hobbots 0.5.0 on Studio · 0.5.1 on this Mac");
     expect(versionsLine({ ...view, hubVersion: null })).toBe("Hobbots 0.5.1 on this Mac");
+  });
+
+  // covers DP-001
+  it("[TC-DP-219] offers Disconnect only where the desktop app's bridge has it, as ADR 025 asks of every call", () => {
+    const get = async () => {
+      throw new Error("not called");
+    };
+    const disconnect = async () => ({ stillListed: false });
+    expect(connectionCalls({ get, disconnect })).toEqual({ get, disconnect });
+    // The previous desktop app's bridge: the hub it uses, and no Disconnect.
+    expect(connectionCalls({ get })).toEqual({ get, disconnect: undefined });
+    // No bridge, or one that cannot say which hub it uses: the hub's own settings show.
+    expect(connectionCalls(undefined)).toBeUndefined();
+    expect(connectionCalls({ disconnect })).toBeUndefined();
+    // Its answer names no device, so no row is marked as this Mac's and every row keeps Revoke.
+    expect(deviceMeta(device({}), now, { hub: "Studio" })).toMatch(/^A browser · iOS · on Studio · /);
   });
 
   it("lists only devices that were not revoked", () => {

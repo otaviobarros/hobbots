@@ -505,9 +505,15 @@ describe("Disconnect on a connected desktop", () => {
   const forgotten = async ({ settings, token, cookies }: Awaited<ReturnType<typeof connectedTo>>) => {
     expect(await token.read()).toBeUndefined();
     expect(cookies.cleared).toBe(1);
-    // No mode is chosen, so the next start is setup's first screen; this Mac's own choices stay.
+    // No mode is chosen, and this Mac's own choices stay.
     expect(desktopMode(settings.read())).toBeUndefined();
-    expect(settings.read()).toEqual({ openAtLogin: true });
+    expect(settings.read()).toEqual({ openAtLogin: true, leftHub: true });
+    // The next start asks what this Mac is for: it never starts a hub, which would make it one for good.
+    expect(startMode(settings, { installationId: undefined })).toEqual({ start: "choose" });
+    // Choosing again still works: pairing with a hub, or a hub's own installation.
+    expect(startMode(settings, { installationId: undefined, connectTo: ORIGINS.origin })).toMatchObject({
+      start: "pair",
+    });
   };
 
   // covers DP-001, DP-004
@@ -556,5 +562,31 @@ describe("Disconnect on a connected desktop", () => {
     expect(await other.disconnect({ state: "otherNode" })).toEqual({ stillListed: true });
     expect(elsewhere.withSecrets()).toEqual([]);
     await forgotten(other);
+  });
+
+  // covers DP-001, DP-004
+  it("[TC-DP-218] a keychain that cannot delete the token fails Disconnect and keeps the connection, so it can be asked again", async () => {
+    const hub = fakeHub();
+    hub.setReachable(false);
+    const desktop = await connectedTo(hub, tailnet().lookup);
+    const stuck = { remove: async () => Promise.reject(new Error("The keychain is locked")) };
+    const attempt = (token: Pick<typeof desktop.token, "remove">) =>
+      disconnectFromHub({
+        connection: CONNECTION,
+        state: () => ({ state: "unreachable" }),
+        hub: { fetchAsDevice: hub.fetch },
+        token,
+        clearCookies: async () => void desktop.cookies.cleared++,
+        settings: desktop.settings,
+      });
+    await expect(attempt(stuck)).rejects.toThrow("The keychain is locked");
+    // Nothing else changed: the token, the cookies and the connection all stay.
+    expect(await desktop.token.read()).toBe("hbd_token");
+    expect(desktop.cookies.cleared).toBe(0);
+    expect(desktopMode(desktop.settings.read())).toEqual({ mode: "connected", connection: CONNECTION });
+
+    // Asked again with the keychain working, it finishes.
+    expect(await attempt(desktop.token)).toEqual({ stillListed: true });
+    await forgotten(desktop);
   });
 });

@@ -539,6 +539,8 @@ export const messages = {
       disconnecting: "Disconnecting…",
       failed: "Hobbots could not disconnect. Try again in a moment.",
       readFailed: "Hobbots could not read which hub this Mac uses. Try again in a moment.",
+      updateToDisconnect: ({ hub }: { hub: string }) =>
+        `Update Hobbots on this Mac to disconnect from here. Until then, revoke this Mac on ${hub}, in Settings › Devices.`,
     },
   },
   where: {

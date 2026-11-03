@@ -147,7 +147,8 @@ const connectionStateOf = (hub: ConnectedHub, token: DeviceTokenStore, origins: 
     if (state.state === "revoked" || state.state === "unknownDevice") return;
     const refusal = state.state === "connected" ? await hub.refusal() : null;
     if (refusal !== null) {
-      await token.remove();
+      // The hub refuses the token anyway; one the keychain kept is removed again on Disconnect.
+      await token.remove().catch(() => undefined);
       await clearCookies(origins);
       return set({ state: refusal });
     }

@@ -23,8 +23,8 @@ export interface DesktopConnection {
   readonly hubName: string;
   readonly nodeName: string;
   readonly address: string;
-  /** This computer's device on the hub. */
-  readonly deviceId: string;
+  /** This computer's device on the hub; an older desktop app does not say. */
+  readonly deviceId?: string;
   readonly appVersion: string;
   /** The hub's version as it last said, or null before it answered. */
   readonly hubVersion: string | null;
@@ -69,11 +69,12 @@ declare global {
       /**
        * Only on a connected desktop: the hub it uses, and Disconnect, which revokes this computer
        * on the hub, forgets the hub here and starts the app again at setup's first screen.
-       * `stillListed` when the hub could not be reached, so it still lists this computer.
+       * `stillListed` when the hub could not be reached, so it still lists this computer. An older
+       * desktop app offers `get` alone (ADR 025): check each call before using it.
        */
       readonly connection?: {
-        readonly get: () => Promise<DesktopConnection>;
-        readonly disconnect: () => Promise<{ readonly stillListed: boolean }>;
+        readonly get?: () => Promise<DesktopConnection>;
+        readonly disconnect?: () => Promise<{ readonly stillListed: boolean }>;
       };
     };
   }

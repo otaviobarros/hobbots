@@ -46,7 +46,11 @@ const revokeOnHub = async (hub: DisconnectOptions["hub"], deviceId: string): Pro
 
 /**
  * Disconnects this computer from its hub. The hub revokes the device first, unless it already
- * refused it; then, reached or not, the keychain item, the window's cookies and the mode go.
+ * refused it; then, reached or not, the keychain item, the window's cookies and the mode go. A
+ * keychain that cannot delete the token rejects before anything else changes, so the connection
+ * stays and Disconnect can be asked again; the hub then refuses the revoked token, which counts
+ * as done. The settings remember that this computer left a hub, so the next start asks what it
+ * is for instead of becoming a hub by itself.
  */
 export const disconnectFromHub = async (options: DisconnectOptions): Promise<Disconnected> => {
   const state = options.state().state;
@@ -54,6 +58,6 @@ export const disconnectFromHub = async (options: DisconnectOptions): Promise<Dis
   const revoked = refused || (await revokeOnHub(options.hub, options.connection.deviceId));
   await options.token.remove();
   await options.clearCookies();
-  options.settings.update({ mode: undefined, connection: undefined });
+  options.settings.update({ mode: undefined, connection: undefined, leftHub: true });
   return { stillListed: !revoked };
 };

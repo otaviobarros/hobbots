@@ -6,9 +6,23 @@ import { messages } from "../messages.ts";
 
 const copy = messages.remoteAccess.connectedHub;
 
-/** The connected desktop's bridge for its hub (ADR 025); undefined on the hub's own window and in a browser. */
-export const connectionBridge = globalThis.window?.hobbots?.connection;
+type ConnectionCalls = NonNullable<NonNullable<Window["hobbots"]>["connection"]>;
+
+/**
+ * What a connected desktop's bridge offers for its hub (ADR 025), checked call by call, since a
+ * hub's pages may load in an older app: `get` to show the hub, and `disconnect` when this app
+ * can disconnect. Undefined on the hub's own window, in a browser, or in an app that cannot say.
+ */
+export const connectionCalls = (connection: ConnectionCalls | undefined) => {
+  const get = connection?.get;
+  if (typeof get !== "function") return undefined;
+  const disconnect = connection?.disconnect;
+  return { get, disconnect: typeof disconnect === "function" ? disconnect : undefined };
+};
+
+export const connectionBridge = connectionCalls(globalThis.window?.hobbots?.connection);
 type ConnectionBridge = NonNullable<typeof connectionBridge>;
+type Disconnect = NonNullable<ConnectionBridge["disconnect"]>;
 
 const connectionKey = ["desktop", "connection"] as const;
 
@@ -35,10 +49,10 @@ export const versionsLine = (view: DesktopConnection): string =>
  * hub here; the app then starts again at setup's first screen, so this page goes with it. Keep or
  * Escape takes the question back with focus on Disconnect….
  */
-function DisconnectQuestion({ bridge, hub }: { readonly bridge: ConnectionBridge; readonly hub: string }) {
+function DisconnectQuestion({ run, hub }: { readonly run: Disconnect; readonly hub: string }) {
   const [asking, setAsking] = useState(false);
   // Local IPC that must work while the hub is out of reach too.
-  const disconnect = useMutation({ mutationFn: bridge.disconnect, networkMode: "always" });
+  const disconnect = useMutation({ mutationFn: run, networkMode: "always" });
   const keepButton = useRef<HTMLButtonElement>(null);
   const askButton = useRef<HTMLButtonElement>(null);
   const wasAsking = useRef(false);
@@ -134,9 +148,12 @@ export function ConnectedHubSettings({ bridge }: { readonly bridge: ConnectionBr
               </span>
               <span className="text-[13px] text-secondary-text">{versionsLine(view)}</span>
             </span>
-            <DisconnectQuestion bridge={bridge} hub={view.hubName} />
+            {bridge.disconnect && <DisconnectQuestion run={bridge.disconnect} hub={view.hubName} />}
           </div>
           <span className="text-[13px] text-label">{copy.managedThere({ hub: view.hubName })}</span>
+          {!bridge.disconnect && (
+            <span className="text-[13px] text-label">{copy.updateToDisconnect({ hub: view.hubName })}</span>
+          )}
         </>
       )}
     </>

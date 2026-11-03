@@ -103,3 +103,42 @@ test("[TC-DP-217] a connected desktop's Settings › Devices shows its hub in pl
     "disconnect",
   ]);
 });
+
+/** The previous desktop app's bridge: the hub it uses, with no device ID and no Disconnect. */
+const asPreviousDesktop = () => {
+  (window as unknown as Record<string, unknown>).hobbots = {
+    onOpenRequest: () => () => undefined,
+    connection: {
+      get: async () => ({
+        hubName: "Studio",
+        nodeName: "studio-desk.example.ts.net",
+        address: "http://studio-desk.example.ts.net:4317",
+        appVersion: "0.5.0",
+        hubVersion: "0.5.1",
+        state: "connected",
+      }),
+    },
+  };
+};
+
+// covers DP-001
+test("[TC-DP-220] an older desktop app without Disconnect sees its hub, no Disconnect, and how to leave from the hub", async ({
+  page,
+}) => {
+  hub = await startHub(dataDir);
+  const current = hub;
+  await setupDone(current);
+  await page.addInitScript(asPreviousDesktop);
+  await page.goto(`${current.url}/#/settings`);
+  const devices = page.getByRole("region", { name: "Devices" });
+
+  await expect(devices.getByRole("status").filter({ hasText: "Connected to Studio" })).toBeVisible();
+  await expect(devices.getByRole("button", { name: "Disconnect from Studio" })).toHaveCount(0);
+  await expect(
+    devices.getByText("Update Hobbots on this Mac to disconnect from here.", { exact: false }),
+  ).toBeVisible();
+  // It names no device of its own, so no row is marked as this Mac's and the others keep Revoke.
+  const allowed = devices.getByRole("list", { name: "Allowed devices" });
+  await expect(allowed.locator("li").filter({ hasText: "this Mac ·" })).toHaveCount(0);
+  await expect(allowed.getByRole("button", { name: "Revoke Playwright" })).toBeVisible();
+});

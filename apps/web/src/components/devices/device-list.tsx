@@ -115,7 +115,13 @@ export function DeviceList() {
   const devices = useQuery(devicesQuery);
   const connection = useDesktopConnection().data;
   const context: DeviceContext =
-    connection === undefined ? {} : { hub: connection.hubName, ownDeviceId: connection.deviceId };
+    connection === undefined
+      ? {}
+      : {
+          hub: connection.hubName,
+          // An older desktop app does not name its own device, so no row is marked as this Mac's.
+          ...(typeof connection.deviceId === "string" && { ownDeviceId: connection.deviceId }),
+        };
   const now = useNow();
   const headingId = useId();
   // A group rather than a region of its own, so the Devices panel stays the one region named for devices.
