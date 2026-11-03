@@ -20,7 +20,8 @@ const cut = (input: string) =>
  * in one transaction; the journal's head is taken first, so a retry that arrives while the first
  * call is still writing waits for it and then returns its result. The calling turn's backpack
  * claims are checked next, in the same transaction, by one conditional update each (ADR 019).
- * Refused calls are recorded in `task_tool_refusals` (migration 0039), one row per hob and key.
+ * Refused calls are recorded in `task_tool_refusals` (migration 0039). Both are keyed by hob, scope
+ * and key (migration 0043): the work the calling turn is on, so a key is reused only within it.
  */
 export const TaskToolCallsLive = Layer.effect(
   TaskToolCalls,
@@ -68,6 +69,7 @@ export const TaskToolCallsLive = Layer.effect(
           const rows = yield* sql<Row>`INSERT INTO task_tool_refusals ${sql.insert({
             id: crypto.randomUUID(),
             agent_id: call.agentId,
+            scope: call.scope,
             call_key: call.key,
             task_id: call.taskId,
             tool: call.tool,
@@ -78,7 +80,7 @@ export const TaskToolCallsLive = Layer.effect(
             created_at: call.at,
             refused_at: call.at,
           })}
-            ON CONFLICT (agent_id, call_key) DO UPDATE SET
+            ON CONFLICT (agent_id, scope, call_key) DO UPDATE SET
               task_id = COALESCE(excluded.task_id, task_tool_refusals.task_id),
               tool = excluded.tool,
               input = excluded.input,
@@ -109,7 +111,7 @@ export const TaskToolCallsLive = Layer.effect(
           yield* fence(call.fence ?? []);
           const [stored] = yield* sql<{ readonly tool: string; readonly input: string; readonly result: string }>`
             SELECT tool, input, result FROM task_tool_calls
-            WHERE agent_id = ${call.agentId} AND call_key = ${call.key}`;
+            WHERE agent_id = ${call.agentId} AND scope = ${call.scope} AND call_key = ${call.key}`;
           if (stored !== undefined) {
             if (stored.tool !== call.tool || stored.input !== call.input) {
               return yield* new TaskToolRefused({
@@ -125,6 +127,7 @@ export const TaskToolCallsLive = Layer.effect(
           );
           yield* sql`INSERT INTO task_tool_calls ${sql.insert({
             agent_id: call.agentId,
+            scope: call.scope,
             call_key: call.key,
             tool: call.tool,
             input: call.input,

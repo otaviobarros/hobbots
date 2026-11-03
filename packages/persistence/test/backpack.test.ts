@@ -219,6 +219,7 @@ describe("A hob's backpack", () => {
         const backpack = yield* Backpack;
         const call = {
           agentId: QUILL,
+          scope: "task:copy",
           key: "report-1",
           tool: "report_checkpoint" as const,
           input: '{"kind":"finding"}',

@@ -39,6 +39,7 @@ const seed = Effect.gen(function* () {
 const call = (key: string, overrides: Partial<CharmCall> = {}) =>
   new CharmCall({
     agentId,
+    scope: "reply:m1",
     key,
     attempt: `${key}-1`,
     tool: "github_push",
@@ -67,7 +68,7 @@ describe("Charm call records", () => {
         const applied = yield* calls.settle(call("k1"), "applied", "Pushed.", later);
         // A late outcome never overwrites a settled call.
         const late = yield* calls.settle(call("k1"), "uncertain", null, later);
-        const stored = yield* calls.find(agentId, "k1");
+        const stored = yield* calls.find(agentId, "reply:m1", "k1");
         const byStep = yield* calls.findByStep(ThreadId.make("t1"), MessageId.make("m1"), "toolu_1");
         return { first, again, applied, late, stored, byStep };
       }),
@@ -115,7 +116,7 @@ describe("Charm call records", () => {
         yield* calls.settle(call("k1"), "not-sent", "Not sent.", later);
         const other = yield* calls.begin(call("k1", { input: `{"branch":"feat/y"}` }));
         const same = yield* calls.begin(call("k1"));
-        return { other, same, stored: yield* calls.find(agentId, "k1") };
+        return { other, same, stored: yield* calls.find(agentId, "reply:m1", "k1") };
       }),
     );
     expect(result.other._tag === "Existing" && result.other.call.state).toBe("not-sent");
@@ -139,13 +140,13 @@ describe("Charm call records", () => {
           ],
           { concurrency: "unbounded" },
         );
-        const afterRace = yield* calls.find(agentId, "k1");
+        const afterRace = yield* calls.find(agentId, "reply:m1", "k1");
         // A key that was not sent is sent again: a late outcome of the first sending must not land.
         yield* calls.begin(call("k2"));
         yield* calls.settle(call("k2"), "not-sent", "Not sent.", later);
         yield* calls.begin(call("k2", { attempt: "k2-2" }));
         const stale = yield* calls.settle(call("k2"), "applied", "Pushed.", later);
-        const current = yield* calls.find(agentId, "k2");
+        const current = yield* calls.find(agentId, "reply:m1", "k2");
         return { raced, afterRace, stale, current };
       }),
     );

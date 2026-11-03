@@ -22,7 +22,9 @@ export const isCharmCallSettled = (state: CharmCallState): boolean => state !== 
 
 export class CharmCall extends Schema.Class<CharmCall>("CharmCall")({
   agentId: AgentId,
-  /** The key the hob sent, unique among its calls. */
+  /** The work the key belongs to, such as `task:<Task id>`: a key is unique within it (#660). */
+  scope: Schema.String,
+  /** The key the hob sent, unique among its calls in that work. */
   key: Schema.String,
   /**
    * This sending of the key: new each time a key that was not sent is used again, so a late outcome

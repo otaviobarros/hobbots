@@ -43,13 +43,14 @@ const recordUncertainPush = (agentId: string, threadId: string, messageId: strin
   const at = "2026-11-02T09:00:00.000Z";
   database
     .prepare(
-      `INSERT INTO charm_calls (agent_id, call_key, attempt, tool, input, site, plan, state, result,
+      `INSERT INTO charm_calls (agent_id, scope, call_key, attempt, tool, input, site, plan, state, result,
          thread_id, message_id, step_id, created_at, updated_at)
-       VALUES (?, 'push-1', 'push-1-a', 'github_push', '{}', 'github.com/octo/shop refs/heads/feat/cart', ?, 'uncertain',
+       VALUES (?, ?, 'push-1', 'push-1-a', 'github_push', '{}', 'github.com/octo/shop refs/heads/feat/cart', ?, 'uncertain',
          'GitHub did not answer the push in time.', ?, ?, ?, ?, ?)`,
     )
     .run(
       agentId,
+      `reply:${messageId}`,
       JSON.stringify({ repository: "octo/shop", remoteBranch: "feat/cart", commit: "abc", appliedText: "Pushed." }),
       threadId,
       messageId,

@@ -15,7 +15,7 @@ const id = (description: string) => Schema.String.check(Schema.isNonEmpty()).ann
 /** Every call carries a key, so a retried call returns the first result and is done once. */
 const key = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(200)).annotate({
   description:
-    "A key you choose for this call, unique among your calls. Send the same key when you retry the same call, so it is done once.",
+    "A key you choose for this call, unique among your calls for this Task. Send the same key when you retry the same call, so it is done once. A key you used for earlier work is free to use again.",
 });
 
 const taskId = Schema.optionalKey(id("The Task to act on. Leave it out to act on the Task you are working on."));

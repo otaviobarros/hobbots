@@ -228,6 +228,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
         const outcome = yield* runner.run(
           {
             agentId: turn.agentId,
+            scope: turn.scope,
             tool: planned.tool,
             key: planned.key,
             input: planned.input,
@@ -276,7 +277,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
         const { key, withoutKey } = keyed(turn, input);
         yield* checkBranch(input.head);
         if (input.base !== undefined) yield* checkBranch(input.base);
-        const earlier = yield* runner.earlier(turn.agentId, key, withoutKey);
+        const earlier = yield* runner.earlier(turn.agentId, turn.scope, key, withoutKey);
         if (Option.isSome(earlier)) return earlier.value;
 
         // Outgoing text is redacted before deciding, so the card shows and approves what is sent.
@@ -352,7 +353,7 @@ export const makeGitHubWrites = (runner: CharmCallRunner) =>
     ): Effect.Effect<string, Refused> =>
       Effect.gen(function* () {
         const { key, withoutKey } = keyed(turn, input);
-        const earlier = yield* runner.earlier(turn.agentId, key, withoutKey);
+        const earlier = yield* runner.earlier(turn.agentId, turn.scope, key, withoutKey);
         if (Option.isSome(earlier)) return earlier.value;
 
         // The hub's marker is its own: anything shaped like one goes before the text is redacted and shown.

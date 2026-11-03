@@ -5,7 +5,7 @@ import { Context, DateTime, Effect, Layer, Option } from "effect";
 /** What recording a call found: it is new and may be sent, or a call already holds its key or its site. */
 export type CharmCallStart =
   | { readonly _tag: "Started" }
-  /** The hob used this key before: the call it named then, with its result or state. */
+  /** The hob used this key before in the same work: the call it named then, with its result or state. */
   | { readonly _tag: "Existing"; readonly call: CharmCall }
   /** Another call of the same tool on the same site is still being sent or is uncertain. */
   | { readonly _tag: "Blocked"; readonly call: CharmCall };
@@ -20,7 +20,7 @@ export class CharmCalls extends Context.Service<
   {
     /**
      * Records a call in `sending`, in one transaction with the checks: a call already holding the
-     * hob's key is returned instead, unless it was `not-sent` with the same input, which this call
+     * hob's key in the same work is returned instead, unless it was `not-sent` with the same input, which this call
      * replaces; a call of the same tool on the same site that is still `sending` or `uncertain`
      * blocks it.
      */
@@ -36,7 +36,7 @@ export class CharmCalls extends Context.Service<
       result: string | null,
       at: string,
     ) => Effect.Effect<Option.Option<CharmCall>>;
-    readonly find: (agentId: AgentId, key: string) => Effect.Effect<Option.Option<CharmCall>>;
+    readonly find: (agentId: AgentId, scope: string, key: string) => Effect.Effect<Option.Option<CharmCall>>;
     /** The call shown as this reply step. */
     readonly findByStep: (
       threadId: ThreadId,
@@ -92,7 +92,7 @@ export class CharmCallService extends Context.Service<
             const settled = yield* calls.settle(call, outcome, SETTLED[outcome], at);
             // Reading GitHub back may have settled it a moment before.
             if (Option.isNone(settled)) {
-              const now = yield* calls.find(call.agentId, call.key);
+              const now = yield* calls.find(call.agentId, call.scope, call.key);
               return yield* new CharmCallSettled({
                 stepId,
                 state: Option.isSome(now) ? now.value.state : call.state,

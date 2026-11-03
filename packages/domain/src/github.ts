@@ -118,7 +118,7 @@ const branchName = (description: string) =>
 /** Every write carries a key, so a retried call returns the first result and is sent once (ADR 020). */
 const writeKey = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(200)).annotate({
   description:
-    "A key you choose for this call, unique among your calls. Send the same key when you retry the same call, so it is sent once.",
+    "A key you choose for this call, unique among your calls for this Task. Send the same key when you retry the same call, so it is sent once. A key you used for earlier work is free to use again.",
 });
 
 /** The folder a write acts from, whose repository the hub resolves. */

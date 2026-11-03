@@ -1,6 +1,7 @@
 import {
   type ChatTaskTurn,
   type ChatTurn,
+  callScope,
   EventPublisher,
   FolderChecks,
   HobbotsRepository,
@@ -60,6 +61,8 @@ const COULD_NOT_RECORD = "Hobbots could not record this call, so it did not happ
  */
 interface CallSource {
   readonly turn: Record<string, string>;
+  /** The work the call's key belongs to (#660), from `callScope`. */
+  readonly scope: string;
   /** The backpack claims the turn holds, which fence each of its calls (ADR 019). */
   readonly fence: ReadonlyArray<CarriedItem>;
   /**
@@ -166,7 +169,15 @@ export class TaskTools extends Context.Service<
             if (name === "complete_task") yield* settle(rest);
             const at = DateTime.formatIso(yield* DateTime.now);
             const outcome = yield* ledger.once(
-              { agentId, key, tool: name, input: stableJson({ ...rest, ...source.turn }), at, fence: source.fence },
+              {
+                agentId,
+                scope: source.scope,
+                key,
+                tool: name,
+                input: stableJson({ ...rest, ...source.turn }),
+                at,
+                fence: source.fence,
+              },
               Effect.gen(function* () {
                 const resolved = yield* source.resolve(name, at);
                 seen.resolved = resolved;
@@ -179,7 +190,7 @@ export class TaskTools extends Context.Service<
             // Committed already: a client that misses the announcement replays it from the journal.
             if (outcome.entries.length > 0) yield* announce(outcome.entries);
             return outcome.done;
-          }).pipe(refusals.recorded({ agentId, tool: name, raw, taskOf }));
+          }).pipe(refusals.recorded({ agentId, scope: source.scope, tool: name, raw, taskOf }));
         };
 
         const announce = (entries: ReadonlyArray<EventEnvelope>) =>
@@ -198,6 +209,7 @@ export class TaskTools extends Context.Service<
             caller.agentId,
             {
               turn: { turn_task: caller.taskId },
+              scope: callScope.task(caller.taskId),
               fence: caller.carried ?? [],
               taskId: () => caller.taskId,
               resolve: () => Effect.succeed({ caller, entries: [], attemptId: null }),
@@ -242,7 +254,13 @@ export class TaskTools extends Context.Service<
               only === undefined || (isTaskToolName(name) && only.includes(name))
                 ? call(caller, name, input)
                 : notOffered(name).pipe(
-                    refusals.recorded({ agentId: caller.agentId, tool: name, raw: input, taskOf: () => caller.taskId }),
+                    refusals.recorded({
+                      agentId: caller.agentId,
+                      scope: callScope.task(caller.taskId),
+                      tool: name,
+                      raw: input,
+                      taskOf: () => caller.taskId,
+                    }),
                   ),
               step,
             ),
@@ -255,14 +273,15 @@ export class TaskTools extends Context.Service<
             let attemptId: AttemptId | null = null;
             // The committed Task the turn works on: the one it was briefed on, then one a call of its committed.
             let known: TaskId | null = null;
+            const briefing = yield* chat.briefing;
+            known = yield* chat.workingOn;
             const source: CallSource = {
               turn: { turn_reply: turn.messageId },
+              scope: known === null ? callScope.reply(turn.messageId) : callScope.task(known),
               fence: turn.holding ?? [],
               taskId: () => known,
               resolve: (name, at) => chat.resolve(name, at, attemptId),
             };
-            const briefing = yield* chat.briefing;
-            known = yield* chat.workingOn;
             // A turn briefed on its Task works on it as an Attempt of its own from the start.
             const begun = yield* chat.begin(DateTime.formatIso(yield* DateTime.now));
             if (begun !== null) {
@@ -310,6 +329,7 @@ export class TaskTools extends Context.Service<
               briefing,
               end,
               workingOn: chat.workingOn,
+              scope: source.scope,
               attempt: Effect.sync(() => attemptId),
             } satisfies ChatTaskTurn;
           });

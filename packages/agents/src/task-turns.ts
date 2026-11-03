@@ -36,6 +36,11 @@ export interface ChatTaskTurn {
    * works on none. A call that starts a Task changes it partway through the turn.
    */
   readonly workingOn: Effect.Effect<TaskId | null>;
+  /**
+   * The work the turn's tool call keys belong to (#660), from `callScope`: the Task it was briefed on,
+   * else its reply. Fixed for the whole turn, so a retry of a call that started a Task is still a retry.
+   */
+  readonly scope: string;
   /** The Attempt the turn runs on its Task: from the start when briefed on one, once a call starts one, else null. */
   readonly attempt: Effect.Effect<AttemptId | null>;
   /** Ends the Attempt the turn started on its Task, if it started one. */

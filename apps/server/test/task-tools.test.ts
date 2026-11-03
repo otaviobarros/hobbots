@@ -208,18 +208,24 @@ describe("hob tools for Tasks and Quests", () => {
     const draft = tasks.find((task) => task.brief === "Draft copy");
     expect(draft?.dependsOn).toEqual([research?.id]);
 
-    // The same key and input from another Task's turn is another call, not a retry.
-    const [step] = (first.details.steps as Array<{ readonly task_id: string }>).map((each) =>
-      TaskIdSchema.make(each.task_id),
-    );
-    if (step === undefined) throw new Error("expected a step");
-    const fromStep = await refused(ALDRIC, step, "plan_steps", input);
-    expect(fromStep.reason).toBe("key-reused");
-
+    // Another call with the same key on the same Task is refused.
     const reused = await refused(ALDRIC, TOP, "plan_steps", { ...input, steps: [{ brief: "Something else" }] });
     expect(reused).toBeInstanceOf(TaskToolRefused);
     expect(reused.reason).toBe("key-reused");
     expect((await tree()).tasks).toHaveLength(3);
+
+    // The same key from another Task's turn is a call of its own there, never the first one's result (#660).
+    const [step] = (first.details.steps as Array<{ readonly task_id: string }>).map((each) =>
+      TaskIdSchema.make(each.task_id),
+    );
+    if (step === undefined) throw new Error("expected a step");
+    const fromStep = await done(ALDRIC, step, "report_checkpoint", {
+      key: input.key,
+      kind: "progress",
+      summary: "Keywords listed",
+    });
+    expect(fromStep).not.toEqual(first);
+    expect((await tree()).checkpoints.map((each) => each.summary)).toContain("Keywords listed");
   });
 
   // covers OR-001, OR-002

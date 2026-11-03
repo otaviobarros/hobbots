@@ -1,0 +1,212 @@
+import { CharmCalls, HobbotsRepository, TaskToolCalls } from "@hobbots/agents";
+import { Agent, AgentId, CharmCall, MessageId, TaskToolRefused, ThreadId } from "@hobbots/domain";
+import { Effect, Layer, Option } from "effect";
+import { SqlClient } from "effect/sql";
+import { describe, expect, it } from "vitest";
+import { CharmCallsLive, EventJournal, HobbotsRepositoryLive, migrations, TaskToolCallsLive } from "../src/index.ts";
+import callKeyScopes from "../src/migrations/0043_call_key_scopes.ts";
+import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+
+// A tool call's key is unique within the work it belongs to, not among all of its hob's calls
+// (#660), on SQLite and PostgreSQL (STD-TEST-006).
+
+const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, TaskToolCallsLive, CharmCallsLive, EventJournal.layer).pipe(
+  Layer.provideMerge(TestDatabase),
+);
+const run = <A, E>(
+  effect: Effect.Effect<A, E, HobbotsRepository | TaskToolCalls | CharmCalls | EventJournal | SqlClient.SqlClient>,
+) => effect.pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+const now = "2026-11-03T00:00:00.000Z";
+const FRODO = AgentId.make("frodo");
+
+const agent = new Agent({
+  id: FRODO,
+  name: "Frodo",
+  roleTitle: "Lead",
+  runtime: "claude-code",
+  model: null,
+  effort: null,
+  instructions: "",
+  lookSeed: 1,
+  lookColor: "moss",
+  configVersion: 1,
+  createdAt: now,
+});
+
+const seed = Effect.flatMap(HobbotsRepository, (repo) => repo.insertAgent(agent));
+
+const checkpoint = (scope: string, summary: string) => ({
+  agentId: FRODO,
+  scope,
+  key: "cp-tests-passing",
+  tool: "report_checkpoint" as const,
+  input: JSON.stringify({ kind: "progress", summary }),
+  at: now,
+});
+
+describe("tool call keys per Task", () => {
+  // covers OR-001, EX-001
+  it("[TC-OR-420] the same key is a new call on another Task, a retry on the same one, and refused for another call there", async () => {
+    await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const ledger = yield* TaskToolCalls;
+        let runs = 0;
+        const report = (message: string) =>
+          Effect.sync(() => {
+            runs++;
+            return { done: { message, details: {} }, entries: [] };
+          });
+
+        // A key Frodo chose for one Task is free again for the next.
+        const first = yield* ledger.once(checkpoint("task:quest-a", "Green"), report("First"));
+        const second = yield* ledger.once(checkpoint("task:quest-b", "Green"), report("Second"));
+        expect([first.done.message, second.done.message, runs]).toEqual(["First", "Second", 2]);
+
+        // The same call again on the same Task is a retry: its first result, run once.
+        const retried = yield* ledger.once(checkpoint("task:quest-b", "Green"), report("Third"));
+        expect(retried).toEqual({ done: second.done, entries: [] });
+        expect(runs).toBe(2);
+
+        // Another call with the same key on the same Task is still refused.
+        const reused = yield* Effect.flip(ledger.once(checkpoint("task:quest-b", "Red"), report("Fourth")));
+        expect(reused).toMatchObject({ _tag: "TaskToolRefused", reason: "key-reused" });
+        expect(runs).toBe(2);
+      }),
+    );
+  });
+
+  // covers OR-007
+  it("[TC-OR-421] a refusal is recorded per Task and key, so a refused key on one Task never merges with another's", async () => {
+    await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const ledger = yield* TaskToolCalls;
+        const refused = new TaskToolRefused({ reason: "not-owner", message: "Not yours." });
+        const call = (scope: string) => ({
+          agentId: FRODO,
+          scope,
+          key: "wait-pip-1",
+          tool: "wait_for",
+          input: "{}",
+          taskId: null,
+          refused,
+          at: now,
+        });
+        const one = yield* ledger.refused(call("task:quest-a"));
+        const again = yield* ledger.refused(call("task:quest-a"));
+        const other = yield* ledger.refused(call("task:quest-b"));
+        expect(again.value).toMatchObject({ id: one.value.id, tries: 2 });
+        expect(other.value).toMatchObject({ tries: 1 });
+        expect(other.value.id).not.toBe(one.value.id);
+      }),
+    );
+  });
+
+  // covers IN-003, EX-003
+  it("[TC-OR-422] a Charm call's key is a new call in other work, and returns the first call in its own", async () => {
+    const write = (messageId: string, attempt: string) =>
+      new CharmCall({
+        agentId: FRODO,
+        scope: `reply:${messageId}`,
+        key: "push-1",
+        attempt,
+        tool: "github_push",
+        input: `{"branch":"feat/x"}`,
+        site: "github.com/octo/app refs/heads/feat/x",
+        plan: "{}",
+        state: "sending",
+        result: null,
+        threadId: ThreadId.make("t1"),
+        messageId: MessageId.make(messageId),
+        stepId: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const calls = yield* CharmCalls;
+        expect((yield* calls.begin(write("m1", "a1")))._tag).toBe("Started");
+        yield* calls.settle(write("m1", "a1"), "applied", "Pushed.", now);
+        expect(yield* calls.begin(write("m1", "a2"))).toMatchObject({ _tag: "Existing", call: { attempt: "a1" } });
+        expect((yield* calls.begin(write("m2", "a3")))._tag).toBe("Started");
+        const later = Option.getOrThrow(yield* calls.find(FRODO, "reply:m2", "push-1"));
+        expect(later.attempt).toBe("a3");
+      }),
+    );
+  });
+
+  // covers DP-003
+  it("[TC-OR-423] 0043 keeps every stored call and refusal readable, each in the work its input names", async () => {
+    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0043")) as typeof migrations;
+    const rows = await Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* seed;
+      yield* sql`INSERT INTO task_tool_calls ${sql.insert({
+        agentId: FRODO,
+        callKey: "chat",
+        tool: "report_checkpoint",
+        input: '{"turn_reply":"m1"}',
+        result: "{}",
+        createdAt: now,
+      })}`;
+      yield* sql`INSERT INTO task_tool_calls ${sql.insert({
+        agentId: FRODO,
+        callKey: "step",
+        tool: "report_checkpoint",
+        input: '{"turn_task":"t1"}',
+        result: "{}",
+        createdAt: now,
+      })}`;
+      yield* sql`INSERT INTO task_tool_refusals ${sql.insert({
+        id: "r1",
+        agentId: FRODO,
+        callKey: "cut",
+        taskId: null,
+        tool: "plan_steps",
+        input: '{"steps":[{"brief":"x…',
+        reason: "invalid-input",
+        message: "Cut.",
+        tries: 1,
+        createdAt: now,
+        refusedAt: now,
+      })}`;
+      yield* sql`INSERT INTO charm_calls ${sql.insert({
+        agentId: FRODO,
+        callKey: "push",
+        attempt: "a1",
+        tool: "github_push",
+        input: "{}",
+        site: "s",
+        plan: "{}",
+        state: "applied",
+        result: null,
+        threadId: null,
+        messageId: "m2",
+        stepId: null,
+        createdAt: now,
+        updatedAt: now,
+      })}`;
+      yield* callKeyScopes;
+      return {
+        calls: yield* sql`SELECT call_key, scope FROM task_tool_calls ORDER BY call_key`,
+        refusals: yield* sql`SELECT call_key, scope FROM task_tool_refusals`,
+        charms: yield* sql`SELECT call_key, scope FROM charm_calls`,
+      };
+    }).pipe(
+      Effect.provide(Layer.mergeAll(HobbotsRepositoryLive).pipe(Layer.provideMerge(TestDatabaseAt(earlier)))),
+      Effect.runPromise,
+    );
+
+    expect(rows).toEqual({
+      calls: [
+        { callKey: "chat", scope: "reply:m1" },
+        { callKey: "step", scope: "task:t1" },
+      ],
+      refusals: [{ callKey: "cut", scope: "" }],
+      charms: [{ callKey: "push", scope: "reply:m2" }],
+    });
+  });
+});

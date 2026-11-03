@@ -229,7 +229,7 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
         yield* checkBranch(input.branch);
         yield* checkBranch(remoteBranch);
         // A retried call returns its first answer and never asks again.
-        const earlier = yield* runner.earlier(turn.agentId, key, withoutKey);
+        const earlier = yield* runner.earlier(turn.agentId, turn.scope, key, withoutKey);
         if (Option.isSome(earlier)) return earlier.value;
 
         const staged = yield* git
@@ -309,6 +309,7 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
           const outcome = yield* runner.run(
             {
               agentId: turn.agentId,
+              scope: turn.scope,
               tool: "github_push",
               key,
               input: withoutKey,

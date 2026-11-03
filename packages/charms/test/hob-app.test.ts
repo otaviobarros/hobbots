@@ -1065,6 +1065,7 @@ const callAs = (agentId: AgentId, w: World, folder: string, tool: string, input:
       agentId,
       threadId: ThreadId.make("t1"),
       messageId: MessageId.make("m1"),
+      scope: "reply:m1",
       currentAccess: Effect.succeed(access),
       redactor: w.redactor,
       approvals: {
@@ -1318,7 +1319,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
     );
     // Only the user's pull request is there: it is not this call's, so the call stays uncertain.
     expect(outcome.lost.answer.refused).toBe(true);
-    expect(w.calls.get(`${FRODO} l-1`)?.state).toBe("uncertain");
+    expect(w.calls.get(`${FRODO} reply:m1 l-1`)?.state).toBe("uncertain");
     // The bot's own is found and settles the call with its link.
     const ours = github.items(project.slug).find((item) => item.author === hobAppBot(outcome.app));
     expect(ours?.pullRequest?.head).toBe("feat/y");
@@ -1326,7 +1327,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
       refused: false,
       text: expect.stringContaining(`pull request #${ours?.number} from feat/y`),
     });
-    expect(w.calls.get(`${FRODO} l-2`)?.state).toBe("applied");
+    expect(w.calls.get(`${FRODO} reply:m1 l-2`)?.state).toBe("applied");
     expect(calls).toEqual([]);
   });
 });
@@ -1456,6 +1457,7 @@ const pushAs = (
       agentId: FRODO,
       threadId: ThreadId.make("t1"),
       messageId: MessageId.make("m1"),
+      scope: "reply:m1",
       currentAccess: Effect.succeed(access),
       redactor: makeRedactor(),
       approvals: approveAll(access, asked, whileAsking),
