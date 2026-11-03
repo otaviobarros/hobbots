@@ -104,6 +104,8 @@ test("[TC-UX-080] onboarding shows a missing Codex with its fix, and a connected
   await expect(page.getByText("Codex connected")).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Continue" }).click();
+  // The last step names the provider the hob thinks with.
+  await expect(page.getByText(/^Tinker .* · thinks with Codex GPT-5\.5$/)).toBeVisible();
   await page.getByRole("button", { name: "Summon Tinker" }).click();
   await expect(page.getByRole("heading", { name: "Tinker has arrived!" })).toBeVisible();
 
@@ -228,4 +230,34 @@ test("[TC-UX-083] the profile shows a signed-out Codex as unavailable with its f
   await expect(providers.getByRole("radio", { name: "Codex, signed out" })).toBeDisabled();
   await expect(page.getByRole("status", { name: /^Codex:/ }).getByText("codex login")).toBeVisible();
   await expect(page.getByRole("radio", { name: /Fake Thinker/ })).toBeChecked();
+});
+
+// covers OP-001
+test("[TC-UX-084] connecting a second provider waits for the first, so both stay connected", async ({ page }) => {
+  hub = await startHub(dataDir);
+  await openProviders(page, hub);
+
+  // Hold the first save back, so a second click lands while it is on its way.
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let saves = 0;
+  await page.route("**/api/setup", async (route) => {
+    if (route.request().method() === "PATCH" && saves++ === 0) await held;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "Connect Claude" }).click();
+  await expect(page.getByRole("region", { name: "Claude" }).getByText("Knocking on the door")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect Codex" })).toBeDisabled();
+  release();
+  await expect(page.getByRole("region", { name: "Claude" }).getByText("✓ Connected")).toBeVisible();
+
+  await page.getByRole("button", { name: "Connect Codex" }).click();
+  await expect(page.getByRole("region", { name: "Codex" }).getByText("✓ Connected")).toBeVisible();
+  await expect(page.getByText("2 providers connected")).toBeVisible();
+  expect(await api<{ connectedProviders: ReadonlyArray<string> }>(hub, "GET", "/api/setup")).toMatchObject({
+    connectedProviders: ["claude-code", "codex"],
+  });
 });

@@ -18,6 +18,7 @@ import {
   STARTER_ROLES,
   starterRole,
 } from "@hobbots/domain";
+import { messages } from "../components/messages.ts";
 import { PROVIDER_NAMES } from "../lib/providers.ts";
 import { readStored, writeStored } from "../lib/storage.ts";
 
@@ -522,7 +523,11 @@ export const settleSummonDraft = summoning.settle;
 
 /** The provider, model and effort the hob thinks with, such as "Claude · Sonnet · medium effort". */
 export const thinksWith = (draft: FirstHobDraft, model: RuntimeModel | undefined): string =>
-  `${PROVIDER_NAMES[draft.runtime]} · ${model?.displayName ?? "…"}${draft.effort ? ` · ${effortWords(draft.effort).label.toLowerCase()} effort` : ""}`;
+  messages.models.brain({
+    provider: PROVIDER_NAMES[draft.runtime],
+    model: model?.displayName ?? "…",
+    effort: draft.effort ? effortWords(draft.effort).label : null,
+  });
 
 /** What the hob's line says after its name, such as "the Writer", or "one of a kind" before a title. */
 export const kindLine = (draft: FirstHobDraft): string => {

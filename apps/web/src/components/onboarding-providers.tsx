@@ -7,18 +7,13 @@ import { type ReactNode, useState } from "react";
 import { runtimesQuery } from "../api/queries.ts";
 import { canContinueSetup, claudeInstallGuide, codexInstallGuide, runtimeProblem } from "../api/runtime-health.ts";
 import { useUpdateSetup, watchedSetupQuery } from "../api/setup.ts";
-import { formatCount, plural } from "../lib/format.ts";
 import { connectedLines, PROVIDER_MAKERS, PROVIDER_MARKS, PROVIDER_NAMES, PROVIDERS } from "../lib/providers.ts";
+import { messages } from "./messages.ts";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
-import { providerFix } from "./provider-fix.tsx";
+import { providerFix, WithCommand } from "./provider-fix.tsx";
 
-const GUIDE = {
-  looking: "Welcome, friend! Let me peek around your Mac for an AI helper you already use.",
-  found: (name: string) => `There it is! ${name} is ready on this Mac. Connect it, and your hobs will think with it.`,
-  connected: "Splendid! That door is open, so your hobs can think with it. Continue when you like.",
-  fix: "Your hobs need an AI to think with. Each one here needs a little fix first; follow the steps, then check again.",
-  nudge: "Connect one provider first, otherwise the hobs have nothing to think with!",
-};
+const shared = messages.onboarding;
+const copy = messages.onboarding.providers;
 
 const INSTALL_GUIDES: Readonly<Record<RuntimeKind, string>> = {
   "claude-code": claudeInstallGuide,
@@ -27,22 +22,10 @@ const INSTALL_GUIDES: Readonly<Record<RuntimeKind, string>> = {
 
 // Providers from the Hobbots design that arrive in a later slice.
 const LATER = [
-  { name: "Gemini", maker: "Google", mark: "G", tile: "#8fb4f0", how: "Sign in with your Google account." },
-  { name: "Grok", maker: "xAI", mark: "X", tile: "#c9c3e8", how: "Paste an API key from your xAI account." },
-  {
-    name: "Local models",
-    maker: "Ollama · LM Studio",
-    mark: "L",
-    tile: "#f3e9b5",
-    how: "Free, private, stays on this Mac.",
-  },
-  {
-    name: "Other",
-    maker: "OpenRouter · any API",
-    mark: "+",
-    tile: "#b79be8",
-    how: "Any OpenAI-compatible key.",
-  },
+  { ...copy.later.gemini, mark: "G", tile: "#8fb4f0" },
+  { ...copy.later.grok, mark: "X", tile: "#c9c3e8" },
+  { ...copy.later.local, mark: "L", tile: "#f3e9b5" },
+  { ...copy.later.other, mark: "+", tile: "#b79be8" },
 ];
 
 /** Found and connected are both a ready provider; only the user's Connect turns one into the other. */
@@ -69,13 +52,13 @@ const providerState = (
 
 const TAG: Record<ProviderState, { label: string; className: string } | null> = {
   checking: null,
-  found: { label: "Found", className: "bg-moonlight text-ground" },
-  connected: { label: "Found", className: "bg-moonlight text-ground" },
-  notFound: { label: "Not found", className: "bg-line-2 text-text" },
-  notStarted: { label: "Not working", className: "bg-rose text-ground" },
-  outdated: { label: "Update needed", className: "bg-rose text-ground" },
-  signedOut: { label: "Signed out", className: "bg-lantern text-ground" },
-  unknown: { label: "Unknown", className: "bg-line-2 text-text" },
+  found: { label: copy.tags.found, className: "bg-moonlight text-ground" },
+  connected: { label: copy.tags.connected, className: "bg-moonlight text-ground" },
+  notFound: { label: copy.tags.notFound, className: "bg-line-2 text-text" },
+  notStarted: { label: copy.tags.notStarted, className: "bg-rose text-ground" },
+  outdated: { label: copy.tags.outdated, className: "bg-rose text-ground" },
+  signedOut: { label: copy.tags.signedOut, className: "bg-lantern text-ground" },
+  unknown: { label: copy.tags.unknown, className: "bg-line-2 text-text" },
 };
 
 const BORDER: Record<ProviderState, string> = {
@@ -90,31 +73,24 @@ const BORDER: Record<ProviderState, string> = {
 };
 
 const claudeHow = (state: ProviderState, claude: RuntimeHealth | undefined): ReactNode => {
+  const words = copy.claude;
+  const version = claude?.version ?? null;
   switch (state) {
     case "checking":
-      return "Looking for Claude Code on this Mac.";
+      return words.checking;
     case "found":
     case "connected":
-      return `Claude Code${claude?.version ? ` ${claude.version}` : ""} is signed in on this Mac.`;
+      return words.ready({ version });
     case "notFound":
-      return "Claude Code is not on this Mac yet. Install it, sign in once in Terminal, then check again.";
+      return words.notFound;
     case "notStarted":
-      return (
-        <>
-          Claude Code is installed but did not start. Run <code>claude</code> in Terminal to see what is wrong.
-        </>
-      );
+      return <WithCommand text={words.notStarted} command={words.command} />;
     case "outdated":
-      return `Claude Code${claude?.version ? ` ${claude.version}` : ""} is too old for Hobbots.`;
+      return words.outdated({ version });
     case "signedOut":
-      return (
-        <>
-          Claude Code is installed but not signed in. Run <code>claude</code> in Terminal and sign in with your
-          claude.ai account.
-        </>
-      );
+      return <WithCommand text={words.signedOut} command={words.command} />;
     case "unknown":
-      return "Hobbots could not check Claude Code just now.";
+      return words.unknown;
   }
 };
 
@@ -122,12 +98,12 @@ const claudeHow = (state: ProviderState, claude: RuntimeHealth | undefined): Rea
 const codexHow = (state: ProviderState, codex: RuntimeHealth | undefined): ReactNode => {
   switch (state) {
     case "checking":
-      return "Looking for Codex on this Mac.";
+      return copy.codex.checking;
     case "found":
     case "connected":
-      return `Codex${codex?.version ? ` ${codex.version}` : ""} is signed in with your ChatGPT plan on this Mac.`;
+      return copy.codex.ready({ version: codex?.version ?? null });
     case "unknown":
-      return "Hobbots could not check Codex just now.";
+      return copy.codex.unknown;
     default:
       return providerFix("codex", codex);
   }
@@ -169,7 +145,7 @@ function Busy({ children }: { children: ReactNode }) {
 const planLine = (runtime: RuntimeKind, health: RuntimeHealth | undefined) => {
   const onSubscription = health?.billing?.startsWith("subscription") ?? false;
   if (!onSubscription) return health?.billing;
-  return runtime === "codex" ? "Your ChatGPT plan" : "Your Claude plan";
+  return messages.providers.plan[runtime];
 };
 
 /** The card's footer for a provider that needs a fix: its install guide when missing, and Check again. */
@@ -186,23 +162,21 @@ function FixFooter({
     <>
       <span className="text-xs text-label">
         {state === "outdated" && runtime === "claude-code" ? (
-          <>
-            Run <code>claude update</code> in Terminal. Your sign-in stays as it is.
-          </>
+          <WithCommand text={copy.claude.update} command={copy.claude.updateCommand} />
         ) : (
-          "No need to restart Hobbots after fixing it."
+          copy.noRestart
         )}
       </span>
       <CardFooter>
         {state === "notFound" && (
           <Button asChild variant="outline" size="sm">
             <a href={INSTALL_GUIDES[runtime]} target="_blank" rel="noreferrer">
-              Install guide
+              {copy.installGuide}
             </a>
           </Button>
         )}
         <Button variant="outline" size="sm" className="ml-auto border-lantern" onClick={onCheckAgain}>
-          Check again
+          {copy.checkAgain}
         </Button>
       </CardFooter>
     </>
@@ -216,6 +190,8 @@ interface ProviderCardProps {
   health: RuntimeHealth | undefined;
   checking: boolean;
   saving: "connect" | "disconnect" | null;
+  /** Another provider's Connect or Disconnect is on its way, so this card's waits for it. */
+  locked: boolean;
   onCheckAgain: () => void;
   onConnect: () => void;
   onDisconnect: () => void;
@@ -228,6 +204,7 @@ function ProviderFooter({
   health,
   checking,
   saving,
+  locked,
   onCheckAgain,
   onConnect,
   onDisconnect,
@@ -237,23 +214,30 @@ function ProviderFooter({
   if (saving) {
     return (
       <CardFooter>
-        <Busy>{saving === "connect" ? "Knocking on the door" : "Closing the door"}</Busy>
+        <Busy>{saving === "connect" ? copy.connecting : copy.disconnecting}</Busy>
       </CardFooter>
     );
   }
   if (state === "checking" || (checking && !ready)) {
     return (
       <CardFooter>
-        <Busy>Looking on this Mac</Busy>
+        <Busy>{copy.looking}</Busy>
       </CardFooter>
     );
   }
   if (state === "found") {
     return (
       <CardFooter>
-        <span className="text-[13px] text-label">Not connected</span>
-        <Button variant="outline" size="sm" className="flex-none" aria-label={`Connect ${name}`} onClick={onConnect}>
-          Connect
+        <span className="text-[13px] text-label">{copy.notConnected}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-none"
+          aria-label={copy.connectLabel({ provider: name })}
+          disabled={locked}
+          onClick={onConnect}
+        >
+          {copy.connect}
         </Button>
       </CardFooter>
     );
@@ -263,17 +247,18 @@ function ProviderFooter({
     return (
       <CardFooter>
         <span className="flex min-w-0 flex-col leading-tight">
-          <span className="animate-hb-pop truncate text-sm font-bold text-mint">✓ Connected</span>
+          <span className="animate-hb-pop truncate text-sm font-bold text-mint">{copy.connected}</span>
           {plan && <span className="truncate text-[13px] text-secondary-text">{plan}</span>}
         </span>
         <Button
           variant="outline"
           size="sm"
           className="flex-none"
-          aria-label={`Disconnect ${name}`}
+          aria-label={copy.disconnectLabel({ provider: name })}
+          disabled={locked}
           onClick={onDisconnect}
         >
-          Disconnect
+          {copy.disconnect}
         </Button>
       </CardFooter>
     );
@@ -314,11 +299,11 @@ const guideFor = (
   nudged: boolean,
   states: ReadonlyArray<readonly [RuntimeKind, ProviderState]>,
 ): string => {
-  if (ready) return GUIDE.connected;
-  if (nudged) return GUIDE.nudge;
-  if (states.some(([, state]) => state === "checking")) return GUIDE.looking;
+  if (ready) return copy.guide.connected;
+  if (nudged) return copy.guide.nudge;
+  if (states.some(([, state]) => state === "checking")) return copy.guide.looking;
   const found = states.find(([, state]) => state === "found");
-  return found ? GUIDE.found(PROVIDER_NAMES[found[0]]) : GUIDE.fix;
+  return found ? copy.guide.found({ provider: PROVIDER_NAMES[found[0]] }) : copy.guide.fix;
 };
 
 /**
@@ -348,7 +333,10 @@ export function OnboardingProviders() {
   // The provider whose Connect or Disconnect is on its way.
   const [changing, setChanging] = useState<RuntimeKind | null>(null);
 
+  // Each change sends the whole list, so one waits for the other: a second click mid-request would
+  // otherwise send a list without the first provider and undo it.
   const change = (runtime: RuntimeKind, connect: boolean) => {
+    if (providers.isPending) return;
     if (connect) setNudged(false);
     setChanging(runtime);
     const others = connected.filter((kind) => kind !== runtime);
@@ -380,21 +368,14 @@ export function OnboardingProviders() {
       footer={
         <>
           <Button variant="outline" onClick={back}>
-            Back
+            {shared.back}
           </Button>
           <span
             id="providers-hint"
             role={failed ? "alert" : undefined}
             className={`flex-1 text-right text-sm ${failed ? "text-rose" : ready ? "text-secondary-text" : "text-lantern"}`}
           >
-            {failed
-              ? "Hobbots could not save that. Try again in a moment."
-              : ready
-                ? plural(count, {
-                    one: "1 provider connected",
-                    other: `${formatCount(count)} providers connected`,
-                  })
-                : "Connect at least one to continue"}
+            {failed ? copy.saveFailed : ready ? messages.providers.connectedCount({ count }) : copy.connectOne}
           </span>
           <Button
             onClick={next}
@@ -405,17 +386,14 @@ export function OnboardingProviders() {
               ready ? undefined : "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_#22203f] hover:bg-line-2"
             }
           >
-            Continue
+            {shared.continue}
           </Button>
         </>
       }
     >
       <div className="flex animate-hb-in flex-col gap-1.5">
-        <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">Which AI do you already use?</h1>
-        <p className="m-0 mb-3.5 text-secondary-text">
-          Hobs think with your own subscription or key. Either one is enough, and you can change this any time in
-          Settings.
-        </p>
+        <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{copy.heading}</h1>
+        <p className="m-0 mb-3.5 text-secondary-text">{copy.intro}</p>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
           {states.map(([runtime, state]) => (
             <ProviderCard
@@ -425,6 +403,7 @@ export function OnboardingProviders() {
               health={healthOf(runtime)}
               checking={runtimes.isFetching}
               saving={savingFor(runtime)}
+              locked={providers.isPending}
               onCheckAgain={() => void runtimes.refetch()}
               onConnect={() => change(runtime, true)}
               onDisconnect={() => change(runtime, false)}
@@ -433,7 +412,7 @@ export function OnboardingProviders() {
           {LATER.map((p) => (
             <section
               key={p.name}
-              aria-label={`${p.name}, coming later`}
+              aria-label={copy.later.label({ provider: p.name })}
               className="cut flex flex-col gap-2.5 border-2 border-line-2 bg-card p-3.5"
             >
               <div className="flex items-center gap-2.5">
@@ -442,18 +421,16 @@ export function OnboardingProviders() {
                   <span className="text-base font-bold">{p.name}</span>
                   <span className="text-[13px] text-secondary-text">{p.maker}</span>
                 </div>
-                <span className="bg-lantern px-[7px] py-0.5 text-xs font-bold text-ground">Later</span>
+                <span className="bg-lantern px-[7px] py-0.5 text-xs font-bold text-ground">{copy.later.tag}</span>
               </div>
               <span className="min-h-9 text-[13px] leading-snug text-secondary-text">{p.how}</span>
               <CardFooter>
-                <span className="text-[13px] text-label">Arrives in a later version</span>
+                <span className="text-[13px] text-label">{copy.later.arrives}</span>
               </CardFooter>
             </section>
           ))}
         </div>
-        <p className="mt-3 mb-0 text-[13px] text-label">
-          Hobbots never sees your password. It reuses the tool already signed in on this Mac.
-        </p>
+        <p className="mt-3 mb-0 text-[13px] text-label">{copy.privacy}</p>
       </div>
     </OnboardingFrame>
   );

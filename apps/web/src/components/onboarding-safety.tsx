@@ -10,8 +10,7 @@ import { messages } from "./messages.ts";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 import { FolderPicker, PresetPicker } from "./safety-and-folders.tsx";
 
-const SAFETY_GUIDE = "A good hob always asks before doing something you cannot undo. How careful should yours be?";
-const FOLDERS_GUIDE = "Pick the folders your hobs share. You can give one hob more of its own later, from its profile.";
+const shared = messages.onboarding;
 
 /** The first hob as chosen on the step before, read back from storage. */
 export const useFirstHobDraft = (): FirstHobDraft => {
@@ -33,8 +32,8 @@ export function OnboardingSafety() {
   const draft = useFirstHobDraft();
   const setup = useQuery(setupQuery);
   const saving = useSavingSetup();
-  const [guide, setGuide] = useState(SAFETY_GUIDE);
-  const name = draft.name.trim() || "your hob";
+  const [guide, setGuide] = useState<string>(shared.safety.guide);
+  const name = draft.name.trim() || shared.firstHob.yourHob;
 
   return (
     <OnboardingFrame
@@ -42,28 +41,26 @@ export function OnboardingSafety() {
       guide={guide}
       sofar={[
         ...connectedLines(setup.data?.connectedProviders),
-        `${hobLine(draft)} on ${PROVIDER_NAMES[draft.runtime]}`,
+        shared.hobOn({ hob: hobLine(draft), provider: PROVIDER_NAMES[draft.runtime] }),
       ]}
       footer={
         <>
           <Button variant="outline" onClick={back} disabled={saving}>
-            Back
+            {shared.back}
           </Button>
           <span className="flex-1" />
           <Button onClick={() => void navigate({ to: "/setup/folders" })} disabled={!setup.data || saving}>
-            Continue
+            {shared.continue}
           </Button>
         </>
       }
     >
       <div className="flex animate-hb-in flex-col gap-1.5">
-        <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">How much should {name} ask first?</h1>
-        <p className="m-0 mb-3.5 text-secondary-text">
-          Hobs read, edit, run and browse inside the folders you pick next. Pick how often they ask you first.
-        </p>
+        <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{shared.safety.heading({ name })}</h1>
+        <p className="m-0 mb-3.5 text-secondary-text">{shared.safety.intro}</p>
         {setup.data ? (
           <PresetPicker
-            label="Safety preset"
+            label={shared.safety.preset}
             value={setup.data.safetyPreset}
             onPicked={(preset) => setGuide(presetInfo(preset).guide)}
           />
@@ -87,32 +84,29 @@ export function OnboardingFolders() {
   return (
     <OnboardingFrame
       step={3}
-      guide={FOLDERS_GUIDE}
+      guide={shared.folders.guide}
       sofar={[
         ...connectedLines(setup.data?.connectedProviders),
-        `${hobLine(draft)} on ${PROVIDER_NAMES[draft.runtime]}`,
-        ...(setup.data ? [`${presetInfo(setup.data.safetyPreset).label} safety`] : []),
+        shared.hobOn({ hob: hobLine(draft), provider: PROVIDER_NAMES[draft.runtime] }),
+        ...(setup.data ? [shared.presetSafety({ preset: presetInfo(setup.data.safetyPreset).label })] : []),
       ]}
       footer={
         <>
           <Button variant="outline" onClick={back} disabled={saving}>
-            Back
+            {shared.back}
           </Button>
           <span className="flex-1 text-right text-sm text-secondary-text">
-            {folders.length === 0 ? "No folders is fine, hobs can still chat" : foldersShared(folders.length)}
+            {folders.length === 0 ? shared.folders.none : foldersShared(folders.length)}
           </span>
           <Button onClick={() => void navigate({ to: "/setup/ready" })} disabled={!setup.data || saving}>
-            Continue
+            {shared.continue}
           </Button>
         </>
       }
     >
       <div className="flex max-w-[780px] animate-hb-in flex-col gap-1.5">
-        <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">Where can hobs work?</h1>
-        <p className="m-0 mb-2.5 text-secondary-text">
-          Every hob can work in these folders, and nowhere else on this computer. You can give one hob more folders of
-          its own from its profile.
-        </p>
+        <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{shared.folders.heading}</h1>
+        <p className="m-0 mb-2.5 text-secondary-text">{shared.folders.intro}</p>
         {setup.data ? (
           <FolderPicker folders={folders} />
         ) : setup.isError ? (

@@ -10,7 +10,7 @@ import { messages } from "./settings/messages.ts";
 const copy = messages.providers;
 
 /** A sentence from the messages with its `{command}` shown as code. */
-function WithCommand({ text, command }: { text: string; command: string }) {
+export function WithCommand({ text, command }: { text: string; command: string }) {
   const parts = text.split("{command}");
   return (
     <>

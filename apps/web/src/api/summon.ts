@@ -1,4 +1,5 @@
 import { RUNTIME_NAMES, type RuntimeHealth } from "@hobbots/domain";
+import { messages } from "../components/messages.ts";
 import { draftProblem, type FirstHobDraft, newDraft, type Random, restoreDraft, rollName } from "./first-hob.ts";
 
 /**
@@ -54,11 +55,11 @@ export const summonProblem = (
   modelFound: boolean,
 ): string | undefined => {
   if (draft.submitted !== null) return undefined;
-  const name = draft.name.trim() || "your hob";
+  const name = draft.name.trim() || messages.onboarding.firstHob.yourHob;
   const problem = draftProblem(draft);
   if (problem) return problem;
-  if (provider.health === undefined && provider.pending) return "Checking your AI providers";
-  if (provider.health === undefined && provider.failed) return `Check your AI providers again to summon ${name}`;
-  if (provider.health?.availability !== "ready") return `Fix a provider to summon ${name}`;
-  return modelFound ? undefined : `Waiting for ${RUNTIME_NAMES[draft.runtime]}'s models`;
+  if (provider.health === undefined && provider.pending) return messages.summon.checkingProviders;
+  if (provider.health === undefined && provider.failed) return messages.summon.checkAgainToSummon({ name });
+  if (provider.health?.availability !== "ready") return messages.summon.fixProvider({ name });
+  return modelFound ? undefined : messages.onboarding.firstHob.waitingModels({ runtime: RUNTIME_NAMES[draft.runtime] });
 };

@@ -10,10 +10,156 @@ const sentence = (text: string) => text.replace(/\.?$/, ".");
 const plural = new Intl.PluralRules("en");
 
 export const messages = {
+  providers: {
+    names: { "claude-code": "Claude", codex: "Codex" },
+    makers: { "claude-code": "Anthropic · Claude Code", codex: "OpenAI · ChatGPT plan" },
+    /** The providers the user connected, already joined as a list in the reader's locale. */
+    connected: ({ names }: { names: string }) => `${names} connected`,
+    connectedCount: ({ count }: { count: number }) =>
+      pluralForm(count, { one: "1 provider connected", other: `${formatCount(count)} providers connected` }),
+    plan: { "claude-code": "Your Claude plan", codex: "Your ChatGPT plan" },
+  },
+  onboarding: {
+    back: "Back",
+    continue: "Continue",
+    /** The first hob in the summary of the steps so far, such as "Pip the Writer on Claude". */
+    hobOn: ({ hob, provider }: { hob: string; provider: string }) => `${hob} on ${provider}`,
+    presetSafety: ({ preset }: { preset: string }) => `${preset} safety`,
+    providers: {
+      guide: {
+        looking: "Welcome, friend! Let me peek around your Mac for an AI helper you already use.",
+        found: ({ provider }: { provider: string }) =>
+          `There it is! ${provider} is ready on this Mac. Connect it, and your hobs will think with it.`,
+        connected: "Splendid! That door is open, so your hobs can think with it. Continue when you like.",
+        fix: "Your hobs need an AI to think with. Each one here needs a little fix first; follow the steps, then check again.",
+        nudge: "Connect one provider first, otherwise the hobs have nothing to think with!",
+      },
+      heading: "Which AI do you already use?",
+      intro:
+        "Hobs think with your own subscription or key. Either one is enough, and you can change this any time in Settings.",
+      privacy: "Hobbots never sees your password. It reuses the tool already signed in on this Mac.",
+      tags: {
+        found: "Found",
+        connected: "Found",
+        notFound: "Not found",
+        notStarted: "Not working",
+        outdated: "Update needed",
+        signedOut: "Signed out",
+        unknown: "Unknown",
+      },
+      // Each `{command}` is shown as code.
+      claude: {
+        checking: "Looking for Claude Code on this Mac.",
+        ready: ({ version }: { version: string | null }) =>
+          version ? `Claude Code ${version} is signed in on this Mac.` : "Claude Code is signed in on this Mac.",
+        notFound: "Claude Code is not on this Mac yet. Install it, sign in once in Terminal, then check again.",
+        notStarted: "Claude Code is installed but did not start. Run {command} in Terminal to see what is wrong.",
+        outdated: ({ version }: { version: string | null }) =>
+          version ? `Claude Code ${version} is too old for Hobbots.` : "Claude Code is too old for Hobbots.",
+        signedOut:
+          "Claude Code is installed but not signed in. Run {command} in Terminal and sign in with your claude.ai account.",
+        command: "claude",
+        unknown: "Hobbots could not check Claude Code just now.",
+        update: "Run {command} in Terminal. Your sign-in stays as it is.",
+        updateCommand: "claude update",
+      },
+      codex: {
+        checking: "Looking for Codex on this Mac.",
+        ready: ({ version }: { version: string | null }) =>
+          version
+            ? `Codex ${version} is signed in with your ChatGPT plan on this Mac.`
+            : "Codex is signed in with your ChatGPT plan on this Mac.",
+        unknown: "Hobbots could not check Codex just now.",
+      },
+      noRestart: "No need to restart Hobbots after fixing it.",
+      installGuide: "Install guide",
+      checkAgain: "Check again",
+      connecting: "Knocking on the door",
+      disconnecting: "Closing the door",
+      looking: "Looking on this Mac",
+      notConnected: "Not connected",
+      connect: "Connect",
+      connectLabel: ({ provider }: { provider: string }) => `Connect ${provider}`,
+      connected: "✓ Connected",
+      disconnect: "Disconnect",
+      disconnectLabel: ({ provider }: { provider: string }) => `Disconnect ${provider}`,
+      saveFailed: "Hobbots could not save that. Try again in a moment.",
+      connectOne: "Connect at least one to continue",
+      later: {
+        tag: "Later",
+        arrives: "Arrives in a later version",
+        label: ({ provider }: { provider: string }) => `${provider}, coming later`,
+        gemini: { name: "Gemini", maker: "Google", how: "Sign in with your Google account." },
+        grok: { name: "Grok", maker: "xAI", how: "Paste an API key from your xAI account." },
+        local: { name: "Local models", maker: "Ollama · LM Studio", how: "Free, private, stays on this Mac." },
+        other: { name: "Other", maker: "OpenRouter · any API", how: "Any OpenAI-compatible key." },
+      },
+    },
+    firstHob: {
+      guide: "Now the fun part. Every hob has a role on your team. Pick one, a name and a cloak.",
+      heading: "Meet your first hob",
+      intro: "Pick a role or name your own. Every hob looks different.",
+      legend: "Your first hob",
+      legendSent: ({ name }: { name: string }) => `${name}, as sent`,
+      role: "Role",
+      chores: ({ name }: { name: string }) => `What should ${name} do?`,
+      yourHob: "your hob",
+      name: "Name",
+      colors: "Colors",
+      thinksWith: "Thinks with",
+      preview: "Preview",
+      newLook: "New look",
+      newLookTitle: "Click for a new look",
+      look: ({ seed, recipe }: { seed: number; recipe: string }) => `Look #${seed} · ${recipe}`,
+      checking: "Checking your AI providers",
+      connectReady: "Connect a provider that is ready first",
+      waitingModels: ({ runtime }: { runtime: string }) => `Waiting for ${runtime}'s models`,
+      onTheWay: ({ name }: { name: string }) => `${name} is on the way. Finish summoning to change it.`,
+      ready: ({ name, role }: { name: string; role: string }) => `${name} the ${role} is ready`,
+    },
+    safety: {
+      guide: "A good hob always asks before doing something you cannot undo. How careful should yours be?",
+      heading: ({ name }: { name: string }) => `How much should ${name} ask first?`,
+      intro: "Hobs read, edit, run and browse inside the folders you pick next. Pick how often they ask you first.",
+      preset: "Safety preset",
+    },
+    folders: {
+      guide: "Pick the folders your hobs share. You can give one hob more of its own later, from its profile.",
+      heading: "Where can hobs work?",
+      intro:
+        "Every hob can work in these folders, and nowhere else on this computer. You can give one hob more folders of its own from its profile.",
+      none: "No folders is fine, hobs can still chat",
+    },
+    ready: {
+      guide: "Everything is ready. Light the circle and your first hob will appear.",
+      doneGuide: "There it is! Say hello. I will be in the corner of Home if you need me.",
+      heading: "Ready to summon",
+      arrived: ({ name }: { name: string }) => `${name} has arrived!`,
+      waiting: ({ name }: { name: string }) => `${name} is waiting in Hobs, ready for a first chore.`,
+      thinksWith: ({ hob, provider, model }: { hob: string; provider: string; model: string }) =>
+        `${hob} · thinks with ${provider} ${model}`,
+      rejected: ({ name, reason }: { name: string; reason: string }) =>
+        `Hobbots could not create ${name}: ${reason}. Go back to change it.`,
+      failed: ({ name }: { name: string }) => `Hobbots could not finish summoning ${name}. Try again in a moment.`,
+      tryAgain: "Try again",
+      summon: ({ name }: { name: string }) => `Summon ${name}`,
+      gathering: "Gathering moonlight",
+      sayHi: ({ name }: { name: string }) => `Say hi to ${name}`,
+      home: "Go to Home",
+    },
+  },
   models: {
     loading: ({ runtime }: { runtime: string }) => `Asking ${runtime} for its models`,
     failed: ({ runtime }: { runtime: string }) => `Hobbots could not get ${runtime}'s models.`,
     retry: "Try again",
+    /** How a hob thinks, such as "Codex · GPT-5.5 · medium effort". */
+    brain: ({ provider, model, effort }: { provider: string; model: string; effort: string | null }) =>
+      effort === null ? `${provider} · ${model}` : `${provider} · ${model} · ${effort.toLowerCase()} effort`,
+    /** The summary line; {brain} is shown in bold. */
+    thinksWith: "Thinks with {brain}",
+    more: "More models",
+    effort: "Effort",
+    noEffort: ({ model }: { model: string }) => `${model} takes no effort setting.`,
   },
   providerChoice: {
     legend: "Provider",
@@ -24,11 +170,55 @@ export const messages = {
     failed: "Hobbots could not read your setup.",
     retry: "Try again",
   },
+  profile: {
+    saving: "Saving…",
+    rejected: ({ reason }: { reason: string }) => `Hobbots could not save: ${reason}.`,
+    failed: "Hobbots could not save the changes. Try again.",
+    unsaved: ({ name }: { name: string }) => `Unsaved changes. ${name}'s next reply uses them once saved.`,
+    saved: ({ version, name }: { version: number; name: string }) =>
+      `Saved as version ${version}. ${name}'s next reply uses it.`,
+    role: "Role",
+    tone: "Tone",
+    toneNote: ({ name }: { name: string }) => `How ${name} talks. If your instructions describe a voice too, they win.`,
+    instructions: "Instructions",
+    instructionsNote: ({ name }: { name: string }) =>
+      `${name} reads this before every reply, after its name, role and tone. Add anything else it should know.`,
+    brain: "Brain",
+    discard: "Discard",
+    save: "Save changes",
+  },
   summon: {
     checkAgain: "Check again",
     checking: "Checking…",
     checkingProviders: "Checking your AI providers",
     checkFailed: "Hobbots could not check your AI providers.",
+    checkAgainToSummon: ({ name }: { name: string }) => `Check your AI providers again to summon ${name}`,
+    fixProvider: ({ name }: { name: string }) => `Fix a provider to summon ${name}`,
+    answers: { Ask: "Asks first", Allow: "Allowed", Never: "Never" },
+    summoning: ({ name }: { name: string }) => `Summoning ${name}… If you leave now, ${name} still joins your hobs.`,
+    rejected: ({ name, reason }: { name: string; reason: string }) => `Hobbots could not create ${name}: ${reason}.`,
+    heading: "Summon a hob",
+    intro:
+      "Describe the chores in your own words. Hobbots writes the instructions, and you can change anything before the hob starts.",
+    cancel: "Cancel",
+    choresSent: ({ name }: { name: string }) => `${name}'s chores, as sent`,
+    whatItDoes: "What the hob does",
+    chores: "What should this hob do?",
+    worksWhere: ({ name }: { name: string }) => `Where ${name} works`,
+    hub: "The hub",
+    hubDetail: "Uses the hub's files and apps",
+    sandbox: "A sandbox on the hub",
+    later: "Later",
+    sandboxDetail: "Isolated, safer for code",
+    asksFirst: ({ name }: { name: string }) => `${name} asks you first`,
+    asksFirstBefore: ({ name }: { name: string }) => `${name} asks you first before`,
+    safetyNote: "Safety is the same for every hob; you can make one more careful from its profile.",
+    changeInSettings: "Change it in Settings",
+    whoItIs: "Who the hob is",
+    newLookFor: ({ name }: { name: string }) => `New look for ${name}`,
+    hobName: "Hob name",
+    runs: "Runs",
+    runsWhen: "When you or another hob asks · schedules come later",
   },
   chief: {
     home: "Hobbots home",

@@ -37,6 +37,7 @@ import { CharmsTab } from "./hob-charms.tsx";
 import { Choice, ModelsBrain } from "./hob-form.tsx";
 import { PermissionsTab } from "./hob-permissions.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
 import { ProviderChoices } from "./provider-choices.tsx";
 import { RoleSheet } from "./role-sheet.tsx";
 import { RoleSigil } from "./role-sigil.tsx";
@@ -327,18 +328,19 @@ function ProfileTab({ hob }: { hob: Agent }) {
     });
   };
 
+  const copy = messages.profile;
   const status = update.isPending
-    ? "Saving…"
+    ? copy.saving
     : problem
       ? problem
       : rejected
-        ? `Hobbots could not save: ${rejected.message}.`
+        ? copy.rejected({ reason: rejected.message })
         : update.isError
-          ? "Hobbots could not save the changes. Try again."
+          ? copy.failed
           : dirty
-            ? `Unsaved changes. ${hob.name}'s next reply uses them once saved.`
+            ? copy.unsaved({ name: hob.name })
             : saved === hob.configVersion
-              ? `Saved as version ${saved}. ${hob.name}'s next reply uses it.`
+              ? copy.saved({ version: saved, name: hob.name })
               : "";
 
   return (
@@ -347,7 +349,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
         <div className="flex max-w-[880px] flex-col gap-6">
           <section aria-labelledby="hob-role" className="flex flex-col gap-2">
             <h2 id="hob-role" className="lbl m-0 text-moonlight">
-              Role
+              {copy.role}
             </h2>
             <RoleCard name={hob.name} draft={draft} disabled={update.isPending} onChange={() => setSheetOpen(true)} />
           </section>
@@ -355,11 +357,9 @@ function ProfileTab({ hob }: { hob: Agent }) {
           <section aria-labelledby="hob-tone" className="flex flex-col gap-3.5">
             <div className="flex flex-col gap-1">
               <h2 id="hob-tone" className="lbl m-0 text-moonlight">
-                Tone
+                {copy.tone}
               </h2>
-              <span className="text-sm text-secondary-text">
-                How {hob.name} talks. If your instructions describe a voice too, they win.
-              </span>
+              <span className="text-sm text-secondary-text">{copy.toneNote({ name: hob.name })}</span>
             </div>
             <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-3.5 border-0 p-0">
               <TonePicker
@@ -374,10 +374,10 @@ function ProfileTab({ hob }: { hob: Agent }) {
 
           <section className="flex flex-col gap-2">
             <label htmlFor="hob-instructions" className="lbl text-moonlight">
-              Instructions
+              {copy.instructions}
             </label>
             <span id="hob-instructions-note" className="text-sm text-secondary-text">
-              {hob.name} reads this before every reply, after its name, role and tone. Add anything else it should know.
+              {copy.instructionsNote({ name: hob.name })}
             </span>
             <textarea
               id="hob-instructions"
@@ -393,7 +393,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
           </section>
 
           <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-2.5 border-0 p-0">
-            <legend className="lbl mb-2 text-moonlight">Brain</legend>
+            <legend className="lbl mb-2 text-moonlight">{copy.brain}</legend>
             {runtimes.data && (
               <ProviderChoices
                 runtimes={runtimes.data}
@@ -429,10 +429,10 @@ function ProfileTab({ hob }: { hob: Agent }) {
             update.reset();
           }}
         >
-          Discard
+          {copy.discard}
         </Button>
         <Button type="submit" disabled={!changes || update.isPending}>
-          Save changes
+          {copy.save}
         </Button>
       </div>
 
