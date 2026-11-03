@@ -1,14 +1,31 @@
 import { execFile, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { HubTools, RuntimeEvent, ToolAccess } from "@hobbots/agents";
-import { EMPTY_HOB_POLICY, GIT_INIT_DESCRIPTION, GIT_INIT_LABEL, GIT_INIT_TOOL } from "@hobbots/domain";
+import {
+  EMPTY_HOB_POLICY,
+  GIT_INIT_DESCRIPTION,
+  GIT_INIT_LABEL,
+  GIT_INIT_TOOL,
+  leftoverGitNote,
+  type SafetyPreset,
+} from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
+import { keptGitHint } from "../src/approval.ts";
 import { policyHooks, toolTurn, turnInstructions } from "../src/claude-code.ts";
 import { type PreparedSandbox, ProcessSandbox, TEMP_BASE } from "../src/sandbox.ts";
 import { initsRepository } from "../src/tool-calls.ts";
@@ -40,8 +57,8 @@ const engine = Effect.runSync(
   }).pipe(Effect.provide(PolicyEngine.node)),
 );
 
-const access = (project: string): ToolAccess => ({
-  policy: { preset: "balanced", sharedFolders: [project], hob: EMPTY_HOB_POLICY, dataFolder: data, restrictions: [] },
+const access = (project: string, preset: SafetyPreset = "balanced"): ToolAccess => ({
+  policy: { preset, sharedFolders: [project], hob: EMPTY_HOB_POLICY, dataFolder: data, restrictions: [] },
   folders: [project],
   runtimeFolder: join(runtimes, "hob-1"),
 });
@@ -271,5 +288,88 @@ describe("pointing a hob to what works in its sandbox", () => {
     expect(note).toContain("git_init tool instead of git init");
     expect(note).toContain("$TMPDIR");
     expect(turnInstructions("Be brief.", false)).toBe("Be brief.");
+  });
+});
+
+// #663: deleting a repository from the sandbox leaves its config and hooks, which no hob may remove,
+// and git_init then replaces what is left (in @hobbots/charms, TC-PE-440).
+describe("a repository a hob deletes", () => {
+  // covers PE-005
+  it.runIf(sandboxed)(
+    "[TC-PE-443] an approved delete of a repository leaves only its config and hooks, whose files stay read-only, and its output names git_init",
+    async () => {
+      const project = newProject();
+      hubGit("init", "--quiet", "--", project);
+      hubGit("-C", project, "config", "user.name", "Frodo");
+      await inTurn(project, async (prepared) => {
+        const committed = await runIn(prepared, project, commitReadme);
+        expect(committed.ok, committed.stderr).toBe(true);
+      });
+      const hook = join(project, ".git", "hooks", "pre-commit");
+      writeFileSync(hook, "echo earlier\n");
+      await inTurn(project, async (prepared) => {
+        // A hook that exists stays read-only, as before.
+        const edited = await runIn(prepared, project, "echo 'echo hob' >> .git/hooks/pre-commit");
+        expect(edited.ok).toBe(false);
+        expect(readFileSync(hook, "utf8")).toBe("echo earlier\n");
+        // The delete, as approved, removes everything but the repository's config and hooks.
+        const deleted = await runIn(prepared, project, "rm -rf ./* ./.[!.]*");
+        expect(deleted.ok).toBe(false);
+        expect(keptGitHint("Bash", `${deleted.stdout}${deleted.stderr}`, GIT_INIT_TOOL)).toBe(
+          leftoverGitNote(GIT_INIT_TOOL),
+        );
+      });
+      expect(readdirSync(project)).toEqual([".git"]);
+      expect(readdirSync(join(project, ".git")).sort()).toEqual(["config", "hooks"]);
+      expect(readFileSync(hook, "utf8")).toBe("echo earlier\n");
+    },
+    60_000,
+  );
+
+  // covers PE-005
+  it("[TC-PE-444] a delete refused for a repository's config or hooks, and one the sandbox kept them from, both point to git_init", async () => {
+    const project = newProject();
+    hubGit("init", "--quiet", "--", project);
+    // The policy refuses a delete it can read that holds the config or hooks, and says what to do.
+    expect(await hooked(project, "Bash", { command: `rm -rf ${project}` }, withGitInit)).toMatchObject({
+      _tag: "ToolDenied",
+      reason: expect.stringContaining(leftoverGitNote(GIT_INIT_TOOL)),
+    });
+    // Without git_init on the turn, the refusal says only why.
+    const plain = await hooked(project, "Bash", { command: `rm -rf ${project}` });
+    expect((plain as { reason: string }).reason).not.toContain(GIT_INIT_TOOL);
+
+    // A delete that ran and met the sandbox gets the note with its result, on macOS's words or Linux's.
+    const turn = toolTurn(access(project, "trusting"), "on", withGitInit);
+    if (turn === null) throw new Error("expected a tool turn");
+    const { hooks } = policyHooks(engine, turn, () => {});
+    const signal = new AbortController().signal;
+    const ended = async (id: string, error: string) => {
+      const base = { session_id: "s", transcript_path: "", cwd: project, tool_use_id: id, tool_name: "Bash" };
+      const tool_input = { command: "rm -rf ./* ./.[!.]*" };
+      await hooks.PreToolUse?.[0]?.hooks[0]?.({ ...base, hook_event_name: "PreToolUse", tool_input } as HookInput, id, {
+        signal,
+      });
+      const failed = { ...base, hook_event_name: "PostToolUseFailure", tool_input, error, is_interrupt: false };
+      return hooks.PostToolUseFailure?.[0]?.hooks[0]?.(failed as unknown as HookInput, id, { signal });
+    };
+    const note = {
+      hookSpecificOutput: { hookEventName: "PostToolUseFailure", additionalContext: leftoverGitNote(GIT_INIT_TOOL) },
+    };
+    expect(await ended("t2", `Exit code 1\nrm: ${project}/.git/config: Operation not permitted`)).toEqual(note);
+    expect(
+      await ended("t3", `Exit code 1\nrm: cannot remove '${project}/.git/hooks/pre-commit': Read-only file system`),
+    ).toEqual(note);
+    expect(await ended("t4", "Exit code 1\nrm: cannot remove 'notes.txt': Permission denied")).toEqual({});
+    // Git's warning that it could not write the config, as after deleting a branch, is not a delete.
+    expect(
+      await ended("t5", "Exit code 0\nwarning: could not write config file .git/config: Operation not permitted"),
+    ).toEqual({});
+    expect(keptGitHint("Bash", `rm: ${project}/.git/config: Operation not permitted`, undefined)).toBeUndefined();
+    // Output a command crafts is read in linear time (STD-SEC-005): a long line of candidate paths with
+    // no refusal answers at once.
+    const started = performance.now();
+    expect(keptGitHint("Bash", `rm: ${".git/config ".repeat(500_000)}`, GIT_INIT_TOOL)).toBeUndefined();
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });
