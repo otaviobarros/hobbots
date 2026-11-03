@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CONNECTED_MODE_ARGUMENT } from "../src/main/mode-argument.ts";
+import { CONNECTED_MODE_ARGUMENT, SETUP_MODE_ARGUMENT } from "../src/main/mode-argument.ts";
 
 // What the preload script offers the window's pages (ADR 025), with Electron's bridge recorded.
 
@@ -46,5 +46,12 @@ describe("the preload bridge", () => {
     ]);
     // On the hub, the folder pickers, the backup folder picker included, and Show in Finder stay.
     expect(await bridgeWith([])).toEqual([...shared, "chooseBackupFolder", "chooseFolder", "showFile"].sort());
+  });
+
+  // covers DP-001, PE-006
+  it("[TC-DP-203] offers setup's local pages only setup's own calls, and none of the hub's", async () => {
+    expect(await bridgeWith([SETUP_MODE_ARGUMENT])).toEqual(["setup"]);
+    const setup = exposed.bridge?.setup as Record<string, unknown>;
+    expect(Object.keys(setup).sort()).toEqual(["cancel", "connect", "findHubs", "onWaiting", "runHere"]);
   });
 });

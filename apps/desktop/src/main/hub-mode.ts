@@ -1,5 +1,4 @@
 import { lstat } from "node:fs/promises";
-import { join, resolve } from "node:path";
 import serverPath from "@hobbots/server/main?modulePath";
 import { hubPort } from "@hobbots/server/network-settings";
 import { app, BrowserWindow, dialog, ipcMain, session, shell, utilityProcess } from "electron";
@@ -7,6 +6,7 @@ import { newAppWindow } from "./app-window.ts";
 import { handleFolderDialogIpc } from "./folder-dialog.ts";
 import { hubAddress } from "./hub-address.ts";
 import { followHub } from "./hub-events.ts";
+import { webClientDir } from "./local-pages.ts";
 import type { LoginItem } from "./login-item.ts";
 import { startMenuBar } from "./menu-bar.ts";
 import { ServerSupervisor, StartTimedOut } from "./server.ts";
@@ -27,18 +27,21 @@ export interface AppShell {
 
 /**
  * The app on the hub (ADR 012): it runs this installation's server, attached to or launched and
- * owned, and its window loads the hub's pages from it on this computer. Called once the app is ready.
+ * owned, and its window loads the hub's pages from it on this computer. Called once the app is ready,
+ * or once the user chose Run here in setup, when the first window opens at `firstPage`, a route of
+ * the hub's pages such as `/setup/remote`.
  */
-export const startHub = async ({ settings, loginItem, handleSettingsIpc }: AppShell) => {
+export const startHub = async (
+  { settings, loginItem, handleSettingsIpc }: AppShell,
+  { firstPage }: { readonly firstPage?: string } = {},
+) => {
   // The port the user chose in Settings, kept in the data folder, unless HOBBOTS_PORT overrides it.
   const hub = hubAddress(hubPort(app.getPath("userData"), process.env));
   const devWebUrl = process.env.HOBBOTS_WEB_URL ?? "http://127.0.0.1:5173";
 
   // A packaged app carries the web client in its resources folder; a checkout uses the web build.
   // The server serves it, and the window loads it from there like any browser on the hub (ADR 012).
-  const webDir = app.isPackaged
-    ? join(process.resourcesPath, "web")
-    : resolve(import.meta.dirname, "../../../web/dist");
+  const webDir = webClientDir(app.isPackaged ? process : null, import.meta.dirname);
 
   /** The pages the window may show, and the only ones the preload bridge answers. */
   const isAllowedUrl = (url: string) => url.startsWith(`${devWebUrl}/`) || url.startsWith(`${hub.apiUrl}/`);
@@ -95,13 +98,14 @@ export const startHub = async ({ settings, loginItem, handleSettingsIpc }: AppSh
     },
   });
 
+  // Only the first window opens at `firstPage`; any later one opens where the hub's pages choose.
+  let route = firstPage === undefined ? "" : `#${firstPage}`;
   const createWindow = async () => {
     const window = newAppWindow({ isAllowedUrl });
-    if (!app.isPackaged && (await isUp(devWebUrl))) {
-      await window.loadURL(devWebUrl);
-    } else {
-      await window.loadURL(`${hub.apiUrl}/`);
-    }
+    const page = route;
+    route = "";
+    const base = !app.isPackaged && (await isUp(devWebUrl)) ? devWebUrl : hub.apiUrl;
+    await window.loadURL(`${base}/${page}`);
     return window;
   };
 

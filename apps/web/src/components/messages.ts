@@ -756,8 +756,15 @@ export const messages = {
     connect: {
       title: "Connect to Hobbots on another computer",
       body: "Already have a hub? Use it from here with chat, Quests, approvals and the Workbench.",
-      soon: "Coming soon: the Hobbots app can't join another computer's hub yet. Open the hub's address in a browser instead.",
+      onHub: "This computer is the hub already. To use it from another computer, open Hobbots there and choose this.",
     },
+    starting: "Starting Hobbots…",
+    startFailed: "Hobbots could not start here. Try again in a moment.",
+  },
+  welcome: {
+    getStarted: "Get started",
+    alreadyUse: "I already use Hobbots",
+    saveFailed: "Hobbots could not save that. Try again in a moment.",
   },
   remoteSetup: {
     stage: "This computer",

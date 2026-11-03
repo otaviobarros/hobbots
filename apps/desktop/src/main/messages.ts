@@ -62,11 +62,4 @@ export const messages = {
       `Hobbots could not reach ${hub}, so it still lists this Mac. Revoke it there, in Settings › Devices.`,
     ok: "OK",
   },
-  choose: {
-    title: "This Mac is not connected to a hub",
-    detail:
-      "Hobbots here was disconnected from its hub. Run Hobbots on this Mac to make it the hub, where hobs live and work, or quit.",
-    runHere: "Run Hobbots on this Mac",
-    quit: "Quit",
-  },
 } as const;

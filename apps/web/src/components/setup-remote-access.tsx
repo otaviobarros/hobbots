@@ -1,58 +1,15 @@
-import type { RemoteAccessStatus, TailscaleState } from "@hobbots/domain";
+import type { RemoteAccessStatus } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Switch } from "@hobbots/ui/components/switch";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useId } from "react";
 import { RemoteAddress } from "./devices/remote-address.tsx";
 import { messages } from "./messages.ts";
-import {
-  remoteAccessWhy,
-  remoteAddress,
-  TAILSCALE_DOWNLOAD,
-  tailnetName,
-  useRemoteAccessSwitch,
-} from "./remote-access-settings.tsx";
+import { remoteAccessWhy, remoteAddress, tailnetName, useRemoteAccessSwitch } from "./remote-access-settings.tsx";
+import { TailscaleNotReady } from "./tailscale-not-ready.tsx";
 import { ElderAside } from "./where-hobbots-runs.tsx";
 
 const copy = messages.remoteSetup;
-
-/** Tailscale is not ready here: how to get it ready, and Check again, which Hobbots also does by itself. */
-function TailscaleNotReady({
-  state,
-  checking,
-  onCheck,
-}: {
-  state: Exclude<TailscaleState, "running">;
-  checking: boolean;
-  onCheck: () => void;
-}) {
-  return (
-    <section
-      aria-label={copy.missing[state]}
-      className="cut flex max-w-[720px] flex-col gap-2.5 border-2 border-lantern bg-card px-[18px] py-4"
-    >
-      <span className="font-bold">{copy.missing[state]}</span>
-      <span className="text-sm leading-normal text-secondary-text">{copy.missingBody}</span>
-      <ol className="m-0 flex list-none flex-col gap-1 p-0 text-sm leading-normal">
-        {copy.steps.map((step, index) => (
-          <li key={step}>
-            <b className="text-lantern">{index + 1}.</b> {step}
-          </li>
-        ))}
-      </ol>
-      <span className="flex flex-wrap gap-2.5 pt-1">
-        <Button asChild variant="outline" size="sm">
-          <a href={TAILSCALE_DOWNLOAD} target="_blank" rel="noreferrer">
-            {messages.remoteAccess.getTailscale}
-          </a>
-        </Button>
-        <Button variant="outline" size="sm" disabled={checking} onClick={onCheck}>
-          {checking ? copy.checking : copy.checkAgain}
-        </Button>
-      </span>
-    </section>
-  );
-}
 
 /** With remote access on: the address and QR code, or why the hub is not on the tailnet yet. */
 function RemoteAccessOn({ status }: { status: RemoteAccessStatus }) {

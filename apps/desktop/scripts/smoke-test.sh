@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke-tests a packaged Hobbots.app: launches it with the fake runtime, waits for its server's
+# Smoke-tests a packaged Hobbots.app: launches it as the hub with the fake runtime, waits for its server's
 # health check, then quits it and checks that the server it launched stopped too.
 #
 #   apps/desktop/scripts/smoke-test.sh path/to/Hobbots.app [extra app arguments]
@@ -20,7 +20,8 @@ if curl -fsS --max-time 1 "$health" >/dev/null 2>&1; then
   exit 1
 fi
 
-HOBBOTS_RUNTIME=fake HOBBOTS_PORT="$port" "${app}/Contents/MacOS/Hobbots" "$@" &
+# A new data folder starts setup with no server (ADR 025); HOBBOTS_MODE=hub makes it the hub, as Run here does.
+HOBBOTS_RUNTIME=fake HOBBOTS_MODE=hub HOBBOTS_PORT="$port" "${app}/Contents/MacOS/Hobbots" "$@" &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true' EXIT
 
