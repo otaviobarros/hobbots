@@ -20,6 +20,7 @@ import {
   journalOf,
   ledTask,
   newId,
+  outcomesShown,
   ownTask,
   questLimitsFor,
   refuse,
@@ -268,8 +269,9 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
       const target = yield* ledTask(scope, input.task_id);
       const journal = journalOf();
       const moves = cancelMoves(target, scope.tree);
+      const moved: Array<Task> = [];
       for (const { task, to } of moves) {
-        journal.keep(yield* fromRecords(tasks.moveTask(task.id, task.revision, to, scope.at)));
+        moved.push(journal.keep(yield* fromRecords(tasks.moveTask(task.id, task.revision, to, scope.at))));
       }
       const cancelling = moves.filter((move) => move.to === "cancelling").map((move) => move.task.id as string);
       return {
@@ -284,6 +286,8 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
           },
         },
         entries: journal.entries,
+        // The turn cancelled them itself: the failures recorded for those that ended at once are read already (#662).
+        shown: yield* outcomesShown(tasks, scope, moved),
       };
     }),
 });

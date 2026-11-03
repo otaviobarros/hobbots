@@ -206,8 +206,31 @@ export const ledgerRefusal = (
   const more = rest > 0 ? `; and ${rest} more` : "";
   return {
     reason: REASONS[first._tag],
-    message: `Task ${ledger.taskId} cannot complete yet: ${named.join("; ")}${more}.`,
+    message: `Task ${ledger.taskId} cannot complete yet: ${named.join("; ")}${more}.${unreadRemedy(ledger)}`,
   };
+};
+
+/**
+ * What clears the unread backpack items in a refusal (#662): `read_tasks` reads the results and
+ * failures of the Tasks it lists, and the rest reach the hob as its next message once its turn ends.
+ * Calling `complete_task` again without doing either is refused the same way.
+ */
+const unreadRemedy = (ledger: ResponsibilityLedger): string => {
+  const items = ledger.open.flatMap((entry) => (entry._tag === "Item" ? [entry.item] : []));
+  if (items.length === 0) return "";
+  const clears = items.every((item) => OUTCOME_KINDS.includes(item.kind))
+    ? "Call read_tasks to read what ended, which counts as reading it, then complete the Task; or end your turn, and it reaches you as your next message."
+    : "End your turn: what still waits for you reaches you as your next message, and you complete the Task then.";
+  return ` ${clears} Calling complete_task again without doing either is refused the same way.`;
+};
+
+/** What a turn carries: the items it holds claims on, then those it was shown, a held claim winning over the same item shown. */
+export const carriedWith = (
+  held: ReadonlyArray<CarriedItem>,
+  shown: Iterable<CarriedItem>,
+): ReadonlyArray<CarriedItem> => {
+  const ids = new Set<string>(held.map((each) => each.itemId));
+  return [...held, ...[...shown].filter((each) => !ids.has(each.itemId))];
 };
 
 /**

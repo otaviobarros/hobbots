@@ -4,6 +4,7 @@ import {
   AttemptId,
   type CarriedItem,
   carriedFrom,
+  carriedWith,
   type EventEnvelope,
   openThreadTask,
   type Task,
@@ -58,12 +59,8 @@ export const makeChatResolver = (
    * What the turn carries on its Task: the items it holds claims on, and those its briefing showed
    * unclaimed, a held claim winning over the same item shown.
    */
-  const carriedBy = (taskId: TaskId): ReadonlyArray<CarriedItem> => {
-    const holding = turn.holding ?? [];
-    const shown = briefed?.taskId === taskId ? briefed.carried : [];
-    const held = new Set(holding.map((each) => each.itemId));
-    return [...holding, ...shown.filter((each) => !held.has(each.itemId))];
-  };
+  const carriedBy = (taskId: TaskId): ReadonlyArray<CarriedItem> =>
+    carriedWith(turn.holding ?? [], briefed?.taskId === taskId ? briefed.carried : []);
   return {
     /**
      * What the turn's session is told of the open Task, read as the turn starts. The briefing shows

@@ -541,6 +541,51 @@ describe("hob tools for Tasks and Quests", () => {
     expect(Option.getOrThrow(await run(tasks.readLedger(TOP))).open).toEqual([]);
   });
 
+  // covers IN-006, OR-001 (#662)
+  it("[TC-OR-460] a lead that cancels or reads what ended completes in the same turn, without retrying", async () => {
+    await run(seed);
+    await done(ALDRIC, TOP, "start_quest", { key: "quest", goal: "Launch the campaign" });
+    const quill = await delegate(ALDRIC, TOP, "Quill", "copy");
+    const ada = await delegate(ALDRIC, TOP, "Ada", "art");
+    // Ada's Task is cancelled from an earlier turn, so its failure waits unread in Aldric's backpack.
+    await done(ALDRIC, TOP, "cancel_task", { key: "drop-art", task_id: ada });
+    const lone = await refused(ALDRIC, TOP, "complete_task", { key: "early", summary: "Campaign launched" });
+    expect(lone.message).toContain(`Task ${ada} (Work for Ada) cancelled, and you have not read it yet`);
+    expect(lone.message).toContain("Call read_tasks to read what ended");
+    expect(lone.message).toContain("or end your turn");
+
+    // One turn: it reads Ada's failure, cancels Quill's Task itself, and completes at the first try.
+    const prompt = [
+      "Wrap up the campaign",
+      'fake:hub read_tasks {"key":"look"}',
+      `fake:hub cancel_task {"key":"drop-copy","task_id":"${quill}"}`,
+      'fake:hub complete_task {"key":"wrap","summary":"Campaign launched without copy or art"}',
+    ].join("\n");
+    const turn = Effect.gen(function* () {
+      const tools = yield* TaskTools;
+      const adapter = yield* RuntimeAdapter;
+      return yield* Stream.runCollect(
+        adapter.sendPrompt({
+          prompt,
+          sessionId: null,
+          instructions: "",
+          instructionsChanged: false,
+          model: null,
+          effort: null,
+          hubTools: tools.forTurn({ agentId: ALDRIC, taskId: TOP }),
+        }),
+      );
+    });
+    const events = (await run(turn)) as ReadonlyArray<RuntimeEvent>;
+    const completed = events.find((event) => event._tag === "Completed");
+    expect(completed?._tag === "Completed" && completed.text).toMatch(/complete_task: Task top is complete/);
+    const after = await tree();
+    expect(after.tasks.find((each) => each.id === TOP)?.state).toBe("completed");
+    expect(after.quests[0]?.state).toBe("completed");
+    const tasks = await run(Effect.service(TaskRepository));
+    expect(Option.getOrThrow(await run(tasks.readLedger(TOP))).open).toEqual([]);
+  });
+
   // covers OR-001
   it("[TC-OR-017] a refused or malformed call writes nothing and says why", async () => {
     await run(seed);

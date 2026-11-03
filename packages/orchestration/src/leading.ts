@@ -10,7 +10,16 @@ import {
   type TaskTree,
 } from "@hobbots/domain";
 import { Effect } from "effect";
-import { type CallScope, fromRecords, journalOf, ledTask, newId, ownTask, refuse } from "./call-scope.ts";
+import {
+  type CallScope,
+  fromRecords,
+  journalOf,
+  ledTask,
+  newId,
+  outcomesShown,
+  ownTask,
+  refuse,
+} from "./call-scope.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -85,6 +94,8 @@ export const makeLeading = ({ tasks }: Deps) => ({
           details: { tasks: listed },
         },
         entries: [],
+        // It shows each ended Task's state and result, as a briefing does: the turn has read them.
+        shown: yield* outcomesShown(tasks, scope, under),
       };
     }),
 

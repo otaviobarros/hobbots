@@ -141,7 +141,7 @@ Hobs act through Hobbots tools on the runtime's control channel, as Charms are e
 | `escalate` | A lead | Passes a question it cannot answer to the next lead, and from the top lead to you | The Question's new recipient |
 | `hand_off` | A lead | Gives one Task's result to another Task as context | Artifact reference on the receiving brief |
 | `wait_for` | A Task's owner | Waits for any or all of its child Tasks, steps or members' Tasks, without blocking its chat. The hob then ends its turn, and the Task shows as waiting once the turn has ended | Wait record |
-| `read_tasks` | A Task's owner | Reads the state of every Task under its own, at any depth: owner, state, whether a turn runs, what it waits on, open questions, latest checkpoints and result | Nothing |
+| `read_tasks` | A Task's owner | Reads the state of every Task under its own, at any depth: owner, state, whether a turn runs, what it waits on, open questions, latest checkpoints and result. The results and failures it shows count as read for the turn's completion | Nothing |
 | `message_task` | A lead | Sends a short message to a member's Task directly under its own, which wakes the member; a hob further down is reached through its own lead | A note from the lead on that Task |
 | `complete_task` | A Task's owner | Returns the result; the server checks the completion gate | Result, Task state |
 | `cancel_task` | A Task's owner | Cancels one of its child Tasks and that Task's subtree | Cancel request, then confirmed outcomes |

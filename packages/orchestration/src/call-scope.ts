@@ -4,6 +4,7 @@ import {
   ancestorsOf,
   type CarriedItem,
   type Committed,
+  carriedFrom,
   DEFAULT_QUEST_LIMITS,
   type EventEnvelope,
   IllegalTaskTransition,
@@ -21,6 +22,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { type Authority, NO_AUTHORITY, narrowBy, type PathSeparator } from "./authority.ts";
+import { outcomeShows } from "./briefs.ts";
 
 /**
  * Limits the hub holds every call to (orchestration contract). Depth counts Quests, not steps.
@@ -93,6 +95,23 @@ export const journalOf = () => {
 };
 
 export const newId = () => crypto.randomUUID();
+
+/**
+ * The results and failures of `ended` in the caller's backpack, on its turn's Task, that a call's
+ * result shows as it reads them now: the turn has read them, so they no longer keep its Task open
+ * (#662). Read in the call's own transaction, so an item recorded by the call itself counts.
+ */
+export const outcomesShown = (
+  tasks: TaskRepository["Service"],
+  scope: CallScope,
+  ended: ReadonlyArray<Task>,
+): Effect.Effect<ReadonlyArray<CarriedItem>> =>
+  !ended.some((each) => isTerminalTask(each.state))
+    ? Effect.succeed([])
+    : Effect.map(
+        tasks.readLedger(scope.turnTask.id),
+        Option.match({ onNone: () => [], onSome: (ledger) => carriedFrom(ledger, outcomeShows(ended)) }),
+      );
 
 /** A Task of the call's tree, or a refusal naming it. */
 /**
