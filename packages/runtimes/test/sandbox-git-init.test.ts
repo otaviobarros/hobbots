@@ -366,5 +366,10 @@ describe("a repository a hob deletes", () => {
       await ended("t5", "Exit code 0\nwarning: could not write config file .git/config: Operation not permitted"),
     ).toEqual({});
     expect(keptGitHint("Bash", `rm: ${project}/.git/config: Operation not permitted`, undefined)).toBeUndefined();
+    // Output a command crafts is read in linear time (STD-SEC-005): a long line of candidate paths with
+    // no refusal answers at once.
+    const started = performance.now();
+    expect(keptGitHint("Bash", `rm: ${".git/config ".repeat(500_000)}`, GIT_INIT_TOOL)).toBeUndefined();
+    expect(performance.now() - started).toBeLessThan(500);
   });
 });

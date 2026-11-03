@@ -177,12 +177,17 @@ const withTempHint = (call: ToolCall, decision: CallDecision): CallDecision =>
     ? { ...decision, reason: `${decision.reason} ${TEMP_HINT}` }
     : decision;
 
+/** How macOS and Linux refuse to remove what the sandbox keeps. Read with string search, in linear time (STD-SEC-005). */
+const KEPT_REFUSALS = ["Operation not permitted", "Read-only file system", "Device or resource busy"];
+
 /**
  * `rm` or `find -delete` refusing, in a command's output, to remove a repository's config or hooks,
  * in macOS's words or Linux's. Git's own warning that it could not write the config is not one.
  */
-const KEPT_GIT =
-  /^(rm|find): (cannot (remove|delete) )?[^\n]*\.git\/(config|hooks)\b[^\n]*(Operation not permitted|Read-only file system|Device or resource busy)/m;
+const keptGitLine = (line: string) =>
+  (line.startsWith("rm: ") || line.startsWith("find: ")) &&
+  (line.includes(".git/config") || line.includes(".git/hooks")) &&
+  KEPT_REFUSALS.some((refusal) => line.includes(refusal));
 
 /**
  * What a hob is told after a command whose output shows its sandbox kept a repository's config or
@@ -193,7 +198,7 @@ export const keptGitHint = (
   output: string | undefined,
   initTool: string | undefined,
 ): string | undefined =>
-  tool === "Bash" && initTool !== undefined && output !== undefined && KEPT_GIT.test(output)
+  tool === "Bash" && initTool !== undefined && output?.split("\n").some(keptGitLine)
     ? leftoverGitNote(initTool)
     : undefined;
 
