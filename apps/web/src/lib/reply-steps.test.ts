@@ -25,5 +25,6 @@ describe("reply steps", () => {
     expect(formatBytes(512, "en-US")).toBe("512 byte");
     expect(formatBytes(16 * 1024, "en-US")).toBe("16 kB");
     expect(formatBytes(3.45 * 1024 * 1024, "en-US")).toBe("3.5 MB");
+    expect(formatBytes(2.5 * 1024 * 1024 * 1024, "en-US")).toBe("2.5 GB");
   });
 });

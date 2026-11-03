@@ -49,6 +49,11 @@ export class Device extends Schema.Class<Device>("Device")({
   /** Written at most once a minute while the device is used. */
   lastActiveAt: Schema.NullOr(Schema.String),
   revokedAt: Schema.NullOr(Schema.String),
+  /**
+   * Why a revoked device was revoked when it was not you: `restore` when a restore revoked every
+   * device (ADR 026). Absent for a device you revoked yourself, or one still approved.
+   */
+  revokedReason: Schema.optionalKey(Schema.Literals(["restore"])),
 }) {}
 
 /**

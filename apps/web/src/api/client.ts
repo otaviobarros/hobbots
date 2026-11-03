@@ -18,6 +18,20 @@ export interface NotificationChoices {
   readonly sound: boolean;
 }
 
+/** What a connected desktop says about the hub it uses (ADR 025): names, address, versions and state, never the token. */
+export interface DesktopConnection {
+  readonly hubName: string;
+  readonly nodeName: string;
+  readonly address: string;
+  /** This computer's device on the hub; an older desktop app does not say. */
+  readonly deviceId?: string;
+  readonly appVersion: string;
+  /** The hub's version as it last said, or null before it answered. */
+  readonly hubVersion: string | null;
+  /** `connected`, or why the hub cannot be used right now. */
+  readonly state: string;
+}
+
 declare global {
   interface Window {
     /** Set by the Electron preload script. */
@@ -39,6 +53,8 @@ declare global {
       };
       /** Opens the system folder picker; resolves with the chosen folder, or null when cancelled. */
       readonly chooseFolder?: () => Promise<string | null>;
+      /** The same picker for a backup: where to save one, or which one to restore (ADR 026). */
+      readonly chooseBackupFolder?: (purpose: "save" | "restore") => Promise<string | null>;
       /**
        * Shows one of an Attempt's files in Finder, selected. The desktop app asks the hub which
        * file the id names, so the page never hands it a path; resolves false when the hub does not
@@ -50,6 +66,16 @@ declare global {
        * notification is clicked; answers a function that stops listening.
        */
       readonly onOpenRequest?: (listener: (requestId: string) => void) => () => void;
+      /**
+       * Only on a connected desktop: the hub it uses, and Disconnect, which revokes this computer
+       * on the hub, forgets the hub here and starts the app again at setup's first screen.
+       * `stillListed` when the hub could not be reached, so it still lists this computer. An older
+       * desktop app offers `get` alone (ADR 025): check each call before using it.
+       */
+      readonly connection?: {
+        readonly get?: () => Promise<DesktopConnection>;
+        readonly disconnect?: () => Promise<{ readonly stillListed: boolean }>;
+      };
     };
   }
 }

@@ -21,6 +21,7 @@ const byApproval = (sql: SqlClient.SqlClient) =>
   });
 
 interface TailscaleColumns {
+  readonly revokedReason?: unknown;
   readonly tailscaleNodeId?: unknown;
   readonly tailscaleNodeName?: unknown;
   readonly tailscaleOwner?: unknown;
@@ -30,10 +31,12 @@ const decodeOwner = Schema.decodeUnknownSync(Schema.fromJsonString(TailscaleOwne
 const encodeOwner = Schema.encodeSync(Schema.fromJsonString(TailscaleOwner));
 
 // The Tailscale node is three columns, its owner JSON text (migration 0029); a local device has none.
+// A revoke reason is kept only when there is one (migration 0038).
 const tailscaleOf = <Row extends TailscaleColumns>(row: Row) => {
-  const { tailscaleNodeId, tailscaleNodeName, tailscaleOwner, ...rest } = row;
+  const { tailscaleNodeId, tailscaleNodeName, tailscaleOwner, revokedReason, ...rest } = row;
   return {
     ...rest,
+    ...(revokedReason === null || revokedReason === undefined ? {} : { revokedReason }),
     tailscale:
       tailscaleNodeId === null || tailscaleNodeId === undefined
         ? null
@@ -48,7 +51,7 @@ const tailscaleColumns = (tailscale: TailscaleIdentity | null) => ({
 });
 
 const DEVICE_COLUMNS =
-  "id, name, kind, platform, tailscale_node_id, tailscale_node_name, tailscale_owner, approved_at, last_active_at, revoked_at";
+  "id, name, kind, platform, tailscale_node_id, tailscale_node_name, tailscale_owner, approved_at, last_active_at, revoked_at, revoked_reason";
 
 /** The SQL store of devices and pairing requests, for SQLite and PostgreSQL (ADR 011, ADR 021). */
 export const DeviceRepositoryLive = Layer.effect(

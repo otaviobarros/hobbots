@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { type PromptRequest, RuntimeError, type RuntimeEvent } from "@hobbots/agents";
+import { type HubTools, type PromptRequest, RuntimeError, type RuntimeEvent } from "@hobbots/agents";
 import { Effect, Exit, Fiber, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -25,8 +25,14 @@ interface ModelRequest {
   readonly tools?: ReadonlyArray<{ readonly name?: string; readonly type?: string }>;
 }
 
-/** What the stand-in model does with the next request: say something, or hang until the client leaves. */
-type Move = { readonly say: string } | { readonly hang: true };
+/**
+ * What the stand-in model does with the next request: say something, call a tool, or hang until the
+ * client leaves.
+ */
+type Move =
+  | { readonly say: string }
+  | { readonly call: string; readonly input: Record<string, unknown> }
+  | { readonly hang: true };
 
 const sse = (response: ServerResponse, event: Record<string, unknown>) =>
   response.write(`event: ${String(event.type)}\ndata: ${JSON.stringify(event)}\n\n`);
@@ -62,6 +68,15 @@ const say = (response: ServerResponse, text: string, id: string) => {
   response.end();
 };
 
+const callTool = (response: ServerResponse, name: string, input: Record<string, unknown>, id: string) => {
+  response.writeHead(200, { "content-type": "text/event-stream" });
+  sse(response, { type: "response.created", response: { id } });
+  const item = { type: "function_call", id: `fc-${id}`, call_id: `call-${id}`, name, arguments: JSON.stringify(input) };
+  sse(response, { type: "response.output_item.done", output_index: 0, item });
+  sse(response, { type: "response.completed", response: { id, usage: null } });
+  response.end();
+};
+
 const standIn = () => {
   const moves: Array<Move> = [];
   const requests: Array<ModelRequest> = [];
@@ -82,7 +97,8 @@ const standIn = () => {
         sse(response, { type: "response.created", response: { id: `r${served}` } });
         return;
       }
-      say(response, move.say, `r${served}`);
+      if ("call" in move) callTool(response, move.call, move.input, `r${served}`);
+      else say(response, move.say, `r${served}`);
     });
   });
   return { server, moves, requests };
@@ -245,5 +261,59 @@ describe.runIf(codex !== undefined)("a turn on an installed Codex", () => {
       }),
     );
     expect(exit).toEqual(Exit.fail(new RuntimeError({ message: LOST_TURN })));
+  });
+  // covers OR-001, PE-003, EX-004
+  it("[TC-RT-083] serves hub tools as dynamic tools, and a resumed thread keeps the ones it started with", {
+    timeout: 60_000,
+  }, async () => {
+    const calls: Array<{ readonly name: string; readonly input: unknown; readonly step: string | undefined }> = [];
+    const offering = (name: string): HubTools => ({
+      tools: [
+        {
+          name,
+          description: `The hub's ${name}.`,
+          inputSchema: { type: "object", properties: { hob: { type: "string" } } },
+          label: "Delegating a Task",
+        },
+      ],
+      call: (called, input, step) =>
+        Effect.sync(() => {
+          calls.push({ name: called, input, step: step?.id });
+          return called === name
+            ? { text: "Delegated to Quill.", refused: false }
+            : { text: `${called} is not offered in this session.`, refused: true };
+        }),
+    });
+    const toolNames = (request: ModelRequest | undefined) => (request?.tools ?? []).map((tool) => tool.name);
+
+    model.moves.push({ call: "delegate_task", input: { hob: "Quill" } }, { say: "Quill has it." });
+    const asked = model.requests.length;
+    const first = await collect(prompt({ sessionId: null, hubTools: offering("delegate_task") }));
+    expect(Exit.isSuccess(first) ? first.value.at(-1) : first).toMatchObject({
+      _tag: "Completed",
+      text: "Quill has it.",
+    });
+    expect(toolNames(model.requests[asked])).toContain("delegate_task");
+    const [call] = calls;
+    expect(call).toMatchObject({ name: "delegate_task", input: { hob: "Quill" } });
+    expect(call?.step).toBeDefined();
+    // The hub's answer reached the model, and the call showed as a step that ended with it.
+    expect(textOf(model.requests.at(-1))).toContain("Delegated to Quill.");
+    const events = Exit.isSuccess(first) ? first.value : [];
+    expect(events).toContainEqual({ _tag: "StepStarted", id: call?.step, kind: "tool", label: "Delegating a Task" });
+    expect(events).toContainEqual({ _tag: "ToolFinished", id: call?.step, failed: false });
+    const started = events.find((event) => event._tag === "SessionStarted");
+    const thread = started?._tag === "SessionStarted" ? started.sessionId : "";
+
+    // Resumed with other hub tools, the thread still offers its first ones, and this turn's hub
+    // refuses a call to one it does not offer.
+    model.moves.push({ call: "delegate_task", input: { hob: "Ada" } }, { say: "Not this time." });
+    const before = model.requests.length;
+    const second = await collect(prompt({ sessionId: thread, prompt: "Again.", hubTools: offering("complete_task") }));
+    expect(Exit.isSuccess(second) ? second.value.at(-1) : second).toMatchObject({ _tag: "Completed" });
+    expect(toolNames(model.requests[before])).toContain("delegate_task");
+    expect(toolNames(model.requests[before])).not.toContain("complete_task");
+    expect(calls.at(-1)).toMatchObject({ name: "delegate_task", input: { hob: "Ada" } });
+    expect(textOf(model.requests.at(-1))).toContain("delegate_task is not offered in this session.");
   });
 });

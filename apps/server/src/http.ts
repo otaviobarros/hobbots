@@ -19,6 +19,7 @@ import { HttpServerRequest } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { ApprovalsHandlers } from "./approvals.ts";
 import { BackpackHandlers } from "./backpack.ts";
+import { BackupHandlers } from "./backup-handlers.ts";
 import { BlockersHandlers } from "./blockers.ts";
 import { CharmCallsHandlers } from "./charm-calls.ts";
 import { DevicesHandlers } from "./device-handlers.ts";
@@ -214,6 +215,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     HobGitHubAppHandlers,
     WorkbenchHandlers,
     RemoteAccessHandlers,
+    BackupHandlers,
     DiagnosticsHandlers,
     ExportsHandlers,
     UsageHandlers,

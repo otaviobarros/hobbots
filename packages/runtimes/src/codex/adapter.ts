@@ -30,13 +30,18 @@ const toolsClosed = {
 } as const;
 
 /**
- * What the Codex adapter enforces while its turns are chat-only: every tool call is refused, so no
- * tool is offered as safe (PE-005). Cancelling a turn waits for Codex to stop it (ADR 024).
+ * What the Codex adapter enforces: every call Codex would run itself is refused until the policy
+ * decides it, so no such tool is offered as safe (PE-005); hub tools are decided by the hub. Cancelling
+ * a turn waits for Codex to stop it (ADR 024).
  */
 const codexEnforcement: RuntimeEnforcement = {
   toolInterception: toolsClosed,
   processSandbox: { status: "unsupported", evidence: "Codex does not run inside Hobbots' sandbox yet." },
-  hubTools: { status: "unsupported", evidence: "Charms and coordination tools are not served to Codex yet." },
+  hubTools: {
+    status: "verified",
+    evidence:
+      "Charms and coordination tools are Codex dynamic tools, answered on the App Server's channel and decided by the hub.",
+  },
   toolEvents: toolsClosed,
   toolInterruption: {
     status: "verified",

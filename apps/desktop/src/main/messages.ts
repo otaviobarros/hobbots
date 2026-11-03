@@ -36,4 +36,17 @@ export const messages = {
     askAgainDetail: ({ hub }: { hub: string }) => `Ask ${hub} again, or disconnect.`,
     ok: "OK",
   },
+  disconnect: {
+    stillListed: ({ hub }: { hub: string }) => `Disconnected from ${hub}`,
+    stillListedDetail: ({ hub }: { hub: string }) =>
+      `Hobbots could not reach ${hub}, so it still lists this Mac. Revoke it there, in Settings › Devices.`,
+    ok: "OK",
+  },
+  choose: {
+    title: "This Mac is not connected to a hub",
+    detail:
+      "Hobbots here was disconnected from its hub. Run Hobbots on this Mac to make it the hub, where hobs live and work, or quit.",
+    runHere: "Run Hobbots on this Mac",
+    quit: "Quit",
+  },
 } as const;

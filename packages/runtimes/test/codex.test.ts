@@ -236,11 +236,13 @@ describe("Codex's provider health", () => {
 
   // TC-RT-007 is retired: Codex turns run now (#438), and TC-RT-032 checks what they enforce.
   // covers PE-005, ADR 024
-  it("[TC-RT-032] offers no tool as safe while Codex's tool calls are refused, and cancels a turn through Codex", async () => {
+  it("[TC-RT-032] offers no tool as safe while Codex's tool calls are refused, serves hub tools, and cancels a turn through Codex", async () => {
     const codex = await codexWith({}).adapter;
     const enforcement = await Effect.runPromise(codex.enforcement);
-    const { toolInterruption, ...tools } = enforcement;
+    const { toolInterruption, hubTools, ...tools } = enforcement;
     expect(Object.values(tools).every((capability) => capability.status === "unsupported")).toBe(true);
+    // Hub tools are decided by the hub, so serving them offers no tool of Codex's own as safe (#440).
+    expect(hubTools.status).toBe("verified");
     expect(toolInterruption.status).toBe("verified");
   });
 });

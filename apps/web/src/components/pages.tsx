@@ -6,6 +6,9 @@ import { Link } from "@tanstack/react-router";
 import { setupQuery } from "../api/setup.ts";
 import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
 import { ArchivedHobs } from "./archived-hobs.tsx";
+import { BackupSettings } from "./backup/backup-settings.tsx";
+import { messages as backupMessages } from "./backup/messages.ts";
+import { ConnectedHubSettings, connectionBridge } from "./devices/connected-hub.tsx";
 import { DeviceList } from "./devices/device-list.tsx";
 import { DiagnosticsSettings } from "./diagnostics/diagnostics-settings.tsx";
 import { messages as diagnosticsMessages } from "./diagnostics/messages.ts";
@@ -130,8 +133,12 @@ export function SettingsPage() {
         <p className="m-0 text-secondary-text">{messages.github.intro}</p>
         <GitHubSettings />
       </Panel>
+      <Panel label={backupMessages.heading} id="backup">
+        <BackupSettings />
+      </Panel>
       <Panel label={messages.remoteAccess.heading} id="devices">
-        <RemoteAccessSettings />
+        {/* A connected desktop shows the hub it uses in place of the hub's own network settings (ADR 025). */}
+        {connectionBridge ? <ConnectedHubSettings bridge={connectionBridge} /> : <RemoteAccessSettings />}
         <WaitingDevices />
         <DeviceList />
       </Panel>
