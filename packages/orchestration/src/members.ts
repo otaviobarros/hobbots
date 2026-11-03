@@ -121,13 +121,6 @@ export const dependenciesDone = (task: Task, tree: TaskTree): boolean =>
   task.dependsOn.every((id) => tree.tasks.find((each) => each.id === id)?.state === "completed");
 
 /**
- * Whether a Task that comes after others still waits for what they made: nothing has been handed
- * to it yet. Its first turn then never completes it.
- */
-const awaitsHandOff = (task: Task, tree: TaskTree): boolean =>
-  task.dependsOn.length > 0 && !tree.handOffs.some((each) => each.toTaskId === task.id);
-
-/**
  * The session the member's last turn on the Task ran in, to resume, or null before its first. Only
  * the Task's current Attempt counts, and only when its owner ran it: a reassignment leaves it none,
  * so a hob the Task comes back to starts afresh rather than in the session it had before. Each turn
@@ -169,18 +162,12 @@ export const makeMemberRunner = (deps: MemberDeps) => {
 
   /**
    * After a turn: the Attempt ends with it. Unless the turn returned the result itself, its final
-   * reply completes the Task once nothing keeps it open; the first turn of a Task that comes after
-   * others does not while what it needs from them is still to come, through its lead. A Task still
-   * open waits, or is blocked when only its own unreported milestones keep it open, which its lead
-   * then hears about.
+   * reply completes the Task once nothing keeps it open. A Task that comes after others starts
+   * only once they have completed, with what they returned, so nothing more from them is to come.
+   * A Task still open waits, or is blocked when only its own unreported milestones keep it open,
+   * which its lead then hears about.
    */
-  const settle = (
-    taskId: TaskId,
-    attemptId: AttemptId,
-    ending: Ending,
-    work: CarriedWork,
-    first: boolean,
-  ): Effect.Effect<CarriedEnd> =>
+  const settle = (taskId: TaskId, attemptId: AttemptId, ending: Ending, work: CarriedWork): Effect.Effect<CarriedEnd> =>
     Effect.gen(function* () {
       const at = yield* nowIso;
       const failed = ending._tag === "Failed";
@@ -201,23 +188,21 @@ export const makeMemberRunner = (deps: MemberDeps) => {
       }
       const found = yield* read(taskId);
       if (Option.isNone(found) || isTerminalTask(found.value.task.state)) return { _tag: "Handled" } as CarriedEnd;
-      const { task, tree } = found.value;
+      const { task } = found.value;
       if (task.state === "cancelling") {
         yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
         return { _tag: "Handled" } as CarriedEnd;
       }
-      if (!first || !awaitsHandOff(task, tree)) {
-        const done = yield* tasks
-          .completeTask(task.id, task.revision, {
-            summary: deps.redactor.text(ending.text).trim() || "The Task finished without a reply.",
-            attemptId,
-            artifacts: [],
-            at,
-            carried: work.holding,
-          })
-          .pipe(Effect.flatMap(deps.announce), Effect.option);
-        if (Option.isSome(done)) return { _tag: "Handled" } as CarriedEnd;
-      }
+      const done = yield* tasks
+        .completeTask(task.id, task.revision, {
+          summary: deps.redactor.text(ending.text).trim() || "The Task finished without a reply.",
+          attemptId,
+          artifacts: [],
+          at,
+          carried: work.holding,
+        })
+        .pipe(Effect.flatMap(deps.announce), Effect.option);
+      if (Option.isSome(done)) return { _tag: "Handled" } as CarriedEnd;
       yield* holdOpen(taskId, at, new Set(work.holding.map((each) => each.itemId as string)));
       return { _tag: "Handled" } as CarriedEnd;
     });
@@ -397,7 +382,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
           },
           deps.recorder,
         ).pipe(Effect.ensuring(handle === null ? Effect.void : handle.close));
-        return yield* settle(task.id, attemptId, ending, work, previous === null);
+        return yield* settle(task.id, attemptId, ending, work);
       }).pipe(Effect.onInterrupt(() => stopped(taskId, attemptId, run))),
   });
 

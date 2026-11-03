@@ -152,5 +152,6 @@ describe("resuming a Task's Attempt", () => {
     expect(ending.afterEnd).toMatchObject({ reason: "task-ended" });
     expect(ending.stale).toMatchObject({ _tag: "StaleTask" });
     expect(ending.attempts).toEqual([{ id: "a1", number: 1, state: "completed", endedAt: now }]);
-  });
+    // About 3 seconds on PostgreSQL alone, so the 5 second default runs out on a loaded runner.
+  }, 20_000);
 });

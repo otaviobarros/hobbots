@@ -122,10 +122,8 @@ describe("a party member's session", () => {
     expect(prompt.startsWith("Brief for build\nMore detail\n---\n")).toBe(true);
     expect(prompt).toContain("Aldric gave you this Task as part of a Quest Aldric leads.");
     expect(prompt).toContain("Aldric expects back: A scheduled launch email");
-    expect(prompt).toContain("  - Task copy, active: Brief for copy");
-    expect(prompt).toContain(
-      "starts only once they have completed. What you need from them reaches you as a hand-off from Aldric",
-    );
+    // The Task it comes after has not completed, so it has returned nothing to list yet.
+    expect(prompt).not.toContain("It came after these Tasks");
     expect(prompt).toContain("  - Page live (milestone_id m1)");
     expect(prompt.endsWith("Task id: build.")).toBe(true);
   });

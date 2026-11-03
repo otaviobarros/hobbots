@@ -67,15 +67,7 @@ const artifactLines = (tree: TaskTree, taskId: string, limit = SUMMARY_LIMIT) =>
  */
 export const stepPrompt = (step: Task, tree: TaskTree): string => {
   const { index, total } = stepPlace(step, tree);
-  const before = step.dependsOn.flatMap((id) => {
-    const done = tree.tasks.find((each) => each.id === id);
-    if (done?.result == null) return [];
-    const place = stepPlace(done, tree).index;
-    return [
-      `Step ${place} returned: ${cut(done.result.summary, RESULT_LIMIT)}`,
-      ...artifactLines(tree, done.id, RESULT_LIMIT),
-    ];
-  });
+  const before = returnedBefore(step, tree, (done) => `Step ${stepPlace(done, tree).index}`);
   const handed = handedTo(step, tree);
   const inputs = [
     ...(before.length === 0 ? [] : ["What the steps before it returned:", ...before]),
@@ -90,6 +82,20 @@ export const stepPrompt = (step: Task, tree: TaskTree): string => {
     `Report findings or blockers with report_checkpoint. When the step is done, call complete_task with its result; otherwise your final reply becomes its result. Task id: ${step.id}.`,
   ].join("\n");
 };
+
+/**
+ * What each completed Task `task` comes after returned, named by `name`: its result and its
+ * artifacts, each kept whole up to `RESULT_LIMIT`, so the work that builds on them has them.
+ */
+const returnedBefore = (task: Task, tree: TaskTree, name: (done: Task) => string): ReadonlyArray<string> =>
+  task.dependsOn.flatMap((id) => {
+    const done = tree.tasks.find((each) => each.id === id);
+    if (done?.result == null) return [];
+    return [
+      `${name(done)} returned: ${cut(done.result.summary, RESULT_LIMIT)}`,
+      ...artifactLines(tree, done.id, RESULT_LIMIT),
+    ];
+  });
 
 /** What was handed to `task`, each value kept whole up to `RESULT_LIMIT`. */
 const handedTo = (task: Task, tree: TaskTree): ReadonlyArray<string> =>
@@ -109,28 +115,24 @@ const milestonesToReport = (task: Task, tree: TaskTree): ReadonlyArray<string> =
 
 /**
  * The prompt a party member's session starts from (ADR 018): the lead's brief first, then what the
- * lead expects back, the Tasks it comes after and anything handed to it, then how to report. The
- * member works with its lead only: what another member makes reaches it as a hand-off.
+ * lead expects back, what each Task it comes after returned and anything handed to it, then how to
+ * report. The member works with its lead only: the hub gives it what the Tasks it comes after
+ * returned, and anything else another member makes reaches it as a hand-off from its lead.
  */
 export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string => {
   const delegation = tree.delegations.find((each) => each.childTaskId === task.id);
-  const after = task.dependsOn.flatMap((id) => {
-    const before = tree.tasks.find((each) => each.id === id);
-    return before === undefined ? [] : [`  - Task ${before.id}, ${before.state}: ${firstLine(before.brief)}`];
-  });
+  const before = returnedBefore(task, tree, (done) => `Task ${done.id} (${firstLine(done.brief)})`);
   const handed = handedTo(task, tree);
+  const inputs = [
+    ...(before.length === 0 ? [] : ["It came after these Tasks, which have completed. What they returned:", ...before]),
+    ...(handed.length === 0 ? [] : ["Handed to this Task:", ...handed]),
+  ];
   return [
     task.brief,
     "---",
     `${lead} gave you this Task as part of a Quest ${lead} leads. You work on it in your own session, and you deal only with ${lead}, never with the other hobs on the Quest.`,
     ...(delegation?.expectedOutput == null ? [] : [`${lead} expects back: ${delegation.expectedOutput}`]),
-    ...(after.length === 0
-      ? []
-      : [
-          `It comes after these Tasks, and starts only once they have completed. What you need from them reaches you as a hand-off from ${lead}, so finish once you have it:`,
-          ...after,
-        ]),
-    ...(handed.length === 0 ? [] : [cut(["Handed to this Task:", ...handed].join("\n"), STEP_INPUT_LIMIT)]),
+    ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(task, tree),
     `Report findings or blockers with report_checkpoint, and ask ${lead} with ask. When the Task is done, call complete_task with its result. Task id: ${task.id}.`,
   ].join("\n");
