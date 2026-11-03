@@ -130,6 +130,22 @@ const finish = async (
   };
 };
 
+/** One check on the waiting request: the outcome once it is decided, or undefined while it still waits. */
+const checkOnce = async (
+  options: PairAsDesktopOptions,
+  hub: { readonly node: TailnetNode; readonly name: string },
+  secret: string,
+): Promise<PairingOutcome | undefined> => {
+  // The pairing secret, too, goes only to the node the user chose.
+  if (!(await options.nodeCheck.isPinned(options.origins.host, hub.node.nodeId))) return { kind: "otherNode" };
+  const now = await status(options, secret);
+  if ("kind" in now) return now;
+  if (now.state === "denied") return { kind: "denied" };
+  if (now.state === "expired") return { kind: "expired" };
+  if (now.token !== undefined && now.deviceId !== undefined) return finish(options, hub, now.token, now.deviceId);
+  return undefined;
+};
+
 /** Pairs this computer with the hub at `origins`, as the user chose it. */
 export const pairAsDesktop = async (options: PairAsDesktopOptions): Promise<PairingOutcome> => {
   const sleep = options.sleep ?? wait;
@@ -148,13 +164,8 @@ export const pairAsDesktop = async (options: PairAsDesktopOptions): Promise<Pair
       if (options.signal?.aborted) return { kind: "cancelled" };
       await sleep(options.intervalMs ?? 2000);
       if (options.signal?.aborted) return { kind: "cancelled" };
-      // The pairing secret, too, goes only to the node the user chose.
-      if (!(await options.nodeCheck.isPinned(options.origins.host, hub.node.nodeId))) return { kind: "otherNode" };
-      const now = await status(options, opened.secret);
-      if ("kind" in now) return now;
-      if (now.state === "denied") return { kind: "denied" };
-      if (now.state === "expired") return { kind: "expired" };
-      if (now.token !== undefined && now.deviceId !== undefined) return finish(options, hub, now.token, now.deviceId);
+      const outcome = await checkOnce(options, hub, opened.secret);
+      if (outcome !== undefined) return outcome;
     }
   } catch {
     return { kind: "noAnswer" };
