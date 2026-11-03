@@ -471,7 +471,7 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
-    const moveTask: TaskRepository["Service"]["moveTask"] = (taskId, expected, to: TaskTarget, at) =>
+    const moveTask: TaskRepository["Service"]["moveTask"] = (taskId, expected, to: TaskTarget, at, carried = []) =>
       change((revision) =>
         Effect.gen(function* () {
           const before = yield* current(taskId, expected);
@@ -483,6 +483,11 @@ export const TaskRepositoryLive = Layer.effect(
             { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null },
             ...(yield* automatic(task, at, revision + 1)),
           ];
+          if (to === "blocked" && carried.length > 0 && task.currentAttemptId !== null) {
+            const { consumes } = yield* ledger.readFor(task, carried);
+            const by = yield* ledger.consumer(task.currentAttemptId);
+            events.push(...(yield* ledger.consume(consumes, by, revision + events.length)));
+          }
           if (isTerminalTask(task.state)) events.push(...(yield* withdrawQuestions(task, revision + events.length)));
           return { value: task, events };
         }),

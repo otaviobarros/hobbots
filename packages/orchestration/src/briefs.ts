@@ -80,7 +80,7 @@ export const stepPrompt = (step: Task, tree: TaskTree): string => {
     `This is step ${index} of ${total} of a Task you own, running in a fresh session with only its brief and what it refers to.`,
     ...(inputs.length === 0 ? [] : [cut(inputs.join("\n"), STEP_INPUT_LIMIT)]),
     ...milestonesToReport(step, tree),
-    `Report findings or blockers with report_checkpoint. When the step is done, call complete_task with its result; otherwise your final reply becomes its result. Task id: ${step.id}.`,
+    `Report findings or blockers with report_checkpoint. If the work is already done or you cannot do it as briefed, report a finding or blocker and end without complete_task: the step then waits for its owner. When the step is done, call complete_task with its result; otherwise your final reply becomes its result. Task id: ${step.id}.`,
   ].join("\n");
 };
 
@@ -286,6 +286,10 @@ export const stepPromptShows = (step: Task, tree: TaskTree): ((item: BackpackIte
     (payload._tag === "hand-off" && payload.handOff.toTaskId === step.id && handed.has(payload.handOff.artifactId));
 };
 
+/** What the owner can do about a step that stopped on a finding or blocker, which holds the steps after it (#667). */
+const STOPPED_STEP =
+  "A blocked step stopped on a finding or blocker, and the steps after it wait for you. To go on, call complete_task on that step with the result the steps after it should work from; to change the plan, cancel it with cancel_task and plan again.";
+
 /**
  * What the owner's chat turn is told of the open Task it works on: the Task, and for each Task
  * under it, and under its own steps, its state, result or latest checkpoint, and when it leads a
@@ -306,6 +310,9 @@ export const ownerBriefing = (task: Task, tree: TaskTree): string => {
       : [
           "The work under it, each running in its own session, with what it reported:",
           ...under.flatMap(({ task: child, place }) => childLine(child, tree, place)),
+          ...(under.some(({ task: child }) => child.state === "blocked" && isStep(child, tree.tasks))
+            ? [STOPPED_STEP]
+            : []),
           "Call complete_task with the Task's result once everything under it has ended.",
         ]),
   ].join("\n");

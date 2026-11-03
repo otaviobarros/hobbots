@@ -234,16 +234,36 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
         );
 
       /**
+       * Whether the last thing the step reported in this Attempt is a finding or a blocker: it
+       * stopped for its owner to decide, so its reply is no result (#667).
+       */
+      const stoppedOnReport = (stepId: TaskId, attemptId: AttemptId) =>
+        Effect.map(tasks.readTree(stepId), (tree) => {
+          // A tree lists its checkpoints in the order they were recorded.
+          const reported = Option.getOrUndefined(tree)?.checkpoints.findLast(
+            (each) =>
+              each.taskId === stepId &&
+              each.attemptId === attemptId &&
+              each.source !== "automatic" &&
+              each.kind !== "progress",
+          );
+          return reported?.kind === "finding" || reported?.kind === "blocker";
+        });
+
+      /**
        * Records how the step's session ended. A step that replied completes with that reply first,
        * unless it returned a result itself, and its Attempt ends after: a restart in between finds
        * the Attempt live and keeps the result. A step that failed ends its Attempt first, as ending
-       * a Task needs, and then fails; a restart in between leaves it to `endStranded`.
+       * a Task needs, and then fails; a restart in between leaves it to `endStranded`. A step that
+       * replied after reporting a finding or blocker, with no result, is blocked instead, so the
+       * steps after it wait until its owner completes it or plans again (#667).
        */
       const settle = (stepId: TaskId, attemptId: AttemptId, ending: Ending, carried: ReadonlyArray<CarriedItem>) =>
         Effect.gen(function* () {
           const at = yield* nowIso;
+          const held = ending._tag === "Replied" && (yield* stoppedOnReport(stepId, attemptId));
           const completed =
-            ending._tag === "Replied" ? yield* complete(stepId, attemptId, ending.text, carried, at) : false;
+            ending._tag === "Replied" && !held && (yield* complete(stepId, attemptId, ending.text, carried, at));
           yield* attempt(
             tasks.updateAttempt(attemptId, {
               state: ending._tag === "Failed" ? "failed" : "completed",
@@ -255,7 +275,13 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           if (completed) return;
           const latest = yield* currentTask(stepId);
           if (Option.isNone(latest) || isTerminalTask(latest.value.state)) return;
-          yield* attempt(tasks.moveTask(stepId, latest.value.revision, endOf(latest.value), at), "end a step");
+          const blocks = held && latest.value.state === "active";
+          yield* attempt(
+            blocks
+              ? tasks.moveTask(stepId, latest.value.revision, "blocked", at, carried)
+              : tasks.moveTask(stepId, latest.value.revision, endOf(latest.value), at),
+            "end a step",
+          );
         });
 
       /**
