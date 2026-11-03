@@ -21,7 +21,8 @@ import {
 import { agentsQuery, modelsQuery, runtimesQuery, useCreateHob } from "../api/queries.ts";
 import { presetInfo, type RuleAnswer } from "../api/safety.ts";
 import { setupQuery } from "../api/setup.ts";
-import { openSummonDraft, providerNotice, summonProblem } from "../api/summon.ts";
+import { openSummonDraft, summonProblem } from "../api/summon.ts";
+import { readyProviders } from "../lib/providers.ts";
 import {
   Choice,
   ChoresField,
@@ -35,15 +36,20 @@ import {
   RolePicker,
   useDraftLook,
   useSettledBrain,
+  useSettledRuntime,
 } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
+import { ProviderChoices } from "./provider-choices.tsx";
 import { Stars } from "./scene.tsx";
 
+const copy = messages.summon;
+const shared = messages.onboarding;
+
 const ANSWER: Readonly<Record<RuleAnswer, { text: string; className: string }>> = {
-  Ask: { text: "Asks first", className: "text-mint" },
-  Allow: { text: "Allowed", className: "text-lantern" },
-  Never: { text: "Never", className: "text-rose" },
+  Ask: { text: copy.answers.Ask, className: "text-mint" },
+  Allow: { text: copy.answers.Allow, className: "text-lantern" },
+  Never: { text: copy.answers.Never, className: "text-rose" },
 };
 
 /**
@@ -57,12 +63,12 @@ export function Summon() {
   const canGoBack = useCanGoBack();
   const hobs = useQuery(agentsQuery);
   const runtimes = useQuery(runtimesQuery);
-  const models = useQuery(modelsQuery("claude-code"));
   const setup = useQuery(setupQuery);
   const create = useCreateHob();
   // The route loads the hob list first, so a fresh name avoids the hobs the user already has and a
   // draft whose hob already joined is not brought back.
   const [draft, setDraft] = useState<FirstHobDraft>(() => openSummonDraft(keptSummonDraft(), hobs.data ?? []));
+  const models = useQuery(modelsQuery(draft.runtime));
   const [nameRolls, setNameRolls] = useState(0);
   const [lookRolls, setLookRolls] = useState(0);
   const [tried, setTried] = useState(false);
@@ -77,28 +83,28 @@ export function Summon() {
 
   // Leaving and coming back keeps what was chosen, until the hob exists.
   useEffect(() => keepSummonDraft(draft), [draft]);
+  useSettledRuntime(readyProviders(runtimes.data), setDraft);
   useSettledBrain(models.data, setDraft);
 
   const gear = gearOf(draft);
   const look = useDraftLook(draft);
-  const claude = runtimes.data?.find((r) => r.runtime === "claude-code");
-  const notice = providerNotice(claude);
-  const connected = notice === undefined;
+  const health = runtimes.data?.find((r) => r.runtime === draft.runtime);
+  const ready = health?.availability === "ready";
   const model = models.data?.models.find((m) => m.id === draft.model);
   const locked = draft.submitted !== null;
-  const name = draft.name.trim() || "your hob";
+  const name = draft.name.trim() || shared.firstHob.yourHob;
   const rejected = create.error instanceof ApiError && create.error.tag === "InvalidHob" ? create.error : undefined;
   const problem = summonProblem(
     draft,
-    { pending: runtimes.isPending, failed: runtimes.isError, health: claude },
+    { pending: runtimes.isPending, failed: runtimes.isError, health },
     model !== undefined,
   );
   const hint = create.isPending
-    ? `Summoning ${name}… If you leave now, ${name} still joins your hobs.`
+    ? copy.summoning({ name })
     : rejected
-      ? `Hobbots could not create ${name}: ${rejected.message}.`
+      ? copy.rejected({ name, reason: rejected.message })
       : create.isError
-        ? `Hobbots could not finish summoning ${name}. Try again in a moment.`
+        ? shared.ready.failed({ name })
         : problem;
 
   // Cancel drops the draft; leaving any other way keeps it for next time.
@@ -140,59 +146,52 @@ export function Summon() {
       <form onSubmit={(e) => void summon(e)} className="flex min-h-full flex-col gap-[18px] px-8 py-6">
         <div className="flex items-end gap-4">
           <div className="flex flex-1 flex-col gap-1.5">
-            <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">Summon a hob</h1>
-            <span className="text-secondary-text">
-              Describe the chores in your own words. Hobbots writes the instructions, and you can change anything before
-              the hob starts.
-            </span>
+            <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">{copy.heading}</h1>
+            <span className="text-secondary-text">{copy.intro}</span>
           </div>
           <Button type="button" variant="outline" onClick={cancel}>
-            Cancel
+            {copy.cancel}
           </Button>
         </div>
 
         {/* The choices are disabled once sent: the hob may already exist with exactly these. */}
         <div className="grid min-h-0 flex-1 animate-hb-in grid-cols-[minmax(0,1fr)_430px] gap-7">
           <fieldset disabled={locked} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0 disabled:opacity-85">
-            <legend className="sr-only">{locked ? `${name}'s chores, as sent` : "What the hob does"}</legend>
+            <legend className="sr-only">{locked ? copy.choresSent({ name }) : copy.whatItDoes}</legend>
             <RolePicker
               {...draftRolePicker(draft, setDraft)}
-              legend={<legend className="lbl mb-2 text-moonlight">Role</legend>}
+              legend={<legend className="lbl mb-2 text-moonlight">{shared.firstHob.role}</legend>}
             />
 
-            <ChoresField
-              draft={draft}
-              onChange={setDraft}
-              rows={4}
-              label="What should this hob do?"
-              className="font-bold"
-            />
+            <ChoresField draft={draft} onChange={setDraft} rows={4} label={copy.chores} className="font-bold" />
 
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-              <legend className="lbl mb-2 text-moonlight">Where {name} works</legend>
+              <legend className="lbl mb-2 text-moonlight">{copy.worksWhere({ name })}</legend>
               <div className="grid grid-cols-3 gap-2.5">
                 <Choice name="hob-place" checked onPick={() => {}} className="flex-col items-start gap-1 p-3">
-                  <span className="font-bold">The hub</span>
-                  <span className="text-[13px] leading-snug opacity-85">Uses the hub's files and apps</span>
+                  <span className="font-bold">{copy.hub}</span>
+                  <span className="text-[13px] leading-snug opacity-85">{copy.hubDetail}</span>
                 </Choice>
                 <div className="cut flex flex-col items-start gap-1 border-2 border-dashed border-control p-3 text-sm">
                   <span className="flex items-center gap-2 font-bold">
-                    A sandbox on the hub
-                    <span className="bg-lantern px-1.5 text-xs text-ground">Later</span>
+                    {copy.sandbox}
+                    <span className="bg-lantern px-1.5 text-xs text-ground">{copy.later}</span>
                   </span>
-                  <span className="text-[13px] leading-snug text-secondary-text">Isolated, safer for code</span>
+                  <span className="text-[13px] leading-snug text-secondary-text">{copy.sandboxDetail}</span>
                 </div>
               </div>
             </fieldset>
 
             <section
-              aria-label={`${name} asks you first`}
+              aria-label={copy.asksFirst({ name })}
               className="cut flex flex-col gap-2.5 border-2 border-line bg-card px-4 py-3.5"
             >
               <div className="flex items-baseline gap-2.5">
-                <span className="lbl flex-1 text-moonlight">{name} asks you first before</span>
+                <span className="lbl flex-1 text-moonlight">{copy.asksFirstBefore({ name })}</span>
                 {setup.data && (
-                  <span className="text-[13px] text-label">{presetInfo(setup.data.safetyPreset).label} safety</span>
+                  <span className="text-[13px] text-label">
+                    {shared.presetSafety({ preset: presetInfo(setup.data.safetyPreset).label })}
+                  </span>
                 )}
               </div>
               {setup.data &&
@@ -203,15 +202,17 @@ export function Summon() {
                   </div>
                 ))}
               <span className="text-[13px] text-secondary-text">
-                Safety is the same for every hob; you can make one more careful from its profile.{" "}
-                <Link to="/settings">Change it in Settings</Link>
+                {copy.safetyNote} <Link to="/settings">{copy.changeInSettings}</Link>
               </span>
             </section>
           </fieldset>
 
-          <section aria-label="Preview" className="flex min-w-0 flex-col self-start border-[3px] border-text bg-card">
+          <section
+            aria-label={shared.firstHob.preview}
+            className="flex min-w-0 flex-col self-start border-[3px] border-text bg-card"
+          >
             <fieldset disabled={locked} className="m-0 flex flex-col border-0 p-0 disabled:opacity-85">
-              <legend className="sr-only">{locked ? `${name}, as sent` : "Who the hob is"}</legend>
+              <legend className="sr-only">{locked ? shared.firstHob.legendSent({ name }) : copy.whoItIs}</legend>
               <div className="relative h-[170px] flex-none overflow-hidden border-b-[3px] border-line-2 bg-panel">
                 <Stars count={10} height={100} />
                 <div aria-hidden className="absolute inset-x-0 bottom-0 h-9 bg-line" />
@@ -226,8 +227,8 @@ export function Summon() {
                 <button
                   type="button"
                   onClick={newLook}
-                  aria-label={`New look for ${name}`}
-                  title="Click for a new look"
+                  aria-label={copy.newLookFor({ name })}
+                  title={shared.firstHob.newLookTitle}
                   className="absolute bottom-[22px] left-1/2 -ml-[50px] cursor-pointer border-0 bg-transparent p-0 hover:brightness-110"
                 >
                   <span
@@ -248,10 +249,10 @@ export function Summon() {
                 </button>
                 <div className="absolute top-3 left-3 flex flex-col items-start gap-1">
                   <Button type="button" variant="outline" size="xs" onClick={newLook} className="bg-ground">
-                    New look
+                    {shared.firstHob.newLook}
                   </Button>
                   <span aria-live="polite" className="max-w-[230px] text-[11px] text-label">
-                    Look <b className="text-text tabular-nums">#{draft.lookSeed}</b> · {look.recipe}
+                    {shared.firstHob.look({ seed: draft.lookSeed, recipe: look.recipe })}
                   </span>
                 </div>
                 <div className="absolute top-3 right-3">
@@ -271,7 +272,7 @@ export function Summon() {
               <div className="flex flex-col gap-2.5 px-4 py-3.5">
                 <div className="flex items-center gap-2.5">
                   <label htmlFor="hob-name" className="sr-only">
-                    Hob name
+                    {copy.hobName}
                   </label>
                   <input
                     id="hob-name"
@@ -296,9 +297,9 @@ export function Summon() {
                 </div>
 
                 <fieldset className="m-0 flex items-center gap-2.5 border-0 p-0">
-                  <legend className="sr-only">Colors</legend>
+                  <legend className="sr-only">{shared.firstHob.colors}</legend>
                   <span aria-hidden className="w-[50px] text-sm text-label">
-                    Colors
+                    {shared.firstHob.colors}
                   </span>
                   <ColorSwatches
                     value={draft.lookColor}
@@ -310,43 +311,32 @@ export function Summon() {
                 <GearPicker draft={draft} onChange={setDraft} />
 
                 <div className="flex flex-col gap-1.5 border-t-2 border-line pt-[9px]">
-                  <span className="text-sm text-label">Thinks with</span>
-                  <fieldset className="m-0 flex flex-wrap gap-1.5 border-0 p-0">
-                    <legend className="sr-only">Provider</legend>
-                    {connected && (
-                      <Choice name="hob-provider" checked onPick={() => {}} className="px-[9px] py-1 text-[13px]">
-                        <span
-                          aria-hidden
-                          className="grid size-4 place-items-center bg-[#e39a74] text-[11px] font-bold text-ground"
-                        >
-                          C
-                        </span>
-                        Claude
-                      </Choice>
-                    )}
-                  </fieldset>
+                  <span className="text-sm text-label">{shared.firstHob.thinksWith}</span>
                   {runtimes.isPending ? (
                     <span className="py-1 text-sm text-lantern">
-                      Checking Claude Code <span className="animate-hb-blink">•••</span>
+                      {messages.summon.checkingProviders} <span className="animate-hb-blink">•••</span>
                     </span>
                   ) : !runtimes.data ? (
                     <span role="alert" className="flex items-center gap-3 text-sm text-rose">
-                      Hobbots could not check Claude Code.
-                      <CheckAgain checking={runtimes.isFetching} onCheck={() => void runtimes.refetch()} />
-                    </span>
-                  ) : !connected ? (
-                    <span role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-lantern">
-                      {notice} <Link to="/settings">Open Settings</Link>
+                      {messages.summon.checkFailed}
                       <CheckAgain checking={runtimes.isFetching} onCheck={() => void runtimes.refetch()} />
                     </span>
                   ) : (
-                    <ModelsBrain models={models} draft={draft} onChange={setDraft} />
+                    <>
+                      <ProviderChoices
+                        runtimes={runtimes.data}
+                        draft={draft}
+                        onChange={setDraft}
+                        chipClassName="px-[9px] py-1 text-[13px]"
+                      />
+                      {ready && <ModelsBrain models={models} draft={draft} onChange={setDraft} />}
+                    </>
                   )}
                 </div>
 
                 <div className="flex gap-3 border-t-2 border-line pt-[9px] text-sm">
-                  <span className="w-[92px] flex-none text-label">Runs</span>
-                  <span className="flex-1 leading-snug">When you or another hob asks · schedules come later</span>
+                  <span className="w-[92px] flex-none text-label">{copy.runs}</span>
+                  <span className="flex-1 leading-snug">{copy.runsWhen}</span>
                 </div>
               </div>
             </fieldset>
@@ -362,7 +352,7 @@ export function Summon() {
                   problem && "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_#22203f] hover:bg-line-2",
                 )}
               >
-                Summon {name}
+                {shared.ready.summon({ name })}
               </Button>
               <span
                 id="summon-hint"

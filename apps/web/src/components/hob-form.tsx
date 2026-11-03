@@ -8,6 +8,8 @@ import {
   type RoleHat,
   type RoleId,
   type RoleTool,
+  RUNTIME_NAMES,
+  type RuntimeKind,
   type RuntimeModel,
   type RuntimeModels,
   starterRole,
@@ -31,6 +33,7 @@ import {
   pickRole,
   roleRequestUrl,
   settleBrain,
+  settleRuntime,
   splitModels,
   thinksWith,
 } from "../api/first-hob.ts";
@@ -547,10 +550,13 @@ export function HobSummary({
   className?: string | undefined;
 }) {
   const note = draft.role === null ? undefined : starterRole(draft.role).note;
+  const [before, after] = messages.models.thinksWith.split("{brain}");
   return (
     <div className={cn("flex flex-col gap-[3px] text-[13px] text-secondary-text", className)}>
       <span>
-        Thinks with <b className="text-text">{thinksWith(draft, model)}</b>
+        {before}
+        <b className="text-text">{thinksWith(draft, model)}</b>
+        {after}
       </span>
       {note && <span>{note}</span>}
     </div>
@@ -624,12 +630,12 @@ function Brain<D extends BrainChoice>({
             <span aria-hidden className="w-2.5">
               {moreOpen ? "▾" : "▸"}
             </span>
-            More models
+            {messages.models.more}
             <span className="text-[13px]">{more.length}</span>
           </button>
           {moreOpen && (
             <fieldset id={moreId} className="m-0 flex min-w-0 animate-hb-in flex-col border-2 border-line p-1">
-              <legend className="sr-only">More models</legend>
+              <legend className="sr-only">{messages.models.more}</legend>
               {more.map((m) => {
                 const on = m.id === draft.model;
                 return (
@@ -665,10 +671,10 @@ function Brain<D extends BrainChoice>({
       )}
       {efforts.length > 0 ? (
         <fieldset className="m-0 flex flex-wrap items-center gap-3 border-0 p-0">
-          <legend className="sr-only">Effort</legend>
+          <legend className="sr-only">{messages.models.effort}</legend>
           {/* A legend cannot sit inline with the row, so the visible label is a plain span. */}
           <span aria-hidden className="text-sm font-bold">
-            Effort
+            {messages.models.effort}
           </span>
           <div className="flex flex-wrap border-2 border-control">
             {efforts.map((effort: Effort, i) => {
@@ -702,7 +708,9 @@ function Brain<D extends BrainChoice>({
           )}
         </fieldset>
       ) : (
-        model && <span className="text-[13px] text-label">{model.displayName} takes no effort setting.</span>
+        model && (
+          <span className="text-[13px] text-label">{messages.models.noEffort({ model: model.displayName })}</span>
+        )
       )}
     </>
   );
@@ -723,14 +731,15 @@ export function ModelsBrain<D extends BrainChoice>({
   if (models.isPending) {
     return (
       <span className={cn("text-sm text-lantern", waitingClassName)}>
-        {messages.models.loading} <span className="animate-hb-blink">•••</span>
+        {messages.models.loading({ runtime: RUNTIME_NAMES[draft.runtime] })}{" "}
+        <span className="animate-hb-blink">•••</span>
       </span>
     );
   }
   if (models.isError) {
     return (
       <span role="alert" className="flex items-center gap-3 text-sm text-rose">
-        {messages.models.failed}
+        {messages.models.failed({ runtime: RUNTIME_NAMES[draft.runtime] })}
         <Button type="button" variant="outline" size="xs" onClick={() => void models.refetch()}>
           {messages.models.retry}
         </Button>
@@ -757,4 +766,19 @@ export const useSettledBrain = (
   useEffect(() => {
     if (models) setDraft((d) => (d.submitted ? d : settleBrain(d, models)));
   }, [models, setDraft]);
+};
+
+/**
+ * Moves an unsent draft off a provider that cannot think now, to the first ready one, each time the
+ * ready providers change. With none ready, the draft keeps its provider.
+ */
+export const useSettledRuntime = (
+  ready: ReadonlyArray<RuntimeKind>,
+  setDraft: Dispatch<SetStateAction<FirstHobDraft>>,
+) => {
+  const key = ready.join(" ");
+  useEffect(() => {
+    const runtimes = key === "" ? [] : (key.split(" ") as ReadonlyArray<RuntimeKind>);
+    setDraft((d) => settleRuntime(d, runtimes));
+  }, [key, setDraft]);
 };

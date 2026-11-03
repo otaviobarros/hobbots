@@ -1,8 +1,18 @@
-import { RuntimeHealth } from "@hobbots/domain";
+import { RuntimeHealth, type RuntimeKind, RuntimeModel, RuntimeModels } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
+import { readyProviders } from "../lib/providers.ts";
 import { enforcementFixture } from "../test/enforcement.ts";
-import { firstHobPayload, kindLine, pickRole, sampleChores, submitDraft } from "./first-hob.ts";
-import { newSummonDraft, openSummonDraft, providerNotice, summonProblem } from "./summon.ts";
+import {
+  firstHobPayload,
+  kindLine,
+  pickRole,
+  pickRuntime,
+  sampleChores,
+  settleBrain,
+  settleRuntime,
+  submitDraft,
+} from "./first-hob.ts";
+import { newSummonDraft, openSummonDraft, summonProblem } from "./summon.ts";
 
 const id = "8a1f6c2e-3b4d-4e5f-9a6b-7c8d9e0f1a2b";
 const fresh = (taken: ReadonlyArray<string> = []) =>
@@ -51,9 +61,13 @@ describe("a summoned hob's draft", () => {
   });
 });
 
-const health = (availability: RuntimeHealth["availability"], version: string | null = "2.1.301") =>
+const health = (
+  availability: RuntimeHealth["availability"],
+  version: string | null = "2.1.301",
+  runtime: RuntimeKind = "claude-code",
+) =>
   new RuntimeHealth({
-    runtime: "claude-code",
+    runtime,
     availability,
     billing: null,
     version,
@@ -63,16 +77,41 @@ const health = (availability: RuntimeHealth["availability"], version: string | n
   });
 
 describe("the provider a summoned hob thinks with", () => {
-  it("is offered only when Claude Code is ready", () => {
-    expect(providerNotice(health("ready"))).toBeUndefined();
-    expect(providerNotice(undefined)).toBe("Claude Code is not connected.");
+  it("starts on Claude, and goes in the create request as picked", () => {
+    expect(fresh().runtime).toBe("claude-code");
+    expect(firstHobPayload(pickRuntime(fresh(), "codex")).runtime).toBe("codex");
   });
 
-  it("says how to fix a provider that lists models but cannot run a chat", () => {
-    expect(providerNotice(health("signedOut"))).toMatch(/not signed in/);
-    expect(providerNotice(health("outdated"))).toMatch(/claude update/);
-    expect(providerNotice(health("unavailable", null))).toMatch(/not found/);
-    expect(providerNotice(health("unverified"))).toMatch(/could not confirm/);
+  it("leaves the model and effort to the new provider's own list", () => {
+    const thinking = { ...fresh(), model: "sonnet", effort: "high" as const };
+    expect(pickRuntime(thinking, "codex")).toMatchObject({ runtime: "codex", model: null, effort: null });
+    expect(pickRuntime(thinking, "claude-code")).toBe(thinking);
+  });
+
+  it("moves an unsent draft to the first ready provider, and keeps its own when none is ready", () => {
+    expect(settleRuntime(fresh(), ["codex"]).runtime).toBe("codex");
+    expect(settleRuntime(fresh(), ["claude-code", "codex"]).runtime).toBe("claude-code");
+    expect(settleRuntime(fresh(), []).runtime).toBe("claude-code");
+    const sent = submitDraft(fresh());
+    expect(settleRuntime(sent, ["codex"])).toBe(sent);
+  });
+
+  it("settles only against its own provider's models", () => {
+    const codex = new RuntimeModels({
+      runtime: "codex",
+      source: "runtime",
+      models: [new RuntimeModel({ id: "gpt-5", displayName: "GPT-5", description: "", efforts: ["low"], main: true })],
+    });
+    expect(settleBrain(fresh(), codex)).toEqual(fresh());
+    expect(settleBrain(pickRuntime(fresh(), "codex"), codex)).toMatchObject({ model: "gpt-5", effort: "low" });
+  });
+
+  it("offers only the providers that are ready, in order, narrowed to the ones connected", () => {
+    const runtimes = [health("signedOut", "0.166.0", "codex"), health("ready")];
+    expect(readyProviders(runtimes)).toEqual(["claude-code"]);
+    expect(readyProviders([health("ready", "0.166.0", "codex"), health("ready")])).toEqual(["claude-code", "codex"]);
+    expect(readyProviders([health("ready", "0.166.0", "codex"), health("ready")], ["codex"])).toEqual(["codex"]);
+    expect(readyProviders(undefined)).toEqual([]);
   });
 });
 
@@ -83,19 +122,21 @@ describe("what stops a summon", () => {
     health: health(availability),
   });
 
-  it("goes once Claude Code is confirmed ready and a model is picked", () => {
+  it("goes once the provider is confirmed ready and a model is picked", () => {
     expect(summonProblem(fresh(), checked("ready"), true)).toBeUndefined();
     expect(summonProblem(fresh(), checked("ready"), false)).toBe("Waiting for Claude Code's models");
+    expect(summonProblem(pickRuntime(fresh(), "codex"), checked("ready"), false)).toBe("Waiting for Codex's models");
   });
 
-  it("waits for Claude Code's health even when the models already loaded", () => {
+  it("waits for the provider's health even when the models already loaded", () => {
     expect(summonProblem(fresh(), { pending: true, failed: false, health: undefined }, true)).toBe(
-      "Checking Claude Code",
+      "Checking your AI providers",
     );
     expect(summonProblem(fresh(), { pending: false, failed: true, health: undefined }, true)).toBe(
-      "Check Claude Code again to summon Pip",
+      "Check your AI providers again to summon Pip",
     );
-    expect(summonProblem(fresh(), checked("signedOut"), true)).toBe("Fix Claude Code in Settings to summon Pip");
+    expect(summonProblem(fresh(), checked("signedOut"), true)).toBe("Fix a provider to summon Pip");
+    expect(summonProblem(fresh(), checked("unavailable"), true)).toBe("Fix a provider to summon Pip");
   });
 
   it("keeps the last health it saw when checking again fails", () => {

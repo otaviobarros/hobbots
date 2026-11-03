@@ -212,7 +212,14 @@ export const startRelay = async (): Promise<Relay> => {
  * Agent SDK's initialize request with an empty account, as a binary with no login does. The real
  * Claude Code adapter starts it, so the check goes through the same path as on a user's Mac.
  */
-export const signedOutClaudeCode = (dataDir: string): string => {
+export const signedOutClaudeCode = (dataDir: string): string => claudeCodeAt(dataDir, {});
+
+/** A stand-in Claude Code signed in to a claude.ai plan, which the real adapter reports as ready. */
+export const signedInClaudeCode = (dataDir: string): string =>
+  claudeCodeAt(dataDir, { email: "player@example.com", subscriptionType: "pro" });
+
+/** Writes a stand-in Claude Code where the hub is told to look, answering with `account`. */
+const claudeCodeAt = (dataDir: string, account: Record<string, string>): string => {
   const path = join(dataDir, "bin", "claude");
   mkdirSync(join(dataDir, "bin"), { recursive: true });
   writeFileSync(
@@ -229,7 +236,7 @@ process.stdin.on("data", (chunk) => {
     const message = JSON.parse(buffered.slice(0, end));
     buffered = buffered.slice(end + 1);
     if (message.type !== "control_request") continue;
-    const response = message.request.subtype === "initialize" ? { commands: [], models: [], account: {} } : {};
+    const response = message.request.subtype === "initialize" ? { commands: [], models: [], account: ${JSON.stringify(account)} } : {};
     const reply = { type: "control_response", response: { subtype: "success", request_id: message.request_id, response } };
     process.stdout.write(JSON.stringify(reply) + "\\n");
   }
@@ -250,9 +257,22 @@ const CODEX_ACCOUNTS: Record<FakeCodexState, unknown> = {
   ready: { type: "chatgpt", email: "player@example.com", planType: "plus", workspaceName: null },
 };
 
+/** The one model the stand-in Codex lists, in the App Server's shape. */
+const CODEX_MODEL = {
+  id: "gpt-5.5",
+  model: "gpt-5.5",
+  displayName: "GPT-5.5",
+  description: "Frontier model for complex coding",
+  hidden: false,
+  supportedReasoningEfforts: [{ reasoningEffort: "low" }, { reasoningEffort: "medium" }, { reasoningEffort: "high" }],
+  defaultReasoningEffort: "medium",
+  inputModalities: ["text"],
+  isDefault: true,
+};
+
 /**
  * Writes a stand-in for Codex where the hub looks for it (`<dataDir>/bin/codex`), answering
- * `--version`, `account/read` and `model/list` over the App Server's JSON-RPC.
+ * `--version`, `account/read` and `model/list` (one model) over the App Server's JSON-RPC.
  */
 export const fakeCodexAt = (dataDir: string, state: FakeCodexState): string => {
   const path = join(dataDir, "bin", "codex");
@@ -268,7 +288,7 @@ if (process.argv.includes("--version")) {
 const results = {
   initialize: { userAgent: "fake", codexHome: "/fake", platformFamily: "unix", platformOs: "linux" },
   "account/read": { account: ${JSON.stringify(CODEX_ACCOUNTS[state])}, requiresOpenaiAuth: true, workspaceRouting: null },
-  "model/list": { data: [], nextCursor: null },
+  "model/list": { data: [${JSON.stringify(CODEX_MODEL)}], nextCursor: null },
 };
 let buffered = "";
 process.stdin.on("data", (chunk) => {

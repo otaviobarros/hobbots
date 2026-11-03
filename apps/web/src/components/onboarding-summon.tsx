@@ -10,12 +10,14 @@ import { modelsQuery, useCreateHob } from "../api/queries.ts";
 import { foldersShared, presetInfo } from "../api/safety.ts";
 import { setupQuery, useUpdateSetup } from "../api/setup.ts";
 import { motionReduced } from "../lib/motion.ts";
+import { connectedLines, PROVIDER_NAMES } from "../lib/providers.ts";
 import { HobSprite } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
 import { useFirstHobDraft } from "./onboarding-safety.tsx";
 
-const READY_GUIDE = "Everything is ready. Light the circle and your first hob will appear.";
-const DONE_GUIDE = "There it is! Say hello. I will be in the corner of Home if you need me.";
+const shared = messages.onboarding;
+const copy = messages.onboarding.ready;
 
 const RUNES = 8;
 const RING = 300;
@@ -53,10 +55,10 @@ export function OnboardingReady() {
   const router = useRouter();
   const canGoBack = useCanGoBack();
   const setup = useQuery(setupQuery);
-  const models = useQuery(modelsQuery("claude-code"));
   const create = useCreateHob();
   const update = useUpdateSetup();
   const [draft, setDraft] = useState<FirstHobDraft>(useFirstHobDraft());
+  const models = useQuery(modelsQuery(draft.runtime));
   const [ritual, setRitual] = useState<Ritual>("idle");
   const [lit, setLit] = useState(0);
   const [hob, setHob] = useState<Agent | null>(null);
@@ -103,33 +105,36 @@ export function OnboardingReady() {
   };
 
   const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/folders" }));
-  const name = draft.name.trim() || "your hob";
+  const name = draft.name.trim() || shared.firstHob.yourHob;
   const model = models.data?.models.find((m) => m.id === draft.model);
   const done = ritual === "done";
   const rejected = create.error instanceof ApiError && create.error.tag === "InvalidHob" ? create.error : undefined;
   const failed = ritual === "idle" && (create.isError || update.isError);
   const problem = rejected
-    ? `Hobbots could not create ${name}: ${rejected.message}. Go back to change it.`
+    ? copy.rejected({ name, reason: rejected.message })
     : failed
-      ? `Hobbots could not finish summoning ${name}. Try again in a moment.`
+      ? copy.failed({ name })
       : undefined;
 
   return (
     <OnboardingFrame
       step={4}
-      guide={done ? DONE_GUIDE : READY_GUIDE}
+      guide={done ? copy.doneGuide : copy.guide}
       sofar={[
-        "Claude connected",
-        `${hobLine(draft)} on Claude`,
+        ...connectedLines(setup.data?.connectedProviders),
+        shared.hobOn({ hob: hobLine(draft), provider: PROVIDER_NAMES[draft.runtime] }),
         ...(setup.data
-          ? [`${presetInfo(setup.data.safetyPreset).label} safety`, foldersShared(setup.data.approvedFolders.length)]
+          ? [
+              shared.presetSafety({ preset: presetInfo(setup.data.safetyPreset).label }),
+              foldersShared(setup.data.approvedFolders.length),
+            ]
           : []),
       ]}
       footer={
         done ? null : (
           <>
             <Button variant="outline" onClick={back} disabled={ritual !== "idle"}>
-              Back
+              {shared.back}
             </Button>
             <span role={problem ? "alert" : undefined} className="flex-1 text-right text-sm text-rose">
               {problem}
@@ -140,12 +145,18 @@ export function OnboardingReady() {
     >
       <div className="flex animate-hb-in flex-col items-center gap-2.5 pt-1 text-center">
         <h1 aria-live="polite" className="m-0 font-pixel text-[30px] font-bold text-moonlight">
-          {done ? `${name} has arrived!` : "Ready to summon"}
+          {done ? copy.arrived({ name }) : copy.heading}
         </h1>
         <p className="m-0 text-secondary-text">
           {done
-            ? `${name} is waiting in Hobs, ready for a first chore.`
-            : `${hobLine(draft)} · thinks with Claude ${model?.displayName ?? ""}`.trim()}
+            ? copy.waiting({ name })
+            : copy
+                .thinksWith({
+                  hob: hobLine(draft),
+                  provider: PROVIDER_NAMES[draft.runtime],
+                  model: model?.displayName ?? "",
+                })
+                .trim()}
         </p>
 
         <div aria-hidden className="relative my-1.5" style={{ width: RING, height: RING }}>
@@ -190,23 +201,23 @@ export function OnboardingReady() {
 
         {ritual === "idle" && (
           <Button onClick={() => void summon()} disabled={!setup.data}>
-            {failed ? "Try again" : `Summon ${name}`}
+            {failed ? copy.tryAgain : copy.summon({ name })}
           </Button>
         )}
         {(ritual === "charging" || ritual === "poof") && (
           <span role="status" className="py-[11px] font-bold text-lantern">
-            Gathering moonlight <span className="animate-hb-blink">•••</span>
+            {copy.gathering} <span className="animate-hb-blink">•••</span>
           </span>
         )}
         {done && hob && (
           <div className="flex animate-hb-in gap-3">
             <Button asChild>
               <Link to="/hobs/$hobId/new" params={{ hobId: hob.id }}>
-                Say hi to {hob.name}
+                {copy.sayHi({ name: hob.name })}
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link to="/">Go to Home</Link>
+              <Link to="/">{copy.home}</Link>
             </Button>
           </div>
         )}

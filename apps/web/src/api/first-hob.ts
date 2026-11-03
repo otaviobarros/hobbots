@@ -11,12 +11,15 @@ import {
   type RoleHat,
   type RoleId,
   type RoleTool,
+  type RuntimeKind,
   type RuntimeModel,
   type RuntimeModels,
   roleFields,
   STARTER_ROLES,
   starterRole,
 } from "@hobbots/domain";
+import { messages } from "../components/messages.ts";
+import { PROVIDER_NAMES } from "../lib/providers.ts";
 import { readStored, writeStored } from "../lib/storage.ts";
 
 /**
@@ -202,8 +205,10 @@ export const rollSeed = (current: number, random: Random = Math.random): number 
 export const nearbySeeds = (seed: number): ReadonlyArray<number> =>
   [1, 2, 3, 4, 5].map((k) => ((seed * 31 + k * 7919) % 9998) + 1);
 
-/** The model and effort a hob thinks with, as a form holds them. */
+/** The provider, model and effort a hob thinks with, as a form holds them. */
 export interface BrainChoice {
+  /** The runtime the hob thinks with. */
+  readonly runtime: RuntimeKind;
   /** A model id from the runtime's list; null until the list arrives. */
   readonly model: string | null;
   readonly effort: Effort | null;
@@ -260,6 +265,7 @@ export const newDraft = (
     lookSeed,
     lookBase: lookSeed,
     lookColor: "violet",
+    runtime: "claude-code",
     model: null,
     effort: null,
     submitted: null,
@@ -360,10 +366,12 @@ const startingModel = (models: RuntimeModels): RuntimeModel | undefined =>
   models.models.find((m) => m.id === "default") ?? models.models[0];
 
 /**
- * The draft's model and effort, settled against what the runtime offers now: a model it no
+ * The draft's model and effort, settled against what its runtime offers now: a model it no
  * longer lists falls back to its default, and an effort the model does not take to its own.
+ * Another runtime's list leaves the draft as it is.
  */
 export const settleBrain = <D extends BrainChoice>(draft: D, models: RuntimeModels): D => {
+  if (models.runtime !== draft.runtime) return draft;
   const model = models.models.find((m) => m.id === draft.model) ?? startingModel(models);
   const effort = draft.effort !== null && model?.efforts.includes(draft.effort) ? draft.effort : startingEffort(model);
   const settled = model?.id ?? null;
@@ -379,6 +387,26 @@ export const splitModels = (
 ): { readonly main: ReadonlyArray<RuntimeModel>; readonly more: ReadonlyArray<RuntimeModel> } => {
   const main = models.filter((m) => m.main);
   return main.length === 0 ? { main: models, more: [] } : { main, more: models.filter((m) => !m.main) };
+};
+
+/**
+ * Picking another provider leaves the model and effort to its own list, which settles them once it
+ * arrives: a model id from one runtime means nothing to another.
+ */
+export const pickRuntime = <D extends BrainChoice>(draft: D, runtime: RuntimeKind): D =>
+  draft.runtime === runtime ? draft : { ...draft, runtime, model: null, effort: null };
+
+/**
+ * An unsent draft whose provider cannot think now moves to the first one that can, so a new hob
+ * starts on a provider that is ready. With none ready, the draft keeps its provider.
+ */
+export const settleRuntime = <D extends BrainChoice & { readonly submitted: unknown }>(
+  draft: D,
+  ready: ReadonlyArray<RuntimeKind>,
+): D => {
+  const first = ready[0];
+  if (draft.submitted !== null || first === undefined || ready.includes(draft.runtime)) return draft;
+  return pickRuntime(draft, first);
 };
 
 /** Picking a model keeps the effort when the new model takes it. */
@@ -424,7 +452,7 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
     tool: draft.tool,
     lookSeed: draft.lookSeed,
     lookColor: draft.lookColor,
-    runtime: "claude-code",
+    runtime: draft.runtime,
     model: draft.model === null || draft.model === "default" ? null : draft.model,
     effort: draft.effort,
     instructions: chores ? `Your chores, in the user's words:\n${chores}` : "",
@@ -493,9 +521,13 @@ export const keepSummonDraft = summoning.keep;
 export const keptSummonDraft = summoning.kept;
 export const settleSummonDraft = summoning.settle;
 
-/** The model and effort the hob thinks with, such as "Claude · Sonnet · medium effort". */
+/** The provider, model and effort the hob thinks with, such as "Claude · Sonnet · medium effort". */
 export const thinksWith = (draft: FirstHobDraft, model: RuntimeModel | undefined): string =>
-  `Claude · ${model?.displayName ?? "…"}${draft.effort ? ` · ${effortWords(draft.effort).label.toLowerCase()} effort` : ""}`;
+  messages.models.brain({
+    provider: PROVIDER_NAMES[draft.runtime],
+    model: model?.displayName ?? "…",
+    effort: draft.effort ? effortWords(draft.effort).label : null,
+  });
 
 /** What the hob's line says after its name, such as "the Writer", or "one of a kind" before a title. */
 export const kindLine = (draft: FirstHobDraft): string => {
