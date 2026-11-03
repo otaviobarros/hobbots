@@ -81,6 +81,7 @@ export const messages = {
     questions: "Questions",
     output: "Output",
     given: "Handed to it",
+    returned: ({ name, summary }: { name: string; summary: string }) => `${name}'s result: ${summary}`,
     noOutput: "No output yet.",
     tasks: "Tasks",
     reached: "Reached",

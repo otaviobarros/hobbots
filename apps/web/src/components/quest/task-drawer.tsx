@@ -237,9 +237,16 @@ function Detail({
           </div>
         )}
       </Section>
-      {detail.given.length > 0 && (
+      {(detail.given.length > 0 || detail.returned.length > 0) && (
         <Section title={copy.given}>
-          <Artifacts artifacts={detail.given} />
+          <div className="flex flex-col gap-1.5 text-detail">
+            {detail.returned.map((done) => (
+              <p key={done.id} className="m-0 whitespace-pre-wrap">
+                {copy.returned({ name: hobs(done.ownerId).name, summary: done.result?.summary ?? "" })}
+              </p>
+            ))}
+            <Artifacts artifacts={detail.given} />
+          </div>
         </Section>
       )}
     </div>

@@ -1,6 +1,7 @@
 import {
   type AgentId,
   checkpointOn,
+  handedFrom,
   isTerminalTask,
   type Message,
   type MessageId,
@@ -248,10 +249,27 @@ export const findTask = (trees: ReadonlyArray<TaskTree>, taskId: TaskId) => {
   return null;
 };
 
-/** What the drawer shows for a Task: its brief, checkpoints, questions and output. */
+/**
+ * The completed Tasks the Task's work builds on, once each: those it comes after, whose results and
+ * artifacts the hub gives it when it starts (ADR 018), then those whose artifacts were handed to it,
+ * whose results its later turns are told (#567).
+ */
+const returnedTo = (tree: TaskTree, task: Task): ReadonlyArray<Task> =>
+  [...new Set([...task.dependsOn, ...handedFrom(tree, task.id)])].flatMap((id) =>
+    tree.tasks.filter((each) => each.id === id && each.id !== task.id && each.result !== null),
+  );
+
+/** What the drawer shows for a Task: its brief, checkpoints, questions and output, and what it was given. */
 export const taskDetail = (tree: TaskTree, task: Task) => {
   const delegation = tree.delegations.find((each) => each.childTaskId === task.id) ?? null;
-  const received = new Set(tree.handOffs.filter((each) => each.toTaskId === task.id).map((each) => each.artifactId));
+  const returned = returnedTo(tree, task);
+  const received = new Set([
+    ...tree.handOffs.filter((each) => each.toTaskId === task.id).map((each) => each.artifactId),
+    // Every artifact of a Task it comes after reaches it; of another Task, only what was handed on.
+    ...tree.artifacts
+      .filter((each) => task.dependsOn.includes(each.taskId) && returned.some((done) => done.id === each.taskId))
+      .map((each) => each.id),
+  ]);
   return {
     brief: delegation?.brief ?? task.brief,
     expected: delegation?.expectedOutput ?? null,
@@ -264,6 +282,7 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
     notes: tree.notes.filter((each) => each.taskId === task.id && (each.senderId ?? null) === null),
     output: tree.artifacts.filter((each) => each.taskId === task.id),
     given: tree.artifacts.filter((each) => received.has(each.id)),
+    returned,
     rows: workRowsAll(tree, task),
   };
 };

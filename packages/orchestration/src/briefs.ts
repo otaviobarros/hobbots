@@ -2,6 +2,7 @@ import { clip } from "@hobbots/agents";
 import {
   ancestorsOf,
   type BackpackItem,
+  handedFrom,
   isTerminalTask,
   type Question,
   type Task,
@@ -138,9 +139,38 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
   ].join("\n");
 };
 
-/** What a later turn of a member's session is reminded of, after the work that arrived for it. */
-export const memberReminder = (task: Task, lead: string): string =>
-  `You work on Task ${task.id} for ${lead}. When it is done, call complete_task with its result; while nothing else keeps it open, your final reply becomes its result.`;
+/**
+ * The Tasks a member's work builds on: those its Task comes after, then those whose artifacts were
+ * handed to it, once each, in that order.
+ */
+const buildsOn = (task: Task, tree: TaskTree): ReadonlyArray<Task> => {
+  const ids = [...new Set([...task.dependsOn, ...handedFrom(tree, task.id)])];
+  return ids.flatMap((id) => tree.tasks.filter((each) => each.id === id && each.id !== task.id));
+};
+
+/** Where a Task a member's work builds on stands now, with its result once it has one. */
+const standingLine = (task: Task) =>
+  `  - Task ${task.id} (${firstLine(task.brief)}), ${task.state}${task.result === null ? "" : `: ${cut(task.result.summary, SUMMARY_LIMIT)}`}`;
+
+/**
+ * What a later turn of a member's session is reminded of, after the work that arrived for it: its
+ * Task, where each Task its work builds on stands now, read when the turn starts, and how to finish.
+ * A session resumed after one of them completed so tells "done, and here is its result" from
+ * "still running" without asking its lead. Each result is cut to `SUMMARY_LIMIT`, and the whole list
+ * to `STEP_INPUT_LIMIT`.
+ */
+export const memberReminder = (task: Task, tree: TaskTree, lead: string): string => {
+  const standing = buildsOn(task, tree).map(standingLine);
+  return [
+    `You work on Task ${task.id} for ${lead}.`,
+    // Every later turn carries it, so all of it together stays within the step input limit; the
+    // lines around it are never cut.
+    ...(standing.length === 0
+      ? []
+      : [cut(["Where the Tasks your work builds on stand now:", ...standing].join("\n"), STEP_INPUT_LIMIT)]),
+    "When it is done, call complete_task with its result; while nothing else keeps it open, your final reply becomes its result.",
+  ].join("\n");
+};
 
 /**
  * The Tasks the owner's briefing lists under `task`, depth first, each with its place (`1`, `1.2`):
