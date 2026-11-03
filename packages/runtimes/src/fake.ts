@@ -9,6 +9,7 @@ import {
   UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
+  type ReplyUsage,
   RUNTIME_NAMES,
   type RuntimeAvailability,
   type RuntimeEnforcement,
@@ -464,6 +465,23 @@ const fakeEnding = (prompt: string) =>
       : "complete";
 
 /** The failure that ends a reply cut off or limited, as a provider would end it. */
+/**
+ * What a fake turn took and used, the same for every turn so tests can assert it: a session's first
+ * turn writes its prompt to the cache and later ones read it, as a model API's prompt cache would.
+ */
+const fakeUsage = (prompt: string, reply: string, resumed: boolean): ReplyUsage => {
+  const tokens = (text: string) => Math.ceil(text.length / 4);
+  return {
+    timeToRequestMs: 5,
+    timeToFirstStreamMs: 15,
+    timeToFirstTokenMs: 20,
+    inputTokens: tokens(prompt),
+    outputTokens: tokens(reply),
+    cacheReadTokens: resumed ? 1000 : 0,
+    cacheWriteTokens: resumed ? 0 : 1000,
+  };
+};
+
 const fakeFailure = (
   ending: ReturnType<typeof fakeEnding>,
 ): Stream.Stream<never, RuntimeError | RuntimeLimitReached> =>
@@ -520,7 +538,9 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
         ...(ending === "complete" ? words : words.slice(0, 2)).map(
           (text): RuntimeEvent => ({ _tag: "TextDelta", text }),
         ),
-        ...(ending === "complete" ? [{ _tag: "Completed", sessionId, text: reply } as const] : []),
+        ...(ending === "complete"
+          ? [{ _tag: "Completed", sessionId, text: reply, usage: fakeUsage(told, reply, known !== undefined) } as const]
+          : []),
       ]);
     });
     const failure = fakeFailure(ending);

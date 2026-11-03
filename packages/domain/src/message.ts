@@ -93,6 +93,29 @@ export const ReplyStep = Schema.Struct({
 });
 export type ReplyStep = typeof ReplyStep.Type;
 
+/** A count or a duration the runtime reported, or null when it reported none. */
+const Measured = Schema.NullOr(Schema.Number);
+
+/**
+ * How long a turn took to get going and how many tokens it used, as its runtime reported them
+ * (#398). Any runtime can leave a field null. Durations are milliseconds from the start of the turn;
+ * tokens are the main session's alone, without subagents or the runtime's own helper calls.
+ */
+export const ReplyUsage = Schema.Struct({
+  /** Until the runtime sent its first model request: its own startup, such as resuming the session. */
+  timeToRequestMs: Measured,
+  /** Until the model's response stream opened. */
+  timeToFirstStreamMs: Measured,
+  /** Until the model's first complete message arrived. */
+  timeToFirstTokenMs: Measured,
+  /** Input tokens that were neither read from nor written to the prompt cache. */
+  inputTokens: Measured,
+  outputTokens: Measured,
+  cacheReadTokens: Measured,
+  cacheWriteTokens: Measured,
+});
+export type ReplyUsage = typeof ReplyUsage.Type;
+
 export class Message extends Schema.Class<Message>("Message")({
   id: MessageId,
   threadId: ThreadId,
@@ -111,6 +134,14 @@ export class Message extends Schema.Class<Message>("Message")({
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
   model: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
+   * For an assistant message, what its latest turn took and used, next to that turn's runtime and
+   * model. Null until a turn completes with a report, and for the user's.
+   */
+  usage: Schema.NullOr(ReplyUsage).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
@@ -170,9 +201,14 @@ export const MessageTransitions = {
   appendDelta: (message: Message, delta: string): Message | InvalidMessageTransition =>
     requireInProgress(message, "appendDelta") ?? new Message({ ...message, content: message.content + delta }),
 
-  complete: (message: Message, finalContent?: string): Message | InvalidMessageTransition =>
+  /** The turn finished; `usage` is what it took and used, when the runtime said. */
+  complete: (message: Message, finalContent?: string, usage?: ReplyUsage): Message | InvalidMessageTransition =>
     requireInProgress(message, "complete") ??
-    endTurn(message, { content: finalContent ?? message.content, status: "complete" }),
+    endTurn(message, {
+      content: finalContent ?? message.content,
+      status: "complete",
+      ...(usage === undefined ? {} : { usage }),
+    }),
 
   fail: (message: Message, error: string): Message | InvalidMessageTransition =>
     requireInProgress(message, "fail") ?? endTurn(message, { status: "failed", error }),
@@ -192,7 +228,7 @@ export const MessageTransitions = {
   /** Continue: a reply that ended early streams again, appending to the text it kept. */
   resume: (message: Message): Message | InvalidMessageTransition =>
     message.role === "assistant" && isResumable(message.status)
-      ? new Message({ ...message, status: "streaming", error: null, resetsAt: null })
+      ? new Message({ ...message, status: "streaming", error: null, resetsAt: null, usage: null })
       : new InvalidMessageTransition({ messageId: message.id, from: message.status, action: "resume" }),
 
   /** Replaces the steps of a reply in progress, as the runtime reports them. */
