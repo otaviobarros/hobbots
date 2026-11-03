@@ -6,6 +6,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useId, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { ApiError } from "../api/client.ts";
+import { settleBrain } from "../api/first-hob.ts";
 import {
   aboutLine,
   goodAt,
@@ -20,7 +21,15 @@ import {
   retiredSummary,
   roleProblem,
 } from "../api/profile.ts";
-import { agentsQuery, modelsQuery, threadsQuery, usePauseHob, useRetireHob, useUpdateHob } from "../api/queries.ts";
+import {
+  agentsQuery,
+  modelsQuery,
+  runtimesQuery,
+  threadsQuery,
+  usePauseHob,
+  useRetireHob,
+  useUpdateHob,
+} from "../api/queries.ts";
 import { hobState, stateLabel } from "../lib/hob-state.ts";
 import { ExportDialog } from "./export/export-dialog.tsx";
 import { messages as exportCopy } from "./export/messages.ts";
@@ -28,6 +37,8 @@ import { CharmsTab } from "./hob-charms.tsx";
 import { Choice, ModelsBrain } from "./hob-form.tsx";
 import { PermissionsTab } from "./hob-permissions.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
+import { ProviderChoices } from "./provider-choices.tsx";
 import { RoleSheet } from "./role-sheet.tsx";
 import { RoleSigil } from "./role-sigil.tsx";
 import { TonePicker } from "./tone-picker.tsx";
@@ -284,6 +295,15 @@ function ProfileTab({ hob }: { hob: Agent }) {
     setDraft((d) => rebaseDraft(from, fresh, d, sendingRef.current));
   }, [hob, models.data]);
 
+  // Another provider's models settle the model and effort once its list arrives.
+  const runtimes = useQuery(runtimesQuery);
+  const draftModels = useQuery(modelsQuery(draft.runtime));
+  const draftReady = runtimes.data?.some((h) => h.runtime === draft.runtime && h.availability === "ready") ?? false;
+  useEffect(() => {
+    const list = draftModels.data;
+    if (list) setDraft((d) => settleBrain(d, list));
+  }, [draftModels.data]);
+
   const edit = profileEdit(hob, draft);
   const problem = roleProblem(draft);
   const changes = Object.keys(edit).length > 0 && problem === undefined;
@@ -308,18 +328,19 @@ function ProfileTab({ hob }: { hob: Agent }) {
     });
   };
 
+  const copy = messages.profile;
   const status = update.isPending
-    ? "Saving…"
+    ? copy.saving
     : problem
       ? problem
       : rejected
-        ? `Hobbots could not save: ${rejected.message}.`
+        ? copy.rejected({ reason: rejected.message })
         : update.isError
-          ? "Hobbots could not save the changes. Try again."
+          ? copy.failed
           : dirty
-            ? `Unsaved changes. ${hob.name}'s next reply uses them once saved.`
+            ? copy.unsaved({ name: hob.name })
             : saved === hob.configVersion
-              ? `Saved as version ${saved}. ${hob.name}'s next reply uses it.`
+              ? copy.saved({ version: saved, name: hob.name })
               : "";
 
   return (
@@ -328,7 +349,7 @@ function ProfileTab({ hob }: { hob: Agent }) {
         <div className="flex max-w-[880px] flex-col gap-6">
           <section aria-labelledby="hob-role" className="flex flex-col gap-2">
             <h2 id="hob-role" className="lbl m-0 text-moonlight">
-              Role
+              {copy.role}
             </h2>
             <RoleCard name={hob.name} draft={draft} disabled={update.isPending} onChange={() => setSheetOpen(true)} />
           </section>
@@ -336,11 +357,9 @@ function ProfileTab({ hob }: { hob: Agent }) {
           <section aria-labelledby="hob-tone" className="flex flex-col gap-3.5">
             <div className="flex flex-col gap-1">
               <h2 id="hob-tone" className="lbl m-0 text-moonlight">
-                Tone
+                {copy.tone}
               </h2>
-              <span className="text-sm text-secondary-text">
-                How {hob.name} talks. If your instructions describe a voice too, they win.
-              </span>
+              <span className="text-sm text-secondary-text">{copy.toneNote({ name: hob.name })}</span>
             </div>
             <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-3.5 border-0 p-0">
               <TonePicker
@@ -355,10 +374,10 @@ function ProfileTab({ hob }: { hob: Agent }) {
 
           <section className="flex flex-col gap-2">
             <label htmlFor="hob-instructions" className="lbl text-moonlight">
-              Instructions
+              {copy.instructions}
             </label>
             <span id="hob-instructions-note" className="text-sm text-secondary-text">
-              {hob.name} reads this before every reply, after its name, role and tone. Add anything else it should know.
+              {copy.instructionsNote({ name: hob.name })}
             </span>
             <textarea
               id="hob-instructions"
@@ -374,20 +393,17 @@ function ProfileTab({ hob }: { hob: Agent }) {
           </section>
 
           <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-2.5 border-0 p-0">
-            <legend className="lbl mb-2 text-moonlight">Brain</legend>
-            <div className="flex flex-wrap gap-1.5">
-              <Choice name="hob-provider" checked onPick={() => {}} label="Claude" className="px-2.5 py-[5px]">
-                <span
-                  aria-hidden
-                  className="grid size-[18px] place-items-center bg-[#e39a74] text-xs font-bold text-ground"
-                >
-                  C
-                </span>
-                Claude
-              </Choice>
-            </div>
-            <ModelsBrain models={models} draft={draft} onChange={setDraft} />
-            <span className="text-[13px] text-label">Other providers arrive later.</span>
+            <legend className="lbl mb-2 text-moonlight">{copy.brain}</legend>
+            {runtimes.data && (
+              <ProviderChoices
+                runtimes={runtimes.data}
+                draft={draft}
+                onChange={setDraft}
+                chipClassName="px-2.5 py-[5px]"
+                markClassName="size-[18px] text-xs"
+              />
+            )}
+            {draftReady && <ModelsBrain models={draftModels} draft={draft} onChange={setDraft} />}
           </fieldset>
 
           <p className="m-0 text-[13px] text-label">{aboutLine(hob)}</p>
@@ -413,10 +429,10 @@ function ProfileTab({ hob }: { hob: Agent }) {
             update.reset();
           }}
         >
-          Discard
+          {copy.discard}
         </Button>
         <Button type="submit" disabled={!changes || update.isPending}>
-          Save changes
+          {copy.save}
         </Button>
       </div>
 

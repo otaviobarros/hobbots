@@ -66,6 +66,7 @@ export const profileDraft = (hob: Agent, models?: RuntimeModels): ProfileDraft =
     voice: hob.voice,
     length: hob.length,
     instructions: hob.instructions,
+    runtime: hob.runtime,
     model: hob.model ?? DEFAULT_MODEL,
     effort: hob.effort,
   };
@@ -76,6 +77,8 @@ export const profileDraft = (hob: Agent, models?: RuntimeModels): ProfileDraft =
 export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload => {
   const model = storedModel(draft.model);
   const role: RoleChoice = { ...draft, roleTitle: draft.roleTitle.trim() };
+  // The hub checks the model and effort against the runtime, so a new runtime sends both.
+  const newRuntime = draft.runtime !== hob.runtime;
   return {
     ...(role.role !== hob.role && { role: role.role }),
     ...(role.roleTitle !== hob.roleTitle && { roleTitle: role.roleTitle }),
@@ -85,15 +88,16 @@ export const profileEdit = (hob: Agent, draft: ProfileDraft): UpdateAgentPayload
     ...(draft.voice !== hob.voice && { voice: draft.voice }),
     ...(draft.length !== hob.length && { length: draft.length }),
     ...(draft.instructions !== hob.instructions && { instructions: draft.instructions }),
-    ...(model !== hob.model && { model }),
-    ...(draft.effort !== hob.effort && { effort: draft.effort }),
+    ...(newRuntime && { runtime: draft.runtime }),
+    ...((newRuntime || model !== hob.model) && { model }),
+    ...((newRuntime || draft.effort !== hob.effort) && { effort: draft.effort }),
   };
 };
 
 /**
  * Moves a draft onto a newer baseline, such as a version saved from another window or the answer
  * to a save. Each part the user left as it was in the old baseline takes the new value; each part
- * they changed keeps their edit. The model and effort move together, as the form picks them, and so
+ * they changed keeps their edit. The provider, model and effort move together, as the form picks them, and so
  * do the role's title, sigil, hat and tool. The voice and the length move on their own.
  *
  * While a save is on its way, the parts it sends stay as the user has them now, even when that is
@@ -105,7 +109,8 @@ export const rebaseDraft = (
   draft: ProfileDraft,
   sending?: ProfileDraft,
 ): ProfileDraft => {
-  const brainChanged = (d: ProfileDraft) => d.model !== from.model || d.effort !== from.effort;
+  const brainChanged = (d: ProfileDraft) =>
+    d.runtime !== from.runtime || d.model !== from.model || d.effort !== from.effort;
   const keepInstructions =
     draft.instructions !== from.instructions || (sending !== undefined && sending.instructions !== from.instructions);
   const keepBrain = brainChanged(draft) || (sending !== undefined && brainChanged(sending));
@@ -123,6 +128,7 @@ export const rebaseDraft = (
     voice: keep("voice"),
     length: keep("length"),
     instructions: keepInstructions ? draft.instructions : to.instructions,
+    runtime: keepBrain ? draft.runtime : to.runtime,
     model: keepBrain ? draft.model : to.model,
     effort: keepBrain ? draft.effort : to.effort,
   };
@@ -134,6 +140,7 @@ export const isDirty = (base: ProfileDraft, draft: ProfileDraft): boolean =>
   base.voice !== draft.voice ||
   base.length !== draft.length ||
   base.instructions !== draft.instructions ||
+  base.runtime !== draft.runtime ||
   base.model !== draft.model ||
   base.effort !== draft.effort;
 

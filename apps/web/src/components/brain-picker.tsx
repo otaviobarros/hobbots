@@ -19,22 +19,22 @@ import { type ReactNode, useId, useState } from "react";
 import { effortWords } from "../api/first-hob.ts";
 import { modelsQuery, runtimesQuery, threadBrain, useSetBrain } from "../api/queries.ts";
 import { modelName, pickedBrain } from "../lib/brains.ts";
+import { PROVIDER_MARKS } from "../lib/providers.ts";
 import { messages } from "./messages.ts";
+import { providerFix } from "./provider-fix.tsx";
 
 const copy = messages.brain;
-
-const TILES: Record<RuntimeKind, { readonly mark: string; readonly className: string }> = {
-  "claude-code": { mark: "C", className: "bg-[#e39a74]" },
-  codex: { mark: "G", className: "bg-[#8fd3a8]" },
-};
 
 /** The runtime's square mark, as the chat header and the picker show it. */
 export const RuntimeTile = ({ runtime }: { runtime: RuntimeKind }) => (
   <span
     aria-hidden
-    className={cn("grid size-5 flex-none place-items-center text-xs font-bold text-ground", TILES[runtime].className)}
+    className={cn(
+      "grid size-5 flex-none place-items-center text-xs font-bold text-ground",
+      PROVIDER_MARKS[runtime].tile,
+    )}
   >
-    {TILES[runtime].mark}
+    {PROVIDER_MARKS[runtime].mark}
   </span>
 );
 
@@ -52,14 +52,16 @@ export const useBrainLabel = (brain: { readonly runtime: RuntimeKind; readonly m
   return brainLabel(brain.runtime, modelName(models.data, brain.model));
 };
 
-/** Why a runtime cannot think now, or null when it can. */
+/** Why a runtime cannot think now and how to fix it, as Settings says it, or null when it can. */
 const unavailableReason = (health: RuntimeHealth) => {
   if (health.availability === "ready") return null;
   const runtime = RUNTIME_NAMES[health.runtime];
-  // Without an adapter the hub reports no version: it has never run the runtime.
-  return health.availability === "unavailable" && health.version === null && health.runtime !== "claude-code"
-    ? copy.notOnThisHub({ runtime })
-    : copy.notReady({ runtime, state: STATE_WORDS[health.availability] });
+  return (
+    providerFix(health.runtime, health) ??
+    (health.availability === "unverified"
+      ? copy.notOnThisHub({ runtime })
+      : copy.notReady({ runtime, state: STATE_WORDS[health.availability] }))
+  );
 };
 
 /**

@@ -49,6 +49,7 @@ describe("hob profile", () => {
       voice: "default",
       length: "balanced",
       instructions: "Write short answers.",
+      runtime: "claude-code",
       model: "default",
       effort: "medium",
     });
@@ -77,6 +78,23 @@ describe("hob profile", () => {
 
     expect(profileEdit(pip, { ...draft, model: "opus", effort: "high" })).toEqual({ model: "opus", effort: "high" });
     expect(profileEdit(hob({ model: "opus" }), { ...draft, model: "default" })).toEqual({ model: null });
+  });
+
+  it("moves the hob to another provider with that provider's model and effort, as one edit", () => {
+    const pip = hob({ model: "opus", effort: "high" });
+    const draft = profileDraft(pip, offered);
+    const codex = { ...draft, runtime: "codex" as const, model: "default", effort: "high" as const };
+    // The hub checks the model and effort against the new runtime, so both go even when unchanged.
+    expect(profileEdit(pip, codex)).toEqual({ runtime: "codex", model: null, effort: "high" });
+    expect(isDirty(draft, { ...draft, runtime: "codex" })).toBe(true);
+  });
+
+  it("keeps a provider the user picked when another window saves a new model", () => {
+    const before = hob();
+    const base = profileDraft(before, offered);
+    const draft = { ...base, runtime: "codex" as const, model: null, effort: null };
+    const after = profileDraft(hob({ model: "opus", effort: "high", configVersion: 2 }), offered);
+    expect(rebaseDraft(base, after, draft)).toMatchObject({ runtime: "codex", model: null, effort: null });
   });
 
   it("keeps a change saved elsewhere that the user did not touch, and sends only the user's edit", () => {

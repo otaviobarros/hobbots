@@ -1,4 +1,4 @@
-import type { RuntimeModel } from "@hobbots/domain";
+import { RUNTIME_NAMES, type RuntimeKind, type RuntimeModel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -18,7 +18,9 @@ import {
   roleTitleOf,
   rollLook,
 } from "../api/first-hob.ts";
-import { modelsQuery } from "../api/queries.ts";
+import { modelsQuery, runtimesQuery } from "../api/queries.ts";
+import { setupQuery } from "../api/setup.ts";
+import { connectedLines, readyProviders } from "../lib/providers.ts";
 import {
   ChoresField,
   ColorSwatches,
@@ -32,11 +34,15 @@ import {
   RolePicker,
   useDraftLook,
   useSettledBrain,
+  useSettledRuntime,
 } from "./hob-form.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
+import { messages } from "./messages.ts";
 import { OnboardingFrame } from "./onboarding-frame.tsx";
+import { ProviderChoices } from "./provider-choices.tsx";
 
-const GUIDE = "Now the fun part. Every hob has a role on your team. Pick one, a name and a cloak.";
+const shared = messages.onboarding;
+const copy = messages.onboarding.firstHob;
 
 /** A few stars in the preview's sky, placed once per visit. */
 const previewStars = () =>
@@ -69,10 +75,10 @@ function LookPreview({
   const gear = gearOf(draft);
   const look = useDraftLook(draft);
   const [stars] = useState(previewStars);
-  const name = draft.name.trim() || "your hob";
+  const name = draft.name.trim() || copy.yourHob;
   return (
     <section
-      aria-label="Preview"
+      aria-label={copy.preview}
       className="cut relative h-[520px] w-[268px] flex-none overflow-hidden border-2 border-line bg-panel"
     >
       {stars.map((star) => (
@@ -92,8 +98,8 @@ function LookPreview({
       <button
         type="button"
         onClick={onRoll}
-        aria-label="New look"
-        title="Click for a new look"
+        aria-label={copy.newLook}
+        title={copy.newLookTitle}
         className="absolute top-[128px] left-[62px] cursor-pointer border-0 bg-transparent p-0 hover:brightness-110"
       >
         <span key={hops} className="block animate-hb-hop">
@@ -111,11 +117,11 @@ function LookPreview({
       <div className="absolute inset-x-4 top-[296px] flex flex-col gap-2.5">
         <div className="flex items-center gap-2">
           <span aria-live="polite" className="min-w-0 flex-1 text-[13px] text-secondary-text">
-            Look <b className="text-text tabular-nums">#{draft.lookSeed}</b> · {look.recipe}
+            {copy.look({ seed: draft.lookSeed, recipe: look.recipe })}
           </span>
           <Button variant="outline" size="xs" onClick={onRoll}>
             <Die size={14} rolls={lookRolls} />
-            New look
+            {copy.newLook}
           </Button>
         </div>
         <NearbyLooks draft={draft} onPick={onPickSeed} tile={42} className="flex gap-1.5" />
@@ -126,30 +132,56 @@ function LookPreview({
   );
 }
 
+/** What still stops the first hob, in words for the footer; undefined when it can go on. */
+const firstHobProblem = (
+  draft: FirstHobDraft,
+  checking: boolean,
+  ready: ReadonlyArray<RuntimeKind>,
+  modelFound: boolean,
+): string | undefined => {
+  const problem = draftProblem(draft);
+  if (problem) return problem;
+  if (checking) return copy.checking;
+  if (!ready.includes(draft.runtime)) return copy.connectReady;
+  return modelFound ? undefined : copy.waitingModels({ runtime: RUNTIME_NAMES[draft.runtime] });
+};
+
+/** The footer's line: the hob on its way once sent, what still stops it, or that it is ready. */
+const firstHobHint = (draft: FirstHobDraft, problem: string | undefined): string => {
+  if (draft.submitted !== null) return copy.onTheWay({ name: draft.name.trim() });
+  return problem ?? copy.ready({ name: draft.name.trim(), role: roleTitleOf(draft) });
+};
+
 /**
  * Onboarding step 2: the user makes their first hob, with a role, a name from the dice, a seeded
- * look in one of the hob colors, and Claude Code's model and effort. The summon creates it.
+ * look in one of the hob colors, and the provider, model and effort it thinks with. The summon creates it.
  */
 export function OnboardingFirstHob() {
   const navigate = useNavigate();
   const router = useRouter();
   const canGoBack = useCanGoBack();
-  const models = useQuery(modelsQuery("claude-code"));
+  const runtimes = useQuery(runtimesQuery);
+  const setup = useQuery(setupQuery);
+  const connected = setup.data?.connectedProviders;
   const [draft, setDraft] = useState<FirstHobDraft>(() => restoreDraft(keptDraftOrStored()));
   const [nameRolls, setNameRolls] = useState(0);
   const [lookRolls, setLookRolls] = useState(0);
   const [tried, setTried] = useState(false);
+  const models = useQuery(modelsQuery(draft.runtime));
 
   // Coming back to this step keeps what was chosen; a model the runtime dropped falls back,
   // unless the hob was already sent with it.
   useEffect(() => keepDraft(draft), [draft]);
+  // The first hob thinks with a provider the user connected in the step before.
+  const ready = readyProviders(runtimes.data, connected ?? []);
+  useSettledRuntime(ready, setDraft);
   useSettledBrain(models.data, setDraft);
 
   const model = models.data?.models.find((m) => m.id === draft.model);
   const locked = draft.submitted !== null;
   const problem = locked
     ? undefined
-    : (draftProblem(draft) ?? (model ? undefined : "Waiting for Claude Code's models"));
+    : firstHobProblem(draft, runtimes.isPending || setup.isPending, ready, model !== undefined);
 
   const back = () => (canGoBack ? router.history.back() : void navigate({ to: "/setup/providers" }));
   // The draft waits in storage; the summon at the end of setup creates the hob.
@@ -160,19 +192,17 @@ export function OnboardingFirstHob() {
   };
 
   const roleLine = kindLine(draft);
-  const hint = locked
-    ? `${draft.name.trim()} is on the way. Finish summoning to change it.`
-    : (problem ?? `${draft.name.trim()} the ${roleTitleOf(draft)} is ready`);
+  const hint = firstHobHint(draft, problem);
 
   return (
     <OnboardingFrame
       step={1}
-      guide={GUIDE}
-      sofar={["Claude connected"]}
+      guide={copy.guide}
+      sofar={connectedLines(connected)}
       footer={
         <>
           <Button variant="outline" onClick={back}>
-            Back
+            {shared.back}
           </Button>
           <span
             id="first-hob-hint"
@@ -188,23 +218,23 @@ export function OnboardingFirstHob() {
               problem ? "cursor-not-allowed bg-line-2 text-label shadow-[0_4px_0_#22203f] hover:bg-line-2" : undefined
             }
           >
-            Continue
+            {shared.continue}
           </Button>
         </>
       }
     >
       {/* Disabled once sent: the hob may already exist with exactly these choices. */}
       <fieldset disabled={locked} className="m-0 flex min-w-0 animate-hb-in gap-6 border-0 p-0 disabled:opacity-85">
-        <legend className="sr-only">{locked ? `${draft.name.trim()}, as sent` : "Your first hob"}</legend>
+        <legend className="sr-only">{locked ? copy.legendSent({ name: draft.name.trim() }) : copy.legend}</legend>
         <div className="flex min-w-0 flex-1 flex-col gap-3.5">
           <div>
-            <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">Meet your first hob</h1>
-            <p className="m-0 mt-1 text-secondary-text">Pick a role or name your own. Every hob looks different.</p>
+            <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{copy.heading}</h1>
+            <p className="m-0 mt-1 text-secondary-text">{copy.intro}</p>
           </div>
 
           <RolePicker
             {...draftRolePicker(draft, setDraft)}
-            legend={<legend className="lbl mb-2 text-label">Role</legend>}
+            legend={<legend className="lbl mb-2 text-label">{copy.role}</legend>}
             columns={2}
           />
 
@@ -212,14 +242,14 @@ export function OnboardingFirstHob() {
             draft={draft}
             onChange={setDraft}
             rows={2}
-            label={`What should ${draft.name.trim() || "your hob"} do?`}
+            label={copy.chores({ name: draft.name.trim() || copy.yourHob })}
             className="lbl text-label"
           />
 
           <div className="flex flex-wrap items-end gap-6">
             <div className="flex flex-col gap-2">
               <label htmlFor="hob-name" className="lbl text-label">
-                Name
+                {copy.name}
               </label>
               <div className="flex gap-1.5">
                 <input
@@ -241,7 +271,7 @@ export function OnboardingFirstHob() {
               </div>
             </div>
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-              <legend className="lbl mb-2 text-label">Colors</legend>
+              <legend className="lbl mb-2 text-label">{copy.colors}</legend>
               <ColorSwatches
                 value={draft.lookColor}
                 onPick={(lookColor) => setDraft((d) => ({ ...d, lookColor }))}
@@ -251,19 +281,19 @@ export function OnboardingFirstHob() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <span className="lbl text-label">Thinks with</span>
-            <div className="flex flex-wrap gap-2">
-              <span className="cut flex items-center gap-2 border-2 border-moonlight bg-line px-3 py-[7px] text-sm">
-                <span
-                  aria-hidden
-                  className="grid size-5 place-items-center bg-[#e39a74] text-[13px] font-bold text-ground"
-                >
-                  C
-                </span>
-                Claude
-              </span>
-            </div>
-            <ModelsBrain models={models} draft={draft} onChange={setDraft} waitingClassName="py-2" />
+            <span className="lbl text-label">{copy.thinksWith}</span>
+            {runtimes.data && (
+              <ProviderChoices
+                runtimes={runtimes.data}
+                draft={draft}
+                onChange={setDraft}
+                only={connected ?? []}
+                markClassName="size-5 text-[13px]"
+              />
+            )}
+            {ready.includes(draft.runtime) && (
+              <ModelsBrain models={models} draft={draft} onChange={setDraft} waitingClassName="py-2" />
+            )}
           </div>
         </div>
 
