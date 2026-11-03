@@ -1,5 +1,6 @@
 import {
   type ActivityLimits,
+  type AttemptActivity,
   type AttemptId,
   CommandId,
   type ContentId,
@@ -26,6 +27,7 @@ import { Context, DateTime, Duration, Effect, Layer, Option, type Scope, Semapho
 import {
   ActivityRepository,
   ActivityStore,
+  type ActivityStoreShape,
   type CommandDraft,
   type FileChangeDraft,
   type FolderScanDraft,
@@ -144,6 +146,40 @@ const withoutContents = (file: ScannedFile, kind: FileVersion["kind"], notKept: 
   notKept,
 });
 
+/** A file content a turn keeps: its id, its kind, and its bytes as stored. */
+interface KeptContent {
+  readonly id: ContentId;
+  readonly kind: FileVersion["kind"];
+  readonly size: number;
+}
+
+/**
+ * What an Attempt's records already keep: each file content its changes name, once, by the file
+ * hash it was kept for, with its bytes as stored, and the bytes of its commands' logs. A turn that
+ * resumes the Attempt counts them against its budgets. A text content is stored redacted, which can
+ * make it longer than the file, so its bytes are read from the store; an image is stored as it is.
+ */
+const attemptUse = (store: ActivityStoreShape, activity: AttemptActivity) =>
+  Effect.gen(function* () {
+    const contents = new Map<string, KeptContent>();
+    for (const change of activity.changes) {
+      for (const version of [change.before, change.after]) {
+        if (!version?.contentId || contents.has(version.hash)) continue;
+        const size =
+          version.kind === "image"
+            ? Option.some(version.size)
+            : Option.map(yield* store.get(version.contentId), (bytes) => bytes.byteLength);
+        if (Option.isSome(size))
+          contents.set(version.hash, { id: version.contentId, kind: version.kind, size: size.value });
+      }
+    }
+    let logs = 0;
+    for (const command of activity.commands) {
+      if (command.log !== null) logs += command.log.totalBytes - command.log.omittedBytes;
+    }
+    return { contents, logs };
+  });
+
 const makeRecorder = (limits: ActivityLimits) =>
   Effect.gen(function* () {
     const scanner = yield* FolderScanner;
@@ -157,10 +193,7 @@ const makeRecorder = (limits: ActivityLimits) =>
     // Contents a live turn may still point at, so neither another turn nor pruning drops them.
     const pinned = new Map<ContentId, number>();
     // What each file hash was kept as, so a file kept before is not read again while it is kept.
-    const kept = new Map<
-      string,
-      { readonly id: ContentId; readonly kind: FileVersion["kind"]; readonly size: number }
-    >();
+    const kept = new Map<string, KeptContent>();
 
     const pin = (id: ContentId) => pinned.set(id, (pinned.get(id) ?? 0) + 1);
     const unpin = (id: ContentId) => {
@@ -188,6 +221,10 @@ const makeRecorder = (limits: ActivityLimits) =>
           claims: new Set(),
           spans: [],
         };
+        // A later turn of the same Attempt keeps what the turns before it recorded.
+        const turnStarted = yield* nowIso;
+        // Its own commands' records are told apart from theirs, as a runtime may reuse step ids.
+        const turnKey = newId();
         for (const other of live) {
           if (other.folders.some((folder) => turn.folders.some((mine) => foldersOverlap(folder, mine)))) {
             other.overlaps.add(me);
@@ -227,6 +264,21 @@ const makeRecorder = (limits: ActivityLimits) =>
         const unattributed = new Set<string>();
         let logsUsed = 0;
         let taskId: TaskId | null = null;
+        // The Attempt's budgets hold across its turns: what earlier turns kept counts here, once,
+        // and a file kept then is not read or counted again.
+        const earlier = new Set<ContentId>();
+        const resumed = yield* turn.attempt;
+        const before = resumed === null ? Option.none() : yield* repo.read(resumed);
+        if (Option.isSome(before)) {
+          const use = yield* attemptUse(store, before.value);
+          for (const [hash, content] of use.contents) {
+            if (!kept.has(hash)) kept.set(hash, content);
+            if (earlier.has(content.id)) continue;
+            earlier.add(content.id);
+            heldBytes += content.size;
+          }
+          logsUsed += use.logs;
+        }
 
         const keep = (id: ContentId) => {
           if (mine.has(id)) return;
@@ -243,8 +295,10 @@ const makeRecorder = (limits: ActivityLimits) =>
         const settle = (reserved: number, id: ContentId, size: number) => {
           heldBytes -= reserved;
           if (held.has(id)) return;
-          held.set(id, size);
-          heldBytes += size;
+          // An earlier turn's content is counted already.
+          const bytes = earlier.has(id) ? 0 : size;
+          held.set(id, bytes);
+          heldBytes += bytes;
           keep(id);
         };
 
@@ -278,9 +332,9 @@ const makeRecorder = (limits: ActivityLimits) =>
             if (plan.readUpTo === null) return withoutContents(file, plan.kind, plan.notKept);
             const known = kept.get(file.hash);
             if (known !== undefined && (yield* store.has(known.id))) {
-              if (!held.has(known.id) && !reserve(known.size))
-                return withoutContents(file, known.kind, "attempt-limit");
-              if (!held.has(known.id)) settle(known.size, known.id, known.size);
+              const counted = held.has(known.id) || earlier.has(known.id);
+              if (!counted && !reserve(known.size)) return withoutContents(file, known.kind, "attempt-limit");
+              if (!held.has(known.id)) settle(counted ? 0 : known.size, known.id, known.size);
               return { ...withoutContents(file, known.kind, null), contentId: known.id };
             }
             // The file's size as scanned is reserved before it is read, so no read passes the budget.
@@ -497,7 +551,7 @@ const makeRecorder = (limits: ActivityLimits) =>
             for (const folder of [...dirtyFolders]) {
               dirtyFolders.delete(folder);
               const drafts = changeSets.get(folder) ?? [];
-              const saved = yield* repo.saveChanges(attemptId, folder, drafts);
+              const saved = yield* repo.saveChanges(attemptId, folder, drafts, turnStarted);
               if (Option.isSome(saved)) entries.push(...saved.value.entries);
             }
             // The scans last: an end scan on the record means the changes it found are too.
@@ -552,7 +606,7 @@ const makeRecorder = (limits: ActivityLimits) =>
             else for (const folder of baselines.keys()) unattributed.add(folder);
             commands.set(event.id, {
               id: CommandId.make(newId()),
-              stepId: event.id,
+              stepId: `${turnKey}/${event.id}`,
               command: turn.redactor.text(event.command.line),
               folder: event.command.folder,
               sandboxed: event.command.sandboxed,

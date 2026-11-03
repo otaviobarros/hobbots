@@ -1,4 +1,4 @@
-import { type NewTask, type TaskCompletion, TaskRepository } from "@hobbots/agents";
+import { type AttemptResume, type NewTask, type TaskCompletion, TaskRepository } from "@hobbots/agents";
 import {
   type AgentId,
   type Answerer,
@@ -429,6 +429,43 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
+    /** The Attempt a Task last ran, which its next turn resumes when nothing makes it a new one. */
+    const resumable = (task: Task, resume: AttemptResume) =>
+      Effect.gen(function* () {
+        if (isTerminalTask(task.state)) return yield* refuse("task-ended", `Task ${task.id} is ${task.state}`);
+        const [last] = task.currentAttemptId === null ? [] : yield* read.attempt(task.currentAttemptId);
+        if (last === undefined) return yield* refuse("attempt-missing", `Task ${task.id} has no Attempt to resume`);
+        if (isLiveAttempt(last.state)) return yield* refuse("attempt-live", `Attempt ${last.id} is still live`);
+        if (last.state === "cancelled" || last.state === "unresolved") {
+          return yield* refuse("attempt-ended", `Attempt ${last.id} ended as ${last.state}`);
+        }
+        if (last.runtime !== resume.runtime || last.configVersion !== resume.configVersion) {
+          return yield* refuse("attempt-mismatch", `Attempt ${last.id} ran on another brain or configuration`);
+        }
+        return last;
+      });
+
+    const resumeAttempt: TaskRepository["Service"]["resumeAttempt"] = (taskId, expected, resume) =>
+      change((revision) =>
+        Effect.gen(function* () {
+          const before = yield* current(taskId, expected);
+          const last = yield* resumable(before, resume);
+          yield* notUnderCancel(before);
+          const task = new Task({ ...(yield* orFail(TaskTransitions.start(before, last.id, resume.at))), revision });
+          const attempt = new Attempt({ ...last, state: "starting", outcome: null, endedAt: null });
+          yield* sql`UPDATE attempts SET state = ${attempt.state}, outcome = NULL, ended_at = NULL
+            WHERE id = ${attempt.id}`;
+          yield* saveTask(task);
+          return {
+            value: { task, attempt },
+            events: [
+              { _tag: "TaskStateChanged", task, attempt, quest: null, wait: null } as const,
+              ...(yield* automatic(task, resume.at, revision + 1)),
+            ],
+          };
+        }),
+      );
+
     const moveTask: TaskRepository["Service"]["moveTask"] = (taskId, expected, to: TaskTarget, at) =>
       change((revision) =>
         Effect.gen(function* () {
@@ -839,6 +876,7 @@ export const TaskRepositoryLive = Layer.effect(
       startQuest,
       startAttempt,
       updateAttempt,
+      resumeAttempt,
       moveTask,
       completeTask,
       retryTask,

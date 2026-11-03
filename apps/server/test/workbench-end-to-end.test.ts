@@ -310,7 +310,7 @@ describe("the Workbench, end to end", () => {
       thread,
       ["Write the release notes", script("start_quest", { key: "quest", goal: "Write the release notes" })].join("\n"),
     );
-    // Each turn on the Task is an Attempt of its own, which ends just after its reply.
+    // The turn's Attempt ends just after its reply; the next turn on the Task resumes it.
     const started = await eventually(async () => {
       const read = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body;
       return read.trees[0]?.attempts.every((attempt) => attempt.state === "completed") ? read : undefined;
@@ -342,7 +342,7 @@ describe("the Workbench, end to end", () => {
     // Live: the turn is held open once its work is done, and its Attempt's records already show all of it.
     const attemptId = await eventually(async () => {
       const tree = await treeOf(thread);
-      return tree.attempts.find((attempt) => attempt.number === 2)?.id;
+      return tree.attempts.find((attempt) => attempt.number === 1 && isLiveAttempt(attempt.state))?.id;
     });
     const read = await readActivity(attemptId);
     const live = await activityWhen(
@@ -378,7 +378,8 @@ describe("the Workbench, end to end", () => {
       { path: "draft.txt", kind: "deleted", settled: false },
       { path: "notes.md", kind: "edited", settled: false },
     ]);
-    expect(live.scans.map((scan) => scan.phase)).toEqual(["start"]);
+    // The scans of the turn before it on the same Attempt stay with it.
+    expect(live.scans.map((scan) => scan.phase)).toEqual(["start", "end", "start"]);
     // The same records reached the stream from the cursor, and the command's output as it came, redacted.
     const followed = () => streamed(stream.entries, attemptId);
     await eventually(async () =>
@@ -407,7 +408,7 @@ describe("the Workbench, end to end", () => {
       { path: "draft.txt", kind: "deleted", settled: true },
       { path: "notes.md", kind: "edited", settled: true },
     ]);
-    expect(after.scans.map((scan) => scan.phase)).toEqual(["start", "end"]);
+    expect(after.scans.map((scan) => scan.phase)).toEqual(["start", "end", "start", "end"]);
     // The stream brought the end-of-turn compare too, so a Workbench following it settles without reading again.
     const settled = after.changes.map(({ path, kind, settled }) => ({ path, kind, settled }));
     await eventually(async () => (followed().scans.length === 2 ? true : undefined));

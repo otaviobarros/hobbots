@@ -87,15 +87,23 @@ export const makeChatResolver = (
     }),
 
     /**
-     * Starts the turn's own Attempt on the Task it was briefed on, so the hub knows the turn is
-     * working on it: a cancel then waits for the turn to stop, or leaves the stop unresolved when it
-     * does not (OR-006). Null when the turn works on no Task yet, or the Task is being cancelled or
-     * changed meanwhile. `was` is the Task's state before, which the turn's end gives back to it.
+     * Runs the turn on the Task it was briefed on, so the hub knows the turn is working on it: a
+     * cancel then waits for the turn to stop, or leaves the stop unresolved when it does not
+     * (OR-006). The turn resumes the Task's current Attempt, so one piece of a lead's work stays one
+     * Attempt however many turns it takes; it starts a new one only where there is none to resume,
+     * as on another brain. Null when the turn works on no Task yet, or the Task is being cancelled
+     * or changed meanwhile. `was` is the Task's state before, which the turn's end gives back to it.
      */
     begin: (at: string) =>
       Effect.gen(function* () {
         const task = briefedOn;
         if (task === null || task.state === "cancelling") return null;
+        const resumed = yield* tasks
+          .resumeAttempt(task.id, task.revision, { runtime: turn.runtime, configVersion: turn.configVersion, at })
+          .pipe(Effect.option);
+        if (Option.isSome(resumed)) {
+          return { attemptId: resumed.value.value.attempt.id, entries: resumed.value.entries, was: task.state };
+        }
         const attemptId = AttemptId.make(newId());
         const started = yield* tasks
           .startAttempt(task.id, task.revision, {
