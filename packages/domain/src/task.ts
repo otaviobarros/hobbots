@@ -179,6 +179,52 @@ export const TaskTransitions = {
       : new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "completed" }),
 };
 
+/**
+ * Why an Attempt ended, as the runner that ran it saw it: its session ran to its end, failed,
+ * was stopped by Hobbots, or did not confirm a stop in time. The record decides the state it ends
+ * in from this and its Task, so every runner ends Attempts the same way (#669, #674).
+ */
+export type AttemptEnd =
+  | { readonly _tag: "Finished"; readonly outcome: string | null }
+  | { readonly _tag: "Failed"; readonly reason: string | null }
+  | { readonly _tag: "Stopped"; readonly reason: string | null }
+  | { readonly _tag: "Unconfirmed"; readonly reason: string };
+
+/** What an Attempt that ended because its Task was cancelled says, when who cancelled it is not known. */
+export const CANCELLED_ATTEMPT = "Its Task was cancelled before this turn ended.";
+
+/** What an Attempt says that ended because `by` cancelled its Task: a hob's name, "You", or null when not known. */
+export const cancelledOutcome = (by: string | null): string =>
+  by === null ? CANCELLED_ATTEMPT : `${by} cancelled this Task.`;
+
+/** Pure transitions for an Attempt, beside the Task's. */
+export const AttemptTransitions = {
+  /**
+   * The state an Attempt ends in, and why, for `end`, with its Task as it is when it ends. An
+   * Attempt whose Task's cancel was asked for ends cancelled, naming who cancelled it (`cancelledBy`),
+   * whether it finished or was stopped; one that failed on its own stays failed, and one whose stop
+   * could not be confirmed stays unresolved. One that ended before the cancel keeps its own end.
+   */
+  end: (
+    task: Task,
+    end: AttemptEnd,
+    cancelledBy: string | null = null,
+  ): { readonly state: AttemptState; readonly outcome: string | null } => {
+    switch (end._tag) {
+      case "Failed":
+        return { state: "failed", outcome: end.reason };
+      case "Unconfirmed":
+        return { state: "unresolved", outcome: end.reason };
+      default:
+        if (task.state === "cancelling" || task.state === "cancelled")
+          return { state: "cancelled", outcome: cancelledOutcome(cancelledBy) };
+        return end._tag === "Finished"
+          ? { state: "completed", outcome: end.outcome }
+          : { state: "interrupted", outcome: end.reason };
+    }
+  },
+};
+
 /** Every Task under `task` among `tree`, the Tasks of its tree, in their order in `tree`. */
 export const descendantsOf = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<Task> => {
   const children = new Map<TaskId, Array<TaskId>>();

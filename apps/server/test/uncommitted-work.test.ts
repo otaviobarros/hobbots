@@ -272,7 +272,7 @@ describe("Completing a Task that changed a Git repository", () => {
         yield* tools.call({ agentId: FRODO, taskId: TASK }, "start_quest", { key: "quest", goal: "Wrap up the spec" });
         const first = yield* Effect.flip(call("done-1"));
         // The turn ends, and the next one runs on another configuration: a new Attempt that changes nothing.
-        yield* repo.updateAttempt(ATTEMPT, { state: "completed", at: now });
+        yield* repo.updateAttempt(ATTEMPT, { _tag: "Ended", end: { _tag: "Finished", outcome: null }, at: now });
         const task = Option.getOrThrow(yield* repo.readTree(TASK)).tasks[0];
         yield* repo.startAttempt(TASK, task?.revision ?? 0, {
           id: AttemptId.make("wrap-up-2"),
