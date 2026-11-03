@@ -15,6 +15,7 @@ import {
 import { Effect, Option } from "effect";
 import { BRIEF_LIMIT, briefingShows, cut, ownerBriefing } from "./briefs.ts";
 import { fromRecords, journalOf, newId, refuse, type TaskToolCaller } from "./call-scope.ts";
+import { reportingRules } from "./reporting.ts";
 
 /** Calls that start work, so a chat turn with no open Task starts one for its request. */
 const STARTS_WORK: ReadonlySet<TaskToolName> = new Set(["plan_steps", "start_quest", "delegate_task"]);
@@ -83,7 +84,7 @@ export const makeChatResolver = (
         taskId: open.top.id,
         carried: Option.match(ledger, { onNone: () => [], onSome: (read) => carriedFrom(read, shown) }),
       };
-      return ownerBriefing(open.top, open.tree);
+      return [ownerBriefing(open.top, open.tree), ...reportingRules(open.top, open.tree)].join("\n");
     }),
 
     /**
