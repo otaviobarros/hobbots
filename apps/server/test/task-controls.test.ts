@@ -280,8 +280,11 @@ const questUnderWay = (quillBrief: ReadonlyArray<string> = [HOLD]) =>
     hub("wait_for", { key: "wait", tasks: ["$copy.task_id", "$build.task_id"] }),
   ].join("\n");
 
+/** Ada's Task queued, Quill's turn live, and Aldric's own turn ended, so his Task waits (#572). */
 const underWay = (tree: TaskTree) =>
-  ownedBy(tree, ADA)?.state === "queued" && tree.attempts.some((each) => each.agentId === QUILL && isLive(each.state));
+  ownedBy(tree, ADA)?.state === "queued" &&
+  tree.attempts.some((each) => each.agentId === QUILL && isLive(each.state)) &&
+  tree.tasks[0]?.state === "waiting";
 
 /** Aldric brings in Rook, who brings in Pip under his own Quest; Pip's turn is held while Rook waits on her. */
 const nestedUnderWay = [
