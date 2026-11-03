@@ -36,6 +36,7 @@ import { DateTime, Effect, FiberMap, Option, Semaphore } from "effect";
 import { type PathSeparator, sharedFolders } from "./authority.ts";
 import { memberPrompt, memberReminder } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
+import { emptyQuestFinding } from "./empty-quests.ts";
 import { type Ending, type Running, runSessionTurn, STOPPED } from "./session.ts";
 import type { TaskTools } from "./task-tools.ts";
 
@@ -220,6 +221,18 @@ export const makeMemberRunner = (deps: MemberDeps) => {
    * open. The items the turn carries settle with it, so they keep nothing open.
    */
   const holdOpen = (taskId: TaskId, at: string, carried: ReadonlySet<string>) =>
+    Effect.andThen(leaveOpen(taskId, at, carried), flagEmptyQuest(taskId, at));
+
+  /** Tells the lead above when the turn left a Quest the member leads with nobody in it (#576). */
+  const flagEmptyQuest = (taskId: TaskId, at: string) =>
+    Effect.gen(function* () {
+      const found = yield* read(taskId);
+      if (Option.isNone(found)) return;
+      const empty = emptyQuestFinding(found.value.task, found.value.tree, at);
+      if (empty !== null) yield* deps.attempt(tasks.recordCheckpoint(empty), "flag an empty Quest");
+    });
+
+  const leaveOpen = (taskId: TaskId, at: string, carried: ReadonlySet<string>) =>
     Effect.gen(function* () {
       const found = yield* read(taskId);
       const ledger = yield* tasks.readLedger(taskId);

@@ -186,6 +186,9 @@ function Row({
               {party.length > 0 ? copy.leadsParty({ names: messages.names(party) }) : copy.leads}
             </span>
           )}
+          {row.quest?.state === "active" && party.length === 0 && (
+            <span className="shrink-0 text-lantern">{copy.nobodyYet}</span>
+          )}
           {waits.length > 0 && (
             <span className="truncate text-lantern">{messages.card.waitingOn({ names: messages.names(waits) })}</span>
           )}
