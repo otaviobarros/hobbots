@@ -10,6 +10,7 @@ import {
   makeRedactor,
   type RuntimeEvent,
   TaskRepository,
+  type TurnActivity,
 } from "@hobbots/agents";
 import {
   Agent,
@@ -251,6 +252,47 @@ const findingsWhen = (count: number) =>
     Effect.retry({ schedule: Schedule.spaced("20 millis"), times: 150 }),
   );
 
+/** A turn on `attempt` in the shop, its baseline taken now; its last scan runs as its scope closes. */
+const openTurn = (attempt: Effect.Effect<AttemptId | null>) =>
+  Effect.flatMap(Effect.service(ActivityRecorder), (recorder) =>
+    recorder.forTurn({ folders: [shop], attempt, redactor: makeRedactor() }),
+  );
+
+/** `turn` runs a file tool on the badge, `act` making the change as it runs. */
+const changeBadge = (turn: TurnActivity, operation: "edit-files" | "delete-files", act: (badge: string) => void) => {
+  const badge = join(shop, "web", "badge.png");
+  return Stream.runDrain(
+    turn.run(
+      {
+        prompt: "",
+        sessionId: null,
+        instructions: "",
+        instructionsChanged: false,
+        model: null,
+        effort: null,
+        tools: null,
+        recordToolStart: () => Effect.succeed(true),
+      },
+      (request) =>
+        Stream.fromIterable<RuntimeEvent>([
+          { _tag: "ToolStarted", id: "tool", tool: "Edit", operation, targets: [badge], label: "Changing the badge" },
+        ]).pipe(
+          Stream.tap((event) =>
+            event._tag === "ToolStarted" && request.recordToolStart ? request.recordToolStart(event) : Effect.void,
+          ),
+          Stream.concat(
+            Stream.fromEffect(
+              Effect.sync((): RuntimeEvent => {
+                act(badge);
+                return { _tag: "ToolFinished", id: "tool", failed: false };
+              }),
+            ),
+          ),
+        ),
+    ),
+  );
+};
+
 /**
  * One turn on `attempt` that runs a file tool on the badge, `act` making the change as it runs, then
  * `after` while the turn is still live. The turn's last scan runs as its scope closes.
@@ -263,49 +305,7 @@ const turnOnBadge = <A, E, R>(
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const turn = yield* (yield* ActivityRecorder).forTurn({
-        folders: [shop],
-        attempt,
-        redactor: makeRedactor(),
-      });
-      const badge = join(shop, "web", "badge.png");
-      yield* Stream.runDrain(
-        turn.run(
-          {
-            prompt: "",
-            sessionId: null,
-            instructions: "",
-            instructionsChanged: false,
-            model: null,
-            effort: null,
-            tools: null,
-            recordToolStart: () => Effect.succeed(true),
-          },
-          (request) =>
-            Stream.fromIterable<RuntimeEvent>([
-              {
-                _tag: "ToolStarted",
-                id: "tool",
-                tool: "Bash",
-                operation,
-                targets: [badge],
-                label: "Changing the badge",
-              },
-            ]).pipe(
-              Stream.tap((event) =>
-                event._tag === "ToolStarted" && request.recordToolStart ? request.recordToolStart(event) : Effect.void,
-              ),
-              Stream.concat(
-                Stream.fromEffect(
-                  Effect.sync((): RuntimeEvent => {
-                    act(badge);
-                    return { _tag: "ToolFinished", id: "tool", failed: false };
-                  }),
-                ),
-              ),
-            ),
-        ),
-      );
+      yield* changeBadge(yield* openTurn(attempt), operation, act);
       return yield* after;
     }),
   );
@@ -463,6 +463,29 @@ describe("A finding on two Tasks changing the same file", () => {
       }),
     );
     expectNoFinding(result);
+  });
+
+  // covers OR-004
+  it("[TC-OR-416] is recorded when one member overwrites the other's file before the other's turn scanned it", async () => {
+    // Rook's edit to the badge is not on the record yet when Pip's edit takes the file over: Rook's
+    // change is still his, so the two edits are one finding.
+    const run = start(Hub);
+    const found = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        yield* takeUp;
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const rook = yield* openTurn(Effect.succeed(ROOK_ATTEMPT));
+            const pip = yield* openTurn(Effect.succeed(PIP_ATTEMPT));
+            yield* changeBadge(rook, "edit-files", (badge) => writeFileSync(badge, "rook"));
+            yield* changeBadge(pip, "edit-files", (badge) => writeFileSync(badge, "pip"));
+          }),
+        );
+        return yield* findingsWhen(1);
+      }),
+    );
+    expect(found.map((each) => [each.taskId, each.aboutTaskId].sort())).toEqual([[ROOK_TASK, PIP_TASK].sort()]);
   });
 
   // covers OR-004

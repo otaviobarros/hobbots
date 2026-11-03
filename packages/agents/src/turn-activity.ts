@@ -397,9 +397,9 @@ const makeRecorder = (limits: ActivityLimits) =>
         /**
          * Whether another turn claimed a file of `change` after this turn last did, as a member does
          * that makes again a file its lead deleted while the lead's turn runs on (#658): what the file
-         * became since is that turn's, so this turn's change stays as it last recorded it, or, never
-         * recorded, is not this turn's to record. A file both turns' commands may have made is
-         * contested instead, and shared as before.
+         * became since is that turn's, so this turn's change stays as it last recorded it. A change
+         * not on its record yet is still recorded as it is now, so a write is never lost. A file both
+         * turns' commands may have made is contested instead, and shared as before.
          */
         const takenOver = (folder: string, change: Pick<ListingChange, "path" | "movedFrom">) =>
           placesOf(folder, change).some((place) =>
@@ -542,7 +542,7 @@ const makeRecorder = (limits: ActivityLimits) =>
                 for (const id of release(folder, kept)) freed.add(id);
                 const fresh = yield* Effect.forEach(
                   compareListings(baseline.listing, scanned.listing).filter(
-                    (change) => ownChange(folder, change) && !takenOver(folder, change),
+                    (change) => ownChange(folder, change) && !kept.some((draft) => draft.path === change.path),
                   ),
                   (change) => draftOf(folder, baseline, change, settled, at),
                 );
