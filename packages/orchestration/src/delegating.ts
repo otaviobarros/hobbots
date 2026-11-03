@@ -5,6 +5,7 @@ import {
   ArtifactId,
   ancestorsOf,
   DelegationId,
+  isTerminalTask,
   MilestoneId,
   POLICY_OPERATIONS,
   type Quest,
@@ -14,9 +15,11 @@ import {
   TaskId,
   type TaskToolInput,
   type TaskToolRefused,
+  type TaskTree,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { type Authority, delegatedAuthority, narrowBy, type PathSeparator } from "./authority.ts";
+import { firstLine } from "./briefs.ts";
 import {
   type CallScope,
   depthWithin,
@@ -134,6 +137,19 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
       return { overrides, folders: [...both.folders] };
     });
 
+  /**
+   * A warning for the lead when `member` already owns an open Task under `task`, so a blocked or
+   * waiting one is dealt with rather than given again as a second Task (#571). Empty otherwise.
+   */
+  const alreadyOpen = (tree: TaskTree, task: Task, member: Agent): string => {
+    const open = tree.tasks.filter(
+      (each) => each.parentId === task.id && each.ownerId === member.id && !isTerminalTask(each.state),
+    );
+    if (open.length === 0) return "";
+    const listed = open.map((each) => `${each.id} (${each.state}): ${firstLine(each.brief)}`).join("; ");
+    return ` ${member.name} already has open work under this Task: ${listed}. If the new Task repeats it, cancel one of them, or hand the open one what it needs instead.`;
+  };
+
   return {
     delegate_task: (scope: CallScope, input: DelegateInput) =>
       Effect.gen(function* () {
@@ -188,7 +204,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         );
         return {
           done: {
-            message: `Delegated Task ${created.id} to ${member.name}. You lead Quest ${quest.id}.`,
+            message: `Delegated Task ${created.id} to ${member.name}. You lead Quest ${quest.id}.${alreadyOpen(scope.tree, task, member)}`,
             details: {
               task_id: created.id,
               quest_id: quest.id,

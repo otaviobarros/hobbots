@@ -431,7 +431,7 @@ describe("leading a party on a Quest", () => {
     const tree = await run(treeWhen((each) => ownedBy(each, QUILL)?.state === "blocked"));
     const quill = ownedBy(tree, QUILL);
     const blocker = tree.checkpoints.find((each) => each.taskId === quill?.id && each.kind === "blocker");
-    expect(blocker?.summary).toContain('milestone "Headlines" is not reached');
+    expect(blocker?.summary).toContain('only its own milestones are unreported: "Headlines"');
     // The blocker and the Failure reach Aldric as continuations in your chat.
     const all = await run(
       messagesWhen((each) => continuations(each).some((reply) => reply.content.includes("ended as blocked."))),
