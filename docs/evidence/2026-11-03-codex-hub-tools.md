@@ -2,8 +2,8 @@
 
 - **Date:** 2026-11-03
 - **Issue:** [#440](https://github.com/otaviobarros/hobbots/issues/440)
-- **Pull request:** PR_PLACEHOLDER
-- **Commit:** COMMIT_PLACEHOLDER on the pull request's branch, not yet on `main`
+- **Pull request:** [#626](https://github.com/otaviobarros/hobbots/pull/626)
+- **Commit:** `cf758ed` on the pull request's branch, not yet on `main`
 - **Setup:** Linux x86_64 container (Ubuntu 24.04, Node 22). Codex 0.166.0 (`@openai/codex` from npm) started by the adapter's turn runner as `codex app-server` with a hob's own `CODEX_HOME`, and a scripted stand-in for the Responses API as a custom model provider, which played the model's tool calls and recorded each request. Run with `HOBBOTS_CODEX=<codex> pnpm --filter @hobbots/runtimes exec vitest run test/codex-live.test.ts`. The hub-level cases ran in CI's suite with the real Codex adapter against a stand-in `codex` executable that speaks the App Server protocol, and the fake runtime as Claude Code, on SQLite. No macOS, no Hobbots sandbox around Codex, no real model or ChatGPT sign-in.
 - **Result:** Passed with gaps. A Codex hob delegated to a Claude hob and got its result, a Claude hob delegated to a Codex hob and got its result, and each hub tool call was decided by the hub as a step; a real model on macOS is not verified.
 
