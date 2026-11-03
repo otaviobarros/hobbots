@@ -16,6 +16,7 @@ import {
 import {
   type AttemptId,
   type CarriedItem,
+  carriedWith,
   type EventEnvelope,
   isTaskToolName,
   stableJson,
@@ -75,7 +76,13 @@ interface CallSource {
    */
   readonly taskId: () => TaskId | null;
   readonly resolve: (name: TaskToolName, at: string) => Effect.Effect<ResolvedCaller, TaskToolRefused>;
+  /** The backpack items the turn's earlier calls showed it, by id, which it carries from then on (#662). */
+  readonly shown: Map<string, CarriedItem>;
 }
+
+/** The caller, carrying what the turn's earlier calls showed it as well, a held claim winning. */
+const withShown = (caller: TaskToolCaller, shown: ReadonlyMap<string, CarriedItem>): TaskToolCaller =>
+  shown.size === 0 ? caller : { ...caller, carried: carriedWith(caller.carried ?? [], shown.values()) };
 
 /**
  * The Hobbots tools for Tasks and Quests (ADR 018). Every call is checked by the hub: who may make
@@ -186,18 +193,19 @@ export class TaskTools extends Context.Service<
               Effect.gen(function* () {
                 const resolved = yield* source.resolve(name, at);
                 seen.resolved = resolved;
-                const scope = yield* scopeOf(resolved.caller, at);
+                const scope = yield* scopeOf(withShown(resolved.caller, source.shown), at);
                 const made = yield* handlers[name](scope, rest as never);
                 // A call that starts the turn's Task takes the turn's calls into that Task's work.
                 const started = resolved.entries.some((entry) => entry.type === "TaskCreated");
                 return {
-                  done: made.done,
+                  ...made,
                   entries: [...resolved.entries, ...made.entries],
                   ...(started ? { scope: callScope.task(resolved.caller.taskId) } : {}),
                 };
               }),
             );
             if (seen.resolved !== null) committed(seen.resolved);
+            for (const item of outcome.shown ?? []) source.shown.set(item.itemId, item);
             // Committed already: a client that misses the announcement replays it from the journal.
             if (outcome.entries.length > 0) yield* announce(outcome.entries);
             return outcome.done;
@@ -216,7 +224,7 @@ export class TaskTools extends Context.Service<
         const refusals = makeRefusals(ledger, announce, redactor);
         const charmRecords = makeCharmRecords(tasks, refusals, announce);
 
-        const call = (caller: TaskToolCaller, name: string, raw: unknown) =>
+        const call = (caller: TaskToolCaller, name: string, raw: unknown, shown = new Map<string, CarriedItem>()) =>
           callFrom(
             caller.agentId,
             {
@@ -224,6 +232,7 @@ export class TaskTools extends Context.Service<
               fence: caller.carried ?? [],
               taskId: () => caller.taskId,
               resolve: () => Effect.succeed({ caller, entries: [], attemptId: null }),
+              shown,
             },
             name,
             raw,
@@ -258,24 +267,29 @@ export class TaskTools extends Context.Service<
         const notOffered = (name: string) =>
           refuse("unknown-tool", `${name} is not offered in this session. Use the tools you were given.`);
 
-        const forTurn = (caller: TaskToolCaller, only?: ReadonlyArray<TaskToolName>): HubTools => ({
-          tools: offered(only),
-          call: (name, input, step) =>
-            answered(
-              only === undefined || (isTaskToolName(name) && only.includes(name))
-                ? call(caller, name, input)
-                : notOffered(name).pipe(
-                    refusals.recorded({
-                      agentId: caller.agentId,
-                      scope: () => callScope.task(caller.taskId),
-                      tool: name,
-                      raw: input,
-                      taskOf: () => caller.taskId,
-                    }),
-                  ),
-              step,
-            ),
-        });
+        const forTurn = (caller: TaskToolCaller, only?: ReadonlyArray<TaskToolName>): HubTools => {
+          const shown = new Map<string, CarriedItem>();
+          const refused = (name: string, input: unknown) =>
+            notOffered(name).pipe(
+              refusals.recorded({
+                agentId: caller.agentId,
+                scope: () => callScope.task(caller.taskId),
+                tool: name,
+                raw: input,
+                taskOf: () => caller.taskId,
+              }),
+            );
+          return {
+            tools: offered(only),
+            call: (name, input, step) =>
+              answered(
+                only === undefined || (isTaskToolName(name) && only.includes(name))
+                  ? call(caller, name, input, shown)
+                  : refused(name, input),
+                step,
+              ),
+          };
+        };
 
         const forChat = (turn: ChatTurn) =>
           Effect.gen(function* () {
@@ -291,6 +305,7 @@ export class TaskTools extends Context.Service<
               fence: turn.holding ?? [],
               taskId: () => known,
               resolve: (name, at) => chat.resolve(name, at, attemptId),
+              shown: new Map(),
             };
             // A turn briefed on its Task works on it as an Attempt of its own from the start.
             const begun = yield* chat.begin(DateTime.formatIso(yield* DateTime.now));

@@ -1,6 +1,7 @@
 import type { FolderChecksShape, TaskRepository } from "@hobbots/agents";
 import {
   ArtifactId,
+  type AttemptId,
   cancelMoves,
   descendantsOf,
   isLiveAttempt,
@@ -16,6 +17,7 @@ import {
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { Authority, PathSeparator } from "./authority.ts";
+import { cut } from "./briefs.ts";
 import {
   type CallScope,
   fromRecords,
@@ -23,13 +25,17 @@ import {
   ledTask,
   nameFor,
   newId,
+  outcomesShown,
   ownTask,
   questLimitsFor,
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
 import { namedFolders, requestedFolders, withFolders } from "./default-folders.ts";
-import type { WrapUp } from "./wrap-up.ts";
+import type { WrapUp, WrapUpPolicy } from "./wrap-up.ts";
+
+/** Longest reason a lead's `leave_uncommitted` keeps on the Task (#665). */
+const REASON_LIMIT = 600;
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -40,7 +46,7 @@ interface Deps {
   ) => Effect.Effect<void, TaskToolRefused>;
   readonly limits: TaskToolLimits;
   /** What the Task leaves uncommitted in its folders, read as it completes (#586). */
-  readonly wrapUp: (task: Task) => Effect.Effect<WrapUp>;
+  readonly wrapUp: (task: Task, attempts: ReadonlyArray<AttemptId>, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
   readonly folderChecks: FolderChecksShape;
   /** The caller's authority on a Task: its own, narrowed by every Delegation on the way down. */
   readonly authority: (scope: CallScope, task: Task) => Effect.Effect<Authority>;
@@ -265,7 +271,14 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, au
         return yield* refuse("no-attempt", `Task ${task.id} has not started, so it has no result yet.`);
       }
       const artifacts = (input.artifacts ?? []).map((artifact) => ({ ...artifact, id: ArtifactId.make(newId()) }));
-      const left = yield* wrapUp(task);
+      // The Quest's own result is the user's, so its lead commits what it changed or says why not (#665).
+      const attempts = scope.tree.attempts.filter((each) => each.taskId === task.id).map((each) => each.id);
+      const left = yield* wrapUp(task, attempts, {
+        hold: task.parentId === null && scope.tree.quests.some((quest) => quest.taskId === task.id),
+        // A blank reason is none; a long one is cut, as every text the Summary shows is.
+        reason: input.leave_uncommitted?.trim() ? cut(input.leave_uncommitted, REASON_LIMIT) : undefined,
+      });
+      if (left.held !== null) return yield* refuse("uncommitted-changes", left.held);
       const journal = journalOf();
       journal.keep(
         yield* fromRecords(
@@ -297,10 +310,13 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, au
       const target = yield* ledTask(scope, input.task_id);
       const journal = journalOf();
       const moves = cancelMoves(target, scope.tree);
+      const moved: Array<Task> = [];
       for (const { task, to } of moves) {
-        journal.keep(
-          yield* fromRecords(
-            tasks.moveTask(task.id, task.revision, to, scope.at, { cancelledBy: scope.caller.agentId }),
+        moved.push(
+          journal.keep(
+            yield* fromRecords(
+              tasks.moveTask(task.id, task.revision, to, scope.at, { cancelledBy: scope.caller.agentId }),
+            ),
           ),
         );
       }
@@ -317,6 +333,8 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, au
           },
         },
         entries: journal.entries,
+        // The turn cancelled them itself: the failures recorded for those that ended at once are read already (#662).
+        shown: yield* outcomesShown(tasks, scope, moved),
       };
     }),
 });

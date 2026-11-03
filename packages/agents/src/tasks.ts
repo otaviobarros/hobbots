@@ -394,6 +394,11 @@ export interface TaskToolOutcome {
    * Task finds them.
    */
   readonly scope?: string;
+  /**
+   * The backpack items the call's result tells the turn, as a result or failure it shows (#662).
+   * The turn carries them from then on, as it carries what its prompt shows. None by default.
+   */
+  readonly shown?: ReadonlyArray<CarriedItem>;
 }
 
 /** A Task tool call the hub refused, to record (#575). */
