@@ -211,7 +211,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "wait_for",
     description:
-      "Record that a Task you own waits for any or all of the Tasks under it, then end your turn. It does not block: Hobbots wakes you when they end, or sooner when something arrives for you, such as a question. Your Task shows as waiting once your turn ends. Call it once per wait, never again to check.",
+      "Record that a Task you own waits for any or all of the Tasks under it, then end your turn. It does not block: Hobbots wakes you when they end, or sooner when something arrives for you, such as a question. Your Task shows as waiting once your turn ends. Its result lists the questions and blockers they have open, so answer the questions that wait for you first. Call it once per wait, never again to check.",
     label: "Waiting on Tasks",
   },
   {
