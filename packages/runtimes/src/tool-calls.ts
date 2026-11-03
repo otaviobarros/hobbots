@@ -605,6 +605,66 @@ export const commandRequests = (command: string, cwd: string, home: string = hom
 };
 
 /**
+ * Whether a tool call runs `git init`, behind any wrapper or Git option, anywhere in its command
+ * line. In the sandbox it cannot write the new repository's config, so the hub makes it (ADR 014).
+ */
+export const initsRepository = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  home: string = homedir(),
+): boolean => {
+  const command = tool === "Bash" ? text(input, "command") : undefined;
+  if (command === undefined) return false;
+  return commandLine(command).some((token) => {
+    if (!("words" in token)) return false;
+    const [name, ...args] = unwrap(token.words, cwd, home).words;
+    return name !== undefined && basename(name) === "git" && args[gitFolders(args, cwd, home).sub] === "init";
+  });
+};
+
+/** Programs whose path arguments are where they write. */
+const PATH_WRITERS = new Set(["touch", "mkdir", "cp", "mv", "tee", "install", "ln"]);
+
+/**
+ * The absolute paths a command line writes by redirection, or names to a program that writes its
+ * path arguments, such as `cp` or `tee`, among those `matches` picks. Only what the line says is
+ * read: a path a variable holds is not known here.
+ */
+export const commandWritesTo = (
+  tool: string,
+  input: Record<string, unknown>,
+  cwd: string,
+  matches: (path: string) => boolean,
+  home: string = homedir(),
+): ReadonlyArray<string> => {
+  const command = tool === "Bash" ? text(input, "command") : undefined;
+  if (command === undefined) return [];
+  const found = new Set<string>();
+  const add = (word: string) => {
+    if (isAbsolute(word) && matches(word)) found.add(word);
+  };
+  const raw = rawTokens(command);
+  raw.forEach((token, index) => {
+    if (!("word" in token)) return;
+    const operator = REDIRECTION.exec(token.word)?.[0];
+    if (operator === undefined || !operator.includes(">") || operator.endsWith("&")) return;
+    const rest = token.word.slice(operator.length);
+    const next = raw[index + 1];
+    const target = rest !== "" ? rest : next !== undefined && "word" in next ? next.word : "";
+    add(unquoted(target));
+  });
+  for (const token of commandLine(command)) {
+    if (!("words" in token)) continue;
+    const [name, ...args] = unwrap(token.words, cwd, home).words;
+    if (name !== undefined && PATH_WRITERS.has(basename(name))) {
+      for (const arg of args) if (!arg.startsWith("-")) add(arg);
+    }
+  }
+  return [...found];
+};
+
+/**
  * The policy requests a tool call makes, or null for a tool Hobbots does not know. Relative paths
  * resolve against `cwd`, the folder the runtime reports for the call.
  */

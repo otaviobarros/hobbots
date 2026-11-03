@@ -34,6 +34,19 @@ export class CharmTools extends Context.Service<
 >()("@hobbots/agents/CharmTools") {}
 
 /**
+ * The local Git work a turn's hob asks the hub to do outside its turn's sandbox (ADR 014), such as creating
+ * a repository, whose config and hooks the sandbox keeps read-only. The hub decides every call under
+ * the hob's policy. Absent, a turn offers none.
+ */
+export class LocalGitTools extends Context.Service<
+  LocalGitTools,
+  {
+    /** The tools the turn offers, read at its start: none (null) for a turn without folders. */
+    readonly forTurn: (turn: CharmTurn) => Effect.Effect<HubTools | null>;
+  }
+>()("@hobbots/agents/LocalGitTools") {}
+
+/**
  * Every tool of several sets, as one: a call goes to the set that offers its tool. A name two sets
  * offer goes to the first. Null when no set is given.
  */

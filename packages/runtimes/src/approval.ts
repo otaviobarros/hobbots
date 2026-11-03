@@ -1,3 +1,4 @@
+import { sep } from "node:path";
 import {
   type AskedDecision,
   askUntilDecided,
@@ -8,9 +9,11 @@ import {
   type ToolStartedEvent,
   type TurnApprovals,
 } from "@hobbots/agents";
+import { steerGitInit } from "@hobbots/domain";
 import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
-import { narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
+import { inSharedTemp, TEMP_HINT } from "./sandbox.ts";
+import { commandWritesTo, initsRepository, narrowestVerdict, toolLabel, toolRequests } from "./tool-calls.ts";
 
 export const UNKNOWN_TOOL = (tool: string) => `Hobbots does not know the ${tool} tool, so it stays closed.`;
 
@@ -104,10 +107,12 @@ export const decideCall = (
   report: (event: RuntimeEvent) => void,
   redaction?: Redactor | null,
   steersPush?: (cwd: string) => Effect.Effect<string | null>,
+  initTool?: string,
 ): Effect.Effect<CallDecision> =>
-  Effect.flatMap(steeredTo(call, steersPush), (pushTool) =>
-    pushTool !== null
-      ? Effect.succeed<CallDecision>({ _tag: "Refuse", verdict: undefined, reason: steerPush(pushTool) })
+  Effect.flatMap(steeredTo(call, steersPush), (pushTool) => {
+    const steer = steeredAway(context, call, pushTool, initTool);
+    return steer !== null
+      ? Effect.succeed<CallDecision>({ _tag: "Refuse", verdict: undefined, reason: steer })
       : askUntilDecided({
           call: {
             id: call.id,
@@ -120,8 +125,57 @@ export const decideCall = (
             decideIn(engine, access === null ? context : { ...context, ...access.policy }, approvals, call),
           report,
           unknown: UNKNOWN_TOOL(call.tool),
-        }),
-  );
+        }).pipe(Effect.map((decision) => withTempHint(call, decision)));
+  });
+
+/**
+ * Why a call is refused before the policy decides it, pointing the hob to what works from its
+ * sandbox, or null: a `git push` the GitHub Charm makes (ADR 020), a `git init`, which the hub makes
+ * (ADR 014), and a write in a shared temporary folder, for which the turn has its own (#578).
+ */
+const steeredAway = (
+  context: PolicyContext,
+  call: ToolCall,
+  pushTool: string | null,
+  initTool: string | undefined,
+): string | null => {
+  if (pushTool !== null) return steerPush(pushTool);
+  if (initTool !== undefined && initsRepository(call.tool, call.input, call.cwd)) return steerGitInit(initTool);
+  const temp = sharedTempWrites(context, call);
+  return temp.length > 0 ? steerTemp(temp) : null;
+};
+
+/** Whether `path` is in one of the hob's folders, as the context names them. */
+const inFolders = (context: PolicyContext, path: string) =>
+  [
+    ...context.sharedFolders.filter((folder) => !context.hob.hiddenSharedFolders.includes(folder)),
+    ...context.hob.ownFolders,
+  ].some((folder) => path === folder || path.startsWith(folder.endsWith(sep) ? folder : `${folder}${sep}`));
+
+/**
+ * The places in shared temporary folders a command writes, which its sandbox keeps closed (#578).
+ * A hob's own folder may lie in one, and is its own.
+ */
+const sharedTempWrites = (context: PolicyContext, call: ToolCall) =>
+  commandWritesTo(call.tool, call.input, call.cwd, (path) => inSharedTemp(path) && !inFolders(context, path));
+
+/** Why a command that writes in a shared temporary folder is refused, naming the turn's own. */
+const steerTemp = (paths: ReadonlyArray<string>) =>
+  `${paths.join(", ")} ${paths.length === 1 ? "is" : "are"} in a shared temporary folder, which your commands cannot write. ${TEMP_HINT}`;
+
+/**
+ * A refusal to write in a shared temporary folder, such as /tmp, also names the turn's own, which
+ * its commands may write (#578).
+ */
+const withTempHint = (call: ToolCall, decision: CallDecision): CallDecision =>
+  decision._tag === "Refuse" &&
+  decision.verdict?.reason.code === "outside-folders" &&
+  decision.verdict.targets.some(inSharedTemp) &&
+  (toolRequests(call.tool, call.input, call.cwd) ?? []).some(
+    (request) => request._tag === "Files" && request.operation !== "read-files",
+  )
+    ? { ...decision, reason: `${decision.reason} ${TEMP_HINT}` }
+    : decision;
 
 /**
  * Decides a host a turn's processes reach that its sandbox has no rule for, under the hob's own

@@ -315,6 +315,7 @@ export const scriptedToolEvents = (
             (event) => Queue.offerUnsafe(queue, event),
             request.redaction,
             turn.steersPush,
+            turn.initTool,
           );
           const label = toolLabel(call.tool, call.input, request.redaction?.text);
           const command =

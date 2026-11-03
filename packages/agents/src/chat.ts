@@ -38,7 +38,7 @@ import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semapho
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing } from "./briefing.ts";
-import { CharmTools, type CharmTurn, combineHubTools } from "./charms.ts";
+import { CharmTools, type CharmTurn, combineHubTools, LocalGitTools } from "./charms.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
@@ -248,6 +248,10 @@ export class ChatService extends Context.Service<
       const charms = yield* Effect.serviceOption(CharmTools);
       const charmsFor = (turn: CharmTurn) =>
         Option.isSome(charms) ? charms.value.forTurn(turn) : Effect.succeed(null);
+      // Without local Git tools, a hob cannot create a repository from its sandbox.
+      const localGit = yield* Effect.serviceOption(LocalGitTools);
+      const localGitFor = (turn: CharmTurn) =>
+        Option.isSome(localGit) ? localGit.value.forTurn(turn) : Effect.succeed(null);
       // Without a backpack, a thread starts only your queued messages.
       const continuations = yield* Effect.serviceOption(Continuations);
       // After a restore nothing that waited starts on its own until you resume work (ADR 026).
@@ -610,17 +614,21 @@ export class ChatService extends Context.Service<
                 approvals: turnApprovals?.approvals ?? null,
                 redaction: redactor,
                 recordToolStart,
-                hubTools: combineHubTools(
-                  taskTurn?.hubTools ?? null,
-                  yield* charmsFor({
+                hubTools: yield* Effect.gen(function* () {
+                  const charmTurn: CharmTurn = {
                     agentId: agent.id,
                     threadId: thread.id,
                     messageId: (yield* Ref.get(reply.current)).id,
                     currentAccess: currentAccess(agent.id),
                     redactor,
                     approvals: turnApprovals?.approvals ?? null,
-                  }),
-                ),
+                  };
+                  return combineHubTools(
+                    taskTurn?.hubTools ?? null,
+                    yield* localGitFor(charmTurn),
+                    yield* charmsFor(charmTurn),
+                  );
+                }),
               },
               adapter.sendPrompt,
             )

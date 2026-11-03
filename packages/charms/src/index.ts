@@ -11,6 +11,7 @@ export * from "./hob-app.ts";
 export * from "./hob-app-tokens.ts";
 export * from "./hob-credential.ts";
 export * from "./keychain.ts";
+export * from "./local-git.ts";
 export * from "./local-sign-ins.ts";
 export * from "./remotes.ts";
 export * from "./run-tool.ts";

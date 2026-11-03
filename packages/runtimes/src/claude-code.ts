@@ -35,6 +35,7 @@ import {
 } from "@hobbots/agents";
 import {
   type CommitIdentity,
+  GIT_INIT_TOOL,
   type PlanUsage,
   policySandbox,
   type ReplyUsage,
@@ -64,6 +65,7 @@ import {
   folderAccessFor,
   onePasswordAgentSocket,
   ProcessSandbox,
+  TEMP_NOTE,
   withCommitIdentity,
 } from "./sandbox.ts";
 import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
@@ -113,12 +115,15 @@ const execFileAsync = promisify(execFile);
 /**
  * What a sandboxed turn is told about the sandbox, after the hob's own instructions: Git's config
  * and hooks in each repository are read-only (ADR 014), so Git's warning when it cannot write them
- * is expected, and the changes that need them are the user's to make.
+ * is expected, the hub creates a new repository, and the other changes that need them are the
+ * user's to make. Temporary files go in the turn's own folder, `TMPDIR` (#578).
  */
 export const SANDBOX_NOTE = [
   "Your commands run in a sandbox. In every Git repository, .git/config and .git/hooks are read-only.",
   "Git prints `could not write config file .git/config: Operation not permitted` when it tries to change them, for example when deleting a branch; if the command otherwise succeeded, that warning is expected and not worth mentioning.",
-  "A change that needs .git/config or a hook, such as adding a remote, setting an upstream or installing a hook, fails here: ask the user to make it.",
+  "To create a repository, use the git_init tool instead of git init, which cannot write a new repository's config here.",
+  "Any other change that needs .git/config or a hook, such as adding a remote, setting an upstream or installing a hook, fails here: ask the user to make it.",
+  TEMP_NOTE,
 ].join(" ");
 
 /**
@@ -666,6 +671,8 @@ export interface ToolTurn {
   readonly runtimeFolder: string;
   /** The hub tool a `git push` command in a folder is pointed to, when the turn offers one (ADR 020). */
   readonly steersPush?: (cwd: string) => Effect.Effect<string | null>;
+  /** The hub tool a `git init` command is pointed to, when the turn offers it (ADR 014). */
+  readonly initTool?: string;
   /** The hob's bot, when it has its own GitHub App: its commands commit as it (ADR 022). */
   readonly commitAs?: CommitIdentity;
 }
@@ -716,6 +723,7 @@ export const toolTurn = (
     tools,
     runtimeFolder: access.runtimeFolder,
     ...(hubTools?.steersPush ? { steersPush: hubTools.steersPush } : {}),
+    ...(hubTools?.tools.some((tool) => tool.name === GIT_INIT_TOOL) ? { initTool: GIT_INIT_TOOL } : {}),
     ...(access.commitAs ? { commitAs: access.commitAs } : {}),
   };
 };
@@ -794,7 +802,7 @@ export const policyHooks = (
     const call = { id: input.tool_use_id, tool, input: toolInput, cwd: input.cwd || (turn.folders[0] as string) };
     // Only the policy decides here; asking the user waits in the permission callback.
     const decision = await Effect.runPromise(
-      decideCall(engine, turn.context, null, call, report, redaction, turn.steersPush),
+      decideCall(engine, turn.context, null, call, report, redaction, turn.steersPush, turn.initTool),
     ).catch(() => failed(tool));
     if (decision._tag === "Run") {
       if (!(await begin(call.id, tool, toolInput, decision.verdict))) {
@@ -863,7 +871,7 @@ export const policyHooks = (
     const call = { id: options.toolUseID, tool, input, cwd: hooked?.cwd ?? (turn.folders[0] as string) };
     // An aborted call stops waiting, which expires its request.
     const decision = await Effect.runPromise(
-      decideCall(engine, turn.context, approvals, call, report, redaction, turn.steersPush),
+      decideCall(engine, turn.context, approvals, call, report, redaction, turn.steersPush, turn.initTool),
       {
         signal: options.signal,
       },
