@@ -7,6 +7,8 @@ import { setupQuery } from "../api/setup.ts";
 import { ICONS, type IconName, iconPalette } from "../art/icons.ts";
 import { ArchivedHobs } from "./archived-hobs.tsx";
 import { DeviceList } from "./devices/device-list.tsx";
+import { DiagnosticsSettings } from "./diagnostics/diagnostics-settings.tsx";
+import { messages as diagnosticsMessages } from "./diagnostics/messages.ts";
 import { ExportSettings } from "./export/export-settings.tsx";
 import { messages as exportMessages } from "./export/messages.ts";
 import { GeneralSettings } from "./general-settings.tsx";
@@ -135,6 +137,9 @@ export function SettingsPage() {
       </Panel>
       <Panel label={exportMessages.heading} id="export">
         <ExportSettings />
+      </Panel>
+      <Panel label={diagnosticsMessages.heading} id="diagnostics">
+        <DiagnosticsSettings />
       </Panel>
       <Panel label="Archived hobs">
         <ArchivedHobs />

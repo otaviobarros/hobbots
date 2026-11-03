@@ -10,6 +10,8 @@ import {
   MemberContinuations,
   makeRedactor,
   narrows,
+  type RecoveryStep,
+  recordRecovery,
   runtimeAdapters,
   SecretRedaction,
   TaskRepository,
@@ -117,6 +119,23 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           Effect.flatMap(announce),
           Effect.asSome,
           Effect.catchCause((cause) => Effect.logWarning(`Could not ${what}`, cause).pipe(Effect.as(Option.none()))),
+        );
+      /** A step of startup recovery: as `attempt`, and a failure is kept for Settings › Diagnostics (ADR 026). */
+      const recover = <A, E>(
+        change: Effect.Effect<Committed<A>, E>,
+        what: string,
+        step: RecoveryStep,
+        ids: { readonly taskId: TaskId; readonly attemptId: AttemptId | null },
+      ) =>
+        change.pipe(
+          Effect.flatMap(announce),
+          Effect.asSome,
+          Effect.catchCause((cause) =>
+            Effect.logWarning(`Could not ${what}`, cause).pipe(
+              Effect.andThen(recordRecovery(step, cause, ids)),
+              Effect.as(Option.none()),
+            ),
+          ),
         );
       const currentTask = (id: TaskId) =>
         Effect.map(
@@ -328,9 +347,11 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
               continue;
             }
             const at = yield* nowIso;
-            const ended = yield* attempt(
+            const ended = yield* recover(
               tasks.moveTask(step.id, step.revision, endOf(step), at),
               "end a step left from before a restart",
+              "endStep",
+              { taskId: step.id, attemptId: null },
             );
             if (Option.isNone(ended)) continue;
             ending = true;
@@ -469,9 +490,11 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
       // then every step left open without one ends, so its lead hears of it.
       for (const live of yield* tasks.listLiveAttempts) {
         const at = yield* nowIso;
-        yield* attempt(
+        yield* recover(
           tasks.updateAttempt(live.id, { state: "interrupted", outcome: "Hobbots stopped while this ran.", at }),
           "end an Attempt left from before a restart",
+          "endAttempt",
+          { taskId: live.taskId, attemptId: live.id },
         );
       }
       yield* endStranded;

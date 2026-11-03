@@ -2,18 +2,18 @@ import { hostname } from "node:os";
 import {
   ChatService,
   DeviceService,
+  everyRuntimeHealth,
   foundAgent,
   HobbotsRepository,
   HobLifecycle,
   HobService,
-  missingRuntimeHealth,
   missingRuntimeModels,
   readToolLog,
   runtimeAdapters,
   ToolLogs,
 } from "@hobbots/agents";
 import { CONNECT_PROTOCOL, HobbotsApi, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
-import { RuntimeKind, type ThreadId } from "@hobbots/domain";
+import type { ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { HttpServerRequest } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
@@ -23,6 +23,7 @@ import { BlockersHandlers } from "./blockers.ts";
 import { CharmCallsHandlers } from "./charm-calls.ts";
 import { DevicesHandlers } from "./device-handlers.ts";
 import { DeviceGate } from "./devices.ts";
+import { DiagnosticsHandlers } from "./diagnostics.ts";
 import { ExportsHandlers } from "./exports.ts";
 import { GitHubHandlers } from "./github.ts";
 import { GrantsHandlers } from "./grants.ts";
@@ -143,15 +144,7 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
 
     return handlers.handleAll({
       activity: () => activity,
-      // Every runtime, Claude Code first; one the hub has no adapter for is listed as unavailable.
-      runtimes: () =>
-        Effect.forEach(
-          RuntimeKind.literals,
-          (kind) => adapters(kind)?.health ?? Effect.succeed(missingRuntimeHealth(kind)),
-          {
-            concurrency: "unbounded",
-          },
-        ),
+      runtimes: () => everyRuntimeHealth(adapters),
     });
   }),
 );
@@ -221,6 +214,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     HobGitHubAppHandlers,
     WorkbenchHandlers,
     RemoteAccessHandlers,
+    DiagnosticsHandlers,
     ExportsHandlers,
     UsageHandlers,
   ]),

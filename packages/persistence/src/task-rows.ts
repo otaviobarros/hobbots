@@ -88,7 +88,7 @@ interface Records {
 }
 
 /** Decodes stored rows as records of `kind`. A row that does not decode is a defect: the hub wrote it. */
-const decodeRows =
+export const decodeRows =
   <K extends keyof Records>(kind: K) =>
   (rows: ReadonlyArray<Row>): Effect.Effect<ReadonlyArray<Records[K]>> =>
     (decoders[kind](rows.map(fromRow[kind])) as Effect.Effect<ReadonlyArray<Records[K]>, Schema.SchemaError>).pipe(

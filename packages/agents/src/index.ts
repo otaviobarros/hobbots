@@ -11,6 +11,7 @@ export * from "./continuations.ts";
 export * from "./controls.ts";
 export * from "./destinations.ts";
 export * from "./devices.ts";
+export * from "./diagnostics.ts";
 export * from "./export.ts";
 export * from "./grants.ts";
 export * from "./hobs.ts";
