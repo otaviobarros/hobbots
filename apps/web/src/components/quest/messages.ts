@@ -140,6 +140,8 @@ export const messages = {
     leads: "Leads a quest",
     /** A member that brought in hobs of its own: the party it leads under the Quest. */
     leadsParty: ({ names }: { names: string }) => `Leads ${names}`,
+    /** Another Task of the work changed a file this one changed too (#570). */
+    sameFile: ({ names }: { names: string }) => `Same file as ${names}`,
     pick: "Pick a Task to retry, reassign or cancel it.",
     workbench: "Open in Workbench",
     controls: ({ title }: { title: string }) => `Controls for ${title}`,

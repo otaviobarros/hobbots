@@ -10,6 +10,7 @@ import type {
   Checkpoint,
   CheckpointId,
   CheckpointKind,
+  CheckpointSource,
   Committed,
   DelegationAuthority,
   DelegationId,
@@ -114,14 +115,19 @@ export interface TaskCompletion {
   readonly carried?: ReadonlyArray<CarriedItem>;
 }
 
-/** A checkpoint its owner reports; automatic ones are recorded by the repository with the state they follow. */
+/**
+ * A checkpoint its owner reports, or a finding the hub makes itself. The automatic states are
+ * recorded by the repository with the state they follow.
+ */
 export interface NewCheckpoint {
   readonly id: CheckpointId;
   readonly taskId: TaskId;
-  readonly source: "planned" | "unplanned";
+  readonly source: CheckpointSource;
   readonly kind: CheckpointKind;
   readonly milestoneId: MilestoneId | null;
   readonly summary: string;
+  /** Another Task the checkpoint is also about, as for a hub finding on two Tasks changing one file. */
+  readonly aboutTaskId?: TaskId | null;
   readonly createdAt: string;
 }
 

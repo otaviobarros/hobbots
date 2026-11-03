@@ -163,6 +163,7 @@ function Row({
   const title = taskTitle(row.task);
   const waits = row.waitingOn.map((each) => (each.kind === "you" ? copy.you : hobs(each.id).name));
   const party = row.party.map((id) => hobs(id).name);
+  const sameFile = row.sameFileAs.map((id) => hobs(id).name);
   return (
     <button
       type="button"
@@ -187,6 +188,9 @@ function Row({
           )}
           {waits.length > 0 && (
             <span className="truncate text-lantern">{messages.card.waitingOn({ names: messages.names(waits) })}</span>
+          )}
+          {sameFile.length > 0 && (
+            <span className="truncate text-rose">{copy.sameFile({ names: messages.names(sameFile) })}</span>
           )}
           <Age task={row.task} now={now} />
         </span>

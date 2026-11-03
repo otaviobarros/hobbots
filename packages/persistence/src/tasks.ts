@@ -123,6 +123,7 @@ export const TaskRepositoryLive = Layer.effect(
         kind: checkpoint.kind,
         milestone_id: checkpoint.milestoneId,
         summary: checkpoint.summary,
+        about_task_id: checkpoint.aboutTaskId,
         created_at: checkpoint.createdAt,
         revision: checkpoint.revision,
       })}`;
@@ -628,11 +629,20 @@ export const TaskRepositoryLive = Layer.effect(
       change((revision) =>
         Effect.gen(function* () {
           const task = yield* workingTask(input.taskId);
-          if (!CHECKPOINT_KINDS[input.source].includes(input.kind)) {
+          // The hub records only findings this way; the automatic states follow the Task's own changes.
+          if (
+            !CHECKPOINT_KINDS[input.source].includes(input.kind) ||
+            (input.source === "automatic" && input.kind !== "finding")
+          ) {
             return yield* refuse("checkpoint-kind", `A ${input.source} checkpoint is not a ${input.kind}`);
           }
           const milestone = yield* reach(input);
-          const checkpoint = new Checkpoint({ ...input, attemptId: task.currentAttemptId, revision });
+          const checkpoint = new Checkpoint({
+            ...input,
+            aboutTaskId: input.aboutTaskId ?? null,
+            attemptId: task.currentAttemptId,
+            revision,
+          });
           yield* insertCheckpoint(checkpoint);
           return { value: checkpoint, events: [{ _tag: "CheckpointRecorded", checkpoint, milestone } as const] };
         }),
