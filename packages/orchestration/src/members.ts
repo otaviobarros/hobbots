@@ -255,17 +255,10 @@ export const makeMemberRunner = (deps: MemberDeps) => {
     Effect.gen(function* () {
       // Stopped with the hub: the next start finds the Attempt live and ends it.
       if (run.stop === null) return;
-      const reason = STOPPED[run.stop];
-      const hob = yield* repo.findAgent(run.agentId);
-      if (Option.isSome(hob) && hob.value.status !== "retired")
-        return yield* endMemberTurn(taskId, attemptId, { _tag: "Stopped", reason }, []);
+      yield* endMemberTurn(taskId, attemptId, { _tag: "Stopped", reason: STOPPED[run.stop] }, []);
       // A retired hob's Task fails rather than wait, once its Attempt has ended.
-      const at = yield* nowIso;
-      yield* deps.attempt(
-        tasks.updateAttempt(attemptId, { _tag: "Ended", end: { _tag: "Stopped", reason }, at }),
-        "end a stopped member's turn",
-      );
-      yield* retire(taskId, run.agentId, at);
+      const hob = yield* repo.findAgent(run.agentId);
+      if (Option.isNone(hob) || hob.value.status === "retired") yield* retire(taskId, run.agentId, yield* nowIso);
     });
 
   /** One turn of the member's session on its Task, carrying the work that waits there. */
