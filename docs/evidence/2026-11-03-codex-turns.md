@@ -16,7 +16,7 @@
 | `[TC-RT-029]` | A second turn resumes the thread in a new App Server: the model request carries the earlier turn and the changed instructions, inside the turn | ✅ |
 | `[TC-RT-030]` | Cancelling while the model is mid-response sends `turn/interrupt`, and the turn ends once `turn/completed` reports `interrupted`, well inside the grace period; the thread then takes another turn | ✅ |
 | `[TC-RT-031]` | Codex killed while the model is mid-response: the turn fails as uncertain ("may or may not have finished"), never as done | ✅ |
-| `[TC-RT-020]` to `[TC-RT-028]` | With a scripted App Server in CI: streaming and usage, thread and turn settings (`untrusted`, external sandbox, no attribution), resume with a briefing, interrupt and its acknowledgement, a lost process with calls left uncertain, every tool call refused and reported as denied, failures and the usage limit, sign-in and refresh through the protocol only, and the hob's Codex settings | ✅ |
+| `[TC-RT-020]` to `[TC-RT-028]`, `[TC-RT-033]` | With a scripted App Server in CI: streaming and usage, thread and turn settings (`untrusted`, external sandbox, no attribution), resume with a briefing, interrupt and its acknowledgement, an interrupt Codex never answers, a lost process with calls left uncertain, every tool call refused and reported as denied, failures and the usage limit, sign-in and refresh through the protocol only, and the hob's Codex settings | ✅ |
 
 ## Gaps
 
