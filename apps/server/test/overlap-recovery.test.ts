@@ -331,13 +331,16 @@ describe("A finding on two Tasks changing the same file", () => {
   });
 
   /** Pip's turn on the Task `rootId`'s lead delegated to rebuild the badge; then what was recorded. */
-  const rebuilt = (rootId: TaskId) =>
+  const rebuilt = (rootId: TaskId) => Effect.andThen(pipRebuilds(rootId), recorded(rootId));
+
+  /** Pip's turn on the Task `rootId`'s lead delegated to rebuild the badge: it makes the badge anew. */
+  const pipRebuilds = (rootId: TaskId) =>
     Effect.gen(function* () {
       const tasks = yield* TaskRepository;
-      const tree = Option.getOrThrow(yield* tasks.readTree(rootId));
-      const rebuild = tree.tasks.find((each) => each.ownerId === PIP && each.id !== PIP_TASK);
-      const lead = tree.tasks[0]?.currentAttemptId;
-      if (rebuild === undefined || !lead) return yield* Effect.die("Pip's Task was not delegated");
+      const rebuild = Option.getOrThrow(yield* tasks.readTree(rootId)).tasks.find(
+        (each) => each.ownerId === PIP && each.id !== PIP_TASK,
+      );
+      if (rebuild === undefined) return yield* Effect.die("Pip's Task was not delegated");
       const attempt = AttemptId.make("pip-rebuild-1");
       yield* tasks.startAttempt(rebuild.id, rebuild.revision, {
         id: attempt,
@@ -348,17 +351,25 @@ describe("A finding on two Tasks changing the same file", () => {
         startedAt: new Date().toISOString(),
       });
       yield* turnOnBadge(Effect.succeed(attempt), "edit-files", (badge) => writeFileSync(badge, "green"), Effect.void);
+    });
+
+  /** What was recorded on the tree of `rootId`, once the hub has heard every change. */
+  const recorded = (rootId: TaskId) =>
+    Effect.gen(function* () {
       yield* Effect.sleep("300 millis");
+      const tree = Option.getOrThrow(yield* (yield* TaskRepository).readTree(rootId));
+      const rebuild = tree.tasks.find((each) => each.ownerId === PIP && each.id !== PIP_TASK);
+      const lead = tree.tasks[0]?.currentAttemptId;
+      if (rebuild === undefined || !lead) return yield* Effect.die("Pip's Task was not delegated");
       const leads = Option.getOrThrow(yield* (yield* ActivityRepository).read(lead)).changes;
-      const after = Option.getOrThrow(yield* tasks.readTree(rootId));
-      return { rebuild, leads, found: after.checkpoints.filter((each) => each.kind === "finding") };
+      return { rebuild, leads, found: tree.checkpoints.filter((each) => each.kind === "finding") };
     });
 
   /**
    * The lead's delete kept the time it was first seen, no later than Pip's Task was delegated (the
    * same millisecond counts as before), and nothing was found.
    */
-  const expectNoFinding = (result: Effect.Success<ReturnType<typeof rebuilt>>) => {
+  const expectNoFinding = (result: Effect.Success<ReturnType<typeof recorded>>) => {
     expect(result.leads.map((each) => [each.path, each.kind, each.recordedAt <= result.rebuild.createdAt])).toEqual([
       ["web/badge.png", "deleted", true],
     ]);
@@ -387,6 +398,34 @@ describe("A finding on two Tasks changing the same file", () => {
           }),
         );
         return yield* rebuilt(LEAD);
+      }),
+    );
+    expectNoFinding(result);
+  });
+
+  // covers OR-004
+  it("[TC-OR-415] is not recorded when the member makes the file again while the lead's turn still runs", async () => {
+    // The lead's last scan then sees the badge Pip made, not the one it deleted: that is Pip's
+    // change, and the lead's stays the delete it made before it delegated.
+    const run = start(Hub);
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        yield* leadAtWork;
+        yield* turnOnBadge(
+          Effect.succeed(LEAD_ATTEMPT),
+          "delete-files",
+          (badge) => rmSync(badge),
+          Effect.gen(function* () {
+            yield* (yield* TaskTools).call({ agentId: FRODO, taskId: LEAD }, "delegate_task", {
+              key: "rebuild",
+              hob: "Pip",
+              brief: "Make the badge again",
+            });
+            yield* pipRebuilds(LEAD);
+          }),
+        );
+        return yield* recorded(LEAD);
       }),
     );
     expectNoFinding(result);

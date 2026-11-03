@@ -104,6 +104,8 @@ interface LiveTurn {
   readonly writing: Map<string, ReadonlyArray<string>>;
   /** Every file it claims: those its file tools named, and those that changed while its commands ran. */
   readonly claims: Set<string>;
+  /** The tick it last claimed each file at, so a later claim by another turn is told from its own. */
+  readonly claimedAt: Map<string, number>;
   /** When each of its commands ran, in ticks; `closed` is null while it runs. */
   readonly spans: Array<Span>;
   /** Records the changes made so far now, if the turn works on `attemptId` (#586). */
@@ -136,7 +138,7 @@ export const textOf = (bytes: Uint8Array): string | null => {
 };
 
 /** Where a change is, as `folder/path`, and where a moved file was. */
-const placesOf = (folder: string, change: ListingChange): ReadonlyArray<string> => [
+const placesOf = (folder: string, change: Pick<ListingChange, "path" | "movedFrom">): ReadonlyArray<string> => [
   fileLocation(folder, change.path),
   ...(change.movedFrom === null ? [] : [fileLocation(folder, change.movedFrom)]),
 ];
@@ -227,6 +229,7 @@ const makeRecorder = (limits: ActivityLimits) =>
           named: new Map(),
           writing: new Map(),
           claims: new Set(),
+          claimedAt: new Map(),
           spans: [],
           settle: () => Effect.void,
         };
@@ -391,6 +394,22 @@ const makeRecorder = (limits: ActivityLimits) =>
         const ownChange = (folder: string, change: ListingChange) =>
           unattributed.has(folder) || placesOf(folder, change).some((place) => me.claims.has(place));
 
+        /**
+         * Whether another turn claimed a file of `change` after this turn last did, as a member does
+         * that makes again a file its lead deleted while the lead's turn runs on (#658): what the file
+         * became since is that turn's, so this turn's change stays as it last recorded it, or, never
+         * recorded, is not this turn's to record. A file both turns' commands may have made is
+         * contested instead, and shared as before.
+         */
+        const takenOver = (folder: string, change: Pick<ListingChange, "path" | "movedFrom">) =>
+          placesOf(folder, change).some((place) =>
+            [...me.overlaps].some(
+              (other) =>
+                !contested.get(place)?.has(other) &&
+                (other.claimedAt.get(place) ?? -1) > (me.claimedAt.get(place) ?? -1),
+            ),
+          );
+
         /** Whether another turn's file tool changed `place` while the command of `span` ran. */
         const namedByAnother = (place: string, span: Span) =>
           [...me.overlaps].some(
@@ -419,7 +438,8 @@ const makeRecorder = (limits: ActivityLimits) =>
             const scanned = yield* Effect.forEach(window.listings, ([folder, before]) =>
               Effect.map(scanner.scan(folder, limits), (after) => ({ folder, before, after })),
             );
-            window.span.closed = tick();
+            const closed = tick();
+            window.span.closed = closed;
             const beside = runningBeside(window.span);
             for (const { folder, before, after } of scanned) {
               if (after.stopped !== null) {
@@ -430,6 +450,7 @@ const makeRecorder = (limits: ActivityLimits) =>
                 for (const place of placesOf(folder, change)) {
                   if (namedByAnother(place, window.span)) continue;
                   me.claims.add(place);
+                  me.claimedAt.set(place, closed);
                   // Only a turn that tracks the file's folder could have made it.
                   for (const other of beside)
                     if (other.folders.some((each) => foldersOverlap(each, place)))
@@ -475,17 +496,20 @@ const makeRecorder = (limits: ActivityLimits) =>
          * Frees the contents no baseline or current change needs any more, such as the version of a
          * file a later rewrite replaced, so a long turn holds only what its records can show.
          */
-        const release = (rescanning?: string): ReadonlyArray<ContentId> => {
-          const needed = new Set<ContentId | null>();
-          for (const baseline of baselines.values())
-            for (const version of baseline.versions.values()) needed.add(version.contentId);
-          for (const [folder, drafts] of changeSets) {
-            if (folder === rescanning) continue;
-            for (const draft of drafts) {
-              needed.add(draft.before?.contentId ?? null);
-              needed.add(draft.after?.contentId ?? null);
-            }
-          }
+        const release = (
+          rescanning?: string,
+          keeping: ReadonlyArray<FileChangeDraft> = [],
+        ): ReadonlyArray<ContentId> => {
+          const drafts = [
+            ...keeping,
+            ...[...changeSets].flatMap(([folder, each]) => (folder === rescanning ? [] : each)),
+          ];
+          const needed = new Set<ContentId | null>([
+            ...[...baselines.values()].flatMap((baseline) =>
+              [...baseline.versions.values()].map((each) => each.contentId),
+            ),
+            ...drafts.flatMap((draft) => [draft.before?.contentId ?? null, draft.after?.contentId ?? null]),
+          ]);
           const freed = [...held.keys()].filter((id) => !needed.has(id));
           for (const id of freed) {
             heldBytes -= held.get(id) ?? 0;
@@ -510,12 +534,19 @@ const makeRecorder = (limits: ActivityLimits) =>
                   scans.push(scanDraft(folder, "end", scanned.filesScanned, scanned.stopped, startedAt, at));
                 }
                 if (scanned.stopped !== null) return;
+                // A change another turn took over since stays as this turn last recorded it.
+                const kept = (changeSets.get(folder) ?? [])
+                  .filter((draft) => takenOver(folder, draft))
+                  .map((draft) => ({ ...draft, settled }));
                 // What this folder's last changes held is freed first, so the new ones can use it.
-                for (const id of release(folder)) freed.add(id);
-                const drafts = yield* Effect.forEach(
-                  compareListings(baseline.listing, scanned.listing).filter((change) => ownChange(folder, change)),
+                for (const id of release(folder, kept)) freed.add(id);
+                const fresh = yield* Effect.forEach(
+                  compareListings(baseline.listing, scanned.listing).filter(
+                    (change) => ownChange(folder, change) && !takenOver(folder, change),
+                  ),
                   (change) => draftOf(folder, baseline, change, settled, at),
                 );
+                const drafts = [...kept, ...fresh];
                 yield* Semaphore.withPermit(
                   lock,
                   Effect.sync(() => {
@@ -623,6 +654,7 @@ const makeRecorder = (limits: ActivityLimits) =>
               for (const target of event.targets) {
                 me.named.set(target, at);
                 me.claims.add(target);
+                me.claimedAt.set(target, at);
               }
             }
             if (event.command === undefined || commands.has(event.id)) return;
@@ -700,7 +732,10 @@ const makeRecorder = (limits: ActivityLimits) =>
           me.writing.delete(id);
           if (targets === undefined) return;
           const at = tick();
-          for (const target of targets) me.named.set(target, at);
+          for (const target of targets) {
+            me.named.set(target, at);
+            me.claimedAt.set(target, at);
+          }
         };
 
         /** Lists the tracked folders just before a command runs. */
