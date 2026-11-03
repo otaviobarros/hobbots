@@ -1,6 +1,6 @@
 # ADR 010 — The desktop hub
 
-Status: **Accepted.** Refines [ADR 006](006-server-and-clients.md) for the MVP. [ADR 012](012-macos-hub-service.md) refines how the background service runs on macOS, and [ADR 021](021-devices-and-remote-access.md) decides device approval and the Tailscale route.
+Status: **Accepted.** Refines [ADR 006](006-server-and-clients.md) for the MVP. [ADR 012](012-macos-hub-service.md) refines how the background service runs on macOS, [ADR 021](021-devices-and-remote-access.md) decides device approval and the Tailscale route, and [ADR 025](025-connected-desktop.md) decides connect mode.
 
 ## Decision
 
