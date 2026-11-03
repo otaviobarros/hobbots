@@ -18,6 +18,29 @@ export interface NotificationChoices {
   readonly sound: boolean;
 }
 
+/** What the user can do about the connection to the hub on a connected desktop (ADR 025). */
+export type ConnectionAction = "tryAgain" | "openTailscale" | "changeAddress" | "askAgain" | "disconnect";
+
+/**
+ * A connected desktop's view of its hub: names, address, versions and state. The app writes `title`
+ * and `detail` itself, since it knows its own states and this computer's language, and a hub's pages
+ * may be from another version that does not know a newer state.
+ */
+export interface ConnectionView {
+  readonly hubName: string;
+  readonly nodeName: string;
+  readonly address: string;
+  readonly appVersion: string;
+  readonly hubVersion: string | null;
+  readonly state: string;
+  readonly title: string;
+  readonly detail: string;
+  readonly actions: ReadonlyArray<ConnectionAction>;
+}
+
+/** The answer to a typed address: taken, or why not in the user's words. */
+export type AddressChangeAnswer = { readonly ok: true } | { readonly ok: false; readonly message: string };
+
 declare global {
   interface Window {
     /** Set by the Electron preload script. */
@@ -50,6 +73,17 @@ declare global {
        * notification is clicked; answers a function that stops listening.
        */
       readonly onOpenRequest?: (listener: (requestId: string) => void) => () => void;
+      /**
+       * Only on a connected desktop (ADR 025): the hub it uses and where the connection stands. A
+       * page checks each call before it uses it, since the app may be of another version.
+       */
+      readonly connection?: {
+        readonly get: () => Promise<ConnectionView>;
+        readonly retry?: () => Promise<ConnectionView>;
+        readonly changeAddress?: (address: string) => Promise<AddressChangeAnswer>;
+        readonly openTailscale?: () => Promise<boolean>;
+        readonly onChange?: (listener: (view: ConnectionView) => void) => () => void;
+      };
     };
   }
 }

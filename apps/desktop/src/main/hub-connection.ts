@@ -153,13 +153,39 @@ export const makeNodeCheck = (lookup: NodeLookup, now: () => number = Date.now) 
 };
 export type NodeCheck = ReturnType<typeof makeNodeCheck>;
 
+/**
+ * Where the hub's node stands on this computer's Tailscale (ADR 025): Tailscale is not running here,
+ * the node is not online in `tailscale status`, or it is online.
+ */
+export type HubNodeState = "tailscaleOff" | "offline" | "online";
+
+/**
+ * The hub's node in `tailscale status`: a node Tailscale no longer lists counts as offline, as does
+ * one it lists as offline, which covers a hub whose own Tailscale is off.
+ */
+export const hubNodeState = (
+  snapshot: {
+    readonly status: { readonly state: string };
+    readonly nodes: ReadonlyArray<{ readonly nodeId: string; readonly online: boolean }>;
+  },
+  nodeId: string,
+): HubNodeState => {
+  if (snapshot.status.state !== "running") return "tailscaleOff";
+  return snapshot.nodes.some((node) => node.nodeId === nodeId && node.online) ? "online" : "offline";
+};
+
 /** Where the connection to the hub stands, for the menu bar and the bridge. */
 export type ConnectionState =
   | { readonly state: "connected"; readonly version: string }
   | { readonly state: "connecting" }
   /** No device token in the keychain: this computer has to ask the hub again. */
   | { readonly state: "noToken" }
+  /** Tailscale is not running on this computer, so no hub can be reached. */
+  | { readonly state: "tailscaleOff" }
+  /** The hub's computer is not online on the tailnet: asleep, shut down, or its Tailscale is off. */
+  | { readonly state: "hubOffline" }
   | { readonly state: "otherNode" }
+  /** The hub's computer is online, but nothing answers on the address: Hobbots is closed, remote access is off or paused, or the port changed. */
   | { readonly state: "unreachable" }
   | { readonly state: "notHobbots" }
   | { readonly state: "unsupported"; readonly side: "hubOlder" | "appOlder"; readonly version: string }
@@ -186,6 +212,8 @@ export interface ConnectedHubOptions {
   readonly nodeId: string;
   readonly fallbackName: string;
   readonly nodeCheck: NodeCheck;
+  /** Where the hub's node stands on this computer's Tailscale, read fresh on each check. */
+  readonly nodeState: (nodeId: string) => Promise<HubNodeState>;
   /** The device token, read from the keychain. */
   readonly token: () => Promise<string | undefined>;
   readonly fetch: typeof fetch;
@@ -199,8 +227,14 @@ export interface ConnectedHubOptions {
 export const connectedHub = (options: ConnectedHubOptions) => {
   const { origins, nodeId, nodeCheck } = options;
 
-  /** Checks the node, then the hub's health; answers where the connection stands. */
+  /**
+   * Checks, in the order ADR 025 gives, this computer's Tailscale, the hub's node, that the address
+   * is still that node's, then the hub's health; answers where the connection stands.
+   */
   const verify = async (): Promise<ConnectionState> => {
+    const node = await options.nodeState(nodeId).catch((): HubNodeState => "tailscaleOff");
+    if (node === "tailscaleOff") return { state: "tailscaleOff" };
+    if (node === "offline") return { state: "hubOffline" };
     if (!(await nodeCheck.isPinned(origins.host, nodeId))) return { state: "otherNode" };
     const answer = await askHub(origins.origin, options.fetch, options.fallbackName);
     if (answer.kind === "noAnswer") return { state: "unreachable" };
@@ -239,6 +273,9 @@ export const connectedHub = (options: ConnectedHubOptions) => {
   return { verify, headers, fetchAsDevice, refusal };
 };
 export type ConnectedHub = ReturnType<typeof connectedHub>;
+
+/** The states only the user can change, such as a revoked device: trying again does not leave them. */
+export const WAITS_FOR_USER: ReadonlySet<ConnectionState["state"]> = new Set(["noToken", "revoked", "unknownDevice"]);
 
 /**
  * What happens to a request of the window, as the browser engine is about to send it: `cancel` when

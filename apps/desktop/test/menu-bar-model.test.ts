@@ -113,6 +113,7 @@ describe("the menu-bar icon on a connected desktop", () => {
       icon: "running",
       title: "Connected to studio",
       detail: hub.address,
+      actions: [],
     });
     expect(connectedTrayModel({ state: "unsupported", side: "hubOlder", version: "0.3.0" }, hub)).toMatchObject({
       icon: "error",
@@ -125,5 +126,42 @@ describe("the menu-bar icon on a connected desktop", () => {
     expect(connectedTrayModel({ state: "otherNode" }, hub).title).toBe(`${hub.address} is now a different computer.`);
     expect(connectedTrayModel({ state: "revoked" }, hub).title).toBe("This Mac was removed from studio.");
     expect(connectedTrayModel({ state: "unreachable" }, hub).icon).toBe("stopped");
+  });
+
+  // covers DP-001
+  it("[TC-DP-169] gives each reason the hub cannot be reached its own words and what the user can do", () => {
+    const hub = { nodeName: "studio.example.ts.net", address: "http://studio.example.ts.net:4317" };
+    const model = (state: Parameters<typeof connectedTrayModel>[0]) => {
+      const { title, detail, actions } = connectedTrayModel(state, hub);
+      return { title, detail, actions };
+    };
+    expect(model({ state: "tailscaleOff" })).toEqual({
+      title: "Tailscale is off on this Mac.",
+      detail: "Open Tailscale and turn it on. Hobbots reconnects by itself.",
+      actions: ["openTailscale", "tryAgain"],
+    });
+    expect(model({ state: "hubOffline" })).toEqual({
+      title: "studio is offline.",
+      detail: "It may be asleep, shut down, or off Tailscale. Hobbots tries again.",
+      actions: ["tryAgain"],
+    });
+    expect(model({ state: "unreachable" })).toEqual({
+      title: "Hobbots on studio isn't answering.",
+      detail: "It may be closed, remote access may be paused or off, or its port changed. Hobbots tries again.",
+      actions: ["tryAgain", "changeAddress"],
+    });
+    expect(model({ state: "otherNode" }).actions).toEqual(["changeAddress", "disconnect"]);
+    expect(model({ state: "notHobbots" })).toEqual({
+      title: `Something other than Hobbots answers at ${hub.address}.`,
+      detail: hub.address,
+      actions: ["changeAddress"],
+    });
+    for (const state of ["revoked", "unknownDevice"] as const) {
+      expect(model({ state })).toMatchObject({
+        detail: "Ask studio again, or disconnect.",
+        actions: ["askAgain", "disconnect"],
+      });
+    }
+    expect(model({ state: "unknownDevice" }).title).toBe("studio no longer knows this Mac.");
   });
 });

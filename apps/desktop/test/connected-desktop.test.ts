@@ -252,6 +252,7 @@ describe("the connected desktop", () => {
       nodeId: STUDIO.nodeId,
       fallbackName: STUDIO.nodeName,
       nodeCheck: makeNodeCheck(tailnet().lookup),
+      nodeState: async () => "online",
       token: async () => "hbd_token",
       fetch: hub.fetch,
     });
@@ -344,6 +345,7 @@ describe("the connected desktop", () => {
       nodeId: STUDIO.nodeId,
       fallbackName: STUDIO.nodeName,
       nodeCheck: makeNodeCheck(lookup, () => now),
+      nodeState: async () => "online",
       token: async () => "hbd_token",
       fetch: hub.fetch,
     });
@@ -410,6 +412,7 @@ describe("the connected desktop", () => {
       nodeId: STUDIO.nodeId,
       fallbackName: STUDIO.nodeName,
       nodeCheck: makeNodeCheck(lookup),
+      nodeState: async () => "online",
       token: async () => "hbd_token",
       fetch: hub.fetch,
     });
