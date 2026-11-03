@@ -1,0 +1,390 @@
+{
+  "$comment": "Theme values for the redesign (#462). Described in themes.md. Every theme sets every color and shadow token; token names never change between themes.",
+  "themes": [
+    {
+      "id": "lamplight-dusk",
+      "name": "Lamplight Dusk",
+      "look": "lamplight",
+      "mode": "dark",
+      "default": true
+    },
+    {
+      "id": "lamplight-paper",
+      "name": "Lamplight Paper",
+      "look": "lamplight",
+      "mode": "light",
+      "default": false
+    },
+    {
+      "id": "workshop-night",
+      "name": "Workshop Night",
+      "look": "workshop",
+      "mode": "dark",
+      "default": false
+    },
+    {
+      "id": "workshop-daylight",
+      "name": "Workshop Daylight",
+      "look": "workshop",
+      "mode": "light",
+      "default": false
+    }
+  ],
+  "color": {
+    "ground": {
+      "use": "App background. Text on lantern and rose fills in the dark themes.",
+      "lamplight-dusk": "#17161f",
+      "lamplight-paper": "#f7f4ef",
+      "workshop-night": "#141228",
+      "workshop-daylight": "#f6f1e7"
+    },
+    "deep": {
+      "use": "Inputs, code blocks and tool output.",
+      "lamplight-dusk": "#121118",
+      "lamplight-paper": "#f1ede6",
+      "workshop-night": "#0d0c1c",
+      "workshop-daylight": "#f1e9da"
+    },
+    "panel": {
+      "use": "The sidebar and the work sheet.",
+      "lamplight-dusk": "#1c1b26",
+      "lamplight-paper": "#efebe4",
+      "workshop-night": "#1b1835",
+      "workshop-daylight": "#ede6d8"
+    },
+    "card": {
+      "use": "Cards, the Needs-you tray, menus and toasts.",
+      "lamplight-dusk": "#22212d",
+      "lamplight-paper": "#ffffff",
+      "workshop-night": "#1f1c3e",
+      "workshop-daylight": "#fffdf8"
+    },
+    "hover": {
+      "use": "Row and quiet-button hover fill.",
+      "lamplight-dusk": "#2a2936",
+      "lamplight-paper": "#e9e4dc",
+      "workshop-night": "#25224a",
+      "workshop-daylight": "#e6dccb"
+    },
+    "tile": {
+      "use": "The square behind a hob portrait. Stays dark in every theme so the pixel art reads the same.",
+      "lamplight-dusk": "#2f2d3c",
+      "lamplight-paper": "#2f2d3c",
+      "workshop-night": "#2c2a5a",
+      "workshop-daylight": "#2c2a5a"
+    },
+    "line": {
+      "use": "Dividers and the selected-row fill. Decorative only: never the only edge of a control.",
+      "lamplight-dusk": "#34323f",
+      "lamplight-paper": "#e2ddd4",
+      "workshop-night": "#2c2a5a",
+      "workshop-daylight": "#e2d9c9"
+    },
+    "line-2": {
+      "use": "Quiet borders on cards, menus and toasts; scrollbar thumb. Decorative only.",
+      "lamplight-dusk": "#3d3b4a",
+      "lamplight-paper": "#d6d0c5",
+      "workshop-night": "#3a3666",
+      "workshop-daylight": "#cfc4ae"
+    },
+    "control": {
+      "use": "The edge of anything you can operate: inputs, secondary and icon buttons, the switch. 3:1 or more on ground in every theme.",
+      "lamplight-dusk": "#7a7690",
+      "lamplight-paper": "#857f91",
+      "workshop-night": "#7770c4",
+      "workshop-daylight": "#837b99"
+    },
+    "text-strong": {
+      "use": "Headings, hob names, button labels.",
+      "lamplight-dusk": "#ece9f3",
+      "lamplight-paper": "#1f1c26",
+      "workshop-night": "#ece8ff",
+      "workshop-daylight": "#1b1728"
+    },
+    "text": {
+      "use": "Reading text: replies, lists, fields. Softer than text-strong to cut glare in long sessions; 12:1 or more on ground in every theme.",
+      "lamplight-dusk": "#dcd8e6",
+      "lamplight-paper": "#2f2c38",
+      "workshop-night": "#dcd7f2",
+      "workshop-daylight": "#241f33"
+    },
+    "text-secondary": {
+      "use": "Supporting text and the second line of a row.",
+      "lamplight-dusk": "#aaa6b9",
+      "lamplight-paper": "#57525f",
+      "workshop-night": "#c9c3e8",
+      "workshop-daylight": "#4f4863"
+    },
+    "label": {
+      "use": "Labels, timestamps, hints, disabled text.",
+      "lamplight-dusk": "#9e9aae",
+      "lamplight-paper": "#605b67",
+      "workshop-night": "#a9a2e0",
+      "workshop-daylight": "#5a536d"
+    },
+    "moonlight": {
+      "use": "Selected item text and Workshop headings.",
+      "lamplight-dusk": "#efe3c2",
+      "lamplight-paper": "#4b3a7a",
+      "workshop-night": "#f3e9b5",
+      "workshop-daylight": "#6a4a00"
+    },
+    "lantern": {
+      "use": "Needs you, and the one primary action per view. Nothing else.",
+      "lamplight-dusk": "#e8a54b",
+      "lamplight-paper": "#8f4c00",
+      "workshop-night": "#f2a541",
+      "workshop-daylight": "#8f4c00"
+    },
+    "lantern-hover": {
+      "use": "Primary button hover.",
+      "lamplight-dusk": "#f2b665",
+      "lamplight-paper": "#a35800",
+      "workshop-night": "#ffb75c",
+      "workshop-daylight": "#a35800"
+    },
+    "lantern-press": {
+      "use": "The Workshop primary button's 4px press edge.",
+      "lamplight-dusk": "#9a6a2a",
+      "lamplight-paper": "#5e3300",
+      "workshop-night": "#9a5f16",
+      "workshop-daylight": "#5e3300"
+    },
+    "mint": {
+      "use": "In progress and done: dots, check marks, the progress line, approve.",
+      "lamplight-dusk": "#7cc4a8",
+      "lamplight-paper": "#21664e",
+      "workshop-night": "#7fd1b9",
+      "workshop-daylight": "#1f644f"
+    },
+    "mint-deep": {
+      "use": "Switch track when on, the approve press edge. Never a text ground.",
+      "lamplight-dusk": "#3e7e68",
+      "lamplight-paper": "#1f5a46",
+      "workshop-night": "#3f8a75",
+      "workshop-daylight": "#1a5444"
+    },
+    "rose": {
+      "use": "Failed, deny, stop, error toasts and blocker rings.",
+      "lamplight-dusk": "#e58e8e",
+      "lamplight-paper": "#a63a35",
+      "workshop-night": "#ee9292",
+      "workshop-daylight": "#a83c3c"
+    },
+    "star": {
+      "use": "Types and attributes in code highlighting.",
+      "lamplight-dusk": "#c9b8ff",
+      "lamplight-paper": "#6b4fd8",
+      "workshop-night": "#cfc8ff",
+      "workshop-daylight": "#5a4bb0"
+    },
+    "notice": {
+      "use": "Banner fill behind reconnecting and notice lines.",
+      "lamplight-dusk": "#2a2533",
+      "lamplight-paper": "#fbeedb",
+      "workshop-night": "#2a2140",
+      "workshop-daylight": "#fbeccf"
+    },
+    "on-lantern": {
+      "use": "Text and icons on a lantern fill.",
+      "lamplight-dusk": "#17161f",
+      "lamplight-paper": "#ffffff",
+      "workshop-night": "#141228",
+      "workshop-daylight": "#ffffff"
+    },
+    "on-rose": {
+      "use": "Text and icons on a rose fill.",
+      "lamplight-dusk": "#17161f",
+      "lamplight-paper": "#ffffff",
+      "workshop-night": "#141228",
+      "workshop-daylight": "#ffffff"
+    },
+    "focus-ring": {
+      "use": "Keyboard focus. Lamplight: a 2px outline 2px outside. Workshop: drawn inset (2px ring, 2px ground gap) so the cut corner cannot hide it.",
+      "lamplight-dusk": "#c9b8ff",
+      "lamplight-paper": "#6b4fd8",
+      "workshop-night": "#f3e9b5",
+      "workshop-daylight": "#6a4a00"
+    },
+    "link": {
+      "use": "Links in reading text, always underlined; the underline turns lantern on hover.",
+      "lamplight-dusk": "#ece9f3",
+      "lamplight-paper": "#1f1c26",
+      "workshop-night": "#ece8ff",
+      "workshop-daylight": "#1b1728"
+    }
+  },
+  "shadow": {
+    "shadow-menu": {
+      "use": "Menus, toasts and tooltips. Lamplight: a soft lift. Workshop: a hard pixel drop.",
+      "lamplight-dusk": "0 6px 18px rgba(0, 0, 0, 0.28)",
+      "lamplight-paper": "0 6px 18px rgba(40, 30, 20, 0.12)",
+      "workshop-night": "0 6px 0 #0d0c1c",
+      "workshop-daylight": "0 4px 0 #cfc4ae"
+    },
+    "shadow-sheet": {
+      "use": "The work sheet over the chat.",
+      "lamplight-dusk": "0 16px 48px rgba(0, 0, 0, 0.28)",
+      "lamplight-paper": "0 16px 48px rgba(40, 30, 20, 0.14)",
+      "workshop-night": "-14px 0 34px rgba(0, 0, 0, 0.5)",
+      "workshop-daylight": "-14px 0 34px rgba(36, 31, 51, 0.14)"
+    }
+  },
+  "fixed": {
+    "switch-knob": {
+      "use": "The knob of a switch that is on, in every theme.",
+      "value": "#fdf9ef"
+    }
+  },
+  "skin": {
+    "lamplight": {
+      "corner-control": "8px",
+      "corner-card": "16px",
+      "corner-tag": "6px",
+      "corner-dot": "999px",
+      "corner-tile": "9px",
+      "font-heading": "sans",
+      "heading-weight": 700,
+      "label-case": "none",
+      "label-track": "0",
+      "ease-ui": "cubic-bezier(.2,.8,.2,1)",
+      "edge": "1px",
+      "button-weight": 600,
+      "hop": "none",
+      "focus": "2px outline, 2px outside",
+      "primary-press": "darkens and moves down 1px",
+      "clip": "none"
+    },
+    "workshop": {
+      "corner-control": "0",
+      "corner-card": "0",
+      "corner-tag": "0",
+      "corner-dot": "0",
+      "corner-tile": "0",
+      "font-heading": "pixel",
+      "heading-weight": 600,
+      "label-case": "uppercase",
+      "label-track": "0.08em",
+      "ease-ui": "steps(4)",
+      "edge": "2px",
+      "button-weight": 700,
+      "hop": "hb-hop 700ms steps(6) once",
+      "focus": "2px ring drawn inset with a 2px ground gap",
+      "primary-press": "4px lantern-press edge that shrinks to 2px",
+      "clip": "4px cut corners on cards and buttons"
+    }
+  },
+  "font": {
+    "sans": "\"Atkinson Hyperlegible Next\", system-ui, sans-serif",
+    "pixel": "\"Pixelify Sans\", system-ui, sans-serif",
+    "mono": "ui-monospace, SFMono-Regular, Menlo, monospace",
+    "serif": "\"Literata\", Georgia, serif"
+  },
+  "type": {
+    "reading": {
+      "size": "16px",
+      "lineHeight": "26px",
+      "weight": 400,
+      "family": "sans",
+      "use": "Hob replies and any long text in the transcript. Max 70ch per line."
+    },
+    "body": {
+      "size": "15px",
+      "lineHeight": "23px",
+      "weight": 400,
+      "family": "sans",
+      "use": "UI text: rows, fields, menus, cards. Buttons use it at 700."
+    },
+    "detail": {
+      "size": "13px",
+      "lineHeight": "18px",
+      "weight": 400,
+      "family": "sans",
+      "use": "Secondary lines of a row, tags, captions. 600 for emphasis."
+    },
+    "meta": {
+      "size": "12px",
+      "lineHeight": "16px",
+      "weight": 400,
+      "family": "sans",
+      "use": "Timestamps, counts, key hints. The floor: no text below 12px (replaces the 11px --text-meta)."
+    },
+    "display": {
+      "size": "32px",
+      "lineHeight": "36px",
+      "weight": 700,
+      "family": "pixel",
+      "use": "Empty states and onboarding titles. At most one per screen. (Lamplight sets this style in Atkinson 700 through --font-heading; Workshop in Pixelify.)"
+    },
+    "heading": {
+      "size": "22px",
+      "lineHeight": "28px",
+      "weight": 600,
+      "family": "pixel",
+      "use": "Screen headings, in moonlight. (Lamplight sets this style in Atkinson 700 through --font-heading; Workshop in Pixelify.)"
+    },
+    "title": {
+      "size": "18px",
+      "lineHeight": "24px",
+      "weight": 600,
+      "family": "pixel",
+      "use": "Card, panel and Quest titles; hob name in the chat header. (Lamplight sets this style in Atkinson 700 through --font-heading; Workshop in Pixelify.)"
+    },
+    "label": {
+      "size": "14px",
+      "lineHeight": "18px",
+      "weight": 700,
+      "letterSpacing": "0.08em",
+      "family": "pixel",
+      "use": "Section labels of one or two words, in label. Workshop: uppercase, +0.08em. Lamplight: sentence case, no tracking. Longer labels: detail at 600."
+    },
+    "code": {
+      "size": "13px",
+      "lineHeight": "20px",
+      "weight": 400,
+      "family": "mono",
+      "use": "Commands, tool output, code blocks; inline code at 0.9em."
+    }
+  },
+  "space": {
+    "space-px2": "2px",
+    "space-1": "4px",
+    "space-2": "8px",
+    "space-3": "12px",
+    "space-4": "16px",
+    "space-6": "24px",
+    "space-8": "32px",
+    "space-12": "48px"
+  },
+  "radius": {
+    "radius-none": "0",
+    "radius-cut": "4px",
+    "radius-sm": "6px",
+    "radius-md": "8px",
+    "radius-lg": "16px",
+    "radius-round": "999px",
+    "radius-window": "10px"
+  },
+  "size": {
+    "title-strip": "30px",
+    "sidebar": "72px",
+    "sidebar-open": "256px",
+    "sheet": "340px",
+    "chat-min": "360px",
+    "measure": "70ch",
+    "bubble-max": "460px",
+    "work-max": "604px",
+    "hob-tile": "36px",
+    "row-min": "36px",
+    "hit-min": "28px"
+  },
+  "duration": {
+    "dur-press": "75ms",
+    "dur-fade": "150ms",
+    "dur-enter": "200ms",
+    "dur-sheet": "220ms",
+    "dur-shake": "450ms",
+    "dur-hop": "700ms",
+    "dur-loop-cap": "10s"
+  }
+}

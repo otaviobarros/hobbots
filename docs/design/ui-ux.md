@@ -6,6 +6,8 @@ Hobbots is a modern AI chat app with a pixel-folklore character: small hobs that
 
 ## Style tokens
 
+These are the tokens the app ships today. The redesign (#462) replaces them with four themes; their values are in [themes.md](themes.md) and [themes.json](themes.json).
+
 | Token | Value | Use |
 |---|---|---|
 | Ground | `#141228` | App background, text on lantern and mint |
