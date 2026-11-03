@@ -6,7 +6,7 @@
 
 | Target | Planned route | Status in this foundation |
 |---|---|---|
-| Codex | Codex App Server adapter | Selected; installed-version contracts and enforcement need live verification. |
+| Codex | Codex App Server over stdio, 0.166.0 or later ([ADR 024](../decisions/024-codex-adapter.md)) | Selected; App Server behavior verified with a stand-in model; the sandbox, macOS and a real sign-in still need verification. |
 | Claude Code | Supported CLI/SDK integration | Selected; exact route/version needs compatibility validation. |
 | ACP agents | ACP client adapter with capability negotiation | Foundation selected; per-agent interoperability is not yet demonstrated. |
 | Other CLIs/local-model runtimes | Individually validated future adapters | Outside initial support guarantees. |
@@ -25,7 +25,28 @@ For each runtime/version/executor, verify native session persistence/resumption 
 
 Each adapter also declares its enforcement capabilities (tool interception, process sandbox, hub tools, tool events, tool interruption) and what is blocked without each; [ADR 014](../decisions/014-tool-policy-and-enforcement.md) owns that table. The declaration travels with provider health and the hob's permissions, so Settings and the hob profile show it, and the profile blocks rather than shows as safe what an unsupported capability leaves unheld (PE-005). A process sandbox that is unsupported or not yet verified on this hub counts as missing, as ADR 014 requires: commands, local Git and the web are blocked, and the profile says which applies and why. An unverified sandbox that starts still wraps the runtime for file tools. Hobbots wraps the whole runtime process in its own sandbox and turns the runtime's sandbox off inside it, so a runtime's native sandbox modes are not part of the contract.
 
-Classify each capability as verified supported, unsupported, conditional or unverified, with runtime version, test date and evidence. The Claude Code adapter's enforcement capabilities were verified on macOS in October 2026 (Claude Code 2.1.301, sandbox-runtime 0.0.81): tool interception, the process sandbox, tool events and tool interruption; hub tools are unsupported until Charms land. The adapter can already serve a turn's coordination tools as an in-process MCP server on Claude Code's control channel, approved by its own hook rather than by name in `allowedTools`, so the permission callback stays unshadowed, and decided by the hub rather than the policy hook, and each call shows as a step. Chat turns and steps offer them ([#272](https://github.com/otaviobarros/hobbots/issues/272)), and chat turns also offer the GitHub Charm's read actions ([#317](https://github.com/otaviobarros/hobbots/issues/317)) and its push ([#323](https://github.com/otaviobarros/hobbots/issues/323)). A hub tool call carries the step Claude Code announced it as in the PreToolUse hook, so a Charm can ask for approval on that step and mark it uncertain (`ToolUncertain`) when a write's answer is lost; this has not been verified with an installed Claude Code. The evidence is in ADR 014. Every other live capability entry is still **unverified**. The selected integration strategy is not proof that a runtime supports every product feature.
+Classify each capability as verified supported, unsupported, conditional or unverified, with runtime version, test date and evidence. The Claude Code adapter's enforcement capabilities were verified on macOS in October 2026 (Claude Code 2.1.301, sandbox-runtime 0.0.81): tool interception, the process sandbox, tool events and tool interruption; hub tools are unsupported until Charms land. The adapter can already serve a turn's coordination tools as an in-process MCP server on Claude Code's control channel, approved by its own hook rather than by name in `allowedTools`, so the permission callback stays unshadowed, and decided by the hub rather than the policy hook, and each call shows as a step. Chat turns and steps offer them ([#272](https://github.com/otaviobarros/hobbots/issues/272)), and chat turns also offer the GitHub Charm's read actions ([#317](https://github.com/otaviobarros/hobbots/issues/317)) and its push ([#323](https://github.com/otaviobarros/hobbots/issues/323)). A hub tool call carries the step Claude Code announced it as in the PreToolUse hook, so a Charm can ask for approval on that step and mark it uncertain (`ToolUncertain`) when a write's answer is lost; this has not been verified with an installed Claude Code. The evidence is in ADR 014. Every other live Claude Code capability entry is still **unverified**. The Codex column above says which Codex entries are verified. The selected integration strategy is not proof that a runtime supports every product feature.
+
+## Codex column
+
+Codex 0.166.0, probed on 2026-11-03 on Linux with a stand-in model ([ADR 024](../decisions/024-codex-adapter.md), [evidence](../evidence/2026-11-03-codex-app-server-probe.md)).
+
+| Capability | Codex | Status |
+|---|---|---|
+| Detection | `codex --version`; sign-in through `account/read`, which returns no token | Verified signed out; signed in unverified |
+| Models and efforts | `model/list`: models, supported efforts, default effort | Verified |
+| Sessions | One Codex thread per Hobbots thread, in the hob's own `CODEX_HOME`; `thread/resume` in a new process | Verified |
+| Changed instructions | Ignored on resume, so carried inside the next turn | Verified |
+| Concurrency | One App Server process per turn; two turns of one hob at once | Unverified |
+| Streaming | Item notifications and text deltas; command output streams (`ToolOutput`) | Verified |
+| Interruption | `turn/interrupt`, acknowledged by `turn/completed` with status `interrupted` | Verified |
+| Tool interception | Approval requests for every command, file change and MCP call under `untrusted` | Verified |
+| Process sandbox | Hobbots' sandbox around the App Server; Codex's own off (`externalSandbox`) | Unverified |
+| Hub tools | Dynamic tools, called back on the App Server channel | Verified |
+| Tool events | `item/started`, `item/completed`, output deltas | Verified |
+| Usage | `thread/tokenUsage/updated` per turn; no cost | Verified; rate limits unverified |
+| Sign-in for a turn | `chatgptAuthTokens` with refresh requests answered by the hub | Unverified |
+| Commit attribution | Hob instructions; Codex's own trailer request when signed in | Unverified |
 
 Evidence so far: a resumed Claude Code session (2.1.301) keeps the system prompt it started with and ignores the one passed with a new turn, including `--append-system-prompt`, a full `--system-prompt` and `--fork-session`. So when a hob's instructions change after a thread's session started, the adapter carries the new instructions inside the next turn instead of the system prompt, which keeps the session's context.
 
