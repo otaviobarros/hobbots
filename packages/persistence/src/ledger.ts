@@ -1,5 +1,6 @@
 import {
   ApprovalRequest,
+  type BackpackDisposition,
   type BackpackItem,
   type BackpackItemId,
   type CarriedItem,
@@ -139,17 +140,19 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
     });
 
   /**
-   * Resolves the items the ledger no longer counts as late, against the version their ended Task
-   * ended at, in the completion's transaction from sequence `first` on. Only an item still pending
-   * and unclaimed at the token read: one a worker holds is left for it to find late.
+   * Resolves each item with its disposition, from sequence `first` on, in the caller's transaction.
+   * Only an item still pending and unclaimed at the token read: one a worker holds is left for it.
    */
-  const retire = (superseded: LedgerRead["superseded"], first: number) =>
+  const resolveWaiting = (
+    settled: ReadonlyArray<{ readonly item: BackpackItem; readonly disposition: BackpackDisposition }>,
+    first: number,
+  ) =>
     Effect.gen(function* () {
       const at = DateTime.formatIso(yield* DateTime.now);
       const events: Array<JournaledEvent> = [];
-      for (const { item, taskRevision } of superseded) {
+      for (const { item, disposition } of settled) {
         const updated = yield* sql`UPDATE backpack_items
-          SET state = 'resolved', disposition = ${dispositionColumn({ _tag: "late", taskRevision })},
+          SET state = 'resolved', disposition = ${dispositionColumn(disposition)},
             updated_at = ${at}, revision = ${first + events.length}
           WHERE id = ${item.id} AND state = 'pending' AND claim_owner IS NULL AND claim_token = ${item.fencingToken}
           RETURNING id`;
@@ -158,6 +161,37 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
         if (resolved !== undefined) events.push({ _tag: "BackpackItemChanged", item: resolved });
       }
       return events;
+    });
+
+  /**
+   * Resolves the items the ledger no longer counts as late, against the version their ended Task
+   * ended at, in the completion's transaction from sequence `first` on.
+   */
+  const retire = (superseded: LedgerRead["superseded"], first: number) =>
+    resolveWaiting(
+      superseded.map(({ item, taskRevision }) => ({ item, disposition: { _tag: "late", taskRevision } as const })),
+      first,
+    );
+
+  /**
+   * Resolves as answered the copies of a question still waiting unclaimed for `recipientId`, once
+   * that hob answered it or passed it on: a lead that learned of it from `wait_for` handles it in
+   * the turn it is in, and no later turn asks again (#573). One a turn holds is settled with that turn.
+   */
+  const settleQuestionCopies = (questionId: string, recipientId: string, first: number) =>
+    Effect.gen(function* () {
+      const rows = yield* sql<Row>`SELECT * FROM backpack_items
+        WHERE recipient_id = ${recipientId} AND kind = 'question' AND state = 'pending' AND claim_owner IS NULL
+        ORDER BY recorded_sequence`;
+      const copies = (yield* items.toItems(rows)).filter(
+        (item) => item.payload._tag === "question" && item.payload.question.id === questionId,
+      );
+      const call = yield* CurrentToolCall;
+      const toolCall = call === null ? `hob:${recipientId}` : `tool:${call.agentId}:${call.key}`;
+      return yield* resolveWaiting(
+        copies.map((item) => ({ item, disposition: { _tag: "answered", toolCall } as const })),
+        first,
+      );
     });
 
   /**
@@ -189,5 +223,5 @@ export const makeLedger = (sql: SqlClient.SqlClient) => {
       call === null ? `attempt:${attemptId}` : `tool:${call.agentId}:${call.key}`,
     );
 
-  return { readFor, consume, retire, staleItems, questionItems, consumer };
+  return { readFor, consume, retire, settleQuestionCopies, staleItems, questionItems, consumer };
 };

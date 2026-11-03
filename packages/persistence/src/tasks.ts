@@ -704,6 +704,12 @@ export const TaskRepositoryLive = Layer.effect(
         answered_by = ${question.answeredBy === null ? null : JSON.stringify(question.answeredBy)},
         answered_at = ${question.answeredAt}, revision = ${question.revision} WHERE id = ${question.id}`;
 
+    /** The copies of `question` still waiting for the hob that just handled it, resolved as answered (#573). */
+    const settleCopies = (question: Question, first: number) =>
+      question.recipientId === null
+        ? Effect.succeed([])
+        : ledger.settleQuestionCopies(question.id, question.recipientId, first);
+
     const answerQuestion: TaskRepository["Service"]["answerQuestion"] = (questionId, by, answer, at) =>
       change((revision) =>
         Effect.gen(function* () {
@@ -717,7 +723,8 @@ export const TaskRepositoryLive = Layer.effect(
             revision,
           });
           yield* saveQuestion(question);
-          return { value: question, events: [{ _tag: "QuestionAnswered", question } as const] };
+          const settled = yield* settleCopies(before, revision + 1);
+          return { value: question, events: [{ _tag: "QuestionAnswered", question } as const, ...settled] };
         }),
       );
 
@@ -734,7 +741,8 @@ export const TaskRepositoryLive = Layer.effect(
             revision,
           });
           yield* saveQuestion(question);
-          return { value: question, events: [{ _tag: "QuestionEscalated", question } as const] };
+          const settled = yield* settleCopies(before, revision + 1);
+          return { value: question, events: [{ _tag: "QuestionEscalated", question } as const, ...settled] };
         }),
       );
 
