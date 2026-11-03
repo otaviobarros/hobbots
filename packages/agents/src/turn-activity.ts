@@ -73,9 +73,10 @@ export class ActivityRecorder extends Context.Service<
     readonly prune: Effect.Effect<void>;
     /**
      * Records now what the live turn on `attemptId` changed so far, rather than when its scan
-     * waiting to run gets to it, so a check made during the turn reads it (#586).
+     * waiting to run gets to it, so a check made during the turn reads it (#586). With null, the
+     * live turns whose Attempt is not known yet, such as a chat turn whose call is starting its Task.
      */
-    readonly settle: (attemptId: AttemptId) => Effect.Effect<void>;
+    readonly settle: (attemptId: AttemptId | null) => Effect.Effect<void>;
   }
 >()("@hobbots/agents/ActivityRecorder") {
   static readonly layer = (limits: ActivityLimits = DEFAULT_ACTIVITY_LIMITS) =>
@@ -106,7 +107,7 @@ interface LiveTurn {
   /** When each of its commands ran, in ticks; `closed` is null while it runs. */
   readonly spans: Array<Span>;
   /** Records the changes made so far now, if the turn works on `attemptId` (#586). */
-  settle: (attemptId: AttemptId) => Effect.Effect<void>;
+  settle: (attemptId: AttemptId | null) => Effect.Effect<void>;
 }
 
 /** When a command ran, in the recorder's ticks. */
@@ -848,7 +849,7 @@ const makeRecorder = (limits: ActivityLimits) =>
       yield* dropUnnamed(yield* store.list);
     }).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not prune the Workbench's details", cause)));
 
-    const settle = (attemptId: AttemptId) =>
+    const settle = (attemptId: AttemptId | null) =>
       Effect.forEach([...live], (turn) => turn.settle(attemptId), { discard: true });
 
     return ActivityRecorder.of({ forTurn, prune, settle });

@@ -20,6 +20,7 @@ import {
   DelegationId,
   EMPTY_HOB_POLICY,
   FileChangeId,
+  MessageId,
   QuestId,
   TaskId,
   type TaskToolDone,
@@ -255,7 +256,7 @@ const findingsWhen = (count: number) =>
  * `after` while the turn is still live. The turn's last scan runs as its scope closes.
  */
 const turnOnBadge = <A, E, R>(
-  attempt: AttemptId,
+  attempt: Effect.Effect<AttemptId | null>,
   operation: "edit-files" | "delete-files",
   act: (badge: string) => void,
   after: Effect.Effect<A, E, R>,
@@ -264,7 +265,7 @@ const turnOnBadge = <A, E, R>(
     Effect.gen(function* () {
       const turn = yield* (yield* ActivityRecorder).forTurn({
         folders: [shop],
-        attempt: Effect.succeed(attempt),
+        attempt,
         redactor: makeRedactor(),
       });
       const badge = join(shop, "web", "badge.png");
@@ -310,65 +311,119 @@ const turnOnBadge = <A, E, R>(
   );
 
 describe("A finding on two Tasks changing the same file", () => {
+  // Issue #658: the lead's turn clears the badge, delegates Pip at once, before the delete's own
+  // rescan may have run, and ends with the badge still gone, so its last scan sees the delete again
+  // after Pip's Task exists. Pip then makes the badge anew: no finding, however the lead delegated.
+  const LEAD_ATTEMPT = AttemptId.make("frodo-1");
+
+  /** Frodo's Attempt on his root Task, as a turn briefed on it runs. */
+  const leadAtWork = Effect.gen(function* () {
+    const tasks = yield* TaskRepository;
+    const root = Option.getOrThrow(yield* tasks.readTree(LEAD)).tasks[0];
+    yield* tasks.startAttempt(LEAD, root?.revision ?? 0, {
+      id: LEAD_ATTEMPT,
+      runtime: "claude-code",
+      sessionId: null,
+      configVersion: 1,
+      policyVersion: null,
+      startedAt: new Date().toISOString(),
+    });
+  });
+
+  /** Pip's turn on the Task `rootId`'s lead delegated to rebuild the badge; then what was recorded. */
+  const rebuilt = (rootId: TaskId) =>
+    Effect.gen(function* () {
+      const tasks = yield* TaskRepository;
+      const tree = Option.getOrThrow(yield* tasks.readTree(rootId));
+      const rebuild = tree.tasks.find((each) => each.ownerId === PIP && each.id !== PIP_TASK);
+      const lead = tree.tasks[0]?.currentAttemptId;
+      if (rebuild === undefined || !lead) return yield* Effect.die("Pip's Task was not delegated");
+      const attempt = AttemptId.make("pip-rebuild-1");
+      yield* tasks.startAttempt(rebuild.id, rebuild.revision, {
+        id: attempt,
+        runtime: "claude-code",
+        sessionId: null,
+        configVersion: 1,
+        policyVersion: null,
+        startedAt: new Date().toISOString(),
+      });
+      yield* turnOnBadge(Effect.succeed(attempt), "edit-files", (badge) => writeFileSync(badge, "green"), Effect.void);
+      yield* Effect.sleep("300 millis");
+      const leads = Option.getOrThrow(yield* (yield* ActivityRepository).read(lead)).changes;
+      const after = Option.getOrThrow(yield* tasks.readTree(rootId));
+      return { rebuild, leads, found: after.checkpoints.filter((each) => each.kind === "finding") };
+    });
+
+  /**
+   * The lead's delete kept the time it was first seen, no later than Pip's Task was delegated (the
+   * same millisecond counts as before), and nothing was found.
+   */
+  const expectNoFinding = (result: Effect.Success<ReturnType<typeof rebuilt>>) => {
+    expect(result.leads.map((each) => [each.path, each.kind, each.recordedAt <= result.rebuild.createdAt])).toEqual([
+      ["web/badge.png", "deleted", true],
+    ]);
+    expect(result.found).toEqual([]);
+  };
+
   // covers OR-004
-  it("[TC-OR-412] is not recorded for a file the lead deleted before it delegated, though its turn scans it again after", async () => {
-    // Issue #658: Frodo's turn clears the badge, delegates Pip, and ends with the badge still gone, so
-    // its last scan sees the delete again after Pip's Task exists. Pip then makes the badge anew.
-    const LEAD_ATTEMPT = AttemptId.make("frodo-1");
+  it.each([
+    ["TC-OR-412", "naming the Task to delegate under", { task_id: LEAD }],
+    ["TC-OR-413", "leaving out the Task, so it is the caller's own", {}],
+  ])("[%s] is not recorded for a file the lead deleted before it delegated, %s", async (_id, _how, named) => {
     const run = start(Hub);
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
-        const tasks = yield* TaskRepository;
-        const root = Option.getOrThrow(yield* tasks.readTree(LEAD)).tasks[0];
-        yield* tasks.startAttempt(LEAD, root?.revision ?? 0, {
-          id: LEAD_ATTEMPT,
-          runtime: "claude-code",
-          sessionId: null,
-          configVersion: 1,
-          policyVersion: null,
-          startedAt: new Date().toISOString(),
-        });
+        yield* leadAtWork;
         yield* turnOnBadge(
-          LEAD_ATTEMPT,
+          Effect.succeed(LEAD_ATTEMPT),
           "delete-files",
           (badge) => rmSync(badge),
-          Effect.gen(function* () {
-            // Called at once: the delegation records the delete first, whether or not its rescan ran yet.
-            return yield* (yield* TaskTools).call({ agentId: FRODO, taskId: LEAD }, "delegate_task", {
-              key: "rebuild",
-              task_id: LEAD,
-              hob: "Pip",
-              brief: "Make the badge again",
-            });
+          (yield* TaskTools).call({ agentId: FRODO, taskId: LEAD }, "delegate_task", {
+            key: "rebuild",
+            ...named,
+            hob: "Pip",
+            brief: "Make the badge again",
           }),
         );
-        const rebuild = Option.getOrThrow(yield* tasks.readTree(LEAD)).tasks.find(
-          (each) => each.ownerId === PIP && each.id !== PIP_TASK,
-        );
-        if (rebuild === undefined) return yield* Effect.die("Pip's Task was not delegated");
-        const attempt = AttemptId.make("pip-rebuild-1");
-        yield* tasks.startAttempt(rebuild.id, rebuild.revision, {
-          id: attempt,
-          runtime: "claude-code",
-          sessionId: null,
-          configVersion: 1,
-          policyVersion: null,
-          startedAt: new Date().toISOString(),
-        });
-        yield* turnOnBadge(attempt, "edit-files", (badge) => writeFileSync(badge, "green"), Effect.void);
-        yield* Effect.sleep("300 millis");
-        const leads = (yield* (yield* ActivityRepository).read(LEAD_ATTEMPT)).pipe(Option.getOrThrow).changes;
-        return { rebuild, leads, found: yield* findings };
+        return yield* rebuilt(LEAD);
       }),
     );
-    // The lead's delete keeps the time it was first seen, before Pip's Task was delegated.
-    expect(result.leads.map((each) => [each.path, each.kind, each.recordedAt < result.rebuild.createdAt])).toEqual([
-      ["web/badge.png", "deleted", true],
-    ]);
-    expect(
-      result.found.filter((each) => each.taskId === result.rebuild.id || each.aboutTaskId === result.rebuild.id),
-    ).toEqual([]);
+    expectNoFinding(result);
+  });
+
+  // covers OR-004
+  it("[TC-OR-414] is not recorded for a file a chat turn deleted before the delegation that starts its Task", async () => {
+    const run = start(Hub);
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        // A thread with no Task yet: the delegation starts Frodo's Task and his turn's Attempt on it.
+        const elsewhere = ThreadId.make("rebuild");
+        yield* (yield* HobbotsRepository).upsertThread(
+          new Thread({ id: elsewhere, agentId: FRODO, title: "Rebuild", createdAt: now, updatedAt: now }),
+        );
+        const chat = yield* (yield* TaskTools).forChat({
+          agentId: FRODO,
+          threadId: elsewhere,
+          messageId: MessageId.make("rebuild-1"),
+          prompt: "Clear the badge, then have Pip make it again",
+          runtime: "claude-code",
+          configVersion: 1,
+        });
+        const answer = yield* turnOnBadge(
+          chat.attempt,
+          "delete-files",
+          (badge) => rmSync(badge),
+          chat.hubTools.call("delegate_task", { key: "rebuild", hob: "Pip", brief: "Make the badge again" }),
+        );
+        expect(answer.refused).toBe(false);
+        const rootId = yield* chat.workingOn;
+        if (rootId === null) return yield* Effect.die("The delegation started no Task");
+        return yield* rebuilt(rootId);
+      }),
+    );
+    expectNoFinding(result);
   });
 
   // covers OR-004
