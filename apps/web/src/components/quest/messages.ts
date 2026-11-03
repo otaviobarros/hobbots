@@ -62,6 +62,13 @@ export const messages = {
     send: "Send answer",
     sending: "Sending…",
     youAnswered: ({ answer }: { answer: string }) => `You answered: ${answer}`,
+    /** Your answer and where you gave it, seen from where it shows (#671): `here` when that is the same place. */
+    youAnsweredIn: {
+      here: ({ answer }: { answer: string }) => `You answered here: ${answer}`,
+      chat: ({ answer }: { answer: string }) => `You answered in the chat: ${answer}`,
+      inbox: ({ answer }: { answer: string }) => `You answered in the Inbox: ${answer}`,
+      task: ({ answer }: { answer: string }) => `You answered in the Task's details: ${answer}`,
+    },
     failed: "Your answer could not be sent. Try again.",
     closed: "This question was already answered.",
     withdrawn: "Withdrawn: the work it was about ended before anyone answered.",
@@ -90,7 +97,6 @@ export const messages = {
     notReached: "Not reached yet",
     answer: ({ name, answer }: { name: string; answer: string }) => `${name}: ${answer}`,
     withdrawn: "Withdrawn when this Task ended.",
-    you: "You",
     notFound: "This Task is not in this thread.",
     noteLabel: ({ name }: { name: string }) => `Tell ${name} about this task`,
     noteHint: ({ name }: { name: string }) => `You talk to ${name}, who passes it on.`,

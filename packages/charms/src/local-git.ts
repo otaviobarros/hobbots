@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { lstat } from "node:fs/promises";
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
 import {
   type AskableVerdict,
@@ -33,7 +32,9 @@ import { runTool, toolEnv } from "./run-tool.ts";
  * hub decides the call as Local Git and Edit files on the folder under the hob's policy, has Git
  * create the repository with no template in a folder of the hub's own, where no hob's command
  * reaches, and copies it to the folder's `.git` without following links (`PUBLISH_SCRIPT`). The
- * repository starts with Git's own config and no hooks, and the hob commits in it as usual.
+ * repository starts with Git's own config and no hooks, and the hob commits in it as usual. A `.git`
+ * that holds only a config and hooks, which the sandbox keeps when a hob deletes a repository, is
+ * replaced (#663).
  */
 
 class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> {}
@@ -42,20 +43,60 @@ class Refused extends Data.TaggedError("Refused")<{ readonly message: string }> 
 export const initializedText = (folder: string) =>
   `Created an empty Git repository in ${folder}. Add, commit and branch in it with git as usual; its .git/config and .git/hooks stay read-only for you, so ask the user to add a remote or install a hook.`;
 
+/** What the hob is told when the repository took the place of a stub `.git` a delete left (#663). */
+export const REPLACED = "It replaced the .git that was there, which held only a config and hooks.";
+
 /** What a hob on Linux is told when the repository is at the top of a folder its running turn cannot see yet. */
 export const NEXT_TURN =
   "On this hub your commands see a new repository at the top of a folder from your next turn: finish this turn and continue in the next.";
 
+/** What the hob is told once the repository is at `target`, the top of its folder when `atTop`. */
+const createdText = (target: string, replace: boolean, atTop: boolean, note: string | undefined) =>
+  [
+    initializedText(target),
+    ...(replace ? [REPLACED] : []),
+    // Bubblewrap fixes a turn's mounts when it starts, and holds a missing `.git` at the top of a folder;
+    // a stub's `.git` is there, so its replacement shows at once.
+    ...(process.platform === "linux" && atTop && !replace ? [NEXT_TURN] : []),
+    ...(note === undefined ? [] : [note]),
+  ].join(" ");
+
 /** Whether `path` names something inside a Git directory, where a new repository has no place. */
 const insideGitDirectory = (path: string) => path.split(sep).includes(".git");
 
-const exists = (path: string) =>
-  Effect.promise(() =>
-    lstat(path).then(
-      () => true,
-      () => false,
-    ),
-  );
+/** What a sandbox keeps from a delete inside `.git`, as paths relative to it (ADR 014). */
+export const KEPT = /^(config$|hooks\/)/;
+
+/** Up to `limit` files in `git` that `KEPT` does not name, as paths relative to it. */
+const strays = (git: string, limit: number) => {
+  const found: Array<string> = [];
+  const walk = (folder: string) => {
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      if (found.length >= limit) return;
+      const path = join(folder, entry.name);
+      if (entry.isDirectory()) walk(path);
+      else if (!KEPT.test(relative(git, path).split(sep).join("/"))) found.push(relative(git, path));
+    }
+  };
+  walk(git);
+  return found;
+};
+
+/**
+ * What stands at `<folder>/.git`: nothing, a repository (or a `.git` file pointing to one), a stub a
+ * delete left, holding only what `KEPT` names besides folders, or something else, with some of the
+ * files a stub would not hold.
+ */
+const gitDirectory = (folder: string) => {
+  const git = join(folder, ".git");
+  const stat = lstatSync(git, { throwIfNoEntry: false });
+  if (stat === undefined) return { _tag: "None" } as const;
+  if (!stat.isDirectory() || lstatSync(join(git, "HEAD"), { throwIfNoEntry: false })) {
+    return { _tag: "Repository" } as const;
+  }
+  const other = strays(git, 6);
+  return other.length === 0 ? ({ _tag: "Stub" } as const) : ({ _tag: "Other", other } as const);
+};
 
 /** A branch name plain enough to pass to `git init --initial-branch`. */
 const BRANCH_NAME = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$/;
@@ -97,18 +138,36 @@ export const narrowerOf = (first: AskableVerdict, second: AskableVerdict): Askab
  * those missing, and checks after every step where it really landed, so a link anywhere is refused
  * and a folder swapped for one meanwhile changes nothing for it. It then makes `.git`, failing when
  * anything has that name, and copies each folder and file by name inside it, never over anything a
- * command wrote there first; anything else that appears there meanwhile fails the call. Arguments,
- * as JSON: `root`, the levels, and `staging`.
+ * command wrote there first; anything else that appears there meanwhile fails the call. With `kept`,
+ * the source of `KEPT`, a stub `.git` is removed first, by name and never through a link, stopping
+ * at any file it does not name. Arguments, as JSON: `root`, the levels, `staging` and `kept` or null.
  */
 export const PUBLISH_SCRIPT = `
 const fs = require("node:fs");
 const { join } = require("node:path");
 const { O_WRONLY, O_CREAT, O_EXCL, O_NOFOLLOW } = fs.constants;
-const [root, levels, staging] = JSON.parse(process.argv[1]);
+const [root, levels, staging, kept] = JSON.parse(process.argv[1]);
+const keeps = kept === null ? null : new RegExp(kept);
 const stop = (code, message) => { process.stdout.write(message); process.exit(code); };
 const enter = (name, expected) => {
   process.chdir(name);
   if (process.cwd() !== expected) stop(3, expected + " moved while Hobbots was creating the repository.");
+};
+// Walks a stub .git, entered at here, by name and never through a link, stopping at any file the kept
+// pattern does not name; with remove, it removes each file and folder as it goes.
+const clear = (here, path, remove) => {
+  for (const entry of fs.readdirSync(".", { withFileTypes: true })) {
+    const inner = path + entry.name;
+    if (entry.isDirectory()) {
+      enter(entry.name, join(here, entry.name));
+      clear(join(here, entry.name), inner + "/", remove);
+      enter("..", here);
+      if (remove) fs.rmdirSync(entry.name);
+    } else if (!keeps.test(inner)) {
+      stop(4, here + " holds " + inner + (remove ? ", written while Hobbots was replacing its .git." : ", so its .git was left as it is."));
+    }
+    else if (remove) fs.unlinkSync(entry.name);
+  }
 };
 const copy = (from, here) => {
   for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
@@ -132,6 +191,13 @@ try {
     if (fs.lstatSync(level, { throwIfNoEntry: false }) === undefined) fs.mkdirSync(level);
     here = join(here, level);
     enter(level, here);
+  }
+  if (keeps !== null && fs.lstatSync(".git", { throwIfNoEntry: false })?.isDirectory()) {
+    enter(".git", join(here, ".git"));
+    clear(join(here, ".git"), "", false);
+    clear(join(here, ".git"), "", true);
+    enter("..", here);
+    fs.rmdirSync(".git");
   }
   try { fs.mkdirSync(".git"); } catch (error) {
     if (error.code === "EEXIST") stop(4, here + " already has a .git, so nothing was created.");
@@ -169,7 +235,10 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
         },
       ];
 
-      /** Refuses a folder that is, or lies in, a Git directory, or already holds a repository. */
+      /**
+       * Refuses a folder that is, or lies in, a Git directory, or already holds a `.git` other than a
+       * stub, and answers whether a stub is there to replace.
+       */
       const checkPlace = (folder: string) =>
         Effect.gen(function* () {
           if (insideGitDirectory(folder)) {
@@ -177,21 +246,37 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
               message: `${folder} is inside a Git directory, so it cannot hold a repository.`,
             });
           }
-          if (yield* exists(`${folder}${sep}.git`)) {
+          const git = yield* Effect.try({
+            try: () => gitDirectory(folder),
+            catch: (error) =>
+              new Refused({
+                message: `Hobbots could not read ${folder}, so nothing was created: ${(error as NodeJS.ErrnoException).code ?? String(error)}`,
+              }),
+          });
+          if (git._tag === "Repository") {
             return yield* new Refused({
               message: `${folder} is already a Git repository, so nothing was created. Commit in it with git as usual.`,
             });
           }
+          if (git._tag === "Other") {
+            const named = git.other.slice(0, 5).map((path) => `.git/${path.split(sep).join("/")}`);
+            const more = git.other.length > named.length ? " and the rest of it" : "";
+            return yield* new Refused({
+              message: `${folder} holds a .git that is not a repository, so nothing was created. Delete ${named.join(", ")}${more}, then call ${GIT_INIT_TOOL} again: it replaces a .git that holds only a config and hooks.`,
+            });
+          }
+          return git._tag === "Stub";
         });
 
       /**
        * The call's verdict: Local Git on the folder, and Edit files on it, since the hub writes the
        * repository's files there for the hob (STD-SEC-002). The narrower answer stands, on the folder.
        * Edit files is decided on the folder, not its `.git`, which the policy keeps from every hob's
-       * own writes.
+       * own writes. In place of a stub, it is decided on the new `HEAD`, since the folder holds the
+       * stub's config and hooks, which no hob may change and which only the hub removes.
        */
       const decideBoth =
-        (turn: CharmTurn, access: ToolAccess, folder: string) =>
+        (turn: CharmTurn, access: ToolAccess, folder: string, replace: boolean) =>
         (fresh: ToolAccess | null): Effect.Effect<AskableVerdict> =>
           Effect.gen(function* () {
             const command: PolicyRequest = {
@@ -203,7 +288,7 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
             const files: PolicyRequest = {
               _tag: "Files",
               operation: "edit-files",
-              paths: [folder],
+              paths: [replace ? join(folder, ".git", "HEAD") : folder],
               cwd: folder,
             };
             const git = yield* decideCharmWrite(engine, turn, access, command)(fresh);
@@ -227,7 +312,7 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
        * the hub's staging folder, outside every hob's reach and with no config of the user's, and
        * `PUBLISH_SCRIPT` copies it to `target`'s `.git` without following links.
        */
-      const create = (writable: string, target: string) =>
+      const create = (writable: string, target: string, replace: boolean) =>
         Effect.gen(function* () {
           const branch = yield* initialBranch;
           mkdirSync(options.stagingFolder, { recursive: true, mode: 0o700 });
@@ -255,7 +340,7 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
             const published = yield* node(process.execPath, [
               "-e",
               PUBLISH_SCRIPT,
-              JSON.stringify([writable, levels, join(staging, ".git")]),
+              JSON.stringify([writable, levels, join(staging, ".git"), replace ? KEPT.source : null]),
             ]);
             if (published.code !== 0) return yield* new Refused({ message: published.out.trim() });
           }).pipe(
@@ -273,19 +358,19 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
           if (!isAbsolute(folder)) {
             return yield* new Refused({ message: `Give the folder as an absolute path, not ${folder}.` });
           }
-          yield* checkPlace(folder);
+          const stub = yield* checkPlace(folder);
           const decision = yield* askUntilDecided({
             call: { id: step?.id ?? GIT_INIT_TOOL, tool: GIT_INIT_TOOL, arguments: { folder }, label: GIT_INIT_LABEL },
             // A call without a step has no card to show, so it cannot ask.
             approvals: step === undefined ? null : turn.approvals,
-            decide: decideBoth(turn, access, folder),
+            decide: decideBoth(turn, access, folder, stub),
             report: step?.report ?? (() => {}),
             unknown: "Hobbots cannot decide this call.",
           });
           if (decision._tag === "Refuse") return yield* new Refused({ message: decision.reason });
           // The folder as the engine resolved it, links followed, so the repository goes where it was decided.
           const target = decision.verdict.targets[0] ?? folder;
-          if (target !== folder) yield* checkPlace(target);
+          const replace = target === folder ? stub : yield* checkPlace(target);
           const writable = holder(access, target);
           if (writable === undefined) {
             return yield* new Refused({ message: `${target} is outside this hob's folders, so nothing was created.` });
@@ -298,11 +383,13 @@ export const LocalGitToolsLive = (options: LocalGitOptions) =>
             targets: decision.verdict.targets,
             label: GIT_INIT_LABEL,
           });
-          yield* create(writable, target);
-          const note = decision.approval === undefined ? "" : ` ${approvalNote(decision.approval)}`;
-          // Bubblewrap fixes a turn's mounts when it starts, and holds a missing `.git` at the top of a folder.
-          const later = process.platform === "linux" && writable === target ? ` ${NEXT_TURN}` : "";
-          return `${initializedText(target)}${later}${note}`;
+          yield* create(writable, target, replace);
+          return createdText(
+            target,
+            replace,
+            writable === target,
+            decision.approval === undefined ? undefined : approvalNote(decision.approval),
+          );
         });
 
       const call = (turn: CharmTurn, name: string, input: unknown, step?: HubCallStep) =>

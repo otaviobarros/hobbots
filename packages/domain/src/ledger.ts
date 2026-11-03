@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
 import { BackpackItem, type BackpackItemId } from "./backpack.ts";
 import { Milestone, Question, type TaskRefusal, type TaskTree, TaskWait } from "./quest.ts";
+import { TaskReadiness } from "./readiness.ts";
 import { descendantsOf, isTerminalTask, Task, TaskId } from "./task.ts";
 
 /**
@@ -108,16 +109,15 @@ export const supersededItems = (
 export const responsibilityLedger = (task: Task, sources: LedgerSources): ResponsibilityLedger => {
   const under = descendantsOf(task, sources.subtree.tasks);
   const scope = new Set([task.id, ...under.map((each) => each.id)]);
-  const done = new Set(sources.tree.filter((each) => each.state === "completed").map((each) => each.id));
   const ended = new Set<string>(under.filter((each) => isTerminalTask(each.state)).map((each) => each.id));
   const open: Array<LedgerEntry> = [
     ...under.filter((each) => !isTerminalTask(each.state)).map((each) => ({ _tag: "Child", task: each }) as const),
     ...sources.subtree.waits
       .filter((wait) => wait.taskId === task.id && waitHolds(wait, under))
       .map((wait) => ({ _tag: "Wait", wait }) as const),
-    ...sources.tree
-      .filter((each) => task.dependsOn.includes(each.id) && !done.has(each.id))
-      .map((each) => ({ _tag: "Dependency", task: each }) as const),
+    ...TaskReadiness.unmet(TaskReadiness.of(task, sources.tree)).flatMap((id) =>
+      sources.tree.filter((each) => each.id === id).map((each) => ({ _tag: "Dependency", task: each }) as const),
+    ),
     ...sources.subtree.questions
       .filter((question) => question.state === "open" && scope.has(question.taskId))
       .map((question) => ({ _tag: "Question", question }) as const),
@@ -206,8 +206,31 @@ export const ledgerRefusal = (
   const more = rest > 0 ? `; and ${rest} more` : "";
   return {
     reason: REASONS[first._tag],
-    message: `Task ${ledger.taskId} cannot complete yet: ${named.join("; ")}${more}.`,
+    message: `Task ${ledger.taskId} cannot complete yet: ${named.join("; ")}${more}.${unreadRemedy(ledger)}`,
   };
+};
+
+/**
+ * What clears the unread backpack items in a refusal (#662): `read_tasks` reads the results and
+ * failures of the Tasks it lists, and the rest reach the hob as its next message once its turn ends.
+ * Calling `complete_task` again without doing either is refused the same way.
+ */
+const unreadRemedy = (ledger: ResponsibilityLedger): string => {
+  const items = ledger.open.flatMap((entry) => (entry._tag === "Item" ? [entry.item] : []));
+  if (items.length === 0) return "";
+  const clears = items.every((item) => OUTCOME_KINDS.includes(item.kind))
+    ? "Call read_tasks to read what ended, which counts as reading it, then complete the Task; or end your turn, and it reaches you as your next message."
+    : "End your turn: what still waits for you reaches you as your next message, and you complete the Task then.";
+  return ` ${clears} Calling complete_task again without doing either is refused the same way.`;
+};
+
+/** What a turn carries: the items it holds claims on, then those it was shown, a held claim winning over the same item shown. */
+export const carriedWith = (
+  held: ReadonlyArray<CarriedItem>,
+  shown: Iterable<CarriedItem>,
+): ReadonlyArray<CarriedItem> => {
+  const ids = new Set<string>(held.map((each) => each.itemId));
+  return [...held, ...[...shown].filter((each) => !ids.has(each.itemId))];
 };
 
 /**

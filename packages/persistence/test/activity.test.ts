@@ -246,7 +246,11 @@ describe("Workbench records", () => {
         yield* repo.saveChanges(attemptId, project, [change("a.md", true)]);
         const whileOpen = yield* repo.clearDetails("2026-12-31T00:00:00.000Z", "2026-12-31T00:00:00.000Z");
         const tasks = yield* TaskRepository;
-        yield* tasks.updateAttempt(attemptId, { state: "failed", outcome: "It stopped.", at: later });
+        yield* tasks.updateAttempt(attemptId, {
+          _tag: "Ended",
+          end: { _tag: "Failed", reason: "It stopped." },
+          at: later,
+        });
         const task = Option.getOrThrow(yield* tasks.readTree(taskId)).tasks[0];
         yield* tasks.moveTask(taskId, task?.revision ?? started.value.task.revision, "failed", later);
         const tooSoon = yield* repo.clearDetails(later, "2026-11-03T00:00:00.000Z");

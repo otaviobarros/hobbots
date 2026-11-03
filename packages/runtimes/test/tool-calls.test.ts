@@ -290,10 +290,22 @@ describe("Claude Code tool calls as policy requests", () => {
 
   it("names no exact paths or words in a line that changes folder", () => {
     expect(commandRequests("cd sub && rm build", "/work")).toEqual([
-      { _tag: "Command", operation: "run-commands", cwd: "/work", words: null },
       { _tag: "Files", operation: "delete-files", paths: ["build"], cwd: "/work/sub", exact: false },
       { _tag: "Command", operation: "run-commands", cwd: "/work/sub", words: null },
     ]);
+  });
+
+  it("[TC-RT-486] decides a command after cd only in the folder cd moved to, not the one the line started in", () => {
+    const folders = (command: string) =>
+      commandRequests(command, "/work/hobbots", "/home/me").map((r) => (r._tag === "Web" ? r.host : r.cwd));
+    expect(folders("cd /work/test && ls")).toEqual(["/work/test"]);
+    expect(folders("cd /work/test && pnpm test; popd")).toEqual(["/work/test"]);
+    expect(folders("cd sub")).toEqual(["/work/hobbots"]);
+    // A cd whose folder only the shell settles may run code, so it is still decided where it runs.
+    expect(folders('cd "$(make dir)" && ls')[0]).toBe("/work/hobbots");
+    // A redirection or a process substitution on the line may act where it started.
+    expect(folders("cd /work/test > out.txt && ls")).toEqual(["/work/hobbots", "/work/test"]);
+    expect(folders("cd <(rm -rf x) && ls")[0]).toBe("/work/hobbots");
   });
 
   it("labels each step from the call's own arguments", () => {
@@ -428,7 +440,7 @@ describe("[#210] the folder a Git command works in", () => {
       commandRequests("cd /outside && git --work-tree=/hob add f", "/work").map((r) =>
         r._tag === "Web" ? r.host : r.cwd,
       ),
-    ).toEqual(["/work", "/outside", "/hob"]);
+    ).toEqual(["/outside", "/hob"]);
   });
 
   it("also names the folder Git runs in when a Git directory has no working tree", () => {
@@ -480,6 +492,24 @@ describe("tools offered for a turn", () => {
       { "read-files": "deny" },
     ] as const)
       expect(offeredTools(context({ restrictions: [restriction] }))).not.toContain("Bash");
+  });
+
+  it("[TC-PE-430] offers each combination of file and command answers the tools it opens, and no command tool without both file answers Allow", () => {
+    // covers PE-005
+    // Issue #661: Local Git Allow with Edit files Never left a member with nothing to commit with.
+    const decisions = ["allow", "ask", "deny"] as const;
+    for (const read of decisions)
+      for (const edit of decisions)
+        for (const run of decisions)
+          for (const git of decisions) {
+            const overrides = { "read-files": read, "edit-files": edit, "run-commands": run, "local-git": git };
+            const tools = offeredTools(context({ preset: "trusting", hob: { ...EMPTY_HOB_POLICY, overrides } }));
+            expect(tools.includes("Read"), JSON.stringify(overrides)).toBe(read !== "deny");
+            expect(tools.includes("Edit"), JSON.stringify(overrides)).toBe(edit !== "deny");
+            expect(tools.includes("Bash"), JSON.stringify(overrides)).toBe(
+              read === "allow" && edit === "allow" && (run !== "deny" || git !== "deny"),
+            );
+          }
   });
 });
 

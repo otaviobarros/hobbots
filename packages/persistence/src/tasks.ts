@@ -4,6 +4,7 @@ import {
   type Answerer,
   ArtifactRef,
   Attempt,
+  AttemptTransitions,
   ancestorsOf,
   CHECKPOINT_KINDS,
   Checkpoint,
@@ -28,6 +29,7 @@ import {
   Task,
   type TaskId,
   TaskNote,
+  TaskReadiness,
   type TaskRefusal,
   TaskRefused,
   type TaskState,
@@ -359,6 +361,18 @@ export const TaskRepositoryLive = Layer.effect(
         return new Quest({ ...quest, state: "active", endedAt: null, revision });
       });
 
+    /** Whether `task` can start an Attempt, read from its tree: refused unless it is Ready (#667). */
+    const readiness = (task: Task) =>
+      Effect.gen(function* () {
+        const ready = TaskReadiness.of(task, task.dependsOn.length === 0 ? [] : yield* read.treeOf(task.rootId));
+        if (ready._tag === "Ready") return ready;
+        const unmet = TaskReadiness.unmet(ready).join(", ");
+        return yield* refuse(
+          "dependencies-open",
+          `Task ${task.id} comes after Tasks that have not completed: ${unmet}`,
+        );
+      });
+
     const startAttempt: TaskRepository["Service"]["startAttempt"] = (taskId, expected, input) =>
       change((revision) =>
         Effect.gen(function* () {
@@ -367,7 +381,7 @@ export const TaskRepositoryLive = Layer.effect(
           yield* notUnderCancel(before);
           const quest = yield* reopen(before, revision);
           const task = new Task({
-            ...(yield* orFail(TaskTransitions.start(before, input.id, input.startedAt))),
+            ...(yield* orFail(TaskTransitions.start(before, input.id, input.startedAt, yield* readiness(before)))),
             revision,
           });
           const [last] = yield* sql<{ readonly number: unknown }>`SELECT MAX(number) AS number FROM attempts
@@ -412,20 +426,22 @@ export const TaskRepositoryLive = Layer.effect(
           const [before] = yield* read.attempt(attemptId);
           if (before === undefined) return yield* refuse("attempt-missing", `No Attempt ${attemptId}`);
           if (!isLiveAttempt(before.state)) return yield* refuse("attempt-ended", `Attempt ${attemptId} has ended`);
-          if (update.state === "running" && before.state === "running") {
+          if (update._tag === "Running" && before.state === "running") {
             return yield* refuse("attempt-live", `Attempt ${attemptId} is already running`);
           }
-          const ended = update.state !== "running";
+          const owner = yield* loadTask(before.taskId);
+          const ended =
+            update._tag === "Ended" ? AttemptTransitions.end(owner, update.end, yield* cancelledBy(owner)) : null;
           const attempt = new Attempt({
             ...before,
-            state: update.state,
+            state: ended?.state ?? "running",
             sessionId: update.sessionId ?? before.sessionId,
-            outcome: update.outcome ?? before.outcome,
-            endedAt: ended ? update.at : null,
+            outcome: ended?.outcome ?? before.outcome,
+            endedAt: ended === null ? null : update.at,
           });
           yield* sql`UPDATE attempts SET state = ${attempt.state}, session_id = ${attempt.sessionId},
             outcome = ${attempt.outcome}, ended_at = ${attempt.endedAt} WHERE id = ${attempt.id}`;
-          const task = new Task({ ...(yield* loadTask(attempt.taskId)), updatedAt: update.at, revision });
+          const task = new Task({ ...owner, updatedAt: update.at, revision });
           yield* saveTask(task);
           return {
             value: { task, attempt },
@@ -434,10 +450,33 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
+    /**
+     * Who cancelled `task`, as its Attempt names them: "You", or the hob's name, by the cancel asked
+     * for on it or, for one cancelled with its parent, on its nearest ancestor. Null when its cancel
+     * was not asked for, or was asked for before who asked was recorded.
+     */
+    const cancelledBy = (task: Task) =>
+      Effect.gen(function* () {
+        if (task.state !== "cancelling" && task.state !== "cancelled") return null;
+        const line = [task, ...ancestorsOf(task, yield* read.treeOf(task.rootId))];
+        const rows = yield* sql<{ readonly taskId: string; readonly requestedBy: string | null }>`
+          SELECT task_id, requested_by FROM task_cancels WHERE ${sql.in(
+            "task_id",
+            line.map((each) => each.id),
+          )}`;
+        const nearest = line.flatMap((each) => rows.filter((row) => row.taskId === each.id))[0];
+        if (nearest === undefined) return null;
+        if (nearest.requestedBy === null) return "You";
+        const [hob] = yield* sql<{ readonly name: string }>`SELECT name FROM agents WHERE id = ${nearest.requestedBy}`;
+        return hob?.name ?? nearest.requestedBy;
+      });
+
     /** The Attempt a Task last ran, which its next turn resumes when nothing makes it a new one. */
     const resumable = (task: Task, resume: AttemptResume) =>
       Effect.gen(function* () {
         if (isTerminalTask(task.state)) return yield* refuse("task-ended", `Task ${task.id} is ${task.state}`);
+        // A retried Task waits in the queue for a new Attempt, never the one that failed (EX-001).
+        if (task.state === "queued") return yield* refuse("attempt-ended", `Task ${task.id} waits for a new Attempt`);
         const [last] = task.currentAttemptId === null ? [] : yield* read.attempt(task.currentAttemptId);
         if (last === undefined) return yield* refuse("attempt-missing", `Task ${task.id} has no Attempt to resume`);
         if (isLiveAttempt(last.state)) return yield* refuse("attempt-live", `Attempt ${last.id} is still live`);
@@ -456,7 +495,11 @@ export const TaskRepositoryLive = Layer.effect(
           const before = yield* current(taskId, expected);
           const last = yield* resumable(before, resume);
           yield* notUnderCancel(before);
-          const task = new Task({ ...(yield* orFail(TaskTransitions.start(before, last.id, resume.at))), revision });
+          const ready = yield* readiness(before);
+          const task = new Task({
+            ...(yield* orFail(TaskTransitions.start(before, last.id, resume.at, ready))),
+            revision,
+          });
           const attempt = new Attempt({ ...last, state: "starting", outcome: null, endedAt: null });
           yield* sql`UPDATE attempts SET state = ${attempt.state}, outcome = NULL, ended_at = NULL
             WHERE id = ${attempt.id}`;
@@ -471,18 +514,30 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
-    const moveTask: TaskRepository["Service"]["moveTask"] = (taskId, expected, to: TaskTarget, at) =>
+    const moveTask: TaskRepository["Service"]["moveTask"] = (taskId, expected, to: TaskTarget, at, options = {}) =>
       change((revision) =>
         Effect.gen(function* () {
+          const { carried = [], cancelledBy } = options;
           const before = yield* current(taskId, expected);
           if (to === "failed" || to === "cancelled") yield* endable(before);
           const task = new Task({ ...(yield* orFail(TaskTransitions.moveTo(before, to, at))), revision });
           yield* saveTask(task);
+          if (cancelledBy !== undefined && (to === "cancelling" || to === "cancelled")) {
+            const requestedBy = cancelledBy === "you" ? null : cancelledBy;
+            yield* sql`INSERT INTO task_cancels (task_id, requested_by, requested_at)
+              VALUES (${task.id}, ${requestedBy}, ${at})
+              ON CONFLICT (task_id) DO UPDATE SET requested_by = ${requestedBy}, requested_at = ${at}`;
+          }
           const quest = yield* endQuest(task, at, revision);
           const events: Array<JournaledEvent> = [
             { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null },
             ...(yield* automatic(task, at, revision + 1)),
           ];
+          if (to === "blocked" && carried.length > 0 && task.currentAttemptId !== null) {
+            const { consumes } = yield* ledger.readFor(task, carried);
+            const by = yield* ledger.consumer(task.currentAttemptId);
+            events.push(...(yield* ledger.consume(consumes, by, revision + events.length)));
+          }
           if (isTerminalTask(task.state)) events.push(...(yield* withdrawQuestions(task, revision + events.length)));
           return { value: task, events };
         }),
@@ -770,7 +825,8 @@ export const TaskRepositoryLive = Layer.effect(
       sql`UPDATE questions SET recipient_id = ${question.recipientId}, chain = ${JSON.stringify(question.chain)},
         state = ${question.state}, answer = ${question.answer},
         answered_by = ${question.answeredBy === null ? null : JSON.stringify(question.answeredBy)},
-        answered_at = ${question.answeredAt}, revision = ${question.revision} WHERE id = ${question.id}`;
+        answered_at = ${question.answeredAt}, answered_by_device_id = ${question.answeredByDeviceId},
+        answered_via = ${question.answeredVia}, revision = ${question.revision} WHERE id = ${question.id}`;
 
     /** The copies of `question` still waiting for the hob that just handled it, resolved as answered (#573). */
     const settleCopies = (question: Question, first: number) =>
@@ -778,7 +834,7 @@ export const TaskRepositoryLive = Layer.effect(
         ? Effect.succeed([])
         : ledger.settleQuestionCopies(question.id, question.recipientId, first);
 
-    const answerQuestion: TaskRepository["Service"]["answerQuestion"] = (questionId, by, answer, at) =>
+    const answerQuestion: TaskRepository["Service"]["answerQuestion"] = (questionId, by, answer, at, from) =>
       change((revision) =>
         Effect.gen(function* () {
           const before = yield* openQuestion(questionId, by);
@@ -788,6 +844,8 @@ export const TaskRepositoryLive = Layer.effect(
             answer,
             answeredBy: by,
             answeredAt: at,
+            answeredByDeviceId: from?.deviceId ?? null,
+            answeredVia: from?.via ?? null,
             revision,
           });
           yield* saveQuestion(question);

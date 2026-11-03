@@ -4,7 +4,9 @@ import {
   AttemptId,
   type CarriedItem,
   carriedFrom,
+  carriedWith,
   type EventEnvelope,
+  latestThreadTask,
   openThreadTask,
   type Task,
   TaskId,
@@ -28,6 +30,8 @@ export interface ResolvedCaller {
   readonly caller: TaskToolCaller;
   readonly entries: ReadonlyArray<EventEnvelope>;
   readonly attemptId: AttemptId | null;
+  /** A read of a request that has ended: the turn does not take it for the Task it works on (#666). */
+  readonly readOnly?: true;
 }
 
 /** Whether `taskId` is among `trees` and you cancelled it, or asked to. */
@@ -58,12 +62,8 @@ export const makeChatResolver = (
    * What the turn carries on its Task: the items it holds claims on, and those its briefing showed
    * unclaimed, a held claim winning over the same item shown.
    */
-  const carriedBy = (taskId: TaskId): ReadonlyArray<CarriedItem> => {
-    const holding = turn.holding ?? [];
-    const shown = briefed?.taskId === taskId ? briefed.carried : [];
-    const held = new Set(holding.map((each) => each.itemId));
-    return [...holding, ...shown.filter((each) => !held.has(each.itemId))];
-  };
+  const carriedBy = (taskId: TaskId): ReadonlyArray<CarriedItem> =>
+    carriedWith(turn.holding ?? [], briefed?.taskId === taskId ? briefed.carried : []);
   return {
     /**
      * What the turn's session is told of the open Task, read as the turn starts. The briefing shows
@@ -145,6 +145,16 @@ export const makeChatResolver = (
           );
         }
         let task: Task | undefined = openThreadTask(trees, turn.agentId)?.top;
+        // Once the request has ended, its lead can still read it, never change it, to answer you about it (#666).
+        const ended = task === undefined && name === "read_tasks" ? latestThreadTask(trees, turn.agentId) : undefined;
+        if (ended !== undefined) {
+          return {
+            caller: { agentId: turn.agentId, taskId: ended.top.id },
+            entries: [],
+            attemptId: null,
+            readOnly: true,
+          };
+        }
         if (task === undefined) {
           if (!STARTS_WORK.has(name)) {
             return yield* refuse(

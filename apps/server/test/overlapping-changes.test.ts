@@ -310,7 +310,11 @@ describe("Two Tasks of a Quest changing the same file", () => {
         yield* record(PIP_ATTEMPT, project, [change("pip", "web/index.html", "pip-1", 1)]);
         yield* settle;
         const apart = yield* findings;
-        const ended = yield* tasks.updateAttempt(ROOK_ATTEMPT, { state: "failed", at: now });
+        const ended = yield* tasks.updateAttempt(ROOK_ATTEMPT, {
+          _tag: "Ended",
+          end: { _tag: "Failed", reason: null },
+          at: now,
+        });
         yield* tasks.moveTask(ROOK_TASK, ended.value.task.revision, "failed", now);
         yield* record(PIP_ATTEMPT, project, [change("pip", "web/badge.png", "pip-2", 2)]);
         yield* settle;

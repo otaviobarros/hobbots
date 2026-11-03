@@ -51,6 +51,8 @@ const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-workbench-hub-")))
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const dataFolder = join(temp, "data");
 let project = "";
+/** Aldric's folders after the project, which the fake runtime never changes. */
+let others: ReadonlyArray<string> = [];
 
 const now = "2026-11-03T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
@@ -64,8 +66,14 @@ const ProjectTools = Layer.effect(
     HobTools.of({
       access: (agent) =>
         Effect.succeed({
-          policy: { preset: "balanced", sharedFolders: [project], hob: EMPTY_HOB_POLICY, dataFolder, restrictions: [] },
-          folders: [project],
+          policy: {
+            preset: "balanced",
+            sharedFolders: [project, ...others],
+            hob: EMPTY_HOB_POLICY,
+            dataFolder,
+            restrictions: [],
+          },
+          folders: [project, ...others],
           runtimeFolder: join(temp, "runtime", agent.id),
         }),
     }),
@@ -152,10 +160,11 @@ afterEach(async () => {
 });
 
 let projects = 0;
-/** A fresh project folder with `files`, and the hub around it. */
-export const setUp = (files: Record<string, string>) => {
+/** A fresh project folder with `files`, Aldric's folders named `more` beside it, and the hub around them. */
+export const setUp = (files: Record<string, string>, more: ReadonlyArray<string> = []) => {
   project = join(temp, `project-${++projects}`);
-  mkdirSync(project, { recursive: true });
+  others = more.map((name) => join(temp, `${name}-${projects}`));
+  for (const folder of [project, ...others]) mkdirSync(folder, { recursive: true });
   for (const [path, contents] of Object.entries(files)) {
     mkdirSync(join(project, path, ".."), { recursive: true });
     writeFileSync(join(project, path), contents);
@@ -177,7 +186,7 @@ export const setUp = (files: Record<string, string>) => {
         ),
       ),
     );
-  return { run, folder: project, holding, release: () => run(Deferred.succeed(gate, undefined)) };
+  return { run, folder: project, others, holding, release: () => run(Deferred.succeed(gate, undefined)) };
 };
 
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>

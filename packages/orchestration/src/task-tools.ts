@@ -15,6 +15,7 @@ import {
 import {
   type AttemptId,
   type CarriedItem,
+  carriedWith,
   type EventEnvelope,
   isTaskToolName,
   stableJson,
@@ -24,6 +25,7 @@ import {
   TaskToolInputs,
   type TaskToolName,
   TaskToolRefused,
+  type TurnEnding,
   taskToolJsonSchema,
   taskToolText,
 } from "@hobbots/domain";
@@ -46,6 +48,7 @@ import { makeLeading } from "./leading.ts";
 import { makePlanning } from "./planning.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
 import { TaskSignal } from "./signal.ts";
+import { endTurn, type TurnEndDeps } from "./turn-end.ts";
 import { makeSettle, makeWrapUp } from "./wrap-up.ts";
 
 type ToolHandler = (scope: CallScope, input: never) => Effect.Effect<TaskToolOutcome, TaskToolRefused>;
@@ -68,7 +71,13 @@ interface CallSource {
    */
   readonly taskId: () => TaskId | null;
   readonly resolve: (name: TaskToolName, at: string) => Effect.Effect<ResolvedCaller, TaskToolRefused>;
+  /** The backpack items the turn's earlier calls showed it, by id, which it carries from then on (#662). */
+  readonly shown: Map<string, CarriedItem>;
 }
+
+/** The caller, carrying what the turn's earlier calls showed it as well, a held claim winning. */
+const withShown = (caller: TaskToolCaller, shown: ReadonlyMap<string, CarriedItem>): TaskToolCaller =>
+  shown.size === 0 ? caller : { ...caller, carried: carriedWith(caller.carried ?? [], shown.values()) };
 
 /**
  * The Hobbots tools for Tasks and Quests (ADR 018). Every call is checked by the hub: who may make
@@ -117,7 +126,7 @@ export class TaskTools extends Context.Service<
         const wrapUp = yield* makeWrapUp;
         const settle = yield* makeSettle;
         const handlers: Record<TaskToolName, ToolHandler> = {
-          ...makePlanning({ tasks, capacity, limits, wrapUp }),
+          ...makePlanning({ tasks, capacity, limits, wrapUp, folderChecks, authority: authority.of, separator }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
           ...makeAsking({ tasks }),
           ...makeLeading({ tasks }),
@@ -171,12 +180,13 @@ export class TaskTools extends Context.Service<
               Effect.gen(function* () {
                 const resolved = yield* source.resolve(name, at);
                 seen.resolved = resolved;
-                const scope = yield* scopeOf(resolved.caller, at);
+                const scope = yield* scopeOf(withShown(resolved.caller, source.shown), at);
                 const made = yield* handlers[name](scope, rest as never);
-                return { done: made.done, entries: [...resolved.entries, ...made.entries] };
+                return { ...made, entries: [...resolved.entries, ...made.entries] };
               }),
             );
             if (seen.resolved !== null) committed(seen.resolved);
+            for (const item of outcome.shown ?? []) source.shown.set(item.itemId, item);
             // Committed already: a client that misses the announcement replays it from the journal.
             if (outcome.entries.length > 0) yield* announce(outcome.entries);
             return outcome.done;
@@ -194,7 +204,7 @@ export class TaskTools extends Context.Service<
         const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
         const refusals = makeRefusals(ledger, announce, redactor);
 
-        const call = (caller: TaskToolCaller, name: string, raw: unknown) =>
+        const call = (caller: TaskToolCaller, name: string, raw: unknown, shown = new Map<string, CarriedItem>()) =>
           callFrom(
             caller.agentId,
             {
@@ -202,6 +212,7 @@ export class TaskTools extends Context.Service<
               fence: caller.carried ?? [],
               taskId: () => caller.taskId,
               resolve: () => Effect.succeed({ caller, entries: [], attemptId: null }),
+              shown,
             },
             name,
             raw,
@@ -236,18 +247,23 @@ export class TaskTools extends Context.Service<
         const notOffered = (name: string) =>
           refuse("unknown-tool", `${name} is not offered in this session. Use the tools you were given.`);
 
-        const forTurn = (caller: TaskToolCaller, only?: ReadonlyArray<TaskToolName>): HubTools => ({
-          tools: offered(only),
-          call: (name, input, step) =>
-            answered(
-              only === undefined || (isTaskToolName(name) && only.includes(name))
-                ? call(caller, name, input)
-                : notOffered(name).pipe(
-                    refusals.recorded({ agentId: caller.agentId, tool: name, raw: input, taskOf: () => caller.taskId }),
-                  ),
-              step,
-            ),
-        });
+        const forTurn = (caller: TaskToolCaller, only?: ReadonlyArray<TaskToolName>): HubTools => {
+          const shown = new Map<string, CarriedItem>();
+          const refused = (name: string, input: unknown) =>
+            notOffered(name).pipe(
+              refusals.recorded({ agentId: caller.agentId, tool: name, raw: input, taskOf: () => caller.taskId }),
+            );
+          return {
+            tools: offered(only),
+            call: (name, input, step) =>
+              answered(
+                only === undefined || (isTaskToolName(name) && only.includes(name))
+                  ? call(caller, name, input, shown)
+                  : refused(name, input),
+                step,
+              ),
+          };
+        };
 
         const forChat = (turn: ChatTurn) =>
           Effect.gen(function* () {
@@ -261,36 +277,45 @@ export class TaskTools extends Context.Service<
               fence: turn.holding ?? [],
               taskId: () => known,
               resolve: (name, at) => chat.resolve(name, at, attemptId),
+              shown: new Map(),
             };
             const briefing = yield* chat.briefing;
             known = yield* chat.workingOn;
             // A turn briefed on its Task works on it as an Attempt of its own from the start.
             const begun = yield* chat.begin(DateTime.formatIso(yield* DateTime.now));
+            // The Task the turn's Attempt is on, which it ends on whatever Task a later call names.
+            let attemptOn: TaskId | null = null;
             if (begun !== null) {
               attemptId = begun.attemptId;
+              attemptOn = known;
               yield* announce(begun.entries);
             }
-            const end = (outcome: Parameters<ChatTaskTurn["end"]>[0], sessionId: string | null) =>
+            // The Task you asked for completes only by complete_task, so it is never blocked here.
+            const ended: TurnEndDeps = {
+              tasks,
+              attempt: (change) =>
+                change.pipe(
+                  Effect.tap((committed) => announce(committed.entries)),
+                  Effect.map((committed) => committed.value),
+                  Effect.tapError((error) => Effect.logDebug("A chat turn's end was refused", error)),
+                  Effect.option,
+                ),
+              explain: () => Effect.void,
+            };
+            const end = (ending: TurnEnding, sessionId: string | null) =>
               Effect.gen(function* () {
-                if (attemptId === null) return;
+                if (attemptId === null || attemptOn === null) return;
                 const at = DateTime.formatIso(yield* DateTime.now);
-                const ended = yield* tasks
-                  .updateAttempt(attemptId, { state: outcome, at, ...(sessionId === null ? {} : { sessionId }) })
-                  .pipe(Effect.option);
-                if (Option.isNone(ended)) return;
-                yield* announce(ended.value.entries);
-                const task = ended.value.value.task;
-                if (task.state !== "active" || task.currentAttemptId !== attemptId) return;
-                // A Task whose turn recorded a wait that still holds shows waiting now the turn has
-                // ended (#572). Otherwise one that waited, or was blocked, before the turn goes back to that.
-                const ledger = yield* tasks.readLedger(task.id);
-                const waits = Option.isSome(ledger) && ledger.value.open.some((entry) => entry._tag === "Wait");
-                const was = begun?.was;
-                const to = waits ? "waiting" : was === "waiting" || was === "blocked" ? was : null;
-                if (to !== null) {
-                  const back = yield* tasks.moveTask(task.id, task.revision, to, at).pipe(Effect.option);
-                  if (Option.isSome(back)) yield* announce(back.value.entries);
-                }
+                yield* endTurn(ended, {
+                  runner: "root",
+                  taskId: attemptOn,
+                  attemptId,
+                  ending,
+                  carried: [],
+                  sessionId,
+                  ...(begun === null ? {} : { was: begun.was }),
+                  at,
+                });
               }).pipe(
                 Effect.catchCause((cause) => Effect.logWarning("Could not end a chat turn's Attempt", cause)),
                 Effect.provideContext(context),
@@ -300,8 +325,11 @@ export class TaskTools extends Context.Service<
               call: (name, input, step) =>
                 answered(
                   callFrom(turn.agentId, source, name, input, (resolved) => {
-                    if (resolved.attemptId !== null) attemptId = resolved.attemptId;
-                    known = resolved.caller.taskId;
+                    if (resolved.attemptId !== null) {
+                      attemptId = resolved.attemptId;
+                      attemptOn = resolved.caller.taskId;
+                    }
+                    if (resolved.readOnly !== true) known = resolved.caller.taskId;
                   }),
                   step,
                 ),
@@ -312,6 +340,15 @@ export class TaskTools extends Context.Service<
               end,
               workingOn: chat.workingOn,
               attempt: Effect.sync(() => attemptId),
+              workIn: Effect.suspend(() =>
+                known === null
+                  ? Effect.succeed(null)
+                  : Effect.map(tasks.readTree(known), (tree) =>
+                      Option.isNone(tree)
+                        ? null
+                        : (tree.value.quests.find((quest) => quest.taskId === known)?.limits.folders ?? null),
+                    ),
+              ),
             } satisfies ChatTaskTurn;
           });
 

@@ -4,8 +4,8 @@ import type {
   ArtifactId,
   ArtifactKind,
   Attempt,
+  AttemptEnd,
   AttemptId,
-  AttemptState,
   CarriedItem,
   Checkpoint,
   CheckpointId,
@@ -14,6 +14,7 @@ import type {
   Committed,
   DelegationAuthority,
   DelegationId,
+  DeviceId,
   EventEnvelope,
   HandOff,
   IllegalTaskTransition,
@@ -24,6 +25,7 @@ import type {
   QuestId,
   Question,
   QuestionId,
+  QuestionSurface,
   QuestLimits,
   RefusedCall,
   ResponsibilityLedger,
@@ -87,13 +89,13 @@ export interface NewAttempt {
   readonly startedAt: string;
 }
 
-/** What happened to a live Attempt: the runtime took it (`running`), or it ended. */
-export interface AttemptChange {
-  readonly state: Exclude<AttemptState, "starting">;
-  readonly sessionId?: string;
-  readonly outcome?: string;
-  readonly at: string;
-}
+/**
+ * What happened to a live Attempt: the runtime took it in its session, or it ended, and why. The
+ * record decides the state it ends in from why and its Task (`AttemptTransitions.end`).
+ */
+export type AttemptChange =
+  | { readonly _tag: "Running"; readonly sessionId?: string; readonly at: string }
+  | { readonly _tag: "Ended"; readonly end: AttemptEnd; readonly sessionId?: string; readonly at: string };
 
 /** The turn that resumes a Task's Attempt: when, and the brain and configuration it runs on. */
 export interface AttemptResume {
@@ -190,6 +192,14 @@ type TaskChange = TaskRefused | StaleTask | IllegalTaskTransition;
  * its events in one transaction; a refused write changes nothing. Changes to a Task name the
  * revision they were decided on, and a stale one is refused (EX-002).
  */
+/** How a move is made, beyond where it goes. */
+export interface TaskMoveOptions {
+  /** The backpack items the turn that ended read, which a move to `blocked` settles. */
+  readonly carried?: ReadonlyArray<CarriedItem>;
+  /** Who asked for a cancel this move makes: the hob that cancelled the Task, or you. */
+  readonly cancelledBy?: AgentId | "you";
+}
+
 export class TaskRepository extends Context.Service<
   TaskRepository,
   {
@@ -211,8 +221,10 @@ export class TaskRepository extends Context.Service<
       attempt: NewAttempt,
     ) => Changed<{ readonly task: Task; readonly attempt: Attempt }, TaskChange>;
     /**
-     * Records that a live Attempt is running or has ended. The Task's own state is decided
-     * separately, so an Attempt still ends after its Task completed or failed.
+     * Records that a live Attempt is running or has ended. It ends in the state its end and its
+     * Task call for, read in the same transaction, so one whose Task is being cancelled ends
+     * cancelled. The Task's own state is decided separately, so an Attempt still ends after its
+     * Task completed or failed.
      */
     readonly updateAttempt: (
       attemptId: AttemptId,
@@ -220,9 +232,9 @@ export class TaskRepository extends Context.Service<
     ) => Changed<{ readonly task: Task; readonly attempt: Attempt }>;
     /**
      * Puts the Task's current Attempt, once it has ended, back to starting for another turn of the
-     * same work, as a lead's next chat turn on its Task does: the Attempt keeps its number, and only a
-     * retry or a reassignment starts a new one. Refused for a Task that has ended or is being
-     * cancelled, for an Attempt that is live, was cancelled or never confirmed its stop, and for one
+     * same work, as a lead's next chat turn or a member's next turn on its Task does: the Attempt
+     * keeps its number, and only a retry or a reassignment starts a new one. Refused for a Task that
+     * has ended, is being cancelled or waits queued after a retry, for an Attempt that is live, was cancelled or never confirmed its stop, and for one
      * that ran on another brain or configuration, which starts an Attempt of its own instead.
      */
     readonly resumeAttempt: (
@@ -232,9 +244,18 @@ export class TaskRepository extends Context.Service<
     ) => Changed<{ readonly task: Task; readonly attempt: Attempt }, TaskChange>;
     /**
      * Moves a Task to another state. It fails or is cancelled only once its Attempt and every Task
-     * under it have ended, and ends its Quest with it.
+     * under it have ended, and ends its Quest with it. A move to `blocked` settles the backpack items
+     * in `carried`, those the turn that ended read, as a completion settles them; other moves ignore
+     * them. A move that asks for a cancel records who asked (`cancelledBy`), which an Attempt the
+     * cancel stops names (#669, #674).
      */
-    readonly moveTask: (taskId: TaskId, revision: number, to: TaskTarget, at: string) => Changed<Task, TaskChange>;
+    readonly moveTask: (
+      taskId: TaskId,
+      revision: number,
+      to: TaskTarget,
+      at: string,
+      options?: TaskMoveOptions,
+    ) => Changed<Task, TaskChange>;
     /**
      * Completes a Task with a result from its current Attempt once its responsibility ledger is
      * settled, less what the completing turn carries; completes its Quest with it. Refused otherwise,
@@ -262,7 +283,14 @@ export class TaskRepository extends Context.Service<
     readonly recordCheckpoint: (input: NewCheckpoint) => Changed<Checkpoint>;
     /** Asks the nearest lead above the Task, or the user when there is none. */
     readonly askQuestion: (input: NewQuestion) => Changed<Question>;
-    readonly answerQuestion: (questionId: QuestionId, by: Answerer, answer: string, at: string) => Changed<Question>;
+    /** `from` is the device and surface you answered on, for your own answer (#671). */
+    readonly answerQuestion: (
+      questionId: QuestionId,
+      by: Answerer,
+      answer: string,
+      at: string,
+      from?: { readonly deviceId: DeviceId; readonly via: QuestionSurface | null },
+    ) => Changed<Question>;
     /** Passes a question from its current lead to the next lead up, or to the user from the top lead. */
     readonly escalateQuestion: (questionId: QuestionId, by: AgentId) => Changed<Question>;
     /**
@@ -342,6 +370,11 @@ export interface TaskToolCall {
 export interface TaskToolOutcome {
   readonly done: TaskToolDone;
   readonly entries: ReadonlyArray<EventEnvelope>;
+  /**
+   * The backpack items the call's result tells the turn, as a result or failure it shows (#662).
+   * The turn carries them from then on, as it carries what its prompt shows. None by default.
+   */
+  readonly shown?: ReadonlyArray<CarriedItem>;
 }
 
 /** A Task tool call the hub refused, to record (#575). */

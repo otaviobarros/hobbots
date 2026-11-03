@@ -28,15 +28,18 @@ import {
   isTerminalTask,
   type Task,
   type TaskId,
+  TaskReadiness,
   type TaskTree,
+  type TurnEnding,
 } from "@hobbots/domain";
 import { DateTime, Effect, FiberMap, Option, Semaphore } from "effect";
 import { type PathSeparator, sharedFolders } from "./authority.ts";
-import { memberPrompt, memberReminder, stoppedShort } from "./briefs.ts";
+import { memberPrompt, memberReminder } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { emptyQuestFinding } from "./empty-quests.ts";
 import { type Ending, type Running, runSessionTurn, STOPPED } from "./session.ts";
 import type { TaskTools } from "./task-tools.ts";
+import { endTurn } from "./turn-end.ts";
 
 /** What the member runner shares with the step runner it runs beside. */
 export interface MemberDeps {
@@ -111,14 +114,6 @@ export const delegatedAccess = (
 };
 
 /**
- * Every Task `task` comes after has completed (ADR 018). Until then neither a step nor a member's
- * Task starts: it stays queued, waiting on them. One that fails or is cancelled keeps it queued
- * until its lead retries that Task, or cancels this one.
- */
-export const dependenciesDone = (task: Task, tree: TaskTree): boolean =>
-  task.dependsOn.every((id) => tree.tasks.find((each) => each.id === id)?.state === "completed");
-
-/**
  * The session the member's last turn on the Task ran in, to resume, or null before its first. Only
  * the Task's current Attempt counts, and only when its owner ran it: a reassignment leaves it none,
  * so a hob the Task comes back to starts afresh rather than in the session it had before. Each turn
@@ -130,10 +125,29 @@ const lastSession = (task: Task, tree: TaskTree): string | null => {
 };
 
 /**
+ * The Attempt the member's next turn on the Task goes on in, as a lead's later turns do (#577,
+ * #668): its current one, when its owner's last turn there finished, or was stopped by Hobbots, on
+ * the same brain and configuration. A failed turn, a cancel, a retry and a reassignment end it, so
+ * the next turn starts a new one. The hub refuses a resume it would not allow, which leaves the work
+ * waiting for the next try.
+ */
+const resumableAttempt = (task: Task, tree: TaskTree, config: AgentConfiguration): AttemptId | null => {
+  const current = tree.attempts.find((each) => each.id === task.currentAttemptId);
+  return task.state !== "queued" &&
+    current !== undefined &&
+    current.agentId === task.ownerId &&
+    (current.state === "completed" || current.state === "interrupted") &&
+    current.runtime === config.runtime &&
+    current.configVersion === config.version
+    ? current.id
+    : null;
+};
+
+/**
  * Runs party members' Tasks (ADR 018, ADR 019). A member works on its Task in a session of its
  * own, under its own policy narrowed by the delegation, with the Task tools on its Task. Each turn
  * carries the work its owner holds under the Task, starting with the Task itself, through the
- * dispatcher, and is an Attempt of the Task. A turn that ends without the Task's result leaves it
+ * dispatcher, and goes on in the Task's current Attempt (#668). A turn that ends without the Task's result leaves it
  * waiting for what comes next, such as a hand-off from its lead or an answer, which starts the
  * next turn in the same session. A member's tool calls that need approval ask you directly, in the
  * Inbox, under the lead's thread (PE-006).
@@ -158,24 +172,30 @@ export const makeMemberRunner = (deps: MemberDeps) => {
       return Option.match(lead, { onNone: () => "your lead", onSome: (agent) => agent.name });
     });
 
+  /** Ends a member's turn on its Task by the one turn-end decision (#669). */
+  const endMemberTurn = (taskId: TaskId, attemptId: AttemptId, ending: TurnEnding, carried: CarriedWork["holding"]) =>
+    Effect.gen(function* () {
+      const at = yield* nowIso;
+      return yield* endTurn(deps, { runner: "member", taskId, attemptId, ending, carried, at });
+    });
+
   /**
-   * After a turn: the Attempt ends with it. Unless the turn returned the result itself, its final
-   * reply completes the Task once nothing keeps it open. A Task that comes after others starts
-   * only once they have completed, with what they returned, so nothing more from them is to come.
-   * A Task still open waits, or is blocked when only its own unreported milestones keep it open,
-   * which its lead then hears about.
+   * After a turn: the Attempt ends with it, until the next turn resumes it. Unless the turn returned
+   * the result itself, its final reply completes the Task once nothing keeps it open. A Task that
+   * comes after others starts only once they have completed, with what they returned, so nothing
+   * more from them is to come. A Task still open waits, or is blocked when only its own unreported
+   * milestones keep it open, which its lead then hears about, as it does of a Quest the turn left
+   * with nobody in it (#576). A failed turn leaves its work to be delivered again.
    */
   const settle = (taskId: TaskId, attemptId: AttemptId, ending: Ending, work: CarriedWork): Effect.Effect<CarriedEnd> =>
     Effect.gen(function* () {
-      const at = yield* nowIso;
-      const failed = ending._tag === "Failed";
-      yield* deps.attempt(
-        tasks.updateAttempt(attemptId, {
-          state: failed ? "failed" : "completed",
-          outcome: failed ? ending.reason : "The turn finished.",
-          at,
-        }),
-        "end a member's turn",
+      const { decided, completed } = yield* endMemberTurn(
+        taskId,
+        attemptId,
+        ending._tag === "Failed"
+          ? { _tag: "Failed", reason: ending.reason }
+          : { _tag: "Replied", text: deps.redactor.text(ending.text) },
+        work.holding,
       );
       if (ending._tag === "Failed") {
         return {
@@ -184,66 +204,18 @@ export const makeMemberRunner = (deps: MemberDeps) => {
           diagnostic: ending.reason,
         } as CarriedEnd;
       }
-      const found = yield* read(taskId);
-      if (Option.isNone(found) || isTerminalTask(found.value.task.state)) return { _tag: "Handled" } as CarriedEnd;
-      const { task } = found.value;
-      if (task.state === "cancelling") {
-        yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
-        return { _tag: "Handled" } as CarriedEnd;
-      }
-      const done = yield* tasks
-        .completeTask(task.id, task.revision, {
-          summary: deps.redactor.text(ending.text).trim() || "The Task finished without a reply.",
-          attemptId,
-          artifacts: [],
-          at,
-          carried: work.holding,
-        })
-        .pipe(Effect.flatMap(deps.announce), Effect.option);
-      if (Option.isSome(done)) return { _tag: "Handled" } as CarriedEnd;
-      yield* holdOpen(taskId, at, new Set(work.holding.map((each) => each.itemId as string)));
+      if (!completed && decided !== null) yield* flagEmptyQuest(taskId, yield* nowIso);
       return { _tag: "Handled" } as CarriedEnd;
     });
-
-  /**
-   * Leaves a Task its turn did not finish waiting while anything it waits on is open: a question, a
-   * Task it comes after, an approval or work that arrived. Only when its own milestones are all that
-   * is left is it blocked, with a reason its lead can act on (#571). The items the turn carries
-   * settle with it, so they keep nothing open.
-   */
-  const holdOpen = (taskId: TaskId, at: string, carried: ReadonlySet<string>) =>
-    Effect.andThen(leaveOpen(taskId, at, carried), flagEmptyQuest(taskId, at));
 
   /** Tells the lead above when the turn left a Quest the member leads with nobody in it (#576). */
   const flagEmptyQuest = (taskId: TaskId, at: string) =>
     Effect.gen(function* () {
       const found = yield* read(taskId);
-      if (Option.isNone(found)) return;
+      if (Option.isNone(found) || isTerminalTask(found.value.task.state) || found.value.task.state === "cancelling")
+        return;
       const empty = emptyQuestFinding(found.value.task, found.value.tree, at);
       if (empty !== null) yield* deps.attempt(tasks.recordCheckpoint(empty), "flag an empty Quest");
-    });
-
-  const leaveOpen = (taskId: TaskId, at: string, carried: ReadonlySet<string>) =>
-    Effect.gen(function* () {
-      const found = yield* read(taskId);
-      const ledger = yield* tasks.readLedger(taskId);
-      if (Option.isNone(found) || Option.isNone(ledger)) return;
-      const { task } = found.value;
-      if (task.state !== "active" && task.state !== "waiting") return;
-      const open = ledger.value.open.filter((entry) => entry._tag !== "Item" || !carried.has(entry.item.id));
-      const milestones = open.flatMap((entry) => (entry._tag === "Milestone" ? [entry.milestone.title] : []));
-      if (open.length > 0 && milestones.length === open.length) {
-        yield* deps.explain(task.id, stoppedShort(milestones), at);
-        const latest = yield* read(taskId);
-        if (Option.isSome(latest)) {
-          const now = latest.value.task;
-          yield* deps.attempt(tasks.moveTask(now.id, now.revision, "blocked", at), "block a member's Task");
-        }
-        return;
-      }
-      if (task.state === "active") {
-        yield* deps.attempt(tasks.moveTask(task.id, task.revision, "waiting", at), "leave a member's Task waiting");
-      }
     });
 
   /**
@@ -276,27 +248,10 @@ export const makeMemberRunner = (deps: MemberDeps) => {
     Effect.gen(function* () {
       // Stopped with the hub: the next start finds the Attempt live and ends it.
       if (run.stop === null) return;
-      const at = yield* nowIso;
-      const found = yield* read(taskId);
-      const cancelling = Option.isSome(found) && found.value.task.state === "cancelling";
-      yield* deps.attempt(
-        tasks.updateAttempt(attemptId, {
-          state: cancelling ? "cancelled" : "interrupted",
-          outcome: cancelling ? STOPPED.cancel : STOPPED[run.stop],
-          at,
-        }),
-        "end a stopped member's turn",
-      );
+      yield* endMemberTurn(taskId, attemptId, { _tag: "Stopped", reason: STOPPED[run.stop] }, []);
+      // A retired hob's Task fails rather than wait, once its Attempt has ended.
       const hob = yield* repo.findAgent(run.agentId);
-      if (Option.isNone(hob) || hob.value.status === "retired") return yield* retire(taskId, run.agentId, at);
-      const latest = yield* read(taskId);
-      if (Option.isNone(latest) || latest.value.task.ownerId !== run.agentId) return;
-      const task = latest.value.task;
-      if (task.state === "cancelling") {
-        yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
-      } else if (task.state === "active") {
-        yield* deps.attempt(tasks.moveTask(task.id, task.revision, "waiting", at), "leave a member's Task waiting");
-      }
+      if (Option.isNone(hob) || hob.value.status === "retired") yield* retire(taskId, run.agentId, yield* nowIso);
     });
 
   /** One turn of the member's session on its Task, carrying the work that waits there. */
@@ -313,7 +268,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         const hob = yield* repo.findAgent(agent.id);
         if (Option.isNone(hob) || hob.value.status !== "active") return null;
         // A Task that ended still takes the turn's claims, so the dispatcher settles its items as late.
-        return AttemptIdSchema.make(newId());
+        return resumableAttempt(found.value.task, found.value.tree, config) ?? AttemptIdSchema.make(newId());
       }),
     run: (attemptId, work) =>
       Effect.gen(function* () {
@@ -323,15 +278,22 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         const { task, tree } = found.value;
         if (isTerminalTask(task.state) || task.state === "cancelling") return { _tag: "Handled" } as CarriedEnd;
         const previous = lastSession(task, tree);
+        const at = yield* nowIso;
         const started = yield* deps.attempt(
-          tasks.startAttempt(task.id, task.revision, {
-            id: attemptId,
-            runtime: config.runtime,
-            sessionId: previous,
-            configVersion: config.version,
-            policyVersion: null,
-            startedAt: yield* nowIso,
-          }),
+          attemptId === task.currentAttemptId
+            ? tasks.resumeAttempt(task.id, task.revision, {
+                runtime: config.runtime,
+                configVersion: config.version,
+                at,
+              })
+            : tasks.startAttempt(task.id, task.revision, {
+                id: attemptId,
+                runtime: config.runtime,
+                sessionId: previous,
+                configVersion: config.version,
+                policyVersion: null,
+                startedAt: at,
+              }),
           "start a member's turn",
         );
         if (Option.isNone(started)) {
@@ -373,7 +335,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                 Effect.andThen(nowIso),
                 Effect.flatMap((at) =>
                   deps.attempt(
-                    tasks.updateAttempt(attemptId, { state: "running", sessionId, at }),
+                    tasks.updateAttempt(attemptId, { _tag: "Running", sessionId, at }),
                     "record a member's session",
                   ),
                 ),
@@ -407,7 +369,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         if (liveAttemptOn(task, tree)) return;
         // Its work waits, queued, until every Task it comes after has completed: that completion
         // wakes the runner again, as it does for a step (ADR 018).
-        if (!dependenciesDone(task, tree)) return;
+        if (TaskReadiness.of(task, tree.tasks)._tag !== "Ready") return;
         const narrowed = (own: ToolAccess | null) => delegatedAccess(own, task, tree, deps.separator);
         // Registered and forked under one permit, so a narrower policy either sees neither or can
         // stop the fiber it finds (PE-008).

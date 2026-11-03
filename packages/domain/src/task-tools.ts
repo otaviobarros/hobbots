@@ -40,7 +40,8 @@ const Step = Schema.Struct({
 const Authority = Schema.Struct({
   decisions: Schema.optionalKey(
     PolicyOverrides.annotate({
-      description: "allow, ask or deny for each operation. Each must be at least as narrow as your own.",
+      description:
+        "allow, ask or deny for each operation. Each must be at least as narrow as your own. Commands, Git's included, need read-files and edit-files both allow.",
     }),
   ),
   folders: Schema.optionalKey(
@@ -70,6 +71,12 @@ export const TaskToolInputs = {
     deadline: Schema.optionalKey(
       Schema.String.annotate({
         description: "When its work must be done, ISO 8601. It cannot be later than the one above it.",
+      }),
+    ),
+    folders: Schema.optionalKey(
+      Schema.Array(Schema.String).check(Schema.isMinLength(1)).annotate({
+        description:
+          "Absolute folders the Quest's work is in, each one of yours or inside one. Leave out for the folders the Task's brief and the goal name.",
       }),
     ),
   }),
@@ -136,7 +143,9 @@ export const TaskToolInputs = {
   read_tasks: Schema.Struct({
     key,
     task_id: Schema.optionalKey(
-      id("A Task you own, or one under it, to read everything under. Leave it out for the Task you are working on."),
+      id(
+        "A Task you own, or one under it, to read everything under. Leave it out for the Task you are working on. Once that request has ended, you read only the last request you led in this conversation, and the Tasks under it.",
+      ),
     ),
   }),
   message_task: Schema.Struct({
@@ -148,6 +157,11 @@ export const TaskToolInputs = {
     key,
     task_id: taskId,
     summary: text("The result, in a few sentences."),
+    leave_uncommitted: Schema.optionalKey(
+      text(
+        "Why you leave the files you changed uncommitted. Only when you mean to: completing a Quest you lead with uncommitted changes is refused without it.",
+      ),
+    ),
     artifacts: Schema.optionalKey(
       Schema.Array(
         Schema.Struct({
@@ -229,7 +243,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   {
     name: "read_tasks",
     description:
-      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its open questions, its latest checkpoints and its result. Read it instead of guessing; it changes nothing.",
+      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its questions with their state and answer, its latest checkpoints and its result. Read it instead of guessing, and before you tell anyone a question is unanswered; it changes nothing.",
     label: "Reading the work",
   },
   {
@@ -278,12 +292,14 @@ export const TaskToolRefusal = Schema.Literals([
   "depth-limit",
   "concurrency-limit",
   "authority-wider",
+  "authority-unusable",
   "deadline-passed",
   "key-reused",
   "no-attempt",
   "no-task",
   "task-state",
   "claim-stale",
+  "uncommitted-changes",
 ]);
 export type TaskToolRefusal = typeof TaskToolRefusal.Type;
 

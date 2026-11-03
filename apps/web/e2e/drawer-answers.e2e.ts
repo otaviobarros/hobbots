@@ -35,13 +35,13 @@ test("[TC-UX-085] a question waiting for you is answered in the Task drawer, goe
   await expect(drawer.getByRole("button", { name: "Send answer" })).toBeEnabled();
   await answer.press("Enter");
 
-  // The question closes in place, and the chat's card shows the same answer.
-  await expect(drawer).toContainText("You: Yes, Dec 12 for international orders.");
+  // The question closes in place, and the chat's card shows the same answer, each saying where you gave it (#671).
+  await expect(drawer).toContainText("You answered here: Yes, Dec 12 for international orders.");
   await expect(answer).toHaveCount(0);
   await expect(drawer.getByRole("textbox", { name: "Tell Aldric about this task" })).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("region", { name: "Ada asks you" })).toContainText(
-    "You answered: Yes, Dec 12 for international orders.",
+    "You answered in the Task's details: Yes, Dec 12 for international orders.",
   );
 
   // Once the question is answered, her part finishes and the Quest wraps up.
@@ -79,4 +79,29 @@ test("[TC-UX-086] while a question waits for you, the drawer's note box says it 
   const questions = page.getByRole("region", { name: "Questions for you" });
   await expect(questions).toContainText("1 question for you");
   await expect(questions.getByRole("region", { name: "Question from Ada" })).toContainText(QUESTION);
+});
+
+// covers OR-004, IN-002, UX-001
+test("[TC-IN-489] an answer given in the Inbox says so in the Task drawer and on the chat's card", async ({ page }) => {
+  const { url, aldric } = await questHub();
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill("Plan a Black Friday campaign for the shop");
+  await composer.press("Enter");
+  await expect(page.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 15_000 });
+  const thread = page.url();
+
+  await page.goto(`${url}/#/inbox?tab=needs`);
+  const asked = page.getByRole("region", { name: "Question from Ada" });
+  await asked.getByRole("textbox", { name: "Your answer to Ada" }).fill("Yes, Dec 12.");
+  await asked.getByRole("button", { name: "Send answer" }).click();
+  await expect(page.getByRole("region", { name: "Questions for you" })).toBeHidden();
+
+  await page.goto(thread);
+  const asks = page.getByRole("region", { name: "Ada asks you" });
+  await expect(asks).toContainText("You answered in the Inbox: Yes, Dec 12.");
+  // The Quest may have wrapped up by now, so the drawer opens from the question's own card.
+  await asks.getByRole("button", { name: "for Build the campaign" }).click();
+  const drawer = page.getByRole("complementary", { name: "Build the campaign, Task details" });
+  await expect(drawer).toContainText("You answered in the Inbox: Yes, Dec 12.");
 });

@@ -38,8 +38,9 @@ import { EventBus } from "./event-bus.ts";
  * Quill's signs are under way, so they can be cancelled. Asking for the shop badge has Quill make
  * it while Ada reviews the shop, and both change the badge's file while both are at work, so the
  * hub's finding on the two Tasks can be followed (#570), while Aldric's clearing of the badge before
- * he delegated is none (#658); Quill then finishes with the badge left
- * uncommitted (#586). Only `HOBBOTS_FAKE_QUEST=black-friday`
+ * he delegated is none (#658); Quill then finishes with the badge left uncommitted (#586). Asking
+ * to wrap up the spec has the lead edit the spec itself and complete the Quest leaving it
+ * uncommitted on purpose, as its hold on the top Task lets it (#665). Only `HOBBOTS_FAKE_QUEST=black-friday`
  * with the fake runtime turns any of them on.
  */
 
@@ -48,6 +49,7 @@ const SCRIPTS = {
   "black-friday": /black friday/i,
   "spring-sale": /spring sale/i,
   "shop-badge": /shop badge/i,
+  "spec-wrap": /wrap up the spec/i,
 } as const;
 type Script = keyof typeof SCRIPTS;
 
@@ -58,6 +60,7 @@ const BRIEFS: Record<Script, { readonly title: string; readonly goal: string }> 
   },
   "spring-sale": { title: "Plan the spring sale", goal: "A spring sale: a banner, an email and window signs" },
   "shop-badge": { title: "Make the shop badge", goal: "A badge on the shop's page, in the agreed colour" },
+  "spec-wrap": { title: "Wrap up the spec", goal: "The shop's spec, final and committed" },
 };
 
 /** The folder the shop badge's play says its files are in. */
@@ -142,8 +145,8 @@ const stopAttempt = (task: Task, bus: EventBus["Service"]) =>
     );
     if (live !== undefined) {
       const stopped = yield* tasks.updateAttempt(live.id, {
-        state: "cancelled",
-        outcome: "Stopped when you cancelled it.",
+        _tag: "Ended",
+        end: { _tag: "Stopped", reason: null },
         at: yield* iso,
       });
       yield* bus.publish(stopped.entries);
@@ -263,7 +266,8 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
             id: QuestId.make(id(name)),
             taskId,
             goal,
-            acceptance: name === "quest" ? ["Landing copy approved", "Campaign scheduled"] : [],
+            acceptance:
+              name === "quest" && script !== "spec-wrap" ? ["Landing copy approved", "Campaign scheduled"] : [],
             limits: DEFAULT_QUEST_LIMITS,
             createdAt: yield* iso,
           })
@@ -301,7 +305,8 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
             milestones: milestones.map((title, index) => ({ id: MilestoneId.make(id(`${name}-${index}`)), title })),
           })
           .pipe(Effect.flatMap(announce));
-        return (yield* start(task, `a-${name}`)).task;
+        // A Task that comes after others stays queued until they complete, as a real one does.
+        return after.length === 0 ? (yield* start(task, `a-${name}`)).task : task;
       });
     // The spring sale stops here, with work in each state the Quest tab's controls act on.
     if (script === "spring-sale") {
@@ -309,7 +314,11 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
         Effect.gen(function* () {
           const started = yield* member(name, owner, brief, [], []);
           const ended = yield* tasks
-            .updateAttempt(AttemptId.make(id(`a-${name}`)), { state: "failed", outcome: why, at: yield* iso })
+            .updateAttempt(AttemptId.make(id(`a-${name}`)), {
+              _tag: "Ended",
+              end: { _tag: "Failed", reason: why },
+              at: yield* iso,
+            })
             .pipe(Effect.flatMap(announce));
           yield* tasks.moveTask(started.id, ended.task.revision, "failed", yield* iso).pipe(Effect.flatMap(announce));
         });
@@ -326,6 +335,19 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
         "The mailing tool rejected the sign-in.",
       );
       yield* member("signs", cast.quill, "Order the sale signs\nOrder window signs for the shop.", [], []);
+      return;
+    }
+    // The lead edits the spec after the last commit and completes the Quest, leaving it on purpose (#665).
+    if (script === "spec-wrap") {
+      yield* changeInShop(AttemptId.make(id("a-campaign")), "docs/SPEC.md", "final", bus);
+      yield* pause;
+      yield* complete(
+        campaign.id,
+        "a-campaign",
+        "Spec wrapped up",
+        null,
+        `Left 1 file uncommitted since the last commit: docs/SPEC.md in ${SHOP}. Left on purpose: You asked to review it before it is committed.`,
+      );
       return;
     }
     // The shop badge stops with Quill and Ada both at work, after both changed the badge.
@@ -382,9 +404,6 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       [],
       [copy.id],
     );
-    yield* whileOpen(build.id, tasks.moveTask(build.id, build.revision, "waiting", yield* iso)).pipe(
-      Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: announce })),
-    );
     yield* pause;
 
     // Rook runs the ads and brings in Pip for the keywords, leading a Quest of his own under Aldric's.
@@ -425,7 +444,29 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
           .pipe(Effect.flatMap(announce));
       }),
     );
-    yield* whileOpen(build.id, report(build.id, "progress", "Keyword research done while waiting on Quill", null));
+    yield* pause;
+
+    // Quill finishes, and Ada's Task starts with the copy it comes after.
+    yield* whileOpen(
+      copy.id,
+      Effect.gen(function* () {
+        yield* report(copy.id, "milestone", "Landing copy written", "copy-1");
+        yield* complete(copy.id, "a-copy", "Landing copy ready", [
+          "Landing copy",
+          "Black Friday: 20% off everything, this weekend only.",
+        ]);
+      }),
+    );
+    if ((yield* stateOf(copy.id)) === "completed") {
+      yield* whileOpen(
+        build.id,
+        Effect.gen(function* () {
+          const queued = Option.getOrThrow(yield* tasks.readTree(build.id)).tasks[0];
+          if (queued !== undefined) yield* start(queued, "a-build");
+        }),
+      );
+    }
+    yield* whileOpen(build.id, report(build.id, "progress", "Keyword research done", null));
     yield* pause;
 
     // Ada's question needs a call only you can make: Aldric passes it up to you.
@@ -443,32 +484,6 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       }),
     );
     yield* pause;
-
-    // Quill finishes; Aldric checks the copy and hands it to Ada.
-    yield* whileOpen(
-      copy.id,
-      Effect.gen(function* () {
-        yield* report(copy.id, "milestone", "Landing copy written", "copy-1");
-        yield* complete(copy.id, "a-copy", "Landing copy ready", [
-          "Landing copy",
-          "Black Friday: 20% off everything, this weekend only.",
-        ]);
-      }),
-    );
-    if ((yield* stateOf(copy.id)) === "completed") {
-      yield* whileOpen(
-        build.id,
-        Effect.gen(function* () {
-          yield* tasks
-            .handOff(ArtifactId.make(`art-a-copy-${key}`), build.id, yield* iso)
-            .pipe(Effect.flatMap(announce));
-          const waiting = Option.getOrThrow(yield* tasks.readTree(build.id)).tasks[0];
-          if (waiting !== undefined) {
-            yield* tasks.moveTask(build.id, waiting.revision, "active", yield* iso).pipe(Effect.flatMap(announce));
-          }
-        }),
-      );
-    }
 
     // Once you answer, Ada finishes and Aldric wraps up in your chat. Work you cancelled is skipped.
     if (Option.isSome(cutoff)) yield* answered(cutoff.value.id, build.id, step);

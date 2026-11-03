@@ -6,6 +6,7 @@ import {
   QuestId,
   Question,
   QuestionId,
+  QuestionSurface,
   ResponsibilityLedger,
   Task,
   TaskId,
@@ -104,8 +105,10 @@ export type WaitingQuestion = typeof WaitingQuestion.Type;
 export const WaitingQuestionsRead = Schema.Struct({ cursor: Schema.String, questions: Schema.Array(WaitingQuestion) });
 export type WaitingQuestionsRead = typeof WaitingQuestionsRead.Type;
 
+/** `via` says where you answered: the card in the chat, the Inbox or the Task's drawer (#671). */
 export const AnswerQuestionPayload = Schema.Struct({
   answer: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(4000)),
+  via: Schema.optionalKey(QuestionSurface),
 });
 export type AnswerQuestionPayload = typeof AnswerQuestionPayload.Type;
 

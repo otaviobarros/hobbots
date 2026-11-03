@@ -1,6 +1,7 @@
-import type { TaskRepository } from "@hobbots/agents";
+import type { FolderChecksShape, TaskRepository } from "@hobbots/agents";
 import {
   ArtifactId,
+  type AttemptId,
   cancelMoves,
   descendantsOf,
   isLiveAttempt,
@@ -9,23 +10,32 @@ import {
   QuestId,
   type Task,
   TaskId,
+  TaskReadiness,
   type TaskState,
   type TaskToolInput,
   type TaskToolRefused,
 } from "@hobbots/domain";
 import { Effect } from "effect";
+import type { Authority, PathSeparator } from "./authority.ts";
+import { cut } from "./briefs.ts";
 import {
   type CallScope,
   fromRecords,
   journalOf,
   ledTask,
+  nameFor,
   newId,
+  outcomesShown,
   ownTask,
   questLimitsFor,
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
-import type { WrapUp } from "./wrap-up.ts";
+import { namedFolders, requestedFolders, withFolders } from "./default-folders.ts";
+import type { WrapUp, WrapUpPolicy } from "./wrap-up.ts";
+
+/** Longest reason a lead's `leave_uncommitted` keeps on the Task (#665). */
+const REASON_LIMIT = 600;
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -36,7 +46,11 @@ interface Deps {
   ) => Effect.Effect<void, TaskToolRefused>;
   readonly limits: TaskToolLimits;
   /** What the Task leaves uncommitted in its folders, read as it completes (#586). */
-  readonly wrapUp: (task: Task) => Effect.Effect<WrapUp>;
+  readonly wrapUp: (task: Task, attempts: ReadonlyArray<AttemptId>, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
+  readonly folderChecks: FolderChecksShape;
+  /** The caller's authority on a Task: its own, narrowed by every Delegation on the way down. */
+  readonly authority: (scope: CallScope, task: Task) => Effect.Effect<Authority>;
+  readonly separator: PathSeparator;
 }
 
 /**
@@ -62,17 +76,27 @@ const openOnAwaited = (scope: CallScope, awaited: ReadonlyArray<Task>) => {
       task_id: question.taskId as string,
       asker: question.askerId as string,
       question: question.text,
-      waits_for:
-        question.recipientId === scope.caller.agentId ? "you" : ((question.recipientId ?? "the user") as string),
+      waits_for: nameFor(question.recipientId, scope.caller.agentId),
     }));
-  // A Task is blocked, or the last thing its hob reported about it is a blocker.
+  // A Task is blocked, the last thing its hob reported about it is a blocker, or it cannot start
+  // until someone acts on a Task it comes after (#667).
   const blockers = awaited.flatMap((each) => {
     const reported = scope.tree.checkpoints
       .filter((checkpoint) => checkpoint.taskId === each.id && checkpoint.source !== "automatic")
       .toSorted((a, b) => b.revision - a.revision)[0];
     const latest = reported?.kind === "blocker" ? reported.summary : null;
-    if (isTerminalTask(each.state) || (each.state !== "blocked" && latest === null)) return [];
-    return [{ task_id: each.id as string, blocker: latest ?? "Blocked, with no reason reported." }];
+    if (isTerminalTask(each.state)) return [];
+    if (each.state === "blocked" || latest !== null) {
+      return [{ task_id: each.id as string, blocker: latest ?? "Blocked, with no reason reported." }];
+    }
+    const ready = TaskReadiness.of(each, scope.tree.tasks);
+    if (ready._tag !== "Blocked") return [];
+    return [
+      {
+        task_id: each.id as string,
+        blocker: `It cannot start until someone acts on ${ready.by.map((id) => `Task ${id}`).join(", ")}, which it comes after and which did not complete.`,
+      },
+    ];
   });
   return { questions, blockers };
 };
@@ -110,7 +134,7 @@ const newMilestones = (titles: ReadonlyArray<string> | undefined) =>
  * Tools a Task's owner runs its own work with: steps, a Quest, waits, the result, and cancelling
  * work under it.
  */
-export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
+export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, authority, separator }: Deps) => ({
   plan_steps: (scope: CallScope, input: Omit<TaskToolInput<"plan_steps">, "key">) =>
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
@@ -157,6 +181,17 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
       const quest = yield* questLimitsFor(scope, limits, task, input);
+      // Its work is in the folders the lead names, else those its brief and goal name (#670).
+      const lead = (yield* authority(scope, task)).folders;
+      const folders =
+        input.folders === undefined
+          ? yield* namedFolders(
+              folderChecks,
+              lead,
+              [task.brief, input.goal, ...(input.acceptance ?? [])].join("\n"),
+              separator,
+            )
+          : yield* requestedFolders(folderChecks, lead, input.folders, separator);
       const journal = journalOf();
       const started = journal.keep(
         yield* fromRecords(
@@ -165,7 +200,7 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
             taskId: task.id,
             goal: input.goal,
             acceptance: input.acceptance ?? [],
-            limits: quest,
+            limits: withFolders(quest, folders),
             createdAt: scope.at,
           }),
         ),
@@ -236,7 +271,14 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
         return yield* refuse("no-attempt", `Task ${task.id} has not started, so it has no result yet.`);
       }
       const artifacts = (input.artifacts ?? []).map((artifact) => ({ ...artifact, id: ArtifactId.make(newId()) }));
-      const left = yield* wrapUp(task);
+      // The Quest's own result is the user's, so its lead commits what it changed or says why not (#665).
+      const attempts = scope.tree.attempts.filter((each) => each.taskId === task.id).map((each) => each.id);
+      const left = yield* wrapUp(task, attempts, {
+        hold: task.parentId === null && scope.tree.quests.some((quest) => quest.taskId === task.id),
+        // A blank reason is none; a long one is cut, as every text the Summary shows is.
+        reason: input.leave_uncommitted?.trim() ? cut(input.leave_uncommitted, REASON_LIMIT) : undefined,
+      });
+      if (left.held !== null) return yield* refuse("uncommitted-changes", left.held);
       const journal = journalOf();
       journal.keep(
         yield* fromRecords(
@@ -268,8 +310,15 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
       const target = yield* ledTask(scope, input.task_id);
       const journal = journalOf();
       const moves = cancelMoves(target, scope.tree);
+      const moved: Array<Task> = [];
       for (const { task, to } of moves) {
-        journal.keep(yield* fromRecords(tasks.moveTask(task.id, task.revision, to, scope.at)));
+        moved.push(
+          journal.keep(
+            yield* fromRecords(
+              tasks.moveTask(task.id, task.revision, to, scope.at, { cancelledBy: scope.caller.agentId }),
+            ),
+          ),
+        );
       }
       const cancelling = moves.filter((move) => move.to === "cancelling").map((move) => move.task.id as string);
       return {
@@ -284,6 +333,8 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
           },
         },
         entries: journal.entries,
+        // The turn cancelled them itself: the failures recorded for those that ended at once are read already (#662).
+        shown: yield* outcomesShown(tasks, scope, moved),
       };
     }),
 });

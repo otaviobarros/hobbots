@@ -1,4 +1,13 @@
-import type { AgentId, AttemptId, CarriedItem, MessageId, RuntimeKind, TaskId, ThreadId } from "@hobbots/domain";
+import type {
+  AgentId,
+  AttemptId,
+  CarriedItem,
+  MessageId,
+  RuntimeKind,
+  TaskId,
+  ThreadId,
+  TurnEnding,
+} from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 import type { HubTools } from "./runtime.ts";
 
@@ -19,9 +28,6 @@ export interface ChatTurn {
   readonly holding?: ReadonlyArray<CarriedItem>;
 }
 
-/** How a chat turn ended, for the Attempt it may have started on its Task. */
-export type ChatTurnOutcome = "completed" | "failed" | "interrupted";
-
 /** What a chat turn gets for the Task its hob works on in the thread. */
 export interface ChatTaskTurn {
   /** The Task tools the turn offers its runtime; the hub checks every call. */
@@ -38,8 +44,10 @@ export interface ChatTaskTurn {
   readonly workingOn: Effect.Effect<TaskId | null>;
   /** The Attempt the turn runs on its Task: from the start when briefed on one, once a call starts one, else null. */
   readonly attempt: Effect.Effect<AttemptId | null>;
-  /** Ends the Attempt the turn started on its Task, if it started one. */
-  readonly end: (outcome: ChatTurnOutcome, sessionId: string | null) => Effect.Effect<void>;
+  /** The folders the Quest on its Task works in, which the turn's activity is tracked in (#670); null for all. */
+  readonly workIn: Effect.Effect<ReadonlyArray<string> | null>;
+  /** Ends the Attempt the turn started on its Task, if it started one, by the one turn-end decision. */
+  readonly end: (ending: TurnEnding, sessionId: string | null) => Effect.Effect<void>;
 }
 
 /**

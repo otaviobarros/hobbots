@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, resolve, sep } from "node:path";
-import { type CommandStart, operationDecision } from "@hobbots/agents";
-import { narrowest, type PolicyDecision, type PolicyOperation, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
+import { type CommandStart, openTools, operationDecision } from "@hobbots/agents";
+import { narrowest, type PolicyDecision, PRESET_DECISIONS, redactSecrets } from "@hobbots/domain";
 import {
   type PolicyContext,
   type PolicyRequest,
@@ -38,22 +38,17 @@ export const CLAUDE_CODE_TOOLS = [
  * asking. Every call is still decided one by one.
  */
 export const offeredTools = (context: Pick<PolicyContext, "preset" | "hob" | "restrictions" | "sandbox">) => {
-  const open = (...operations: ReadonlyArray<PolicyOperation>) =>
-    operations.some((operation) => operationDecision(context, operation) !== "deny");
-  const free = (...operations: ReadonlyArray<PolicyOperation>) =>
-    operations.every((operation) => operationDecision(context, operation) === "allow");
+  const open = openTools((operation) => operationDecision(context, operation));
   return CLAUDE_CODE_TOOLS.filter((tool) => {
     switch (tool) {
       case "Read":
       case "Glob":
       case "Grep":
-        return open("read-files");
+        return open.read;
       case "Bash":
-        return (
-          context.sandbox !== "unavailable" && open("run-commands", "local-git") && free("read-files", "edit-files")
-        );
+        return context.sandbox !== "unavailable" && open.commands;
       default:
-        return open("edit-files");
+        return open.edit;
     }
   });
 };
@@ -587,6 +582,7 @@ export const commandRequests = (command: string, cwd: string, home: string = hom
   const read = readCommandLine(command);
   const simple = tokens.filter((token) => "words" in token).length;
   const literal = read !== null && read.length === simple ? read : null;
+  const plain = !/[<>]/.test(command);
   let position = 0;
   tokens.forEach((token, index) => {
     if ("separator" in token) {
@@ -598,6 +594,10 @@ export const commandRequests = (command: string, cwd: string, home: string = hom
     const preview = unwrap(token.words, cwd, home).words;
     const folder = folders.command(preview, separatorOf(tokens[index + 1]));
     const unwrapped = unwrap(token.words, folder, home);
+    // A settled `cd` runs nothing: it moves the shell, and each command after it is decided in the
+    // folder it moved to, so it names no folder of its own (#670). A line with a redirection or a
+    // process substitution may still act where it started, so there it is decided as before.
+    if (plain && DIRECTORY_COMMANDS.has(unwrapped.words[0] ?? "") && unwrapped.words.every(isSettled)) return;
     for (const request of programRequests(unwrapped.words, unwrapped.folder, home, literalWords)) add(request);
   });
   if (requests.length === 0) add({ _tag: "Command", operation: "run-commands", cwd });

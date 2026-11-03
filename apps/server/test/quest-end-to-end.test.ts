@@ -827,14 +827,6 @@ describe("a hub that stops mid-Quest", () => {
         lines: [hub("complete_task", { key: "build-done", summary: "Campaign built for Dec 12" })],
       },
     ]);
-    const resumed = await second.run(
-      treeWhen((tree) => tree.attempts.filter((each) => each.taskId === build.id).length === 3),
-    );
-    expect(attemptsOf(resumed, build)).toEqual([
-      [ADA, "completed"],
-      [ADA, "interrupted"],
-      [ADA, "starting"],
-    ]);
     const [adaTurn] = await second.run(
       retry(
         Effect.suspend(() => {
@@ -843,6 +835,11 @@ describe("a hub that stops mid-Quest", () => {
         }),
       ),
     );
+    // Her new turn goes on in her Task's one Attempt, which the stop interrupted (#668).
+    const resumed = await second.run(
+      treeWhen((tree) => tree.attempts.some((each) => each.taskId === build.id && isLive(each.state))),
+    );
+    expect(attemptsOf(resumed, build).map(([agent]) => agent)).toEqual([ADA]);
     expect(adaTurn?.sessionId).toBe(before.attempts.find((each) => each.taskId === build.id)?.sessionId);
     // The hand-off her cut-off turn carried reaches her again, as it never settled.
     expect(adaTurn?.prompt).toContain("Black Friday: 20% off everything");
@@ -872,12 +869,7 @@ describe("a hub that stops mid-Quest", () => {
     expect(done.delegations).toHaveLength(2);
     expect(done.questions.map((each) => [each.state, each.answeredBy])).toEqual([["answered", { _tag: "User" }]]);
     expect(done.handOffs.map((each) => each.toTaskId)).toEqual([build.id]);
-    expect(attemptsOf(done, build)).toEqual([
-      [ADA, "completed"],
-      [ADA, "interrupted"],
-      [ADA, "completed"],
-      [ADA, "completed"],
-    ]);
+    expect(attemptsOf(done, build)).toEqual([[ADA, "completed"]]);
     expect(taskOf(done, ADA).result?.summary).toBe("Campaign built for Dec 12");
     const adaPrompts = [...first.script.requests, ...second.script.requests].filter((request) =>
       promptsTo([request], build).includes(request),

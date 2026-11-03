@@ -662,7 +662,9 @@ describe("The responsibility ledger", () => {
       message:
         "Task review cannot complete yet: it comes after Task copy (Brief for copy), which is queued; " +
         'milestone "Review notes" is not reached; report it with report_checkpoint; ' +
-        "Task review (Brief for review) has not been taken up.",
+        "Task review (Brief for review) has not been taken up. " +
+        "End your turn: what still waits for you reaches you as your next message, and you complete the Task then. " +
+        "Calling complete_task again without doing either is refused the same way.",
     });
   });
 

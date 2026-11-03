@@ -9,7 +9,7 @@ import {
   type ToolStartedEvent,
   type TurnApprovals,
 } from "@hobbots/agents";
-import { steerGitInit } from "@hobbots/domain";
+import { leftoverGitNote, steerGitInit } from "@hobbots/domain";
 import type { PolicyContext, PolicyEngine, PolicyRequest, PolicyVerdict } from "@hobbots/permissions";
 import { Effect } from "effect";
 import { inSharedTemp, TEMP_HINT } from "./sandbox.ts";
@@ -125,7 +125,7 @@ export const decideCall = (
             decideIn(engine, access === null ? context : { ...context, ...access.policy }, approvals, call),
           report,
           unknown: UNKNOWN_TOOL(call.tool),
-        }).pipe(Effect.map((decision) => withTempHint(call, decision)));
+        }).pipe(Effect.map((decision) => withGitHint(withTempHint(call, decision), initTool)));
   });
 
 /**
@@ -175,6 +175,43 @@ const withTempHint = (call: ToolCall, decision: CallDecision): CallDecision =>
     (request) => request._tag === "Files" && request.operation !== "read-files",
   )
     ? { ...decision, reason: `${decision.reason} ${TEMP_HINT}` }
+    : decision;
+
+/** How macOS and Linux refuse to remove what the sandbox keeps. Read with string search, in linear time (STD-SEC-005). */
+const KEPT_REFUSALS = ["Operation not permitted", "Read-only file system", "Device or resource busy"];
+
+/**
+ * `rm` or `find -delete` refusing, in a command's output, to remove a repository's config or hooks,
+ * in macOS's words or Linux's. Git's own warning that it could not write the config is not one.
+ */
+const keptGitLine = (line: string) =>
+  (line.startsWith("rm: ") || line.startsWith("find: ")) &&
+  (line.includes(".git/config") || line.includes(".git/hooks")) &&
+  KEPT_REFUSALS.some((refusal) => line.includes(refusal));
+
+/**
+ * What a hob is told after a command whose output shows its sandbox kept a repository's config or
+ * hooks from a delete, when the turn offers `initTool` to replace what is left (#663), or undefined.
+ */
+export const keptGitHint = (
+  tool: string,
+  output: string | undefined,
+  initTool: string | undefined,
+): string | undefined =>
+  tool === "Bash" && initTool !== undefined && output?.split("\n").some(keptGitLine)
+    ? leftoverGitNote(initTool)
+    : undefined;
+
+/**
+ * A refused delete that meets a repository's config or hooks also says what the hob can do instead,
+ * when the turn offers `initTool` (#663).
+ */
+const withGitHint = (decision: CallDecision, initTool: string | undefined): CallDecision =>
+  decision._tag === "Refuse" &&
+  initTool !== undefined &&
+  decision.verdict?.reason.code === "protected-path" &&
+  decision.verdict.operation === "delete-files"
+    ? { ...decision, reason: `${decision.reason} ${leftoverGitNote(initTool)}` }
     : decision;
 
 /**
