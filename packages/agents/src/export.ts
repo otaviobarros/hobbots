@@ -4,9 +4,7 @@ import {
   type AgentId,
   type ArtifactNotCopied,
   type ArtifactRef,
-  EXPORT_FILE_BYTES,
   EXPORT_FORMAT,
-  EXPORT_TOTAL_BYTES,
   EXPORT_VERSION,
   type ExportedArtifact,
   type ExportedAttempt,
@@ -31,11 +29,12 @@ import {
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { ActivityRepository } from "./activity.ts";
 import { SaveDestinations } from "./destinations.ts";
+import { EXPORT_LIMITS, type ExportLimits, exportedContents, overLimits } from "./export-files.ts";
 import { type ExportNames, readmeMarkdown, threadMarkdown, treeMarkdown } from "./export-markdown.ts";
 import { hobFoldersNow } from "./permissions.ts";
 import { FolderChecks, InstallationSettings } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
-import { makeRedactor, type Redactor, SecretRedaction } from "./secrets.ts";
+import { makeRedactor, SecretRedaction } from "./secrets.ts";
 import { HobFiles } from "./task-files.ts";
 import { TaskRepository } from "./tasks.ts";
 
@@ -195,26 +194,6 @@ const folderName = (data: HobbotsExport): string => {
 
 const encodeExport = Schema.encodeSync(HobbotsExport);
 
-const utf8 = new TextDecoder("utf-8", { fatal: true });
-const bytesAsText = new TextDecoder("latin1");
-
-/**
- * What an export writes for a file artifact's bytes (ADR 026: every string is redacted). UTF-8 text
- * goes through the redactor like any other string. Any other file is copied as it is only when
- * the redactor finds nothing in it read byte by byte, since a token in a binary file is still
- * ASCII; otherwise it is not copied at all.
- */
-const redactedContents = (redactor: Redactor, bytes: Uint8Array): Option.Option<string | Uint8Array> => {
-  const text = Option.liftThrowable(() => utf8.decode(bytes))().pipe(Option.filter((each) => !each.includes("\0")));
-  if (Option.isSome(text)) return Option.some(redactor.text(text.value));
-  const raw = bytesAsText.decode(bytes);
-  return redactor.text(raw) === raw ? Option.some(bytes) : Option.none();
-};
-
-/** How many bytes `contents` takes on disk. */
-const sizeOf = (contents: string | Uint8Array): number =>
-  typeof contents === "string" ? new TextEncoder().encode(contents).length : contents.length;
-
 export class DataExport extends Context.Service<
   DataExport,
   {
@@ -225,8 +204,8 @@ export class DataExport extends Context.Service<
     ) => Effect.Effect<ExportResult, InvalidFolder | AgentNotFound | ThreadNotFound | ExportFailed>;
   }
 >()("@hobbots/agents/DataExport") {
-  /** `version` is the hub's own, which the export names. */
-  static readonly layer = (version: string) =>
+  /** `version` is the hub's own, which the export names. `limits` are ADR 026's unless a test sets smaller ones. */
+  static readonly layer = (version: string, limits: ExportLimits = EXPORT_LIMITS) =>
     Layer.effect(
       DataExport,
       Effect.gen(function* () {
@@ -477,16 +456,17 @@ export class DataExport extends Context.Service<
                 if (isSecretFile(path)) return refuse("secret");
                 const found = yield* files.look(from, path);
                 if (Option.isNone(found)) return refuse("gone");
-                if (found.value.size > EXPORT_FILE_BYTES) return refuse("too-large");
-                if (total + found.value.size > EXPORT_TOTAL_BYTES) return refuse("export-full");
+                // Checked on the file first so a file far over the limits is never read, then again on what is written.
+                const over = overLimits(found.value.size, total, limits);
+                if (Option.isSome(over)) return refuse(over.value);
                 const bytes = yield* files.read(from, path, found.value.size);
                 if (Option.isNone(bytes)) return refuse("gone");
-                const contents = redactedContents(redactor, bytes.value);
-                if (Option.isNone(contents)) return refuse("holds-secret");
+                const contents = exportedContents(redactor, bytes.value, total, limits);
+                if (contents._tag === "Skip") return refuse(contents.why);
                 const base = redactor.text(path.slice(path.lastIndexOf("/") + 1));
                 const copiedTo = `files/${safeFileName(taskId, "task")}/${uniqueName(taken, safeFileName(base, "file"))}`;
-                yield* folders.write(folder, copiedTo, contents.value);
-                total += sizeOf(contents.value);
+                yield* folders.write(folder, copiedTo, contents.bytes);
+                total += contents.bytes.length;
                 return { ...artifact, copiedTo };
               });
             const quests = yield* Effect.forEach(data.quests, (tree) =>
