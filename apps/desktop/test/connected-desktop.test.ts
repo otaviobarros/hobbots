@@ -288,9 +288,15 @@ describe("the connected desktop", () => {
     let listener: Parameters<BeforeSendHeaders["onBeforeSendHeaders"]>[0] | undefined;
     let refused = 0;
     guardWindowRequests(
-      { onBeforeSendHeaders: (next) => void (listener = next) },
+      {
+        onBeforeSendHeaders: (next) => {
+          listener = next;
+        },
+      },
       windowRequestGate({ origins: ORIGINS, nodeId: STUDIO.nodeId, nodeCheck: makeNodeCheck(lookup, () => now) }),
-      () => void refused++,
+      () => {
+        refused++;
+      },
     );
     const send = (url: string, cookie = "hobbots_device=hbd_token; theme=dark") =>
       new Promise<{ cancel?: boolean; requestHeaders?: Record<string, string> }>((answer) =>
