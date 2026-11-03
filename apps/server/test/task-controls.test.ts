@@ -342,7 +342,7 @@ const strayTurn = Effect.gen(function* () {
       configVersion: 1,
     }),
   );
-  yield* turn.end("completed", null);
+  yield* turn.end({ _tag: "Replied", text: "" }, null);
   return turn;
 });
 
@@ -549,8 +549,8 @@ describe("cancelling with confirmed outcomes", () => {
     expect(all.at(-1)?.status).toBe("stopped");
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "cancelled"));
     // Your request's turn, the reply its step's result started, the stray turn and yours all worked
-    // in the Task's one Attempt, which ended when yours was stopped.
-    expect(attemptsOf(done, done.tasks[0])).toEqual([[ALDRIC, "interrupted"]]);
+    // in the Task's one Attempt, which ended cancelled when yours was stopped by the cancel (#669).
+    expect(attemptsOf(done, done.tasks[0])).toEqual([[ALDRIC, "cancelled"]]);
     // Confirmed only once the reply's Attempt had ended.
     const reply = done.attempts.filter((each) => each.taskId === top.id).at(-1);
     expect(reply?.endedAt).not.toBeNull();

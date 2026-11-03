@@ -4,6 +4,7 @@ import {
   type Answerer,
   ArtifactRef,
   Attempt,
+  AttemptTransitions,
   ancestorsOf,
   CHECKPOINT_KINDS,
   Checkpoint,
@@ -412,20 +413,21 @@ export const TaskRepositoryLive = Layer.effect(
           const [before] = yield* read.attempt(attemptId);
           if (before === undefined) return yield* refuse("attempt-missing", `No Attempt ${attemptId}`);
           if (!isLiveAttempt(before.state)) return yield* refuse("attempt-ended", `Attempt ${attemptId} has ended`);
-          if (update.state === "running" && before.state === "running") {
+          if (update._tag === "Running" && before.state === "running") {
             return yield* refuse("attempt-live", `Attempt ${attemptId} is already running`);
           }
-          const ended = update.state !== "running";
+          const owner = yield* loadTask(before.taskId);
+          const ended = update._tag === "Ended" ? AttemptTransitions.end(owner, update.end) : null;
           const attempt = new Attempt({
             ...before,
-            state: update.state,
+            state: ended?.state ?? "running",
             sessionId: update.sessionId ?? before.sessionId,
-            outcome: update.outcome ?? before.outcome,
-            endedAt: ended ? update.at : null,
+            outcome: ended?.outcome ?? before.outcome,
+            endedAt: ended === null ? null : update.at,
           });
           yield* sql`UPDATE attempts SET state = ${attempt.state}, session_id = ${attempt.sessionId},
             outcome = ${attempt.outcome}, ended_at = ${attempt.endedAt} WHERE id = ${attempt.id}`;
-          const task = new Task({ ...(yield* loadTask(attempt.taskId)), updatedAt: update.at, revision });
+          const task = new Task({ ...owner, updatedAt: update.at, revision });
           yield* saveTask(task);
           return {
             value: { task, attempt },

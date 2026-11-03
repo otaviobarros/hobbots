@@ -24,6 +24,7 @@ import {
   TaskToolInputs,
   type TaskToolName,
   TaskToolRefused,
+  type TurnEnding,
   taskToolJsonSchema,
   taskToolText,
 } from "@hobbots/domain";
@@ -46,6 +47,7 @@ import { makeLeading } from "./leading.ts";
 import { makePlanning } from "./planning.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
 import { TaskSignal } from "./signal.ts";
+import { endTurn, type TurnEndDeps } from "./turn-end.ts";
 import { makeSettle, makeWrapUp } from "./wrap-up.ts";
 
 type ToolHandler = (scope: CallScope, input: never) => Effect.Effect<TaskToolOutcome, TaskToolRefused>;
@@ -269,27 +271,31 @@ export class TaskTools extends Context.Service<
               attemptId = begun.attemptId;
               yield* announce(begun.entries);
             }
-            const end = (outcome: Parameters<ChatTaskTurn["end"]>[0], sessionId: string | null) =>
+            // The Task you asked for completes only by complete_task, so it is never blocked here.
+            const ended: TurnEndDeps = {
+              tasks,
+              attempt: (change) =>
+                change.pipe(
+                  Effect.tap((committed) => announce(committed.entries)),
+                  Effect.map((committed) => committed.value),
+                  Effect.option,
+                ),
+              explain: () => Effect.void,
+            };
+            const end = (ending: TurnEnding, sessionId: string | null) =>
               Effect.gen(function* () {
-                if (attemptId === null) return;
+                if (attemptId === null || known === null) return;
                 const at = DateTime.formatIso(yield* DateTime.now);
-                const ended = yield* tasks
-                  .updateAttempt(attemptId, { state: outcome, at, ...(sessionId === null ? {} : { sessionId }) })
-                  .pipe(Effect.option);
-                if (Option.isNone(ended)) return;
-                yield* announce(ended.value.entries);
-                const task = ended.value.value.task;
-                if (task.state !== "active" || task.currentAttemptId !== attemptId) return;
-                // A Task whose turn recorded a wait that still holds shows waiting now the turn has
-                // ended (#572). Otherwise one that waited, or was blocked, before the turn goes back to that.
-                const ledger = yield* tasks.readLedger(task.id);
-                const waits = Option.isSome(ledger) && ledger.value.open.some((entry) => entry._tag === "Wait");
-                const was = begun?.was;
-                const to = waits ? "waiting" : was === "waiting" || was === "blocked" ? was : null;
-                if (to !== null) {
-                  const back = yield* tasks.moveTask(task.id, task.revision, to, at).pipe(Effect.option);
-                  if (Option.isSome(back)) yield* announce(back.value.entries);
-                }
+                yield* endTurn(ended, {
+                  runner: "root",
+                  taskId: known,
+                  attemptId,
+                  ending,
+                  carried: [],
+                  sessionId,
+                  ...(begun === null ? {} : { was: begun.was }),
+                  at,
+                });
               }).pipe(
                 Effect.catchCause((cause) => Effect.logWarning("Could not end a chat turn's Attempt", cause)),
                 Effect.provideContext(context),

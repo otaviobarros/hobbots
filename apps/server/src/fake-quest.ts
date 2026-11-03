@@ -138,8 +138,8 @@ const stopAttempt = (task: Task, bus: EventBus["Service"]) =>
     );
     if (live !== undefined) {
       const stopped = yield* tasks.updateAttempt(live.id, {
-        state: "cancelled",
-        outcome: "Stopped when you cancelled it.",
+        _tag: "Ended",
+        end: { _tag: "Stopped", reason: null },
         at: yield* iso,
       });
       yield* bus.publish(stopped.entries);
@@ -305,7 +305,11 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
         Effect.gen(function* () {
           const started = yield* member(name, owner, brief, [], []);
           const ended = yield* tasks
-            .updateAttempt(AttemptId.make(id(`a-${name}`)), { state: "failed", outcome: why, at: yield* iso })
+            .updateAttempt(AttemptId.make(id(`a-${name}`)), {
+              _tag: "Ended",
+              end: { _tag: "Failed", reason: why },
+              at: yield* iso,
+            })
             .pipe(Effect.flatMap(announce));
           yield* tasks.moveTask(started.id, ended.task.revision, "failed", yield* iso).pipe(Effect.flatMap(announce));
         });

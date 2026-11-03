@@ -1,0 +1,235 @@
+import { describe, expect, it } from "vitest";
+import {
+  AgentId,
+  AttemptTransitions,
+  BackpackItem,
+  BackpackItemId,
+  CANCELLED_ATTEMPT,
+  type LedgerEntry,
+  Milestone,
+  MilestoneId,
+  Task,
+  TaskId,
+  type TaskMove,
+  type TaskState,
+  TaskWait,
+  type TurnEnding,
+  type TurnRunner,
+  turnEnded,
+} from "../src/index.ts";
+
+// The one turn-end decision (#669, #674): every ending against every Task state, for each runner.
+
+const at = "2026-11-03T00:00:00.000Z";
+const PIP = AgentId.make("pip");
+
+const task = (state: TaskState) =>
+  new Task({
+    id: TaskId.make("review"),
+    ownerId: PIP,
+    parentId: TaskId.make("top"),
+    rootId: TaskId.make("top"),
+    threadId: null,
+    brief: "Review the project",
+    state,
+    dependsOn: [],
+    result: null,
+    currentAttemptId: null,
+    createdAt: at,
+    updatedAt: at,
+    revision: 1,
+  });
+
+const ENDINGS: Record<"replied" | "failed" | "stopped", TurnEnding> = {
+  replied: { _tag: "Replied", text: "Reviewed it" },
+  failed: { _tag: "Failed", reason: "The runtime broke" },
+  stopped: { _tag: "Stopped", reason: "Stopped by Hobbots" },
+};
+
+/** A move as a short word: `stay`, `→failed`, or `complete|<what the Task does when that is refused>`. */
+const shown = (move: TaskMove): string =>
+  move._tag === "Stay" ? "stay" : move._tag === "Move" ? `→${move.to}` : `complete|${shown(move.otherwise)}`;
+
+const STATES: ReadonlyArray<TaskState> = [
+  "queued",
+  "active",
+  "waiting",
+  "blocked",
+  "cancelling",
+  "completed",
+  "failed",
+  "cancelled",
+];
+
+/** The Attempt's end by Task state, for a reply, a failure and a stop, whatever ran it. */
+const ATTEMPTS: Record<TaskState, readonly [string, string, string]> = {
+  queued: ["completed", "failed", "interrupted"],
+  active: ["completed", "failed", "interrupted"],
+  waiting: ["completed", "failed", "interrupted"],
+  blocked: ["completed", "failed", "interrupted"],
+  cancelling: ["cancelled", "failed", "cancelled"],
+  completed: ["completed", "failed", "interrupted"],
+  failed: ["completed", "failed", "interrupted"],
+  cancelled: ["cancelled", "failed", "cancelled"],
+};
+
+/** What the Task does by runner and Task state, for a reply, a failure and a stop, with nothing open. */
+const MOVES: Record<TurnRunner, Record<TaskState, readonly [string, string, string]>> = {
+  step: {
+    queued: ["complete|→failed", "→failed", "→failed"],
+    active: ["complete|→failed", "→failed", "→failed"],
+    waiting: ["complete|→failed", "→failed", "→failed"],
+    blocked: ["complete|→failed", "→failed", "→failed"],
+    cancelling: ["→cancelled", "→cancelled", "→cancelled"],
+    completed: ["stay", "stay", "stay"],
+    failed: ["stay", "stay", "stay"],
+    cancelled: ["stay", "stay", "stay"],
+  },
+  member: {
+    queued: ["complete|stay", "stay", "stay"],
+    active: ["complete|→waiting", "stay", "→waiting"],
+    waiting: ["complete|stay", "stay", "stay"],
+    blocked: ["complete|stay", "stay", "stay"],
+    cancelling: ["→cancelled", "→cancelled", "→cancelled"],
+    completed: ["stay", "stay", "stay"],
+    failed: ["stay", "stay", "stay"],
+    cancelled: ["stay", "stay", "stay"],
+  },
+  root: {
+    queued: ["stay", "stay", "stay"],
+    active: ["stay", "stay", "stay"],
+    waiting: ["stay", "stay", "stay"],
+    blocked: ["stay", "stay", "stay"],
+    cancelling: ["→cancelled", "→cancelled", "→cancelled"],
+    completed: ["stay", "stay", "stay"],
+    failed: ["stay", "stay", "stay"],
+    cancelled: ["stay", "stay", "stay"],
+  },
+};
+
+const decide = (runner: TurnRunner, state: TaskState, ending: TurnEnding, ledger: ReadonlyArray<LedgerEntry> = []) =>
+  turnEnded({ runner, task: task(state), ending, ledger, carried: new Set() });
+
+const milestone = (title: string): LedgerEntry => ({
+  _tag: "Milestone",
+  milestone: new Milestone({
+    id: MilestoneId.make(title),
+    taskId: TaskId.make("review"),
+    title,
+    position: 0,
+    reachedAt: null,
+    createdAt: at,
+  }),
+});
+
+const deadline = (id: string): LedgerEntry => ({
+  _tag: "Item",
+  item: new BackpackItem({
+    id: BackpackItemId.make(id),
+    recipientId: PIP,
+    kind: "deadline",
+    actionable: true,
+    priority: 1,
+    state: "pending",
+    taskId: TaskId.make("review"),
+    questId: null,
+    attemptId: null,
+    threadId: null,
+    dedupeKey: id,
+    payload: { _tag: "deadline", taskId: TaskId.make("review"), dueAt: at },
+    notBefore: null,
+    claim: null,
+    fencingToken: 0,
+    deliveries: [],
+    blockers: [],
+    disposition: null,
+    error: null,
+    createdAt: at,
+    updatedAt: at,
+    revision: 1,
+  }),
+});
+
+const waitEntry: LedgerEntry = {
+  _tag: "Wait",
+  wait: new TaskWait({ taskId: TaskId.make("review"), on: [TaskId.make("lint")], mode: "all", createdAt: at }),
+};
+
+describe("turnEnded", () => {
+  // covers EX-001, OR-006
+  it("[TC-OR-455] decides the Attempt's end and the Task's move for every ending, Task state and runner", () => {
+    for (const runner of ["step", "member", "root"] as const) {
+      for (const state of STATES) {
+        const decided = (["replied", "failed", "stopped"] as const).map((name) => decide(runner, state, ENDINGS[name]));
+        expect([runner, state, decided.map((each) => each.attempt.state)]).toEqual([runner, state, ATTEMPTS[state]]);
+        expect([runner, state, decided.map((each) => shown(each.task))]).toEqual([runner, state, MOVES[runner][state]]);
+        expect(decided.every((each) => each.reason === null)).toBe(true);
+      }
+    }
+  });
+
+  // covers EX-001, OR-006
+  it("[TC-OR-456] says why an Attempt ended: a cancel names it, a failure and a stop keep their reason", () => {
+    expect(decide("member", "cancelling", ENDINGS.replied).attempt).toEqual({
+      state: "cancelled",
+      outcome: CANCELLED_ATTEMPT,
+    });
+    expect(decide("step", "active", ENDINGS.replied).attempt).toEqual({
+      state: "completed",
+      outcome: "The step's session finished.",
+    });
+    expect(decide("member", "active", ENDINGS.replied).attempt.outcome).toBe("The turn finished.");
+    expect(decide("root", "active", ENDINGS.replied).attempt.outcome).toBeNull();
+    expect(decide("member", "cancelling", ENDINGS.failed).attempt).toEqual({
+      state: "failed",
+      outcome: "The runtime broke",
+    });
+    expect(decide("step", "active", ENDINGS.stopped).attempt).toEqual({
+      state: "interrupted",
+      outcome: "Stopped by Hobbots",
+    });
+    // A stop Hobbots could not confirm stays unresolved, cancel or not.
+    expect(AttemptTransitions.end(task("cancelling"), { _tag: "Unconfirmed", reason: "Not confirmed" }).state).toBe(
+      "unresolved",
+    );
+    // A reply becomes the result, or says there was none.
+    const empty = decide("step", "active", { _tag: "Replied", text: "  " }).task;
+    expect(empty).toMatchObject({ _tag: "Complete", summary: "The step finished without a reply." });
+    expect(decide("member", "active", ENDINGS.replied).task).toMatchObject({ summary: "Reviewed it" });
+  });
+
+  // covers OR-004, IN-004
+  it("[TC-OR-457] holds a member's Task open on what its ledger still has, and gives the root's waits back", () => {
+    // Only its own milestones left: blocked, with a reason its lead can act on (#571).
+    const short = decide("member", "active", ENDINGS.replied, [milestone("Reviewed")]);
+    expect(shown(short.task)).toBe("→blocked");
+    expect(short.reason).toContain('"Reviewed"');
+    // Anything else open: it waits, and nothing is completed.
+    expect(shown(decide("member", "active", ENDINGS.replied, [milestone("Reviewed"), deadline("n1")]).task)).toBe(
+      "→waiting",
+    );
+    // What the turn carried settles with it, so it keeps nothing open.
+    const carried = turnEnded({
+      runner: "member",
+      task: task("active"),
+      ending: ENDINGS.replied,
+      ledger: [deadline("n1")],
+      carried: new Set(["n1"]),
+    });
+    expect(shown(carried.task)).toBe("complete|→waiting");
+    // The root waits while its wait holds, or goes back to what it was before the turn.
+    expect(shown(decide("root", "active", ENDINGS.replied, [waitEntry]).task)).toBe("→waiting");
+    const was = (before: TaskState) =>
+      shown(
+        turnEnded({
+          runner: "root",
+          task: task("active"),
+          ending: ENDINGS.failed,
+          ledger: [],
+          carried: new Set(),
+          was: before,
+        }).task,
+      );
+    expect([was("waiting"), was("blocked"), was("active")]).toEqual(["→waiting", "→blocked", "stay"]);
+  });
+});

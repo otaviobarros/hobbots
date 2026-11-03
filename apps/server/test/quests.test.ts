@@ -620,8 +620,8 @@ describe("a member Task already being worked", () => {
         const tasks = yield* TaskRepository;
         const bus = yield* EventBus;
         const ended = yield* tasks.updateAttempt(AttemptId.make("held-a-copy"), {
-          state: "interrupted",
-          outcome: "Stopped elsewhere.",
+          _tag: "Ended",
+          end: { _tag: "Stopped", reason: "Stopped elsewhere." },
           at: new Date().toISOString(),
         });
         yield* bus.publish(ended.entries);

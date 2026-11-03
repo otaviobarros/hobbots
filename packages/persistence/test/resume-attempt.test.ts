@@ -1,5 +1,5 @@
 import { type AttemptResume, HobbotsRepository, type NewAttempt, TaskRepository } from "@hobbots/agents";
-import { Agent, AgentId, AttemptId, TaskId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, type AttemptEnd, AttemptId, TaskId, Thread, ThreadId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive } from "../src/index.ts";
@@ -30,8 +30,15 @@ const attempt = (id: string): NewAttempt => ({
 });
 const resume: AttemptResume = { runtime: "claude-code", configVersion: 1, at: later };
 
+/** How a turn's Attempt ends, by the state it ends in on a Task that is not being cancelled. */
+const ENDS: Record<"completed" | "interrupted" | "unresolved", AttemptEnd> = {
+  completed: { _tag: "Finished", outcome: null },
+  interrupted: { _tag: "Stopped", reason: null },
+  unresolved: { _tag: "Unconfirmed", reason: "Not confirmed" },
+};
+
 /** Aldric's Task in his thread, with its first turn's Attempt ended as `ended`. */
-const turnEnded = (ended: "completed" | "interrupted" | "cancelled" | "unresolved" = "completed") =>
+const turnEnded = (ended: keyof typeof ENDS = "completed") =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     yield* repo.insertAgent(
@@ -67,8 +74,8 @@ const turnEnded = (ended: "completed" | "interrupted" | "cancelled" | "unresolve
       milestones: [],
     });
     yield* tasks.startAttempt(top, created.value.revision, attempt("a1"));
-    yield* tasks.updateAttempt(AttemptId.make("a1"), { state: "running", sessionId: "s1", at: now });
-    return (yield* tasks.updateAttempt(AttemptId.make("a1"), { state: ended, at: now })).value.task;
+    yield* tasks.updateAttempt(AttemptId.make("a1"), { _tag: "Running", sessionId: "s1", at: now });
+    return (yield* tasks.updateAttempt(AttemptId.make("a1"), { _tag: "Ended", end: ENDS[ended], at: now })).value.task;
   });
 
 const attemptsOf = Effect.map(
@@ -85,7 +92,11 @@ describe("resuming a Task's Attempt", () => {
         const task = yield* turnEnded();
         const resumed = yield* tasks.resumeAttempt(top, task.revision, resume);
         const live = yield* attemptsOf;
-        const ended = yield* tasks.updateAttempt(AttemptId.make("a1"), { state: "completed", at: later });
+        const ended = yield* tasks.updateAttempt(AttemptId.make("a1"), {
+          _tag: "Ended",
+          end: { _tag: "Finished", outcome: null },
+          at: later,
+        });
         const again = yield* tasks.resumeAttempt(top, ended.value.task.revision, resume);
         return { resumed, live, again, after: yield* attemptsOf };
       }),
@@ -104,7 +115,7 @@ describe("resuming a Task's Attempt", () => {
 
   // covers EX-001, EX-002, OR-006
   it("[TC-OR-311] refuses to resume a live, cancelled or unconfirmed Attempt, one on another brain, or a Task that ended or is cancelling, and writes nothing", async () => {
-    const refusal = (ended: "completed" | "cancelled" | "unresolved", change: Partial<typeof resume> = {}) =>
+    const refusal = (ended: "completed" | "unresolved", change: Partial<typeof resume> = {}) =>
       run(
         Effect.gen(function* () {
           const tasks = yield* TaskRepository;
@@ -115,7 +126,7 @@ describe("resuming a Task's Attempt", () => {
           return { refused, unchanged: JSON.stringify(yield* journal.head) === JSON.stringify(head) };
         }),
       );
-    expect(await refusal("cancelled")).toMatchObject({ refused: { reason: "attempt-ended" }, unchanged: true });
+    // A cancelled Attempt ends only on a Task being cancelled, which refuses a resume below.
     expect(await refusal("unresolved")).toMatchObject({ refused: { reason: "attempt-ended" }, unchanged: true });
     expect(await refusal("completed", { runtime: "codex" })).toMatchObject({
       refused: { reason: "attempt-mismatch" },
@@ -168,7 +179,11 @@ describe("resuming a Task's Attempt", () => {
           milestones: [],
         });
         yield* tasks.startAttempt(step, created.value.revision, attempt("s1"));
-        const ended = yield* tasks.updateAttempt(AttemptId.make("s1"), { state: "completed", at: now });
+        const ended = yield* tasks.updateAttempt(AttemptId.make("s1"), {
+          _tag: "Ended",
+          end: { _tag: "Finished", outcome: null },
+          at: now,
+        });
         const failed = yield* tasks.moveTask(step, ended.value.task.revision, "failed", later);
         const retried = yield* tasks.retryTask(step, failed.value.revision, later);
         return yield* tasks.resumeAttempt(step, retried.value.revision, resume).pipe(Effect.flip);

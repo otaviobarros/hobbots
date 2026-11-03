@@ -1,5 +1,15 @@
 import { HobbotsRepository, TaskRepository } from "@hobbots/agents";
-import { Agent, AgentId, Message, MessageId, type Task, type TaskTree, Thread, ThreadId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  CANCELLED_ATTEMPT,
+  Message,
+  MessageId,
+  type Task,
+  type TaskTree,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
 import { BackpackLive, EventJournal, HobbotsRepositoryLive, TaskRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Duration, Effect, Layer, ManagedRuntime, Option } from "effect";
@@ -118,7 +128,7 @@ describe("FakeQuestLive", () => {
             return attempt?.state === "cancelled" ? attempt : undefined;
           }),
         );
-        expect(stopped.outcome).toBe("Stopped when you cancelled it.");
+        expect(stopped.outcome).toBe(CANCELLED_ATTEMPT);
         const latest = Option.getOrThrow(yield* tasks.readTree(build.id)).tasks[0];
         if (latest === undefined) throw new Error("No Task for Ada");
         yield* bus.publish((yield* tasks.moveTask(build.id, latest.revision, "cancelled", now)).entries);
