@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { DeviceId } from "./device.ts";
 import { AgentId, ThreadId } from "./ids.ts";
 import { PolicyOverrides } from "./policy.ts";
 import { Revision } from "./revision.ts";
@@ -33,6 +34,11 @@ export const QuestLimits = Schema.Struct({
   maxDepth: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
   /** When its work must be done (ISO 8601), or null for no deadline. */
   deadline: Schema.NullOr(Schema.String),
+  /**
+   * The folders its work is in, as the hub stores them: its lead's turns on it track only its own
+   * folders that hold or sit in one of these (#670). Absent, all of the lead's folders.
+   */
+  folders: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 export type QuestLimits = typeof QuestLimits.Type;
 
@@ -177,6 +183,10 @@ export const Answerer = Schema.Union([
 ]);
 export type Answerer = typeof Answerer.Type;
 
+/** Where you answered a question: its card in the chat, the Inbox, or the Task's drawer or sheet (#671). */
+export const QuestionSurface = Schema.Literals(["chat", "inbox", "task"]);
+export type QuestionSurface = typeof QuestionSurface.Type;
+
 /**
  * A question from a Task's owner. It goes to the nearest lead, and climbs one lead at a time when
  * escalated; `recipientId` is null once it reaches the user. `chain` lists the leads it passed,
@@ -194,6 +204,19 @@ export class Question extends Schema.Class<Question>("Question")({
   answeredBy: Schema.NullOr(Answerer),
   createdAt: Schema.String,
   answeredAt: Schema.NullOr(Schema.String),
+  /**
+   * The approved device you answered it from (#671); null while open, for a lead's answer, and for
+   * questions answered before this was recorded.
+   */
+  answeredByDeviceId: Schema.NullOr(DeviceId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /** Where you answered it; null also when the client did not say. */
+  answeredVia: Schema.NullOr(QuestionSurface).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   revision: Revision,
 }) {}
 

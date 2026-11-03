@@ -20,6 +20,7 @@ import { AnswerForm } from "./question-card.tsx";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
 import { findTask, noteRecipient, taskDetail, taskTitle } from "./work-model.ts";
+import { yourAnswer } from "./your-answer.ts";
 
 const copy = messages.drawer;
 
@@ -216,10 +217,9 @@ function Detail({
                 {question.state === "open" && <OpenQuestion question={question} hobs={hobs} />}
                 {question.answer !== null && (
                   <span className="text-mint">
-                    {copy.answer({
-                      name: question.answeredBy?._tag === "Lead" ? hobs(question.answeredBy.agentId).name : copy.you,
-                      answer: question.answer,
-                    })}
+                    {question.answeredBy?._tag === "Lead"
+                      ? copy.answer({ name: hobs(question.answeredBy.agentId).name, answer: question.answer })
+                      : yourAnswer(question, "task")}
                   </span>
                 )}
                 {question.state === "withdrawn" && <span className="text-secondary-text">{copy.withdrawn}</span>}
@@ -277,7 +277,7 @@ function OpenQuestion({ question, hobs }: { question: Question; hobs: HobLookup 
   return (
     <div className="flex flex-col gap-1.5 border-2 border-lantern bg-card px-2.5 py-2">
       <span className="text-xs font-bold text-lantern">{copy.asksYou({ name: asker })}</span>
-      <AnswerForm question={question} askerName={asker} />
+      <AnswerForm question={question} askerName={asker} via="task" />
     </div>
   );
 }

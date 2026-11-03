@@ -4,7 +4,7 @@ import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { CharmCallsLive, EventJournal, HobbotsRepositoryLive, migrations, TaskToolCallsLive } from "../src/index.ts";
-import callKeyScopes from "../src/migrations/0044_call_key_scopes.ts";
+import callKeyScopes from "../src/migrations/0045_call_key_scopes.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // A tool call's key is unique within the work it belongs to, not among all of its hob's calls
@@ -216,8 +216,8 @@ describe("tool call keys per Task", () => {
   });
 
   // covers DP-003
-  it("[TC-OR-423] 0044 keeps every stored call and refusal readable, each in the work its input names, compared without its turn", async () => {
-    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0044")) as typeof migrations;
+  it("[TC-OR-423] 0045 keeps every stored call and refusal readable, each in the work its input names, compared without its turn", async () => {
+    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0045")) as typeof migrations;
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* seed;

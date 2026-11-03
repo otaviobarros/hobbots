@@ -362,8 +362,10 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     ).body;
     const thread = (await request<Thread>("POST", `/api/agents/${frodo.id}/threads`)).body;
     await exchange(thread, "Start a repository", hub("start_quest", { key: "quest", goal: "Start a repository" }));
-    // A stub `.git` is already there, so the first git_init is refused; the second makes one in a new folder.
-    mkdirSync(join(frodoProject, ".git"));
+    // A repository is already there, so the first git_init is refused; the second makes one in a new folder.
+    execFileSync("git", ["init", "--quiet", frodoProject], {
+      env: { PATH: process.env.PATH, HOME: temp, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
+    });
     const inner = join(frodoProject, "app");
     const reply = await exchange(
       thread,

@@ -252,6 +252,7 @@ export class ChatService extends Context.Service<
         trackTurn(recorder, {
           folders: tools?.folders ?? [],
           attempt: taskTurn?.attempt ?? Effect.succeed(null),
+          workIn: taskTurn?.workIn ?? Effect.succeed(null),
           redactor,
         });
       // Without Task work, turns offer no Task tools and hobs run no steps.

@@ -14,6 +14,7 @@ import type {
   Committed,
   DelegationAuthority,
   DelegationId,
+  DeviceId,
   EventEnvelope,
   HandOff,
   IllegalTaskTransition,
@@ -24,6 +25,7 @@ import type {
   QuestId,
   Question,
   QuestionId,
+  QuestionSurface,
   QuestLimits,
   RefusedCall,
   ResponsibilityLedger,
@@ -281,7 +283,14 @@ export class TaskRepository extends Context.Service<
     readonly recordCheckpoint: (input: NewCheckpoint) => Changed<Checkpoint>;
     /** Asks the nearest lead above the Task, or the user when there is none. */
     readonly askQuestion: (input: NewQuestion) => Changed<Question>;
-    readonly answerQuestion: (questionId: QuestionId, by: Answerer, answer: string, at: string) => Changed<Question>;
+    /** `from` is the device and surface you answered on, for your own answer (#671). */
+    readonly answerQuestion: (
+      questionId: QuestionId,
+      by: Answerer,
+      answer: string,
+      at: string,
+      from?: { readonly deviceId: DeviceId; readonly via: QuestionSurface | null },
+    ) => Changed<Question>;
     /** Passes a question from its current lead to the next lead up, or to the user from the top lead. */
     readonly escalateQuestion: (questionId: QuestionId, by: AgentId) => Changed<Question>;
     /**

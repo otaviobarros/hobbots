@@ -7,7 +7,7 @@ test.afterEach(stopAldricHub);
 test("[TC-PE-425] a git_init the hub refused shows as a failed step in the reply and in the Workbench Summary", async ({
   page,
 }) => {
-  // Aldric's folder already holds a stub `.git`, so creating a repository there is refused (#664).
+  // Aldric's folder already holds a repository's `.git`, so creating a repository there is refused (#664).
   const { url, aldric, folder } = await aldricHub({ ".git/HEAD": "ref: refs/heads/main\n" });
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });

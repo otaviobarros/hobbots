@@ -70,7 +70,7 @@ const orDie = <A, R>(effect: Effect.Effect<A, SqlError.SqlError, R>) =>
   );
 
 /**
- * The SQL Charm call records (migration 0028), keyed by hob, scope and key (migration 0044). Recording a call checks its key and its site in the
+ * The SQL Charm call records (migration 0028), keyed by hob, scope and key (migration 0045). Recording a call checks its key and its site in the
  * same transaction, with the journal's head taken first so concurrent calls take turns on PostgreSQL.
  */
 export const CharmCallsLive = Layer.effect(
