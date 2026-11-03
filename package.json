@@ -8,7 +8,7 @@
     "build": "turbo run build",
     "package:mac": "turbo run build --filter=@hobbots/web --filter=@hobbots/desktop && pnpm --filter @hobbots/desktop package:mac",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
+    "test": "turbo run test --concurrency=4",
     "test:pg": "node scripts/test-pg.mjs",
     "test:e2e": "pnpm --filter @hobbots/web build && pnpm --filter @hobbots/web test:e2e",
     "pg:up": "docker compose -f infrastructure/local/compose.yaml up --detach --wait",
@@ -20,7 +20,7 @@
     "lint:complexity": "node scripts/check-complexity.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "format": "biome check --write .",
-    "check": "node scripts/check-standards.mjs && node scripts/check-layers.mjs && node scripts/check-complexity.mjs && node --test \"scripts/*.test.mjs\" && knip && jscpd && biome check . && turbo run typecheck test"
+    "check": "node scripts/check-standards.mjs && node scripts/check-layers.mjs && node scripts/check-complexity.mjs && node --test \"scripts/*.test.mjs\" && knip && jscpd && biome check . && turbo run typecheck test --concurrency=4"
   },
   "packageManager": "pnpm@12.15.0",
   "devDependencies": {
