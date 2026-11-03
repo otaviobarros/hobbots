@@ -1,4 +1,4 @@
-import { type Dirent, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { secretShapeIn } from "@hobbots/domain";
@@ -272,127 +272,32 @@ export const userGitIdentity = (
     read,
   );
 
-/** A repository's Git directory and the config files it reads its own settings from. */
-export interface RepositoryConfig {
-  readonly gitdir: string;
-  readonly files: ReadonlyArray<string>;
-}
-
-/** The repository whose `.git` sits in `at`: its own config, or a linked worktree's and the shared one. */
-const repositoryAt = (at: string, read: ReadText): RepositoryConfig | null => {
-  const dotGit = join(at, ".git");
-  if (read(join(dotGit, "config")) !== null)
-    return { gitdir: dotGit, files: [join(dotGit, "config"), join(dotGit, "config.worktree")] };
-  const line = (read(dotGit) ?? "").split("\n")[0]?.trim() ?? "";
-  if (!line.startsWith("gitdir:")) return null;
-  const gitdir = resolve(at, line.slice("gitdir:".length).trim());
-  const common = (read(join(gitdir, "commondir")) ?? "").trim();
-  const shared = common === "" ? gitdir : resolve(gitdir, common);
-  return { gitdir, files: [join(shared, "config"), join(gitdir, "config.worktree")] };
-};
-
-// A turn's folders are searched this deep, and through this many folders, for repositories inside them.
-const MAX_DEPTH = 4;
-const MAX_FOLDERS = 2000;
-const SKIPPED = new Set(["node_modules", ".git"]);
-
-/** The folders below `folder` that a commit could land in, nearest first, within the limits above. */
-const foldersBelow = (folder: string): ReadonlyArray<string> => {
-  const found: Array<string> = [];
-  const queue: Array<{ at: string; depth: number }> = [{ at: folder, depth: 0 }];
-  while (queue.length > 0 && found.length < MAX_FOLDERS) {
-    const { at, depth } = queue.shift() as { at: string; depth: number };
-    if (depth >= MAX_DEPTH) continue;
-    let entries: ReadonlyArray<Dirent> = [];
-    try {
-      entries = readdirSync(at, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory() || SKIPPED.has(entry.name)) continue;
-      found.push(join(at, entry.name));
-      queue.push({ at: join(at, entry.name), depth: depth + 1 });
-    }
-  }
-  return found;
-};
-
-/**
- * The repositories a commit from one of `folders` can land in: the one holding each folder, and
- * those nested inside it.
- */
-export const repositoriesOf = (
-  folders: ReadonlyArray<string>,
-  read: ReadText = readText,
-  below: (folder: string) => ReadonlyArray<string> = foldersBelow,
-): ReadonlyArray<RepositoryConfig> => {
-  const found = new Map<string, RepositoryConfig>();
-  const add = (repository: RepositoryConfig | null) => {
-    if (repository !== null && !found.has(repository.gitdir)) found.set(repository.gitdir, repository);
-  };
-  for (const folder of folders) {
-    for (let at = folder; ; at = dirname(at)) {
-      const holding = repositoryAt(at, read);
-      add(holding);
-      if (holding !== null || dirname(at) === at) break;
-    }
-    for (const inside of below(folder)) add(repositoryAt(inside, read));
-  }
-  return [...found.values()];
-};
-
-/** Those of `repositories` that set their own `user.name`, which then stays theirs. */
-export const namedRepositories = (
-  repositories: ReadonlyArray<RepositoryConfig>,
-  home: string,
-  read: ReadText = readText,
-): ReadonlyArray<RepositoryConfig> =>
-  repositories.filter((repository) => identityIn(repository.files, home, read).name !== null);
-
-/** A path as a `gitdir:` condition matches it, glob characters taken literally. */
-const gitdirPattern = (gitdir: string) => realOrSelf(gitdir).replace(/[\\*?[]/g, (c) => `\\${c}`);
-
 /**
  * The environment a hob's commands commit with when no app identity applies (#586). Git would
- * otherwise make an identity up from the user's account and the computer's name when it finds none,
- * as a sandbox that cannot read the user's config does. Each field is settled by the repository the
- * commit lands in, as Git settles it:
+ * otherwise make an email up from the user's account and the computer's name when no config gives
+ * one, as in a sandbox that cannot read the user's config.
  *
  * - The user's email goes in `EMAIL`, below every config, so a repository's own `user.email` wins.
- * - Git has no such place for a name, so the user's name is set as `user.name` for the command,
- *   above every config. Each repository of `named` that sets its own `user.name` then has its config
- *   included after it, on a `gitdir:` condition that matches only that repository, so its own name
- *   wins there. A repository that sets only an email keeps the user's name with its own email.
+ * - No name is given. Git takes it from config: the repository's own `user.name`, or else the user's
+ *   global one, which the sandbox opens for reading (`gitConfigAccess`). Git has no place for a name
+ *   below a repository's config that a command's environment can reach, since Claude Code's scrub
+ *   removes `GIT_CONFIG_GLOBAL`, and `GIT_AUTHOR_NAME` or a command-level `user.name` would override
+ *   every repository's own. Where neither config sets one, as when the user's config stays closed,
+ *   Git takes the account's full name, and fails when that is empty.
  * - With no email, Git is told to take an email from config only, so a commit without one fails,
  *   and the hob asks.
  *
- * The settings already in `GIT_CONFIG_COUNT` come last, so a repository's config cannot undo them.
+ * Settings already in `GIT_CONFIG_COUNT` are kept.
  */
-export const withUserIdentity = (
-  env: NodeJS.ProcessEnv,
-  identity: GitIdentity,
-  named: ReadonlyArray<RepositoryConfig> = [],
-): NodeJS.ProcessEnv => {
-  const ours: Array<readonly [string, string]> =
-    identity.name === null
-      ? []
-      : [
-          ["user.name", identity.name],
-          ...named.flatMap(({ gitdir, files }) =>
-            files.map((file) => [`includeIf.gitdir:${gitdirPattern(gitdir)}.path`, file] as const),
-          ),
-        ];
-  if (identity.email === null) ours.push(["user.useConfigOnly", "true"]);
+export const withUserIdentity = (env: NodeJS.ProcessEnv, identity: GitIdentity): NodeJS.ProcessEnv => {
+  if (identity.email !== null) return { ...env, EMAIL: identity.email };
   const count = Number.parseInt(env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
-  const theirs = Array.from({ length: count }, (_, i) => [env[`GIT_CONFIG_KEY_${i}`], env[`GIT_CONFIG_VALUE_${i}`]]);
-  const settings = [...ours, ...theirs];
-  const next: NodeJS.ProcessEnv = { ...env, GIT_CONFIG_COUNT: String(settings.length) };
-  settings.forEach(([key, value], i) => {
-    next[`GIT_CONFIG_KEY_${i}`] = key;
-    next[`GIT_CONFIG_VALUE_${i}`] = value;
-  });
-  return identity.email === null ? next : { ...next, EMAIL: identity.email };
+  return {
+    ...env,
+    GIT_CONFIG_COUNT: String(count + 1),
+    [`GIT_CONFIG_KEY_${count}`]: "user.useConfigOnly",
+    [`GIT_CONFIG_VALUE_${count}`]: "true",
+  };
 };
 
 /** What a hob is told when no identity applies to its commits (#586). */
@@ -411,17 +316,13 @@ export interface UserCommits {
  * repositories now. Anything else commits as it would.
  */
 export const userCommits = (
-  tools: {
-    readonly folders: ReadonlyArray<string>;
-    readonly commitAs?: { readonly name: string; readonly email: string };
-  } | null,
+  tools: { readonly commitAs?: { readonly name: string; readonly email: string } } | null,
   home: string = homedir(),
 ): UserCommits => {
   if (tools === null || tools.commitAs !== undefined) return { note: "", env: (env) => env };
   const identity = userGitIdentity(home);
-  const named = identity.name === null ? [] : namedRepositories(repositoriesOf(tools.folders), home);
   return {
     note: identity.email === null ? NO_GIT_IDENTITY_NOTE : "",
-    env: (env) => withUserIdentity(env, identity, named),
+    env: (env) => withUserIdentity(env, identity),
   };
 };
