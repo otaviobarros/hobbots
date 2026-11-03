@@ -369,10 +369,13 @@ export class ApprovalService extends Context.Service<
                     const asking = open && (yield* hobActive(owner.agentId));
                     // The user sees the call with its secrets redacted; the digest still names the call
                     // exactly as it would run, so an approval matches only that call.
+                    const rootTaskId = yield* workingOn;
                     const approval = new ApprovalRequest({
                       id: ApprovalId.make(crypto.randomUUID()),
+                      // A chat turn on its Task asks for that Task, as a member's turn asks for its own (#670).
+                      taskId: rootTaskId,
                       ...owner,
-                      rootTaskId: yield* workingOn,
+                      rootTaskId,
                       stepId: action.stepId,
                       tool: action.tool,
                       operation: action.operation,

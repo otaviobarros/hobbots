@@ -38,7 +38,7 @@ export function QuestionForYou({ waiting, hobs }: { waiting: WaitingQuestion; ho
       </div>
       <p className="m-0 leading-normal whitespace-pre-wrap">{question.text}</p>
       {passedBy.length > 0 && <p className="m-0 text-xs text-label">{copy.passedBy({ names: passedBy })}</p>}
-      <AnswerForm question={question} askerName={asker.name} />
+      <AnswerForm question={question} askerName={asker.name} via="inbox" />
       {task.threadId !== null && (
         <Link
           to="/hobs/$hobId/threads/$threadId"

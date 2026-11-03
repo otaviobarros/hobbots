@@ -582,6 +582,7 @@ export const commandRequests = (command: string, cwd: string, home: string = hom
   const read = readCommandLine(command);
   const simple = tokens.filter((token) => "words" in token).length;
   const literal = read !== null && read.length === simple ? read : null;
+  const plain = !/[<>]/.test(command);
   let position = 0;
   tokens.forEach((token, index) => {
     if ("separator" in token) {
@@ -593,6 +594,10 @@ export const commandRequests = (command: string, cwd: string, home: string = hom
     const preview = unwrap(token.words, cwd, home).words;
     const folder = folders.command(preview, separatorOf(tokens[index + 1]));
     const unwrapped = unwrap(token.words, folder, home);
+    // A settled `cd` runs nothing: it moves the shell, and each command after it is decided in the
+    // folder it moved to, so it names no folder of its own (#670). A line with a redirection or a
+    // process substitution may still act where it started, so there it is decided as before.
+    if (plain && DIRECTORY_COMMANDS.has(unwrapped.words[0] ?? "") && unwrapped.words.every(isSettled)) return;
     for (const request of programRequests(unwrapped.words, unwrapped.folder, home, literalWords)) add(request);
   });
   if (requests.length === 0) add({ _tag: "Command", operation: "run-commands", cwd });

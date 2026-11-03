@@ -40,8 +40,9 @@ export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequ
   /** The reply whose turn is paused, or null for a party member's turn, which runs outside the chat (ADR 018). */
   messageId: Schema.NullOr(MessageId),
   /**
-   * The member's Task whose turn is paused, for a turn outside the chat; null for a chat turn, and
-   * for requests from before party members ran.
+   * The Task whose turn is paused: a party member's, or the Task a chat turn works on (#670). Null
+   * for a chat turn on no Task, and for requests from before these were recorded. A turn outside
+   * the chat is the one with no reply.
    */
   taskId: Schema.NullOr(TaskId).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),

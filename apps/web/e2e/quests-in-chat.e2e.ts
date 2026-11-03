@@ -59,7 +59,7 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   // Your answer goes back; the Quest finishes and Aldric wraps up in the chat.
   await asks.getByRole("textbox", { name: "Your answer to Ada" }).fill("Yes, Dec 12 for international orders.");
   await asks.getByRole("button", { name: "Send answer" }).click();
-  await expect(asks).toContainText("You answered: Yes, Dec 12 for international orders.");
+  await expect(asks).toContainText("You answered here: Yes, Dec 12 for international orders.");
   // Aldric finishes only once his chat has read each member's result, a paced fake reply apiece.
   await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
   await expect(strip).toBeHidden();
@@ -102,7 +102,7 @@ test("[TC-IN-132] a question no lead could answer waits in the Inbox's Needs you
 
   // The chat shows the answer you gave from the Inbox.
   await page.goto(chat);
-  await expect(asksInChat).toContainText("You answered: Yes, Dec 12 for international orders.");
+  await expect(asksInChat).toContainText("You answered in the Inbox: Yes, Dec 12 for international orders.");
 });
 
 // covers OR-004, OR-006, IN-002

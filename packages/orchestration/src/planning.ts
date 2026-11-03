@@ -1,4 +1,4 @@
-import type { TaskRepository } from "@hobbots/agents";
+import type { FolderChecksShape, TaskRepository } from "@hobbots/agents";
 import {
   ArtifactId,
   type AttemptId,
@@ -16,6 +16,7 @@ import {
   type TaskToolRefused,
 } from "@hobbots/domain";
 import { Effect } from "effect";
+import type { Authority, PathSeparator } from "./authority.ts";
 import { cut } from "./briefs.ts";
 import {
   type CallScope,
@@ -30,6 +31,7 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
+import { namedFolders, requestedFolders, withFolders } from "./default-folders.ts";
 import type { WrapUp, WrapUpPolicy } from "./wrap-up.ts";
 
 /** Longest reason a lead's `leave_uncommitted` keeps on the Task (#665). */
@@ -45,6 +47,10 @@ interface Deps {
   readonly limits: TaskToolLimits;
   /** What the Task leaves uncommitted in its folders, read as it completes (#586). */
   readonly wrapUp: (task: Task, attempts: ReadonlyArray<AttemptId>, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
+  readonly folderChecks: FolderChecksShape;
+  /** The caller's authority on a Task: its own, narrowed by every Delegation on the way down. */
+  readonly authority: (scope: CallScope, task: Task) => Effect.Effect<Authority>;
+  readonly separator: PathSeparator;
 }
 
 /**
@@ -128,7 +134,7 @@ const newMilestones = (titles: ReadonlyArray<string> | undefined) =>
  * Tools a Task's owner runs its own work with: steps, a Quest, waits, the result, and cancelling
  * work under it.
  */
-export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
+export const makePlanning = ({ tasks, capacity, limits, wrapUp, folderChecks, authority, separator }: Deps) => ({
   plan_steps: (scope: CallScope, input: Omit<TaskToolInput<"plan_steps">, "key">) =>
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
@@ -175,6 +181,17 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
     Effect.gen(function* () {
       const task = yield* ownTask(scope, input.task_id);
       const quest = yield* questLimitsFor(scope, limits, task, input);
+      // Its work is in the folders the lead names, else those its brief and goal name (#670).
+      const lead = (yield* authority(scope, task)).folders;
+      const folders =
+        input.folders === undefined
+          ? yield* namedFolders(
+              folderChecks,
+              lead,
+              [task.brief, input.goal, ...(input.acceptance ?? [])].join("\n"),
+              separator,
+            )
+          : yield* requestedFolders(folderChecks, lead, input.folders, separator);
       const journal = journalOf();
       const started = journal.keep(
         yield* fromRecords(
@@ -183,7 +200,7 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
             taskId: task.id,
             goal: input.goal,
             acceptance: input.acceptance ?? [],
-            limits: quest,
+            limits: withFolders(quest, folders),
             createdAt: scope.at,
           }),
         ),
