@@ -100,6 +100,18 @@ const answering = (
   return { ...request, hubTools: { ...hubTools, call } };
 };
 
+/** Lines a later prompt runs once it carries `on`, as a hob reacts to what reaches it. */
+export interface Reaction {
+  readonly on: string;
+  readonly lines: ReadonlyArray<string>;
+}
+
+/** The prompt with the first reaction it carries added; each reaction runs once. */
+const reacted = (prompt: string, reactions: Array<Reaction>) => {
+  const index = reactions.findIndex((each) => prompt.includes(each.on));
+  return index === -1 ? prompt : [prompt, ...(reactions.splice(index, 1)[0]?.lines ?? [])].join("\n");
+};
+
 /** The hub's services, a temporary project folder, and what each scripted call was answered. */
 export const partyHub = () => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -110,6 +122,7 @@ export const partyHub = () => {
   const answers = new Map<string, string>();
   /** Gates on scripted calls, by the call's key: see `answering`. */
   const gates = new Map<string, () => Promise<void>>();
+  const reactions: Array<Reaction> = [];
 
   const tools = Layer.succeed(
     HobTools,
@@ -136,7 +149,7 @@ export const partyHub = () => {
       return RuntimeAdapter.of({
         ...fake,
         sendPrompt: (sent) => {
-          const request = answering(sent, answers, gates);
+          const request = answering({ ...sent, prompt: reacted(sent.prompt, reactions) }, answers, gates);
           requests.push(request);
           return fake.sendPrompt(request);
         },
@@ -204,7 +217,7 @@ export const partyHub = () => {
     await runtime.dispose();
     rmSync(temp, { recursive: true, force: true });
   };
-  return { run, dispose, requests, answers, gates };
+  return { run, dispose, requests, answers, reactions, gates };
 };
 
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>

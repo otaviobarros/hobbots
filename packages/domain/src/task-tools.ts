@@ -132,6 +132,17 @@ export const TaskToolInputs = {
       }),
     ),
   }),
+  read_tasks: Schema.Struct({
+    key,
+    task_id: Schema.optionalKey(
+      id("A Task you own, or one under it, to read everything under. Leave it out for the Task you are working on."),
+    ),
+  }),
+  message_task: Schema.Struct({
+    key,
+    task_id: id("A member's Task directly under one of yours."),
+    text: text("What the member needs to know, in a sentence or two."),
+  }),
   complete_task: Schema.Struct({
     key,
     task_id: taskId,
@@ -213,6 +224,18 @@ export const TASK_TOOLS: ReadonlyArray<{
     description:
       "Record that a Task you own waits for any or all of the Tasks under it, then end your turn. It does not block: Hobbots wakes you when they end, or sooner when something arrives for you, such as a question. Your Task shows as waiting once your turn ends. Its result lists the questions and blockers they have open, so answer the questions that wait for you first. Call it once per wait, never again to check.",
     label: "Waiting on Tasks",
+  },
+  {
+    name: "read_tasks",
+    description:
+      "Read where every Task under one of yours stands, at any depth, nested Quests included: its owner, state, whether a turn runs on it, what it waits on, its open questions, its latest checkpoints and its result. Read it instead of guessing; it changes nothing.",
+    label: "Reading the work",
+  },
+  {
+    name: "message_task",
+    description:
+      "Send a short message to a member's Task directly under one of yours, such as that an obstacle is gone. It reaches the member in its next turn and wakes it. To reach a hob further down, message the member that leads it.",
+    label: "Messaging a member",
   },
   {
     name: "complete_task",
