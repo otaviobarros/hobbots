@@ -102,10 +102,14 @@ describe("the folder scan", () => {
          try { fs.renameSync(docs, kept); fs.symlinkSync(out, docs); fs.unlinkSync(docs); fs.renameSync(kept, docs); } catch {}
        }`,
     ]);
-    const done = new Promise((resolve) => swapper.on("exit", resolve));
+    let swapping = true;
+    const done = new Promise((resolve) => swapper.on("exit", resolve)).then(() => {
+      swapping = false;
+    });
     const scanner = makeFolderScanner();
     const seen: Array<string> = [];
-    for (let i = 0; i < 400; i++) {
+    // Read and scan for as long as the swapper runs, however slow the machine is.
+    while (swapping) {
       const read = await Effect.runPromise(scanner.read(root, "docs/notes.md", 1024));
       if (Option.isSome(read)) seen.push(new TextDecoder().decode(read.value));
       const scanned = await Effect.runPromise(scanner.scan(root, limits));

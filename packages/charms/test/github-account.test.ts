@@ -130,13 +130,7 @@ const setup = (
   });
 
 /** Lets the hub's waiting fiber run for `seconds` of test time. */
-const wait = (seconds: number) =>
-  Effect.gen(function* () {
-    for (let i = 0; i < seconds; i++) {
-      yield* TestClock.adjust("1 second");
-      yield* Effect.yieldNow;
-    }
-  });
+const wait = (seconds: number) => TestClock.adjust(`${seconds} seconds`);
 
 const run = <A, E>(effect: Effect.Effect<A, E, TestClock.TestClock>) =>
   Effect.runPromise(effect.pipe(Effect.provide(Layer.fresh(TestClock.layer()))));

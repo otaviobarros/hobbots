@@ -171,7 +171,9 @@ describe("standing grants", () => {
     const careful = contextFor(home, "careful");
     const edit = files("edit-files", home.project, "src/index.ts");
     const granted = await approveAlways(careful, edit);
-    expect(granted.grants[0]?.rule).toMatchObject({ _tag: "Folder", folder: path.join(home.project, "src") });
+    // A saved rule holds the canonical path, which differs where the temp folder is a symlink.
+    const src = await fs.realpath(path.join(home.project, "src"));
+    expect(granted.grants[0]?.rule).toMatchObject({ _tag: "Folder", folder: src });
     expect((await decide(granted, edit)).decision).toBe("allow");
     // A file beside it is covered; one in a subfolder is not.
     await fs.mkdir(path.join(home.project, "src", "deep"), { recursive: true });
@@ -249,7 +251,7 @@ describe("standing grants", () => {
     expect(deleting.grants[0]?.rule).toEqual({
       _tag: "Paths",
       operation: "delete-files",
-      paths: [path.join(home.project, "src")],
+      paths: [await fs.realpath(path.join(home.project, "src"))],
     });
     expect((await decide(deleting, remove)).decision).toBe("allow");
     expect((await decide(deleting, files("delete-files", home.project, "src/index.ts"))).decision).toBe("ask");
@@ -282,20 +284,21 @@ describe("the GitHub Charm's writes", () => {
   // covers PE-001, PE-003, PE-007
   it("[TC-PE-200] asks before opening a pull request or commenting, and a rule names only the repository and base", async () => {
     const balanced = contextFor(home, "balanced");
+    const project = await fs.realpath(home.project);
     expect(await decide(balanced, pullRequest(home.project))).toMatchObject({
       decision: "ask",
       operation: "open-pull-request",
       targets: ["github.com/otaviobarros/hobbots into main"],
       onceOnly: false,
       grantable: true,
-      rules: [{ _tag: "PullRequest", cwd: home.project, repository, base: "main" }],
+      rules: [{ _tag: "PullRequest", cwd: project, repository, base: "main" }],
     });
     expect(await decide(balanced, comment(home.project))).toMatchObject({
       decision: "ask",
       operation: "comment-github",
       targets: ["github.com/otaviobarros/hobbots #324"],
       grantable: true,
-      rules: [{ _tag: "GitHubComment", cwd: home.project, repository }],
+      rules: [{ _tag: "GitHubComment", cwd: project, repository }],
     });
     expect((await decide(contextFor(home, "trusting"), pullRequest(home.project))).decision).toBe("allow");
     expect((await decide(contextFor(home, "trusting"), comment(home.project))).decision).toBe("allow");
