@@ -446,9 +446,9 @@ describe("the Black Friday Quest end to end", () => {
     const { run, script, release } = await start(database, [
       // Quill goes on with Aldric's answer, held until Ada has heard yours, so Ada still waits on him.
       { on: 'was answered by hob aldric: "Playful"', lines: [HOLD] },
-      // Ada finishes once Quill's copy reaches her through Aldric.
+      // Ada finishes once your answer reaches her, Quill's copy already in hand through Aldric.
       {
-        on: '"Landing copy" was handed to Task',
+        on: 'was answered by the user: "Yes, Dec 12"',
         lines: [hub("complete_task", { key: "build-done", summary: "Campaign built for Dec 12" })],
       },
     ]);
@@ -516,35 +516,41 @@ describe("the Black Friday Quest end to end", () => {
       send(["Answer Quill", hub("answer", { key: "reply", question_id: "$tone.question_id", answer: "Playful" })]),
     );
 
-    // Ada's question Aldric passes up to you, and you answer it.
-    await run(treeWhen((tree) => tree.questions.some((each) => each.askerId === ADA)));
-    await run(send(["Ask the user", hub("escalate", { key: "up", question_id: "$date.question_id" })]));
-    const yours = await run(
-      treeWhen((tree) => tree.questions.some((each) => each.askerId === ADA && each.recipientId === null)),
+    // Quill goes on with the answer, held. Ada's Task depends on his, so it waits, queued, with no turn of its own.
+    const held = await run(
+      treeWhen((tree) => {
+        const quill = memberTask(tree, QUILL);
+        return quill !== undefined && promptsTo(script.requests, quill).length === 2 && quill.state === "active";
+      }),
     );
-    const date = yours.questions.find((each) => each.askerId === ADA);
-    if (date === undefined) throw new Error("no question from Ada");
-    await run(QuestionService.use((questions) => questions.answer(date.id, "Yes, Dec 12")));
-    // Ada goes on with your answer in her own session, and waits on Quill's copy.
-    const heard = await run(
+    expect(memberTask(held, ADA)?.state).toBe("queued");
+    expect(held.attempts.filter((each) => each.agentId === ADA)).toEqual([]);
+
+    // Quill finishes, and only then does Ada start.
+    await release();
+    await run(treeWhen((tree) => memberTask(tree, QUILL)?.state === "completed"));
+
+    // Ada asks a question Aldric passes up to you. He hands her Quill's copy, which reaches her only
+    // through him, and she goes on with it in her own session while your answer is still to come.
+    await run(treeWhen((tree) => tree.questions.some((each) => each.askerId === ADA)));
+    await run(
+      send([
+        "Ask the user, and hand the copy to Ada",
+        hub("escalate", { key: "up", question_id: "$date.question_id" }),
+        hub("hand_off", { key: "hand", artifact_id: "$copy-done.artifacts.0", to_task_id: "$build.task_id" }),
+      ]),
+    );
+    const handed = await run(
       treeWhen((tree) => {
         const ada = memberTask(tree, ADA);
         return ada !== undefined && promptsTo(script.requests, ada).length === 2;
       }).pipe(Effect.andThen(settledFor(ADA))),
     );
-    expect(memberTask(heard, ADA)?.state).toBe("waiting");
-    expect(memberTask(heard, QUILL)?.state).toBe("active");
-
-    // Quill finishes; his copy reaches Ada only through Aldric.
-    await release();
-    const copied = await run(treeWhen((tree) => memberTask(tree, QUILL)?.state === "completed"));
-    expect(memberTask(copied, ADA)?.state).not.toBe("completed");
-    await run(
-      send([
-        "Hand the copy to Ada",
-        hub("hand_off", { key: "hand", artifact_id: "$copy-done.artifacts.0", to_task_id: "$build.task_id" }),
-      ]),
-    );
+    expect(memberTask(handed, ADA)?.state).toBe("waiting");
+    const date = handed.questions.find((each) => each.askerId === ADA);
+    if (date === undefined) throw new Error("no question from Ada");
+    expect(date.recipientId).toBeNull();
+    await run(QuestionService.use((questions) => questions.answer(date.id, "Yes, Dec 12")));
 
     // Once every step and member is done, Aldric wraps up in your chat.
     await run(
@@ -588,13 +594,15 @@ describe("the Black Friday Quest end to end", () => {
     expect(quillPrompts.map((request) => request.sessionId === null)).toEqual([true, false]);
     expect(quillPrompts[1]?.prompt).toContain('was answered by hob aldric: "Playful"');
 
-    // The hand-off: Ada heard your answer, then got Quill's copy from Aldric, in her own session.
+    // The hand-off: Ada started once Quill was done, got his copy from Aldric, then heard your
+    // answer, in her own session.
     const ada = taskOf(done, ADA);
     expect(done.handOffs.map((each) => each.toTaskId)).toEqual([ada.id]);
     const adaPrompts = promptsTo(script.requests, ada);
     expect(adaPrompts).toHaveLength(3);
-    expect(adaPrompts[1]?.prompt).toContain('was answered by the user: "Yes, Dec 12"');
-    expect(adaPrompts[2]?.prompt).toContain("Black Friday: 20% off everything");
+    expect(adaPrompts[0]?.prompt).toContain(`Task ${taskOf(done, QUILL).id}, completed: Draft the landing copy`);
+    expect(adaPrompts[1]?.prompt).toContain("Black Friday: 20% off everything");
+    expect(adaPrompts[2]?.prompt).toContain('was answered by the user: "Yes, Dec 12"');
     expect(new Set(adaPrompts.slice(1).map((request) => request.sessionId)).size).toBe(1);
     expect(ada.result?.summary).toBe("Campaign built for Dec 12");
 
@@ -751,14 +759,22 @@ describe("a hub that stops mid-Quest", () => {
   // covers EX-004, OR-002, IN-002, IN-004
   it("[TC-OR-172] starts again with nothing lost or duplicated: the cut-off member works again, your answer and the hand-off arrive once, and the Quest completes", async () => {
     const database = await sharedDatabase();
-    const first = await start(database);
+    // Ada's turn that carries Quill's copy is still running when Hobbots stops.
+    const first = await start(database, [{ on: '"Landing copy" was handed to Task', lines: [HOLD_STARTED] }]);
     await first.run(
       send([
         "Plan the Black Friday campaign",
         hub("delegate_task", {
           key: "copy",
           hob: "Quill",
-          brief: ["Draft the landing copy", HOLD_STARTED].join("\n"),
+          brief: [
+            "Draft the landing copy",
+            hub("complete_task", {
+              key: "copy-done",
+              summary: "Landing copy ready",
+              artifacts: [{ kind: "text", label: "Landing copy", value: "Black Friday: 20% off everything" }],
+            }),
+          ].join("\n"),
         }),
         hub("delegate_task", {
           key: "build",
@@ -772,90 +788,79 @@ describe("a hub that stops mid-Quest", () => {
         hub("wait_for", { key: "wait", tasks: ["$copy.task_id", "$build.task_id"] }),
       ]),
     );
-    // Aldric passes Ada's question up to you; Quill's turn is still running when Hobbots stops.
+    // Quill finishes, so Ada starts and asks. Aldric passes her question up to you and hands her the copy.
     await first.run(treeWhen((tree) => tree.questions.length === 1));
-    await first.run(send(["Ask the user", hub("escalate", { key: "up", question_id: "$date.question_id" })]));
+    await first.run(
+      send([
+        "Ask the user, and hand the copy to Ada",
+        hub("escalate", { key: "up", question_id: "$date.question_id" }),
+        hub("hand_off", { key: "hand", artifact_id: "$copy-done.artifacts.0", to_task_id: "$build.task_id" }),
+      ]),
+    );
     const before = await first.run(
       treeWhen(
         (tree) =>
           tree.questions[0]?.recipientId === null &&
-          memberTask(tree, ADA)?.state === "waiting" &&
-          tree.attempts.some((each) => each.agentId === QUILL && each.state === "running") &&
-          !tree.attempts.some((each) => each.agentId !== QUILL && isLive(each.state)),
+          tree.handOffs.length === 1 &&
+          tree.attempts.some((each) => each.agentId === ADA && each.state === "running") &&
+          !tree.attempts.some((each) => each.agentId !== ADA && isLive(each.state)),
       ),
     );
-    // Aldric's turn has settled what it carried, so only Quill's is cut off when Hobbots stops.
+    // Aldric's turns have settled what they carried, so only Ada's is cut off when Hobbots stops.
     await first.run(settledFor(ALDRIC));
-    await first.run(onlyAtWork(QUILL));
+    await first.run(onlyAtWork(ADA));
     const beforeMessages = await first.run(messagesWhen(() => true));
     const copy = taskOf(before, QUILL);
     const build = taskOf(before, ADA);
+    expect(copy.state).toBe("completed");
 
     first.stop();
 
-    // The next start, over the same database. Quill goes on in a new turn of his session and returns
-    // the copy once let go; Ada finishes once it reaches her through Aldric.
+    // The next start, over the same database. Ada goes on in a new turn of her session, held, and
+    // finishes once your answer reaches her.
     const second = await start(database, [
+      { on: `You work on Task ${build.id} `, lines: [HOLD] },
       {
-        on: `You work on Task ${copy.id} `,
-        lines: [
-          HOLD,
-          hub("complete_task", {
-            key: "copy-done",
-            summary: "Landing copy ready",
-            artifacts: [{ kind: "text", label: "Landing copy", value: "Black Friday: 20% off everything" }],
-          }),
-        ],
-      },
-      {
-        on: '"Landing copy" was handed to Task',
+        on: 'was answered by the user: "Yes, Dec 12"',
         lines: [hub("complete_task", { key: "build-done", summary: "Campaign built for Dec 12" })],
       },
     ]);
-    const copied = await second.run(
-      treeWhen((tree) => tree.attempts.filter((each) => each.taskId === copy.id).length === 2),
+    const resumed = await second.run(
+      treeWhen((tree) => tree.attempts.filter((each) => each.taskId === build.id).length === 3),
     );
-    expect(attemptsOf(copied, copy)).toEqual([
-      [QUILL, "interrupted"],
-      [QUILL, "starting"],
+    expect(attemptsOf(resumed, build)).toEqual([
+      [ADA, "completed"],
+      [ADA, "interrupted"],
+      [ADA, "starting"],
     ]);
-    const [quillTurn] = await second.run(
+    const [adaTurn] = await second.run(
       retry(
         Effect.suspend(() => {
-          const sent = promptsTo(second.script.requests, copy);
+          const sent = promptsTo(second.script.requests, build);
           return sent.length === 1 ? Effect.succeed(sent) : Effect.fail("not yet" as const);
         }),
       ),
     );
-    expect(quillTurn?.sessionId).toBe(before.attempts.find((each) => each.taskId === copy.id)?.sessionId);
+    expect(adaTurn?.sessionId).toBe(before.attempts.find((each) => each.taskId === build.id)?.sessionId);
+    // The hand-off her cut-off turn carried reaches her again, as it never settled.
+    expect(adaTurn?.prompt).toContain("Black Friday: 20% off everything");
     // Nothing of the Quest was lost: the same Tasks, Quest and question, still waiting for you.
-    expect(copied.tasks.map((task) => task.id)).toEqual(before.tasks.map((task) => task.id));
-    expect(copied.quests.map((quest) => quest.id)).toEqual(before.quests.map((quest) => quest.id));
-    expect(copied.delegations.map((each) => each.id)).toEqual(before.delegations.map((each) => each.id));
-    const [question] = copied.questions;
+    expect(resumed.tasks.map((task) => task.id)).toEqual(before.tasks.map((task) => task.id));
+    expect(resumed.quests.map((quest) => quest.id)).toEqual(before.quests.map((quest) => quest.id));
+    expect(resumed.delegations.map((each) => each.id)).toEqual(before.delegations.map((each) => each.id));
+    const [question] = resumed.questions;
     expect(question).toMatchObject({ id: before.questions[0]?.id, state: "open", recipientId: null, chain: [ALDRIC] });
     if (question === undefined) throw new Error("no question");
 
     await second.run(QuestionService.use((questions) => questions.answer(question.id, "Yes, Dec 12")));
-    const answered = await second.run(
-      treeWhen(() => promptsTo(second.script.requests, build).length === 1).pipe(Effect.andThen(settledFor(ADA))),
-    );
-    expect(memberTask(answered, ADA)?.state).toBe("waiting");
-    expect(memberTask(answered, QUILL)?.state).toBe("active");
     await second.release();
-    const ready = await second.run(treeWhen((tree) => memberTask(tree, QUILL)?.state === "completed"));
-    expect(memberTask(ready, ADA)?.state).not.toBe("completed");
-    const artifact = ready.artifacts.find((each) => each.label === "Landing copy");
-    await second.run(
-      send(["Hand the copy to Ada", hub("hand_off", { key: "hand", artifact_id: artifact?.id, to_task_id: build.id })]),
-    );
     await second.run(settledTree((tree) => memberTask(tree, ADA)?.state === "completed"));
     await second.run(
       send(["Wrap up", hub("complete_task", { key: "wrap", summary: "The Black Friday campaign is ready" })]),
     );
     const done = await second.run(settledTree((tree) => tree.tasks[0]?.state === "completed"));
 
-    // Nothing was duplicated: one of each record, and each arrival reached Ada once.
+    // Nothing was duplicated: one of each record, and your answer reached Ada once.
     expect(done.tasks.map((task) => [task.ownerId, task.state])).toEqual([
       [ALDRIC, "completed"],
       [QUILL, "completed"],
@@ -867,31 +872,30 @@ describe("a hub that stops mid-Quest", () => {
     expect(done.handOffs.map((each) => each.toTaskId)).toEqual([build.id]);
     expect(attemptsOf(done, build)).toEqual([
       [ADA, "completed"],
+      [ADA, "interrupted"],
       [ADA, "completed"],
       [ADA, "completed"],
     ]);
+    expect(taskOf(done, ADA).result?.summary).toBe("Campaign built for Dec 12");
     const adaPrompts = [...first.script.requests, ...second.script.requests].filter((request) =>
       promptsTo([request], build).includes(request),
     );
-    expect(adaPrompts).toHaveLength(3);
-    expect(adaPrompts[1]?.prompt).toContain('was answered by the user: "Yes, Dec 12"');
-    expect(adaPrompts[2]?.prompt).toContain("Black Friday: 20% off everything");
-    expect(attemptsOf(done, copy)).toEqual([
-      [QUILL, "interrupted"],
-      [QUILL, "completed"],
+    expect(adaPrompts).toHaveLength(4);
+    expect(adaPrompts.filter((request) => request.prompt.includes('was answered by the user: "Yes, Dec 12"'))).toEqual([
+      adaPrompts[3],
     ]);
-    // Quill's brief was never sent again: his new turn went on in his session from what reached him.
-    const quillBriefs = [...first.script.requests, ...second.script.requests].filter((request) =>
-      request.prompt.startsWith("Draft the landing copy"),
+    expect(attemptsOf(done, copy)).toEqual([[QUILL, "completed"]]);
+    // Ada's brief was never sent again: her new turns went on in her session from what reached her.
+    const adaBriefs = [...first.script.requests, ...second.script.requests].filter((request) =>
+      request.prompt.startsWith("Build the campaign once the copy exists"),
     );
-    expect(quillBriefs).toHaveLength(1);
+    expect(adaBriefs).toHaveLength(1);
     // Your messages are kept once each, and every reply ended.
     const all = await second.run(messagesWhen(() => true));
     expect(all.slice(0, beforeMessages.length).map((m) => m.id)).toEqual(beforeMessages.map((m) => m.id));
     expect(all.filter((m) => m.role === "user").map((m) => m.content.split("\n")[0])).toEqual([
       "Plan the Black Friday campaign",
-      "Ask the user",
-      "Hand the copy to Ada",
+      "Ask the user, and hand the copy to Ada",
       "Wrap up",
     ]);
     expect(await second.run(TaskRepository.use((tasks) => tasks.listLiveAttempts))).toEqual([]);

@@ -216,7 +216,8 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         output: "[main (root-commit) 1a2b3c4] First\n",
       })}`,
     );
-    const attempts = await endedAttempts(thread, 3);
+    // The three turns on the Task share its one Attempt (#644), which ends after each reply.
+    const attempts = await endedAttempts(thread, 1);
     const last = attempts.at(-1);
     if (last === undefined) throw new Error("no attempt");
     const { activity } = (await request<AttemptActivityRead>("GET", `/api/attempts/${last.id}/activity`)).body;

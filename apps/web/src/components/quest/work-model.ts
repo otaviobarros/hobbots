@@ -81,6 +81,11 @@ export const rowStatus = (tree: TaskTree, task: Task): RowStatus => {
       return "blocked";
     case "waiting":
       return "waiting";
+    // A Task that comes after others starts only once they have completed (ADR 018): until then it waits on them.
+    case "queued":
+      return task.dependsOn.some((id) => tree.tasks.find((each) => each.id === id)?.state !== "completed")
+        ? "waiting"
+        : "running";
     case "completed":
     case "cancelled":
       return "done";

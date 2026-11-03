@@ -127,7 +127,7 @@ export const memberPrompt = (task: Task, tree: TaskTree, lead: string): string =
     ...(after.length === 0
       ? []
       : [
-          "It comes after these Tasks. What you need from them reaches you as a hand-off from your lead, so do what you can meanwhile and finish once you have it:",
+          `It comes after these Tasks, and starts only once they have completed. What you need from them reaches you as a hand-off from ${lead}, so finish once you have it:`,
           ...after,
         ]),
     ...(handed.length === 0 ? [] : [cut(["Handed to this Task:", ...handed].join("\n"), STEP_INPUT_LIMIT)]),

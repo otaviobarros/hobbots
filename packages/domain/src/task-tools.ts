@@ -81,7 +81,7 @@ export const TaskToolInputs = {
     milestones,
     depends_on: Schema.optionalKey(
       Schema.Array(Schema.String).annotate({
-        description: "Ids of Tasks under the same Task that must complete before this one.",
+        description: "Ids of Tasks under the same Task that must complete before this one starts.",
       }),
     ),
     authority: Schema.optionalKey(Authority),
