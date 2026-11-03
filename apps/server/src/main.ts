@@ -7,6 +7,7 @@ import {
   ApprovalService,
   CharmCallService,
   ChatService,
+  DataExport,
   DeviceService,
   GrantService,
   HobAdmission,
@@ -69,9 +70,11 @@ import { DispatcherHostLive } from "./backpack.ts";
 import { BlockOnRetirement } from "./blockers.ts";
 import { ServerConfig } from "./config.ts";
 import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "./continuations.ts";
+import { SaveDestinationsLive } from "./destination.ts";
 import { DeviceGate, DeviceSecretsLive, PairingLimiterLive, WindowKeyLive } from "./devices.ts";
 import { EventBus } from "./event-bus.ts";
 import { EventStream, EventStreamRoute } from "./event-stream.ts";
+import { ExportFoldersLive } from "./exports.ts";
 import { FAKE_QUEST_STEP, FakeQuestLive } from "./fake-quest.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "./folders.ts";
 import { HobGitHubAppPages } from "./hob-github-app.ts";
@@ -266,9 +269,20 @@ const ServerLive = Layer.unwrap(
       // folder, out of every hob's reach.
       .pipe(
         Layer.provideMerge(
-          Layer.merge(ActivityRecorder.layer(), TaskFiles.layer.pipe(Layer.provide(HobFilesLive))).pipe(
-            Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity")))),
-          ),
+          Layer.mergeAll(
+            ActivityRecorder.layer(),
+            TaskFiles.layer.pipe(Layer.provide(HobFilesLive)),
+            // Exports of your threads and work history (ADR 026), never inside a hob's folder.
+            DataExport.layer(config.version).pipe(
+              Layer.provide(
+                Layer.mergeAll(
+                  HobFilesLive,
+                  ExportFoldersLive,
+                  SaveDestinationsLive(join(config.dataDir, "workspaces", "default")),
+                ),
+              ),
+            ),
+          ).pipe(Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity"))))),
         ),
       )
       // One dispatcher for the whole hub, so the claims it expires at start are an earlier process's.

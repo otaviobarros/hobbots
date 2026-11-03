@@ -7,6 +7,7 @@ export * from "./cancel.ts";
 export * from "./charm-call.ts";
 export * from "./device.ts";
 export * from "./events.ts";
+export * from "./export.ts";
 export * from "./github.ts";
 export * from "./github-account.ts";
 export * from "./grant.ts";

@@ -37,6 +37,7 @@ import {
   ThreadNotFound,
   ToolLogNotFound,
 } from "./errors.ts";
+import { ExportsGroup } from "./export.ts";
 import { GitHubGroup } from "./github.ts";
 import { HobGitHubAppGroup } from "./hob-github-app.ts";
 import { PermissionsGroup } from "./permissions.ts";
@@ -341,4 +342,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(GitHubGroup)
   .add(HobGitHubAppGroup)
   .add(RemoteAccessGroup)
-  .add(WorkbenchGroup) {}
+  .add(WorkbenchGroup)
+  .add(ExportsGroup) {}

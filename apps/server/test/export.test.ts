@@ -1,0 +1,436 @@
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
+import {
+  ActivityRepository,
+  DataExport,
+  HobbotsRepository,
+  type NewAttempt,
+  SecretRedaction,
+  TaskRepository,
+} from "@hobbots/agents";
+import {
+  Agent,
+  AgentId,
+  ArtifactId,
+  AttemptId,
+  CommandId,
+  carriedFrom,
+  DEFAULT_QUEST_LIMITS,
+  DelegationId,
+  EMPTY_HOB_POLICY,
+  type ExportScope,
+  FileChangeId,
+  HobbotsExport,
+  Message,
+  MessageId,
+  QuestId,
+  TaskId,
+  Thread,
+  ThreadId,
+} from "@hobbots/domain";
+import {
+  ActivityRepositoryLive,
+  EventJournal,
+  HobbotsRepositoryLive,
+  SetupRepository,
+  TaskRepositoryLive,
+} from "@hobbots/persistence";
+import { TestDatabase } from "@hobbots/persistence/testing";
+import { HobFilesLive } from "@hobbots/workbench";
+import { Effect, Layer, ManagedRuntime, Option, Schema } from "effect";
+import { SqlClient } from "effect/sql";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { SaveDestinationsLive } from "../src/destination.ts";
+import { EventBus } from "../src/event-bus.ts";
+import { ExportFoldersLive } from "../src/exports.ts";
+import { NodeFolderChecks } from "../src/folders.ts";
+
+// Issue #453: exports of ADR 026. One thread, one hob or everything, as a folder of Markdown and
+// versioned JSON that opens without Hobbots, with the files the Tasks made, every string redacted,
+// and nothing a backup alone may hold: no device record, token hash or credential.
+
+const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-export-")));
+afterAll(() => rmSync(temp, { recursive: true, force: true }));
+/** Aldric's own folder, where its Task left its files. */
+const project = join(temp, "project");
+/** Where the exports go: no hob works there. */
+const saved = join(temp, "saved");
+const workspace = join(temp, "data", "workspaces", "default");
+
+const AT = "2026-11-02T10:00:00.000Z";
+const LATER = "2026-11-02T11:00:00.000Z";
+const ALDRIC = AgentId.make("aldric");
+const QUILL = AgentId.make("quill");
+const CAMPAIGN = ThreadId.make("campaign");
+const NOTES = ThreadId.make("notes");
+const QUILL_THREAD = ThreadId.make("quill-own");
+/** The hub's own credential, known by value, and a token you pasted into a message, known by its shape. */
+const HUB_SECRET = "hub-credential-0123456789";
+const PASTED = `ghp_${"a1B2".repeat(9)}`;
+/** A device's token hash, which only a backup may hold, and only blank. */
+const TOKEN_HASH = "f".repeat(64);
+const REPORT = `# Launch report\n\nAll set.\n`;
+const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+const hob = (id: AgentId, name: string, ownFolders: ReadonlyArray<string>) =>
+  new Agent({
+    id,
+    name,
+    roleTitle: "Marketing",
+    runtime: "claude-code",
+    model: null,
+    effort: null,
+    instructions: `Use ${HUB_SECRET} when you must.`,
+    lookSeed: 1,
+    lookColor: "moss",
+    configVersion: 1,
+    createdAt: AT,
+    policy: { ...EMPTY_HOB_POLICY, ownFolders },
+  });
+
+const message = (id: string, threadId: ThreadId, role: "user" | "assistant", content: string, at = AT) =>
+  new Message({
+    id: MessageId.make(id),
+    threadId,
+    role,
+    content,
+    status: "complete",
+    error: null,
+    configVersion: role === "assistant" ? 1 : null,
+    steps:
+      role === "assistant"
+        ? [
+            {
+              id: "s1",
+              kind: "tool",
+              label: "Running pnpm test",
+              state: "done",
+              call: { tool: "Bash", operation: "run-commands", targets: [project] },
+            },
+          ]
+        : [],
+    createdAt: at,
+  });
+
+const attempt = (id: string): NewAttempt => ({
+  id: AttemptId.make(id),
+  runtime: "claude-code",
+  sessionId: null,
+  configVersion: 1,
+  policyVersion: null,
+  startedAt: AT,
+});
+
+/**
+ * Aldric's campaign thread, with a token in your message, and a Quest that brought in Quill: Aldric's
+ * Task made a report, a chart, an `.env` and a file since deleted, and ran a command; Quill drafted
+ * copy with a brief only Quill's export holds. Quill also has a thread of its own.
+ */
+const seed = Effect.gen(function* () {
+  yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [] });
+  const repo = yield* HobbotsRepository;
+  yield* repo.insertAgent(hob(ALDRIC, "Aldric", [project]));
+  yield* repo.insertAgent(hob(QUILL, "Quill", []));
+  for (const [id, agentId, title] of [
+    [CAMPAIGN, ALDRIC, "Black Friday campaign"],
+    [NOTES, ALDRIC, "Notes / ideas"],
+    [QUILL_THREAD, QUILL, "Quill's own chat"],
+  ] as const) {
+    yield* repo.upsertThread(new Thread({ id, agentId, title, createdAt: AT, updatedAt: AT }));
+  }
+  yield* repo.upsertMessage(
+    message("m1", CAMPAIGN, "user", `Plan the campaign. My token is ${PASTED} and the hub's is ${HUB_SECRET}.`),
+  );
+  yield* repo.upsertMessage(message("m2", CAMPAIGN, "assistant", "On it. **Quill** drafts the copy.", LATER));
+  yield* repo.upsertMessage(message("m3", NOTES, "user", "A note to self."));
+  yield* repo.upsertMessage(message("m4", QUILL_THREAD, "user", "Hello Quill."));
+
+  const tasks = yield* TaskRepository;
+  const top = TaskId.make("campaign-task");
+  yield* tasks.createTask({
+    task: {
+      id: top,
+      ownerId: ALDRIC,
+      parentId: null,
+      threadId: CAMPAIGN,
+      brief: "Run the Black Friday campaign\nWith a report.",
+      dependsOn: [],
+      createdAt: AT,
+    },
+    delegation: null,
+    milestones: [],
+  });
+  yield* tasks.startQuest({
+    id: QuestId.make("q1"),
+    taskId: top,
+    goal: "A Black Friday campaign",
+    acceptance: ["Copy approved"],
+    limits: DEFAULT_QUEST_LIMITS,
+    createdAt: AT,
+  });
+  yield* tasks.createTask({
+    task: {
+      id: TaskId.make("copy-task"),
+      ownerId: QUILL,
+      parentId: top,
+      threadId: CAMPAIGN,
+      brief: "Draft the copy\nQuill's private brief: mention the secret discount.",
+      dependsOn: [],
+      createdAt: LATER,
+    },
+    delegation: {
+      id: DelegationId.make("d1"),
+      brief: "Draft the copy",
+      expectedOutput: null,
+      authority: { overrides: {}, folders: null },
+      timeoutMs: null,
+    },
+    milestones: [],
+  });
+  const created = Option.getOrThrow(yield* tasks.readTree(top)).tasks[0];
+  if (created === undefined) throw new Error("no Task");
+  const started = yield* tasks.startAttempt(top, created.revision, attempt("a1"));
+  const activity = yield* ActivityRepository;
+  yield* activity.saveCommand({
+    id: CommandId.make("cmd1"),
+    attemptId: AttemptId.make("a1"),
+    stepId: "s1",
+    command: "pnpm build",
+    folder: project,
+    sandboxed: true,
+    liveOutput: false,
+    state: "succeeded",
+    exitCode: 0,
+    startedAt: AT,
+    endedAt: LATER,
+    output: null,
+    log: null,
+    logNotKept: null,
+  });
+  yield* activity.saveChanges(AttemptId.make("a1"), project, [
+    {
+      id: FileChangeId.make("ch1"),
+      path: "report.md",
+      kind: "added",
+      movedFrom: null,
+      before: null,
+      after: null,
+      sharedWith: [],
+      settled: true,
+      recordedAt: LATER,
+    },
+  ]);
+  // The copy Task is Quill's: Aldric's Task completes once Quill's has ended.
+  const copy = Option.getOrThrow(yield* tasks.readTree(TaskId.make("copy-task"))).tasks[0];
+  if (copy === undefined) throw new Error("no Task");
+  yield* tasks.moveTask(copy.id, copy.revision, "cancelled", LATER);
+  yield* tasks.completeTask(top, started.value.task.revision, {
+    summary: "Campaign ready",
+    attemptId: AttemptId.make("a1"),
+    artifacts: [
+      { id: ArtifactId.make("art-report"), kind: "file", label: "The report", value: join(project, "report.md") },
+      { id: ArtifactId.make("art-chart"), kind: "file", label: "Chart", value: "chart.png" },
+      { id: ArtifactId.make("art-gone"), kind: "file", label: "Old draft", value: "draft.md" },
+      { id: ArtifactId.make("art-env"), kind: "file", label: "Settings", value: ".env" },
+      { id: ArtifactId.make("art-link"), kind: "link", label: "Store", value: "https://hobbots.ai" },
+    ],
+    at: LATER,
+    carried: carriedFrom(Option.getOrThrow(yield* tasks.readLedger(top)), () => true),
+  });
+  // A device the hub approved: an export never holds it.
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`INSERT INTO devices (id, name, kind, platform, token_hash, approved_at)
+    VALUES ('phone', 'Otto phone', 'browser', 'iOS', ${TOKEN_HASH}, ${AT})`;
+});
+
+const App = DataExport.layer("9.9.9").pipe(
+  Layer.provideMerge(Layer.effectDiscard(seed)),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      HobFilesLive,
+      ExportFoldersLive,
+      SaveDestinationsLive(workspace),
+      SecretRedaction.layer([{ value: HUB_SECRET, kind: "HUB_TOKEN" }]),
+    ),
+  ),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      HobbotsRepositoryLive,
+      TaskRepositoryLive,
+      ActivityRepositoryLive,
+      SetupRepository.layer,
+      EventJournal.layer,
+      EventBus.layer,
+      NodeFolderChecks,
+    ),
+  ),
+  Layer.provideMerge(TestDatabase),
+);
+
+let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<typeof App>, Layer.Error<typeof App>>;
+beforeAll(async () => {
+  mkdirSync(project, { recursive: true });
+  mkdirSync(saved, { recursive: true });
+  mkdirSync(workspace, { recursive: true });
+  writeFileSync(join(project, "report.md"), REPORT);
+  writeFileSync(join(project, "chart.png"), PNG);
+  writeFileSync(join(project, ".env"), `API_TOKEN=${HUB_SECRET}\n`);
+  runtime = ManagedRuntime.make(App);
+  await runtime.runPromise(Effect.void);
+});
+afterAll(() => runtime.dispose());
+
+const run = (scope: ExportScope, destination = saved) =>
+  runtime.runPromise(DataExport.use((exporter) => exporter.run(scope, destination)));
+const refusal = (scope: ExportScope, destination = saved) =>
+  runtime.runPromise(DataExport.use((exporter) => Effect.flip(exporter.run(scope, destination))));
+
+/** Every file in `folder`, by its path inside it. */
+const filesIn = (folder: string): Record<string, Buffer> =>
+  Object.fromEntries(
+    readdirSync(folder, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => {
+        const path = join(entry.parentPath, entry.name);
+        return [relative(folder, path), readFileSync(path)];
+      }),
+  );
+
+const decode = Schema.decodeUnknownSync(Schema.fromJsonString(HobbotsExport));
+
+describe("exports", () => {
+  // covers OP-003
+  it("[TC-OP-040] an export of a hob opens on its own and holds its threads, Quests, artifacts and work history", async () => {
+    const result = await run({ _tag: "Hob", agentId: ALDRIC });
+    expect(result.folder.startsWith(join(saved, "Hobbots export Aldric "))).toBe(true);
+    expect(result).toMatchObject({ threads: 2, quests: 1, files: 2, notCopied: 2 });
+
+    const files = filesIn(result.folder);
+    expect(Object.keys(files).sort()).toEqual([
+      "README.md",
+      "export.json",
+      "files/campaign-task/chart.png",
+      "files/campaign-task/report.md",
+      "quests/2026-11-02 A Black Friday campaign.md",
+      "threads/2026-11-02 Black Friday campaign.md",
+      "threads/2026-11-02 Notes ideas.md",
+    ]);
+    expect(files["files/campaign-task/report.md"]?.toString()).toBe(REPORT);
+    expect(new Uint8Array(files["files/campaign-task/chart.png"] ?? [])).toEqual(PNG);
+
+    const data = decode(files["export.json"]?.toString());
+    expect(data).toMatchObject({ format: "hobbots.export", version: 1, hobbotsVersion: "9.9.9" });
+    expect(data.hobs.map((each) => [each.name, each.roleTitle, each.runtime])).toEqual([
+      ["Aldric", "Marketing", "claude-code"],
+      ["Quill", "Marketing", "claude-code"],
+    ]);
+    expect(data.threads.map((thread) => thread.title)).toEqual(["Black Friday campaign", "Notes / ideas"]);
+    const [tree] = data.quests;
+    expect(tree?.quests.map((quest) => quest.goal)).toEqual(["A Black Friday campaign"]);
+    // Aldric's Task in full; Quill's as its title and state only.
+    expect(tree?.tasks.map((task) => [task.title, task.detail, task.state])).toEqual([
+      ["Run the Black Friday campaign", "full", "completed"],
+      ["Draft the copy", "summary", "cancelled"],
+    ]);
+    const top = tree?.tasks[0];
+    expect(top?.result).toBe("Campaign ready");
+    const artifacts = top?.artifacts.map((artifact) => [artifact.label, artifact.copiedTo, artifact.notCopied]);
+    expect(artifacts?.sort()).toEqual([
+      ["Chart", "files/campaign-task/chart.png", null],
+      ["Old draft", null, "gone"],
+      ["Settings", null, "secret"],
+      ["Store", null, null],
+      ["The report", "files/campaign-task/report.md", null],
+    ]);
+    expect(top?.attempts[0]?.commands.map((command) => [command.command, command.exitCode])).toEqual([
+      ["pnpm build", 0],
+    ]);
+    expect(top?.attempts[0]?.changes.map((change) => [change.path, change.kind])).toEqual([["report.md", "added"]]);
+
+    const quest = files["quests/2026-11-02 A Black Friday campaign.md"]?.toString() ?? "";
+    expect(quest).toContain("## Quest: A Black Friday campaign");
+    expect(quest).toContain("[files/campaign-task/report.md](../files/campaign-task/report.md)");
+    expect(quest).toContain("- File “Old draft”: `draft.md`, not copied because it is no longer there");
+    expect(quest).toContain("not copied because its name marks it as a file that may hold secrets");
+    expect(quest).toContain("Ran `pnpm build`");
+    expect(quest).toContain("### Draft the copy");
+    const thread = files["threads/2026-11-02 Black Friday campaign.md"]?.toString() ?? "";
+    expect(thread).toContain("**You** · 2026-11-02 10:00 UTC");
+    expect(thread).toContain("**Aldric** · 2026-11-02 11:00 UTC");
+    expect(thread).toContain("- Running pnpm test: done");
+    expect(files["README.md"]?.toString()).toContain("Redaction is best effort");
+  });
+
+  // covers OP-003
+  it("[TC-OP-041] redacts every string, your own messages included, and holds no device record, token hash or other hob's brief", async () => {
+    const result = await run({ _tag: "Hob", agentId: ALDRIC });
+    const text = Object.entries(filesIn(result.folder))
+      .filter(([path]) => !path.startsWith("files/"))
+      .map(([, bytes]) => bytes.toString())
+      .join("\n");
+    expect(text).not.toContain(PASTED);
+    expect(text).not.toContain(HUB_SECRET);
+    expect(text).toContain("[redacted: GitHub token]");
+    expect(text).toContain("[redacted: HUB_TOKEN]");
+    // Nothing of the device, and no hob's instructions.
+    expect(text).not.toContain(TOKEN_HASH);
+    expect(text).not.toContain("Otto phone");
+    expect(text).not.toContain("Use [redacted");
+    // Quill's brief is Quill's: Aldric's export names its Task only.
+    expect(text).not.toContain("secret discount");
+    // A file named as one that may hold secrets is never copied.
+    expect(existsSync(join(result.folder, "files", "campaign-task", ".env"))).toBe(false);
+  });
+
+  // covers OP-003
+  it("[TC-OP-042] exports one thread, or everything, and never writes over an earlier export", async () => {
+    const thread = await run({ _tag: "Thread", threadId: CAMPAIGN });
+    const threadData = decode(readFileSync(join(thread.folder, "export.json"), "utf8"));
+    expect(threadData.threads.map((each) => each.title)).toEqual(["Black Friday campaign"]);
+    // In a thread's export every Task of its Quests is in full.
+    expect(threadData.quests[0]?.tasks.map((task) => task.detail)).toEqual(["full", "full"]);
+    expect(JSON.stringify(threadData)).toContain("secret discount");
+
+    const everything = await run({ _tag: "Everything" });
+    const everythingData = decode(readFileSync(join(everything.folder, "export.json"), "utf8"));
+    expect(everythingData.threads.map((each) => each.title).sort()).toEqual([
+      "Black Friday campaign",
+      "Notes / ideas",
+      "Quill's own chat",
+    ]);
+    expect(everythingData.hobs.map((each) => each.name)).toEqual(["Aldric", "Quill"]);
+
+    const again = await run({ _tag: "Everything" });
+    expect(again.folder).toBe(`${everything.folder} (2)`);
+  });
+
+  // covers OP-003
+  it("[TC-OP-043] refuses a destination inside a hob's folder, or one that is not a folder, and writes nothing", async () => {
+    const before = readdirSync(project).sort();
+    const inside = await refusal({ _tag: "Everything" }, join(project));
+    expect(inside._tag).toBe("InvalidFolder");
+    expect(readdirSync(project).sort()).toEqual(before);
+    const inWorkspace = await refusal({ _tag: "Everything" }, workspace);
+    expect(inWorkspace._tag).toBe("InvalidFolder");
+    const missing = await refusal({ _tag: "Everything" }, join(temp, "nowhere"));
+    expect(missing._tag).toBe("InvalidFolder");
+    const relativePath = await refusal({ _tag: "Everything" }, "saved");
+    expect(relativePath._tag).toBe("InvalidFolder");
+  });
+
+  // covers OP-003
+  it("[TC-OP-044] refuses a hob or thread that is not there", async () => {
+    expect((await refusal({ _tag: "Hob", agentId: AgentId.make("nobody") }))._tag).toBe("AgentNotFound");
+    expect((await refusal({ _tag: "Thread", threadId: ThreadId.make("nothing") }))._tag).toBe("ThreadNotFound");
+  });
+});
