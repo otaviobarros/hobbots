@@ -14,6 +14,7 @@ import {
   HobService,
   PermissionSummary,
   SecretRedaction,
+  TaskFiles,
 } from "@hobbots/agents";
 import {
   GitHubAccountLive,
@@ -61,7 +62,7 @@ import {
   FolderSandboxLive,
   ProcessSandbox,
 } from "@hobbots/runtimes";
-import { ActivityStoreLive, FolderScannerLive } from "@hobbots/workbench";
+import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
 import { Effect, Layer, Option, References } from "effect";
 import { HttpRouter } from "effect/http";
 import { DispatcherHostLive } from "./backpack.ts";
@@ -89,6 +90,7 @@ import {
 import { QuietRoutineReads } from "./request-log.ts";
 import { StopWithoutWaitingForClients } from "./shutdown.ts";
 import { TailscaleFakeFile, TailscaleLive } from "./tailscale.ts";
+import { TaskFileRoute } from "./task-files.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
@@ -264,7 +266,7 @@ const ServerLive = Layer.unwrap(
       // folder, out of every hob's reach.
       .pipe(
         Layer.provideMerge(
-          ActivityRecorder.layer().pipe(
+          Layer.merge(ActivityRecorder.layer(), TaskFiles.layer.pipe(Layer.provide(HobFilesLive))).pipe(
             Layer.provideMerge(Layer.merge(FolderScannerLive, ActivityStoreLive(join(dataDir, "activity")))),
           ),
         ),
@@ -323,6 +325,7 @@ const ServerLive = Layer.unwrap(
           Layer.mergeAll(
             ApiRoutes,
             EventStreamRoute,
+            TaskFileRoute,
             HobGitHubAppPages,
             WebClientRoutes(config.webDir),
             OwnHostsOnly,
