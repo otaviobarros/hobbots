@@ -1,5 +1,5 @@
-import type { HubCallStep, TaskToolCalls } from "@hobbots/agents";
-import { type EventEnvelope, stableJson, type TaskId, type TaskToolRefused } from "@hobbots/domain";
+import type { HubCallStep, Redactor, TaskToolCalls } from "@hobbots/agents";
+import { type EventEnvelope, stableJson, type TaskId, TaskToolRefused } from "@hobbots/domain";
 import { DateTime, Effect } from "effect";
 
 /** Who made a refused call and what it sent, as far as the hub could read it. */
@@ -28,22 +28,27 @@ const inputOf = (raw: unknown): string => {
 
 /**
  * Records every refusal of a Task tool call, whatever refused it: the call's own checks, the
- * ledger, or a tool the turn does not offer (#575). The refusal is journaled and announced, then
- * returned unchanged. A refusal that cannot be recorded is logged, and the hob still reads it.
+ * ledger, or a tool the turn does not offer (#575). Its text is redacted before it is stored,
+ * journaled or announced, as a tool step's is (see the permissions contract): a brief can hold a
+ * token. The refusal is then returned to the hob unchanged. A refusal that cannot be recorded is
+ * logged, and the hob still reads it.
  */
 export const makeRefusals = (
   ledger: TaskToolCalls["Service"],
   announce: (entries: ReadonlyArray<EventEnvelope>) => Effect.Effect<void>,
+  redactor: Redactor,
 ) => {
   const record = (from: RefusedFrom, refused: TaskToolRefused) =>
     Effect.gen(function* () {
+      const key = keyOf(from.raw);
       const committed = yield* ledger.refused({
         agentId: from.agentId,
-        key: keyOf(from.raw),
-        tool: from.tool,
-        input: inputOf(from.raw),
+        key: key === null ? null : redactor.text(key),
+        tool: redactor.text(from.tool),
+        // Redacted whole, before the ledger cuts it, so a cut never leaves part of a secret behind.
+        input: redactor.text(inputOf(from.raw)),
         taskId: from.taskOf(),
-        refused,
+        refused: new TaskToolRefused({ reason: refused.reason, message: redactor.text(refused.message) }),
         at: DateTime.formatIso(yield* DateTime.now),
       });
       yield* announce(committed.entries);

@@ -6,6 +6,8 @@ import {
   HobbotsRepository,
   type HubCallStep,
   type HubTools,
+  makeRedactor,
+  SecretRedaction,
   TaskRepository,
   TaskToolCalls,
   type TaskToolOutcome,
@@ -58,8 +60,11 @@ interface CallSource {
   readonly turn: Record<string, string>;
   /** The backpack claims the turn holds, which fence each of its calls (ADR 019). */
   readonly fence: ReadonlyArray<CarriedItem>;
-  /** The Task the turn works on, when it is known before the call. */
-  readonly taskId: TaskId | null;
+  /**
+   * The committed Task the turn works on, when one is known before the call: what a refusal is
+   * recorded on when the call never reached its own Task, as one refused before it is decided.
+   */
+  readonly taskId: () => TaskId | null;
   readonly resolve: (name: TaskToolName, at: string) => Effect.Effect<ResolvedCaller, TaskToolRefused>;
 }
 
@@ -144,7 +149,7 @@ export class TaskTools extends Context.Service<
           // A refused call's Task, unless the call started it: that Task was rolled back with the call.
           const taskOf = () =>
             seen.resolved === null || seen.resolved.entries.some((entry) => entry.type === "TaskCreated")
-              ? source.taskId
+              ? source.taskId()
               : seen.resolved.caller.taskId;
           return Effect.gen(function* () {
             if (!isTaskToolName(name)) return yield* refuse("unknown-tool", `Hobbots has no ${name} tool.`);
@@ -177,7 +182,9 @@ export class TaskTools extends Context.Service<
               .pipe(Effect.catchCause((cause) => Effect.logWarning("Could not announce a Task tool call", cause)));
             if (Option.isSome(signal)) yield* signal.value.notify;
           });
-        const refusals = makeRefusals(ledger, announce);
+        // Without the hub's redactor, secret shapes are still redacted.
+        const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
+        const refusals = makeRefusals(ledger, announce, redactor);
 
         const call = (caller: TaskToolCaller, name: string, raw: unknown) =>
           callFrom(
@@ -185,7 +192,7 @@ export class TaskTools extends Context.Service<
             {
               turn: { turn_task: caller.taskId },
               fence: caller.carried ?? [],
-              taskId: caller.taskId,
+              taskId: () => caller.taskId,
               resolve: () => Effect.succeed({ caller, entries: [], attemptId: null }),
             },
             name,
@@ -239,13 +246,16 @@ export class TaskTools extends Context.Service<
             const chat = makeChatResolver(tasks, hobRoom, turn);
             // The Attempt this turn started on its Task, known once the call that started it commits.
             let attemptId: AttemptId | null = null;
+            // The committed Task the turn works on: the one it was briefed on, then one a call of its committed.
+            let known: TaskId | null = null;
             const source: CallSource = {
               turn: { turn_reply: turn.messageId },
               fence: turn.holding ?? [],
-              taskId: null,
+              taskId: () => known,
               resolve: (name, at) => chat.resolve(name, at, attemptId),
             };
             const briefing = yield* chat.briefing;
+            known = yield* chat.workingOn;
             // A turn briefed on its Task works on it as an Attempt of its own from the start.
             const begun = yield* chat.begin(DateTime.formatIso(yield* DateTime.now));
             if (begun !== null) {
@@ -282,6 +292,7 @@ export class TaskTools extends Context.Service<
                 answered(
                   callFrom(turn.agentId, source, name, input, (resolved) => {
                     if (resolved.attemptId !== null) attemptId = resolved.attemptId;
+                    known = resolved.caller.taskId;
                   }),
                   step,
                 ),

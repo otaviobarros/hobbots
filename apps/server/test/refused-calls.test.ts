@@ -1,13 +1,21 @@
 import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { HobbotsRepository, HobTools, RuntimeAdapter, type RuntimeEvent, TaskRepository } from "@hobbots/agents";
+import {
+  HobbotsRepository,
+  HobTools,
+  RuntimeAdapter,
+  type RuntimeEvent,
+  SecretRedaction,
+  TaskRepository,
+} from "@hobbots/agents";
 import {
   Agent,
   AgentId,
   AttemptId,
   type CarriedItem,
   type EventEnvelope,
+  MessageId,
   type TaskId,
   TaskId as TaskIdSchema,
   type TaskToolDone,
@@ -42,6 +50,8 @@ const PIP = AgentId.make("pip");
 const SAM = AgentId.make("sam");
 const threadId = ThreadId.make("t1");
 const TOP = TaskIdSchema.make("top");
+/** A credential the hub knows by value, as one from its environment. */
+const KNOWN_TOKEN = "hobbots-known-credential-0123456789";
 
 let work: string;
 
@@ -74,7 +84,16 @@ const App = TaskTools.layer(sep === "\\" ? "\\" : "/", {
   maxOpenTasksPerHob: 2,
   maxOpenTasksPerTree: 10,
 }).pipe(
-  Layer.provideMerge(Layer.mergeAll(Persistence, EventBus.layer, NodeFolderChecks, TestHobTools, FakeRuntimeLayer())),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      Persistence,
+      EventBus.layer,
+      NodeFolderChecks,
+      TestHobTools,
+      FakeRuntimeLayer(),
+      SecretRedaction.layer([{ value: KNOWN_TOKEN, kind: "DEPLOY_TOKEN" }]),
+    ),
+  ),
 );
 
 let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<typeof App>, Layer.Error<typeof App>>;
@@ -351,5 +370,91 @@ describe("refused Task tool calls", () => {
     ]);
     // The call that went through ends as done, with no failure reported for it.
     expect(events).toContainEqual({ _tag: "StepEnded", id: "fake-hub-2" });
+  });
+  // covers OR-007, PE-001
+  it("[TC-OR-307] a refusal is redacted before it is stored, journaled or announced", async () => {
+    await run(seed);
+    const bearer = "Bearer abcdefghijklmnopqrstuvwxyz0123456789";
+    const announced: Array<EventEnvelope> = [];
+    const refusal = await run(
+      Effect.gen(function* () {
+        const bus = yield* EventBus;
+        const subscription = yield* bus.subscribe;
+        const told = yield* Effect.flip(
+          call(FRODO, TOP, "delegate_task", {
+            key: "leak",
+            hob: KNOWN_TOKEN,
+            brief: `Deploy with ${KNOWN_TOKEN}, and send Authorization: ${bearer}`,
+          }),
+        );
+        const next = yield* PubSub.take(subscription);
+        if (next._tag === "Journaled") announced.push(next.entry);
+        return told;
+      }).pipe(Effect.scoped),
+    );
+    // The hob still reads what it sent; only the record is redacted.
+    expect(refusal.reason).toBe("hob-missing");
+    expect(refusal.message).toContain(KNOWN_TOKEN);
+
+    const rows = await stored();
+    const journal = await run(Effect.flatMap(Effect.service(EventJournal), (each) => each.readAfter(0)));
+    const everywhere = JSON.stringify([rows, journal, announced]);
+    expect(everywhere).not.toContain(KNOWN_TOKEN);
+    expect(everywhere).not.toContain("abcdefghijklmnopqrstuvwxyz0123456789");
+    expect(rows[0]?.input).toContain("[redacted: DEPLOY_TOKEN]");
+    expect(rows[0]?.message).toContain("[redacted: DEPLOY_TOKEN]");
+    expect(announced.map((entry) => entry.type)).toEqual(["ToolCallRefused"]);
+  });
+
+  // covers OR-007
+  it("[TC-OR-308] a chat turn's refusal before its call is decided is recorded on the Task it was briefed on", async () => {
+    await run(seed);
+    const chatTurn = (thread: ThreadId, message: string) =>
+      run(
+        Effect.flatMap(Effect.service(TaskTools), (tools) =>
+          tools.forChat({
+            agentId: FRODO,
+            threadId: thread,
+            messageId: MessageId.make(message),
+            prompt: "Carry on with the Quest",
+            runtime: "claude-code",
+            configVersion: 1,
+          }),
+        ),
+      );
+    const briefed = await chatTurn(threadId, "reply-1");
+    for (const [name, input] of [
+      ["summon_army", { key: "army" }],
+      ["plan_steps", { steps: [] }],
+      ["report_checkpoint", { key: "p", kind: "progress", summary: "Under way" }],
+      ["report_checkpoint", { key: "p", kind: "progress", summary: "Something else" }],
+    ] as const) {
+      await run(briefed.hubTools.call(name, input));
+    }
+    const rows = await stored();
+    expect(rows.map((row) => [row.reason, row.taskId]).sort()).toEqual([
+      ["invalid-input", TOP],
+      ["key-reused", TOP],
+      ["unknown-tool", TOP],
+    ]);
+    expect((await tree()).refusals).toHaveLength(3);
+
+    // In a thread with no Task yet, a refused call that would start one leaves none, and no Task on its record.
+    const elsewhere = ThreadId.make("t2");
+    await run(
+      Effect.flatMap(Effect.service(HobbotsRepository), (repo) =>
+        repo.upsertThread(
+          new Thread({ id: elsewhere, agentId: FRODO, title: "Other", createdAt: now, updatedAt: now }),
+        ),
+      ),
+    );
+    const fresh = await chatTurn(elsewhere, "reply-2");
+    const answer = await run(fresh.hubTools.call("delegate_task", { key: "d", hob: "Nobody", brief: "x" }));
+    expect(answer.refused).toBe(true);
+    const missing = (await stored()).find((row) => row.callKey === "d");
+    expect(missing).toMatchObject({ reason: "hob-missing", taskId: null });
+    expect(
+      await run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readThreadTrees(elsewhere))),
+    ).toEqual([]);
   });
 });
