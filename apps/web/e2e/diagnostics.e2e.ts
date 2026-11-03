@@ -72,6 +72,48 @@ test("[TC-OP-053] follows a Quest that delegated to two hobs from Settings › D
   await expect(report).toContainText('"title": "Draft the landing copy"');
 
   // Turning titles off again drops the report that holds them.
-  await diagnostics.getByRole("switch", { name: "Include titles" }).click();
+  const titles = diagnostics.getByRole("switch", { name: "Include titles" });
+  await titles.click();
   await expect(report).toHaveCount(0);
+
+  // A request dropped by a change never lands, even when a newer one asks for the same report:
+  // the first answers late with a failure while the second is still on its way, and the second wins.
+  let asked = 0;
+  let answerFirst = () => {};
+  let answerSecond = () => {};
+  const firstHeld = new Promise<void>((resolve) => {
+    answerFirst = resolve;
+  });
+  const secondHeld = new Promise<void>((resolve) => {
+    answerSecond = resolve;
+  });
+  await page.route("**/api/diagnostics/report**", async (route) => {
+    asked += 1;
+    if (asked === 1) {
+      await firstHeld;
+      await route.fulfill({ status: 500, contentType: "application/json", body: "{}" });
+    } else {
+      await secondHeld;
+      await route.continue();
+    }
+  });
+  const make = diagnostics.getByRole("button", { name: "Make report" });
+  await make.click();
+  await expect(diagnostics.getByRole("button", { name: "Making…" })).toBeDisabled();
+  await titles.click();
+  await titles.click();
+  await make.click();
+  await expect.poll(() => asked).toBe(2);
+  const lateFailure = page.waitForResponse(
+    (response) => response.url().includes("/diagnostics/report") && response.status() === 500,
+  );
+  answerFirst();
+  await lateFailure;
+  await expect(diagnostics.getByRole("alert")).toHaveCount(0);
+  await expect(diagnostics.getByRole("button", { name: "Making…" })).toBeDisabled();
+  answerSecond();
+  await expect(report).toContainText('"format": "hobbots.diagnostics"');
+  await expect(report).not.toContainText('"title"');
+  await expect(diagnostics.getByRole("alert")).toHaveCount(0);
+  await page.unroute("**/api/diagnostics/report**");
 });

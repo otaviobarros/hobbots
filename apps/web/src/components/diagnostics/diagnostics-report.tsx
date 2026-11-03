@@ -2,7 +2,7 @@ import type { DiagnosticsReport } from "@hobbots/api";
 import type { QuestId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Switch } from "@hobbots/ui/components/switch";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { makeReport, reportFileName, reportText } from "../../api/diagnostics.ts";
 import { useCopy } from "../../lib/use-copy.ts";
@@ -20,24 +20,16 @@ const save = (report: DiagnosticsReport) => {
   URL.revokeObjectURL(url);
 };
 
-const sameInputs = (a: Inputs, b: Inputs) => a.questId === b.questId && a.includeTitles === b.includeTitles;
-
 const failure = (error: unknown): string =>
   error instanceof ApiError && error.tag === "DiagnosticsReportRefused"
     ? copy.refused({ field: String(error.fields.field) })
     : copy.failed;
 
-/** What a report is made from. */
-interface Inputs {
-  readonly questId: QuestId | null;
-  readonly includeTitles: boolean;
-}
-
-/** A request and how it ended, kept with the inputs it was made from. */
+/** One request for a report and how it ended. `request` tells requests apart, even ones made from the same inputs. */
 type Outcome =
-  | (Inputs & { readonly state: "making" })
-  | (Inputs & { readonly state: "made"; readonly report: DiagnosticsReport })
-  | (Inputs & { readonly state: "failed"; readonly error: string });
+  | { readonly request: number; readonly state: "making" }
+  | { readonly request: number; readonly state: "made"; readonly report: DiagnosticsReport }
+  | { readonly request: number; readonly state: "failed"; readonly error: string };
 
 /**
  * Copy report (ADR 026): the hub makes a redacted report on request and it is shown in full here
@@ -61,20 +53,22 @@ export function DiagnosticsReportMaker({ questId }: { questId: QuestId | null })
     setOutcome(null);
   };
 
-  const current = outcome !== null && sameInputs(outcome, { questId, includeTitles }) ? outcome : null;
-  const making = current?.state === "making";
-  const report = current?.state === "made" ? current.report : null;
-  const error = current?.state === "failed" ? current.error : null;
+  const requests = useRef(0);
+  const making = outcome?.state === "making";
+  const report = outcome?.state === "made" ? outcome.report : null;
+  const error = outcome?.state === "failed" ? outcome.error : null;
 
   const make = () => {
-    const inputs: Inputs = { questId, includeTitles };
-    // Only the latest request may land: an older one that answers late is dropped.
+    requests.current += 1;
+    const request = requests.current;
+    // Only the request still being made may land: one dropped by a change above, or replaced by a
+    // newer request, is ignored when it answers, even if it was made from the same inputs.
     const settle = (next: Outcome) =>
-      setOutcome((now) => (now?.state === "making" && sameInputs(now, inputs) ? next : now));
-    setOutcome({ ...inputs, state: "making" });
+      setOutcome((now) => (now?.state === "making" && now.request === request ? next : now));
+    setOutcome({ request, state: "making" });
     makeReport(questId, includeTitles).then(
-      (made) => settle({ ...inputs, state: "made", report: made }),
-      (cause: unknown) => settle({ ...inputs, state: "failed", error: failure(cause) }),
+      (made) => settle({ request, state: "made", report: made }),
+      (cause: unknown) => settle({ request, state: "failed", error: failure(cause) }),
     );
   };
 
