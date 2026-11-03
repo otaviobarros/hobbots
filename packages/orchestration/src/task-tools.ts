@@ -42,6 +42,7 @@ import {
 } from "./call-scope.ts";
 import { makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeDelegating } from "./delegating.ts";
+import { makeLeading } from "./leading.ts";
 import { makePlanning } from "./planning.ts";
 import { makeRefusals, showRefusal } from "./refusals.ts";
 import { TaskSignal } from "./signal.ts";
@@ -116,6 +117,7 @@ export class TaskTools extends Context.Service<
           ...makePlanning({ tasks, capacity, limits }),
           ...makeDelegating({ tasks, capacity, limits, authority, folderChecks, hobs, separator }),
           ...makeAsking({ tasks }),
+          ...makeLeading({ tasks }),
         };
 
         // Tells the step runner that Tasks changed. Absent, as in tests of the tools alone, no step runs.

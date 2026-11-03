@@ -22,6 +22,7 @@ import {
   Dispatcher,
   DispatcherHost,
   lateWorkOf,
+  startingText,
 } from "@hobbots/inbox";
 import { TaskSignal } from "@hobbots/orchestration";
 import { DateTime, Deferred, Effect, Layer, Option, Stream } from "effect";
@@ -62,7 +63,7 @@ const makeCarrier = Effect.gen(function* () {
   ): CarriedWork => {
     const items: ReadonlyArray<BackpackItem> = deliveries.map((delivery) => delivery.item);
     return {
-      text: (as) => arrivalsText(items, as),
+      text: (as) => (as === "start" ? startingText(items) : arrivalsText(items, as)),
       routineOnly: !items.some((item) => item.actionable),
       holding: deliveries.map(({ item, held }) => ({ itemId: item.id, owner: held.owner, token: held.token })),
       accepted: (sessionId) =>

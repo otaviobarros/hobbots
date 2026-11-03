@@ -203,6 +203,8 @@ export class TaskNote extends Schema.Class<TaskNote>("TaskNote")({
   taskId: TaskId,
   /** The hob the note goes to. */
   recipientId: AgentId,
+  /** The lead that sent it to its member's Task (#574); absent or null for a note you left. */
+  senderId: Schema.optionalKey(Schema.NullOr(AgentId)),
   text: Schema.String,
   createdAt: Schema.String,
   revision: Revision,

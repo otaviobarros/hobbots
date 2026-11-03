@@ -3,8 +3,11 @@ import { Context, type Effect } from "effect";
 
 /** What arrived for a hob in a thread, put into one turn there under the claims the turn holds (ADR 019). */
 export interface CarriedWork {
-  /** What the turn is told of the items, written by Hobbots: as its prompt, or as context with your message. */
-  readonly text: (as: "prompt" | "context") => string;
+  /**
+   * What the turn is told of the items, written by Hobbots: as its prompt, as context with your
+   * message, or, for a member's first turn on its Task, what it carries besides the Task (empty when nothing).
+   */
+  readonly text: (as: "prompt" | "context" | "start") => string;
   /** The items and the claims the turn holds them under, so its `complete_task` consumes them. */
   readonly holding: ReadonlyArray<CarriedItem>;
   /** Records the adapter's evidence that the runtime accepted the turn: its session. */

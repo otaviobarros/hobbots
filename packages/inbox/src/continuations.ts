@@ -165,3 +165,25 @@ export const arrivalsText = (items: ReadonlyArray<BackpackItem>, as: "prompt" | 
         : "Answer the user's message first, then act on this work.",
   ].join("\n");
 };
+
+/**
+ * What a member's first turn on a Task is told of what else it carries, after its brief: a lead's
+ * message, an answer or a hand-off that arrived before its session started, so none of it is
+ * consumed unread (#574). The Task's own assignment is the brief itself. Empty when nothing else waits.
+ */
+export const startingText = (items: ReadonlyArray<BackpackItem>): string => {
+  const others = items.filter((item) => item.payload._tag !== "task");
+  if (others.length === 0) return "";
+  const work = others.filter((item) => item.actionable);
+  return [
+    "Hobbots wrote this, not the user. This also arrived for you before you started:",
+    "",
+    ...work.map((item) => `- ${describeArrival(item)}`),
+    ...digestSection(
+      others.filter((item) => !item.actionable),
+      work.length === 0,
+    ),
+    "",
+    "Take it into account as you work on the Task.",
+  ].join("\n");
+};

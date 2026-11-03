@@ -1,4 +1,4 @@
-import { type AttemptResume, type NewTask, type TaskCompletion, TaskRepository } from "@hobbots/agents";
+import { type AttemptResume, type NewNote, type NewTask, type TaskCompletion, TaskRepository } from "@hobbots/agents";
 import {
   type AgentId,
   type Answerer,
@@ -65,6 +65,11 @@ const QUEST_END: Partial<Record<TaskState, QuestState>> = {
 };
 
 /** The SQL store of Tasks, Quests and their records, for SQLite and PostgreSQL (ADR 011, ADR 018). */
+
+/** Whether a note left again with the same id is the same note: same Task, text and sender. */
+const sameNote = (left: TaskNote, input: NewNote) =>
+  left.taskId === input.taskId && left.text === input.text && (left.senderId ?? null) === (input.senderId ?? null);
+
 export const TaskRepositoryLive = Layer.effect(
   TaskRepository,
   Effect.gen(function* () {
@@ -793,12 +798,28 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
+    /**
+     * Who a note goes to. You talk only to the lead: your note goes to the nearest one still at work,
+     * or to the owner of a Task nobody leads. A lead's message goes to the owner of the open Task
+     * directly under its own (#574).
+     */
+    const noteRecipient = (task: Task, senderId: AgentId | undefined, tree: ReadonlyArray<Task>) => {
+      if (senderId === undefined) return Effect.succeed(noteRecipientOf(task, tree));
+      const parent = tree.find((each) => each.id === task.parentId);
+      if (parent?.ownerId !== senderId || task.ownerId === senderId) {
+        return refuse("not-delegated", `Hob ${senderId} does not lead Task ${task.id}`);
+      }
+      return isTerminalTask(task.state)
+        ? refuse("task-ended", `Task ${task.id} has ended`)
+        : Effect.succeed(task.ownerId);
+    };
+
     const leaveNote: TaskRepository["Service"]["leaveNote"] = (input) =>
       change((revision) =>
         Effect.gen(function* () {
           const [left] = yield* read.note(input.id);
           if (left !== undefined) {
-            if (left.taskId !== input.taskId || left.text !== input.text) {
+            if (!sameNote(left, input)) {
               return yield* refuse("note-key-reused", `Note ${input.id} was left with another Task or text`);
             }
             return { value: left, events: [] };
@@ -808,12 +829,12 @@ export const TaskRepositoryLive = Layer.effect(
           const top = task.rootId === task.id ? task : yield* loadTask(task.rootId);
           if (isTerminalTask(top.state))
             return yield* refuse("task-ended", `The work Task ${task.id} is part of has ended`);
-          // You talk only to the lead: the note goes to the nearest one still at work, or to the owner of a Task nobody leads.
-          const recipientId = noteRecipientOf(task, yield* read.treeOf(task.rootId));
-          const note = new TaskNote({ ...input, recipientId, revision });
+          const recipientId = yield* noteRecipient(task, input.senderId, yield* read.treeOf(task.rootId));
+          const note = new TaskNote({ ...input, senderId: input.senderId ?? null, recipientId, revision });
           yield* sql`INSERT INTO task_notes ${sql.insert({
             id: note.id,
             task_id: note.taskId,
+            sender_id: note.senderId ?? null,
             recipient_id: note.recipientId,
             text: note.text,
             created_at: note.createdAt,

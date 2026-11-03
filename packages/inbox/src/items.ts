@@ -186,7 +186,10 @@ const noteHeldUnder = (subject: Task, recipientId: AgentId, trees: Trees): Task 
   return held === undefined || held === nearest ? subject : held;
 };
 
-/** Your note on a Task goes to the hob it was left for, its nearest lead, as a message about that Task. */
+/**
+ * Your note on a Task goes to the hob it was left for, its nearest lead, as a message about that Task.
+ * A lead's message goes to the member whose Task it leads (#574).
+ */
 const noteLeft: Rule<"NoteLeft"> = ({ note }, trees) => {
   const subject = trees.byId.get(note.taskId);
   if (subject === undefined) return [];
@@ -198,7 +201,7 @@ const noteLeft: Rule<"NoteLeft"> = ({ note }, trees) => {
       attemptId: null,
       payload: {
         _tag: "message",
-        senderId: null,
+        senderId: note.senderId ?? null,
         text: note.text,
         ...(task === subject ? {} : { aboutTaskId: note.taskId }),
       },

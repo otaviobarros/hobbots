@@ -260,7 +260,8 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
     milestones: tree.milestones.filter((each) => each.taskId === task.id).sort((a, b) => a.position - b.position),
     checkpoints: tree.checkpoints.filter((each) => checkpointOn(each, task.id)),
     questions: tree.questions.filter((each) => each.taskId === task.id),
-    notes: tree.notes.filter((each) => each.taskId === task.id),
+    // Your notes only: a lead's message to its member's Task is the hobs' own (#574).
+    notes: tree.notes.filter((each) => each.taskId === task.id && (each.senderId ?? null) === null),
     output: tree.artifacts.filter((each) => each.taskId === task.id),
     given: tree.artifacts.filter((each) => received.has(each.id)),
     rows: workRowsAll(tree, task),

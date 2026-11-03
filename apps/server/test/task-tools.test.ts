@@ -654,6 +654,8 @@ describe("hob tools for Tasks and Quests", () => {
       escalate: { key: "s-escalate", question_id: "q-1" },
       hand_off: { key: "s-hand-off", artifact_id: "a-1", to_task_id: String(TOP) },
       wait_for: { key: "s-wait", tasks: [String(TOP)] },
+      read_tasks: { key: "s-read" },
+      message_task: { key: "s-message", task_id: String(TOP), text: "Go on" },
       complete_task: { key: "s-complete", summary: "The copy is ready" },
       cancel_task: { key: "s-cancel", task_id: String(TOP) },
     };

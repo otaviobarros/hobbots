@@ -152,6 +152,11 @@ export interface NewNote {
   readonly taskId: TaskId;
   readonly text: string;
   readonly createdAt: string;
+  /**
+   * The lead sending it to the owner of a Task directly under its own (#574). Absent for your note,
+   * which goes to the Task's nearest lead.
+   */
+  readonly senderId?: AgentId;
 }
 
 /** A question that climbed every lead and waits for you, with the Task it asks about. */
