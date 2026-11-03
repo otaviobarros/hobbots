@@ -117,6 +117,10 @@ test("[TC-DP-122] the prompt over the hub's window keeps the keyboard inside it 
     const prompt = page.getByRole("dialog", { name: `${name} wants to use Hobbots` });
     await expect(prompt).toBeVisible();
     await expect(prompt.getByRole("heading", { name: `${name} wants to use Hobbots` })).toBeFocused();
+    // The prompt pops in, growing in steps for under half a second. Each step holds still long
+    // enough to pass for stable, so a click can press a button on one step and release it on the
+    // next, where it no longer is, and no click happens. Answer it once it has settled.
+    await prompt.evaluate((dialog) => Promise.all(dialog.getAnimations().map((animation) => animation.finished)));
     return prompt;
   };
 

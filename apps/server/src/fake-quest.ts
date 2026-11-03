@@ -411,15 +411,25 @@ const stateOf = (taskId: TaskId) =>
     Effect.map(tasks.readTree(taskId), (tree) => Option.getOrUndefined(tree)?.tasks[0]?.state ?? null),
   );
 
+/** Whether a played Task is still open: not ended, and no cancel asked for. */
+const isOpen = (taskId: TaskId) =>
+  Effect.map(stateOf(taskId), (state) => state !== null && state !== "cancelling" && !isTerminalTask(state));
+
 /**
  * Plays a step on a Task only while it is open: once you cancel a member's Task, the play skips
- * what that Task would have done and goes on with the rest of the Quest.
+ * what that Task would have done and goes on with the rest of the Quest. Your cancel can also land
+ * while the step runs, after the look; the step then fails on the Task's newer revision or its
+ * cancel, and is skipped the same way. A step that fails on a Task still open fails the play.
  */
 const whileOpen = <A, E, R>(taskId: TaskId, step: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
-    const state = yield* stateOf(taskId);
-    const open = state !== null && state !== "cancelling" && !isTerminalTask(state);
-    return open ? Option.some(yield* step) : Option.none<A>();
+    if (!(yield* isOpen(taskId))) return Option.none<A>();
+    return yield* step.pipe(
+      Effect.map(Option.some),
+      Effect.catch((error) =>
+        Effect.flatMap(isOpen(taskId), (open) => (open ? Effect.fail(error) : Effect.succeed(Option.none<A>()))),
+      ),
+    );
   });
 
 /** Waits until you answer the question, or its Task ends, looking again every `step`. */
