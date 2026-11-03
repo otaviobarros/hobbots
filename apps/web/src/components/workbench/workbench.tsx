@@ -1,7 +1,7 @@
-import type { AgentId, AttemptId, Task, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
+import type { AgentId, Attempt, AttemptId, Task, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ComponentType, useEffect, useId, useRef } from "react";
 import { threadTasksQuery } from "../../api/tasks.ts";
 import { attemptActivityQuery } from "../../api/workbench.ts";
@@ -21,6 +21,8 @@ import {
   type ActivityRead,
   attemptsOf,
   chosenAttempt,
+  openingAttempt,
+  type ProbedRead,
   type TabState,
   tabStates,
   WORKBENCH_TABS,
@@ -119,6 +121,30 @@ export function Workbench({
   );
 }
 
+/**
+ * The Attempt the Bench shows. With none chosen it opens on the latest that recorded work, reading
+ * one Attempt's records at a time from the newest back: the one it shows is the one it reads, so
+ * once that read finds nothing the next render moves to the one before (#386). The newer Attempts
+ * it passed over stay read, so their records are not dropped from the cache and read again.
+ */
+const useShownAttempt = (
+  tree: TaskTree,
+  task: Task,
+  attempts: ReadonlyArray<Attempt>,
+  chosen: AttemptId | undefined,
+): Attempt | null => {
+  const queryClient = useQueryClient();
+  const readOf = (each: Attempt): ProbedRead => {
+    const state = queryClient.getQueryState(attemptActivityQuery(each.id).queryKey);
+    if (state?.data !== undefined) return state.data.activity;
+    return state?.status === "error" ? "failed" : "unread";
+  };
+  const shown = chosenAttempt(attempts, chosen, () => openingAttempt(tree, task, attempts, readOf));
+  const passed = chosen === undefined && shown !== null ? attempts.filter((each) => each.number > shown.number) : [];
+  useQueries({ queries: passed.map((each) => attemptActivityQuery(each.id)) });
+  return shown;
+};
+
 function Bench({
   tree,
   task,
@@ -135,7 +161,7 @@ function Bench({
   const base = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const attempts = attemptsOf(tree, task);
-  const attempt = chosenAttempt(attempts, task, view.attemptId);
+  const attempt = useShownAttempt(tree, task, attempts, view.attemptId);
   const read = useQuery({
     ...attemptActivityQuery(attempt?.id ?? ("" as AttemptId)),
     enabled: attempt !== null,
