@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { accessSync, constants, lstatSync, mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { lstatSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve, sep } from "node:path";
@@ -47,6 +47,7 @@ import {
 import { type PolicyContext, PolicyEngine, type PolicyVerdict } from "@hobbots/permissions";
 import { Clock, DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
 import { type CallDecision, decideCall, startCall, type ToolCall, UNKNOWN_TOOL } from "./approval.ts";
+import { binaryVersions, isAtLeast, isExecutable } from "./binary.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
 import { CLAUDE_CODE_MODEL_HOSTS, onePasswordAgentSocket, ProcessSandbox, withCommitIdentity } from "./sandbox.ts";
 import { commandOf, offeredTools, toolLabel } from "./tool-calls.ts";
@@ -301,15 +302,6 @@ const resolveBinary = (binary: string): Effect.Effect<string, RuntimeError> => {
     : Effect.fail(new RuntimeError({ message: `Could not find ${binary} on PATH, so the sandbox cannot start it.` }));
 };
 
-const isExecutable = (path: string) => {
-  try {
-    accessSync(path, constants.X_OK);
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
-};
-
 /**
  * The configured binary, or the first executable candidate on this machine. A relative path is
  * resolved here, because Claude Code is started from the workspace folder; a bare name stays a PATH lookup.
@@ -327,15 +319,6 @@ export const findClaudeCode = (
 
 /** The `major.minor.patch` that `claude --version` starts with. */
 export const parseVersion = (output: string): string | undefined => /^\s*(\d+\.\d+\.\d+)/.exec(output)?.[1];
-
-export const isAtLeast = (version: string, minimum: string): boolean => {
-  const [a, b] = [version, minimum].map((v) => v.split(".").map(Number));
-  for (let i = 0; i < 3; i++) {
-    const diff = (a?.[i] ?? 0) - (b?.[i] ?? 0);
-    if (diff !== 0) return diff > 0;
-  }
-  return true;
-};
 
 /**
  * Reports where requests are billed, from the SDK's own credential fields.
@@ -914,22 +897,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
     yield* Effect.sync(() => mkdirSync(config.workspaceDir, { recursive: true }));
 
     // `claude --version` per binary, rerun when the file changes (as `claude update` does).
-    const versions = new Map<string, { readonly modified: number; readonly version: string }>();
-    const versionOf = (binary: string) =>
-      Effect.gen(function* () {
-        // A configured path may not exist, and an update can remove the binary between lookups.
-        const modified = yield* Effect.try(() => statSync(binary).mtimeMs).pipe(Effect.orElseSucceed(() => -1));
-        const cached = versions.get(binary);
-        if (cached !== undefined && cached.modified === modified) return cached.version;
-        const output = yield* Effect.tryPromise(() =>
-          execFileAsync(binary, ["--version"], { timeout: 10_000, env: runtimeEnv(binary) }).then(
-            (result) => result.stdout,
-          ),
-        ).pipe(Effect.orElseSucceed(() => ""));
-        const version = parseVersion(output);
-        if (version !== undefined) versions.set(binary, { modified, version });
-        return version;
-      });
+    const versionOf = binaryVersions(parseVersion, runtimeEnv);
 
     // Looked up on every use, so installing, moving or updating Claude Code needs no restart.
     const locate = Effect.gen(function* () {
