@@ -64,6 +64,8 @@ interface CallSource {
   readonly turn: Record<string, string>;
   /** The work the call's key belongs to (#660), from `callScope`. */
   readonly scope: string;
+  /** Another scope a retry of the key is found in: a chat turn's reply. */
+  readonly also?: string;
   /** The backpack claims the turn holds, which fence each of its calls (ADR 019). */
   readonly fence: ReadonlyArray<CarriedItem>;
   /**
@@ -173,6 +175,7 @@ export class TaskTools extends Context.Service<
               {
                 agentId,
                 scope: source.scope,
+                ...(source.also === undefined ? {} : { also: source.also }),
                 key,
                 tool: name,
                 input: stableJson({ ...rest, ...source.turn }),
@@ -279,6 +282,7 @@ export class TaskTools extends Context.Service<
             const source: CallSource = {
               turn: { turn_reply: turn.messageId },
               scope: known === null ? callScope.reply(turn.messageId) : callScope.task(known),
+              also: callScope.reply(turn.messageId),
               fence: turn.holding ?? [],
               taskId: () => known,
               resolve: (name, at) => chat.resolve(name, at, attemptId),

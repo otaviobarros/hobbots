@@ -278,7 +278,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     ]);
     // Whoever reads the work sees who created the repository.
     expect(tree?.checkpoints.map((checkpoint) => checkpoint.summary)).toContain(
-      `Created a Git repository in ${inner} with git_init.`,
+      `git_init: Created an empty Git repository in ${inner}.`,
     );
   });
 });

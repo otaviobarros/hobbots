@@ -628,6 +628,7 @@ export class ChatService extends Context.Service<
                     threadId: thread.id,
                     messageId,
                     scope: taskTurn?.scope ?? callScope.reply(messageId),
+                    also: callScope.reply(messageId),
                     currentAccess: currentAccess(agent.id),
                     redactor,
                     approvals: turnApprovals?.approvals ?? null,
@@ -636,8 +637,7 @@ export class ChatService extends Context.Service<
                   const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);
                   return combineHubTools(
                     taskTurn?.hubTools ?? null,
-                    recorded(yield* localGitFor(charmTurn)),
-                    recorded(yield* charmsFor(charmTurn)),
+                    recorded(combineHubTools(yield* localGitFor(charmTurn), yield* charmsFor(charmTurn))),
                   );
                 }),
               },

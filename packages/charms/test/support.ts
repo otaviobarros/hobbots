@@ -10,16 +10,18 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
   Layer.succeed(
     CharmCalls,
     CharmCalls.of({
-      begin: (call) =>
+      begin: (call, also) =>
         Effect.sync(() => {
           const id = idOf(call.agentId, call.scope, call.key);
-          const stored = rows.get(id);
+          const earlier = also === undefined ? undefined : rows.get(idOf(call.agentId, also, call.key));
+          const stored = rows.get(id) ?? earlier;
           const replaces = stored?.state === "not-sent" && stored.input === call.input;
           if (stored !== undefined && !replaces) return { _tag: "Existing", call: stored } as const;
           const busy = [...rows.values()].find(
             (row) => row.tool === call.tool && row.site === call.site && !isCharmCallSettled(row.state),
           );
           if (busy !== undefined) return { _tag: "Blocked", call: busy } as const;
+          if (replaces && stored.scope !== call.scope) rows.delete(idOf(call.agentId, stored.scope, call.key));
           rows.set(id, call);
           return { _tag: "Started" } as const;
         }),
@@ -34,7 +36,12 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
           rows.set(id, next);
           return Option.some(next);
         }),
-      find: (agentId, scope, key) => Effect.sync(() => Option.fromUndefinedOr(rows.get(idOf(agentId, scope, key)))),
+      find: (agentId, scopes, key) =>
+        Effect.sync(() =>
+          Option.fromUndefinedOr(
+            scopes.map((scope) => rows.get(idOf(agentId, scope, key))).find((row) => row !== undefined),
+          ),
+        ),
       findByStep: (threadId, messageId, stepId) =>
         Effect.sync(() =>
           Option.fromUndefinedOr(

@@ -51,6 +51,8 @@ export interface CharmWrite {
   readonly agentId: AgentId;
   /** The work the key belongs to (#660): the turn's `CharmTurn.scope`. */
   readonly scope: string;
+  /** Another scope a retry of the key is found in: the turn's `CharmTurn.also`. */
+  readonly also?: string | undefined;
   readonly tool: string;
   readonly key: string;
   /** The call's input without its key. */
@@ -80,6 +82,10 @@ const earlierAnswer = (call: CharmCall, input: string): string => {
   }
 };
 
+/** The scopes a turn's retried key is found in: its own, then its reply's (#660). */
+export const scopesOf = (turn: { readonly scope: string; readonly also?: string | undefined }) =>
+  turn.also === undefined ? [turn.scope] : [turn.scope, turn.also];
+
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
 
 /** Runs Charm writes under the call records, and reads uncertain ones back with each tool's `readBack`. */
@@ -108,7 +114,7 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
       Effect.gen(function* () {
         for (const delay of READ_BACK_AFTER) {
           yield* Effect.sleep(delay);
-          const now = yield* calls.find(call.agentId, call.scope, call.key);
+          const now = yield* calls.find(call.agentId, [call.scope], call.key);
           if (Option.isNone(now) || now.value.attempt !== call.attempt || now.value.state !== "uncertain") return;
           if (Option.isSome(yield* readBack(now.value))) return;
         }
@@ -131,9 +137,9 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
      * The answer for a key used before in the same work, before anything is decided, so a retried call never asks the
      * user again. None when the key is new, or names a call that was not sent and may run again.
      */
-    const earlier = (agentId: AgentId, scope: string, key: string, input: unknown) =>
+    const earlier = (agentId: AgentId, scopes: ReadonlyArray<string>, key: string, input: unknown) =>
       Effect.gen(function* () {
-        const stored = yield* calls.find(agentId, scope, key);
+        const stored = yield* calls.find(agentId, scopes, key);
         if (Option.isNone(stored)) return Option.none<string>();
         const call = stored.value;
         const sameInput = call.input === stableJson(input);
@@ -173,7 +179,7 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
           createdAt: at,
           updatedAt: at,
         });
-        const started = yield* calls.begin(record);
+        const started = yield* calls.begin(record, write.also);
         if (started._tag === "Existing") {
           return { _tag: "Refused", text: earlierAnswer(started.call, record.input) } as const;
         }

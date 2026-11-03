@@ -79,15 +79,16 @@ export const CharmCallsLive = Layer.effect(
     const sql = yield* SqlClient.SqlClient;
     const one = (rows: ReadonlyArray<Row>) =>
       rows[0] === undefined ? Effect.succeed(Option.none<CharmCall>()) : fromRow(rows[0]).pipe(Effect.map(Option.some));
-    const find = (agentId: string, scope: string, key: string) =>
+    const find = (agentId: string, scopes: ReadonlyArray<string>, key: string) =>
       sql<Row>`SELECT * FROM charm_calls
-        WHERE agent_id = ${agentId} AND scope = ${scope} AND call_key = ${key}`.pipe(Effect.flatMap(one));
+        WHERE agent_id = ${agentId} AND ${sql.in("scope", scopes)} AND call_key = ${key}
+        ORDER BY created_at LIMIT 1`.pipe(Effect.flatMap(one));
 
     return CharmCalls.of({
-      begin: (call) =>
+      begin: (call, also) =>
         Effect.gen(function* () {
           yield* lockJournal(sql);
-          const stored = yield* find(call.agentId, call.scope, call.key);
+          const stored = yield* find(call.agentId, [call.scope, also ?? call.scope], call.key);
           const replaces =
             Option.isSome(stored) && stored.value.state === "not-sent" && stored.value.input === call.input;
           if (Option.isSome(stored) && !replaces) return { _tag: "Existing", call: stored.value } as const;
@@ -98,7 +99,7 @@ export const CharmCallsLive = Layer.effect(
           if (busy !== undefined) return { _tag: "Blocked", call: yield* fromRow(busy) } as const;
           if (replaces) {
             yield* sql`DELETE FROM charm_calls
-              WHERE agent_id = ${call.agentId} AND scope = ${call.scope} AND call_key = ${call.key}`;
+              WHERE agent_id = ${call.agentId} AND scope = ${stored.value.scope} AND call_key = ${call.key}`;
           }
           yield* sql`INSERT INTO charm_calls ${sql.insert(toRow(call))}`;
           return { _tag: "Started" } as const;
@@ -112,7 +113,7 @@ export const CharmCallsLive = Layer.effect(
             AND attempt = ${call.attempt}
             AND state IN ('sending', 'uncertain')
           RETURNING *`.pipe(Effect.flatMap(one), orDie),
-      find: (agentId, scope, key) => orDie(find(agentId, scope, key)),
+      find: (agentId, scopes, key) => orDie(find(agentId, scopes, key)),
       findByStep: (threadId, messageId, stepId) =>
         orDie(
           sql<Row>`

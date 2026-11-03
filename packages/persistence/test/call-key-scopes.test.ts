@@ -73,6 +73,15 @@ describe("tool call keys per Task", () => {
         const reused = yield* Effect.flip(ledger.once(checkpoint("task:quest-b", "Red"), report("Fourth")));
         expect(reused).toMatchObject({ _tag: "TaskToolRefused", reason: "key-reused" });
         expect(runs).toBe(2);
+
+        // A reply's first run starts its Task; on Continue the turn is on that Task, and still finds the call.
+        const started = yield* ledger.once(checkpoint("reply:m1", "Started"), report("Fifth"));
+        const continued = yield* ledger.once(
+          { ...checkpoint("task:quest-c", "Started"), also: "reply:m1" },
+          report("Sixth"),
+        );
+        expect(continued).toEqual({ done: started.done, entries: [] });
+        expect(runs).toBe(3);
       }),
     );
   });
@@ -158,7 +167,10 @@ describe("tool call keys per Task", () => {
         yield* calls.settle(write("m1", "a1"), "applied", "Pushed.", now);
         expect(yield* calls.begin(write("m1", "a2"))).toMatchObject({ _tag: "Existing", call: { attempt: "a1" } });
         expect((yield* calls.begin(write("m2", "a3")))._tag).toBe("Started");
-        const later = Option.getOrThrow(yield* calls.find(FRODO, "reply:m2", "push-1"));
+        // On Continue, a turn now on a Task still finds what its reply sent.
+        const onTask = new CharmCall({ ...write("m1", "a4"), scope: "task:quest-a" });
+        expect(yield* calls.begin(onTask, "reply:m1")).toMatchObject({ _tag: "Existing", call: { attempt: "a1" } });
+        const later = Option.getOrThrow(yield* calls.find(FRODO, ["reply:m2"], "push-1"));
         expect(later.attempt).toBe("a3");
       }),
     );

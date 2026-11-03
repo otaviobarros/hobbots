@@ -111,7 +111,9 @@ export const TaskToolCallsLive = Layer.effect(
           yield* fence(call.fence ?? []);
           const [stored] = yield* sql<{ readonly tool: string; readonly input: string; readonly result: string }>`
             SELECT tool, input, result FROM task_tool_calls
-            WHERE agent_id = ${call.agentId} AND scope = ${call.scope} AND call_key = ${call.key}`;
+            WHERE agent_id = ${call.agentId} AND ${sql.in("scope", [call.scope, call.also ?? call.scope])}
+              AND call_key = ${call.key}
+            ORDER BY created_at LIMIT 1`;
           if (stored !== undefined) {
             if (stored.tool !== call.tool || stored.input !== call.input) {
               return yield* new TaskToolRefused({

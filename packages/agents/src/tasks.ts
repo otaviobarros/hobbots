@@ -335,6 +335,11 @@ export interface TaskToolCall {
   readonly agentId: AgentId;
   /** The work the key belongs to, from `callScope`. */
   readonly scope: string;
+  /**
+   * Another scope a retry of the key is found in: a chat turn's reply, so Continue on a reply whose
+   * first run started its Task still finds what that run did under the reply's scope.
+   */
+  readonly also?: string;
   readonly key: string;
   readonly tool: TaskToolName;
   /**

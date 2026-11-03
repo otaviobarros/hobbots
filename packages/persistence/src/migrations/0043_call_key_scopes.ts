@@ -9,10 +9,11 @@ import { SqlClient } from "effect/sql";
 //
 // SQLite cannot change a primary key, so each table is rebuilt, on both databases alike: the new
 // table is made beside the old one, the rows are copied with a scope, and the old table is dropped
-// before the new one takes its name. A stored call keeps the turn its input or reply names, as
-// `task:` or `reply:`; a row that names neither, such as a refusal whose input was cut, keeps an empty
-// scope, which no new call has. Every stored row stays readable and no two collide. No table refers to
-// these, and the constraints are named so they never meet the old tables' own.
+// before the new one takes its name. A stored Task tool call keeps the turn its input names, as
+// `task:` or `reply:`, and a Charm call its reply; a chat turn's retry also looks in its reply's scope,
+// so Continue still finds them. A refusal's input names no turn, and a row that names nothing keeps
+// an empty scope, which no new call has. Every stored row stays readable and no two collide. No table
+// refers to these, and the constraints are named so they never meet the old tables' own.
 
 type Stored = Record<string, unknown>;
 
@@ -36,7 +37,7 @@ const swap = (sql: SqlClient.SqlClient, table: string) =>
     yield* sql.unsafe(`ALTER TABLE ${table}_next RENAME TO ${table}`);
   });
 
-/** Copies a Task tool table's rows into `${table}_next`, each with the scope its input names, a hundred at a time. */
+/** Copies a Task tool call table's rows into `${table}_next`, each with the scope its input names, a hundred at a time. */
 const copyByInput = (sql: SqlClient.SqlClient, table: string) =>
   Effect.gen(function* () {
     const rows = yield* sql.unsafe<Stored>(`SELECT * FROM ${table}`);
@@ -84,7 +85,10 @@ export default Effect.gen(function* () {
       CONSTRAINT task_tool_refusals_scoped_key UNIQUE (agent_id, scope, call_key)
     )
   `;
-  yield* copyByInput(sql, "task_tool_refusals");
+  const refusalColumns = `id, agent_id, call_key, task_id, tool, input, reason, message, tries, created_at, refused_at`;
+  yield* sql.unsafe(`INSERT INTO task_tool_refusals_next (scope, ${refusalColumns})
+    SELECT '', ${refusalColumns} FROM task_tool_refusals`);
+  yield* swap(sql, "task_tool_refusals");
   yield* sql`CREATE INDEX task_tool_refusals_task ON task_tool_refusals (task_id)`;
 
   yield* sql`DROP INDEX charm_calls_site`;

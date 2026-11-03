@@ -1,13 +1,11 @@
 import type { HubCallStep, HubTools, TaskRepository } from "@hobbots/agents";
-import { CheckpointId, type EventEnvelope, GIT_INIT_TOOL, GitInitInput, TaskToolRefused } from "@hobbots/domain";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { CheckpointId, type EventEnvelope, GIT_INIT_TOOL, TaskToolRefused } from "@hobbots/domain";
+import { DateTime, Effect } from "effect";
 import { newId } from "./call-scope.ts";
 import { type makeRefusals, type RefusedFrom, showRefusal } from "./refusals.ts";
 
 /** The chat turn a Charm call comes from, as its Task tools know it. */
 export type CharmCaller = Omit<RefusedFrom, "tool" | "raw">;
-
-const decodeGitInit = Schema.decodeUnknownOption(GitInitInput);
 
 /**
  * Records what a turn's Charm calls, such as `git_init` and the GitHub writes, did beyond their own
@@ -30,19 +28,18 @@ export const makeCharmRecords = (
       );
     });
 
-  const created = (caller: CharmCaller, input: unknown) =>
+  /** `text` is the hob's answer, redacted, whose first sentence names where the repository is. */
+  const created = (caller: CharmCaller, text: string) =>
     Effect.gen(function* () {
       const taskId = caller.taskOf();
-      const decoded = decodeGitInit(input);
-      if (taskId === null || Option.isNone(decoded)) return;
-      const { folder } = decoded.value;
+      if (taskId === null) return;
       const committed = yield* tasks.recordCheckpoint({
         id: CheckpointId.make(newId()),
         taskId,
         source: "unplanned",
         kind: "progress",
         milestoneId: null,
-        summary: `Created a Git repository in ${folder} with ${GIT_INIT_TOOL}.`,
+        summary: `${GIT_INIT_TOOL}: ${text.split(". ")[0]}.`,
         createdAt: DateTime.formatIso(yield* DateTime.now),
       });
       yield* announce(committed.entries);
@@ -59,7 +56,7 @@ export const makeCharmRecords = (
               charms.call(name, input, step).pipe(
                 Effect.tap((answer) => {
                   if (answer.refused) return refused(caller, name, input, answer.text, step);
-                  return name === GIT_INIT_TOOL ? created(caller, input) : Effect.void;
+                  return name === GIT_INIT_TOOL ? created(caller, answer.text) : Effect.void;
                 }),
               ),
           };
