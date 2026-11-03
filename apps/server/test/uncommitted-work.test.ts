@@ -258,6 +258,48 @@ describe("Completing a Task that changed a Git repository", () => {
     ]);
   });
 
+  // covers OR-004 (#665)
+  it("[TC-OR-463] keeps holding the Quest's top Task on a file an earlier Attempt left, after a brain or configuration change", async () => {
+    const site = repository();
+    writeFileSync(join(site, "docs", "SPEC.md"), "# Spec\n\nEdited after the commit.\n");
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed(["site/docs/SPEC.md"]);
+        const tools = yield* TaskTools;
+        const repo = yield* TaskRepository;
+        const call = (key: string, extra: object = {}) =>
+          tools.call({ agentId: FRODO, taskId: TASK }, "complete_task", { key, summary: "Spec wrapped up", ...extra });
+        yield* tools.call({ agentId: FRODO, taskId: TASK }, "start_quest", { key: "quest", goal: "Wrap up the spec" });
+        const first = yield* Effect.flip(call("done-1"));
+        // The turn ends, and the next one runs on another configuration: a new Attempt that changes nothing.
+        yield* repo.updateAttempt(ATTEMPT, { state: "completed", at: now });
+        const task = Option.getOrThrow(yield* repo.readTree(TASK)).tasks[0];
+        yield* repo.startAttempt(TASK, task?.revision ?? 0, {
+          id: AttemptId.make("wrap-up-2"),
+          runtime: "claude-code",
+          sessionId: null,
+          configVersion: 2,
+          policyVersion: null,
+          startedAt: now,
+        });
+        const again = yield* Effect.flip(call("done-2"));
+        yield* call("done-3", { leave_uncommitted: "You asked to review the spec first." });
+        return { first, again, ...(yield* checkpoints) };
+      }),
+    );
+    for (const refused of [result.first, result.again]) {
+      expect(refused).toMatchObject({ reason: "uncommitted-changes" });
+      expect(refused.message).toContain(`docs/SPEC.md in ${site}`);
+    }
+    expect(result.task?.state).toBe("completed");
+    expect(result.checkpoints).toEqual([
+      expect.objectContaining({
+        attemptId: AttemptId.make("wrap-up-2"),
+        summary: `Left 1 file uncommitted since the last commit: docs/SPEC.md in ${site}. Left on purpose: You asked to review the spec first.`,
+      }),
+    ]);
+  });
+
   // covers OR-004
   it("[TC-OR-285] says nothing more when everything it changed is committed, or it changed no repository", async () => {
     const site = repository();

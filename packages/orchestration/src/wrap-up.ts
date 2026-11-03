@@ -5,7 +5,7 @@ import {
   TaskRepository,
   type UncommittedFiles,
 } from "@hobbots/agents";
-import { CheckpointId, type Task, TaskId } from "@hobbots/domain";
+import { type AttemptId, CheckpointId, type Task, TaskId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 
 /**
@@ -71,22 +71,28 @@ const wrapUpOf = (task: Task, found: ReadonlyArray<UncommittedFiles>, policy: Wr
 };
 
 /**
- * Reads what the Task's current Attempt changed, as the Workbench recorded it, and which of those
- * files differ from their repository's last commit. A hub that keeps no Workbench records or reads
- * no Git state finds nothing.
+ * Reads what the Task's `attempts` changed, as the Workbench recorded it, and which of those files
+ * differ from their repository's last commit now. Every Attempt counts, so a file one of them left
+ * still holds the Task after a brain or configuration change starts another (#665). A hub that
+ * keeps no Workbench records or reads no Git state finds nothing.
  */
 export const makeWrapUp = Effect.gen(function* () {
   const activity = yield* Effect.serviceOption(ActivityRepository);
   const workspace = yield* Effect.serviceOption(GitWorkspace);
-  return (task: Task, policy: WrapUpPolicy): Effect.Effect<WrapUp> =>
+  return (task: Task, attempts: ReadonlyArray<AttemptId>, policy: WrapUpPolicy): Effect.Effect<WrapUp> =>
     Effect.gen(function* () {
       if (Option.isNone(activity) || Option.isNone(workspace) || task.currentAttemptId === null) return NOTHING;
-      const read = yield* activity.value.read(task.currentAttemptId);
-      if (Option.isNone(read)) return NOTHING;
-      const files = read.value.changes.flatMap((change) => [
-        { folder: change.folder, path: change.path },
-        ...(change.movedFrom === null ? [] : [{ folder: change.folder, path: change.movedFrom }]),
-      ]);
+      const changed = new Map<string, { readonly folder: string; readonly path: string }>();
+      for (const attemptId of attempts) {
+        const read = yield* activity.value.read(attemptId);
+        if (Option.isNone(read)) continue;
+        for (const change of read.value.changes) {
+          for (const path of change.movedFrom === null ? [change.path] : [change.path, change.movedFrom]) {
+            changed.set(`${change.folder}\0${path}`, { folder: change.folder, path });
+          }
+        }
+      }
+      const files = [...changed.values()];
       if (files.length === 0) return NOTHING;
       return wrapUpOf(task, yield* workspace.value.uncommitted(files), policy);
     });

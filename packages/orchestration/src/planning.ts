@@ -1,6 +1,7 @@
 import type { TaskRepository } from "@hobbots/agents";
 import {
   ArtifactId,
+  type AttemptId,
   cancelMoves,
   descendantsOf,
   isLiveAttempt,
@@ -41,7 +42,7 @@ interface Deps {
   ) => Effect.Effect<void, TaskToolRefused>;
   readonly limits: TaskToolLimits;
   /** What the Task leaves uncommitted in its folders, read as it completes (#586). */
-  readonly wrapUp: (task: Task, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
+  readonly wrapUp: (task: Task, attempts: ReadonlyArray<AttemptId>, policy: WrapUpPolicy) => Effect.Effect<WrapUp>;
 }
 
 /**
@@ -242,7 +243,8 @@ export const makePlanning = ({ tasks, capacity, limits, wrapUp }: Deps) => ({
       }
       const artifacts = (input.artifacts ?? []).map((artifact) => ({ ...artifact, id: ArtifactId.make(newId()) }));
       // The Quest's own result is the user's, so its lead commits what it changed or says why not (#665).
-      const left = yield* wrapUp(task, {
+      const attempts = scope.tree.attempts.filter((each) => each.taskId === task.id).map((each) => each.id);
+      const left = yield* wrapUp(task, attempts, {
         hold: task.parentId === null && scope.tree.quests.some((quest) => quest.taskId === task.id),
         // A blank reason is none; a long one is cut, as every text the Summary shows is.
         reason: input.leave_uncommitted?.trim() ? cut(input.leave_uncommitted, REASON_LIMIT) : undefined,
