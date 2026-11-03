@@ -37,8 +37,10 @@ interface DesktopSettings {
   readonly notifyRequests?: boolean;
   readonly notifyDevices?: boolean;
   readonly notifySound?: boolean;
-  readonly mode?: DesktopMode["mode"];
+  readonly mode?: DesktopMode["mode"] | undefined;
   readonly connection?: HubConnection | undefined;
+  /** Set by Disconnect: this computer left a hub and has not chosen again, so it must not become a hub by itself. */
+  readonly leftHub?: boolean | undefined;
 }
 
 export interface SettingsStore {
@@ -73,6 +75,7 @@ const BOOLEAN_KEYS = [
   "notifyRequests",
   "notifyDevices",
   "notifySound",
+  "leftHub",
 ] as const satisfies ReadonlyArray<keyof DesktopSettings>;
 
 const parse = (raw: string): DesktopSettings => {

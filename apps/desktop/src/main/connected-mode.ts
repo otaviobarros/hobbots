@@ -11,6 +11,7 @@ import { newAppWindow } from "./app-window.ts";
 import { coalesce } from "./coalesce.ts";
 import { connectionView, handleConnectionIpc } from "./connection-ipc.ts";
 import { type PairingOutcome, pairAsDesktop } from "./desktop-pairing.ts";
+import { type Disconnected, disconnectFromHub } from "./disconnect.ts";
 import {
   type ConnectedHub,
   type ConnectionState,
@@ -26,6 +27,7 @@ import type { AppShell } from "./hub-mode.ts";
 import { keepsRunning } from "./keep-running.ts";
 import { trayImage } from "./menu-bar.ts";
 import { connectedTrayModel } from "./menu-bar-model.ts";
+import { messages } from "./messages.ts";
 import { CONNECTED_MODE_ARGUMENT } from "./mode-argument.ts";
 import type { HubConnection } from "./settings.ts";
 import { reveal } from "./single-instance.ts";
@@ -107,6 +109,26 @@ const connectedMenuBar = (connection: HubConnection, showWindow: () => void) => 
   return { draw };
 };
 
+/**
+ * Starts the app again after Disconnect, so it comes back with no mode at setup's first screen.
+ * A hub that could not be reached still lists this computer, and the user is told so first.
+ */
+const startAgain = async (connection: HubConnection, stillListed: boolean) => {
+  if (stillListed) {
+    const copy = messages.disconnect;
+    await dialog.showMessageBox({
+      type: "info",
+      message: copy.stillListed({ hub: connection.name }),
+      detail: copy.stillListedDetail({ hub: connection.name }),
+      buttons: [copy.ok],
+    });
+  }
+  // A development start that paired from the environment would pair again at once.
+  delete process.env.HOBBOTS_CONNECT_TO;
+  app.relaunch();
+  app.quit();
+};
+
 /** Where the connection stands, and what follows from each change of it. */
 const connectionStateOf = (hub: ConnectedHub, token: DeviceTokenStore, origins: HubOrigins) => {
   let state: ConnectionState = { state: "connecting" };
@@ -125,7 +147,8 @@ const connectionStateOf = (hub: ConnectedHub, token: DeviceTokenStore, origins: 
     if (state.state === "revoked" || state.state === "unknownDevice") return;
     const refusal = state.state === "connected" ? await hub.refusal() : null;
     if (refusal !== null) {
-      await token.remove();
+      // The hub refuses the token anyway; one the keychain kept is removed again on Disconnect.
+      await token.remove().catch(() => undefined);
       await clearCookies(origins);
       return set({ state: refusal });
     }
@@ -168,11 +191,33 @@ export const startConnected = async (
   });
   const connectionState = connectionStateOf(hub, computer.token, origins);
 
+  /** Disconnects once, however often it is asked; a Disconnect that failed may be asked again. */
+  let disconnecting: Promise<Disconnected> | undefined;
+  const disconnect = async () => {
+    try {
+      const outcome = await disconnectFromHub({
+        connection,
+        state: () => connectionState.current,
+        hub,
+        token: computer.token,
+        clearCookies: () => clearCookies(origins),
+        settings,
+      });
+      // The answer reaches the page first; then the app starts again with no mode: setup's first screen.
+      setImmediate(() => void startAgain(connection, outcome.stillListed));
+      return outcome;
+    } catch (error) {
+      disconnecting = undefined;
+      throw error;
+    }
+  };
+
   handleSettingsIpc(isAllowedUrl);
   handleConnectionIpc({
     ipcMain,
     isTrusted,
     view: () => connectionView(connection, connectionState.current, app.getVersion(), connectionState.hubVersion),
+    disconnect: () => (disconnecting ??= disconnect()),
   });
   keepCookiesInMemory(origins);
   // Every request of the window, reloads included, goes to the hub only while its address is the

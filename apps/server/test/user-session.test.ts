@@ -418,6 +418,31 @@ describe("only approved devices reach the hub", () => {
     expect(await request(pairing, "GET", "/api/pairing")).toMatchObject({ status: 404 });
   });
 
+  // covers DP-001, DP-004
+  it("[TC-DP-216] a connected desktop revokes itself with its own token on Disconnect, and the hub lists it as revoked", async () => {
+    const opened = await request<{ status: { id: string }; secret: string }>({}, "POST", "/api/pairing", {
+      name: "Hobbots on MacBook Air",
+      platform: "macOS",
+      kind: "desktop",
+    });
+    const pairing = { authorization: `Bearer ${opened.body.secret}` };
+    await request(APP, "POST", `/api/pairing/requests/${opened.body.status.id}/allow`);
+    const claimed = await request<{ token: string; deviceId: string }>(pairing, "GET", "/api/pairing");
+    const desktop = { authorization: `Bearer ${claimed.body.token}` };
+
+    const revoked = await request<{ id: string; revokedAt: string | null }>(
+      desktop,
+      "POST",
+      `/api/devices/${claimed.body.deviceId}/revoke`,
+    );
+    expect(revoked).toMatchObject({ status: 200, body: { id: claimed.body.deviceId } });
+    const listed = await request<ReadonlyArray<{ id: string; revokedAt: string | null }>>(APP, "GET", "/api/devices");
+    expect(listed.body.find((device) => device.id === claimed.body.deviceId)?.revokedAt).not.toBeNull();
+    // Asked again, as a Disconnect retried, it is refused as revoked, which the app counts as done.
+    const again = await request(desktop, "POST", `/api/devices/${claimed.body.deviceId}/revoke`);
+    expect(again).toMatchObject({ status: 401, body: { _tag: "DeviceRevoked" } });
+  });
+
   // covers DP-004
   it("[TC-PE-213] refuses a cookie request another page could have sent, and two device cookies of one name", async () => {
     const { cookie } = await pairedBrowser();
