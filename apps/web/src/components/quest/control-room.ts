@@ -1,6 +1,7 @@
 import {
   type AgentId,
   ancestorsOf,
+  checkpointOn,
   descendantsOf,
   isTerminalTask,
   partyOf,
@@ -39,6 +40,8 @@ export interface RoomRow {
   /** The hobs the owner brought in on that nested Quest, the sub-lead's own party. */
   readonly party: ReadonlyArray<AgentId>;
   readonly waitingOn: ReadonlyArray<Waited>;
+  /** The hobs whose Tasks changed a file this Task changed too, as the hub found it (#570). */
+  readonly sameFileAs: ReadonlyArray<AgentId>;
 }
 
 /** Whether a cancelled Task's stop was never confirmed: its last Attempt was left unresolved. */
@@ -88,6 +91,22 @@ const waitingOnOf = (tree: TaskTree, task: Task): ReadonlyArray<Waited> => {
   ];
 };
 
+/**
+ * The owners of the other Tasks a hub finding pairs with this one: two Tasks of the work changed
+ * the same file. The finding sits on the Task that changed it last and names the other.
+ */
+const sameFileAsOf = (tree: TaskTree, task: Task): ReadonlyArray<AgentId> => [
+  ...new Set(
+    tree.checkpoints.flatMap((checkpoint) => {
+      if (checkpoint.source !== "automatic" || checkpoint.kind !== "finding" || !checkpointOn(checkpoint, task.id))
+        return [];
+      const otherId = checkpoint.taskId === task.id ? checkpoint.aboutTaskId : checkpoint.taskId;
+      const other = tree.tasks.find((each) => each.id === otherId);
+      return other === undefined ? [] : [other.ownerId];
+    }),
+  ),
+];
+
 /** Every Task of the tree, each under its parent, in the order they were created. */
 export const roomRows = (tree: TaskTree): ReadonlyArray<RoomRow> => {
   const children = new Map<TaskId | null, Array<Task>>();
@@ -104,6 +123,7 @@ export const roomRows = (tree: TaskTree): ReadonlyArray<RoomRow> => {
       quest,
       party: quest === null ? [] : partyOf(quest, tree.delegations),
       waitingOn: waitingOnOf(tree, task),
+      sameFileAs: sameFileAsOf(tree, task),
     });
     for (const child of children.get(task.id) ?? []) visit(child, depth + 1);
   };

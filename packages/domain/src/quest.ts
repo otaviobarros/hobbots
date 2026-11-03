@@ -97,7 +97,10 @@ export class Milestone extends Schema.Class<Milestone>("Milestone")({
   createdAt: Schema.String,
 }) {}
 
-/** Planned milestones and unplanned reports come from the Task's owner; automatic states from the hub. */
+/**
+ * Planned milestones and unplanned reports come from the Task's owner; automatic states, and the
+ * findings the hub notices itself, such as two Tasks changing the same file, from the hub.
+ */
 export const CheckpointSource = Schema.Literals(["planned", "unplanned", "automatic"]);
 export type CheckpointSource = typeof CheckpointSource.Type;
 
@@ -119,8 +122,12 @@ export type CheckpointKind = typeof CheckpointKind.Type;
 export const CHECKPOINT_KINDS: Record<CheckpointSource, ReadonlyArray<CheckpointKind>> = {
   planned: ["milestone"],
   unplanned: ["finding", "blocker", "question", "progress"],
-  automatic: ["started", "waiting", "done", "failed", "cancelled"],
+  automatic: ["started", "waiting", "done", "failed", "cancelled", "finding"],
 };
+
+/** Whether a checkpoint says more than its Task's state: anything its owner reported, or a finding the hub made. */
+export const saysMore = (checkpoint: { readonly source: CheckpointSource; readonly kind: CheckpointKind }) =>
+  checkpoint.source !== "automatic" || checkpoint.kind === "finding";
 
 /** Whether a checkpoint of this kind reaches the lead's context and can wake it; routine progress never does (IN-005). */
 export const wakesLead = (kind: CheckpointKind): boolean =>
@@ -137,10 +144,23 @@ export class Checkpoint extends Schema.Class<Checkpoint>("Checkpoint")({
   /** The milestone a `milestone` checkpoint reached. */
   milestoneId: Schema.NullOr(MilestoneId),
   summary: Schema.String,
+  /**
+   * Another Task the checkpoint is also about, or null: for a finding the hub made because two
+   * Tasks changed the same file, the Task that changed it first, so both Tasks show it. Checkpoints
+   * journaled before migration 0041 carry none.
+   */
+  aboutTaskId: Schema.NullOr(TaskId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   createdAt: Schema.String,
   /** The journal sequence it was recorded at, which orders checkpoints that share a time. */
   revision: Revision,
 }) {}
+
+/** Whether a checkpoint belongs on `taskId`'s card: recorded on it, or about it too. */
+export const checkpointOn = (checkpoint: Checkpoint, taskId: TaskId) =>
+  checkpoint.taskId === taskId || checkpoint.aboutTaskId === taskId;
 
 /** A question is open until it is answered, or withdrawn when its Task ends first and nobody is left to hear the answer. */
 export const QuestionState = Schema.Literals(["open", "answered", "withdrawn"]);

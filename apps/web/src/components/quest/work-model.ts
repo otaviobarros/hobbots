@@ -1,5 +1,6 @@
 import {
   type AgentId,
+  checkpointOn,
   isTerminalTask,
   type Message,
   type MessageId,
@@ -7,6 +8,7 @@ import {
   partyOf,
   type Quest,
   type Question,
+  saysMore,
   type Task,
   type TaskId,
   type TaskTree,
@@ -87,10 +89,12 @@ export const rowStatus = (tree: TaskTree, task: Task): RowStatus => {
   }
 };
 
-/** What the Task's owner last reported; automatic checkpoints only repeat its state. */
+/**
+ * What the Task's owner last reported, or a finding the hub made about it, such as another Task
+ * changing a file it changed; the other automatic checkpoints only repeat its state.
+ */
 const latestOf = (tree: TaskTree, task: Task): string | null =>
-  tree.checkpoints.findLast((checkpoint) => checkpoint.taskId === task.id && checkpoint.source !== "automatic")
-    ?.summary ?? null;
+  tree.checkpoints.findLast((checkpoint) => checkpointOn(checkpoint, task.id) && saysMore(checkpoint))?.summary ?? null;
 
 export const waitsOnOf = (tree: TaskTree, task: Task): ReadonlyArray<AgentId> => [
   ...new Set(
@@ -249,7 +253,7 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
     from: delegation?.leadId ?? null,
     status: rowStatus(tree, task),
     milestones: tree.milestones.filter((each) => each.taskId === task.id).sort((a, b) => a.position - b.position),
-    checkpoints: tree.checkpoints.filter((each) => each.taskId === task.id),
+    checkpoints: tree.checkpoints.filter((each) => checkpointOn(each, task.id)),
     questions: tree.questions.filter((each) => each.taskId === task.id),
     notes: tree.notes.filter((each) => each.taskId === task.id),
     output: tree.artifacts.filter((each) => each.taskId === task.id),

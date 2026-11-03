@@ -353,7 +353,7 @@ describe("backup and restore", () => {
         writeBackup({ dataDir, folder, version: "0.14.0", installationId: "old", copyDatabase }),
       ).pipe(Effect.provide(SqliteLive(databaseOf(dataDir), older))),
     );
-    expect((await readBackup(folder, 38)).schemaVersion).toBe(37);
+    expect((await readBackup(folder, 41)).schemaVersion).toBe(37);
     const target = join(root, "fresh");
     await Effect.runPromise(performRestore(target, folder));
     const restore = await onHub(
@@ -588,7 +588,7 @@ describe("backup and restore", () => {
       await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dir), older)));
       const made = await Effect.runPromise(backupBeforeMigrations(dir, "0.15.0"));
       expect(made).not.toBeNull();
-      const manifest = await readBackup(made as string, 38);
+      const manifest = await readBackup(made as string, 41);
       expect(manifest.schemaVersion).toBe(Number(before) - 1);
       expect(manifest.counts).toEqual({ hobs: 0, threads: 0, quests: 0, tasks: 0 });
       // The next start migrates it.

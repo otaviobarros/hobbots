@@ -104,7 +104,7 @@ import { TaskFileRoute } from "./task-files.ts";
 import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
-import { ActivityRetention } from "./workbench.ts";
+import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 
 const ServerLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -257,6 +257,8 @@ const ServerLive = Layer.unwrap(
             JournalCompaction,
             // The Workbench's heavy details are cleared past their retention window (ADR 023).
             ActivityRetention,
+            // Two Tasks of one Quest changing the same file is a finding for their lead (#570).
+            OverlappingChanges,
             // Work that arrives for a hob wakes its thread (ADR 019).
             WakeOnArrival,
             // A retired hob's work fails as blockers that wait for you (IN-007).

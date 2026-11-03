@@ -10,6 +10,7 @@ import {
   type Milestone,
   type Question,
   type RefusedCall,
+  saysMore,
   type Task,
   type TaskResult,
   type TaskState,
@@ -159,7 +160,7 @@ const reportLines = (
     .filter(
       (checkpoint) =>
         checkpoint.taskId === task.id &&
-        checkpoint.source !== "automatic" &&
+        saysMore(checkpoint) &&
         !(checkpoint.kind === "milestone" && milestones.some((each) => each.id === checkpoint.milestoneId)) &&
         (attempt === null || checkpoint.attemptId === null || checkpoint.attemptId === attempt.id),
     )

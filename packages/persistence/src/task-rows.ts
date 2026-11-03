@@ -13,7 +13,7 @@ import {
   Question,
   RefusedCall,
   Task,
-  type TaskId,
+  TaskId,
   TaskNote,
   TaskTree,
   TaskWait,
@@ -295,6 +295,10 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
   /** The Delegation that brought a member its Task, if it was delegated. */
   const delegationsOf = (taskId: string) =>
     sql<Row>`SELECT * FROM delegations WHERE child_task_id = ${taskId}`.pipe(Effect.flatMap(decodeRows("delegation")));
+  /** The top Tasks of work still going on, with a Task that has an Attempt: where members may be at work. */
+  const rootsAtWork = sql<{ readonly rootId: string }>`SELECT DISTINCT root_id FROM tasks
+    WHERE state NOT IN ('completed', 'failed', 'cancelled') AND current_attempt_id IS NOT NULL
+    ORDER BY root_id`.pipe(Effect.map((rows) => rows.map((row) => TaskId.make(row.rootId))));
   const liveAttempts = sql<Row>`SELECT * FROM attempts WHERE state IN ('starting', 'running')
     ORDER BY ${orderBy(sql, ["started_at", "id"])}`.pipe(Effect.flatMap(decodeRows("attempt")));
   /** Steps that started and have not ended, with no live Attempt: their session ended, oldest first. */
@@ -323,5 +327,6 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     cancelling,
     delegationsOf,
     liveAttempts,
+    rootsAtWork,
   };
 };

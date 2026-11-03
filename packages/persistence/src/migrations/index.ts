@@ -40,6 +40,7 @@ import replyUsage from "./0037_reply_usage.ts";
 import backupRestore from "./0038_backup_restore.ts";
 import taskToolRefusals from "./0039_task_tool_refusals.ts";
 import approvalDeciders from "./0040_approval_deciders.ts";
+import checkpointAboutTask from "./0041_checkpoint_about_task.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -87,4 +88,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0038_backup_restore": backupRestore,
   "0039_task_tool_refusals": taskToolRefusals,
   "0040_approval_deciders": approvalDeciders,
+  "0041_checkpoint_about_task": checkpointAboutTask,
 };

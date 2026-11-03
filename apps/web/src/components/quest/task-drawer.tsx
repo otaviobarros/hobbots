@@ -2,6 +2,7 @@ import {
   type AgentId,
   isTerminalTask,
   type Question,
+  saysMore,
   type Task,
   type TaskId,
   type TaskTree,
@@ -185,7 +186,7 @@ function Detail({
                 <span className="h-fit shrink-0 bg-line px-1.5 text-xs font-bold text-moonlight">
                   {messages.checkpoint[checkpoint.kind]}
                 </span>
-                {checkpoint.source !== "automatic" && <span>{checkpoint.summary}</span>}
+                {saysMore(checkpoint) && <span>{checkpoint.summary}</span>}
               </li>
             ))}
           </ol>

@@ -1,4 +1,4 @@
-import { HobbotsRepository, TaskRepository, TaskTurns } from "@hobbots/agents";
+import { ActivityRepository, HobbotsRepository, TaskRepository, TaskTurns } from "@hobbots/agents";
 import {
   type AgentId,
   ArtifactId,
@@ -9,6 +9,7 @@ import {
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   type EventEnvelope,
+  FileChangeId,
   isLiveAttempt,
   isTerminalTask,
   Message,
@@ -34,12 +35,18 @@ import { EventBus } from "./event-bus.ts";
  *
  * Asking for a spring sale sets up the same party with work for the Quest tab's controls instead:
  * Quill's banner and Ada's email have failed, so they can be retried or given to another hob, and
- * Quill's signs are under way, so they can be cancelled. Only `HOBBOTS_FAKE_QUEST=black-friday`
- * with the fake runtime turns either on.
+ * Quill's signs are under way, so they can be cancelled. Asking for the shop badge has Quill make
+ * it while Ada reviews the shop, and both change the badge's file while both are at work, so the
+ * hub's finding on the two Tasks can be followed (#570). Only `HOBBOTS_FAKE_QUEST=black-friday`
+ * with the fake runtime turns any of them on.
  */
 
 /** The scripted requests, each found by what you ask for. */
-const SCRIPTS = { "black-friday": /black friday/i, "spring-sale": /spring sale/i } as const;
+const SCRIPTS = {
+  "black-friday": /black friday/i,
+  "spring-sale": /spring sale/i,
+  "shop-badge": /shop badge/i,
+} as const;
 type Script = keyof typeof SCRIPTS;
 
 const BRIEFS: Record<Script, { readonly title: string; readonly goal: string }> = {
@@ -48,7 +55,39 @@ const BRIEFS: Record<Script, { readonly title: string; readonly goal: string }> 
     goal: "A Black Friday campaign: landing copy and a launch email, live by Friday",
   },
   "spring-sale": { title: "Plan the spring sale", goal: "A spring sale: a banner, an email and window signs" },
+  "shop-badge": { title: "Make the shop badge", goal: "A badge on the shop's page, in the agreed colour" },
 };
+
+/** The folder the shop badge's play says its files are in. */
+const SHOP = "/fake/shop";
+
+/** Records that a played Task's Attempt changed `path` in the shop, as its turn's scan would. */
+const changeInShop = (attempt: AttemptId, path: string, hash: string, bus: EventBus["Service"]) =>
+  Effect.gen(function* () {
+    const activity = yield* Effect.serviceOption(ActivityRepository);
+    if (Option.isNone(activity)) return;
+    const version = (of: string) => ({
+      hash: of,
+      size: 2048,
+      kind: "image" as const,
+      contentId: null,
+      notKept: "unreadable" as const,
+    });
+    const saved = yield* activity.value.saveChanges(attempt, SHOP, [
+      {
+        id: FileChangeId.make(`${attempt}-${path}`),
+        path,
+        kind: "edited",
+        movedFrom: null,
+        before: version("grey"),
+        after: version(hash),
+        sharedWith: [],
+        settled: true,
+        recordedAt: yield* iso,
+      },
+    ]);
+    if (Option.isSome(saved)) yield* bus.publish(saved.value.entries);
+  });
 
 const iso = Effect.map(DateTime.now, DateTime.formatIso);
 
@@ -272,6 +311,15 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
         "The mailing tool rejected the sign-in.",
       );
       yield* member("signs", cast.quill, "Order the sale signs\nOrder window signs for the shop.", [], []);
+      return;
+    }
+    // The shop badge stops with Quill and Ada both at work, after both changed the badge.
+    if (script === "shop-badge") {
+      yield* member("badge", cast.quill, "Make the shop badge\nA badge in the agreed colour.", [], []);
+      yield* changeInShop(AttemptId.make(id("a-badge")), "web/badge.png", "green", bus);
+      yield* pause;
+      yield* member("review", cast.ada, "Review the shop\nCheck the shop's page before it goes out.", [], []);
+      yield* changeInShop(AttemptId.make(id("a-review")), "web/badge.png", "grey-again", bus);
       return;
     }
     const copy = yield* member(
