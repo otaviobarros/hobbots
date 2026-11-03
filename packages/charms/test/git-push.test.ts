@@ -86,10 +86,9 @@ afterAll(async () => {
 /**
  * Each test here pushes for real: about 55 short-lived processes (the test's own Git setup, the hub's
  * Git calls, Git's helpers, and the fake GitHub's `git http-backend`), one after another. Alone on a
- * CI runner a test takes 0.1 to 0.4 s. Inside the full check, which typechecks and tests every
- * package at once on 4 cores (load average 10 to 12), the same test takes 3 to 5 times as long, and
- * #655 saw two of them pass 5 s at its busiest moment. Nothing in them waits on a timer, so the
- * budget is set for that load rather than for the work.
+ * CI runner a test takes 0.1 to 0.4 s. While every other package tests on the same 4 cores, it
+ * takes 3 to 5 times as long, and #655 saw two of them pass 5 s at the busiest moment. Nothing in
+ * them waits on a timer, so the budget is set for that load rather than for the work.
  */
 const REAL_GIT_TIMEOUT = 30_000;
 
