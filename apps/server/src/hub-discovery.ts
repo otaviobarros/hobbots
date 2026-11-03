@@ -101,16 +101,20 @@ const parseTyped = (typed: string): Option.Option<TypedAddress> => {
     return isIPv6(typed) ? Option.some({ host: typed.toLowerCase(), https: false, port: null }) : Option.none();
   }
   const https = url.protocol === "https:";
-  if (!https && url.protocol !== "http:") return Option.none();
-  if (url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "") return Option.none();
-  if (url.pathname !== "/" && url.pathname !== "") return Option.none();
   const host = stripBrackets(url.hostname.toLowerCase()).replace(/\.$/, "");
-  if (host === "") return Option.none();
-  // The URL parser drops a port that is the scheme's default, which the user still typed.
+  if ((!https && url.protocol !== "http:") || host === "" || !isBareOrigin(url)) return Option.none();
+  return Option.some({ host, https, port: typedPort(url, withScheme, https) });
+};
+
+/** Whether a URL is only a scheme, host and port: no credentials, path, query or fragment. */
+const isBareOrigin = (url: URL) =>
+  url.username === "" && url.password === "" && url.search === "" && url.hash === "" && url.pathname === "/";
+
+/** The port the user typed; the URL parser drops one that is the scheme's default, which they still typed. */
+const typedPort = (url: URL, typed: string, https: boolean): number | null => {
+  if (url.port !== "") return Number(url.port);
   const defaultPort = https ? 443 : 80;
-  const typedDefault = withScheme.split("/")[2]?.endsWith(`:${defaultPort}`) === true;
-  const port = url.port === "" ? (typedDefault ? defaultPort : null) : Number(url.port);
-  return Option.some({ host, https, port });
+  return typed.split("/")[2]?.endsWith(`:${defaultPort}`) === true ? defaultPort : null;
 };
 
 /** The node a name or address names: a full MagicDNS name, its first label alone, or a tailnet address. */
