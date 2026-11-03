@@ -1,5 +1,6 @@
 import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
 import { Button } from "@hobbots/ui/components/button";
+import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -7,6 +8,8 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { useUpdateSetup, watchedSetupQuery } from "../api/setup.ts";
 import { FIREFLIES, HOUSES, intro, PROVIDERS, SCENE_HOBS, type SceneHob } from "../art/village.ts";
+import { messages as backupMessages } from "./backup/messages.ts";
+import { RestoreFlow } from "./backup/restore-flow.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { Stars } from "./scene.tsx";
 
@@ -38,6 +41,9 @@ export function Welcome() {
   const introClass = (className: string) => (playIntro ? className : undefined);
   const introDelay = (seconds: number): CSSProperties | undefined =>
     playIntro ? { animationDelay: `${seconds}s` } : undefined;
+
+  // "I already use Hobbots" can also bring a backup back, before setup (ADR 026).
+  const [restoring, setRestoring] = useState(false);
 
   const skipSetup = () => update.mutate({ completed: true }, { onSuccess: () => navigate({ to: "/" }) });
 
@@ -90,6 +96,9 @@ export function Welcome() {
             I already use Hobbots
           </Button>
         </div>
+        <Button variant="link" onClick={() => setRestoring(true)} className="bg-ground/60 px-2 text-sm">
+          {backupMessages.welcome.open}
+        </Button>
         {update.isError && (
           <span role="alert" className="bg-ground px-2 text-sm text-rose">
             Hobbots could not save that. Try again in a moment.
@@ -168,6 +177,14 @@ export function Welcome() {
           ))}
         </ul>
       </div>
+      <Dialog open={restoring} onOpenChange={setRestoring}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogTitle className="m-0 font-pixel text-2xl font-bold text-moonlight">
+            {backupMessages.restore.title}
+          </DialogTitle>
+          <RestoreFlow onCancel={() => setRestoring(false)} />
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

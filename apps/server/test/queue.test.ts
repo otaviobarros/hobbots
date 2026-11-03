@@ -1,10 +1,10 @@
-import { ChatService, HobAdmission, HobbotsRepository, HobLifecycle, HobTools } from "@hobbots/agents";
+import { ChatService, HobAdmission, HobbotsRepository, HobLifecycle, HobTools, WorkHold } from "@hobbots/agents";
 import { MessageNotQueued } from "@hobbots/api";
 import { Agent, AgentId, type HobbotsEvent, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
-import { Effect, Fiber, Layer, Option, Schedule, Stream } from "effect";
+import { Effect, Fiber, Layer, Option, Ref, Schedule, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 
@@ -166,6 +166,36 @@ describe("message queue", () => {
       ["MessageQueued", "three"],
       ["MessageDequeued", "started"],
       ["MessageDequeued", "started"],
+    ]);
+  });
+
+  // covers OP-003
+  it("[TC-OP-032] starts no queued message while work is held after a restore, and runs them once it resumes", async () => {
+    const held = Ref.makeUnsafe(true);
+    const hold = Layer.succeed(WorkHold, WorkHold.of({ held: Ref.get(held), release: Ref.set(held, false) }));
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      yield* Effect.sleep("60 millis");
+      const whileHeld = yield* transcript(THREAD_ID);
+      yield* (yield* WorkHold).release;
+      yield* chat.drainAgent(HOB_ID);
+      yield* settled(THREAD_ID);
+      return { whileHeld, resumed: yield* transcript(THREAD_ID) };
+    }).pipe(Effect.provide(testLayer(leftQueued).pipe(Layer.provideMerge(hold))), Effect.scoped, Effect.runPromise);
+
+    expect(result.whileHeld).toEqual([
+      ["user", "first", "complete"],
+      ["assistant", "reply", "interrupted"],
+      ["user", "second", "queued"],
+      ["user", "third", "queued"],
+    ]);
+    expect(result.resumed.map(([, content, status]) => `${content}:${status}`)).toEqual([
+      "first:complete",
+      "reply:interrupted",
+      "second:complete",
+      "Echo: second:complete",
+      "third:complete",
+      "Echo: third:complete",
     ]);
   });
 

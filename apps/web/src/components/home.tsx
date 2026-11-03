@@ -22,6 +22,7 @@ import {
 import { sceneOrder, withRequests } from "../lib/hob-state.ts";
 import { questsInProgress } from "../lib/quest-work.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
+import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
 import { messages as inboxCopy } from "./inbox/messages.ts";
 import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
@@ -165,6 +166,7 @@ export function Home() {
 
         {many && <HallDoor count={hall} peek={crew[SCENE_LIMIT]?.hob} onOpen={openHall} />}
       </section>
+      <WorkHeldNotice className="mx-7 mt-5" />
 
       {many ? (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-4 px-[22px] py-4">

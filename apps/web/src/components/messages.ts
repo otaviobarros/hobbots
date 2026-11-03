@@ -511,6 +511,8 @@ export const messages = {
       revoking: "Revoking…",
       failed: "Hobbots could not read your devices. Try again in a moment.",
       revokeFailed: "Hobbots could not revoke it. Try again in a moment.",
+      revokedByRestore: "Revoked by a restore",
+      pairAgain: "Open Hobbots on that device to ask again.",
       footer:
         "Each new device asks once, here and with a notification. A revoked device is signed out right away and has to ask again.",
     },

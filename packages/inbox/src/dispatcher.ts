@@ -182,6 +182,11 @@ export class DispatcherHost extends Context.Service<
     readonly treeOf: (taskId: TaskId) => Effect.Effect<ReadonlyArray<Task>>;
     /** Announces what a backpack write committed, after it committed. */
     readonly announce: (entries: ReadonlyArray<EventEnvelope>) => Effect.Effect<void>;
+    /**
+     * Whether the hub holds work after a restore (ADR 026): then nothing is claimed or delivered,
+     * and every item is skipped as not ready until work resumes. Absent, work is never held.
+     */
+    readonly held?: Effect.Effect<boolean>;
   }
 >()("@hobbots/inbox/DispatcherHost") {}
 
@@ -528,7 +533,14 @@ export class Dispatcher extends Context.Service<
           Schedule.recurs(Math.max(0, limits.maxDeliveries)),
         ]);
 
+        const held = host.held ?? Effect.succeed(false);
+        const notReady = (itemIds: ReadonlyArray<BackpackItemId>) =>
+          itemIds.map((): Dispatched => ({ _tag: "Skipped", reason: "not-ready" }));
+
         const dispatchAll: Dispatcher["Service"]["dispatchAll"] = (itemIds, plan) =>
+          Effect.flatMap(held, (isHeld) => (isHeld ? Effect.succeed(notReady(itemIds)) : deliverAll(itemIds, plan)));
+
+        const deliverAll: Dispatcher["Service"]["dispatchAll"] = (itemIds, plan) =>
           Effect.suspend(() => {
             const outcomes = new Map<BackpackItemId, Dispatched>();
             const last = { ending: null as BackpackTurnEnding | null };

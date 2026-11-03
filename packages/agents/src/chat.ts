@@ -50,6 +50,7 @@ import { type ChatTaskTurn, type ChatTurnOutcome, TaskTurns } from "./task-turns
 import { keepToolOutput } from "./tool-output.ts";
 import { accessNow, HobTools, narrows } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
+import { workHeld } from "./work-hold.ts";
 
 interface Reply {
   readonly current: Ref.Ref<Message>;
@@ -249,6 +250,8 @@ export class ChatService extends Context.Service<
         Option.isSome(charms) ? charms.value.forTurn(turn) : Effect.succeed(null);
       // Without a backpack, a thread starts only your queued messages.
       const continuations = yield* Effect.serviceOption(Continuations);
+      // After a restore nothing that waited starts on its own until you resume work (ADR 026).
+      const held = yield* workHeld;
       const turns = yield* FiberMap.make<ThreadId>();
       const scope = yield* Effect.scope;
       // The reply each running turn is writing, so a stop request can reach it.
@@ -800,6 +803,7 @@ export class ChatService extends Context.Service<
       // leave it started but unanswered.
       const startQueued = (threadId: ThreadId, start: TurnStart = {}) =>
         Effect.gen(function* () {
+          if (yield* held) return null;
           const found = yield* repo.findThread(threadId);
           if (Option.isNone(found)) return null;
           const agent = yield* repo.findAgent(found.value.agentId);
@@ -814,6 +818,7 @@ export class ChatService extends Context.Service<
       // puts the work waiting there into its next turn; your queued message still starts first.
       const startNext = (threadId: ThreadId): Effect.Effect<void> =>
         Effect.gen(function* () {
+          if (yield* held) return;
           // A message of yours waiting there takes the work you stopped along with it.
           if (holdBack.has(threadId) && Option.isSome(yield* repo.nextQueuedMessage(threadId))) {
             holdBack.delete(threadId);

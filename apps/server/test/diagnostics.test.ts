@@ -14,6 +14,7 @@ import {
   RecoveryLog,
   SecretRedaction,
   TaskRepository,
+  WorkHold,
 } from "@hobbots/agents";
 import { DiagnosticsNow, DiagnosticsReport, QuestTrace } from "@hobbots/api";
 import {
@@ -59,6 +60,9 @@ const PROVIDER_KEY = "provider-key-0123456789abcdef";
 const GITHUB_TOKEN = `ghp_${"A".repeat(36)}`;
 const SHOP = join(homedir(), "hobbots-diagnostics-shop");
 
+/** Whether a restore holds work, as the hub's work hold reports it. */
+let held = false;
+
 const App = HobLifecycle.layer.pipe(
   Layer.provideMerge(
     Layer.mergeAll(
@@ -86,6 +90,15 @@ const App = HobLifecycle.layer.pipe(
       NodeFolderChecks,
       FakeRuntimeLayer({ availability: "signedOut" }),
       RecoveryLog.layer,
+      Layer.succeed(
+        WorkHold,
+        WorkHold.of({
+          held: Effect.sync(() => held),
+          release: Effect.sync(() => {
+            held = false;
+          }),
+        }),
+      ),
       SecretRedaction.layer([{ value: PROVIDER_KEY, kind: "ANTHROPIC_API_KEY" }]),
       Layer.succeed(Installation, {
         app: "hobbots",
@@ -118,7 +131,10 @@ beforeEach(async () => {
   };
 });
 
-afterEach(() => dispose());
+afterEach(async () => {
+  held = false;
+  await dispose();
+});
 
 const get = async (
   path: string,
@@ -412,5 +428,16 @@ describe("Diagnostics", () => {
     expect(report.quest).toBeNull();
     expect(report.stalled).toEqual(current.stalled);
     expect(report.recovery[0]?.message).toBe("database is locked near [redacted: GitHub token]");
+  });
+
+  // covers OP-002, OP-003
+  it("[TC-OP-039] says work is held while a restore holds it, in Right now and in the report", async () => {
+    held = true;
+    const current = Schema.decodeUnknownSync(DiagnosticsNow)((await get("/api/diagnostics")).body);
+    const report = Schema.decodeUnknownSync(DiagnosticsReport)((await get("/api/diagnostics/report")).body);
+    expect(current.workHeld).toBe(true);
+    expect(report.workHeld).toBe(true);
+    held = false;
+    expect(Schema.decodeUnknownSync(DiagnosticsNow)((await get("/api/diagnostics")).body).workHeld).toBe(false);
   });
 });
