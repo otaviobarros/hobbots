@@ -495,7 +495,7 @@ describe.runIf(sandboxed && outsideAddress !== undefined)("a turn on an installe
       { say: "Done." },
     );
     const first = await turn("Set things up.", null);
-    // The command waited for the user, was recorded once allowed, and streamed its output.
+    // The command waited for the user, was recorded once allowed, and reported its output.
     expect(first.asked).toEqual([expect.objectContaining({ stepId: "c1", tool: "Bash" })]);
     expect(first.recorded.map((event) => event._tag === "ToolStarted" && [event.id, event.tool])).toEqual([
       ["c1", "Bash"],
@@ -505,10 +505,13 @@ describe.runIf(sandboxed && outsideAddress !== undefined)("a turn on an installe
     const tags = first.events.map((event) => ("id" in event ? `${event._tag}:${event.id}` : event._tag));
     expect(tags).toContain("ToolAwaitingApproval:c1");
     expect(tags.indexOf("ToolAwaitingApproval:c1")).toBeLessThan(tags.indexOf("ToolFinished:c1"));
-    const output = first.events
+    // A short command may end before Codex streams any of it; its end then carries the whole output.
+    const streamed = first.events
       .filter((event) => event._tag === "ToolOutput" && event.id === "c1")
       .map((event) => (event._tag === "ToolOutput" ? event.text : ""))
       .join("");
+    const finished = first.events.find((event) => event._tag === "ToolFinished" && event.id === "c1");
+    const output = streamed || (finished?._tag === "ToolFinished" ? (finished.output ?? "") : "");
     // Codex's home stays closed to its commands but for what it must write; the hob's folder is open.
     expect(output).toMatch(/home-rules=[1-9]/);
     expect(output).toMatch(/home-config=[1-9]/);

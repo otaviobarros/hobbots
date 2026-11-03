@@ -742,7 +742,7 @@ describe.runIf(realSandbox)("Codex's command in the real sandbox", () => {
           const launch = sandboxedCommand(
             {
               command: "/bin/sh",
-              args: ["-c", 'echo "$TMPDIR"; mktemp; env | cut -d= -f1 | grep "^CLAUDE_" || true'],
+              args: ["-c", 'echo "$TMPDIR"; mktemp "$TMPDIR/tmp.XXXXXX"; env | cut -d= -f1 | grep "^CLAUDE_" || true'],
               env: { PATH: "/usr/bin:/bin", CODEX_HOME: join(root, "codex") },
               cwd: project,
             },
@@ -756,7 +756,8 @@ describe.runIf(realSandbox)("Codex's command in the real sandbox", () => {
           });
           expect(ran.status, ran.stderr).toBe(0);
           const [folder, made, ...claude] = ran.stdout.trim().split("\n");
-          // The launcher takes the turn's temporary folder back from sandbox-runtime's, and mktemp works there.
+          // The launcher takes the turn's temporary folder back from sandbox-runtime's, and files can be made there.
+          // (macOS's mktemp ignores TMPDIR without a template.)
           expect(folder).not.toBe("/tmp/claude");
           expect(made?.startsWith(`${folder}/`)).toBe(true);
           // sandbox-runtime adds its proxy ports inside the wrap; no Claude credential gets in.
