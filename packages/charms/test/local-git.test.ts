@@ -124,6 +124,8 @@ describe("creating a repository for a hob", () => {
     expect(gitIn(project, "rev-parse", "--is-inside-work-tree")).toBe("true");
     // No template: no sample hooks, and only Git's own settings in the config.
     expect(fs.existsSync(path.join(project, ".git", "hooks"))).toBe(false);
+    // The repository is made beside the folder's .git and then named .git, leaving nothing else behind.
+    expect(fs.readdirSync(project)).toEqual([".git"]);
     expect(gitIn(project, "config", "--file", path.join(project, ".git", "config"), "--list")).not.toMatch(
       /hookspath|fsmonitor|alias|url\./i,
     );

@@ -250,7 +250,7 @@ const racingGit = (name: string, before: string) => {
 describe("the hub's git init, bound to the folder decided", () => {
   // covers PE-001, PE-005
   it.runIf(sandboxed)(
-    "[TC-PE-329] writes nothing outside the hob's folder through a link a command lays while the call runs, and refuses a folder that moved",
+    "[TC-PE-329] creates the repository in a folder below the hub's own too, writes nothing outside the hob's folder through a link a command lays while the call runs, and refuses a folder that moved",
     async () => {
       const project = newProject();
       const outside = join(away, "outside");
@@ -265,14 +265,26 @@ describe("the hub's git init, bound to the folder decided", () => {
       expect(await sandboxedInit(project, nested, plain)).toMatchObject({ ok: true });
       expect(hubGit("-C", nested, "rev-parse", "--show-toplevel").trim()).toBe(nested);
 
+      // Below the hub's own working folder too, where sandbox-runtime keeps every .git/config read-only.
+      const beneathHub = join(away, "beneath-hub");
+      mkdirSync(beneathHub);
+      expect(beneathHub.startsWith(`${realpathSync(process.cwd())}/`)).toBe(true);
+      expect(await sandboxedInit(beneathHub, beneathHub, plain)).toMatchObject({ ok: true });
+      expect(hubGit("-C", beneathHub, "rev-parse", "--show-toplevel").trim()).toBe(beneathHub);
+      expect(hubGit("-C", beneathHub, "config", "--local", "core.bare").trim()).toBe("false");
+      expect(readdirSync(beneathHub)).toEqual([".git"]);
+      const below = join(beneathHub, "tools");
+      expect(await sandboxedInit(beneathHub, below, plain)).toMatchObject({ ok: true });
+      expect(hubGit("-C", below, "rev-parse", "--show-toplevel").trim()).toBe(below);
+
       // A .git link to outside, laid after every check and just before Git writes, leads nowhere.
       const other = newProject();
       const linked = racingGit("link", `ln -s ${outside} .git`);
       expect(await sandboxedInit(other, other, linked)).toMatchObject({ ok: false });
       expect(readdirSync(outside)).toEqual([]);
-      const below = join(other, "sub");
+      const sub = join(other, "sub");
       rmSync(join(other, ".git"));
-      expect(await sandboxedInit(other, below, linked)).toMatchObject({ ok: false });
+      expect(await sandboxedInit(other, sub, linked)).toMatchObject({ ok: false });
       expect(readdirSync(outside)).toEqual([]);
 
       // A link already there, or a folder swapped for a link to outside, is refused before Git runs.
