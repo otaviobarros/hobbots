@@ -2,7 +2,7 @@ import { expect, test } from "./hub.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #667 in the browser: a step that stops on a finding, with no result, shows as blocked with
-// the finding on the Task card, and the step after it waits. The hub side is checked in
+// the finding on the Task card, and the step after it is held with it. The hub side is checked in
 // apps/server/test/stopped-steps.test.ts.
 
 test.afterEach(stopAldricHub);
@@ -10,7 +10,7 @@ test.afterEach(stopAldricHub);
 const FINDING = "The README and SPEC are already there from an earlier run";
 
 // covers OR-002, OR-004, UX-002
-test("[TC-OR-402] the Task card shows a step that stopped on a finding as blocked, and the step after it waits", async ({
+test("[TC-OR-402] the Task card shows a step that stopped on a finding as blocked, and the step after it held", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -38,10 +38,10 @@ test("[TC-OR-402] the Task card shows a step that stopped on a finding as blocke
     FINDING,
   );
 
-  // Step 2 waits on it, and never ran.
+  // Step 2 is held by it, and never ran.
   await page.getByRole("tab", { name: "Quest" }).click();
   const tasks = page.getByRole("list", { name: "Tasks of Write the docs" });
   const notes = tasks.getByRole("button", { name: /Write the notes/ });
-  await expect(notes).toContainText("Waiting");
+  await expect(notes).toContainText("Blocked");
   await expect(tasks.getByRole("button", { name: /Write the README and SPEC/ })).toContainText("Blocked");
 });
