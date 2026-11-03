@@ -1,18 +1,26 @@
-import { TaskToolCalls } from "@hobbots/agents";
+import { type RefusedTaskToolCall, TaskToolCalls } from "@hobbots/agents";
 import { type CarriedItem, TaskToolDone, TaskToolRefused } from "@hobbots/domain";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
 import { CurrentToolCall, makeDatabaseClock } from "./backpack-rows.ts";
-import { lockJournal } from "./journal.ts";
+import { lockJournal, makeJournaled } from "./journal.ts";
+import { decodeRows, type Row } from "./task-rows.ts";
 
 const encodeDone = Schema.encodeSync(Schema.fromJsonString(TaskToolDone));
 const decodeDone = Schema.decodeUnknownEffect(Schema.fromJsonString(TaskToolDone));
+
+/** How much of a refused call's input is kept: enough to tell what it asked, never a whole file. */
+export const REFUSED_INPUT_LIMIT = 4000;
+
+const cut = (input: string) =>
+  input.length <= REFUSED_INPUT_LIMIT ? input : `${input.slice(0, REFUSED_INPUT_LIMIT - 1)}…`;
 
 /**
  * The SQL ledger of Task tool calls (migration 0025). A call's writes and its stored result commit
  * in one transaction; the journal's head is taken first, so a retry that arrives while the first
  * call is still writing waits for it and then returns its result. The calling turn's backpack
  * claims are checked next, in the same transaction, by one conditional update each (ADR 019).
+ * Refused calls are recorded in `task_tool_refusals` (migration 0039), one row per hob and key.
  */
 export const TaskToolCallsLive = Layer.effect(
   TaskToolCalls,
@@ -48,7 +56,52 @@ export const TaskToolCallsLive = Layer.effect(
         { discard: true },
       );
 
+    const journaled = makeJournaled(sql);
+
+    /**
+     * Records a refusal and journals it, in one transaction. A key refused before is the same row:
+     * its tries count up and it takes the latest refusal, so an audit sees one call tried again.
+     */
+    const refused = (call: RefusedTaskToolCall) =>
+      journaled(1, () =>
+        Effect.gen(function* () {
+          const rows = yield* sql<Row>`INSERT INTO task_tool_refusals ${sql.insert({
+            id: crypto.randomUUID(),
+            agent_id: call.agentId,
+            call_key: call.key,
+            task_id: call.taskId,
+            tool: call.tool,
+            input: cut(call.input),
+            reason: call.refused.reason,
+            message: call.refused.message,
+            tries: 1,
+            created_at: call.at,
+            refused_at: call.at,
+          })}
+            ON CONFLICT (agent_id, call_key) DO UPDATE SET
+              task_id = COALESCE(excluded.task_id, task_tool_refusals.task_id),
+              tool = excluded.tool,
+              input = excluded.input,
+              reason = excluded.reason,
+              message = excluded.message,
+              tries = task_tool_refusals.tries + 1,
+              refused_at = excluded.refused_at
+            RETURNING *`;
+          const [refusal] = yield* decodeRows("refusal")(rows);
+          if (refusal === undefined) return null;
+          return { value: refusal, events: [{ _tag: "ToolCallRefused" as const, refusal }] };
+        }),
+      ).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.die(new Error("A refused Task tool call was not recorded")),
+            onSome: Effect.succeed,
+          }),
+        ),
+      );
+
     return TaskToolCalls.of({
+      refused,
       once: (call, run) =>
         Effect.gen(function* () {
           yield* lockJournal(sql);

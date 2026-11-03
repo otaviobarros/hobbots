@@ -13,8 +13,11 @@ import ignore, { type Ignore } from "ignore";
  * config names. Links are recorded as links and never followed.
  */
 
-/** Folders no scan enters: Git's own data and installed packages. */
-const SKIPPED = new Set([".git", "node_modules"]);
+/** Folders no scan enters: Git's own data, installed packages and well-known build caches. */
+const SKIPPED = new Set([".git", "node_modules", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"]);
+
+/** Files no scan lists: what the system writes beside a person's files. */
+const SKIPPED_FILES = new Set([".DS_Store"]);
 
 /**
  * How long a file must have been left alone before a scan starts for its hash to be reused. File
@@ -243,7 +246,7 @@ const walkFolder = async (walk: Walk, top: ReadonlyArray<Rules>) => {
         if (!SKIPPED.has(entry.name) && !ignoredBy(rules, `${path}/`)) pending.push({ base: `${path}/`, rules });
         continue;
       }
-      if (ignoredBy(rules, path)) continue;
+      if (SKIPPED_FILES.has(entry.name) || ignoredBy(rules, path)) continue;
       await visit(walk, path, join(walk.folder, ...path.split("/")));
       if (Date.now() > walk.deadline) throw new Stopped("too-slow");
     }

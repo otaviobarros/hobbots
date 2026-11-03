@@ -99,6 +99,11 @@ export const messages = {
     noteRefused: ({ name }: { name: string }) => `This work has ended. Tell ${name} in the chat instead.`,
     notes: "Your notes",
     noteTo: ({ name, time }: { name: string; time: string }) => `To ${name} · ${time}`,
+    asksYou: ({ name }: { name: string }) => `${name} asks you. Your answer goes straight back to ${name}.`,
+    waitingOn: ({ name }: { name: string }) => `Waiting for ${name} to answer.`,
+    noteNotAnswer: ({ name }: { name: string }) => `Note to ${name}, not an answer`,
+    noteNotAnswerHint: ({ lead, asker }: { lead: string; asker: string }) =>
+      `This goes to ${lead} as a note. To answer ${asker}, use the answer box above.`,
   },
   checkpoint: {
     milestone: "Milestone",

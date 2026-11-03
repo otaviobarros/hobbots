@@ -368,6 +368,8 @@ export const messages = {
     running: ({ label }: { label: string }) => `${label}…`,
     awaiting: "Waiting for your approval.",
     failed: "The tool reported an error.",
+    /** A Hobbots tool call the hub refused, such as answering a question the user owns (#575). */
+    refused: ({ why }: { why: string }) => `Hobbots refused this: ${why}`,
     unfinished: "The reply ended before this step finished.",
     uncertain:
       "Cut off while it ran, so it may or may not have taken effect. Hobbots won't run it again. Check it before you continue.",

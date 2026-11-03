@@ -25,7 +25,7 @@ import {
 import type { ChatGptTokens } from "./auth.ts";
 import { type CodexTurnEvents, codexTurnEvents, type TurnEnd } from "./events.ts";
 import { callHubTool, dynamicToolsOf } from "./hub-tools.ts";
-import { codexPath } from "./locate.ts";
+import { codexCaBundle, codexPath } from "./locate.ts";
 import { POLICY_REQUESTS, type PolicyRequest, policyGate } from "./policy.ts";
 import { TURN_SERVER_REQUESTS, type TurnServerRequest, type TurnStartResponse } from "./protocol.ts";
 
@@ -247,6 +247,12 @@ const codexPackage = (binary: string): ReadonlyArray<string> => {
   return basename(dirname(root)) === "@openai" ? [dirname(root)] : [root];
 };
 
+/** The CA bundle Codex is given, which must stay readable in the sandbox. */
+const caFiles = (): ReadonlyArray<string> => {
+  const bundle = codexCaBundle();
+  return bundle ? [bundle] : [];
+};
+
 /** The settings every turn applies (ADR 024): ask about every call, Hobbots' sandbox around Codex's. */
 const THREAD_SETTINGS = { approvalPolicy: "untrusted", sandbox: "danger-full-access" } as const;
 const TURN_SETTINGS = {
@@ -399,7 +405,7 @@ const prepareSandbox = (
   Effect.gen(function* () {
     // The sandbox opens the binary's folder and its real location's, so it must be a path that exists.
     const { files, reads } = yield* Effect.try({
-      try: () => ({ files: codexPackage(binary), reads: codexReads(runtimeFolder) }),
+      try: () => ({ files: [...codexPackage(binary), ...caFiles()], reads: codexReads(runtimeFolder) }),
       catch: () => new RuntimeError({ message: `Could not find ${binary}, so the sandbox cannot start it.` }),
     });
     const signingAgent = turnSigningAgent(tools);
@@ -443,9 +449,13 @@ export const sandboxedCommand = (
   return {
     command: wrapped.command,
     args: wrapped.args,
-    // Codex's home is not a variable the sandbox passes on by itself. What the wrap adds for Claude
-    // Code stays out, and with it any Claude credential it brings back.
-    env: { ...withoutClaude(wrapped.env), CODEX_HOME: command.env.CODEX_HOME as string },
+    // Codex's home and CA bundle are not variables the sandbox passes on by itself. What the wrap adds
+    // for Claude Code stays out, and with it any Claude credential it brings back.
+    env: {
+      ...withoutClaude(wrapped.env),
+      CODEX_HOME: command.env.CODEX_HOME as string,
+      ...(command.env.CODEX_CA_CERTIFICATE ? { CODEX_CA_CERTIFICATE: command.env.CODEX_CA_CERTIFICATE } : {}),
+    },
     cwd: command.cwd,
   };
 };
@@ -520,6 +530,12 @@ const governedTurn = (config: CodexTurnConfig, request: PromptRequest) => {
   return { policy, tools, sandbox: policy.sandbox.state === "on" ? policy.sandbox : null };
 };
 
+/** Codex's CA bundle, which wins over `SSL_CERT_FILE` and adds to the roots Codex loads itself. */
+const caVariable = (): Record<string, string> => {
+  const bundle = codexCaBundle();
+  return bundle ? { CODEX_CA_CERTIFICATE: bundle } : {};
+};
+
 /** Starts `codex app-server` in `cwd` with its own home and only named variables (ADR 014). */
 const appServerCommand = (config: CodexTurnConfig, binary: string, home: string, cwd: string): AppServerCommand => ({
   command: binary,
@@ -529,6 +545,7 @@ const appServerCommand = (config: CodexTurnConfig, binary: string, home: string,
     ...withoutClaude(sandboxEnv(process.env)),
     PATH: codexPath(binary, process.env, homedir()),
     CODEX_HOME: home,
+    ...caVariable(),
   },
   cwd,
 });

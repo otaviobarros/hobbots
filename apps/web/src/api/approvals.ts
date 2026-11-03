@@ -3,6 +3,7 @@ import {
   ApprovalId,
   type ApprovalLifetime,
   type ApprovalRequest,
+  type ApprovalSurface,
   type GrantRule,
   type ThreadId,
 } from "@hobbots/domain";
@@ -49,9 +50,10 @@ export interface Decision {
 /**
  * Decides one request as the user saw it: the action digest shown goes with the decision, so it
  * never applies to another action. A refused decision refetches the thread's requests, since the
- * request was most likely decided elsewhere or has expired; the Inbox is refetched too.
+ * request was most likely decided elsewhere or has expired; the Inbox is refetched too. `via` names
+ * where it was decided, the chat card or the Inbox, which the hub records with the device (#598).
  */
-export const useDecideApproval = (approval: ApprovalRequest) => {
+export const useDecideApproval = (approval: ApprovalRequest, via: ApprovalSurface) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ decision, reason, confirmed, lifetime, rules }: Decision) =>
@@ -65,6 +67,7 @@ export const useDecideApproval = (approval: ApprovalRequest) => {
             ...(confirmed === true && { confirmed }),
             ...(lifetime !== undefined && { lifetime }),
             ...(rules !== undefined && { rules }),
+            via,
           },
         }),
       ),

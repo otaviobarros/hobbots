@@ -24,6 +24,7 @@ import type {
   Question,
   QuestionId,
   QuestLimits,
+  RefusedCall,
   ResponsibilityLedger,
   RuntimeKind,
   StaleTask,
@@ -158,6 +159,11 @@ export interface NewWait {
   readonly on: ReadonlyArray<TaskId>;
   readonly mode: WaitMode;
   readonly at: string;
+  /**
+   * Leaves an active Task active, because the turn that records the wait still runs. The turn's end
+   * shows it waiting.
+   */
+  readonly keepActive?: boolean;
 }
 
 type Changed<A, E = TaskRefused> = Effect.Effect<Committed<A>, E>;
@@ -256,7 +262,7 @@ export class TaskRepository extends Context.Service<
     readonly handOff: (artifactId: ArtifactId, toTaskId: TaskId, at: string) => Changed<HandOff>;
     /**
      * Records that the Task's owner waits for Tasks under it, replacing any earlier wait, and shows
-     * the Task as waiting.
+     * the Task as waiting, unless `keepActive` keeps it active while its turn runs.
      */
     readonly waitFor: (
       taskId: TaskId,
@@ -320,11 +326,31 @@ export interface TaskToolOutcome {
   readonly entries: ReadonlyArray<EventEnvelope>;
 }
 
+/** A Task tool call the hub refused, to record (#575). */
+export interface RefusedTaskToolCall {
+  readonly agentId: AgentId;
+  /** The key the call came with; null when it came with none the hub could read. */
+  readonly key: string | null;
+  /** The tool's name as the call gave it, which may name no tool. */
+  readonly tool: string;
+  /** The call's input as stable JSON. */
+  readonly input: string;
+  /** The Task the calling turn worked on, when the hub knew it. */
+  readonly taskId: TaskId | null;
+  readonly refused: TaskToolRefused;
+  readonly at: string;
+}
+
 /**
  * Makes each Task tool call happen once per hob and key (ADR 018). The call's writes and its
  * result are stored in one transaction, so a retried call returns the first result and never
- * writes again; a refused call stores nothing and can be retried. A call from a turn whose
- * backpack claim no longer holds is refused in that same transaction, as `claim-stale` (ADR 019).
+ * writes again; a refused call writes nothing, its key stays free, and a retry is decided again.
+ * A call from a turn whose backpack claim no longer holds is refused in that same transaction, as
+ * `claim-stale` (ADR 019).
+ *
+ * Every refusal is recorded apart from the calls that were done, with its code and message, and
+ * journaled, so the user and an audit can see it (#575). A call retried with its key and refused
+ * again is the same record, with one more try.
  */
 export class TaskToolCalls extends Context.Service<
   TaskToolCalls,
@@ -333,5 +359,7 @@ export class TaskToolCalls extends Context.Service<
       call: TaskToolCall,
       run: Effect.Effect<TaskToolOutcome, E>,
     ) => Effect.Effect<TaskToolOutcome, E | TaskToolRefused>;
+    /** Records a refused call, and journals it. */
+    readonly refused: (call: RefusedTaskToolCall) => Effect.Effect<Committed<RefusedCall>>;
   }
 >()("@hobbots/agents/TaskToolCalls") {}

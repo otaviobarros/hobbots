@@ -4,6 +4,7 @@ import {
   ApprovalId,
   ApprovalLifetime,
   ApprovalRequest,
+  ApprovalSurface,
   Grant,
   GrantId,
   GrantRule,
@@ -31,6 +32,9 @@ import { DeviceSession } from "./user-session.ts";
  *
  * `lifetime` is `once` when absent. This Quest and Always save the request's `rules`, or the
  * narrower `rules` given here, as grants (ADR 015); a rule broader than the request's own is refused.
+ *
+ * `via` says where the user decided it, the chat card or the Inbox. The hub records it with the
+ * approved device the decision came from (#598).
  */
 export const DecideApprovalPayload = Schema.Struct({
   decision: ApprovalDecision,
@@ -39,6 +43,7 @@ export const DecideApprovalPayload = Schema.Struct({
   confirmed: Schema.optionalKey(Schema.Boolean),
   lifetime: Schema.optionalKey(ApprovalLifetime),
   rules: Schema.optionalKey(Schema.Array(GrantRule).check(Schema.isMinLength(1), Schema.isMaxLength(64))),
+  via: Schema.optionalKey(ApprovalSurface),
 });
 export type DecideApprovalPayload = typeof DecideApprovalPayload.Type;
 

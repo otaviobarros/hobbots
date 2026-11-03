@@ -15,6 +15,7 @@ import {
   Milestone,
   Quest,
   Question,
+  RefusedCall,
   TaskNote,
   TaskWait,
 } from "./quest.ts";
@@ -118,6 +119,8 @@ const FileChangesRecorded = Schema.TaggedStruct("FileChangesRecorded", {
   changes: Schema.Array(FileChange),
   removed: Schema.Array(FileChangeId),
 });
+/** The hub refused a Task tool call, or refused a retried one again (ADR 018). */
+const ToolCallRefused = Schema.TaggedStruct("ToolCallRefused", { refusal: RefusedCall });
 /** One of the hob's folders was scanned at the start or end of a turn, or stopped being tracked. */
 const FolderScanned = Schema.TaggedStruct("FolderScanned", { scan: FolderScan });
 /**
@@ -195,6 +198,7 @@ export const JournaledEvent = Schema.Union([
   CommandRecorded,
   FileChangesRecorded,
   FolderScanned,
+  ToolCallRefused,
 ]);
 export type JournaledEvent = typeof JournaledEvent.Type;
 
@@ -249,6 +253,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   CommandRecorded: 1,
   FileChangesRecorded: 1,
   FolderScanned: 1,
+  ToolCallRefused: 1,
 };
 
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */
