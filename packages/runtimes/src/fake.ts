@@ -9,6 +9,7 @@ import {
   UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
+  type PlanUsage,
   type ReplyUsage,
   RUNTIME_NAMES,
   type RuntimeAvailability,
@@ -464,6 +465,31 @@ const fakeEnding = (prompt: string) =>
       ? "limit"
       : "complete";
 
+/**
+ * The fake Claude Code plan, the same on every read so tests can assert it: a session window 38% used
+ * that refills in two hours, and a weekly one 12% used that refills in three days.
+ */
+const fakePlanUsage: Effect.Effect<PlanUsage> = Effect.gen(function* () {
+  const now = yield* Clock.currentTimeMillis;
+  const at = (hours: number) => new Date(now + hours * 3_600_000).toISOString();
+  const meter = (kind: string, group: string, percent: number, hours: number, active: boolean) => ({
+    kind,
+    group,
+    percent,
+    resetsAt: at(hours),
+    scope: null,
+    severity: "normal",
+    active,
+  });
+  return {
+    runtime: "claude-code",
+    reported: true,
+    meters: [meter("session", "session", 38, 2, true), meter("weekly_all", "weekly", 12, 72, false)],
+    extraUsage: null,
+    checkedAt: new Date(now).toISOString(),
+  };
+});
+
 /** The failure that ends a reply cut off or limited, as a provider would end it. */
 /**
  * What a fake turn took and used, the same for every turn so tests can assert it: a session's first
@@ -580,6 +606,8 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     ),
     models: Effect.succeed(runtime === "claude-code" ? fakeModels : fakeCodexModels),
     enforcement: Effect.succeed(enforcement),
+    // Fake Claude Code reports a plan with fixed meters; fake Codex reports none, as an API key would.
+    ...(runtime === "claude-code" ? { planUsage: fakePlanUsage } : {}),
     sendPrompt,
   });
 };

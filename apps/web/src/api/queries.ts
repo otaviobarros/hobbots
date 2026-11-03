@@ -15,8 +15,10 @@ import type {
   RuntimeKind,
   Thread,
   ThreadId,
+  UsagePeriod,
 } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import { periodStart } from "../lib/usage.ts";
 import { ApiError, call } from "./client.ts";
 import { runtimeRefetchOnFocus } from "./runtime-health.ts";
 import { newer, syncedAgents, syncedMessages, syncedThreads } from "./sync.ts";
@@ -30,6 +32,7 @@ export const queryKeys = {
   runtimes: ["runtimes"] as const,
   models: (runtime: RuntimeKind) => ["runtimes", runtime, "models"] as const,
   permissions: (agentId: AgentId) => ["agents", agentId, "permissions"] as const,
+  usage: (days: UsagePeriod, today: string) => ["usage", days, today] as const,
 };
 
 /**
@@ -99,6 +102,19 @@ export const runtimesQuery = queryOptions({
   staleTime: 60_000,
   refetchOnWindowFocus: (query) => runtimeRefetchOnFocus(query.state.data),
 });
+
+/**
+ * What each hob's replies used over the reader's last 7 or 30 days, from the start of their own first
+ * day, and each runtime's plan (OP-002). Asking a runtime for its plan starts it, so the report is
+ * read again at most every half minute. `today` keys the report to the reader's day.
+ */
+export const usageQuery = (days: UsagePeriod, today: string) =>
+  queryOptions({
+    queryKey: queryKeys.usage(days, today),
+    queryFn: () =>
+      call((c) => c.usage.usage({ query: { days, since: periodStart(new Date(), Number(days)).toISOString() } })),
+    staleTime: 30_000,
+  });
 
 /** The models a runtime offers a hob's brain. */
 export const modelsQuery = (runtime: RuntimeKind) =>

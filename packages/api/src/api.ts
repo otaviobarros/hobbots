@@ -44,6 +44,7 @@ import { RemoteAccessGroup } from "./remote-access.ts";
 import { SearchGroup } from "./search.ts";
 import { SetupGroup } from "./setup.ts";
 import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
+import { UsageGroup } from "./usage.ts";
 import { DeviceSession } from "./user-session.ts";
 import { WorkbenchGroup } from "./workbench.ts";
 
@@ -341,4 +342,5 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(GitHubGroup)
   .add(HobGitHubAppGroup)
   .add(RemoteAccessGroup)
-  .add(WorkbenchGroup) {}
+  .add(WorkbenchGroup)
+  .add(UsageGroup) {}

@@ -34,6 +34,7 @@ import { RemoteAccessHandlers } from "./remote-access.ts";
 import { SearchHandlers } from "./search.ts";
 import { SetupHandlers } from "./setup.ts";
 import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
+import { UsageHandlers } from "./usage.ts";
 import { DeviceSessionLive } from "./user-session.ts";
 import { WorkbenchHandlers } from "./workbench.ts";
 
@@ -216,6 +217,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     HobGitHubAppHandlers,
     WorkbenchHandlers,
     RemoteAccessHandlers,
+    UsageHandlers,
   ]),
   Layer.provide(DeviceSessionLive),
 );

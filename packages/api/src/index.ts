@@ -11,5 +11,6 @@ export * from "./remote-access.ts";
 export * from "./search.ts";
 export * from "./setup.ts";
 export * from "./tasks.ts";
+export * from "./usage.ts";
 export * from "./user-session.ts";
 export * from "./workbench.ts";
