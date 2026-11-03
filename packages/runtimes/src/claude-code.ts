@@ -15,6 +15,7 @@ import {
   query,
   type SDKMessage,
   type SDKRateLimitInfo,
+  type SDKResultSuccess,
   type SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
 import {
@@ -35,6 +36,7 @@ import {
 import {
   type CommitIdentity,
   policySandbox,
+  type ReplyUsage,
   type RuntimeEnforcement,
   RuntimeHealth,
   RuntimeModel,
@@ -519,6 +521,21 @@ const limitReached = (info: SDKRateLimitInfo) =>
   info.status === "rejected" && info.overageStatus !== "allowed" && info.overageStatus !== "allowed_warning";
 
 /**
+ * What a turn took and used, from its result (https://code.claude.com/docs/en/agent-sdk/typescript).
+ * `usage` is this turn's main loop alone. `modelUsage` is left out: it adds subagents but runs on
+ * across a resumed session's turns. A timing an older Claude Code does not report is null.
+ */
+export const turnUsage = (result: SDKResultSuccess): ReplyUsage => ({
+  timeToRequestMs: result.time_to_request_ms ?? null,
+  timeToFirstStreamMs: result.ttft_stream_ms ?? null,
+  timeToFirstTokenMs: result.ttft_ms ?? null,
+  inputTokens: result.usage.input_tokens,
+  outputTokens: result.usage.output_tokens,
+  cacheReadTokens: result.usage.cache_read_input_tokens,
+  cacheWriteTokens: result.usage.cache_creation_input_tokens,
+});
+
+/**
  * Maps one turn's SDK messages to runtime events. Stateful, so make one per turn: a thinking block
  * becomes a step that starts with the block and ends when it stops.
  */
@@ -593,6 +610,7 @@ export const turnEvents = () => {
             _tag: "Completed",
             sessionId: message.session_id,
             text: message.result,
+            usage: turnUsage(message),
           },
         ];
       default:
