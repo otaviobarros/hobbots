@@ -200,6 +200,7 @@ const pushIn = (folder: string, repository: GitHubRepository, turn: Turn, input:
       agentId: AgentId.make("hob"),
       threadId: ThreadId.make("t1"),
       messageId: MessageId.make("m1"),
+      scope: () => "reply:m1",
       currentAccess: Effect.succeed(turn.access),
       redactor: makeRedactor(),
       approvals: userApprovals(turn.access, turn.asked ?? [], turn.answer, turn.whileAsking),
@@ -467,6 +468,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
           agentId: AgentId.make("hob"),
           threadId: ThreadId.make("t1"),
           messageId: MessageId.make("m1"),
+          scope: () => "reply:m1",
           currentAccess: Effect.succeed(access),
           redactor: makeRedactor(),
           approvals: userApprovals(access, []),
@@ -586,6 +588,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
     const row = (key: string, overrides: Partial<CharmCall>) =>
       new CharmCall({
         agentId: AgentId.make("hob"),
+        scope: "",
         key,
         attempt: `${key}-1`,
         tool: "github_push",
@@ -602,8 +605,8 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
         ...overrides,
       });
     const rows = new Map<string, CharmCall>([
-      ["hob found", row("found", {})],
-      ["hob missing", row("missing", { plan: JSON.stringify({ ...plan, commit: "f".repeat(40) }) })],
+      ["hob  found", row("found", {})],
+      ["hob  missing", row("missing", { plan: JSON.stringify({ ...plan, commit: "f".repeat(40) }) })],
     ]);
     // The read-back runs in the background as the Charm starts.
     await Effect.gen(function* () {

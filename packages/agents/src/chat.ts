@@ -44,10 +44,17 @@ import { type CarriedEnd, type CarriedWork, Continuations } from "./continuation
 import { checkRuntimeBrain } from "./hobs.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
-import { type RuntimeEvent, runtimeAdapters, type ToolAccess, type ToolStartedEvent } from "./runtime.ts";
+import {
+  type HubTools,
+  type RuntimeEvent,
+  runtimeAdapters,
+  type ToolAccess,
+  type ToolStartedEvent,
+} from "./runtime.ts";
 import { makeRedactor, redactEvent, SecretRedaction } from "./secrets.ts";
 import { nextSteps, replyStepId, uncertainCalls } from "./steps.ts";
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
+import { callScope } from "./tasks.ts";
 import { keepToolOutput } from "./tool-output.ts";
 import { accessNow, HobTools, narrows } from "./tools.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
@@ -620,18 +627,22 @@ export class ChatService extends Context.Service<
                 redaction: redactor,
                 recordToolStart,
                 hubTools: yield* Effect.gen(function* () {
+                  const messageId = (yield* Ref.get(reply.current)).id;
                   const charmTurn: CharmTurn = {
                     agentId: agent.id,
                     threadId: thread.id,
-                    messageId: (yield* Ref.get(reply.current)).id,
+                    messageId,
+                    scope: taskTurn?.scope ?? (() => callScope.reply(messageId)),
+                    also: callScope.reply(messageId),
                     currentAccess: currentAccess(agent.id),
                     redactor,
                     approvals: turnApprovals?.approvals ?? null,
                   };
+                  // A Charm call's refusal is recorded as a Task tool's is, when the turn has Task tools.
+                  const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);
                   return combineHubTools(
                     taskTurn?.hubTools ?? null,
-                    yield* localGitFor(charmTurn),
-                    yield* charmsFor(charmTurn),
+                    recorded(combineHubTools(yield* localGitFor(charmTurn), yield* charmsFor(charmTurn))),
                   );
                 }),
               },

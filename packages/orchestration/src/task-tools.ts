@@ -1,6 +1,7 @@
 import {
   type ChatTaskTurn,
   type ChatTurn,
+  callScope,
   EventPublisher,
   FolderChecks,
   HobbotsRepository,
@@ -42,6 +43,7 @@ import {
   type TaskToolCaller,
   type TaskToolLimits,
 } from "./call-scope.ts";
+import { makeCharmRecords } from "./charm-records.ts";
 import { makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeDelegating } from "./delegating.ts";
 import { makeLeading } from "./leading.ts";
@@ -59,10 +61,13 @@ const COULD_NOT_RECORD = "Hobbots could not record this call, so it did not happ
 
 /**
  * Who a call comes from: a turn on a known Task, or a chat turn whose Task is found, or started,
- * inside the call's own transaction. `turn` tells a retried key from another turn's.
+ * inside the call's own transaction. `scope` tells a retried key from another work's.
  */
 interface CallSource {
-  readonly turn: Record<string, string>;
+  /** The work the call's key belongs to now (#660), from `callScope`: a call can start the turn's Task. */
+  readonly scope: () => string;
+  /** Another scope a retry of the key is found in: a chat turn's reply. */
+  readonly also?: string;
   /** The backpack claims the turn holds, which fence each of its calls (ADR 019). */
   readonly fence: ReadonlyArray<CarriedItem>;
   /**
@@ -175,13 +180,28 @@ export class TaskTools extends Context.Service<
             if (name === "complete_task") yield* settle(rest);
             const at = DateTime.formatIso(yield* DateTime.now);
             const outcome = yield* ledger.once(
-              { agentId, key, tool: name, input: stableJson({ ...rest, ...source.turn }), at, fence: source.fence },
+              {
+                agentId,
+                scope: source.scope(),
+                ...(source.also === undefined ? {} : { also: source.also }),
+                key,
+                tool: name,
+                input: stableJson(rest),
+                at,
+                fence: source.fence,
+              },
               Effect.gen(function* () {
                 const resolved = yield* source.resolve(name, at);
                 seen.resolved = resolved;
                 const scope = yield* scopeOf(withShown(resolved.caller, source.shown), at);
                 const made = yield* handlers[name](scope, rest as never);
-                return { ...made, entries: [...resolved.entries, ...made.entries] };
+                // A call that starts the turn's Task takes the turn's calls into that Task's work.
+                const started = resolved.entries.some((entry) => entry.type === "TaskCreated");
+                return {
+                  ...made,
+                  entries: [...resolved.entries, ...made.entries],
+                  ...(started ? { scope: callScope.task(resolved.caller.taskId) } : {}),
+                };
               }),
             );
             if (seen.resolved !== null) committed(seen.resolved);
@@ -189,7 +209,7 @@ export class TaskTools extends Context.Service<
             // Committed already: a client that misses the announcement replays it from the journal.
             if (outcome.entries.length > 0) yield* announce(outcome.entries);
             return outcome.done;
-          }).pipe(refusals.recorded({ agentId, tool: name, raw, taskOf }));
+          }).pipe(refusals.recorded({ agentId, scope: source.scope, tool: name, raw, taskOf }));
         };
 
         const announce = (entries: ReadonlyArray<EventEnvelope>) =>
@@ -202,12 +222,13 @@ export class TaskTools extends Context.Service<
         // Without the hub's redactor, secret shapes are still redacted.
         const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
         const refusals = makeRefusals(ledger, announce, redactor);
+        const charmRecords = makeCharmRecords(tasks, refusals, announce);
 
         const call = (caller: TaskToolCaller, name: string, raw: unknown, shown = new Map<string, CarriedItem>()) =>
           callFrom(
             caller.agentId,
             {
-              turn: { turn_task: caller.taskId },
+              scope: () => callScope.task(caller.taskId),
               fence: caller.carried ?? [],
               taskId: () => caller.taskId,
               resolve: () => Effect.succeed({ caller, entries: [], attemptId: null }),
@@ -250,7 +271,13 @@ export class TaskTools extends Context.Service<
           const shown = new Map<string, CarriedItem>();
           const refused = (name: string, input: unknown) =>
             notOffered(name).pipe(
-              refusals.recorded({ agentId: caller.agentId, tool: name, raw: input, taskOf: () => caller.taskId }),
+              refusals.recorded({
+                agentId: caller.agentId,
+                scope: () => callScope.task(caller.taskId),
+                tool: name,
+                raw: input,
+                taskOf: () => caller.taskId,
+              }),
             );
           return {
             tools: offered(only),
@@ -270,16 +297,16 @@ export class TaskTools extends Context.Service<
             // The Attempt this turn started on its Task, known once the call that started it commits.
             let attemptId: AttemptId | null = null;
             // The committed Task the turn works on: the one it was briefed on, then one a call of its committed.
-            let known: TaskId | null = null;
+            const briefing = yield* chat.briefing;
+            let known: TaskId | null = yield* chat.workingOn;
             const source: CallSource = {
-              turn: { turn_reply: turn.messageId },
+              scope: () => (known === null ? callScope.reply(turn.messageId) : callScope.task(known)),
+              also: callScope.reply(turn.messageId),
               fence: turn.holding ?? [],
               taskId: () => known,
               resolve: (name, at) => chat.resolve(name, at, attemptId),
               shown: new Map(),
             };
-            const briefing = yield* chat.briefing;
-            known = yield* chat.workingOn;
             // A turn briefed on its Task works on it as an Attempt of its own from the start.
             const begun = yield* chat.begin(DateTime.formatIso(yield* DateTime.now));
             // The Task the turn's Attempt is on, which it ends on whatever Task a later call names.
@@ -338,6 +365,8 @@ export class TaskTools extends Context.Service<
               briefing,
               end,
               workingOn: chat.workingOn,
+              scope: source.scope,
+              recordCharms: charmRecords({ agentId: turn.agentId, scope: source.scope, taskOf: () => known }),
               attempt: Effect.sync(() => attemptId),
               workIn: Effect.suspend(() =>
                 known === null

@@ -587,7 +587,7 @@ describe("a Task's steps in fresh sessions", () => {
   });
 
   // covers OR-001, EX-005
-  it("[TC-OR-036] a key from an earlier request is refused in a later one, never replayed", async () => {
+  it("[TC-OR-036] a key from an earlier request is a new call in a later one, never replayed or refused (#660)", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     const plan = hub("plan_steps", { key: "plan", steps: [{ brief: "Draft" }] });
@@ -596,9 +596,10 @@ describe("a Task's steps in fresh sessions", () => {
     await run(treeWhen(thread.id, (tree) => states(tree)[0] === "completed"));
     await run(send(thread.id, hub("complete_task", { key: "done", summary: "First done" })));
     const again = await run(send(thread.id, `Second request\n${plan}`));
-    expect(again.content).toContain("Refused (key-reused)");
+    expect(again.content).not.toContain("Refused");
     const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(thread.id)));
-    expect(trees.map((tree) => tree.tasks[0]?.state)).toEqual(["completed"]);
+    expect(trees.map((tree) => tree.tasks[0]?.brief.split("\n")[0])).toEqual(["First request", "Second request"]);
+    expect(trees.flatMap((tree) => tree.refusals)).toEqual([]);
   });
 
   // covers PE-008

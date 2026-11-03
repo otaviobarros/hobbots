@@ -9,7 +9,7 @@ import {
 } from "@hobbots/domain";
 import { PolicyEngine, type PolicyRequest } from "@hobbots/permissions";
 import { Context, Data, Effect, Option, Redacted, Result } from "effect";
-import type { CharmCallRunner, ReadBack, WriteOutcome } from "./charm-calls.ts";
+import { type CharmCallRunner, type ReadBack, scopesOf, type WriteOutcome } from "./charm-calls.ts";
 import { GitPush, type PushTransport, type StagedBranch } from "./git-push.ts";
 import { GitHubCredential, type GitHubTokenScope, refusedTwice } from "./github-account.ts";
 import { githubActor } from "./github-actor.ts";
@@ -229,7 +229,7 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
         yield* checkBranch(input.branch);
         yield* checkBranch(remoteBranch);
         // A retried call returns its first answer and never asks again.
-        const earlier = yield* runner.earlier(turn.agentId, key, withoutKey);
+        const earlier = yield* runner.earlier(turn.agentId, scopesOf(turn), key, withoutKey);
         if (Option.isSome(earlier)) return earlier.value;
 
         const staged = yield* git
@@ -309,6 +309,8 @@ export const makeGitHubPush = (runner: CharmCallRunner) =>
           const outcome = yield* runner.run(
             {
               agentId: turn.agentId,
+              scope: turn.scope(),
+              also: turn.also,
               tool: "github_push",
               key,
               input: withoutKey,

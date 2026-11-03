@@ -5,7 +5,7 @@ import { Context, DateTime, Effect, Layer, Option } from "effect";
 /** What recording a call found: it is new and may be sent, or a call already holds its key or its site. */
 export type CharmCallStart =
   | { readonly _tag: "Started" }
-  /** The hob used this key before: the call it named then, with its result or state. */
+  /** The hob used this key before in the same work: the call it named then, with its result or state. */
   | { readonly _tag: "Existing"; readonly call: CharmCall }
   /** Another call of the same tool on the same site is still being sent or is uncertain. */
   | { readonly _tag: "Blocked"; readonly call: CharmCall };
@@ -20,15 +20,17 @@ export class CharmCalls extends Context.Service<
   {
     /**
      * Records a call in `sending`, in one transaction with the checks: a call already holding the
-     * hob's key is returned instead, unless it was `not-sent` with the same input, which this call
+     * hob's key in the same work, or in `also`, is returned instead, unless it was `not-sent` with the same input, which this call
      * replaces; a call of the same tool on the same site that is still `sending` or `uncertain`
      * blocks it.
      */
-    readonly begin: (call: CharmCall) => Effect.Effect<CharmCallStart>;
+    readonly begin: (call: CharmCall, also?: string) => Effect.Effect<CharmCallStart>;
     /**
      * Moves `call`'s sending, if it is not yet settled, to `state`, with what the hob is told, in one
      * atomic step. None when it is not found, has settled already, or the key was sent again since,
-     * so a late or racing outcome never overwrites a settled one or lands on a later sending.
+     * so a late or racing outcome never overwrites a settled one or lands on a later sending. The
+     * sending is found by its attempt, so it settles even after its reply's calls moved to the Task the
+     * reply started (#660).
      */
     readonly settle: (
       call: CharmCall,
@@ -36,7 +38,14 @@ export class CharmCalls extends Context.Service<
       result: string | null,
       at: string,
     ) => Effect.Effect<Option.Option<CharmCall>>;
-    readonly find: (agentId: AgentId, key: string) => Effect.Effect<Option.Option<CharmCall>>;
+    /** The hob's call with `key` in any of `scopes`. */
+    readonly find: (
+      agentId: AgentId,
+      scopes: ReadonlyArray<string>,
+      key: string,
+    ) => Effect.Effect<Option.Option<CharmCall>>;
+    /** `call`'s sending as stored now, by its attempt, in whatever work it moved to. None when the key was sent again since. */
+    readonly current: (call: CharmCall) => Effect.Effect<Option.Option<CharmCall>>;
     /** The call shown as this reply step. */
     readonly findByStep: (
       threadId: ThreadId,
@@ -92,7 +101,7 @@ export class CharmCallService extends Context.Service<
             const settled = yield* calls.settle(call, outcome, SETTLED[outcome], at);
             // Reading GitHub back may have settled it a moment before.
             if (Option.isNone(settled)) {
-              const now = yield* calls.find(call.agentId, call.key);
+              const now = yield* calls.current(call);
               return yield* new CharmCallSettled({
                 stepId,
                 state: Option.isSome(now) ? now.value.state : call.state,

@@ -96,6 +96,7 @@ const callInit = (
       agentId: AgentId.make("hob"),
       threadId: null,
       messageId: null,
+      scope: () => "",
       currentAccess: Effect.succeed(access),
       redactor: makeRedactor(),
       approvals: user && access ? userApprovals(access, user.asked, user.answer) : null,
