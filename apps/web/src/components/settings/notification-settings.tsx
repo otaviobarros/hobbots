@@ -66,7 +66,7 @@ function NotificationRows({ notifications }: { notifications: NonNullable<typeof
           {copy.failed}
         </p>
       )}
-      <p className="m-0 text-[13px] text-label">macOS can also silence Hobbots in System Settings › Notifications.</p>
+      <p className="m-0 text-[13px] text-label">{copy.systemSettings}</p>
     </>
   );
 }
