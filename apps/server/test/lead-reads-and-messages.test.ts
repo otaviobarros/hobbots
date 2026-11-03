@@ -1,6 +1,6 @@
 import { NoteId, TaskId } from "@hobbots/domain";
 import { afterEach, describe, expect, it } from "vitest";
-import { FRODO, hub, NETTLE, ownedBy, PIP, partyHub, QUILL, send, treeWhen } from "./party-hub.ts";
+import { FRODO, hub, messagesWhen, NETTLE, ownedBy, PIP, partyHub, QUILL, ROOK, send, treeWhen } from "./party-hub.ts";
 import { toolsHub } from "./tools-hub.ts";
 
 // Issue #574: Frodo could not see Nettle's Task under Pip's nested Quest, and had no way to tell Pip
@@ -201,5 +201,58 @@ describe("a lead reads its subtree and messages its members", () => {
     // Each message woke its member once.
     expect(requests.filter((each) => each.prompt.includes("Hob frodo sent you a message"))).toHaveLength(1);
     expect(requests.filter((each) => each.prompt.includes("Hob pip sent you a message"))).toHaveLength(1);
+  }, 30_000);
+});
+
+describe("a lead reads its Quest after it ends", () => {
+  // covers OR-002, OR-006
+  it("[TC-OR-472] once the request completes, its lead's chat turn still reads the finished tree, and every changing tool is refused", async () => {
+    const hubbed = partyHub();
+    dispose = hubbed.dispose;
+    const { run, answers, reactions } = hubbed;
+    reactions.push({
+      on: "Its result: Frontend built",
+      lines: [hub("complete_task", { key: "wrap", summary: "The app is built" })],
+    });
+    await run(
+      send([
+        "Build the app",
+        hub("delegate_task", {
+          key: "frontend",
+          hob: "Rook",
+          brief: ["Build the frontend", hub("complete_task", { key: "rook-done", summary: "Frontend built" })].join(
+            "\n",
+          ),
+        }),
+        hub("wait_for", { key: "wait", tasks: ["$frontend.task_id"] }),
+      ]),
+    );
+    const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
+    const rook = ownedBy(done, ROOK);
+    if (rook === undefined) throw new Error("no member Task");
+    await run(messagesWhen(() => true));
+    const before = await run(treeWhen(() => true));
+
+    // You ask Frodo about the finished work; he reads it, and nothing he tries changes it.
+    await run(
+      send([
+        "Why does the Quest say 1 of 1?",
+        hub("read_tasks", { key: "after" }),
+        hub("message_task", { key: "poke", task_id: rook.id, text: "Anything left?" }),
+        hub("complete_task", { key: "again", summary: "Built again" }),
+      ]),
+    );
+    await run(messagesWhen(() => answers.has("again")));
+    const read = answers.get("after") ?? "";
+    expect(read).toContain(String(rook.id));
+    expect(read).toContain('"state":"completed"');
+    expect(read).toContain("Frontend built");
+    expect(read).toContain(`ended as completed, so nothing under it changes now`);
+    expect(answers.get("poke") ?? "").not.toContain("Sent to hob");
+    expect(answers.get("again")).toContain("not working on a Task");
+    const after = await run(treeWhen(() => true));
+    const shape = (tree: typeof after) => tree.tasks.map((task) => [task.id, task.state, task.result?.summary]);
+    expect(shape(after)).toEqual(shape(before));
+    expect(after.notes).toEqual(before.notes);
   }, 30_000);
 });

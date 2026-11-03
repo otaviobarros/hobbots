@@ -86,6 +86,9 @@ export const makeLeading = ({ tasks }: Deps) => ({
   read_tasks: (scope: CallScope, input: Omit<TaskToolInput<"read_tasks">, "key">) =>
     Effect.gen(function* () {
       const root = yield* readRoot(scope, input.task_id);
+      // A request that ended is never reopened; a member's Task under it can be retried.
+      const top = scope.tree.tasks[0];
+      const ended = top !== undefined && isTerminalTask(top.state) ? top : undefined;
       const under = descendantsOf(root, scope.tree.tasks);
       const listed = under.map((task) => describeTask(task, scope.tree, scope.caller.agentId));
       return {
@@ -93,7 +96,11 @@ export const makeLeading = ({ tasks }: Deps) => ({
           message:
             listed.length === 0
               ? `Nothing is under Task ${root.id} yet.`
-              : `${listed.length === 1 ? "1 Task is" : `${listed.length} Tasks are`} under Task ${root.id}, at every depth. This is what the records say now; nothing else is known.`,
+              : `${listed.length === 1 ? "1 Task is" : `${listed.length} Tasks are`} under Task ${root.id}, at every depth. This is what the records say now; nothing else is known.${
+                  ended === undefined
+                    ? ""
+                    : ` Task ${ended.id} ended as ${ended.state}, so nothing under it changes now.`
+                }`,
           details: { tasks: listed },
         },
         entries: [],

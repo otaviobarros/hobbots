@@ -136,7 +136,9 @@ export const TaskToolInputs = {
   read_tasks: Schema.Struct({
     key,
     task_id: Schema.optionalKey(
-      id("A Task you own, or one under it, to read everything under. Leave it out for the Task you are working on."),
+      id(
+        "A Task you own, or one under it, to read everything under. Leave it out for the Task you are working on. Once that request has ended, you read only the last request you led in this conversation, and the Tasks under it.",
+      ),
     ),
   }),
   message_task: Schema.Struct({
