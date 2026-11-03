@@ -611,6 +611,15 @@ export const messages = {
       "Hobbots cannot reach the hub. It may be off, or remote access may be paused. Messages you send wait here.",
     tryNow: "Try now",
   },
+  connectionBanner: {
+    tryNow: "Try now",
+    openTailscale: "Open Tailscale",
+    changeAddress: "Change address",
+    addressLabel: "Hub address",
+    connect: "Connect",
+    connecting: "Checking…",
+    cancel: "Cancel",
+  },
   signing: {
     label: "Sign commits with my 1Password key",
     off: ({ name }: { name: string }) =>

@@ -17,7 +17,14 @@ export type HubChange =
   | { readonly _tag: "Approvals" }
   | { readonly _tag: "Pairing" }
   | { readonly _tag: "Activity" }
-  | ({ readonly _tag: "RemoteAccess" } & RemoteAccessView);
+  | ({
+      readonly _tag: "RemoteAccess";
+      /**
+       * Whether the hub's HTTPS address answers: HTTPS is on, its listener is open and Tailscale
+       * forwards to it. Null from a hub whose event does not say.
+       */
+      readonly servesHttps: boolean | null;
+    } & RemoteAccessView);
 
 /** The part of the hub's remote access the main process uses: its port, and whether it is on and paused. */
 export const RemoteAccessView = Schema.Struct({ port: Schema.Int, enabled: Schema.Boolean, paused: Schema.Boolean });
@@ -27,8 +34,16 @@ export type RemoteAccessView = typeof RemoteAccessView.Type;
 const HubEntry = Schema.Struct({ type: Schema.String });
 const decodeEntry = Schema.decodeUnknownOption(Schema.fromJsonString(HubEntry));
 const decodeReady = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ resumed: Schema.Boolean })));
+/** The part of HTTPS through `tailscale serve` that says whether the HTTPS address answers. */
+const HttpsView = Schema.Struct({
+  enabled: Schema.Boolean,
+  listening: Schema.Boolean,
+  forwarding: Schema.NullOr(Schema.Boolean),
+});
 const decodeRemoteAccess = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Struct({ status: RemoteAccessView })),
+  Schema.fromJsonString(
+    Schema.Struct({ status: Schema.Struct({ ...RemoteAccessView.fields, https: Schema.optionalKey(HttpsView) }) }),
+  ),
 );
 
 /**
@@ -55,7 +70,11 @@ export const frameChange = (frame: Pick<Event, "event" | "data">): HubChange | H
     case STREAM_FRAME.remoteAccess:
       return Option.match(decodeRemoteAccess(frame.data), {
         onNone: () => null,
-        onSome: ({ status }) => ({ _tag: "RemoteAccess", ...status }),
+        onSome: ({ status: { https, ...status } }) => ({
+          _tag: "RemoteAccess",
+          ...status,
+          servesHttps: https === undefined ? null : https.enabled && https.listening && https.forwarding === true,
+        }),
       });
     case "message":
       switch (Option.getOrUndefined(decodeEntry(frame.data))?.type) {

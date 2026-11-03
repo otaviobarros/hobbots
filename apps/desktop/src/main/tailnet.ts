@@ -7,9 +7,9 @@
 import { isIP } from "node:net";
 import { NodeServices } from "@effect/platform-node";
 import { DeviceTokenKeychain, DeviceTokenKeychainLive, DeviceTokenKeychainMemory } from "@hobbots/server/device-token";
-import { Tailscale, TailscaleFakeFile, TailscaleLive } from "@hobbots/server/tailscale";
+import { type TailnetSnapshot, Tailscale, TailscaleFakeFile, TailscaleLive } from "@hobbots/server/tailscale";
 import { Effect, Layer, ManagedRuntime, Option, Redacted } from "effect";
-import type { NodeLookup, TailnetNode } from "./hub-connection.ts";
+import { type HubNodeState, hubNodeState, type NodeLookup, type TailnetNode } from "./hub-connection.ts";
 
 /** Where the device token lives: the keychain item, read and written as plain promises. */
 export interface DeviceTokenStore {
@@ -24,6 +24,10 @@ export interface DeviceTokenStore {
 interface ThisTailnet extends NodeLookup {
   /** This computer's own Tailscale user, or null when Tailscale is not running or signed in. */
   readonly ownLogin: () => Promise<string | null>;
+  /** What `tailscale status` says now: this computer's state and its peers. */
+  readonly snapshot: () => Promise<TailnetSnapshot>;
+  /** Whether Tailscale runs here and the hub's node is online, from a fresh `tailscale status`. */
+  readonly nodeState: (nodeId: string) => Promise<HubNodeState>;
 }
 
 /**
@@ -58,7 +62,10 @@ export const thisComputer = ({ dataDir, env, platform }: TailnetOptions) => {
       : DeviceTokenKeychainLive(platform, env).pipe(Layer.provide(NodeServices.layer));
   const runtime = ManagedRuntime.make(Layer.mergeAll(tailscale, keychain));
 
+  const snapshot = () => runtime.runPromise(Tailscale.use((service) => service.snapshot));
   const tailnet: ThisTailnet = {
+    snapshot,
+    nodeState: async (nodeId) => hubNodeState(await snapshot(), nodeId),
     resolve: (host) =>
       runtime.runPromise(
         Effect.map(

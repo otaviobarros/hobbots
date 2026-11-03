@@ -180,15 +180,22 @@ export const quitWhileWorkingDialog = (working: ReadonlyArray<string> | null) =>
         buttons: ["Quit", "Cancel"],
       };
 
-/** The menu's header on a connected desktop: the hub's state, and the icon that goes with it (ADR 025). */
+/**
+ * What the user can do about a connection state (ADR 025): try again now, open Tailscale on this
+ * computer, type the hub's new address, ask the hub again, or disconnect.
+ */
+export type ConnectionAction = "tryAgain" | "openTailscale" | "changeAddress" | "askAgain" | "disconnect";
+
+/** The menu's header on a connected desktop: the hub's state, the icon that goes with it, and what can be done (ADR 025). */
 export interface ConnectedTrayModel {
   readonly icon: ServerState;
   readonly title: string;
   readonly detail: string;
+  readonly actions: ReadonlyArray<ConnectionAction>;
 }
 
 /** The short name of the hub's computer, from its Tailscale node name, such as `studio` for `studio.example.ts.net`. */
-const shortNodeName = (nodeName: string) => nodeName.split(".")[0] || nodeName;
+export const shortNodeName = (nodeName: string) => nodeName.split(".")[0] || nodeName;
 
 type Copy = { readonly hub: string; readonly address: string };
 type StateModel<S extends ConnectionState["state"]> = (
@@ -196,38 +203,78 @@ type StateModel<S extends ConnectionState["state"]> = (
   copy: Copy,
 ) => ConnectedTrayModel;
 
+const ASK_AGAIN: ReadonlyArray<ConnectionAction> = ["askAgain", "disconnect"];
+const UPDATE: ReadonlyArray<ConnectionAction> = ["tryAgain"];
+
 const CONNECTED_MODELS: { readonly [S in ConnectionState["state"]]: StateModel<S> } = {
-  connected: (_, values) => ({ icon: "running", title: connection.connected(values), detail: values.address }),
-  connecting: (_, values) => ({ icon: "starting", title: connection.connecting(values), detail: values.address }),
+  connected: (_, values) => ({
+    icon: "running",
+    title: connection.connected(values),
+    detail: values.address,
+    actions: [],
+  }),
+  connecting: (_, values) => ({
+    icon: "starting",
+    title: connection.connecting(values),
+    detail: values.address,
+    actions: [],
+  }),
   noToken: (_, values) => ({
     icon: "stopped",
     title: connection.noToken(values),
     detail: connection.noTokenDetail(values),
+    actions: ASK_AGAIN,
   }),
-  otherNode: (_, values) => ({ icon: "error", title: connection.otherNode(values), detail: values.address }),
+  tailscaleOff: () => ({
+    icon: "stopped",
+    title: connection.tailscaleOff,
+    detail: connection.tailscaleOffDetail,
+    actions: ["openTailscale", "tryAgain"],
+  }),
+  hubOffline: (_, values) => ({
+    icon: "stopped",
+    title: connection.hubOffline(values),
+    detail: connection.hubOfflineDetail,
+    actions: ["tryAgain"],
+  }),
+  otherNode: (_, values) => ({
+    icon: "error",
+    title: connection.otherNode(values),
+    detail: connection.otherNodeDetail,
+    actions: ["changeAddress", "disconnect"],
+  }),
   unreachable: (_, values) => ({
     icon: "stopped",
     title: connection.unreachable(values),
     detail: connection.unreachableDetail,
+    actions: ["tryAgain", "changeAddress"],
   }),
-  notHobbots: (_, values) => ({ icon: "error", title: connection.notHobbots(values), detail: values.address }),
+  notHobbots: (_, values) => ({
+    icon: "error",
+    title: connection.notHobbots(values),
+    detail: values.address,
+    actions: ["changeAddress"],
+  }),
   unsupported: (state, values) =>
     state.side === "hubOlder"
       ? {
           icon: "error",
           title: connection.hubOlder({ hub: values.hub, version: state.version }),
           detail: connection.hubOlderDetail(values),
+          actions: UPDATE,
         }
-      : { icon: "error", title: connection.appOlder(values), detail: connection.appOlderDetail },
+      : { icon: "error", title: connection.appOlder(values), detail: connection.appOlderDetail, actions: UPDATE },
   revoked: (_, values) => ({
     icon: "error",
     title: connection.revoked(values),
     detail: connection.askAgainDetail(values),
+    actions: ASK_AGAIN,
   }),
   unknownDevice: (_, values) => ({
     icon: "error",
     title: connection.unknownDevice(values),
     detail: connection.askAgainDetail(values),
+    actions: ASK_AGAIN,
   }),
 };
 

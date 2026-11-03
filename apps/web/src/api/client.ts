@@ -18,7 +18,14 @@ export interface NotificationChoices {
   readonly sound: boolean;
 }
 
-/** What a connected desktop says about the hub it uses (ADR 025): names, address, versions and state, never the token. */
+/** What the user can do about the connection to the hub on a connected desktop (ADR 025). */
+export type ConnectionAction = "tryAgain" | "openTailscale" | "changeAddress" | "askAgain" | "disconnect";
+
+/**
+ * What a connected desktop says about the hub it uses (ADR 025): names, address, versions and state,
+ * never the token. The app writes `title` and `detail` itself, since it knows its own states and this
+ * computer's language, and a hub's pages may be from another version that does not know a newer state.
+ */
 export interface DesktopConnection {
   readonly hubName: string;
   readonly nodeName: string;
@@ -30,7 +37,14 @@ export interface DesktopConnection {
   readonly hubVersion: string | null;
   /** `connected`, or why the hub cannot be used right now. */
   readonly state: string;
+  /** Absent from an app from before the reasons (ADR 025): a page then shows its own generic text. */
+  readonly title?: string;
+  readonly detail?: string;
+  readonly actions?: ReadonlyArray<ConnectionAction>;
 }
+
+/** The answer to a typed address: taken, or why not in the user's words. */
+export type AddressChangeAnswer = { readonly ok: true } | { readonly ok: false; readonly message: string };
 
 declare global {
   interface Window {
@@ -67,14 +81,18 @@ declare global {
        */
       readonly onOpenRequest?: (listener: (requestId: string) => void) => () => void;
       /**
-       * Only on a connected desktop: the hub it uses, and Disconnect, which revokes this computer
-       * on the hub, forgets the hub here and starts the app again at setup's first screen.
-       * `stillListed` when the hub could not be reached, so it still lists this computer. An older
-       * desktop app offers `get` alone (ADR 025): check each call before using it.
+       * Only on a connected desktop (ADR 025): the hub it uses, where the connection stands, and
+       * Disconnect, which revokes this computer on the hub, forgets the hub here and starts the app
+       * again at setup's first screen; `stillListed` when the hub could not be reached, so it still
+       * lists this computer. An older desktop app offers fewer calls: check each before using it.
        */
       readonly connection?: {
         readonly get?: () => Promise<DesktopConnection>;
         readonly disconnect?: () => Promise<{ readonly stillListed: boolean }>;
+        readonly retry?: () => Promise<DesktopConnection>;
+        readonly changeAddress?: (address: string) => Promise<AddressChangeAnswer>;
+        readonly openTailscale?: () => Promise<boolean>;
+        readonly onChange?: (listener: (view: DesktopConnection) => void) => () => void;
       };
     };
   }

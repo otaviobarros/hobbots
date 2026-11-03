@@ -49,6 +49,24 @@ const shared = {
   onOpenRequest,
 };
 
+/** Calls `listener` with each new view of the connection to the hub; answers a function that stops it. */
+const onConnectionChange = (listener: (view: unknown) => void) => {
+  const forward = (_event: unknown, view: unknown) => listener(view);
+  ipcRenderer.on(connectionChannels.changed, forward);
+  return () => void ipcRenderer.removeListener(connectionChannels.changed, forward);
+};
+
+/** The hub a connected desktop uses, what is wrong with the connection and what the user can do (ADR 025). */
+const connection = {
+  get: () => ipcRenderer.invoke(connectionChannels.get),
+  retry: () => ipcRenderer.invoke(connectionChannels.retry),
+  changeAddress: (address: string) => ipcRenderer.invoke(connectionChannels.changeAddress, address),
+  openTailscale: () => ipcRenderer.invoke(connectionChannels.openTailscale),
+  onChange: onConnectionChange,
+  // Disconnect takes nothing from the page.
+  disconnect: () => ipcRenderer.invoke(connectionChannels.disconnect),
+};
+
 // A connected desktop's bridge is narrower (ADR 025): a hob's folders and files are the hub's, so
 // nothing here reaches this computer's files; the pages fall back to typing a path, as in a browser.
 const connected = process.argv.includes(CONNECTED_MODE_ARGUMENT);
@@ -56,14 +74,7 @@ const connected = process.argv.includes(CONNECTED_MODE_ARGUMENT);
 contextBridge.exposeInMainWorld(
   "hobbots",
   connected
-    ? {
-        ...shared,
-        // The hub this computer uses, and Disconnect, which takes nothing from the page.
-        connection: {
-          get: () => ipcRenderer.invoke(connectionChannels.get),
-          disconnect: () => ipcRenderer.invoke(connectionChannels.disconnect),
-        },
-      }
+    ? { ...shared, connection }
     : {
         ...shared,
         // Opens the system folder picker; it takes nothing from the page and answers a path or null.

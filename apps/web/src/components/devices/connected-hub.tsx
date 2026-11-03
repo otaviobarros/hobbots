@@ -1,42 +1,13 @@
 import { Button } from "@hobbots/ui/components/button";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { DesktopConnection } from "../../api/client.ts";
+import { type ConnectionBridge, useDesktopConnection } from "../../api/connected-desktop.ts";
 import { messages } from "../messages.ts";
 
 const copy = messages.remoteAccess.connectedHub;
 
-type ConnectionCalls = NonNullable<NonNullable<Window["hobbots"]>["connection"]>;
-
-/**
- * What a connected desktop's bridge offers for its hub (ADR 025), checked call by call, since a
- * hub's pages may load in an older app: `get` to show the hub, and `disconnect` when this app
- * can disconnect. Undefined on the hub's own window, in a browser, or in an app that cannot say.
- */
-export const connectionCalls = (connection: ConnectionCalls | undefined) => {
-  const get = connection?.get;
-  if (typeof get !== "function") return undefined;
-  const disconnect = connection?.disconnect;
-  return { get, disconnect: typeof disconnect === "function" ? disconnect : undefined };
-};
-
-export const connectionBridge = connectionCalls(globalThis.window?.hobbots?.connection);
-type ConnectionBridge = NonNullable<typeof connectionBridge>;
 type Disconnect = NonNullable<ConnectionBridge["disconnect"]>;
-
-const connectionKey = ["desktop", "connection"] as const;
-
-/**
- * The hub a connected desktop uses, read from the desktop app, never from the hub. Local IPC, so it
- * runs while the hub cannot be reached; undefined outside a connected desktop.
- */
-export const useDesktopConnection = () =>
-  useQuery({
-    queryKey: connectionKey,
-    queryFn: () => (connectionBridge as ConnectionBridge).get(),
-    enabled: connectionBridge !== undefined,
-    networkMode: "always",
-  });
 
 /** Both versions once the hub said its own, or this app's alone before it answered. */
 export const versionsLine = (view: DesktopConnection): string =>

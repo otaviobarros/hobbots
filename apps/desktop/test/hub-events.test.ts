@@ -185,7 +185,16 @@ describe("the event stream model", () => {
     };
     expect(
       frameChange({ event: "remote-access", data: JSON.stringify({ _tag: "RemoteAccessChanged", status }) }),
-    ).toEqual({ _tag: "RemoteAccess", port: 4400, enabled: true, paused: true });
+    ).toEqual({ _tag: "RemoteAccess", port: 4400, enabled: true, paused: true, servesHttps: false });
+    // Whether the HTTPS address answers, for a connected desktop that uses it (ADR 025).
+    const serving = { ...status, https: { ...status.https, enabled: true, listening: true, forwarding: true } };
+    expect(
+      frameChange({ event: "remote-access", data: JSON.stringify({ _tag: "RemoteAccessChanged", status: serving }) }),
+    ).toMatchObject({ servesHttps: true });
+    const { https: _, ...older } = status;
+    expect(
+      frameChange({ event: "remote-access", data: JSON.stringify({ _tag: "RemoteAccessChanged", status: older }) }),
+    ).toMatchObject({ servesHttps: null });
     expect(frameChange({ event: "remote-access", data: "{}" })).toBeNull();
   });
 });
