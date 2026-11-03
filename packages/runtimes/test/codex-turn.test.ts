@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,9 +26,10 @@ import {
   NO_ATTRIBUTION_NOTE,
   runCodexTurn,
   type StartAppServer,
+  sandboxedCommand,
   TOOLS_CLOSED,
 } from "../src/codex/turn.ts";
-import { type ProcessSandboxShape, type SandboxScope, sandboxFilesystem } from "../src/sandbox.ts";
+import { ProcessSandbox, type ProcessSandboxShape, type SandboxScope, sandboxFilesystem } from "../src/sandbox.ts";
 
 const temp = mkdtempSync(join(tmpdir(), "hobbots-codex-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
@@ -711,4 +713,62 @@ describe("reading a Codex turn", () => {
       error: new RuntimeError({ message: LOST_TURN }),
     });
   });
+});
+
+/** The real sandbox: on macOS, or on Linux with HOBBOTS_SANDBOX_TESTS=1 and bubblewrap. */
+const realSandbox = process.platform === "darwin" || process.env.HOBBOTS_SANDBOX_TESTS === "1";
+
+describe.runIf(realSandbox)("Codex's command in the real sandbox", () => {
+  // covers ADR 014, ADR 024, STD-SEC-002
+  it("[TC-RT-071] keeps the turn's temporary folder and no Claude variable in the command that starts Codex", async () => {
+    const root = realpathSync(mkdtempSync(join(temp, "launch-")));
+    const project = join(root, "project");
+    mkdirSync(project);
+    const hubEnv = { CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN };
+    process.env.CLAUDE_CODE_OAUTH_TOKEN = "claude-sign-in";
+    try {
+      await Effect.gen(function* () {
+        const sandbox = yield* ProcessSandbox;
+        const prepared = yield* sandbox.prepare({
+          folders: [project],
+          folderAccess: { read: true, write: true },
+          dataFolder: join(root, "data"),
+          binary: "/bin/sh",
+          runtimeFolder: join(root, "runtimes", "hob-1"),
+          allowedHosts: [],
+        });
+        try {
+          // Codex's command as a turn builds it, with a shell in Codex's place.
+          const launch = sandboxedCommand(
+            {
+              command: "/bin/sh",
+              args: ["-c", 'echo "$TMPDIR"; mktemp; env | cut -d= -f1 | grep "^CLAUDE_" || true'],
+              env: { PATH: "/usr/bin:/bin", CODEX_HOME: join(root, "codex") },
+              cwd: project,
+            },
+            prepared,
+            undefined,
+          );
+          const ran = spawnSync(launch.command, [...launch.args], {
+            cwd: project,
+            env: launch.env,
+            encoding: "utf8",
+          });
+          expect(ran.status, ran.stderr).toBe(0);
+          const [folder, made, ...claude] = ran.stdout.trim().split("\n");
+          // The launcher takes the turn's temporary folder back from sandbox-runtime's, and mktemp works there.
+          expect(folder).not.toBe("/tmp/claude");
+          expect(made?.startsWith(`${folder}/`)).toBe(true);
+          // sandbox-runtime adds its proxy ports inside the wrap; no Claude credential gets in.
+          expect(claude.filter((key) => /TOKEN|SECRET|KEY|AUTH|CREDENTIAL/.test(key))).toEqual([]);
+          expect(ran.stdout).not.toContain("claude-sign-in");
+        } finally {
+          prepared.release();
+        }
+      }).pipe(Effect.provide(ProcessSandbox.layer), Effect.scoped, Effect.runPromise);
+    } finally {
+      if (hubEnv.CLAUDE_CODE_OAUTH_TOKEN === undefined) delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+      else process.env.CLAUDE_CODE_OAUTH_TOKEN = hubEnv.CLAUDE_CODE_OAUTH_TOKEN;
+    }
+  }, 30_000);
 });

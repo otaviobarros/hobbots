@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startAppServer } from "../src/codex/app-server.ts";
 import { LOST_TURN } from "../src/codex/events.ts";
 import { type CodexTurnConfig, codexFolders, runCodexTurn } from "../src/codex/turn.ts";
-import { ProcessSandbox } from "../src/sandbox.ts";
+import { ProcessSandbox, type ProcessSandboxShape } from "../src/sandbox.ts";
 import { approvalsAnswering, approve } from "./codex-fixture.ts";
 
 /**
@@ -399,6 +399,22 @@ const askingHob = (root: string): ToolAccess => ({
 });
 
 /**
+ * The sandbox, with Codex sent through its proxy to a stand-in on a private address. sandbox-runtime
+ * lets clients reach private ranges directly (NO_PROXY), which the sandbox then refuses on macOS, so
+ * the stand-in, which this machine's private address serves, is reached only through the proxy.
+ * Codex's real model hosts are public, so a hob's turn never needs this.
+ */
+const throughProxy = (sandbox: ProcessSandboxShape): ProcessSandboxShape => ({
+  ...sandbox,
+  prepare: (scope) =>
+    Effect.map(sandbox.prepare(scope), (prepared) => ({
+      ...prepared,
+      spawnArgs: (command, args, env) =>
+        prepared.spawnArgs("/usr/bin/env", ["-u", "NO_PROXY", "-u", "no_proxy", command, ...args], env),
+    })),
+});
+
+/**
  * A turn on an installed Codex inside Hobbots' sandbox, under the hob's policy (ADR 014, ADR 024).
  * Needs HOBBOTS_CODEX and the sandbox: on Linux, HOBBOTS_SANDBOX_TESTS=1 with bubblewrap, socat and
  * a checkout outside the home folder, whose sandbox-runtime helper the sandbox can read. The
@@ -445,7 +461,7 @@ describe.runIf(sandboxed && outsideAddress !== undefined)("a turn on an installe
       clientVersion: "0.0.0",
       workspaceDir: join(root, "workspace"),
       interruptGrace: "5 seconds",
-      policy: { engine, sandboxState: "on", sandbox },
+      policy: { engine, sandboxState: "on", sandbox: throughProxy(sandbox) },
       extraArgs: [
         "-c",
         'model_provider="standin"',

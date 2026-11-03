@@ -431,7 +431,7 @@ const withoutClaude = (env: NodeJS.ProcessEnv): Record<string, string> =>
   );
 
 /** The command that starts Codex in the turn's sandbox, or as it is, committing as the hob's bot if it has one. */
-const sandboxed = (
+export const sandboxedCommand = (
   command: AppServerCommand,
   prepared: PreparedSandbox | null,
   commitAs: ToolTurn["commitAs"],
@@ -472,7 +472,7 @@ const prepareLaunch = (config: CodexTurnConfig, request: PromptRequest, binary: 
     const { tools, sandbox, policy } = governed;
     const prepared = yield* sandboxFor(config, governed, request, command, runtimeFolder);
     return {
-      command: sandboxed(command, prepared, tools.commitAs),
+      command: sandboxedCommand(command, prepared, tools.commitAs),
       cwd: tools.folders[0] as string,
       instructions: codexInstructions(
         turnInstructions(request.instructions, sandbox !== null, Boolean(request.approvals), tools.commitAs),
