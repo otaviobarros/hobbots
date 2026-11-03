@@ -297,7 +297,8 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
             milestones: milestones.map((title, index) => ({ id: MilestoneId.make(id(`${name}-${index}`)), title })),
           })
           .pipe(Effect.flatMap(announce));
-        return (yield* start(task, `a-${name}`)).task;
+        // A Task that comes after others stays queued until they complete, as a real one does.
+        return after.length === 0 ? (yield* start(task, `a-${name}`)).task : task;
       });
     // The spring sale stops here, with work in each state the Quest tab's controls act on.
     if (script === "spring-sale") {
@@ -374,9 +375,6 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       [],
       [copy.id],
     );
-    yield* whileOpen(build.id, tasks.moveTask(build.id, build.revision, "waiting", yield* iso)).pipe(
-      Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: announce })),
-    );
     yield* pause;
 
     // Rook runs the ads and brings in Pip for the keywords, leading a Quest of his own under Aldric's.
@@ -436,7 +434,7 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
     );
     yield* pause;
 
-    // Quill finishes; Aldric checks the copy and hands it to Ada.
+    // Quill finishes, and Ada's Task starts with the copy it comes after.
     yield* whileOpen(
       copy.id,
       Effect.gen(function* () {
@@ -451,13 +449,8 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
       yield* whileOpen(
         build.id,
         Effect.gen(function* () {
-          yield* tasks
-            .handOff(ArtifactId.make(`art-a-copy-${key}`), build.id, yield* iso)
-            .pipe(Effect.flatMap(announce));
-          const waiting = Option.getOrThrow(yield* tasks.readTree(build.id)).tasks[0];
-          if (waiting !== undefined) {
-            yield* tasks.moveTask(build.id, waiting.revision, "active", yield* iso).pipe(Effect.flatMap(announce));
-          }
+          const queued = Option.getOrThrow(yield* tasks.readTree(build.id)).tasks[0];
+          if (queued !== undefined) yield* start(queued, "a-build");
         }),
       );
     }

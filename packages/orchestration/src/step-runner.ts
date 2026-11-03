@@ -33,6 +33,7 @@ import {
   isTerminalTask,
   type Task,
   type TaskId,
+  TaskReadiness,
   type TaskToolName,
   type TaskTree,
 } from "@hobbots/domain";
@@ -41,7 +42,7 @@ import type { PathSeparator } from "./authority.ts";
 import { cut, RESULT_LIMIT, stepPrompt, stepPromptShows } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { makeCancelSettler } from "./cancels.ts";
-import { delegatedAccess, dependenciesDone, makeMemberRunner } from "./members.ts";
+import { delegatedAccess, makeMemberRunner } from "./members.ts";
 import { type Ending, type Running, runSessionTurn, STOPPED, type StopReason } from "./session.ts";
 import { TaskSignal } from "./signal.ts";
 import { TaskTools } from "./task-tools.ts";
@@ -504,7 +505,8 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
           const tree = trees.get(step.rootId) ?? Option.getOrUndefined(yield* tasks.readTree(step.rootId));
           if (tree === undefined) continue;
           trees.set(step.rootId, tree);
-          if (dependenciesDone(step, tree)) yield* start(step, tree);
+          // A step starts once every step it comes after has completed (ADR 018).
+          if (TaskReadiness.of(step, tree.tasks)._tag === "Ready") yield* start(step, tree);
         }
         if (members !== null) yield* members.round;
       }).pipe(

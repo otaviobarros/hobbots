@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
 import { AgentId, ThreadId } from "./ids.ts";
+import type { TaskReadiness } from "./readiness.ts";
 import { Revision } from "./revision.ts";
 
 /**
@@ -140,9 +141,15 @@ export const TaskTransitions = {
       ? new Task({ ...task, state: to, updatedAt: at })
       : new IllegalTaskTransition({ taskId: task.id, from: task.state, to }),
 
-  /** A new Attempt makes the Task active: a first start, a resume, or a retry of a failed Task. */
-  start: (task: Task, attemptId: AttemptId, at: string): Task | IllegalTaskTransition =>
-    task.state === "completed" || task.state === "cancelled" || task.state === "cancelling"
+  /**
+   * A new Attempt makes the Task active: a first start, a resume, or a retry of a failed Task. It
+   * starts only when `readiness`, read from its tree, is Ready.
+   */
+  start: (task: Task, attemptId: AttemptId, at: string, readiness: TaskReadiness): Task | IllegalTaskTransition =>
+    task.state === "completed" ||
+    task.state === "cancelled" ||
+    task.state === "cancelling" ||
+    readiness._tag !== "Ready"
       ? new IllegalTaskTransition({ taskId: task.id, from: task.state, to: "active" })
       : new Task({ ...task, state: "active", currentAttemptId: attemptId, updatedAt: at }),
 

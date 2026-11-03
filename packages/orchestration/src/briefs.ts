@@ -6,6 +6,7 @@ import {
   isTerminalTask,
   type Question,
   type Task,
+  TaskReadiness,
   type TaskTree,
 } from "@hobbots/domain";
 
@@ -44,13 +45,6 @@ const stepPlace = (step: Task, tree: TaskTree): { readonly index: number; readon
   const steps = tree.tasks.filter((each) => each.parentId === step.parentId && isStep(each, tree.tasks));
   return { index: steps.findIndex((each) => each.id === step.id) + 1, total: steps.length };
 };
-
-/** The Tasks `task` comes after that ended without completing, so it can never start. */
-const endedBefore = (task: Task, tree: ReadonlyArray<Task>): ReadonlyArray<Task> =>
-  task.dependsOn.flatMap((id) => {
-    const before = tree.find((each) => each.id === id);
-    return before !== undefined && isTerminalTask(before.state) && before.state !== "completed" ? [before] : [];
-  });
 
 /** An artifact as a line, its value cut to `limit`. */
 const artifactLine = (artifact: TaskTree["artifacts"][number], limit: number) =>
@@ -228,7 +222,8 @@ const briefedUnder = (task: Task, tree: TaskTree): ReadonlyArray<{ readonly task
 const childLine = (child: Task, tree: TaskTree, place: string) => {
   const own = tree.checkpoints.filter((checkpoint) => checkpoint.taskId === child.id);
   const latest = own.filter((checkpoint) => checkpoint.kind !== "progress").at(-1) ?? own.at(-1);
-  const stuck = child.state === "queued" && endedBefore(child, tree.tasks).length > 0;
+  // Held by a Task it comes after that failed, was cancelled or is blocked: it waits for its owner.
+  const stuck = child.state === "queued" && TaskReadiness.of(child, tree.tasks)._tag === "Blocked";
   const outcome =
     child.result !== null
       ? ` Result: ${cut(child.result.summary, SUMMARY_LIMIT)}`
