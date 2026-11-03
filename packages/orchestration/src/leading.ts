@@ -6,6 +6,7 @@ import {
   NoteId,
   type Question,
   type Task,
+  TaskReadiness,
   type TaskToolInput,
   type TaskToolRefused,
   type TaskTree,
@@ -29,9 +30,11 @@ const waitingOn = (task: Task, tree: TaskTree): ReadonlyArray<string> => {
     return each !== undefined && !isTerminalTask(each.state);
   };
   const waited = tree.waits.find((wait) => wait.taskId === task.id)?.on ?? [];
-  const done = (id: string) => tree.tasks.find((each) => each.id === id)?.state === "completed";
   return [
-    ...new Set([...(task.state === "waiting" ? waited.filter(open) : []), ...task.dependsOn.filter((id) => !done(id))]),
+    ...new Set([
+      ...(task.state === "waiting" ? waited.filter(open) : []),
+      ...TaskReadiness.unmet(TaskReadiness.of(task, tree.tasks)),
+    ]),
   ];
 };
 

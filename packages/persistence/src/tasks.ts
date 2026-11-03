@@ -28,6 +28,7 @@ import {
   Task,
   type TaskId,
   TaskNote,
+  TaskReadiness,
   type TaskRefusal,
   TaskRefused,
   type TaskState,
@@ -359,6 +360,18 @@ export const TaskRepositoryLive = Layer.effect(
         return new Quest({ ...quest, state: "active", endedAt: null, revision });
       });
 
+    /** Whether `task` can start an Attempt, read from its tree: refused unless it is Ready (#667). */
+    const readiness = (task: Task) =>
+      Effect.gen(function* () {
+        const ready = TaskReadiness.of(task, task.dependsOn.length === 0 ? [] : yield* read.treeOf(task.rootId));
+        if (ready._tag === "Ready") return ready;
+        const unmet = TaskReadiness.unmet(ready).join(", ");
+        return yield* refuse(
+          "dependencies-open",
+          `Task ${task.id} comes after Tasks that have not completed: ${unmet}`,
+        );
+      });
+
     const startAttempt: TaskRepository["Service"]["startAttempt"] = (taskId, expected, input) =>
       change((revision) =>
         Effect.gen(function* () {
@@ -367,7 +380,7 @@ export const TaskRepositoryLive = Layer.effect(
           yield* notUnderCancel(before);
           const quest = yield* reopen(before, revision);
           const task = new Task({
-            ...(yield* orFail(TaskTransitions.start(before, input.id, input.startedAt))),
+            ...(yield* orFail(TaskTransitions.start(before, input.id, input.startedAt, yield* readiness(before)))),
             revision,
           });
           const [last] = yield* sql<{ readonly number: unknown }>`SELECT MAX(number) AS number FROM attempts
@@ -456,7 +469,11 @@ export const TaskRepositoryLive = Layer.effect(
           const before = yield* current(taskId, expected);
           const last = yield* resumable(before, resume);
           yield* notUnderCancel(before);
-          const task = new Task({ ...(yield* orFail(TaskTransitions.start(before, last.id, resume.at))), revision });
+          const ready = yield* readiness(before);
+          const task = new Task({
+            ...(yield* orFail(TaskTransitions.start(before, last.id, resume.at, ready))),
+            revision,
+          });
           const attempt = new Attempt({ ...last, state: "starting", outcome: null, endedAt: null });
           yield* sql`UPDATE attempts SET state = ${attempt.state}, outcome = NULL, ended_at = NULL
             WHERE id = ${attempt.id}`;
@@ -471,7 +488,7 @@ export const TaskRepositoryLive = Layer.effect(
         }),
       );
 
-    const moveTask: TaskRepository["Service"]["moveTask"] = (taskId, expected, to: TaskTarget, at) =>
+    const moveTask: TaskRepository["Service"]["moveTask"] = (taskId, expected, to: TaskTarget, at, carried = []) =>
       change((revision) =>
         Effect.gen(function* () {
           const before = yield* current(taskId, expected);
@@ -483,6 +500,11 @@ export const TaskRepositoryLive = Layer.effect(
             { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null },
             ...(yield* automatic(task, at, revision + 1)),
           ];
+          if (to === "blocked" && carried.length > 0 && task.currentAttemptId !== null) {
+            const { consumes } = yield* ledger.readFor(task, carried);
+            const by = yield* ledger.consumer(task.currentAttemptId);
+            events.push(...(yield* ledger.consume(consumes, by, revision + events.length)));
+          }
           if (isTerminalTask(task.state)) events.push(...(yield* withdrawQuestions(task, revision + events.length)));
           return { value: task, events };
         }),

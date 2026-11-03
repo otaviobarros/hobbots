@@ -9,6 +9,7 @@ import {
   QuestId,
   type Task,
   TaskId,
+  TaskReadiness,
   type TaskState,
   type TaskToolInput,
   type TaskToolRefused,
@@ -65,14 +66,25 @@ const openOnAwaited = (scope: CallScope, awaited: ReadonlyArray<Task>) => {
       question: question.text,
       waits_for: nameFor(question.recipientId, scope.caller.agentId),
     }));
-  // A Task is blocked, or the last thing its hob reported about it is a blocker.
+  // A Task is blocked, the last thing its hob reported about it is a blocker, or it cannot start
+  // until someone acts on a Task it comes after (#667).
   const blockers = awaited.flatMap((each) => {
     const reported = scope.tree.checkpoints
       .filter((checkpoint) => checkpoint.taskId === each.id && checkpoint.source !== "automatic")
       .toSorted((a, b) => b.revision - a.revision)[0];
     const latest = reported?.kind === "blocker" ? reported.summary : null;
-    if (isTerminalTask(each.state) || (each.state !== "blocked" && latest === null)) return [];
-    return [{ task_id: each.id as string, blocker: latest ?? "Blocked, with no reason reported." }];
+    if (isTerminalTask(each.state)) return [];
+    if (each.state === "blocked" || latest !== null) {
+      return [{ task_id: each.id as string, blocker: latest ?? "Blocked, with no reason reported." }];
+    }
+    const ready = TaskReadiness.of(each, scope.tree.tasks);
+    if (ready._tag !== "Blocked") return [];
+    return [
+      {
+        task_id: each.id as string,
+        blocker: `It cannot start until someone acts on ${ready.by.map((id) => `Task ${id}`).join(", ")}, which it comes after and which did not complete.`,
+      },
+    ];
   });
   return { questions, blockers };
 };
