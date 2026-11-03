@@ -8,6 +8,7 @@ import {
   HobbotsRepository,
   HobTools,
   makeRedactor,
+  type RuntimeEvent,
   TaskRepository,
 } from "@hobbots/agents";
 import {
@@ -38,7 +39,7 @@ import {
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive } from "@hobbots/workbench";
-import { Effect, Layer, ManagedRuntime, Option, Schedule } from "effect";
+import { Effect, Layer, ManagedRuntime, Option, Schedule, Stream } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
@@ -267,8 +268,47 @@ describe("A finding on two Tasks changing the same file", () => {
               attempt: Effect.succeed(PIP_ATTEMPT),
               redactor: makeRedactor(),
             });
-            void turn;
-            writeFileSync(join(shop, "web", "badge.png"), "grey-again");
+            const badge = join(shop, "web", "badge.png");
+            // Pip's Edit names the badge and rewrites it, as Claude Code's would.
+            yield* Stream.runDrain(
+              turn.run(
+                {
+                  prompt: "",
+                  sessionId: null,
+                  instructions: "",
+                  instructionsChanged: false,
+                  model: null,
+                  effort: null,
+                  tools: null,
+                  recordToolStart: () => Effect.succeed(true),
+                },
+                (request) =>
+                  Stream.fromIterable<RuntimeEvent>([
+                    {
+                      _tag: "ToolStarted",
+                      id: "edit",
+                      tool: "Edit",
+                      operation: "edit-files",
+                      targets: [badge],
+                      label: "Editing web/badge.png",
+                    },
+                  ]).pipe(
+                    Stream.tap((event) =>
+                      event._tag === "ToolStarted" && request.recordToolStart
+                        ? request.recordToolStart(event)
+                        : Effect.void,
+                    ),
+                    Stream.concat(
+                      Stream.fromEffect(
+                        Effect.sync((): RuntimeEvent => {
+                          writeFileSync(badge, "grey-again");
+                          return { _tag: "ToolFinished", id: "edit", failed: false };
+                        }),
+                      ),
+                    ),
+                  ),
+              ),
+            );
             const tools = yield* TaskTools;
             return (yield* tools.call({ agentId: PIP, taskId: PIP_TASK }, "complete_task", {
               key: "done",
