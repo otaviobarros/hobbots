@@ -107,7 +107,7 @@ Deferred: organizations/RBAC, marketplace publishing, native mobile app, advance
 
 ## Onboarding and release operations
 
-Vendor login methods, telemetry backend, backup format and templates still require technical design.
+Vendor login methods, telemetry backend and templates still require technical design. The backup and export formats are decided in [ADR 026](../decisions/026-backup-export-diagnostics.md).
 
 | ID | Requirement | Acceptance condition |
 |---|---|---|
