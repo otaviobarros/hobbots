@@ -1,5 +1,6 @@
 import { AgentId, CharmCall, MessageId } from "@hobbots/domain";
 import { Deferred, Effect, Fiber, Option } from "effect";
+import { TestClock } from "effect/testing";
 import { describe, expect, it } from "vitest";
 import { type CharmWrite, makeCharmCallRunner, type WriteOutcome } from "../src/index.ts";
 import { memoryCharmCalls } from "./support.ts";
@@ -73,5 +74,31 @@ describe("Charm call runner", () => {
     expect(result.whileSending).toMatchObject({ attempt: result.secondAttempt, state: "sending", result: null });
     expect(result.secondOutcome).toEqual({ _tag: "Applied", text: "Pushed again." });
     expect(Option.getOrThrow(result.final)).toMatchObject({ state: "applied", result: "Pushed again." });
+  });
+
+  // covers EX-004, OR-001
+  it("[TC-OR-426] keeps reading an uncertain call back after its reply's calls move to the Task the reply started", async () => {
+    const rows = new Map<string, CharmCall>();
+    const final = await Effect.gen(function* () {
+      // GitHub shows the push only after the reply has started its Task.
+      let onGitHub = false;
+      const runner = yield* makeCharmCallRunner({ github_push: () => Effect.succeed(onGitHub) });
+      // The runner's startup read-back of calls left unsettled finds none yet.
+      yield* Effect.yieldNow;
+      const outcome = yield* runner
+        .run(write("k1"), Effect.succeed({ _tag: "Uncertain", text: "No answer." }))
+        .pipe(Effect.scoped);
+      expect(outcome._tag).toBe("Uncertain");
+      // start_quest moves the reply's calls to the Task's work, as the Task tool ledger does.
+      const stored = rows.get(K1);
+      if (stored === undefined) throw new Error("expected the sending to be recorded");
+      rows.delete(K1);
+      rows.set("hob task:q1 k1", new CharmCall({ ...stored, scope: "task:q1" }));
+      onGitHub = true;
+      yield* TestClock.adjust("20 seconds");
+      return rows.get("hob task:q1 k1");
+    }).pipe(Effect.scoped, Effect.provide([memoryCharmCalls(rows), TestClock.layer()]), Effect.runPromise);
+
+    expect(final).toMatchObject({ scope: "task:q1", state: "applied", result: "Pushed." });
   });
 });

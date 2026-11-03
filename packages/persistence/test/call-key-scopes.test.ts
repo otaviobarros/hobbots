@@ -176,6 +176,45 @@ describe("tool call keys per Task", () => {
     );
   });
 
+  // covers EX-004, OR-001
+  it("[TC-OR-427] an uncertain Charm call moved to the Task its reply started is still found and settled by its sending", async () => {
+    await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const calls = yield* CharmCalls;
+        const ledger = yield* TaskToolCalls;
+        const sent = new CharmCall({
+          agentId: FRODO,
+          scope: "reply:m1",
+          key: "push-1",
+          attempt: "a1",
+          tool: "github_push",
+          input: `{"branch":"feat/x"}`,
+          site: "github.com/octo/app refs/heads/feat/x",
+          plan: "{}",
+          state: "sending",
+          result: null,
+          threadId: ThreadId.make("t1"),
+          messageId: MessageId.make("m1"),
+          stepId: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+        yield* calls.begin(sent);
+        yield* calls.settle(sent, "uncertain", "No answer.", now);
+        // The reply starts its Task: its calls move to the Task's work.
+        yield* ledger.once(
+          checkpoint("reply:m1", "Started"),
+          Effect.succeed({ done: { message: "Started", details: {} }, entries: [], scope: "task:quest-a" }),
+        );
+        // The watcher holds the sending as it was recorded, and still finds and settles it.
+        expect(yield* calls.current(sent)).toMatchObject(Option.some({ scope: "task:quest-a", state: "uncertain" }));
+        const settled = yield* calls.settle(sent, "applied", "Pushed.", now);
+        expect(settled).toMatchObject(Option.some({ scope: "task:quest-a", state: "applied" }));
+      }),
+    );
+  });
+
   // covers DP-003
   it("[TC-OR-423] 0043 keeps every stored call and refusal readable, each in the work its input names, compared without its turn", async () => {
     const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0043")) as typeof migrations;

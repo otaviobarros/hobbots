@@ -6,8 +6,13 @@ import { GitHubCredential, GitHubError } from "../src/index.ts";
 /** Charm call records in memory, with the rules of the SQL ones (migrations 0028 and 0043), by hob, scope and key. */
 const idOf = (agentId: string, scope: string, key: string) => `${agentId} ${scope} ${key}`;
 
-export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
-  Layer.succeed(
+export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) => {
+  /** `call`'s sending, by its attempt, in whatever scope it is now. */
+  const sending = (call: CharmCall) =>
+    [...rows.entries()].find(
+      ([, row]) => row.agentId === call.agentId && row.key === call.key && row.attempt === call.attempt,
+    );
+  return Layer.succeed(
     CharmCalls,
     CharmCalls.of({
       begin: (call, also) =>
@@ -27,15 +32,13 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
         }),
       settle: (call, state, result, at) =>
         Effect.sync(() => {
-          const id = idOf(call.agentId, call.scope, call.key);
-          const stored = rows.get(id);
-          if (stored === undefined || stored.attempt !== call.attempt || isCharmCallSettled(stored.state)) {
-            return Option.none();
-          }
+          const [id, stored] = sending(call) ?? [];
+          if (id === undefined || stored === undefined || isCharmCallSettled(stored.state)) return Option.none();
           const next = new CharmCall({ ...stored, state, result, updatedAt: at });
           rows.set(id, next);
           return Option.some(next);
         }),
+      current: (call) => Effect.sync(() => Option.fromUndefinedOr(sending(call)?.[1])),
       find: (agentId, scopes, key) =>
         Effect.sync(() =>
           Option.fromUndefinedOr(
@@ -54,6 +57,7 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) =>
       unsettled: Effect.sync(() => [...rows.values()].filter((row) => !isCharmCallSettled(row.state))),
     }),
   );
+};
 
 const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 

@@ -105,15 +105,22 @@ export const CharmCallsLive = Layer.effect(
           return { _tag: "Started" } as const;
         }).pipe(sql.withTransaction, orDie),
       // One conditional update, so of two outcomes racing for the same sending only the first lands,
-      // and an outcome for an earlier sending of the key never lands on a later one.
+      // and an outcome for an earlier sending of the key never lands on a later one. By attempt, not
+      // scope, so a sending still settles after its reply's calls moved to the Task it started (#660).
       settle: (call, state, result, at) =>
         sql<Row>`
           UPDATE charm_calls SET state = ${state}, result = ${result}, updated_at = ${at}
-          WHERE agent_id = ${call.agentId} AND scope = ${call.scope} AND call_key = ${call.key}
-            AND attempt = ${call.attempt}
+          WHERE agent_id = ${call.agentId} AND call_key = ${call.key} AND attempt = ${call.attempt}
             AND state IN ('sending', 'uncertain')
           RETURNING *`.pipe(Effect.flatMap(one), orDie),
       find: (agentId, scopes, key) => orDie(find(agentId, scopes, key)),
+      current: (call) =>
+        orDie(
+          sql<Row>`SELECT * FROM charm_calls
+            WHERE agent_id = ${call.agentId} AND call_key = ${call.key} AND attempt = ${call.attempt}`.pipe(
+            Effect.flatMap(one),
+          ),
+        ),
       findByStep: (threadId, messageId, stepId) =>
         orDie(
           sql<Row>`

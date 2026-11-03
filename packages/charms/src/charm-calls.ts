@@ -114,8 +114,9 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
       Effect.gen(function* () {
         for (const delay of READ_BACK_AFTER) {
           yield* Effect.sleep(delay);
-          const now = yield* calls.find(call.agentId, [call.scope], call.key);
-          if (Option.isNone(now) || now.value.attempt !== call.attempt || now.value.state !== "uncertain") return;
+          // By its attempt: starting a Task moves its reply's calls to the Task's work meanwhile (#660).
+          const now = yield* calls.current(call);
+          if (Option.isNone(now) || now.value.state !== "uncertain") return;
           if (Option.isSome(yield* readBack(now.value))) return;
         }
       }).pipe(Effect.forkIn(scope), Effect.asVoid);

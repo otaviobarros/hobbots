@@ -28,7 +28,9 @@ export class CharmCalls extends Context.Service<
     /**
      * Moves `call`'s sending, if it is not yet settled, to `state`, with what the hob is told, in one
      * atomic step. None when it is not found, has settled already, or the key was sent again since,
-     * so a late or racing outcome never overwrites a settled one or lands on a later sending.
+     * so a late or racing outcome never overwrites a settled one or lands on a later sending. The
+     * sending is found by its attempt, so it settles even after its reply's calls moved to the Task the
+     * reply started (#660).
      */
     readonly settle: (
       call: CharmCall,
@@ -42,6 +44,8 @@ export class CharmCalls extends Context.Service<
       scopes: ReadonlyArray<string>,
       key: string,
     ) => Effect.Effect<Option.Option<CharmCall>>;
+    /** `call`'s sending as stored now, by its attempt, in whatever work it moved to. None when the key was sent again since. */
+    readonly current: (call: CharmCall) => Effect.Effect<Option.Option<CharmCall>>;
     /** The call shown as this reply step. */
     readonly findByStep: (
       threadId: ThreadId,
@@ -97,7 +101,7 @@ export class CharmCallService extends Context.Service<
             const settled = yield* calls.settle(call, outcome, SETTLED[outcome], at);
             // Reading GitHub back may have settled it a moment before.
             if (Option.isNone(settled)) {
-              const now = yield* calls.find(call.agentId, [call.scope], call.key);
+              const now = yield* calls.current(call);
               return yield* new CharmCallSettled({
                 stepId,
                 state: Option.isSome(now) ? now.value.state : call.state,
