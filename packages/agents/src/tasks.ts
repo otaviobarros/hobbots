@@ -93,6 +93,13 @@ export interface AttemptChange {
   readonly at: string;
 }
 
+/** The turn that resumes a Task's Attempt: when, and the brain and configuration it runs on. */
+export interface AttemptResume {
+  readonly runtime: RuntimeKind;
+  readonly configVersion: number;
+  readonly at: string;
+}
+
 export interface NewArtifact {
   readonly id: ArtifactId;
   readonly kind: ArtifactKind;
@@ -189,6 +196,18 @@ export class TaskRepository extends Context.Service<
       attemptId: AttemptId,
       change: AttemptChange,
     ) => Changed<{ readonly task: Task; readonly attempt: Attempt }>;
+    /**
+     * Puts the Task's current Attempt, once it has ended, back to starting for another turn of the
+     * same work, as a lead's next chat turn on its Task does: the Attempt keeps its number, and only a
+     * retry or a reassignment starts a new one. Refused for a Task that has ended or is being
+     * cancelled, for an Attempt that is live, was cancelled or never confirmed its stop, and for one
+     * that ran on another brain or configuration, which starts an Attempt of its own instead.
+     */
+    readonly resumeAttempt: (
+      taskId: TaskId,
+      revision: number,
+      resume: AttemptResume,
+    ) => Changed<{ readonly task: Task; readonly attempt: Attempt }, TaskChange>;
     /**
      * Moves a Task to another state. It fails or is cancelled only once its Attempt and every Task
      * under it have ended, and ends its Quest with it.

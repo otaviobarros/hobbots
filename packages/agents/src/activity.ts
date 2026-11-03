@@ -91,13 +91,15 @@ export interface ActivityRepositoryShape {
   readonly saveCommand: (command: CommandDraft) => Effect.Effect<Option.Option<Committed<CommandRecord>>>;
   /**
    * Stores the Attempt's changes in `folder` as a scan found them: each is added or replaces the one
-   * at its path, and the Attempt's other changes in the folder are removed. None when its Attempt
-   * is not there.
+   * at its path, and the Attempt's other changes in the folder are removed. With `since`, the turn
+   * that found them started then, and a change recorded before it is an earlier turn's of the same
+   * Attempt: it stays unless replaced at its path. None when its Attempt is not there.
    */
   readonly saveChanges: (
     attemptId: AttemptId,
     folder: string,
     changes: ReadonlyArray<FileChangeDraft>,
+    since?: string,
   ) => Effect.Effect<
     Option.Option<
       Committed<{ readonly changes: ReadonlyArray<FileChange>; readonly removed: ReadonlyArray<FileChangeId> }>

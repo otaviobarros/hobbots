@@ -153,6 +153,8 @@ const makeRecorder = (limits: ActivityLimits) =>
     const forTurn = (turn: ActivityTurn) =>
       Effect.gen(function* () {
         const me: LiveTurn = { folders: turn.folders, attemptId: null, overlaps: new Set() };
+        // A later turn of the same Attempt keeps what the turns before it recorded.
+        const turnStarted = yield* nowIso;
         for (const other of live) {
           if (other.folders.some((folder) => turn.folders.some((mine) => foldersOverlap(folder, mine)))) {
             other.overlaps.add(me);
@@ -392,7 +394,7 @@ const makeRecorder = (limits: ActivityLimits) =>
             for (const folder of [...dirtyFolders]) {
               dirtyFolders.delete(folder);
               const drafts = changeSets.get(folder) ?? [];
-              const saved = yield* repo.saveChanges(attemptId, folder, drafts);
+              const saved = yield* repo.saveChanges(attemptId, folder, drafts, turnStarted);
               if (Option.isSome(saved)) entries.push(...saved.value.entries);
             }
             // The scans last: an end scan on the record means the changes it found are too.

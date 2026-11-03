@@ -536,7 +536,7 @@ describe("cancelling with confirmed outcomes", () => {
     // A turn briefed on the Task before the cancel, which goes on calling after its Attempt ended.
     const stray = await run(strayTurn);
 
-    // Your next message there works on the same Task, as an Attempt of its own.
+    // Your next message there works on the same Task, in the same Attempt.
     await run(laterReply(HOLD_STARTED, requests));
     await run(controls((each) => each.cancel(top.id)));
     // The reply's stop may land at once or once it goes on; either way the cancel waits for it.
@@ -544,13 +544,9 @@ describe("cancelling with confirmed outcomes", () => {
     const all = await run(messagesWhen(() => true));
     expect(all.at(-1)?.status).toBe("stopped");
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "cancelled"));
-    // Your request's turn, the reply its step's result started and the stray turn ended; yours was stopped.
-    expect(attemptsOf(done, done.tasks[0])).toEqual([
-      [ALDRIC, "completed"],
-      [ALDRIC, "completed"],
-      [ALDRIC, "completed"],
-      [ALDRIC, "interrupted"],
-    ]);
+    // Your request's turn, the reply its step's result started, the stray turn and yours all worked
+    // in the Task's one Attempt, which ended when yours was stopped.
+    expect(attemptsOf(done, done.tasks[0])).toEqual([[ALDRIC, "interrupted"]]);
     // Confirmed only once the reply's Attempt had ended.
     const reply = done.attempts.filter((each) => each.taskId === top.id).at(-1);
     expect(reply?.endedAt).not.toBeNull();

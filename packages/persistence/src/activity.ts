@@ -170,14 +170,22 @@ export const ActivityRepositoryLive = Layer.effect(
         Effect.flatMap(decoded(decodeChanges)),
       );
 
-    const saveChanges = (attemptId: AttemptId, folder: string, changes: ReadonlyArray<FileChangeDraft>) =>
+    const saveChanges = (
+      attemptId: AttemptId,
+      folder: string,
+      changes: ReadonlyArray<FileChangeDraft>,
+      since?: string,
+    ) =>
       journaled(1, () =>
         Effect.gen(function* () {
           const taskId = yield* taskOf(attemptId);
           if (taskId === null) return null;
           const before = yield* changeRows(attemptId, folder);
           const paths = new Set(changes.map((change) => change.path));
-          const removed: Array<FileChangeId> = before.filter((row) => !paths.has(row.path)).map((row) => row.id);
+          // An earlier turn's change in the same Attempt stays: this turn only takes back its own.
+          const removed: Array<FileChangeId> = before
+            .filter((row) => !paths.has(row.path) && (since === undefined || row.recordedAt >= since))
+            .map((row) => row.id);
           if (removed.length > 0) yield* sql`DELETE FROM attempt_file_changes WHERE ${sql.in("id", removed)}`;
           for (const change of changes) {
             const {
