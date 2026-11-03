@@ -44,8 +44,9 @@ const Authority = Schema.Struct({
     }),
   ),
   folders: Schema.optionalKey(
-    Schema.Array(Schema.String).annotate({
-      description: "Absolute folders the member may use, each one of yours or inside one. Leave out for all of yours.",
+    Schema.Union([Schema.Array(Schema.String), Schema.Literal("all")]).annotate({
+      description:
+        'Absolute folders the member may use, each one of yours or inside one, or "all" for all of yours. Leave out for the folders the brief names, else the folder your Task works in.',
     }),
   ),
 });

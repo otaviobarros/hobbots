@@ -15,6 +15,8 @@ export const messages = {
   askedBy: ({ chain }: { chain: ReadonlyArray<string> }) => `asked by ${chain.join(" → ")}`,
   you: "You",
   owner: ({ name }: { name: string }) => `Owner: ${name}`,
+  worksIn: ({ names }: { names: ReadonlyArray<string> }) => `Works in ${formatList(names)}`,
+  noFolders: "No folders",
   inSandbox: "In the sandbox",
   unsandboxed: "Unsandboxed",
   sandboxNotReady: "Needs the sandbox",

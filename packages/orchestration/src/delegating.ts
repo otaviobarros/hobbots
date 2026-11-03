@@ -29,6 +29,7 @@ import {
   refuse,
   type TaskToolLimits,
 } from "./call-scope.ts";
+import { defaultFolders } from "./default-folders.ts";
 
 interface Deps {
   readonly tasks: TaskRepository["Service"];
@@ -98,18 +99,23 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
    * The member's authority: the caller's on this Task, narrowed by what the brief asks for and by
    * the member's own policy, so it holds the intersection of the lead's and its own (STD-SEC-003).
    */
-  const memberAuthority = (scope: CallScope, task: Task, member: Agent, requested: DelegateInput["authority"]) =>
+  const memberAuthority = (scope: CallScope, task: Task, member: Agent, input: DelegateInput) =>
     Effect.gen(function* () {
+      const requested = input.authority;
+      const lead = yield* authority.of(scope, task);
+      // Left out, the member gets the narrowest folders the work needs; "all" gives all of the lead's (#582).
       const folders =
-        requested?.folders === undefined
+        requested?.folders === "all"
           ? undefined
-          : yield* Effect.forEach(requested.folders, (folder) =>
-              folderChecks
-                .check(folder)
-                .pipe(Effect.catch(() => refuse("invalid-input", `${folder} is not a folder on this hub.`))),
-            );
+          : requested?.folders === undefined
+            ? yield* defaultFolders(folderChecks, lead.folders, input.brief, separator)
+            : yield* Effect.forEach(requested.folders, (folder) =>
+                folderChecks
+                  .check(folder)
+                  .pipe(Effect.catch(() => refuse("invalid-input", `${folder} is not a folder on this hub.`))),
+              );
       const narrowed = delegatedAuthority(
-        yield* authority.of(scope, task),
+        lead,
         {
           ...(requested?.decisions === undefined ? {} : { decisions: requested.decisions }),
           ...(folders === undefined ? {} : { folders }),
@@ -135,7 +141,7 @@ export const makeDelegating = ({ tasks, hobs, folderChecks, capacity, authority,
         const member = yield* findHob(hobs, input.hob);
         yield* checkMember(scope, task, member);
         yield* capacity(scope, member.id, 1);
-        const given = yield* memberAuthority(scope, task, member, input.authority);
+        const given = yield* memberAuthority(scope, task, member, input);
         const timeoutMs = yield* timeoutFor(scope, task, input.timeout_minutes);
         const journal = journalOf();
         const existing = scope.tree.quests.find((quest) => quest.taskId === task.id);
