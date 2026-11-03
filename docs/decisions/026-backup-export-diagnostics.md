@@ -17,7 +17,9 @@ Some data in the database is private but not a credential. The [redaction rules]
 
 ## Decision
 
-### A backup is the whole hub, minus every credential
+### A backup is the whole hub, minus every managed credential
+
+A **managed credential** is a value the hub keeps so that someone or something can authenticate: the keychain items, device token hashes, pairing secret hashes, the window key, runtime sign-ins, and the credentials in the hub's environment. The hub knows each one and where it keeps it. Text you wrote, and the replies hobs wrote, are content, not managed credentials, even when they contain a token.
 
 A backup is a folder named `Hobbots backup <date> <time>.hobbots-backup`. It holds:
 
@@ -32,7 +34,7 @@ A backup is a folder named `Hobbots backup <date> <time>.hobbots-backup`. It hol
 
 The schema version is the highest migration the database has applied, such as `36`.
 
-A backup never holds:
+A backup never holds a managed credential:
 
 - **Keychain items:** the GitHub account's access and refresh tokens (ADR 020), each hob's GitHub App private key (ADR 022), and a connected desktop's device token (ADR 021). They stay in the keychain of the computer that has them.
 - **Device secrets:** the scrub blanks every device token hash and deletes every pairing request with its secret hash. The `window-key` file is never copied; the hub writes a new one on every start.
@@ -41,16 +43,20 @@ A backup never holds:
 - **Hob folders outside the data folder.** They are your own folders and your own backups cover them. The manifest lists each hob's folders by path, so a restore can say which are missing.
 - **Transient state:** the GitHub Charm's staging repositories and sandbox state in `charms/github`, and the `installation-id` file. A restore gets a new installation ID (below).
 
-A backup holds your conversations as they are stored, including any secret you typed into a message. It is written owner-only (`0700` folders, `0600` files), and it is not encrypted in this version. The hub refuses a destination inside any hob's folder, since a hob could read it there. Encrypting a backup with a passphrase is a later change with its own format version.
+A backup holds your conversations as they are stored. A token you pasted into a message is content, and the backup keeps it as you wrote it, even when it is one of the managed credentials above. A backup restores your history exactly, so it does not redact what you wrote. The restore summary and the Back up now screen both say so. It is written owner-only (`0700` folders, `0600` files), and it is not encrypted in this version. The hub refuses a destination inside any hob's folder, since a hob could read it there. Encrypting a backup with a passphrase is a later change with its own format version.
 
 ### Making a backup while the hub runs
 
 1. Settings › Backup & export › **Back up now** asks where to save the backup.
-2. The hub pauses the jobs that delete files: the 30-day Workbench cleanup and the unreferenced-file sweep. New files can still be written.
-3. It copies the database with `backup()` from `node:sqlite` on the hub's own writing connection, a few hundred pages at a time, so the hub keeps serving. Writes through that connection land in the copy; the search worker's connection only reads. The copy is a consistent snapshot of the moment it finishes.
-4. It opens the copy, runs the scrub and checks it with `PRAGMA integrity_check`.
-5. It copies `activity`, `tool-logs` and the default workspace. Contents are stored once per hash and never rewritten, and nothing is deleted while the backup runs, so every file the snapshot names is still there. Files written after the snapshot are copied too, and are harmless: the next sweep after a restore deletes them, since no record names them.
-6. It writes `manifest.json` last, then resumes the cleanup jobs. A backup folder without a manifest is incomplete and a restore refuses it.
+2. The hub places a **cleanup hold**: the jobs that delete files, the 30-day Workbench cleanup and the unreferenced-file sweep, do not run until it is released. New files can still be written.
+3. The hub places a **workspace hold** on the default workspace, the one copied folder that hobs write to. No turn that can write there starts: a turn of a hob without folders of its own, or an unsandboxed turn (ADR 014). The backup waits for such turns already running to end. Settings shows which hob it waits for, with **Stop** and **Cancel backup**. A wait longer than 10 minutes cancels the backup and says why. Turns of sandboxed hobs in their own folders go on as usual.
+4. It copies the database with `backup()` from `node:sqlite` on the hub's own writing connection, a few hundred pages at a time, so the hub keeps serving. Writes through that connection land in the copy; the search worker's connection only reads. The copy is a consistent snapshot of the moment it finishes.
+5. It copies the default workspace, then releases the workspace hold. Nothing wrote to it between the snapshot and the copy, so its files match the records in the snapshot.
+6. It opens the copy, runs the scrub and checks it with `PRAGMA integrity_check`.
+7. It copies `activity` and `tool-logs`. Their files are written once, named by hash or by step, and never rewritten. Nothing is deleted while the cleanup hold stands, so every file the snapshot names is still there. Files written after the snapshot are copied too, and are harmless: the next sweep after a restore deletes them, since no record names them.
+8. It writes `manifest.json` last, then releases the cleanup hold. A backup folder without a manifest is incomplete and a restore refuses it.
+
+Both holds live only in the hub's memory on SQLite: a hub that stops during a backup releases them, and the half-written backup has no manifest.
 
 Settings shows progress, the result and its size, or the failure with its reason. A failed backup deletes what it wrote.
 
@@ -73,11 +79,12 @@ The restore itself:
 On its first start after a restore the hub applies these rules in one transaction, before it serves anything:
 
 - **New journal epoch.** The journal gets a new epoch, as ADR 013 already requires. Every client starts a fresh sync generation and refetches.
-- **Every device is revoked.** Device records are kept as revoked, with "Revoked by a restore" as the reason, so Settings › Devices shows who to pair again. An older backup must never bring back a device revoked after it. The hub's own window keeps working with its new window key. Remote access is off until you turn it on.
+- **Every device is revoked.** Device records are kept as revoked, with "Revoked by a restore" as the reason, so Settings › Devices shows who to pair again. Their token hashes are blanked and pairing requests deleted, which a SQLite backup's scrub already did and a PostgreSQL backup still needs. An older backup must never bring back a device revoked after it. The hub's own window keeps working with its new window key. Remote access is off until you turn it on.
 - **Work is held.** The hub runs its normal recovery sequence ([execution lifecycle](../architecture/execution-lifecycle.md#recovery-sequence)): an Attempt left live ends as interrupted, and a tool call with no outcome is uncertain. A Charm call left sending becomes uncertain. Then the dispatcher stays off: no backpack item is delivered, no continuation starts, no deadline fires and no queued chat message is sent. Time passed between the backup and the restore, and some of that work may already have happened. The restore summary in the app says how much work is held, and **Resume work** turns the dispatcher on. Until then Home and the Quest tab say "Work is held after a restore".
 - **The GitHub account** is connected again only if this computer's keychain still has its item. Otherwise Settings › GitHub says to connect, as after a disconnect (ADR 020).
 - **A hob's own GitHub App** whose key is not in this computer's keychain needs a reconnect, with the reason "The app's key is not on this computer" (ADR 022). Its GitHub actions fail with that reason and never run as you.
 - **Runtime sessions.** A thread keeps its runtime session IDs. A session the runtime no longer has starts fresh, with the briefing a thread gets on a new runtime ([ADR 017](017-switching-brains.md)).
+- **Backup holds.** A cleanup or workspace hold recorded in the database is cleared.
 - **Hob folders.** The restore summary lists each hob folder that is not on this computer, so you can set that hob's folders again.
 
 ### Export
@@ -162,15 +169,20 @@ Redaction works in three layers, so a later field cannot leak by accident:
 Export and diagnostics read through the same `SqlClient` and work unchanged on PostgreSQL. Backup and restore change in one place, the database copy:
 
 - On PostgreSQL the hub does not copy the database. The operator backs it up with PostgreSQL's own tools, such as `pg_dump` or the provider's snapshots. The hub's backup then holds the manifest, with `database: external` and the schema version, and the files.
-- Take the database backup first, then the hub's. A content file cleared between the two reads as Unavailable in the Workbench, a state it already has. Nothing breaks.
+- The operator follows three steps, and the hub refuses them out of order:
+  1. **`hobbots backup begin`** places the cleanup hold and the workspace hold, waits for the turns that hold blocks, and answers with a backup ID. On PostgreSQL both holds are a row in the database, so every server process honours them. The holds expire after one hour.
+  2. The operator takes the database backup with PostgreSQL's tools while the holds stand. The holds row is in that backup too; a restore clears it.
+  3. **`hobbots backup files <id>`** copies the default workspace, `activity` and `tool-logs`, writes the manifest and releases the holds. An expired or unknown ID is refused, and the operator starts again from step 1, since a file could have changed or gone after the holds lapsed.
+- So every file the database backup names is still there when the files are copied, and the default workspace matches the database, as on SQLite.
+- The hub cannot scrub a database backup the operator takes, so on PostgreSQL that backup still holds the device token hashes and pairing secret hashes. Each is a SHA-256 of a 256-bit random secret, which cannot be turned back into a token (ADR 021), and the first-start rules after a restore blank them and revoke every device. The operator keeps that backup as private as the database itself.
 - A restore loads the database with PostgreSQL's tools to the same schema version, then runs the hub's restore with the files. The first-start rules after a restore are plain SQL in one transaction and run the same on both databases.
 - The checks that run on SQLite run on PostgreSQL in CI too, except the copy itself.
 
 ## Rationale
 
-A backup has to bring the hub back exactly, so it is the database itself, not a format of its own. The online backup API copies it without stopping the hub, and pausing deletes while the files are copied keeps the snapshot and the files consistent without a lock on writes.
+A backup has to bring the hub back exactly, so it is the database itself, not a format of its own. The online backup API copies it without stopping the hub. Two narrow holds keep the snapshot and the files consistent: deletes wait, and only the turns that can write to the one copied folder hobs use wait. Every other turn keeps running, so a backup interrupts as little work as it can and never copies a file that disagrees with its record.
 
-Credentials stay out because the keychain, not the data folder, is where they live, and a backup travels further than the computer it came from. Scrubbing the copy, rather than filtering the live database, keeps the hub untouched while it runs. Revoking devices after a restore is the only safe answer to an older backup: it can never bring back a device you revoked since. Pairing again costs one prompt per device.
+Managed credentials stay out because the keychain, not the data folder, is where they live, and a backup travels further than the computer it came from. What you wrote stays in, because redacting it would make the restore inexact, and naming the two apart keeps the rule testable. Scrubbing the copy, rather than filtering the live database, keeps the hub untouched while it runs. Revoking devices after a restore is the only safe answer to an older backup: it can never bring back a device you revoked since. Pairing again costs one prompt per device.
 
 Holding work after a restore is the honest answer to time that passed. The hub cannot know which effects happened after the backup, so it does not repeat any until you say so. Recovery already treats unknown outcomes as uncertain; the hold extends that to work not yet started.
 
@@ -183,7 +195,7 @@ Folders, rather than single archive files, need no new dependency and can be ins
 ## Consequences
 
 - Settings gains Backup & export and Diagnostics, and Welcome's "I already use Hobbots" gains Restore a backup. Screens 1 and 13 of the [screen inventory](../design/screens-and-flows.md) change with #452, #453 and #455.
-- The hub gains a held dispatcher after a restore, with Resume work, and "Revoked by a restore" as a device's revoke reason.
+- The hub gains a cleanup hold and a workspace hold for the length of a backup, and a held dispatcher after a restore, with Resume work, and "Revoked by a restore" as a device's revoke reason.
 - The data folder gains `backups/` with the latest backup before a migration, and a restored hub leaves its earlier folder beside it until you delete it.
 - The redactor runs over message and reply text for exports, which it does not do for stored messages.
 - The first-launch setup tests use `TC-OP-001` to `TC-OP-015`. Slice 15's backup, restore, export and diagnostics cases start at `TC-OP-016`.
@@ -194,7 +206,8 @@ Folders, rather than single archive files, need no new dependency and can be ins
 The scenarios that would show this decision holds. Each names the issue that will prove it.
 
 - A backup made while a reply streams, followed by deleting the data folder and restoring, brings back the threads, Quests, Tasks, artifacts, Workbench contents and usage, on SQLite. Not proven yet: [#452](https://github.com/otaviobarros/hobbots/issues/452).
-- A backup holds no credential: with a GitHub account, a hob's app key, a provider key in the environment, approved devices, an open pairing request and the window key in place, no file in the backup holds any of their values or a known secret shape, and the device token hashes are blank. Not proven yet: [#452](https://github.com/otaviobarros/hobbots/issues/452).
+- A hob that edits one file and deletes another in the default workspace while a backup runs is held until the copy is done, or the backup waits for its turn to end. After a restore each artifact file matches the record that names it, and a file the records name is never missing. The cleanup jobs delete nothing while the hold stands. Not proven yet: [#452](https://github.com/otaviobarros/hobbots/issues/452).
+- A backup holds no managed credential: with a GitHub account, a hob's app key, a provider key in the environment, approved devices, an open pairing request and the window key in place, and none of them typed into a message, no file in the backup holds any of their values, and the device token hashes are blank. A token-shaped value you typed into a message is in the backup and comes back as you wrote it. Not proven yet: [#452](https://github.com/otaviobarros/hobbots/issues/452).
 - A backup with a missing file or a wrong checksum, or from a newer schema, is refused and changes nothing. A backup from an older schema restores and the migrator brings it up to date. Not proven yet: [#452](https://github.com/otaviobarros/hobbots/issues/452).
 - After a restore every device is revoked and must pair again, the journal has a new epoch and the installation a new ID, an Attempt live in the backup is interrupted, a Charm call left sending is uncertain, and no backpack item is delivered until Resume work. A hob's app whose key is not in the keychain needs a reconnect. Not proven yet: [#452](https://github.com/otaviobarros/hobbots/issues/452).
 - The earlier data folder is kept beside the restored one until you delete it, and a destination inside a hob's folder is refused. Not proven yet: [#452](https://github.com/otaviobarros/hobbots/issues/452).
@@ -202,5 +215,5 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - A Quest that delegated to two hobs can be followed from Diagnostics through its Tasks, Delegations, Attempts and runtimes. Its report holds no message text, brief, command line or credential, and a report that would hold a known credential is refused. Not proven yet: [#455](https://github.com/otaviobarros/hobbots/issues/455).
 - A logged-out runtime shows its fix in Settings › Providers and in Diagnostics. Not proven yet: [#456](https://github.com/otaviobarros/hobbots/issues/456).
 - Usage over 7 and 30 days is the same after a backup and restore. Not proven yet: [#454](https://github.com/otaviobarros/hobbots/issues/454), [#457](https://github.com/otaviobarros/hobbots/issues/457).
-- The first-start rules after a restore, export and diagnostics give the same results on PostgreSQL. Not proven yet: [#457](https://github.com/otaviobarros/hobbots/issues/457).
+- On PostgreSQL, `backup files` without a `backup begin` that still holds is refused, and a file named by a database backup taken under the holds is still there when the files are copied. The first-start rules after a restore, export and diagnostics give the same results on PostgreSQL. Not proven yet: [#457](https://github.com/otaviobarros/hobbots/issues/457).
 - A manual backup and restore on the packaged Mac app is recorded as evidence, and the checks run in CI on SQLite. Not proven yet: [#457](https://github.com/otaviobarros/hobbots/issues/457).
