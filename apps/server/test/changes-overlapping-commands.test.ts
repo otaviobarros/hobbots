@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ActivityRecorder, makeRedactor, type RuntimeEvent, type ToolStartedEvent } from "@hobbots/agents";
 import type { AttemptId } from "@hobbots/domain";
@@ -30,12 +30,14 @@ const twoAttempts = async () => {
 };
 
 /** A turn on `attemptId` whose runtime the test plays: each call starts, then ends, when the test says. */
-const playedTurn = (folder: string, attemptId: AttemptId) =>
+const playedTurn = (where: string | ReadonlyArray<string>, attemptId: AttemptId) =>
   Effect.gen(function* () {
+    const folders = typeof where === "string" ? [where] : where;
+    const folder = folders[0] as string;
     const recorder = yield* ActivityRecorder;
     const scope = yield* Scope.make();
     const activity = yield* Scope.provide(scope)(
-      recorder.forTurn({ folders: [folder], attempt: Effect.succeed(attemptId), redactor: makeRedactor() }),
+      recorder.forTurn({ folders, attempt: Effect.succeed(attemptId), redactor: makeRedactor() }),
     );
     const queue = yield* Queue.unbounded<RuntimeEvent>();
     const seen = new Map<string, Deferred.Deferred<void>>();
@@ -97,6 +99,8 @@ const playedTurn = (folder: string, attemptId: AttemptId) =>
           label: `Editing ${path}`,
         }),
       finish: (id: string) => send({ _tag: "ToolFinished", id, failed: false }),
+      /** The runtime was lost while the call ran, so it never reports the call's end. */
+      lost: (id: string) => send({ _tag: "ToolUncertain", id, reason: "The runtime stopped answering." }),
       end: Scope.close(scope, Exit.void),
     };
   });
@@ -186,5 +190,84 @@ describe("changes when two turns' tool calls interleave in one folder", () => {
       { path: "a.txt", sharedWith: [one] },
       { path: "b.txt", sharedWith: [one] },
     ]);
+  }, 30_000);
+
+  // covers UX-002, ADR 023
+  it("[TC-RT-113] a file another turn's file tool was writing when that turn ended without its result is not a command's", async () => {
+    const { run: inHub, folder, one, two } = await twoAttempts();
+    const changes = await inHub(
+      Effect.gen(function* () {
+        const a = yield* playedTurn(folder, one);
+        const b = yield* playedTurn(folder, two);
+        // B's edit starts, then A's command; B writes, and B's turn ends without the edit's end.
+        yield* b.edit("b-edit", "x.txt");
+        yield* a.command("a-run");
+        writeFileSync(join(folder, "x.txt"), "x by B\n");
+        yield* b.end;
+        yield* a.finish("a-run");
+        yield* a.end;
+        return { a: yield* changesOf(one), b: yield* changesOf(two) };
+      }),
+    );
+
+    expect(changes.a).toEqual([]);
+    expect(changes.b).toEqual([{ path: "x.txt", sharedWith: [] }]);
+  }, 30_000);
+
+  // covers UX-002, ADR 023
+  it("[TC-RT-114] a file lost with its runtime, while a command runs beside it, is not the command's", async () => {
+    const { run: inHub, folder, one, two } = await twoAttempts();
+    const changes = await inHub(
+      Effect.gen(function* () {
+        const a = yield* playedTurn(folder, one);
+        const b = yield* playedTurn(folder, two);
+        yield* b.edit("b-edit", "x.txt");
+        yield* a.command("a-run");
+        writeFileSync(join(folder, "x.txt"), "x by B\n");
+        yield* b.lost("b-edit");
+        yield* a.finish("a-run");
+        yield* a.end;
+        yield* b.end;
+        return { a: yield* changesOf(one), b: yield* changesOf(two) };
+      }),
+    );
+
+    expect(changes.a).toEqual([]);
+    expect(changes.b).toEqual([{ path: "x.txt", sharedWith: [] }]);
+  }, 30_000);
+
+  // covers UX-002, ADR 023
+  it("[TC-RT-115] a file is labeled shared only with a turn whose folders hold it", async () => {
+    const { run: inHub, folder, one, two } = await twoAttempts();
+    const p = join(folder, "p");
+    const q = join(folder, "q");
+    mkdirSync(p);
+    mkdirSync(q);
+    const changes = await inHub(
+      Effect.gen(function* () {
+        // A works in p and q, B only in q; their commands run at once.
+        const a = yield* playedTurn([p, q], one);
+        const b = yield* playedTurn(q, two);
+        yield* b.command("b-run");
+        yield* a.command("a-run");
+        writeFileSync(join(p, "a.txt"), "a\n");
+        writeFileSync(join(q, "b.txt"), "b\n");
+        yield* a.finish("a-run");
+        yield* a.end;
+        yield* b.finish("b-run");
+        yield* b.end;
+        const placed = (attemptId: AttemptId) =>
+          Effect.map(endedActivity(attemptId), (activity) =>
+            activity.changes.map(({ folder: at, path, sharedWith }) => ({ at, path, sharedWith: [...sharedWith] })),
+          );
+        return { a: yield* placed(one), b: yield* placed(two) };
+      }),
+    );
+
+    expect(changes.a).toEqual([
+      { at: p, path: "a.txt", sharedWith: [] },
+      { at: q, path: "b.txt", sharedWith: [two] },
+    ]);
+    expect(changes.b).toEqual([{ at: q, path: "b.txt", sharedWith: [one] }]);
   }, 30_000);
 });

@@ -367,7 +367,10 @@ const makeRecorder = (limits: ActivityLimits) =>
                 for (const place of placesOf(folder, change)) {
                   if (namedByAnother(place, window.span)) continue;
                   me.claims.add(place);
-                  for (const other of beside) contested.set(place, (contested.get(place) ?? new Set()).add(other));
+                  // Only a turn that tracks the file's folder could have made it.
+                  for (const other of beside)
+                    if (other.folders.some((each) => foldersOverlap(each, place)))
+                      contested.set(place, (contested.get(place) ?? new Set()).add(other));
                 }
             }
           });
@@ -610,6 +613,18 @@ const makeRecorder = (limits: ActivityLimits) =>
             };
           });
 
+        /**
+         * A file tool's call ended, however it ended: what it wrote is written by now, so its files
+         * count as named then too, and a command running meanwhile does not claim them.
+         */
+        const stopWriting = (id: string) => {
+          const targets = me.writing.get(id);
+          me.writing.delete(id);
+          if (targets === undefined) return;
+          const at = tick();
+          for (const target of targets) me.named.set(target, at);
+        };
+
         /** Lists the tracked folders just before a command runs. */
         const openWindow = (id: string) =>
           Effect.gen(function* () {
@@ -628,13 +643,7 @@ const makeRecorder = (limits: ActivityLimits) =>
         const finished = (event: Extract<RuntimeEvent, { readonly _tag: "ToolFinished" }>) =>
           Effect.gen(function* () {
             yield* claimWindow(event.id);
-            // A file tool's change is made by now: it counts as named when it ended too.
-            const targets = me.writing.get(event.id);
-            me.writing.delete(event.id);
-            if (targets !== undefined) {
-              const at = tick();
-              for (const target of targets) me.named.set(target, at);
-            }
+            stopWriting(event.id);
             const wrote = writers.delete(event.id);
             const command = commands.get(event.id);
             if (command !== undefined) {
@@ -679,6 +688,7 @@ const makeRecorder = (limits: ActivityLimits) =>
             case "ToolFinished":
               return finished(event);
             case "ToolUncertain":
+              stopWriting(event.id);
               return Effect.flatMap(nowIso, (at) => Effect.sync(() => uncertain(event.id, at))).pipe(
                 Effect.andThen(sync),
               );
@@ -711,8 +721,8 @@ const makeRecorder = (limits: ActivityLimits) =>
           for (const id of commands.keys()) uncertain(id, at);
           // A command still running when the turn ended claims what changed up to now.
           yield* Effect.forEach([...windows.keys()], claimWindow, { discard: true });
-          // A file tool cut off with the turn is not changing anything any more.
-          me.writing.clear();
+          // A file tool cut off with the turn may have written: its files count as named as it ends.
+          for (const id of [...me.writing.keys()]) stopWriting(id);
           yield* Semaphore.withPermit(scanLock, compare(true));
           live.delete(me);
           const pinned = [...mine];
