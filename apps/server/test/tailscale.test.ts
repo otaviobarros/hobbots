@@ -38,6 +38,39 @@ describe("readStatus", () => {
     expect([...peers]).toEqual(["100.80.1.2", "fd7a:115c:a1e0::2"]);
   });
 
+  it("lists each peer with an owner as a node: its name, addresses, whether it is online and whose it is", () => {
+    const status = JSON.parse(runningStatus);
+    status.Self.UserID = 1;
+    status.User["2"] = { ID: 2, LoginName: "tagged-devices" };
+    status.Peer["nodekey:abc"] = { ...status.Peer["nodekey:abc"], Online: true, UserID: 1 };
+    status.Peer["nodekey:def"] = { ...status.Peer["nodekey:def"], UserID: 2, Tags: ["tag:server"] };
+    // A peer Tailscale names no owner for, or no MagicDNS name, is not listed.
+    status.Peer["nodekey:ghi"] = { ID: "nGHOST", DNSName: "ghost.example.ts.net.", TailscaleIPs: ["100.80.1.9"] };
+    status.Peer["nodekey:jkl"] = { ID: "nNONAME", DNSName: "", UserID: 1, TailscaleIPs: ["100.80.1.10"] };
+    const { self, nodes } = readStatus(JSON.stringify(status));
+    expect(self).toEqual({
+      nodeId: "nHUB",
+      nodeName: "studio-desk.example.ts.net",
+      owner: { _tag: "User", login: "you@example.com" },
+    });
+    expect(nodes).toEqual([
+      {
+        nodeId: "nPHONE",
+        nodeName: "phone.example.ts.net",
+        owner: { _tag: "User", login: "you@example.com" },
+        addresses: ["100.80.1.2", "fd7a:115c:a1e0::2"],
+        online: true,
+      },
+      {
+        nodeId: "nLAPTOP",
+        nodeName: "laptop.example.ts.net",
+        owner: { _tag: "Tagged", tags: ["tag:server"] },
+        addresses: [],
+        online: false,
+      },
+    ]);
+  });
+
   it("uses the tailnet only while Tailscale is running", () => {
     const status = (BackendState: string) =>
       readStatus(JSON.stringify({ ...JSON.parse(runningStatus), BackendState })).status;
