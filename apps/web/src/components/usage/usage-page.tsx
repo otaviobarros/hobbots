@@ -49,7 +49,7 @@ function PeriodPicker({ days }: { days: UsagePeriod }) {
           aria-current={period === days ? "page" : undefined}
           className={cn(
             "px-3.5 py-1.5 text-sm no-underline",
-            period === days ? "bg-lantern font-bold text-ground" : "text-text hover:bg-hover",
+            period === days ? "bg-lantern font-bold text-ground" : "text-text-strong hover:bg-hover",
           )}
         >
           {messages.period[period]}
@@ -89,14 +89,14 @@ export function UsagePage({ days }: { days: UsagePeriod }) {
             {runtimes.data ? (
               <PlanShelf runtimes={runtimes.data} plans={report.data?.plans} now={now} />
             ) : (
-              <span className="text-secondary-text">{messages.plans.checking}</span>
+              <span className="text-text-secondary">{messages.plans.checking}</span>
             )}
           </Section>
           <Section
             label={messages.daily.label}
             extra={
               report.data && (
-                <span className="text-sm text-secondary-text">{messages.daily.total({ count: replies, period })}</span>
+                <span className="text-sm text-text-secondary">{messages.daily.total({ count: replies, period })}</span>
               )
             }
           >

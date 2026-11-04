@@ -22,11 +22,11 @@ export function ArchivedHobs() {
   if (!hobs.data) return <p className="m-0 text-sm text-label">Loading archived hobs…</p>;
   return (
     <>
-      <p className="m-0 text-secondary-text">
+      <p className="m-0 text-text-secondary">
         Hobs you retired. They are asleep: they take no new work, and their chats stay here to read.
       </p>
       {hobs.data.length === 0 ? (
-        <p className="m-0 text-sm text-secondary-text">No retired hobs.</p>
+        <p className="m-0 text-sm text-text-secondary">No retired hobs.</p>
       ) : (
         <ul aria-label="Archived hobs" className="m-0 flex list-none flex-col p-0">
           {hobs.data.map((hob) => (
@@ -47,7 +47,7 @@ function ArchivedHobRow({ hob }: { hob: Agent }) {
       <HobSprite hob={hob} size={40} state="asleep" className="grayscale-60 brightness-80" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="font-pixel text-[17px] font-bold">{hob.name}</span>
-        <span className="text-[13px] text-secondary-text">{meta.join(" · ")}</span>
+        <span className="text-[13px] text-text-secondary">{meta.join(" · ")}</span>
       </div>
       <Button asChild variant="outline" size="xs">
         <Link to="/settings/archived/$hobId" params={{ hobId: hob.id }} aria-label={`Read ${hob.name}'s chats`}>
@@ -102,7 +102,7 @@ export function ArchivedHobView({ hobId, threadId }: { hobId: AgentId; threadId?
               params={{ hobId, threadId: thread.id }}
               aria-current={thread.id === threadId ? "page" : undefined}
               className={cn(
-                "flex w-full items-center gap-2 py-[7px] pr-2.5 pl-[34px] text-sm text-text no-underline hover:bg-hover hover:text-text",
+                "flex w-full items-center gap-2 py-[7px] pr-2.5 pl-[34px] text-sm text-text-strong no-underline hover:bg-hover hover:text-text-strong",
                 thread.id === threadId && "bg-line text-moonlight hover:text-moonlight",
               )}
             >
@@ -139,7 +139,7 @@ function ArchivedThread({ hob, threadId, title }: { hob: Agent; threadId: Thread
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-baseline gap-2">
             <span className="font-pixel text-xl font-semibold whitespace-nowrap">{hob.name}</span>
-            <span className="truncate text-secondary-text">{title}</span>
+            <span className="truncate text-text-secondary">{title}</span>
           </span>
           <span className="text-xs text-label">
             {hob.roleTitle} · {retiredLabel(hob)}
@@ -156,7 +156,7 @@ function ArchivedThread({ hob, threadId, title }: { hob: Agent; threadId: Thread
         ))}
       </div>
 
-      <p role="note" className="m-0 flex-none border-t-4 border-line px-6 py-3.5 text-sm text-secondary-text">
+      <p role="note" className="m-0 flex-none border-t-4 border-line px-6 py-3.5 text-sm text-text-secondary">
         {hob.name} is retired, so this chat is read-only.
       </p>
     </main>

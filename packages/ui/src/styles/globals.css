@@ -2,7 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* shadcn dark: variants follow the `dark` class on <html> (apps/web/index.html). */
-@custom-variant dark (&:is(.dark *));
+/* shadcn dark: variants follow the theme's mode: every theme but the two light ones is dark
+   (data-theme on <html>, docs/design/themes.md). */
+@custom-variant dark (&:not(:is([data-theme="lamplight-paper"], [data-theme="workshop-daylight"]) *));
 
 @source "../**/*.{ts,tsx}";

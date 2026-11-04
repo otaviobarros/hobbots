@@ -40,7 +40,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "cut fixed top-1/2 left-1/2 z-50 flex w-[calc(100vw-32px)] max-w-[560px] -translate-x-1/2 -translate-y-1/2 flex-col gap-3.5 border-2 border-control bg-panel px-7 py-6 text-text outline-none",
+          "cut fixed top-1/2 left-1/2 z-50 flex w-[calc(100vw-32px)] max-w-[560px] -translate-x-1/2 -translate-y-1/2 flex-col gap-3.5 border-2 border-control bg-panel px-7 py-6 text-text-strong outline-none",
           className,
         )}
         {...props}

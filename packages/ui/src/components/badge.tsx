@@ -10,20 +10,20 @@ const badgeVariants = cva(
     variants: {
       variant: {
         working: "bg-mint text-ground",
-        running: "bg-mint-deep text-text",
+        running: "bg-mint-deep text-text-strong",
         waiting: "bg-lantern text-ground",
         "needs-you": "bg-lantern text-ground",
         done: "bg-mint text-ground",
-        queued: "bg-line-2 text-text",
-        cancelled: "bg-line-2 text-secondary-text",
+        queued: "bg-line-2 text-text-strong",
+        cancelled: "bg-line-2 text-text-secondary",
         // A thread the user archived: read-only until restored.
-        archived: "bg-line-2 text-secondary-text",
+        archived: "bg-line-2 text-text-secondary",
         // An action blocked because the enforcement it needs is missing, such as "Needs the sandbox".
-        blocked: "bg-line-2 text-secondary-text",
+        blocked: "bg-line-2 text-text-secondary",
         failed: "bg-rose text-ground",
         live: "bg-rose text-ground",
         later: "bg-lantern text-ground",
-        muted: "bg-line text-secondary-text",
+        muted: "bg-line text-text-secondary",
       },
     },
     defaultVariants: {

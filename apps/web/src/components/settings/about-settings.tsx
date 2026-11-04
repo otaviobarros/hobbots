@@ -36,7 +36,7 @@ export function AboutSettings() {
         <dt className="text-label">{copy.dataFolder}</dt>
         <dd className="m-0 min-w-0">
           {dataDir === null ? (
-            <span className="text-secondary-text">{copy.dataFolderElsewhere}</span>
+            <span className="text-text-secondary">{copy.dataFolderElsewhere}</span>
           ) : (
             <DataFolder path={dataDir} />
           )}
@@ -51,7 +51,7 @@ export function AboutSettings() {
           </a>
         </dd>
       </dl>
-      <p className="m-0 flex flex-wrap gap-x-1 text-sm leading-[1.45] text-secondary-text">
+      <p className="m-0 flex flex-wrap gap-x-1 text-sm leading-[1.45] text-text-secondary">
         <span>{copy.openSource}</span>
         <a href={REPOSITORY_URL} target="_blank" rel="noreferrer" className={linkClass}>
           {copy.repository}

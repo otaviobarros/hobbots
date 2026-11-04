@@ -40,7 +40,7 @@ export function ChangeDetail({
           <KindTag kind={change.kind} />
         </div>
         {change.movedFrom !== null && (
-          <p className="m-0 text-detail text-secondary-text">{messages.movedFrom({ path: change.movedFrom })}</p>
+          <p className="m-0 text-detail text-text-secondary">{messages.movedFrom({ path: change.movedFrom })}</p>
         )}
         {change.sharedWith.length > 0 && (
           <p className="m-0 text-detail text-lantern">
@@ -60,7 +60,7 @@ export function ChangeDetail({
           cleared={cleared}
         />
       ) : show === "link" ? (
-        <p className="m-0 text-detail text-secondary-text">{messages.link}</p>
+        <p className="m-0 text-detail text-text-secondary">{messages.link}</p>
       ) : (
         <OtherFile change={change} />
       )}
@@ -78,7 +78,7 @@ function OtherFile({ change }: { change: FileChange }) {
   const reason = (change.after ?? change.before)?.notKept ?? null;
   return (
     <div className="flex flex-col gap-2">
-      <p className="m-0 text-detail text-secondary-text">{messages.other({ kind, size })}</p>
+      <p className="m-0 text-detail text-text-secondary">{messages.other({ kind, size })}</p>
       {reason !== null && <NotKeptNote side={change.after === null ? "before" : "after"} reason={reason} />}
     </div>
   );
@@ -107,7 +107,7 @@ function TextChange({
   const failed = sides.find((side): side is Extract<TextSide, { kind: "failed" }> => side.kind === "failed");
   if (failed !== undefined) {
     return (
-      <p className="m-0 flex items-center gap-3 text-detail text-secondary-text">
+      <p className="m-0 flex items-center gap-3 text-detail text-text-secondary">
         <span>{messages.unread}</span>
         <Button variant="chip" size="xs" onClick={failed.retry}>
           {messages.tryAgain}

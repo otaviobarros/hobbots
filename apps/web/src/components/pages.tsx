@@ -45,7 +45,7 @@ export function Page({
         <PixelArt rows={ICONS[icon]} palette={iconPalette(true)} size={40} />
         <div className="flex flex-col gap-0.5">
           <h1 className="m-0 font-pixel text-[28px] font-bold text-moonlight">{title}</h1>
-          <p className="m-0 text-secondary-text">{intro}</p>
+          <p className="m-0 text-text-secondary">{intro}</p>
         </div>
       </header>
       {children}
@@ -93,13 +93,13 @@ function PermissionSettings() {
   if (!setup.data) return null;
   return (
     <>
-      <p className="m-0 text-secondary-text">
+      <p className="m-0 text-text-secondary">
         How much hobs ask first, and the folders every hob can work in. You can make one hob more careful, or give it
         folders of its own, from its profile.
       </p>
       <PresetPicker label="Safety preset" value={setup.data.safetyPreset} />
       <span className="lbl pt-2 text-label">Folders hobs may open</span>
-      {setup.data.approvedFolders.length === 0 && <p className="m-0 text-sm text-secondary-text">No folders yet.</p>}
+      {setup.data.approvedFolders.length === 0 && <p className="m-0 text-sm text-text-secondary">No folders yet.</p>}
       <FolderPicker folders={setup.data.approvedFolders} />
       <StandingRuleSettings />
     </>
@@ -131,7 +131,7 @@ export function SettingsPage() {
         </div>
       </Panel>
       <Panel label={messages.github.heading} id="charms">
-        <p className="m-0 text-secondary-text">{messages.github.intro}</p>
+        <p className="m-0 text-text-secondary">{messages.github.intro}</p>
         <GitHubSettings />
       </Panel>
       <Panel label={backupMessages.heading} id="backup">

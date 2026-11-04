@@ -68,7 +68,7 @@ function DisconnectQuestion({ run, hub }: { readonly run: Disconnect; readonly h
     >
       <span className="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
         <span className="text-sm font-bold text-rose">{copy.confirm({ hub })}</span>
-        <span className="text-[13px] text-secondary-text">{copy.confirmNote({ hub })}</span>
+        <span className="text-[13px] text-text-secondary">{copy.confirmNote({ hub })}</span>
       </span>
       {disconnect.isError && (
         <span role="alert" className="basis-full text-sm text-rose">
@@ -95,7 +95,7 @@ export function ConnectedHubSettings({ bridge }: { readonly bridge: ConnectionBr
   const view = connection.data;
   return (
     <>
-      <p className="m-0 text-secondary-text">{copy.intro}</p>
+      <p className="m-0 text-text-secondary">{copy.intro}</p>
       {connection.isError && (
         <p role="alert" className="m-0 text-sm text-rose">
           {copy.readFailed}
@@ -114,10 +114,10 @@ export function ConnectedHubSettings({ bridge }: { readonly bridge: ConnectionBr
                   ? copy.connected({ hub: view.hubName })
                   : copy.notConnected({ hub: view.hubName })}
               </span>
-              <span className="font-mono text-[13px] text-secondary-text wrap-anywhere">
+              <span className="font-mono text-[13px] text-text-secondary wrap-anywhere">
                 {view.address} · {copy.overTailscale}
               </span>
-              <span className="text-[13px] text-secondary-text">{versionsLine(view)}</span>
+              <span className="text-[13px] text-text-secondary">{versionsLine(view)}</span>
             </span>
             {bridge.disconnect && <DisconnectQuestion run={bridge.disconnect} hub={view.hubName} />}
           </div>

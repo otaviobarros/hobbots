@@ -22,8 +22,8 @@ const motion: Record<HobState, string> = {
 const marks: Partial<Record<HobState, { text: string; className: string }>> = {
   waiting: { text: "?", className: "text-lantern animate-hb-blink" },
   "needs-you": { text: "!", className: "text-lantern animate-hb-blink" },
-  asleep: { text: "z", className: "text-secondary-text animate-hb-float" },
-  paused: { text: "z", className: "text-secondary-text animate-hb-float" },
+  asleep: { text: "z", className: "text-text-secondary animate-hb-float" },
+  paused: { text: "z", className: "text-text-secondary animate-hb-float" },
 };
 
 /**

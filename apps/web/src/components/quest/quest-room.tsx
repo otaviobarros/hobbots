@@ -74,7 +74,7 @@ export function QuestRoom({
             {pinned ? copy.pinned : copy.pin}
           </Button>
         </div>
-        <span className="text-detail text-secondary-text">
+        <span className="text-detail text-text-secondary">
           {total > 0 ? copy.summary({ whose, done, total }) : whose}
         </span>
         {!own && (
@@ -170,7 +170,7 @@ function Row({
       aria-current={selected || undefined}
       onClick={() => onOpen(row.task.id)}
       className={cn(
-        "flex w-full cursor-pointer items-center gap-2 border-0 py-1.5 pe-2 text-start text-text hover:bg-hover",
+        "flex w-full cursor-pointer items-center gap-2 border-0 py-1.5 pe-2 text-start text-text-strong hover:bg-hover",
         INDENT[Math.min(row.depth, INDENT.length - 1)],
         selected ? "bg-line" : "bg-transparent",
       )}

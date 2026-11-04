@@ -53,7 +53,9 @@ export function SidePanel({
             onClick={() => pick(name)}
             className={cn(
               "flex-1 cursor-pointer border-0 px-1.5 py-[11px] text-sm font-bold",
-              tab === name ? "bg-line text-moonlight" : "bg-transparent text-label hover:bg-hover hover:text-text",
+              tab === name
+                ? "bg-line text-moonlight"
+                : "bg-transparent text-label hover:bg-hover hover:text-text-strong",
             )}
           >
             {name}
@@ -80,7 +82,7 @@ export function SidePanel({
 
 function Empty({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex animate-hb-in flex-col gap-2 px-[18px] py-[22px] leading-normal text-secondary-text">
+    <div className="flex animate-hb-in flex-col gap-2 px-[18px] py-[22px] leading-normal text-text-secondary">
       <span className="font-pixel text-lg text-moonlight">{title}</span>
       <span>{children}</span>
     </div>
@@ -107,11 +109,11 @@ function Workshop({ hobId, threadId }: { hobId: string; threadId?: ThreadId | un
           <HobSprite hob={current} size={64} state={now ? "working" : "idle"} />
           <div aria-hidden className="h-[42px] w-[84px] border-t-8 border-[#8a6240] bg-[#6b4a2f]" />
         </div>
-        <span className="absolute top-[54px] left-[110px] max-w-[200px] bg-text px-2.5 py-1.5 text-[13px] text-ground">
+        <span className="absolute top-[54px] left-[110px] max-w-[200px] bg-text-strong px-2.5 py-1.5 text-[13px] text-ground">
           {doing(current, now)}
         </span>
       </div>
-      <p className="m-0 px-4 py-3.5 text-sm leading-normal text-secondary-text">
+      <p className="m-0 px-4 py-3.5 text-sm leading-normal text-text-secondary">
         The Workshop shows what {current.name} is doing right now. Terminal output, files and code changes open in the
         Workbench, which arrives with the MVP.
       </p>
