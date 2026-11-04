@@ -26,42 +26,46 @@ export function AppFrame() {
     <div aria-busy="true" className={windowFrame}>
       <header className={cn(titleStrip, "hidden in-data-[window=desktop]:flex")}>Hobbots</header>
       <div className={windowBody}>
-        <div aria-hidden="true" className={cn(sidebarColumn, "in-data-[frame=plain]:hidden")}>
-          <div
-            className={cn(
-              sidebarNav,
-              "in-data-[sidebar=open]:w-sidebar-open max-wide:in-data-[sidebar=open]:shadow-sheet",
-            )}
-          >
-            <div className={sidebarChief}>
-              <span className={sidebarIcon}>
-                <Skeleton shape="tile" className="size-10" />
-              </span>
-              <FrameLabel width="9ch" />
-            </div>
-            {SECTION_WIDTHS.map((width, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list that never reorders.
-              <div key={index} className={sidebarItem}>
-                <span className={sidebarIcon}>
-                  <Skeleton shape="dot" className="size-5" />
-                </span>
-                <FrameLabel width={width} />
-              </div>
-            ))}
-            <div className={sidebarDivider} />
-            <div className={sidebarItem}>
-              <span className={sidebarIcon}>
-                <Skeleton shape="tile" className="size-hob-tile" />
-              </span>
-              <FrameLabel width="10ch" />
-            </div>
-            <div className={cn(sidebarItem, "mt-auto")}>
-              <span className={sidebarIcon}>
-                <Skeleton shape="dot" className="size-[18px]" />
-              </span>
-              <FrameLabel width="7ch" />
-            </div>
+        <FrameSidebar />
+      </div>
+    </div>
+  );
+}
+
+/** The sidebar's fixed rows as still skeletons: the chief, the four sections, a hob and the chevron. */
+function FrameSidebar() {
+  return (
+    <div aria-hidden="true" className={cn(sidebarColumn, "in-data-[frame=plain]:hidden")}>
+      <div
+        className={cn(sidebarNav, "in-data-[sidebar=open]:w-sidebar-open max-wide:in-data-[sidebar=open]:shadow-sheet")}
+      >
+        <div className={sidebarChief}>
+          <span className={sidebarIcon}>
+            <Skeleton shape="tile" className="size-10" />
+          </span>
+          <FrameLabel width="9ch" />
+        </div>
+        {SECTION_WIDTHS.map((width, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list that never reorders.
+          <div key={index} className={sidebarItem}>
+            <span className={sidebarIcon}>
+              <Skeleton shape="dot" className="size-5" />
+            </span>
+            <FrameLabel width={width} />
           </div>
+        ))}
+        <div className={sidebarDivider} />
+        <div className={sidebarItem}>
+          <span className={sidebarIcon}>
+            <Skeleton shape="tile" className="size-hob-tile" />
+          </span>
+          <FrameLabel width="10ch" />
+        </div>
+        <div className={cn(sidebarItem, "mt-auto")}>
+          <span className={sidebarIcon}>
+            <Skeleton shape="dot" className="size-[18px]" />
+          </span>
+          <FrameLabel width="7ch" />
         </div>
       </div>
     </div>
@@ -70,5 +74,9 @@ export function AppFrame() {
 
 /** A row's label, which shows only while the sidebar is expanded. */
 function FrameLabel({ width }: { width: string }) {
-  return <Skeleton width={width} className="hidden in-data-[sidebar=open]:inline-flex" />;
+  return (
+    <span className="hidden in-data-[sidebar=open]:inline-flex">
+      <Skeleton width={width} />
+    </span>
+  );
 }
