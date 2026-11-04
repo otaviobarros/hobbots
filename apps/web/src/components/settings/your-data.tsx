@@ -2,8 +2,9 @@ import type { Agent } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { aboutQuery } from "../../api/about.ts";
-import { archivedAgentsQuery, threadsQuery } from "../../api/queries.ts";
+import { archivedAgentsQuery, threadsQuery, useBringBackHob } from "../../api/queries.ts";
 import { formatDay } from "../../lib/time.ts";
 import { useCopy } from "../../lib/use-copy.ts";
 import { messages as archiveMessages } from "../archive-page/messages.ts";
@@ -29,17 +30,40 @@ export function YourData() {
   );
 }
 
-/** Each retired hob with its role, when it retired and how many chats it kept, and Read chats. */
+/**
+ * Each retired hob with its role, when it retired and how many chats it kept, with Read chats and
+ * Bring back. A hob brought back leaves the list, and a line says it is back.
+ */
 function RetiredHobs() {
   const hobs = useQuery(archivedAgentsQuery);
+  const bringing = useBringBackHob();
+  const [back, setBack] = useState<{ name: string; chats: number } | null>(null);
+  const bringBack = (hob: Agent, chats: number) => {
+    setBack(null);
+    bringing.mutate(hob.id, { onSuccess: () => setBack({ name: hob.name, chats }) });
+  };
+  const failed = bringing.isError ? hobs.data?.find((hob) => hob.id === bringing.variables) : undefined;
   return (
     <SettingsGroup label={copy.retiredHobs}>
+      <p role="status" className="m-0 text-sm text-text-secondary empty:hidden">
+        {back && archiveMessages.toast.back(back)}
+      </p>
+      {failed && (
+        <p role="alert" className="m-0 text-sm text-rose">
+          {archiveMessages.toast.backFailed({ name: failed.name })}
+        </p>
+      )}
       {hobs.isError && <p className="m-0 text-sm text-rose">{retiredCopy.loadFailed}</p>}
       {hobs.data?.length === 0 && <p className="m-0 text-text-secondary">{retiredCopy.none}</p>}
       {hobs.data !== undefined && hobs.data.length > 0 && (
         <ul aria-label={copy.retiredHobs} className="m-0 flex list-none flex-col gap-1 p-0">
           {hobs.data.map((hob) => (
-            <RetiredRow key={hob.id} hob={hob} />
+            <RetiredRow
+              key={hob.id}
+              hob={hob}
+              busy={bringing.isPending && bringing.variables === hob.id}
+              onBringBack={bringBack}
+            />
           ))}
         </ul>
       )}
@@ -51,7 +75,15 @@ function RetiredHobs() {
   );
 }
 
-function RetiredRow({ hob }: { hob: Agent }) {
+function RetiredRow({
+  hob,
+  busy,
+  onBringBack,
+}: {
+  hob: Agent;
+  busy: boolean;
+  onBringBack: (hob: Agent, chats: number) => void;
+}) {
   const threads = useQuery(threadsQuery(hob.id));
   const meta = [
     hob.roleTitle,
@@ -71,6 +103,15 @@ function RetiredRow({ hob }: { hob: Agent }) {
         <Link to="/archive/hobs/$hobId" params={{ hobId: hob.id }} aria-label={retiredCopy.read({ name: hob.name })}>
           {copy.readChats}
         </Link>
+      </Button>
+      <Button
+        variant="outline"
+        size="xs"
+        disabled={busy}
+        aria-label={retiredCopy.bringBackLabel({ name: hob.name })}
+        onClick={() => onBringBack(hob, threads.data?.length ?? 0)}
+      >
+        {busy ? retiredCopy.bringingBack : retiredCopy.bringBack}
       </Button>
     </li>
   );

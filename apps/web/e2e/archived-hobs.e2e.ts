@@ -175,3 +175,32 @@ test("[TC-AG-116] a retired hob comes back from the Archive with its chats, and 
   await composer.press("Enter");
   await expect(page.getByText("Echo: Plan next week too", { exact: true })).toBeVisible();
 });
+
+// covers AG-006
+test("[TC-AG-117] Settings › Your data brings a retired hob back", async ({ page }) => {
+  hub = await startHub(dataDir);
+  const current = hub;
+  await api(current, "PATCH", "/setup", { completed: true });
+  const hob = await api<{ id: string }>(current, "POST", "/agents", {
+    name: "Pip",
+    role: null,
+    roleTitle: "Guide",
+    sigil: "assistant",
+    hat: null,
+    tool: null,
+    lookSeed: 7,
+    lookColor: "moss",
+    runtime: "claude-code",
+    model: null,
+    effort: null,
+    instructions: "",
+  });
+  await api(current, "POST", `/agents/${hob.id}/retire`, { activeWork: "finish" });
+
+  await page.goto(`${current.url}/#/settings/data`);
+  const panel = page.getByRole("region", { name: "Retired hobs" });
+  await panel.getByRole("button", { name: "Bring back Pip" }).click();
+  await expect(panel.getByRole("status")).toHaveText("Pip is back. It rests until you give it something to do.");
+  await expect(panel.getByRole("list", { name: "Retired hobs" })).toHaveCount(0);
+  expect(await api(current, "GET", "/agents")).toMatchObject([{ id: hob.id, status: "active" }]);
+});

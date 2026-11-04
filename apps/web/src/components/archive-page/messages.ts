@@ -22,6 +22,7 @@ export const messages = {
   scope: {
     label: "Whose chats",
     all: "All hobs",
+    more: "More hobs",
   },
   search: {
     label: "Search archived chats",

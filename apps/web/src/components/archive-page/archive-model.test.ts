@@ -1,6 +1,6 @@
 import { AgentId, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { allArchivedChats, isArchiveTab, scopeHobs, visibleChats } from "./archive-model.ts";
+import { allArchivedChats, isArchiveTab, scopeChips, visibleChats } from "./archive-model.ts";
 
 const pip = { id: AgentId.make("pip"), name: "Pip" };
 const moss = { id: AgentId.make("moss"), name: "Moss" };
@@ -30,10 +30,32 @@ describe("allArchivedChats", () => {
   });
 });
 
-describe("scopeHobs", () => {
-  it("offers the hobs with archived chats by name, and the chosen hob even without any", () => {
-    expect(scopeHobs([pip, moss, ada], chats, undefined).map((hob) => hob.name)).toEqual(["Moss", "Pip"]);
-    expect(scopeHobs([pip, moss, ada], chats, ada.id).map((hob) => hob.name)).toEqual(["Ada", "Moss", "Pip"]);
+describe("scopeChips", () => {
+  const names = (list: ReadonlyArray<{ hob: { name: string }; count: number }>) =>
+    list.map((chip) => `${chip.hob.name} ${chip.count}`);
+
+  it("offers the hobs with archived chats, most chats first, and the chosen hob even without any", () => {
+    expect(names(scopeChips([pip, moss, ada], chats, undefined).chips)).toEqual(["Pip 2", "Moss 1"]);
+    expect(names(scopeChips([pip, moss, ada], chats, ada.id).chips)).toEqual(["Pip 2", "Moss 1", "Ada 0"]);
+  });
+
+  it("puts the hobs past six under More hobs by name, and shows a hob picked from there", () => {
+    const many = Array.from({ length: 9 }, (_, n) => ({ id: AgentId.make(`h${n}`), name: `Hob ${9 - n}` }));
+    const lots = allArchivedChats(
+      many,
+      new Map(
+        many.map((hob, n) => [
+          hob.id,
+          Array.from({ length: 9 - n }, (_, k) => thread(`${hob.id}-${k}`, "Chat", "2026-10-01T10:00:00.000Z")),
+        ]),
+      ),
+    );
+    const open = scopeChips(many, lots, undefined);
+    expect(names(open.chips)).toEqual(["Hob 9 9", "Hob 8 8", "Hob 7 7", "Hob 6 6", "Hob 5 5", "Hob 4 4"]);
+    expect(names(open.more)).toEqual(["Hob 1 1", "Hob 2 2", "Hob 3 3"]);
+    const picked = scopeChips(many, lots, AgentId.make("h7"));
+    expect(names(picked.chips).at(-1)).toBe("Hob 2 2");
+    expect(names(picked.more)).toEqual(["Hob 1 1", "Hob 3 3"]);
   });
 });
 
