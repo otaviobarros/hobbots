@@ -166,7 +166,7 @@ test("[TC-UX-147] a link with q opens a hob's Chats already searching for it", a
 });
 
 // covers UX-001, UX-005
-test("[TC-UX-143] a new hob's page says hello and offers three starters, and one opens a new chat with its words", async ({
+test("[TC-UX-151] a new hob's page says hello and offers three starters, and one opens a new chat with its words", async ({
   page,
 }) => {
   const { current, pip } = await hubWithPip();

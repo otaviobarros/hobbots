@@ -53,7 +53,7 @@ test("[TC-UX-051] the Workbench chat of Quill's Task talks to Aldric, who leads 
 });
 
 // covers OR-004, UX-002
-test("[TC-UX-141] while Ada's question waits for you, the Workbench chat answers it, and a note to Aldric is offered instead, never sent as the answer", async ({
+test("[TC-UX-149] while Ada's question waits for you, the Workbench chat answers it, and a note to Aldric is offered instead, never sent as the answer", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
