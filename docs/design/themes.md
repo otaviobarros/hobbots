@@ -86,6 +86,7 @@ Every size in `size` is a `--spacing-*` token in `styles.css`, so Tailwind reads
 | `measure` | 70ch | The longest line of reply prose, the tray and the composer |
 | `bubble-max` | 460px | Your own message bubble and what waits beside it; the hob profile dialog |
 | `work-max` | 604px | Task and question cards in the transcript |
+| `lane` | 220px | The narrowest a Quest room lane gets before the lanes scroll sideways |
 | `column-max` | 560px | Dialogs, centered notices and empty states, the approval card |
 | `form-max` | 760px | Long single-column content, such as a hob's charms and permissions |
 | `home-max` | 880px | Home and Usage |

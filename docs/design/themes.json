@@ -646,6 +646,7 @@
     "measure": "70ch",
     "bubble-max": "460px",
     "work-max": "604px",
+    "lane": "220px",
     "column-max": "560px",
     "form-max": "760px",
     "home-max": "880px",
