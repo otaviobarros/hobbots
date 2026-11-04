@@ -32,11 +32,7 @@ function Ids({ row }: { row: TraceRow }) {
     copy.taskId({ id: row.task.id }),
     ...(row.delegation ? [copy.delegationId({ id: row.delegation.id })] : []),
   ];
-  return (
-    <span className="font-mono text-xs break-all text-label">
-      {copy.ids}: {ids.join(" · ")}
-    </span>
-  );
+  return <span className="font-mono text-xs break-all text-label">{copy.idsLine({ ids: ids.join(" · ") })}</span>;
 }
 
 function TaskRow({ row, hobName }: { row: TraceRow; hobName: HobName }) {
@@ -97,7 +93,7 @@ function EventRow({ entry, hobName }: { entry: TraceEntry; hobName: HobName }) {
       </time>
       <span className="min-w-0 flex-1">{eventLabel(entry.type)}</span>
       <span className="text-text-secondary">{entry.agentId === null ? "" : hobName(entry.agentId)}</span>
-      <span className="font-mono text-xs text-label">#{entry.sequence}</span>
+      <span className="font-mono text-xs text-label">{copy.sequence({ n: entry.sequence })}</span>
     </li>
   );
 }

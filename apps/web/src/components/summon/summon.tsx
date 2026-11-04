@@ -113,6 +113,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
           </div>
           <Stepper
             aria-label={copy.stepsLabel}
+            doneLabel={copy.stepDone}
             steps={copy.steps}
             current={index}
             onPick={locked ? undefined : (i) => onStep(stepAt(i))}

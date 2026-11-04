@@ -57,13 +57,13 @@ export const useHobPermissions = (hob: Agent) => {
 export function Loading({ name, failed, retry }: { name: string; failed: boolean; retry: () => void }) {
   return failed ? (
     <p role="alert" className="m-0 flex items-center gap-3 text-sm text-rose">
-      Hobbots could not read what {name} may do.
+      {messages.permissions.loadFailed({ name })}
       <Button variant="outline" size="xs" onClick={retry}>
-        Try again
+        {messages.permissions.tryAgain}
       </Button>
     </p>
   ) : (
-    <span className="text-label">Loading…</span>
+    <span className="text-label">{messages.permissions.loading}</span>
   );
 }
 
@@ -283,15 +283,15 @@ function SharedFolders({
   if (permissions.sharedFolders.length === 0) {
     return (
       <span className="text-sm text-text-secondary">
-        No shared folders yet.{" "}
+        {messages.permissions.noShared}{" "}
         <Link to="/settings/$section" params={{ section: "safety" }}>
-          Add them in Settings
+          {messages.permissions.addInSettings}
         </Link>
       </span>
     );
   }
   return (
-    <ul aria-label="Shared folders" className="m-0 flex list-none flex-col gap-1.5 p-0">
+    <ul aria-label={messages.permissions.sharedFolders} className="m-0 flex list-none flex-col gap-1.5 p-0">
       {permissions.sharedFolders.map((folder) => {
         const shownHidden = hidden.includes(folder);
         return (

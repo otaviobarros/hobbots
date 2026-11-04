@@ -15,15 +15,18 @@ type StepperProps = Omit<React.ComponentProps<"ol">, "children"> & {
   onPick?: ((index: number) => void) | undefined;
   /** The list's accessible name, such as "Summon steps". */
   "aria-label": string;
+  /** What a screen reader hears after a done step's name, such as "(done)". */
+  doneLabel: string;
 };
 
-function Stepper({ steps, current, onPick, className, ...props }: StepperProps) {
+function Stepper({ steps, current, onPick, doneLabel, className, ...props }: StepperProps) {
   return (
     <ol data-slot="stepper" className={cn("m-0 flex list-none gap-2 p-0", className)} {...props}>
       {steps.map((label, index) => (
         <StepperStep
           key={label}
           label={label}
+          doneLabel={doneLabel}
           number={index + 1}
           state={index < current ? "done" : index === current ? "current" : "later"}
           onPick={onPick && index < current ? () => onPick(index) : undefined}
@@ -49,11 +52,13 @@ const DOT: Record<StepState, string> = {
 
 function StepperStep({
   label,
+  doneLabel,
   number,
   state,
   onPick,
 }: {
   label: string;
+  doneLabel: string;
   number: number;
   state: StepState;
   onPick: (() => void) | undefined;
@@ -68,7 +73,7 @@ function StepperStep({
       </span>
       <span className="min-w-0 truncate text-sm">
         {label}
-        {state === "done" && <span className="sr-only"> (done)</span>}
+        {state === "done" && <span className="sr-only"> {doneLabel}</span>}
       </span>
     </>
   );

@@ -127,6 +127,8 @@ export const messages = {
     tries: ({ count }: { count: number }) =>
       plural(count, { one: `${formatCount(count)} try`, other: `${formatCount(count)} tries` }),
     openStep: ({ title }: { title: string }) => `Open ${title} in Workbench`,
+    lineLabel: ({ line, mark, title }: { line: string; mark: string; title: string }) =>
+      `${line}, ${mark}. Open ${title} in Workbench`,
     milestone: ({ title }: { title: string }) => `Milestone: ${title}`,
     refused: ({ label }: { label: string }) => `${label}: refused`,
     refusedTold: ({ name, message }: { name: string; message: string }) => `Hobbots told ${name}: ${message}`,

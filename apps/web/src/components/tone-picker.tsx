@@ -1,5 +1,6 @@
 import { REPLY_LENGTHS, type ReplyLength, VOICE_GROUPS, VOICES, type Voice, voiceChoice } from "@hobbots/domain";
 import { Choice } from "./hob-form.tsx";
+import { messages } from "./messages.ts";
 
 /**
  * How a hob talks: one voice, in the picker's three groups, and one length. Each choice shows its
@@ -21,13 +22,13 @@ export function TonePicker({
   return (
     <>
       <fieldset className="m-0 flex flex-col gap-2.5 border-0 p-0">
-        <legend className="mb-2.5 font-bold">Voice</legend>
+        <legend className="mb-2.5 font-bold">{messages.tone.voice}</legend>
         {VOICE_GROUPS.map((group) => (
           <fieldset key={group.id} className="m-0 flex flex-col gap-1.5 border-0 p-0">
             <legend className="mb-1.5 flex items-center gap-2.5 text-[13px] font-bold text-text-secondary">
               {group.title}
               {group.id === "themed" && (
-                <span className="bg-deep px-2 py-0.5 text-xs font-normal text-label">Changes wording only</span>
+                <span className="bg-deep px-2 py-0.5 text-xs font-normal text-label">{messages.tone.wordingOnly}</span>
               )}
             </legend>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -47,14 +48,11 @@ export function TonePicker({
           </fieldset>
         ))}
         {voiceChoice(voice).group === "themed" && (
-          <span className="text-[13px] text-label">
-            Facts stay as accurate as ever. Code, commands, links and warnings stay plain, and {name} drops the voice
-            when things get serious.
-          </span>
+          <span className="text-[13px] text-label">{messages.tone.themedNote({ name })}</span>
         )}
       </fieldset>
       <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-        <legend className="mb-2 font-bold">Length</legend>
+        <legend className="mb-2 font-bold">{messages.tone.length}</legend>
         <div className="flex flex-wrap gap-2">
           {REPLY_LENGTHS.map((l) => (
             <Choice
