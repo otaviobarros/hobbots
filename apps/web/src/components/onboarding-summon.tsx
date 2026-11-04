@@ -147,7 +147,7 @@ export function OnboardingReady() {
         <h1 aria-live="polite" className="m-0 font-pixel text-[30px] font-bold text-moonlight">
           {done ? copy.arrived({ name }) : copy.heading}
         </h1>
-        <p className="m-0 text-secondary-text">
+        <p className="m-0 text-text-secondary">
           {done
             ? copy.waiting({ name })
             : copy
@@ -179,7 +179,7 @@ export function OnboardingReady() {
             );
           })}
           {ritual === "poof" && (
-            <span className="absolute top-[90px] left-[90px] size-[120px] animate-hb-poof rounded-full bg-text" />
+            <span className="absolute top-[90px] left-[90px] size-[120px] animate-hb-poof rounded-full bg-text-strong" />
           )}
           {done && hob && (
             <>

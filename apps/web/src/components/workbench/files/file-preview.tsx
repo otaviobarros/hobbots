@@ -7,7 +7,7 @@ import { ReplyMarkdown } from "../../markdown/reply-markdown.tsx";
 import { fileName, fileView } from "./files-model.ts";
 import { messages } from "./messages.ts";
 
-const NOTE = "m-0 px-4 py-5 text-detail text-secondary-text";
+const NOTE = "m-0 px-4 py-5 text-detail text-text-secondary";
 
 /**
  * A file's preview, as it is now on the hub: an image, a PDF, Markdown rendered as replies are, or
@@ -67,7 +67,7 @@ function TextPreview({ attemptId, file, markdown }: { attemptId: AttemptId; file
           <ReplyMarkdown content={read.data} streaming={false} caret={false} />
         </div>
       ) : (
-        <pre className="m-0 px-4 py-3 font-mono text-xs leading-normal whitespace-pre-wrap break-all text-text">
+        <pre className="m-0 px-4 py-3 font-mono text-xs leading-normal whitespace-pre-wrap break-all text-text-strong">
           {read.data}
         </pre>
       )}

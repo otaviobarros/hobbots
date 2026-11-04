@@ -149,7 +149,7 @@ export function PlanShelf({
               key={view.runtime}
               className={cn(
                 "hop-on-hover flex cursor-pointer flex-col items-center gap-1 px-1.5 pt-2 pb-1.5 text-xs font-bold has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight",
-                on ? "bg-line text-moonlight" : "text-secondary-text hover:bg-hover",
+                on ? "bg-line text-moonlight" : "text-text-secondary hover:bg-hover",
               )}
             >
               <input
@@ -170,11 +170,11 @@ export function PlanShelf({
         })}
       </div>
       <div className="flex min-w-0 flex-1 basis-[220px] animate-hb-in flex-col gap-2" aria-live="polite">
-        <span className="text-sm text-secondary-text">
+        <span className="text-sm text-text-secondary">
           {current.name} · {current.kind}
         </span>
         <span className="font-pixel text-[34px] font-bold leading-none">{current.headline}</span>
-        <span className="text-sm leading-snug text-secondary-text">{current.detail}</span>
+        <span className="text-sm leading-snug text-text-secondary">{current.detail}</span>
         {current.meters.length > 1 && (
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {current.meters.map((meter) => (
@@ -182,7 +182,7 @@ export function PlanShelf({
             ))}
           </ul>
         )}
-        {current.credits !== null && <span className="text-[13px] text-secondary-text">{current.credits}</span>}
+        {current.credits !== null && <span className="text-[13px] text-text-secondary">{current.credits}</span>}
       </div>
     </div>
   );

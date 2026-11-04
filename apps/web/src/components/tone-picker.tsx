@@ -24,7 +24,7 @@ export function TonePicker({
         <legend className="mb-2.5 font-bold">Voice</legend>
         {VOICE_GROUPS.map((group) => (
           <fieldset key={group.id} className="m-0 flex flex-col gap-1.5 border-0 p-0">
-            <legend className="mb-1.5 flex items-center gap-2.5 text-[13px] font-bold text-secondary-text">
+            <legend className="mb-1.5 flex items-center gap-2.5 text-[13px] font-bold text-text-secondary">
               {group.title}
               {group.id === "themed" && (
                 <span className="bg-deep px-2 py-0.5 text-xs font-normal text-label">Changes wording only</span>

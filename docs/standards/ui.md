@@ -4,7 +4,7 @@ Rules for how UI code is written and how it must look. The [design specification
 
 ### STD-UI-001 Styles use theme tokens only
 
-Take colors, spacing, radii, type and animations from the theme tokens in the `@theme` block of `apps/web/src/styles.css`. Add a token there when the design needs a new value. Components never hold raw hex colors or one-off pixel values.
+Take colors, spacing, radii, type and animations from the theme tokens in `apps/web/src/styles.css`: the `@theme` block and the per-theme `data-theme` rules ([themes](../design/themes.md)). Add a token there, with a value for every theme, when the design needs a new value. Components never hold raw hex colors or one-off pixel values, and never check which theme is on.
 
 - **Why:** one token change restyles every screen, and the palette stays consistent.
 - **Enforced by:** review.

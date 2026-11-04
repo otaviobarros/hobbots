@@ -65,7 +65,7 @@ export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: (
   }
   return (
     <div className="flex max-w-[760px] flex-col gap-2.5">
-      <span className="text-secondary-text">
+      <span className="text-text-secondary">
         What {hob.name} can do. Its own tools come with its runtime; Charms connect it to other apps.
       </span>
 
@@ -83,7 +83,7 @@ export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: (
         off and {hob.name} is offered none of its actions from its next reply.
       </span>
       <h2 className="lbl m-0 pt-2 text-xs text-label">{messages.enforcement.heading}</h2>
-      <span className="text-[13px] text-secondary-text">{messages.enforcement.intro({ name: hob.name })}</span>
+      <span className="text-[13px] text-text-secondary">{messages.enforcement.intro({ name: hob.name })}</span>
       <EnforcementList enforcement={data.enforcement} />
       <div className="pt-2">
         <Button variant="outline" onClick={onPermissions}>
@@ -132,7 +132,7 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
           <label htmlFor={switchId} className="font-bold">
             {copy.name}
           </label>
-          <span className="text-[13px] text-secondary-text">
+          <span className="text-[13px] text-text-secondary">
             {bot === null ? copy.reads({ name: hob.name }) : copy.readsAsBot({ name: hob.name, bot })}
           </span>
         </div>
@@ -150,7 +150,7 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
             const answer = ANSWER[offeredAnswer(operation, permissions.decisions[operation])];
             return (
               <li key={operation} className="flex items-center gap-1 text-[13px]">
-                <span className="text-secondary-text">{copy[label]}</span>
+                <span className="text-text-secondary">{copy[label]}</span>
                 <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(answer))}>{answer}</span>
               </li>
             );
@@ -160,7 +160,7 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
         <span className="ps-[54px] text-[13px] text-label">{copy.off({ name: hob.name })}</span>
       )}
       {!connected && (
-        <span className="ps-[54px] text-[13px] text-secondary-text">
+        <span className="ps-[54px] text-[13px] text-text-secondary">
           {copy.notConnected}{" "}
           <Link to="/settings" hash="charms" className="text-lantern">
             {copy.connectInSettings}
@@ -201,7 +201,7 @@ function BuiltInTool({ tool, permissions }: { tool: (typeof BUILT_IN)[number]; p
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="font-bold">{tool.name}</span>
-        <span className="text-[13px] text-secondary-text">{tool.note}</span>
+        <span className="text-[13px] text-text-secondary">{tool.note}</span>
         <span className="text-[13px] text-label">{holdingLine(holding)}</span>
       </div>
       <span className="flex flex-none flex-wrap justify-end gap-1.5">
@@ -212,7 +212,7 @@ function BuiltInTool({ tool, permissions }: { tool: (typeof BUILT_IN)[number]; p
             const answer = ANSWER[permissions.decisions[op]];
             return (
               <span key={op} className="flex items-center gap-1 text-[13px]">
-                {tool.operations.length > 1 && <span className="text-secondary-text">{label}</span>}
+                {tool.operations.length > 1 && <span className="text-text-secondary">{label}</span>}
                 <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(answer))}>{answer}</span>
               </span>
             );

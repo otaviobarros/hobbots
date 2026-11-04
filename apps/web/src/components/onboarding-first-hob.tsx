@@ -93,7 +93,7 @@ function LookPreview({
       <div aria-hidden className="absolute inset-x-[54px] top-[268px] h-3.5 bg-line-2" />
       <div className="absolute inset-x-0 top-4 flex flex-col items-center gap-0.5 px-4">
         <span className="max-w-full truncate font-pixel text-[26px] font-bold text-moonlight">{name}</span>
-        <span className="max-w-full truncate text-sm text-secondary-text">{roleLine}</span>
+        <span className="max-w-full truncate text-sm text-text-secondary">{roleLine}</span>
       </div>
       <button
         type="button"
@@ -111,12 +111,12 @@ function LookPreview({
         <span
           key={lookRolls}
           aria-hidden
-          className="pointer-events-none absolute top-[120px] left-16 size-[140px] animate-hb-poof rounded-full bg-text motion-reduce:hidden"
+          className="pointer-events-none absolute top-[120px] left-16 size-[140px] animate-hb-poof rounded-full bg-text-strong motion-reduce:hidden"
         />
       )}
       <div className="absolute inset-x-4 top-[296px] flex flex-col gap-2.5">
         <div className="flex items-center gap-2">
-          <span aria-live="polite" className="min-w-0 flex-1 text-[13px] text-secondary-text">
+          <span aria-live="polite" className="min-w-0 flex-1 text-[13px] text-text-secondary">
             {copy.look({ seed: draft.lookSeed, recipe: look.recipe })}
           </span>
           <Button variant="outline" size="xs" onClick={onRoll}>
@@ -206,7 +206,7 @@ export function OnboardingFirstHob() {
           </Button>
           <span
             id="first-hob-hint"
-            className={cn("flex-1 text-right text-sm", problem && tried ? "text-lantern" : "text-secondary-text")}
+            className={cn("flex-1 text-right text-sm", problem && tried ? "text-lantern" : "text-text-secondary")}
           >
             {hint}
           </span>
@@ -229,7 +229,7 @@ export function OnboardingFirstHob() {
         <div className="flex min-w-0 flex-1 flex-col gap-3.5">
           <div>
             <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{copy.heading}</h1>
-            <p className="m-0 mt-1 text-secondary-text">{copy.intro}</p>
+            <p className="m-0 mt-1 text-text-secondary">{copy.intro}</p>
           </div>
 
           <RolePicker
@@ -257,7 +257,7 @@ export function OnboardingFirstHob() {
                   value={draft.name}
                   maxLength={LABEL_MAX}
                   onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value, named: true }))}
-                  className="w-[150px] border-2 border-control bg-deep px-2.5 py-[7px] font-pixel text-xl font-bold text-text"
+                  className="w-[150px] border-2 border-control bg-deep px-2.5 py-[7px] font-pixel text-xl font-bold text-text-strong"
                 />
                 <NameDice
                   size={22}

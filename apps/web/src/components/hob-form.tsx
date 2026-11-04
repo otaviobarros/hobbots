@@ -113,7 +113,7 @@ export function Choice({
     <label
       className={cn(
         "cut flex cursor-pointer items-center gap-2 border-2 px-3 py-[7px] text-sm",
-        checked ? "border-lantern bg-lantern text-ground" : "border-control text-text hover:bg-line",
+        checked ? "border-lantern bg-lantern text-ground" : "border-control text-text-strong hover:bg-line",
         focusWithin,
         className,
       )}
@@ -154,7 +154,7 @@ export function ChoresField<D extends FirstHobDraft>({
         }}
         aria-describedby="hob-chores-note"
         placeholder="Tell it about the chores, like you would tell a friend who is helping out."
-        className="resize-none border-2 border-control bg-deep px-3 py-2.5 leading-normal text-text placeholder:text-label"
+        className="resize-none border-2 border-control bg-deep px-3 py-2.5 leading-normal text-text-strong placeholder:text-label"
       />
       <span id="hob-chores-note" className="text-[13px] text-label">
         {draft.choresEdited
@@ -206,8 +206,8 @@ export function RoleOption({
         </span>
       )}
       <span className="flex min-w-0 flex-col gap-0.5">
-        <span className={cn("text-sm font-bold", checked ? "text-moonlight" : "text-text")}>{title}</span>
-        <span className="text-xs leading-snug text-secondary-text">{note}</span>
+        <span className={cn("text-sm font-bold", checked ? "text-moonlight" : "text-text-strong")}>{title}</span>
+        <span className="text-xs leading-snug text-text-secondary">{note}</span>
       </span>
     </label>
   );
@@ -266,7 +266,7 @@ export function RolePicker({
         aria-expanded={moreOpen}
         aria-controls={moreId}
         onClick={() => setMoreShown(!moreOpen)}
-        className="flex items-center gap-2 self-start bg-transparent py-1 text-sm text-label hover:text-text"
+        className="flex items-center gap-2 self-start bg-transparent py-1 text-sm text-label hover:text-text-strong"
       >
         <span aria-hidden className="w-2.5">
           {moreOpen ? "▾" : "▸"}
@@ -357,10 +357,10 @@ export function OwnRole({
         onChange={(e) => onTitle(e.target.value)}
         placeholder="Its role, in your words. e.g. Garden planner"
         aria-label="Your own role title"
-        className="border-2 border-lantern bg-deep px-[11px] py-[9px] text-[15px] text-text"
+        className="border-2 border-lantern bg-deep px-[11px] py-[9px] text-[15px] text-text-strong"
       />
       <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-        <legend className="mb-1.5 text-[13px] text-secondary-text">Sigil</legend>
+        <legend className="mb-1.5 text-[13px] text-text-secondary">Sigil</legend>
         <div className="flex flex-wrap gap-1">
           {ALL_ROLES.map((id) => {
             const on = value.ownSigil === id;
@@ -408,7 +408,7 @@ export function GearPicker<D extends FirstHobDraft>({
   onChange: (update: (draft: D) => D) => void;
   className?: string | undefined;
 }) {
-  const select = "min-w-0 flex-1 border-2 border-control bg-deep px-2 py-1 text-[13px] text-text";
+  const select = "min-w-0 flex-1 border-2 border-control bg-deep px-2 py-1 text-[13px] text-text-strong";
   return (
     <div className={cn("flex gap-2", className)}>
       <label className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-label">
@@ -552,10 +552,10 @@ export function HobSummary({
   const note = draft.role === null ? undefined : starterRole(draft.role).note;
   const [before, after] = messages.models.thinksWith.split("{brain}");
   return (
-    <div className={cn("flex flex-col gap-[3px] text-[13px] text-secondary-text", className)}>
+    <div className={cn("flex flex-col gap-[3px] text-[13px] text-text-secondary", className)}>
       <span>
         {before}
-        <b className="text-text">{thinksWith(draft, model)}</b>
+        <b className="text-text-strong">{thinksWith(draft, model)}</b>
         {after}
       </span>
       {note && <span>{note}</span>}
@@ -625,7 +625,7 @@ function Brain<D extends BrainChoice>({
             aria-expanded={moreOpen}
             aria-controls={moreId}
             onClick={() => setMoreShown(!moreOpen)}
-            className="flex items-center gap-2 self-start bg-transparent py-1 text-sm text-label hover:text-text"
+            className="flex items-center gap-2 self-start bg-transparent py-1 text-sm text-label hover:text-text-strong"
           >
             <span aria-hidden className="w-2.5">
               {moreOpen ? "▾" : "▸"}
@@ -658,7 +658,7 @@ function Brain<D extends BrainChoice>({
                       aria-hidden
                       className={cn("size-2.5 border-2", on ? "border-lantern bg-lantern" : "border-control")}
                     />
-                    <span className={cn("w-24 shrink-0 font-bold", on ? "text-moonlight" : "text-text")}>
+                    <span className={cn("w-24 shrink-0 font-bold", on ? "text-moonlight" : "text-text-strong")}>
                       {m.displayName}
                     </span>
                     <span className="min-w-0 text-xs text-label">{m.description}</span>
@@ -684,7 +684,7 @@ function Brain<D extends BrainChoice>({
                   key={effort}
                   className={cn(
                     "flex cursor-pointer items-center gap-1.5 px-[11px] py-1.5 text-sm whitespace-nowrap",
-                    on ? "bg-lantern text-ground" : "text-text hover:bg-line",
+                    on ? "bg-lantern text-ground" : "text-text-strong hover:bg-line",
                     "has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-moonlight has-[:focus-visible]:-outline-offset-3",
                   )}
                 >
@@ -702,7 +702,7 @@ function Brain<D extends BrainChoice>({
             })}
           </div>
           {draft.effort && (
-            <span key={draft.effort} className="animate-hb-in text-[13px] text-secondary-text">
+            <span key={draft.effort} className="animate-hb-in text-[13px] text-text-secondary">
               {effortWords(draft.effort).note}
             </span>
           )}

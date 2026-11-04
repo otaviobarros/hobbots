@@ -65,7 +65,7 @@ export function RoomControls({
 /** A line that says where a control stands; read out as it changes. */
 function Outcome({ children }: { children: string | null }) {
   return (
-    <p role="status" className="m-0 text-xs text-secondary-text empty:hidden">
+    <p role="status" className="m-0 text-xs text-text-secondary empty:hidden">
       {children}
     </p>
   );
@@ -112,7 +112,7 @@ function ConfirmCancel({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="m-0 text-xs text-text">{question}</p>
+      <p className="m-0 text-xs text-text-strong">{question}</p>
       <span className="flex flex-wrap gap-1.5">
         <Button variant="deny" size="xs" disabled={pending} onClick={onYes}>
           {pending ? copy.cancelling : copy.yesCancel}

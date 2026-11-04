@@ -8,7 +8,7 @@ import type * as React from "react";
 // focus to where it was. A disabled item stays in the menu with its reason and cannot be chosen.
 
 const contentClass =
-  "cut z-50 flex min-w-[220px] max-w-[300px] flex-col border-2 border-solid border-line-2 bg-card p-1 text-text outline-none";
+  "cut z-50 flex min-w-[220px] max-w-[300px] flex-col border-2 border-solid border-line-2 bg-card p-1 text-text-strong outline-none";
 
 const itemClass =
   "flex cursor-pointer flex-col gap-0.5 px-2.5 py-2 text-sm outline-none select-none data-highlighted:bg-hover data-disabled:cursor-default data-disabled:text-label";

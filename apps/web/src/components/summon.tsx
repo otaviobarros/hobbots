@@ -147,7 +147,7 @@ export function Summon() {
         <div className="flex items-end gap-4">
           <div className="flex flex-1 flex-col gap-1.5">
             <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">{copy.heading}</h1>
-            <span className="text-secondary-text">{copy.intro}</span>
+            <span className="text-text-secondary">{copy.intro}</span>
           </div>
           <Button type="button" variant="outline" onClick={cancel}>
             {copy.cancel}
@@ -177,7 +177,7 @@ export function Summon() {
                     {copy.sandbox}
                     <span className="bg-lantern px-1.5 text-xs text-ground">{copy.later}</span>
                   </span>
-                  <span className="text-[13px] leading-snug text-secondary-text">{copy.sandboxDetail}</span>
+                  <span className="text-[13px] leading-snug text-text-secondary">{copy.sandboxDetail}</span>
                 </div>
               </div>
             </fieldset>
@@ -201,7 +201,7 @@ export function Summon() {
                     <span className={cn("text-[13px]", ANSWER[answer].className)}>{ANSWER[answer].text}</span>
                   </div>
                 ))}
-              <span className="text-[13px] text-secondary-text">
+              <span className="text-[13px] text-text-secondary">
                 {copy.safetyNote} <Link to="/settings">{copy.changeInSettings}</Link>
               </span>
             </section>
@@ -209,7 +209,7 @@ export function Summon() {
 
           <section
             aria-label={shared.firstHob.preview}
-            className="flex min-w-0 flex-col self-start border-[3px] border-text bg-card"
+            className="flex min-w-0 flex-col self-start border-[3px] border-text-strong bg-card"
           >
             <fieldset disabled={locked} className="m-0 flex flex-col border-0 p-0 disabled:opacity-85">
               <legend className="sr-only">{locked ? shared.firstHob.legendSent({ name }) : copy.whoItIs}</legend>
@@ -221,7 +221,7 @@ export function Summon() {
                   <span
                     key={lookRolls}
                     aria-hidden
-                    className="pointer-events-none absolute bottom-5 left-1/2 -ml-[60px] h-[100px] w-[120px] animate-hb-poof rounded-full bg-text motion-reduce:hidden"
+                    className="pointer-events-none absolute bottom-5 left-1/2 -ml-[60px] h-[100px] w-[120px] animate-hb-poof rounded-full bg-text-strong motion-reduce:hidden"
                   />
                 )}
                 <button
@@ -282,7 +282,7 @@ export function Summon() {
                       const value = e.target.value;
                       setDraft((d) => ({ ...d, name: value, named: true }));
                     }}
-                    className="w-[130px] border-0 border-b-2 border-dashed border-control bg-transparent px-0 py-0.5 font-pixel text-[26px] font-bold text-text"
+                    className="w-[130px] border-0 border-b-2 border-dashed border-control bg-transparent px-0 py-0.5 font-pixel text-[26px] font-bold text-text-strong"
                   />
                   <NameDice
                     size={18}
@@ -293,7 +293,7 @@ export function Summon() {
                     }}
                     className="size-9"
                   />
-                  <span className="min-w-0 truncate text-secondary-text">{kindLine(draft)}</span>
+                  <span className="min-w-0 truncate text-text-secondary">{kindLine(draft)}</span>
                 </div>
 
                 <fieldset className="m-0 flex items-center gap-2.5 border-0 p-0">
@@ -359,7 +359,7 @@ export function Summon() {
                 role={create.isError ? "alert" : undefined}
                 className={cn(
                   "min-h-5 text-center text-sm",
-                  create.isError ? "text-rose" : problem && tried ? "text-lantern" : "text-secondary-text",
+                  create.isError ? "text-rose" : problem && tried ? "text-lantern" : "text-text-secondary",
                 )}
               >
                 {hint}

@@ -49,7 +49,7 @@ function DeviceRow({ device, now, context }: { device: Device; now: Date; contex
       <div className="flex items-center gap-3">
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="font-bold wrap-anywhere">{name}</span>
-          <span className="text-[13px] text-secondary-text wrap-anywhere">{deviceMeta(device, now, context)}</span>
+          <span className="text-[13px] text-text-secondary wrap-anywhere">{deviceMeta(device, now, context)}</span>
         </span>
         {revocable && !asking && (
           <Button
@@ -98,7 +98,7 @@ function RevokedByRestore({ devices }: { devices: ReadonlyArray<Device> }) {
         {revoked.map((device) => (
           <li key={device.id} className="flex flex-col gap-0.5 border-b-2 border-line py-2 opacity-70 last:border-b-0">
             <span className="font-bold wrap-anywhere">{deviceName(device)}</span>
-            <span className="text-[13px] text-secondary-text">{copy.pairAgain}</span>
+            <span className="text-[13px] text-text-secondary">{copy.pairAgain}</span>
           </li>
         ))}
       </ul>

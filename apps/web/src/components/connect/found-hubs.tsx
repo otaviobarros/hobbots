@@ -47,7 +47,7 @@ function HubRow({ hub, disabled, onConnect }: { hub: FoundHubView; disabled: boo
       <span aria-hidden className={`size-2.5 flex-none ${usable ? "bg-mint" : "bg-lantern"}`} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="font-bold">{hub.computer}</span>
-        <span className="truncate font-mono text-[13px] text-secondary-text">{details.join(" · ")}</span>
+        <span className="truncate font-mono text-[13px] text-text-secondary">{details.join(" · ")}</span>
         {!usable && (
           <span className="text-[13px] text-lantern">
             {hub.support === "hubOlder"
@@ -99,7 +99,7 @@ export function FoundHubs({
         </Button>
       </span>
       {scan.kind === "looking" && (
-        <p role="status" className="m-0 text-sm text-secondary-text">
+        <p role="status" className="m-0 text-sm text-text-secondary">
           {copy.looking}
         </p>
       )}
@@ -109,7 +109,7 @@ export function FoundHubs({
         </p>
       )}
       {scan.kind === "hubs" && scan.hubs.length === 0 && (
-        <p role="status" className="m-0 text-sm text-secondary-text">
+        <p role="status" className="m-0 text-sm text-text-secondary">
           {copy.none}
         </p>
       )}
