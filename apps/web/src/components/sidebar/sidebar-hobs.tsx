@@ -25,7 +25,7 @@ const openHobOf = (pathname: string): string | undefined => /^\/hobs\/([^/]+)/.e
 /**
  * Every hob, each with a still state mark: lantern when it needs you, mint while it works. A hob's
  * tile opens its card. The hob whose page or chat is open lists its recent threads under its name
- * while the sidebar is expanded.
+ * while the sidebar is expanded. Only the list scrolls: its heading and "Summon a hob" stay put.
  */
 export function SidebarHobs({ expanded }: { expanded: boolean }) {
   const agents = useQuery(agentsQuery);
@@ -44,16 +44,18 @@ export function SidebarHobs({ expanded }: { expanded: boolean }) {
         {copy.hobs}
       </Link>
       {agents.isError && <p className="sidebar-label px-3 text-detail text-rose">{copy.hobsLoadFailed}</p>}
-      {agents.data?.map((hob) => (
-        <SidebarHob
-          key={hob.id}
-          hob={hob}
-          expanded={expanded}
-          open={hob.id === open}
-          waiting={waiting.has(hob.id)}
-          pathname={pathname}
-        />
-      ))}
+      <div className="-mx-3 flex min-h-0 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-3">
+        {agents.data?.map((hob) => (
+          <SidebarHob
+            key={hob.id}
+            hob={hob}
+            expanded={expanded}
+            open={hob.id === open}
+            waiting={waiting.has(hob.id)}
+            pathname={pathname}
+          />
+        ))}
+      </div>
       <SidebarTip label={copy.summonLabel} expanded={expanded}>
         <Link to="/summon" className={cn(sidebarItem, "text-lantern hover:text-lantern")}>
           <span aria-hidden className={cn(sidebarIcon, "text-xl leading-none")}>

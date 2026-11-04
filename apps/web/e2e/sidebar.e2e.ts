@@ -11,8 +11,8 @@ test.afterEach(async () => {
   removeDataDir(dataDir);
 });
 
-/** A hub past setup with Aldric, who has two threads, and Ada. */
-const hubWithHobs = async () => {
+/** A hub past setup with Aldric, who has two threads, Ada, and any `more` hobs named after them. */
+const hubWithHobs = async (more: ReadonlyArray<string> = []) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
   const current = hub;
@@ -27,7 +27,7 @@ const hubWithHobs = async () => {
   };
   await api("PATCH", "/setup", { completed: true, connectedProviders: ["claude-code"] });
   const ids: Record<string, string> = {};
-  for (const [i, name] of ["Aldric", "Ada"].entries()) {
+  for (const [i, name] of ["Aldric", "Ada", ...more].entries()) {
     const hob = await api("POST", "/agents", {
       id: randomUUID(),
       name,
@@ -152,4 +152,38 @@ test("[TC-UX-143] a hob's tile opens its card, whose name, Open page and Profile
   await tile.click();
   await card.getByRole("button", { name: "Close" }).click();
   await expect(card).toBeHidden();
+});
+
+// covers UX-001
+test("[TC-UX-161] with many hobs only the hob list scrolls: the sections and the chevron stay on screen", async ({
+  page,
+}) => {
+  const { url } = await hubWithHobs(Array.from({ length: 22 }, (_, i) => `Hob ${i + 3}`));
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(url);
+  const nav = sidebar(page);
+  const last = nav.getByRole("button", { name: /^Hob 24, / });
+  await expect(last).toBeAttached();
+
+  for (const control of [
+    nav.getByRole("link", { name: "Settings", exact: true }),
+    nav.getByRole("link", { name: "Summon a hob" }),
+    nav.getByRole("button", { name: "Expand the sidebar" }),
+  ]) {
+    await expect(control).toBeInViewport();
+  }
+  await expect(last).not.toBeInViewport();
+
+  // Scrolling the list brings the last hob into view and leaves the rest where it was.
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  await expect(nav.getByRole("link", { name: "Home", exact: true })).toBeInViewport();
+  await expect(nav.getByRole("button", { name: "Expand the sidebar" })).toBeInViewport();
+});
+
+test("[TC-UX-162] a browser tab shows no window title strip, which belongs to the desktop app", async ({ page }) => {
+  const { url } = await hubWithHobs();
+  await page.goto(url);
+  await expect(sidebar(page)).toBeVisible();
+  await expect(page.getByRole("banner")).toHaveCount(0);
 });

@@ -85,7 +85,7 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
         >
           {copy.yourHobs}
         </Link>
-        <span aria-hidden className="opacity-60">
+        <span aria-hidden className="text-label">
           /
         </span>
         <span aria-current="page" title={hob.name} className="truncate text-text-strong">

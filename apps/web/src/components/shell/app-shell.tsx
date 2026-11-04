@@ -15,20 +15,30 @@ import { ReconnectingCard, ReconnectingProvider } from "./reconnecting.tsx";
 /** A hob's chat or its fresh page, whose header holds the reconnecting card. */
 const CHAT_PATH = /^\/hobs\/[^/]+\/(new|threads\/[^/]+)$/;
 
-/** The window's frame: its title bar above whatever fills it, a page or an error screen. */
+/**
+ * The desktop window's title bar, which macOS draws the traffic lights over and the window drags by.
+ * A browser tab has its own, so the strip shows only in the desktop app, whose preload sets `window.hobbots`.
+ */
+function TitleStrip() {
+  if (window.hobbots === undefined) return null;
+  return (
+    <header className="flex h-title-strip flex-none items-center justify-center bg-deep text-[13px] text-label [-webkit-app-region:drag]">
+      Hobbots
+    </header>
+  );
+}
+
+/** The window's frame: the desktop title bar above whatever fills it, a page or an error screen. */
 export function WindowFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen min-h-[610px] flex-col bg-ground text-text-strong">
-      {/* Window chrome: macOS draws the traffic lights over the left of this bar in Electron. */}
-      <header className="flex h-title-strip flex-none items-center justify-center bg-deep text-[13px] text-label [-webkit-app-region:drag]">
-        Hobbots
-      </header>
+      <TitleStrip />
       {children}
     </div>
   );
 }
 
-/** The window: its title bar and whichever page fills it, with or without the sidebar. */
+/** The window: the desktop title bar and whichever page fills it, with or without the sidebar. */
 export function AppWindow() {
   // A revoked device sees only that it was removed, whichever page it was on.
   const removed = useDeviceAccess() === "removed";
