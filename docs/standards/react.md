@@ -2,7 +2,7 @@
 
 Rules for React code in the web client and the UI package. The client uses React 19, TanStack Router, TanStack Query, Effect Schema, and shadcn on Radix and Tailwind.
 
-Every rule names the tool that enforces it. A rule says "review" only when it needs judgment that a tool cannot make. Where a rule allows an exception, the exception is a comment in the form of [STD-REACT-020](#std-react-020-every-opt-out-names-its-rule-and-a-reason). The checks for the React, UI, i18n and testing rules land in [#803](https://github.com/otaviobarros/hobbots/issues/803). Until then, review enforces them.
+Every rule names the tool that enforces it. A rule says "review" only when it needs judgment that a tool cannot make. Where a rule allows an exception, the exception is a comment in the form of [STD-REACT-020](#std-react-020-every-opt-out-names-its-rule-and-a-reason). Checks that match one pattern in the code run in Biome, through its rules and the GritQL plugins in `scripts/biome/`, so they show in the editor. Checks that look at whole files run in `scripts/check-frontend.mjs`, called "the frontend check" below. Both run in `pnpm check`. The checks not wired yet are tracked in [#803](https://github.com/otaviobarros/hobbots/issues/803); until they land, review enforces those rules.
 
 ## State
 
@@ -216,20 +216,27 @@ When typing or another urgent input triggers a slow render, such as filtering a 
 
 ### STD-REACT-019 No any, ts-ignore or double casts
 
-Do not write `any`, `@ts-ignore` or `as unknown as`. Parse untrusted data with an Effect Schema instead: browser storage, URL params and messages from the desktop app. Use `@ts-expect-error` only with a reason on the same line.
+Do not write `any`, `@ts-ignore` or `as unknown as`. Parse untrusted data with an Effect Schema instead: browser storage, URL params and messages from the desktop app. Use `@ts-expect-error` only with a reason on the same line. A test may cast a partial fixture through `unknown`.
 
 - **Why:** each escape hatch turns off the strict compiler settings exactly where data is least trusted.
-- **Enforced by:** Biome `noExplicitAny` and `noTsIgnore` at error level, and the frontend check in `pnpm check` for `as unknown as`.
+- **Enforced by:** Biome `noExplicitAny` and `noTsIgnore` at error level, and the `no-double-cast` GritQL plugin outside test files.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-REACT-020 Every opt-out names its rule and a reason
 
-When a rule allows an exception, mark it with a comment in one form: `// standards-allow STD-XXX-NNN: <reason>`. A `biome-ignore` or `@ts-expect-error` comment also gives its reason, and names the rule when one applies.
+Every exception is a comment that gives its reason after a colon. Use the form of the tool that checks the rule:
+
+- a Biome rule or plugin: `// biome-ignore <rule>: <reason>`, the form Biome requires;
+- the complexity limit: `// complexity-ignore: <reason>` (STD-ARCH-012);
+- a type error: `// @ts-expect-error <reason>`;
+- a rule the frontend check enforces: `// standards-allow STD-XXX-NNN: <reason>`.
+
+A reason says why the exception is right here, not that it is fine.
 
 - ✅ `// standards-allow STD-REACT-006: the generated table of every charm stays in one file`
 - ❌ `// biome-ignore lint/style/noJsxLiterals: ok`
-- **Why:** one form lets an audit list every exception with one search, so none hides.
-- **Enforced by:** the frontend check in `pnpm check`, which fails on an opt-out without a rule ID or a reason.
+- **Why:** four known forms let an audit list every exception with one search each, so none hides.
+- **Enforced by:** Biome, which refuses a `biome-ignore` without a reason; the complexity check; and the frontend check for `standards-allow` and `@ts-expect-error`.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-REACT-026 Stored data is versioned and parsed
