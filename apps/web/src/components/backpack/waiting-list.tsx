@@ -22,6 +22,7 @@ export function WaitingList({
   now,
   owners,
   limit = Number.POSITIVE_INFINITY,
+  onMore,
   onOpen,
   label,
   className,
@@ -32,6 +33,8 @@ export function WaitingList({
   owners: boolean;
   /** At most this many rows; the rest fold into a count. */
   limit?: number;
+  /** Makes the count a button that shows the rest. */
+  onMore?: (() => void) | undefined;
   onOpen: (item: BackpackItem) => void;
   label: string;
   className?: string;
@@ -47,9 +50,18 @@ export function WaitingList({
           </li>
         ))}
       </ul>
-      {rows.length > shown.length && (
-        <span className="px-2 text-xs text-label">{copy.more({ count: rows.length - shown.length })}</span>
-      )}
+      {rows.length > shown.length &&
+        (onMore ? (
+          <button
+            type="button"
+            onClick={onMore}
+            className="cursor-pointer self-start rounded-control bg-transparent px-2 py-1.5 text-sm text-link underline decoration-line-2 underline-offset-3 hover:bg-hover"
+          >
+            {copy.more({ count: rows.length - shown.length })}
+          </button>
+        ) : (
+          <span className="px-2 text-xs text-label">{copy.more({ count: rows.length - shown.length })}</span>
+        ))}
       {view.routine > 0 && <span className="px-2 text-xs text-label">{copy.routine({ count: view.routine })}</span>}
     </div>
   );
