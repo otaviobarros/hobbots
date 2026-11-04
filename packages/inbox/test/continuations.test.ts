@@ -9,6 +9,9 @@ import {
   BackpackItemId,
   type BackpackItemKind,
   type BackpackPayload,
+  Checkpoint,
+  CheckpointId,
+  CONTINUATION_HEADER,
   HandOff,
   MessageId,
   Question,
@@ -227,6 +230,34 @@ describe("which thread a backpack item continues", () => {
     expect(arrivalsText([result], "prompt")).toContain("Hobbots wrote this, not the user.");
     expect(arrivalsText([result], "prompt")).toContain("Task pass (Brief for pass) finished. Its result: pass done.");
     expect(arrivalsText([result], "context")).toContain("Answer the user's message first");
+  });
+
+  it("tells the woken lead a finding's detail with its short summary (#901)", () => {
+    const finding = new Checkpoint({
+      id: CheckpointId.make("long"),
+      taskId: TaskId.make("pass"),
+      attemptId: null,
+      source: "unplanned",
+      kind: "finding",
+      milestoneId: null,
+      summary: "Two headlines too long",
+      detail: "Both run past 60 characters.",
+      createdAt: "2026-11-04T00:00:00.000Z",
+      revision: 1,
+    });
+    const arrived = item(FRODO, "pass", "checkpoint", { _tag: "checkpoint", checkpoint: finding });
+    expect(arrivalsText([arrived], "prompt")).toContain(
+      "A finding was reported on Task pass: Two headlines too long. Detail: Both run past 60 characters.",
+    );
+  });
+
+  it("asks the woken lead to stay quiet in the chat unless a question needs the user, or the Task is done (#901)", () => {
+    const result = item(FRODO, "pass", "result", { _tag: "result", task: step, artifacts: [] });
+    const prompt = arrivalsText([result], "prompt");
+    expect(prompt.startsWith(CONTINUATION_HEADER)).toBe(true);
+    expect(prompt).toContain("return its result with complete_task and give the finish");
+    expect(prompt).toContain("Otherwise end your turn without a message, unless a question needs the user.");
+    expect(prompt).not.toContain("Tell the user briefly what changed");
   });
 
   // covers IN-004

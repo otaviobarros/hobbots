@@ -18,6 +18,12 @@
 
 Checkpoints come from three sources: milestones the lead plans in a brief; findings, blockers and questions the owner reports when they matter; and the automatic states started, waiting, done, failed and cancelled, which the hub records. Milestones, findings, blockers, questions, done and failed reach the lead's context and can wake it. Routine progress only updates the screens (IN-005).
 
+A checkpoint's summary is a short beat, about eight words such as "Three headlines drafted": `report_checkpoint` and every step's and member's prompt ask for that. Anything more goes in its optional `detail`, which the Workbench and the Task drawer show and a lane never does. The detail still reaches the lead, cut to 600 characters: in the continuation a finding or blocker starts, in the owner's briefing and in `read_tasks`. The length is a request to the model, so a row that shows a summary still cuts a longer one with an ellipsis ([#901](https://github.com/otaviobarros/hobbots/issues/901)).
+
+### What the lead writes in the chat
+
+The lead writes in your chat only to keep you informed: the plan when the work starts, a question no lead can answer, and the finish, one short summary of what was made, where it is and who did what. Between those it stays quiet, and it says more only when you write to it. The first `delegate_task`, `start_quest` or `plan_steps` on the Task you asked for asks it for the plan, the owner's briefing and the `delegate_task` and `complete_task` descriptions carry the rule, and a continuation asks it to end its turn without a message unless a question needs you or the Task is done. Routine progress already wakes no lead (IN-005); this is about what the lead writes once it is awake. The chat leaves out a reply that wrote nothing and answers no message of yours, so a quiet turn leaves no row. One that ended early still shows, to continue, and so does one with a tool call that did not plainly succeed, so an uncertain Charm write can be settled from its step ([#901](https://github.com/otaviobarros/hobbots/issues/901)).
+
 ## Delegation contract
 
 A request records delegation ID, Quest ID (once the Task is a Quest), parent task, lead, member, objective/instructions, expected output, priority, context artifact references, permitted scope and timeout/budget policy. The server validates identity, authorization, capacity, depth/cycles and input schemas before dispatch. A child cannot gain authority by receiving more ambitious prose.
@@ -29,7 +35,7 @@ Expose controlled Hobbots tools through MCP or a supported equivalent adapter in
 | `plan_steps` | A Task's owner | Splits its own Task into steps, each with a brief |
 | `start_quest` | A Task's owner | Turns its Task into a Quest with a goal, milestones, limits and the folders its work is in |
 | `delegate_task` | A Task's owner, which becomes or already is its lead | Gives another hob a Task with a brief, milestones and dependencies; the first call makes the Task a Quest |
-| `report_checkpoint` | A Task's owner | Reports a milestone, finding, blocker or progress |
+| `report_checkpoint` | A Task's owner | Reports a milestone, finding, blocker or progress, in a short summary with an optional detail |
 | `ask` | A Task's owner | Asks a question, routed to the nearest lead |
 | `answer` | A lead | Answers a question from its subtree |
 | `escalate` | A lead | Passes a question to the next lead, and from the top lead to you |

@@ -161,7 +161,16 @@ export class Checkpoint extends Schema.Class<Checkpoint>("Checkpoint")({
   kind: CheckpointKind,
   /** The milestone a `milestone` checkpoint reached. */
   milestoneId: Schema.NullOr(MilestoneId),
+  /** Where the Task stands, in a few words: the beat a lane shows. */
   summary: Schema.String,
+  /**
+   * More about it, when its owner had more to say: the Workbench shows it, a lane never does (#901).
+   * Null when there is none, and for every checkpoint journaled before migration 0052.
+   */
+  detail: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /**
    * Another Task the checkpoint is also about, or null: for a finding the hub made because two
    * Tasks changed the same file, the Task that changed it first, so both Tasks show it. Checkpoints
@@ -175,6 +184,25 @@ export class Checkpoint extends Schema.Class<Checkpoint>("Checkpoint")({
   /** The journal sequence it was recorded at, which orders checkpoints that share a time. */
   revision: Revision,
 }) {}
+
+/** Longest detail a lead's context keeps from one checkpoint, so its own context stays small. */
+export const DETAIL_LIMIT = 600;
+
+/** A checkpoint's detail, cut to `limit` characters and marked when cut, or null when it has none. */
+export const detailOf = (checkpoint: Checkpoint, limit = DETAIL_LIMIT): string | null => {
+  const detail = checkpoint.detail?.trim() ?? "";
+  if (detail === "") return null;
+  return detail.length <= limit ? detail : `${detail.slice(0, limit).trimEnd()}…`;
+};
+
+/**
+ * What a lead's context says of a checkpoint (#901): its short summary, then its detail, bounded, so
+ * what the hob put beyond the beat a lane shows still reaches the lead.
+ */
+export const checkpointText = (checkpoint: Checkpoint, limit = DETAIL_LIMIT): string => {
+  const detail = detailOf(checkpoint, limit);
+  return detail === null ? checkpoint.summary : `${checkpoint.summary}. Detail: ${detail}`;
+};
 
 /** Whether a checkpoint belongs on `taskId`'s card: recorded on it, or about it too. */
 export const checkpointOn = (checkpoint: Checkpoint, taskId: TaskId) =>
