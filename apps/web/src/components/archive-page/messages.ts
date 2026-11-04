@@ -56,6 +56,8 @@ export const messages = {
     bringBackLabel: ({ name }: Named) => `Bring back ${name}`,
     retired: ({ day }: { day: string }) => `Retired ${day}`,
     retiredUnknown: "Retired",
+    /** What a retired hob did, from the chat it worked on last. */
+    lastDid: ({ title }: { title: string }) => `Last helped with “${title}”.`,
     kept: ({ count }: { count: number }) =>
       plural(count, { one: "1 chat kept", other: `${formatCount(count)} chats kept` }),
     loading: "Loading retired hobs…",

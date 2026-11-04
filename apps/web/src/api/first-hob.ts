@@ -7,7 +7,6 @@ import {
   DEFAULT_VOICE,
   type Effort,
   type HobColor,
-  PICKER_FIRST,
   type ReplyLength,
   ROLE_FAMILIES,
   type RoleFamily,
@@ -33,17 +32,6 @@ import { readStored, writeStored } from "../lib/storage.ts";
 
 /** Every starter role, in the order the sigil choices list them. */
 export const ALL_ROLES: ReadonlyArray<RoleId> = STARTER_ROLES.map((role) => role.id);
-
-/** Every starter role the picker does not show first, under its family, for "More roles". */
-export const MORE_ROLES: ReadonlyArray<{
-  readonly family: RoleFamily;
-  readonly title: string;
-  readonly roles: ReadonlyArray<RoleId>;
-}> = ROLE_FAMILIES.map(({ id, title }) => ({
-  family: id,
-  title,
-  roles: ALL_ROLES.filter((role) => starterRole(role).family === id && !PICKER_FIRST.includes(role)),
-})).filter((group) => group.roles.length > 0);
 
 /** A family of starter roles as the role sheet lists it. */
 export interface RoleGroup {

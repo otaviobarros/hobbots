@@ -322,6 +322,12 @@ export const messages = {
       unavailable: "Unavailable",
       unverified: "Unverified",
     },
+    signInSteps: {
+      intro: ({ provider }: { provider: string }) => `${provider} is on this Mac but not signed in. Three small steps:`,
+      open: "Open the Terminal app.",
+      type: "Type {command} and press Return.",
+      signIn: "Sign in when it asks. Then come back here.",
+    },
     // Each `{command}` is shown as code.
     "claude-code": {
       outdated: "This Claude Code is older than Hobbots supports. Update it with {command}.",

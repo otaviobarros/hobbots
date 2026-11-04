@@ -97,6 +97,8 @@ export const messages = {
     changeTalk: ({ name }: { name: string }) => `Change how ${name} talks`,
     noChores: "No chores written yet.",
     talkLine: ({ voice, length }: { voice: string; length: string }) => `${voice}, ${length.toLowerCase()}`,
+    /** The voice's sample under Talks, so the user hears it once more before they summon. */
+    soundsLike: ({ sample }: { sample: string }) => `“${sample}”`,
     preset: ({ preset }: { preset: string }) => `Follows your ${preset} safety level`,
     thisComputer: "This computer",
     thisComputerNote: "Uses the files and apps your hub can reach. Separate, safer workspaces for code come later.",

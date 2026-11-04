@@ -3,8 +3,11 @@ import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
 import { type ReactNode, useRef, useState } from "react";
 import { type PairingDecision, usePromptedDevices } from "../../api/pairing.ts";
+import { formatWhen } from "../../lib/time.ts";
+import { ChiefMark } from "../chief/chief-mark.tsx";
 import { useNow } from "../inbox/use-now.ts";
-import { DeviceFacts, MatchingCode, PairingActions } from "./device-request.tsx";
+import { PairingActions } from "./device-request.tsx";
+import { askedFrom, groupedCode, usingText } from "./device-request-model.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.prompt;
@@ -16,7 +19,7 @@ interface Answered {
 
 /**
  * The prompt on the hub (screen 4): over the hub's own window, the oldest device still waiting for
- * an answer, with Allow, Deny and Decide later. It shows only in the desktop app's window; every
+ * an answer, held at the gate by the Chief, with its matching code and Decide later, Not mine and Allow. It shows only in the desktop app's window; every
  * other approved device finds the request in Needs you.
  */
 export function DevicePrompt() {
@@ -90,24 +93,39 @@ function AskingPrompt({
   onDecided: (decision: PairingDecision) => void;
 }) {
   const now = useNow();
+  const asked = [usingText(device), askedFrom(device), formatWhen(device.request.createdAt, now)].join(" · ");
   return (
     <>
-      <div className="flex flex-col gap-0.5">
-        <span className="lbl flex items-center gap-1.5 text-meta text-lantern">
-          <span aria-hidden className="inline-block size-2 animate-hb-blink rounded-dot bg-lantern" />
-          {copy.kicker}
+      <div className="flex items-center gap-2.5">
+        <span aria-hidden className="grid size-10 flex-none place-items-center rounded-control bg-deep">
+          <ChiefMark size={34} />
         </span>
-        <DialogTitle
-          tabIndex={-1}
-          className="m-0 font-heading text-2xl font-bold break-words text-moonlight outline-none"
-        >
-          {copy.title({ name: device.request.name })}
-        </DialogTitle>
+        <span className="flex min-w-0 flex-col">
+          <DialogTitle tabIndex={-1} className="lbl m-0 text-label outline-none">
+            {copy.joinTitle}
+          </DialogTitle>
+          <span className="text-detail text-text-secondary">{copy.atTheGate}</span>
+        </span>
       </div>
-      <DeviceFacts device={device} now={now} />
-      <MatchingCode device={device} />
-      <p className="m-0 text-detail leading-normal text-text-secondary">{copy.grants}</p>
-      <PairingActions device={device} canDefer onDecided={onDecided} />
+      {/* The name is the device's own words, so it is plain text, cut to one line. */}
+      <div className="flex items-center gap-3 rounded-card bg-card p-3">
+        <span aria-hidden className="h-9 w-6 flex-none rounded-[3px] border-3 border-text-strong bg-deep" />
+        <span className="flex min-w-0 flex-col">
+          <strong className="truncate text-[17px]" title={device.request.name}>
+            {device.request.name}
+          </strong>
+          <span className="text-detail text-text-secondary">{asked}</span>
+        </span>
+      </div>
+      <div className="flex flex-col items-center gap-1 rounded-card bg-card p-3 text-center">
+        <span className="lbl text-label">{copy.matchLabel}</span>
+        <span className="font-mono text-[30px] tracking-[0.12em] text-moonlight">
+          {groupedCode(device.request.code)}
+        </span>
+        <span className="text-detail text-text-secondary">{copy.matchOnly}</span>
+      </div>
+      <p className="m-0 text-detail leading-[18px] text-text-secondary">{copy.grants}</p>
+      <PairingActions device={device} canDefer onDecided={onDecided} atGate />
     </>
   );
 }
