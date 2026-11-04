@@ -93,25 +93,66 @@ const sequenceAt = (line: string, i: number) => {
 };
 
 /**
+ * The delimiter word of the heredoc whose `<<` ends just before `i`, quoted or not and after an
+ * optional `-`, and the index just past it.
+ */
+const heredocWord = (line: string, i: number) => {
+  let j = i + (line[i] === "-" ? 1 : 0);
+  while (line[j] === " " || line[j] === "\t") j++;
+  const quote = line[j];
+  if (quote === "'" || quote === '"') {
+    const end = line.indexOf(quote, j + 1);
+    const close = end === -1 ? line.length : end;
+    return { word: line.slice(j + 1, close), next: close + 1 };
+  }
+  const start = j;
+  while (j < line.length && !/[\s;&|<>()]/.test(line[j] as string)) j++;
+  return { word: line.slice(start, j), next: j };
+};
+
+/**
+ * The index of the newline that ends the last of `words`' heredoc bodies, which follow the newline
+ * at `i` one after another, each up to the line that holds its delimiter alone; the line's end when
+ * one is never closed.
+ */
+const pastBodies = (line: string, i: number, words: ReadonlyArray<string>) => {
+  let end = i;
+  for (const word of words) {
+    do {
+      const start = end + 1;
+      const next = line.indexOf("\n", start);
+      end = next === -1 ? line.length : next;
+      if (line.slice(start, end).replace(/^\t+/, "") === word) break;
+    } while (end < line.length);
+  }
+  return end;
+};
+
+/**
  * Whether a command line runs a command after another whatever the first one's exit: at a `;`, a
  * newline or a lone `&` outside quotes, with a command after it. Its exit code is the last
  * command's, so a line that succeeded may hold one that failed, as `git rev-parse …; git init` does
- * (#702). A heredoc's body is not read: the line ends where it starts.
+ * (#702). A heredoc's body is skipped up to its delimiter, and what follows that is read on.
  */
 export const runsInSequence = (line: string): boolean => {
-  let heredoc = false;
+  const heredocs: Array<string> = [];
   for (let i = 0; i < line.length; ) {
     const past = pastQuote(line, i);
     if (past !== i) {
       i = past;
-      continue;
+    } else if (line.startsWith("<<<", i)) {
+      i += 3;
+    } else if (line.startsWith("<<", i)) {
+      const read = heredocWord(line, i + 2);
+      heredocs.push(read.word);
+      i = read.next;
+    } else if (line[i] === "\n" && heredocs.length > 0) {
+      // The newline after the last delimiter ends the command, and is read as any other.
+      i = pastBodies(line, i, heredocs.splice(0));
+    } else {
+      if (sequenceAt(line, i) && line.slice(i + 1).trim() !== "") return true;
+      i++;
     }
-    if (line.startsWith("<<", i)) heredoc = true;
-    if (sequenceAt(line, i)) {
-      if (heredoc && line[i] === "\n") return false;
-      if (line.slice(i + 1).trim() !== "") return true;
-    }
-    i++;
   }
   return false;
 };

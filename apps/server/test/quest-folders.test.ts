@@ -87,4 +87,35 @@ describe("a lead's turns on its Quest", () => {
       [quest, "notes.md"],
     ]);
   }, 30_000);
+
+  // covers UX-002, ADR 023, STD-UI-008
+  it("[TC-OR-525] keep the lead's folder's stopped scan when it holds a small Quest folder, never a scan taken after the edit", async () => {
+    const many = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`notes/${i}.md`, `${i}\n`]));
+    const { run, folder } = setUp({ ...many, "full-run/README.md": "# Full run\n" }, [], { maxFiles: 5 });
+    const quest = join(folder, "full-run");
+    await run(
+      say(
+        [
+          "Write the spec",
+          hub("start_quest", { key: "quest", goal: "Write the spec", folders: [quest] }),
+          write("full-run/docs/SPEC.md", "# Spec\n"),
+        ].join("\n"),
+      ),
+    );
+    const tree = await run(treeWhen((each) => each.attempts.length === 1));
+    // The next turn knows the Quest's folder from its start, and that one scans whole.
+    await run(say(["Add notes", write("full-run/notes.md", "Notes\n")].join("\n")));
+    const activity = await run(endedActivity(tree.attempts[0]?.id as AttemptId));
+
+    // The project's scan stopped before the first turn wrote, so what it changed cannot be told: its
+    // stopped scan stays on the record, and no Quest-folder scan taken after the write says otherwise.
+    // Only the second turn scanned the Quest's folder.
+    const scans = activity.scans.map((scan) => [scan.folder, scan.phase, scan.stopped !== null] as const);
+    expect(scans.sort()).toEqual([
+      [folder, "start", true],
+      [quest, "end", false],
+      [quest, "start", false],
+    ]);
+    expect(activity.changes.map((change) => [change.folder, change.path])).toEqual([[quest, "notes.md"]]);
+  }, 30_000);
 });

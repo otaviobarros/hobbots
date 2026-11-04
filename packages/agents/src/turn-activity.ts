@@ -646,14 +646,15 @@ const makeRecorder = (limits: ActivityLimits) =>
         const narrow = Effect.gen(function* () {
           me.folders = yield* within(me.folders);
           // A Task's folder inside one the turn tracked from its start starts from what that one listed.
-          for (const folder of me.folders) {
+          for (const folder of [...me.folders]) {
             if (baselines.has(folder)) continue;
             const outer = [...baselines.keys()].find((each) => holds(each, folder));
             const baseline = outer === undefined ? undefined : baselines.get(outer);
             if (outer === undefined || baseline === undefined) continue;
-            // One whose scan stopped listed nothing to start from: the smaller folder is scanned on its own.
+            // One whose scan stopped listed nothing the turn's changes could be told from, and a scan
+            // taken now would already hold them: it stays tracked, its stopped scan on the record.
             if (baseline.stopped !== null) {
-              yield* takeBaseline(folder);
+              me.folders = [...new Set(me.folders.map((each) => (each === folder ? outer : each)))];
               continue;
             }
             const inner = baselineWithin(outer, baseline, folder);

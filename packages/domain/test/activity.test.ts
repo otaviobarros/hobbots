@@ -112,6 +112,14 @@ describe("runsInSequence", () => {
     }
   });
 
+  it("reads on after a heredoc's delimiter, and never in its body", () => {
+    expect(runsInSequence("cat <<'EOF' > notes.md\nline; two\nEOF\nfalse\necho done")).toBe(true);
+    expect(runsInSequence("cat <<-EOF\n\tbody\n\tEOF\nfalse")).toBe(true);
+    expect(runsInSequence("cat <<A <<B\na; a\nA\nb & b\nB")).toBe(false);
+    expect(runsInSequence("grep x <<< 'a; b'; echo done")).toBe(true);
+    expect(runsInSequence("grep x <<< 'a; b'")).toBe(false);
+  });
+
   it("is false for one command, a chain on success or failure, a redirection and a quoted separator", () => {
     for (const line of [
       "pytest",
