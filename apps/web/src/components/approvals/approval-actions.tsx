@@ -14,6 +14,12 @@ const focusOnMount = (element: HTMLElement | null) => element?.focus();
 
 type Mode = "choose" | "deny" | "always" | "work";
 
+/** The buttons' variants by look: the tray's Allow once is the primary button and its Deny a secondary one. */
+const VARIANTS = {
+  card: { allow: "approve", deny: "deny" },
+  tray: { allow: "default", deny: "outline" },
+} as const;
+
 /**
  * Allow once, This Task, Always for this site and Deny (ADR 015, ADR 018). A high-risk request
  * (`onceOnly`) offers once only and needs the confirmation box ticked first; the hub checks both too
@@ -81,12 +87,13 @@ export function ApprovalActions({
   // A high-risk request explains itself through its check box; any other says why it offers no rule.
   const noRule = !onceOnly && !always;
   const tray = look === "tray";
+  const variant = VARIANTS[look];
   return (
     <div className="flex flex-col gap-2">
       {onceOnly && <ConfirmBox name={hob.name} checked={confirmed} onChange={setConfirmed} tray={tray} />}
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          variant={tray ? "default" : "approve"}
+          variant={variant.allow}
           disabled={onceOnly && !confirmed}
           aria-disabled={pending}
           onClick={() => send({ decision: "approve", confirmed: onceOnly ? confirmed : undefined })}
@@ -103,7 +110,7 @@ export function ApprovalActions({
             {copy.always}
           </Button>
         )}
-        <Button ref={denyButton} variant={tray ? "outline" : "deny"} aria-disabled={pending} onClick={open("deny")}>
+        <Button ref={denyButton} variant={variant.deny} aria-disabled={pending} onClick={open("deny")}>
           {copy.deny}
         </Button>
       </div>
