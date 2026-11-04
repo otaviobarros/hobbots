@@ -103,7 +103,14 @@ export function TaskDetail({
                 <span className="h-fit shrink-0 bg-line px-1.5 text-meta font-bold text-moonlight">
                   {messages.checkpoint[checkpoint.kind]}
                 </span>
-                {saysMore(checkpoint) && <span>{checkpoint.summary}</span>}
+                {saysMore(checkpoint) && (
+                  <span>
+                    {checkpoint.summary}
+                    {checkpoint.detail !== null && (
+                      <span className="block text-text-secondary">{checkpoint.detail}</span>
+                    )}
+                  </span>
+                )}
               </li>
             ))}
           </ol>

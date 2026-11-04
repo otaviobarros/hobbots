@@ -3,8 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   AgentId,
   ancestorsOf,
+  CHECKPOINT_WORDS,
+  Checkpoint,
+  CheckpointId,
   DEFAULT_QUEST_LIMITS,
+  FINISH_RULE,
   isTaskToolName,
+  LEAN_CHAT_RULE,
   Quest,
   QuestId,
   questChain,
@@ -68,6 +73,50 @@ describe("hob tools for Tasks and Quests", () => {
     for (const tool of TASK_TOOLS) {
       expect((taskToolJsonSchema(tool.name) as { required: ReadonlyArray<string> }).required).toContain("key");
     }
+  });
+
+  it("asks for a checkpoint summary of about eight words, with anything more in an optional detail (#901)", () => {
+    const description = (name: string) => TASK_TOOLS.find((tool) => tool.name === name)?.description ?? "";
+    expect(description("report_checkpoint")).toContain(
+      `about ${CHECKPOINT_WORDS} words, like "Three headlines drafted"`,
+    );
+    expect(description("report_checkpoint")).toContain("put anything more in detail");
+    const schema = taskToolJsonSchema("report_checkpoint") as {
+      properties: Record<string, { description?: string }>;
+      required: ReadonlyArray<string>;
+    };
+    expect(schema.properties.summary?.description).toContain("about 8 words");
+    expect(schema.properties.detail?.description).toContain("The Workbench shows it; a lane never does.");
+    expect(schema.required).not.toContain("detail");
+    const decode = Schema.decodeUnknownSync(TaskToolInputs.report_checkpoint);
+    expect(decode({ key: "k", kind: "progress", summary: "Three headlines drafted" })).not.toHaveProperty("detail");
+    expect(
+      decode({ key: "k", kind: "finding", summary: "Two headlines too long", detail: "Both run past 60 characters." })
+        .detail,
+    ).toBe("Both run past 60 characters.");
+  });
+
+  it("tells a lead what it writes in the chat: the plan, a question no lead can answer and the finish (#901)", () => {
+    const description = (name: string) => TASK_TOOLS.find((tool) => tool.name === name)?.description ?? "";
+    expect(description("delegate_task")).toContain(LEAN_CHAT_RULE);
+    expect(description("complete_task")).toContain(FINISH_RULE);
+  });
+
+  it("decodes a checkpoint journaled before it had a detail as one with none (#901)", () => {
+    const decode = Schema.decodeUnknownSync(Checkpoint);
+    const old = decode({
+      id: "c",
+      taskId: "t",
+      attemptId: null,
+      source: "unplanned",
+      kind: "progress",
+      milestoneId: null,
+      summary: "Three headlines drafted",
+      createdAt: at,
+      revision: 1,
+    });
+    expect(old.detail).toBeNull();
+    expect(old.id).toBe(CheckpointId.make("c"));
   });
 
   it("decodes what a model sends and refuses what it leaves out", () => {

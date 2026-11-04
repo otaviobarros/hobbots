@@ -67,6 +67,9 @@ test("[TC-UX-149] while Ada's question waits for you, the Workbench chat answers
   const drawer = page.getByRole("dialog", { name: "Build the campaign, task details" });
   await drawer.getByRole("button", { name: "Open Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Build the campaign" });
+  // Its Summary shows what Ada had to say beyond her short checkpoint (#901).
+  await expect(bench).toContainText("Keyword research done");
+  await expect(bench).toContainText("Doorbuster and early access lead what shoppers search for.");
 
   // The toggle, and the panel once open, say the question waits for you.
   const toggle = bench.getByRole("button", { name: "Task chat" });

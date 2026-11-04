@@ -9,6 +9,22 @@ import { ancestorsOf, type Task } from "./task.ts";
  * nothing. Inputs use the names the model sees.
  */
 
+/**
+ * About how many words a checkpoint's summary should take (#901): a lane shows each one as a short
+ * beat. It is a request to the model, so a lane still cuts a longer one.
+ */
+export const CHECKPOINT_WORDS = 8;
+
+/**
+ * What a lead writes in the user's chat (#901): the plan when the work starts, a question no lead
+ * can answer, and the finish. Briefings and tool descriptions carry the same words.
+ */
+export const LEAN_CHAT_RULE =
+  "In the chat, write only the plan, a question no lead can answer and the finish; otherwise end your turn without a message, until the user writes.";
+
+/** What a lead's finish says (#901). */
+export const FINISH_RULE = "The finish says in short what was made, where it is and who did what.";
+
 const text = (description: string) => Schema.String.check(Schema.isNonEmpty()).annotate({ description });
 const id = (description: string) => Schema.String.check(Schema.isNonEmpty()).annotate({ description });
 
@@ -106,7 +122,12 @@ export const TaskToolInputs = {
       description:
         "milestone: a planned milestone was reached. finding: something that may change the plan. blocker: something you cannot get past. progress: routine progress.",
     }),
-    summary: text("Where the Task stands, in a sentence or two."),
+    summary: text(
+      `Where the Task stands, in about ${CHECKPOINT_WORDS} words, like "Three headlines drafted". A lane shows it as one short beat and cuts anything longer.`,
+    ),
+    detail: Schema.optionalKey(
+      text("More about it, only when the summary cannot hold what matters. The Workbench shows it; a lane never does."),
+    ),
     milestone_id: Schema.optionalKey(id("The milestone reached, for a milestone checkpoint.")),
   }),
   ask: Schema.Struct({
@@ -202,14 +223,12 @@ export const TASK_TOOLS: ReadonlyArray<{
   },
   {
     name: "delegate_task",
-    description:
-      "Give another hob a Task under one you own, with a brief, milestones and dependencies. You become its lead. Its authority is yours narrowed by what you pass, never wider.",
+    description: `Give another hob a Task under one you own, with a brief, milestones and dependencies. You become its lead. Its authority is yours narrowed by what you pass, never wider. ${LEAN_CHAT_RULE}`,
     label: "Delegating a Task",
   },
   {
     name: "report_checkpoint",
-    description:
-      "Report where a Task you own stands: a planned milestone, a finding that may change the plan, a blocker, or routine progress. Routine progress never wakes your lead.",
+    description: `Report where a Task you own stands: a planned milestone, a finding that may change the plan, a blocker, or routine progress. Keep the summary to about ${CHECKPOINT_WORDS} words, like "Three headlines drafted"; put anything more in detail. Routine progress never wakes your lead.`,
     label: "Reporting a checkpoint",
   },
   {
@@ -254,8 +273,7 @@ export const TASK_TOOLS: ReadonlyArray<{
   },
   {
     name: "complete_task",
-    description:
-      "Return the result of a Task you own. It completes only when everything under it has ended, its dependencies completed and its questions are answered.",
+    description: `Return the result of a Task you own. It completes only when everything under it has ended, its dependencies completed and its questions are answered. For the Task of a request in the user's chat: ${FINISH_RULE}`,
     label: "Completing the Task",
   },
   {

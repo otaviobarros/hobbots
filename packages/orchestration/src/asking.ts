@@ -40,6 +40,7 @@ export const makeAsking = ({ tasks }: Deps) => ({
             kind: input.kind,
             milestoneId: input.milestone_id === undefined ? null : MilestoneId.make(input.milestone_id),
             summary: input.summary,
+            detail: input.detail ?? null,
             createdAt: scope.at,
           }),
         ),
