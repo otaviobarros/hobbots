@@ -44,7 +44,7 @@ import { SummonStep } from "./components/summon/summon-model.ts";
 import { UsagePage } from "./components/usage/usage-page.tsx";
 import { WorkbenchSearch } from "./components/workbench/use-workbench.ts";
 import { SearchText, searchParam } from "./lib/search-params.ts";
-import { UsageDays } from "./lib/usage.ts";
+import { UsageDays, UsageSplit } from "./lib/usage.ts";
 
 const PAIR_PATH = "/pair";
 
@@ -325,15 +325,18 @@ const inboxRoute = createRoute({
     return <InboxPage tab={tab ?? "needs"} requestId={request} />;
   },
 });
-// `?days=` picks the period: the last 7 days, or 30. The router reads the number as a number.
+// `?days=` picks the period: the last 7 days, or 30. The router reads the number as a number. `?by=quest`
+// splits Who used what by quest.
 const usageRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="home" />,
   path: "usage",
-  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ days: searchParam(UsageDays) })),
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({ days: searchParam(UsageDays), by: searchParam(UsageSplit) }),
+  ),
   component: function Usage() {
-    const { days } = usageRoute.useSearch();
-    return <UsagePage days={days === 30 ? "30" : "7"} />;
+    const { days, by } = usageRoute.useSearch();
+    return <UsagePage days={days === 30 ? "30" : "7"} by={by ?? "hob"} />;
   },
 });
 // Settings opens on its overview; each section has its own address, such as `/settings/devices`.

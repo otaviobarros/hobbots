@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { AgentStatus, RuntimeKind } from "./agent.ts";
 import { AgentId } from "./ids.ts";
+import { QuestId } from "./quest.ts";
 
 // The Usage screen (OP-002): what each hob's replies used, from the usage recorded with them (#398),
 // and each runtime's plan as the runtime reports it. Nothing here is estimated: a reply or a plan
@@ -29,6 +30,28 @@ export const HobUsage = Schema.Struct({
   cacheWriteTokens: Schema.Number,
 });
 export type HobUsage = typeof HobUsage.Type;
+
+/**
+ * What the chat replies of one Quest used in the period, or of every chat outside a Quest when
+ * `questId` is null. A reply counts for a Quest when it was written in the Quest's chat while the
+ * Quest ran, from its start to its end; a sub-quest's replies count for the Quest above it.
+ */
+export const QuestUsage = Schema.Struct({
+  questId: Schema.NullOr(QuestId),
+  /** The Quest's goal; null for the chats outside a Quest. */
+  goal: Schema.NullOr(Schema.String),
+  /** The Quest's lead; null for the chats outside a Quest. */
+  leadName: Schema.NullOr(Schema.String),
+  /** How many hobs are in the party, the lead included; 0 for the chats outside a Quest. */
+  party: Schema.Number,
+  /** How many chats the replies were in. */
+  chats: Schema.Number,
+  replies: Schema.Number,
+  unreported: Schema.Number,
+  /** Every token the replies read or wrote, cached or not. */
+  tokens: Schema.Number,
+});
+export type QuestUsage = typeof QuestUsage.Type;
 
 /**
  * Every hob's replies that started in one minute (UTC). A minute fits every time zone's offset, so a
@@ -103,6 +126,7 @@ export const UsageReport = Schema.Struct({
   since: Schema.String,
   until: Schema.String,
   hobs: Schema.Array(HobUsage),
+  quests: Schema.Array(QuestUsage),
   minutes: Schema.Array(MinuteUsage),
   plans: Schema.Array(PlanUsage),
 });

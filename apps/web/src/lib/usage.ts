@@ -5,6 +5,8 @@ import {
   type MinuteUsage,
   type PlanMeter,
   type PlanUsage,
+  type QuestId,
+  type QuestUsage,
   type RuntimeKind,
   usageTokens,
 } from "@hobbots/domain";
@@ -12,6 +14,10 @@ import { Schema } from "effect";
 
 /** The Usage screen's periods in its address, `?days=7` or `?days=30`, which the router reads as numbers. */
 export const UsageDays = Schema.Literals([7, 30]);
+
+/** How Who used what splits the period, in the address as `?by=quest`; By hob when it is absent. */
+export const UsageSplit = Schema.Literals(["hob", "quest"]);
+export type UsageSplit = typeof UsageSplit.Type;
 
 // The Usage screen's arithmetic (OP-002): each hob's share of the period's tokens, the period's
 // replies by the reader's own days, and what a plan's headline meter says. Nothing is estimated.
@@ -75,6 +81,37 @@ export const hobShares = (rows: ReadonlyArray<HobUsage>): ReadonlyArray<HobShare
   return all
     .map((hob, index) => ({ ...hob, share: shares[index] ?? 0, brains: hob.brains.toSorted(byTokens) }))
     .toSorted((a, b) => byTokens(a, b) || a.name.localeCompare(b.name));
+};
+
+/** What one Quest's chat replies used in the period, or every chat's outside a Quest, and its share. */
+export interface QuestShare {
+  /** Null for the chats outside a Quest. */
+  readonly questId: QuestId | null;
+  readonly goal: string | null;
+  readonly leadName: string | null;
+  readonly party: number;
+  readonly chats: number;
+  readonly replies: number;
+  readonly unreported: number;
+  readonly tokens: number;
+  /** Of every reply's tokens in the period, 0 to 100, rounded. */
+  readonly share: number;
+}
+
+/**
+ * Each Quest's replies and tokens over the period, most tokens first, then the chats outside a Quest,
+ * each with its share of them all. The shares add up to 100, as the hobs' do.
+ */
+export const questShares = (rows: ReadonlyArray<QuestUsage>): ReadonlyArray<QuestShare> => {
+  const shares = wholeShares(rows.map((row) => row.tokens));
+  return rows
+    .map((row, index) => ({ ...row, share: shares[index] ?? 0 }))
+    .toSorted(
+      (a, b) =>
+        Number(a.questId === null) - Number(b.questId === null) ||
+        byTokens(a, b) ||
+        (a.goal ?? "").localeCompare(b.goal ?? ""),
+    );
 };
 
 /**
@@ -145,6 +182,19 @@ export const dailyUsage = (
 /** The meter a single-value potion shows: the one the provider picked, else its first. */
 export const headlineMeter = (plan: PlanUsage): PlanMeter | undefined =>
   plan.meters.find((meter) => meter.active) ?? plan.meters[0];
+
+/**
+ * The window a plan's potion shows: the whole week, which drains slowest and says how long the plan
+ * lasts, else the window that sets the plan's level. Undefined when the plan reported no window.
+ */
+export const potionMeter = (plan: PlanUsage): PlanMeter | undefined => {
+  if (!plan.reported) return undefined;
+  return (
+    plan.meters.find((meter) => meter.kind === "weekly_all") ??
+    plan.meters.find((meter) => meter.group === "weekly") ??
+    planLevel(plan)?.meter
+  );
+};
 
 /**
  * How a plan window stands: `ok`, `low` when little is left, `out` when it is used up and hobs on

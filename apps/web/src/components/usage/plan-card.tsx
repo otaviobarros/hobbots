@@ -7,12 +7,11 @@ import {
   unreportedPlan,
 } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
-import { PixelArt } from "@hobbots/ui/components/pixel-art";
+import { Button } from "@hobbots/ui/components/button";
 import { Progress } from "@hobbots/ui/components/progress";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { POTION_COLORS, potion, potionPalette, UNREPORTED_POTION } from "../../art/icons.ts";
 import { formatAgo, formatMoney } from "../../lib/format.ts";
 import {
   billingOf,
@@ -20,12 +19,14 @@ import {
   meterLevel,
   type PlanLevel,
   planLevel,
+  potionMeter,
   refillOf,
   reportedCredits,
 } from "../../lib/usage.ts";
 import { RuntimeTile } from "../providers/brain-picker.tsx";
 import { messages } from "./messages.ts";
 import { leftText, refillSentence, windowName } from "./plan-summary.ts";
+import { PotionBottle, type PotionFill, PotionVial } from "./potion.tsx";
 
 const copy = messages.plans;
 
@@ -41,21 +42,20 @@ interface PlanWindow {
 }
 
 /** A plan's state tag and the banner it raises when it is low or out. */
-interface PlanState {
+export interface PlanState {
   readonly level: PlanLevel;
   readonly tag: string;
   readonly banner: { readonly title: string; readonly line: string } | null;
 }
 
 /** What one provider's card says. Nothing is guessed: a plan that reported nothing says why. */
-interface PlanView {
+export interface PlanView {
   readonly runtime: RuntimeKind;
   readonly name: string;
   readonly kind: string;
-  /** How full the potion is, 0 to 1: what is left of the headline window. */
-  readonly level: number;
-  readonly palette: readonly [string, string];
-  /** The headline window's name under the potion, or null when nothing was reported. */
+  /** How full the potion is and in what tone, from the week's window; null for an empty bottle. */
+  readonly potion: PotionFill | null;
+  /** The potion's window under it, or null when nothing was reported. */
   readonly caption: string | null;
   /** The big number on the provider's tile: "62% left", or Not reported. */
   readonly headline: string;
@@ -132,8 +132,9 @@ const KIND = { subscription: copy.subscription, apiKey: copy.apiKey, unknown: co
 const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView => {
   const name = RUNTIME_NAMES[health.runtime];
   const kind = health.availability === "ready" ? KIND[billingOf(health.billing)] : copy.unavailable;
-  // The potion and the big number follow the window that sets the plan's level.
+  // The big number follows the window that sets the plan's level; the potion shows the week.
   const meter = planLevel(plan)?.meter;
+  const week = potionMeter(plan);
   const base = {
     runtime: health.runtime,
     name,
@@ -145,8 +146,7 @@ const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView =
   if (meter === undefined) {
     return {
       ...base,
-      level: 0,
-      palette: UNREPORTED_POTION,
+      potion: null,
       caption: null,
       headline: health.availability === "ready" ? copy.notReported : copy.unavailable,
       summary: kind,
@@ -156,9 +156,8 @@ const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView =
   }
   return {
     ...base,
-    level: leftOf(meter),
-    palette: POTION_COLORS[health.runtime],
-    caption: windowName(meter),
+    potion: week === undefined ? null : { left: leftOf(week), level: meterLevel(week) },
+    caption: week === undefined ? null : windowName(week),
     headline: leftText(meter),
     summary:
       meter.resetsAt === null ? kind : `${kind} · ${copy.refillShort(refillOf(meter.resetsAt, now), meter.resetsAt)}`,
@@ -169,8 +168,9 @@ const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView =
 
 const TONE = { ok: "default", low: "low", out: "out" } as const;
 
-// A tile's big number takes its plan's color once it is low or out.
-const HEADLINE = { ok: "", low: "text-lantern", out: "text-rose" } as const;
+// A number of what is left takes its window's tone: mint, lantern when low, rose when used up. Each
+// sits on `card`, where all three meet the text floor in every theme.
+const LEFT = { ok: "text-mint", low: "text-lantern", out: "text-rose" } as const;
 
 const TAG = { ok: "done", low: "needs-you", out: "failed" } as const;
 
@@ -188,7 +188,7 @@ function Window({ window }: { window: PlanWindow }) {
     <li className="flex flex-col gap-1.5">
       <span className="flex items-baseline gap-2">
         <span className="flex-1 text-text">{window.label}</span>
-        <strong className="text-text-strong">{window.left}</strong>
+        <strong className={LEFT[window.level]}>{window.left}</strong>
       </span>
       <Progress value={window.used} tone={TONE[window.level]} aria-hidden />
       <span className="text-detail text-label">{window.refill}</span>
@@ -204,7 +204,7 @@ function PlanCard({ view }: { view: PlanView }) {
       className="cut flex animate-hb-in flex-wrap items-stretch gap-7 bg-card px-6 py-[22px] shadow-[inset_0_0_0_1px_var(--color-line)]"
     >
       <div className="flex w-[88px] shrink-0 flex-col items-center gap-2" aria-hidden>
-        <PixelArt rows={potion(view.level)} palette={potionPalette(...view.palette)} size={72} />
+        <PotionBottle fill={view.potion} />
         {view.caption !== null && <span className="text-meta text-label">{view.caption}</span>}
       </div>
       <div className="flex min-w-0 flex-1 basis-[260px] flex-col gap-3.5">
@@ -235,29 +235,39 @@ function PlanCard({ view }: { view: PlanView }) {
   );
 }
 
-const BANNER_EDGE = {
-  low: "shadow-[inset_0_0_0_1px_var(--color-lantern)]",
-  out: "shadow-[inset_0_0_0_1px_var(--color-rose)]",
-};
-const BANNER_GLYPH = { low: "bg-lantern text-on-lantern", out: "bg-rose text-on-rose" };
+const BANNER = {
+  low: "[--banner:var(--color-lantern)]",
+  out: "[--banner:var(--color-rose)]",
+} as const;
 
-/** What happens while a plan is low or used up, and when it comes back. */
-function PlanBanner({ level, title, line }: { level: "low" | "out"; title: string; line: string }) {
+/**
+ * What happens while a plan is low or used up, and when it comes back, with How to save. It sits
+ * above the page's sections, tinted with the plan's tone.
+ */
+export function PlanBanner({ state, onSave }: { state: PlanState; onSave: () => void }) {
+  if (state.banner === null || state.level === "ok") return null;
   return (
     <div
       role="status"
-      className={cn("cut flex animate-hb-in items-center gap-3.5 bg-card py-3 ps-3 pe-3.5", BANNER_EDGE[level])}
+      className={cn(
+        "cut flex animate-hb-in flex-wrap items-center gap-3.5 py-3 ps-3 pe-3.5",
+        "bg-[color-mix(in_srgb,var(--banner)_10%,var(--color-card))] shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--banner)_45%,transparent)]",
+        BANNER[state.level],
+      )}
     >
       <span
         aria-hidden
-        className={cn("grid size-8 shrink-0 place-items-center rounded-dot font-bold", BANNER_GLYPH[level])}
+        className="grid size-8 shrink-0 place-items-center rounded-dot bg-[color-mix(in_srgb,var(--banner)_22%,transparent)] font-bold text-text-strong"
       >
-        {level === "low" ? "◷" : "!"}
+        {state.level === "low" ? "◷" : "!"}
       </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <strong className="text-text-strong">{title}</strong>
-        <span className="text-detail text-text-secondary">{line}</span>
+      <span className="flex min-w-0 flex-1 basis-[260px] flex-col">
+        <strong className="text-text-strong">{state.banner.title}</strong>
+        <span className="text-detail text-text-secondary">{state.banner.line}</span>
       </span>
+      <Button variant="outline" size="sm" onClick={onSave}>
+        {copy.save}
+      </Button>
     </div>
   );
 }
@@ -270,9 +280,9 @@ function ProviderTile({ view, on, onPick }: { view: PlanView; on: boolean; onPic
       aria-pressed={on}
       onClick={onPick}
       className={cn(
-        "flex min-w-0 cursor-pointer flex-col items-stretch gap-2 rounded-control border-0 p-3 text-start text-text-strong transition-colors",
-        // Selection is a fill, never an edge.
-        on ? "bg-line" : "bg-card hover:bg-hover",
+        "flex min-w-0 cursor-pointer flex-col items-stretch gap-2 rounded-control border-0 bg-card p-3 text-start text-text-strong transition-colors hover:bg-hover",
+        // The picked tile carries the focus-ring edge; its fill stays `card`, so its number keeps its floor.
+        on && "shadow-[inset_0_0_0_2px_var(--color-focus-ring)]",
       )}
     >
       <span className="flex items-center gap-2">
@@ -280,9 +290,9 @@ function ProviderTile({ view, on, onPick }: { view: PlanView; on: boolean; onPic
         <span className="truncate font-semibold">{view.name}</span>
       </span>
       <span className="flex items-end gap-2.5">
-        <PixelArt rows={potion(view.level)} palette={potionPalette(...view.palette)} size={28} />
+        <PotionVial fill={view.potion} />
         <span className="flex min-w-0 flex-col">
-          <strong className={cn("text-[15px]", view.state && HEADLINE[view.state.level])}>{view.headline}</strong>
+          <strong className={cn("text-body", view.state && LEFT[view.state.level])}>{view.headline}</strong>
           <span className="truncate text-meta text-label">{view.summary}</span>
         </span>
       </span>
@@ -290,38 +300,37 @@ function ProviderTile({ view, on, onPick }: { view: PlanView; on: boolean; onPic
   );
 }
 
-/**
- * Every connected provider's plan. With one, its card; with several, a row of tiles on top, and
- * picking one shows its card.
- */
-export function PlanShelf({
-  runtimes,
-  plans,
-  now,
-}: {
-  runtimes: ReadonlyArray<RuntimeHealth>;
-  plans: ReadonlyArray<PlanUsage> | undefined;
-  now: Date;
-}) {
-  const [picked, setPicked] = useState<RuntimeKind | null>(null);
-  // Claude Code always has a card; another provider has one once it is connected.
-  const views = runtimes
+/** Each connected provider's card. Claude Code always has one; another provider once it is connected. */
+export const planViews = (
+  runtimes: ReadonlyArray<RuntimeHealth>,
+  plans: ReadonlyArray<PlanUsage> | undefined,
+  now: Date,
+): ReadonlyArray<PlanView> =>
+  runtimes
     .filter((health) => health.runtime === "claude-code" || health.availability === "ready")
     .map((health) =>
       planView(health, plans?.find((plan) => plan.runtime === health.runtime) ?? unreportedPlan(health.runtime), now),
     );
+
+/** The plan whose banner the page shows: one used up first, else one running low. */
+export const alarmOf = (views: ReadonlyArray<PlanView>): PlanState | undefined =>
+  (views.find((view) => view.state?.level === "out") ?? views.find((view) => view.state?.level === "low"))?.state ??
+  undefined;
+
+/**
+ * Every connected provider's plan. With one, its card; with several, a row of tiles that shares the
+ * column's width on top, and picking one shows its card.
+ */
+export function PlanShelf({ views }: { views: ReadonlyArray<PlanView> }) {
+  const [picked, setPicked] = useState<RuntimeKind | null>(null);
   const current = views.find((view) => view.runtime === picked) ?? views[0];
   if (current === undefined) return null;
-  const alarm = views.find((view) => view.state?.level === "out") ?? views.find((view) => view.state?.level === "low");
   return (
     <>
-      {alarm?.state?.banner && alarm.state.level !== "ok" && (
-        <PlanBanner level={alarm.state.level} title={alarm.state.banner.title} line={alarm.state.banner.line} />
-      )}
       {views.length > 1 && (
         <fieldset
           aria-label={copy.picker}
-          className="m-0 grid min-w-0 grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2.5 border-0 p-0"
+          className="m-0 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2.5 border-0 p-0"
         >
           {views.map((view) => (
             <ProviderTile
@@ -338,15 +347,13 @@ export function PlanShelf({
   );
 }
 
-/** The Usage screen's link to Settings, where providers are connected and fixed. */
+/** The Usage screen's way to Settings, where providers are connected and fixed: a quiet button. */
 export function ManageProviders() {
   return (
-    <Link
-      to="/settings/$section"
-      params={{ section: "connections" }}
-      className="text-detail text-text-secondary hover:text-text-strong hover:decoration-current"
-    >
-      {copy.manage}
-    </Link>
+    <Button asChild variant="ghost" size="xs">
+      <Link to="/settings/$section" params={{ section: "connections" }}>
+        {copy.manage}
+      </Link>
+    </Button>
   );
 }
