@@ -59,6 +59,8 @@ export function QuestView({
   const lead = hobs(card.leadId);
   const rows = roomRows(tree);
   const tasks = rows.slice(1);
+  const leads = copy.leads({ name: lead.name });
+  const leadLine = rows[0] === undefined ? leads : room.leadLine({ leads, note: leadNote(tree, rows[0]) });
   const needs = workCounts(tree)["needs-you"];
   const pinned = pins.pinned.includes(top.id);
   const fold = !unfolded && tasks.length > SHOWN_BEFORE_FOLD;
@@ -88,19 +90,15 @@ export function QuestView({
       <button
         type="button"
         onClick={() => onOpen(top.id)}
+        aria-label={room.rowName({ name: lead.name, title: taskTitle(top), shown: leadLine })}
         className="flex cursor-pointer items-center gap-2.5 rounded-card border-0 bg-card px-3 py-2.5 text-start text-text-strong hover:bg-hover"
       >
-        {/* The name holds the row's visible text (WCAG 2.5.3), after its owner. */}
-        <span className="sr-only">{room.rowLead({ name: lead.name })}</span>
         <Tile>
           <HobSprite hob={lead} size={22} />
         </Tile>
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate font-bold">{taskTitle(top)}</span>{" "}
-          <span className="truncate text-detail text-text-secondary">
-            {copy.leads({ name: lead.name })}
-            {rows[0] !== undefined && ` · ${leadNote(tree, rows[0])}`}
-          </span>
+          <span className="truncate text-detail text-text-secondary">{leadLine}</span>
         </span>
       </button>
       {tasks.length > 0 && (
@@ -157,28 +155,29 @@ function TaskRow({
   const owner = hobs(row.task.ownerId);
   const { note, color } = rowNote(row, tree, hobs);
   const tone = roomTone(row.status);
+  const line = note === null ? owner.name : questCopy.card.rowDetail({ name: owner.name, detail: note });
+  const flags = rowFlags(row, hobs);
+  const status = roomStatusLabel(row.status);
+  // Everything the row shows after its title, in its order, so its name holds it (WCAG 2.5.3).
+  const shown = [line, flags.leads, flags.nobody, flags.sameFile, status].filter((part) => part !== null).join(" ");
   return (
     <button
       type="button"
       onClick={() => onOpen(row.task.id)}
+      aria-label={room.rowName({ name: owner.name, title, shown })}
       className={cn(
         "flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3 py-2.5 text-start text-text-strong hover:bg-hover",
         INDENT[Math.min(row.depth - 1, INDENT.length - 1)],
       )}
     >
-      {/* The name holds the row's visible text (WCAG 2.5.3), after its owner. */}
-      <span className="sr-only">{room.rowLead({ name: owner.name })}</span>
       <Tile>
         <HobSprite hob={owner} size={22} state={row.status === "running" ? "working" : "idle"} />
       </Tile>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate font-bold">{title}</span>{" "}
-        <span className={cn("truncate text-detail", color)}>
-          {note === null ? owner.name : `${owner.name} · ${note}`}
-        </span>
-        <RowFlags row={row} hobs={hobs} />
+        <span className={cn("truncate text-detail", color)}>{line}</span> <RowFlags flags={flags} />
       </span>{" "}
-      <StatusTag status={tone}>{roomStatusLabel(row.status)}</StatusTag>
+      <StatusTag status={tone}>{status}</StatusTag>
     </button>
   );
 }
@@ -204,22 +203,26 @@ const rowNote = (row: RoomRow, tree: TaskTree, hobs: HobLookup) => {
  * What else a row says: that its member leads a quest of its own, and whom, or that it has brought
  * nobody in yet; and that another Task changed a file this one changed too (#570, #576).
  */
-function RowFlags({ row, hobs }: { row: RoomRow; hobs: HobLookup }) {
+const rowFlags = (row: RoomRow, hobs: HobLookup) => {
   const party = row.party.map((id) => hobs(id).name);
   const sameFile = row.sameFileAs.map((id) => hobs(id).name);
-  const leads =
-    row.quest === null ? null : party.length > 0 ? room.leadsParty({ names: questCopy.names(party) }) : room.leads;
-  const nobody = row.quest?.state === "active" && party.length === 0;
-  if (leads === null && sameFile.length === 0) return null;
+  return {
+    leads:
+      row.quest === null ? null : party.length > 0 ? room.leadsParty({ names: questCopy.names(party) }) : room.leads,
+    nobody: row.quest?.state === "active" && party.length === 0 ? room.nobodyYet : null,
+    sameFile: sameFile.length > 0 ? room.sameFile({ names: questCopy.names(sameFile) }) : null,
+  };
+};
+
+function RowFlags({ flags }: { flags: ReturnType<typeof rowFlags> }) {
+  if (flags.leads === null && flags.sameFile === null) return null;
   return (
     <span className="flex min-w-0 items-center gap-1.5 text-meta">
-      {leads !== null && (
-        <span className="shrink-0 truncate rounded-tag bg-line px-1.5 font-bold text-moonlight">{leads}</span>
-      )}
-      {nobody && <span className="shrink-0 text-lantern">{room.nobodyYet}</span>}
-      {sameFile.length > 0 && (
-        <span className="truncate text-rose">{room.sameFile({ names: questCopy.names(sameFile) })}</span>
-      )}
+      {flags.leads !== null && (
+        <span className="shrink-0 truncate rounded-tag bg-line px-1.5 font-bold text-moonlight">{flags.leads}</span>
+      )}{" "}
+      {flags.nobody !== null && <span className="shrink-0 text-lantern">{flags.nobody}</span>}{" "}
+      {flags.sameFile !== null && <span className="truncate text-rose">{flags.sameFile}</span>}
     </span>
   );
 }

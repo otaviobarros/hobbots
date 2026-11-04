@@ -14,6 +14,8 @@ export const messages = {
     moved: (count: number) => `${formatCount(count)} moved`,
     link: (count: number) => `${formatCount(count)} ${count === 1 ? "link" : "links"}`,
   } satisfies Record<FileChangeKind, (count: number) => string>,
+  /** What the narrow picker shows for a change: the file's name and its tag. */
+  pickerShown: ({ name, kind }: { name: string; kind: string }) => `${name} ${kind}`,
   kind: {
     added: "Added",
     edited: "Edited",

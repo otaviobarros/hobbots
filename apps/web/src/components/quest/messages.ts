@@ -22,7 +22,9 @@ export const messages = {
     rowDetail: ({ name, detail }: { name: string; detail: string }) => `${name} · ${detail}`,
     showAll: "Show all",
     details: "Show details",
-    openLead: "Look inside ",
+    /** A Task row's name: what it opens, then everything the row shows, in its order (WCAG 2.5.3). */
+    open: ({ title, detail, status }: { title: string; detail: string; status: string }) =>
+      `Look inside ${title}, ${detail}, ${status}`,
     workbench: "Open in Workbench",
   },
   status: {
@@ -129,8 +131,10 @@ export const messages = {
     unpinHint: "Unpin: show it only in its own thread",
     tree: ({ title }: { title: string }) => `Tasks of ${title}`,
     row: ({ name, title }: { name: string; title: string }) => `${name} · ${title}`,
-    /** Read before a row's own text, so its name starts with who owns it and still holds what it shows. */
-    rowLead: ({ name }: { name: string }) => `${name} · `,
+    /** A room row's name: its owner and title, then everything the row shows after the title (WCAG 2.5.3). */
+    /** The lead's line under its title: that it leads, then how its work stands. */
+    leadLine: ({ leads, note }: { leads: string; note: string }) => `${leads} · ${note}`,
+    rowName: ({ name, title, shown }: { name: string; title: string; shown: string }) => `${name} · ${title}, ${shown}`,
     you: "you",
     leads: "Leads a quest",
     /** A member that brought in hobs of its own: the party it leads under the Quest. */

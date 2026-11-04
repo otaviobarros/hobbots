@@ -81,6 +81,7 @@ function Files({
             {shown.label ?? fileName(shown)}
           </span>
         }
+        currentText={shown.label ?? fileName(shown)}
         row={(file) => (
           <span className="flex min-w-0 flex-col items-start gap-px">
             <RowContent file={file} />

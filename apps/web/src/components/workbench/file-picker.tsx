@@ -14,6 +14,7 @@ export function FilePicker<Item>({
   items,
   shown,
   current,
+  currentText,
   row,
   onPick,
 }: {
@@ -24,23 +25,27 @@ export function FilePicker<Item>({
   shown: number;
   /** The file shown, as the line names it. */
   current: ReactNode;
+  /** The words `current` shows, which the picker's name holds. */
+  currentText: string;
   /** One file's row in the menu. */
   row: (item: Item) => ReactNode;
   onPick: (index: number) => void;
 }) {
   const step = (by: number) => onPick((shown + by + items.length) % items.length);
+  const position = messages.picker.of({ index: shown + 1, total: items.length });
   return (
     <div className="@container/picker flex items-center gap-1.5 @min-[720px]:hidden">
       <Step label={messages.picker.previous} onClick={() => step(-1)}>
         ‹
       </Step>
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex h-[34px] min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-control border border-line-2 bg-card px-3 text-start text-text hover:border-lantern data-[state=open]:border-lantern">
-          {/* The name says what the button does, then holds the file it shows (WCAG 2.5.3). */}
-          <span className="sr-only">{messages.picker.open({ label })}</span>{" "}
+        <DropdownMenuTrigger
+          aria-label={messages.picker.open({ label, shown: currentText, position })}
+          className="flex h-[34px] min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-control border border-line-2 bg-card px-3 text-start text-text hover:border-lantern data-[state=open]:border-lantern"
+        >
           <span className="flex min-w-0 flex-1 items-center gap-2">{current}</span>{" "}
           <span className="hidden shrink-0 text-xs whitespace-nowrap text-label @min-[300px]/picker:inline">
-            {messages.picker.of({ index: shown + 1, total: items.length })}
+            {position}
           </span>
           <span aria-hidden className="shrink-0 text-[11px] text-label">
             ▾
