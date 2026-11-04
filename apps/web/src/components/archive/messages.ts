@@ -11,6 +11,11 @@ interface Titled {
 export const messages = {
   threadMenu: ({ title }: Titled) => `More for “${title}”`,
   headerMenu: "More for this thread",
+  rename: "Rename",
+  pin: "Pin to the top",
+  unpin: "Unpin",
+  pinned: "Pinned to the top",
+  hobPage: ({ name }: Named) => `${name}'s page`,
   archive: "Archive thread",
   archiveShortcut: ({ mac }: { mac: boolean }) => (mac ? "⌃⌘A" : "Ctrl+Alt+A"),
   undoShortcut: ({ mac }: { mac: boolean }) => (mac ? "⌘Z" : "Ctrl+Z"),
