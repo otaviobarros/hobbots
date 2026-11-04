@@ -2,6 +2,7 @@ import { AgentId, type HobUsage, type PlanUsage } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   billingOf,
+  busiestDay,
   dailyUsage,
   headlineMeter,
   hobShares,
@@ -10,6 +11,7 @@ import {
   periodStart,
   refillOf,
   reportedCredits,
+  wholeShares,
 } from "./usage.ts";
 
 const row = (hob: string, model: string, tokens: number, replies = 1, unreported = 0): HobUsage => ({
@@ -42,6 +44,21 @@ describe("usage", () => {
     // A tie in tokens puts the brain with more replies first.
     expect(shares[1]?.brains.map((brain) => brain.model)).toEqual(["opus", "sonnet"]);
     expect(shares[1]).toMatchObject({ inputTokens: 200, outputTokens: 100 });
+  });
+
+  it("rounds shares so they always add up to 100", () => {
+    expect(wholeShares([1, 1, 1])).toEqual([34, 33, 33]);
+    expect(wholeShares([2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]).reduce((sum, share) => sum + share, 0)).toBe(100);
+    expect(wholeShares([5, 0])).toEqual([100, 0]);
+    expect(wholeShares([0, 0])).toEqual([0, 0]);
+    const shares = hobShares([row("a", "x", 100), row("b", "x", 100), row("c", "x", 100)]);
+    expect(shares.reduce((sum, hob) => sum + hob.share, 0)).toBe(100);
+  });
+
+  it("names the busiest day, the latest on a tie, and none when nobody replied", () => {
+    const day = (name: string, replies: number) => ({ day: name, replies, tokens: 0 });
+    expect(busiestDay([day("a", 2), day("b", 5), day("c", 5), day("d", 1)])?.day).toBe("c");
+    expect(busiestDay([day("a", 0), day("b", 0)])).toBeUndefined();
   });
 
   it("gives every hob a share of nothing when no reply reported tokens", () => {

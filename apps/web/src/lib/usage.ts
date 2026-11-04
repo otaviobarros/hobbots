@@ -71,15 +71,37 @@ export const hobShares = (rows: ReadonlyArray<HobUsage>): ReadonlyArray<HobShare
       brains: [...hob.brains, { runtime: row.runtime, model: row.model, replies: row.replies, tokens }],
     });
   }
-  const total = [...hobs.values()].reduce((sum, hob) => sum + hob.tokens, 0);
-  return [...hobs.values()]
-    .map((hob) => ({
-      ...hob,
-      share: total === 0 ? 0 : Math.round((hob.tokens / total) * 100),
-      brains: hob.brains.toSorted(byTokens),
-    }))
+  const all = [...hobs.values()];
+  const shares = wholeShares(all.map((hob) => hob.tokens));
+  return all
+    .map((hob, index) => ({ ...hob, share: shares[index] ?? 0, brains: hob.brains.toSorted(byTokens) }))
     .toSorted((a, b) => byTokens(a, b) || a.name.localeCompare(b.name));
 };
+
+/**
+ * Each amount's whole-number share of their sum, out of 100, so the shares add up to exactly 100:
+ * every share rounds down, then the largest remainders take the points left over. All zeros when the
+ * sum is zero.
+ */
+export const wholeShares = (amounts: ReadonlyArray<number>): ReadonlyArray<number> => {
+  const total = amounts.reduce((sum, amount) => sum + amount, 0);
+  if (total === 0) return amounts.map(() => 0);
+  const exact = amounts.map((amount) => (amount / total) * 100);
+  const shares = exact.map(Math.floor);
+  const leftOver = 100 - shares.reduce((sum, share) => sum + share, 0);
+  const byRemainder = exact
+    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
+    .toSorted((a, b) => b.remainder - a.remainder);
+  for (const { index } of byRemainder.slice(0, leftOver)) shares[index] = (shares[index] ?? 0) + 1;
+  return shares;
+};
+
+/** The day with the most replies, or undefined when no day has any. The latest wins a tie. */
+export const busiestDay = (days: ReadonlyArray<DayUsage>): DayUsage | undefined =>
+  days.reduce<DayUsage | undefined>(
+    (best, day) => (day.replies > 0 && day.replies >= (best?.replies ?? 0) ? day : best),
+    undefined,
+  );
 
 /** One of the reader's days in the period. `day` is its local date, "2026-11-02". */
 export interface DayUsage {

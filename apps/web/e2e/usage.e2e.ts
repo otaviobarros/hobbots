@@ -88,26 +88,26 @@ test("[TC-OP-073] the Usage screen shows each plan's potion and each hob's share
       .getByText("Codex didn't report this plan's limits", { exact: false }),
   ).toBeVisible();
 
-  await expect(page.getByRole("region", { name: "Replies per day" })).toContainText("3 replies in the last 7 days");
-  const hobs = page.getByRole("region", { name: "Who used your plans" }).getByRole("listitem");
+  await expect(page.getByRole("region", { name: "Day by day" })).toContainText("3 replies in the last 7 days");
+  const hobs = page.getByRole("region", { name: "Who used what" }).getByRole("listitem");
   await expect(hobs).toHaveCount(2);
   await expect(hobs.nth(0)).toContainText("Pip");
   await expect(hobs.nth(0)).toContainText("2 replies");
   await expect(hobs.nth(1)).toContainText("Bramble");
   await expect(hobs.nth(1)).toContainText("1 reply");
-  // The shares add up to every hob's tokens.
+  // The shares add up to exactly 100% of every hob's tokens.
   const shares = await hobs.evaluateAll((rows) =>
     rows.map((row) => Number(/(\d+)%/.exec(row.textContent ?? "")?.[1] ?? Number.NaN)),
   );
   expect(shares[0]).toBeGreaterThan(shares[1] ?? 100);
-  expect((shares[0] ?? 0) + (shares[1] ?? 0)).toBeGreaterThanOrEqual(99);
+  expect((shares[0] ?? 0) + (shares[1] ?? 0)).toBe(100);
 
   // The 30-day period lives in the URL and counts the same replies.
   const period = page.getByRole("radiogroup", { name: "Period" });
   await period.getByRole("radio", { name: "30 days" }).click();
   await expect(page).toHaveURL(/#\/usage\?days=30/);
   await expect(period.getByRole("radio", { name: "30 days" })).toBeChecked();
-  await expect(page.getByRole("region", { name: "Replies per day" })).toContainText("3 replies in the last 30 days");
+  await expect(page.getByRole("region", { name: "Day by day" })).toContainText("3 replies in the last 30 days");
   await expect(hobs).toHaveCount(2);
 });
 
@@ -116,8 +116,8 @@ test("[TC-OP-074] a hub where no hob has replied says so", async ({ page }) => {
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
   await page.goto(`${hub.url}/#/usage?days=30`);
-  await expect(page.getByRole("region", { name: "Who used your plans" })).toContainText(
+  await expect(page.getByRole("region", { name: "Who used what" })).toContainText(
     "No hob replied in the last 30 days.",
   );
-  await expect(page.getByRole("region", { name: "Replies per day" })).toContainText("0 replies in the last 30 days");
+  await expect(page.getByRole("region", { name: "Day by day" })).toContainText("0 replies in the last 30 days");
 });
