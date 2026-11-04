@@ -101,7 +101,8 @@ const SHAPES: ReadonlyArray<SecretShape> = [
   },
 ];
 
-const MARKER = /\[redacted: [^\]]+\]/;
+// A marker's kind holds no bracket, so a run of unclosed `[redacted: ` cannot make a test scan back over it.
+const MARKER = /\[redacted: [^[\]]+\]/;
 
 /** Where each match of a shape is, or only its `secret` group, to be replaced by the shape's marker. */
 const shapeEdits = (text: string, shape: SecretShape): ReadonlyArray<PlainEdit> =>

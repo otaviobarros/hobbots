@@ -127,6 +127,14 @@ describe("redactSecrets", () => {
     expect(secretShapeIn(text)).toBeNull();
   });
 
+  it("stays fast on many unclosed markers", () => {
+    const text = `GH_TOKEN=${"[redacted: ".repeat(20_000)}`;
+    const started = performance.now();
+    redactSecrets(`-----BEGIN RSA PRIVATE KEY-----\n${text}`);
+    redactSecrets(text);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it("stays fast on long lines that almost match", () => {
     const started = performance.now();
     redactSecrets(`${"A".repeat(200_000)} ${"a.".repeat(100_000)} ${"-----BEGIN ".repeat(10_000)}`);
