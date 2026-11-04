@@ -1,11 +1,11 @@
 import type { Quest, TaskId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
-import { Link, useNavigate } from "@tanstack/react-router";
-import type { ReactNode, RefObject } from "react";
+import { Link } from "@tanstack/react-router";
+import type { RefObject } from "react";
 import { firstLine } from "../../lib/format.ts";
+import { FlagIcon } from "../quest/flag-icon.tsx";
 import { EntryPortrait } from "./entry-portrait.tsx";
 import {
   entryAsker,
@@ -18,40 +18,13 @@ import {
   type InboxPlace,
   type RowTone,
 } from "./inbox-entries.ts";
-import { INBOX_TABS, INBOX_VIEWS, type InboxTab, type InboxView } from "./inbox-items.ts";
+import { InboxIcon } from "./inbox-icons.tsx";
+import { INBOX_VIEWS, type InboxTab, type InboxView } from "./inbox-items.ts";
 import { shownOrder } from "./inbox-keys.ts";
 import { messages } from "./messages.ts";
 import type { InboxDirectory } from "./use-inbox-directory.ts";
 
 const copy = messages;
-
-/**
- * Needs you and History, with how many things need you on the first, above the open tab's
- * panel. The tab is in the address.
- */
-export function InboxTabs({ tab, waiting, children }: { tab: InboxTab; waiting: number; children: ReactNode }) {
-  const navigate = useNavigate();
-  // Opens a tab. Clicking the open tab again lands here too, so the request shown leaves the address.
-  const open = (next: string) => {
-    const name = INBOX_TABS.find((each) => each === next);
-    if (name !== undefined) void navigate({ to: "/inbox", search: { tab: name } });
-  };
-  return (
-    <Tabs value={tab} onValueChange={open} className="min-h-0 flex-1">
-      <TabsList aria-label={copy.tabsLabel} className="px-2.5 pt-2">
-        {INBOX_TABS.map((name) => (
-          <TabsTrigger key={name} value={name} onClick={() => name === tab && open(name)}>
-            {copy.tabs[name]}
-            {name === "needs" && waiting > 0 && <Badge variant="needs-you">{copy.count({ count: waiting })}</Badge>}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      <TabsContent value={tab} className="min-h-0 flex-1 overflow-y-auto">
-        {children}
-      </TabsContent>
-    </Tabs>
-  );
-}
 
 /**
  * The entries, by quest or by urgency. By quest groups them by quest, or by thread outside a quest,
@@ -103,11 +76,17 @@ export function InboxList({
   return (
     <ul ref={listRef} aria-label={copy.listLabel} className="m-0 flex list-none flex-col gap-3.5 p-0 px-2.5 py-1">
       {groupByPlace(entries, questOf).map((group) => {
-        const label = groupLabel(group, directory);
+        const heading = groupHeading(group, directory);
         return (
-          <li key={group.key} className="flex flex-col gap-1">
-            <span title={label} className="lbl truncate px-1.5 py-1 text-meta text-label">
-              {label}
+          <li key={group.key} className="flex flex-col gap-1 rounded-card bg-card px-1 pt-1 pb-1">
+            <span title={copy.groupTitle(heading)} className="flex min-w-0 items-center gap-1.5 px-1.5 py-1">
+              {heading.icon === "quest" ? (
+                <FlagIcon size={13} className="text-star" />
+              ) : (
+                <InboxIcon name={heading.icon} className="size-3.25 text-star" />
+              )}
+              <span className="lbl flex-none text-xs text-label">{heading.label}</span>
+              <span className="min-w-0 truncate text-meta text-label">{heading.detail}</span>
             </span>
             <ul className="m-0 flex list-none flex-col gap-1 p-0">{group.entries.map((entry) => item(entry))}</ul>
           </li>
@@ -121,7 +100,7 @@ export function InboxList({
 export function InboxViewPicker({ view, onChange }: { view: InboxView; onChange: (view: InboxView) => void }) {
   return (
     <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5">
-      <span className="flex-1 text-meta text-label">{copy.view.label}</span>
+      <span className="flex-1 text-xs text-label">{copy.view.label}</span>
       <SegmentedControl size="sm" aria-label={copy.view.label} value={view} onValueChange={onChange}>
         {INBOX_VIEWS.map((name) => (
           <SegmentedControlItem key={name} value={name}>
@@ -140,18 +119,29 @@ const placeName = (place: InboxPlace, directory: InboxDirectory): string => {
   return directory.threadTitle(place.threadId);
 };
 
-/** A group's heading: the quest and its lead, the thread and whose chat it is, or this hub's devices. */
-const groupLabel = ({ place, entries }: InboxGroup, directory: InboxDirectory): string => {
-  if (place.kind === "hub") return copy.hubGroup;
+/**
+ * A group's heading: a short label with its icon, then the detail. A quest is its lead's quest and
+ * its goal, a thread outside a quest whose chat it is and its title, and this hub its devices.
+ */
+const groupHeading = (
+  { place, entries }: InboxGroup,
+  directory: InboxDirectory,
+): { readonly icon: "quest" | "chat" | "screen"; readonly label: string; readonly detail: string } => {
+  if (place.kind === "hub") return { icon: "screen", label: copy.hub, detail: copy.devices };
   if (place.kind === "quest") {
-    return copy.questGroup({ name: directory.hobName(place.quest.leadId), goal: firstLine(place.quest.goal) });
+    return {
+      icon: "quest",
+      label: copy.questName({ name: directory.hobName(place.quest.leadId) }),
+      detail: firstLine(place.quest.goal),
+    };
   }
   const first = entries[0];
   const owner = directory.threadHob(place.threadId) ?? (first === undefined ? undefined : entryAsker(first));
-  return copy.group({
-    name: owner === undefined ? copy.unknownHob : directory.hobName(owner),
-    thread: directory.threadTitle(place.threadId),
-  });
+  return {
+    icon: "chat",
+    label: owner === undefined ? copy.unknownHob : directory.hobName(owner),
+    detail: directory.threadTitle(place.threadId),
+  };
 };
 
 const TONE: Record<RowTone, string> = { urgent: "text-lantern", stuck: "text-rose", plain: "text-text-secondary" };
@@ -196,7 +186,7 @@ function InboxItem({
       data-state={entry.kind === "approval" ? entry.request.state : undefined}
       className={cn(
         "hop-on-hover flex w-full items-start gap-2.5 rounded-control p-2.5 text-start text-text-strong no-underline transition-colors hover:text-text-strong",
-        selected ? "bg-card text-text-strong" : "hover:bg-hover",
+        selected ? "bg-lantern/10 text-text-strong" : "hover:bg-hover",
         closed && "opacity-70",
       )}
     >
@@ -208,8 +198,11 @@ function InboxItem({
           </span>
           <Badge variant={row.tag}>{row.kind}</Badge>
         </span>
-        <span className="text-ui leading-snug font-semibold [overflow-wrap:anywhere]">{row.what}</span>
-        <span className={cn("text-meta", TONE[row.tone])}>
+        <span title={row.what} className="truncate text-sm leading-5 font-semibold">
+          {row.what}
+        </span>
+        <span className={cn("flex items-center gap-1.25 text-meta", TONE[row.tone])}>
+          <InboxIcon name="clock" className="size-3" />
           {place === undefined ? row.when : copy.whenIn({ when: row.when, place })}
         </span>
       </span>
