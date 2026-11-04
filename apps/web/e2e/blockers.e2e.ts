@@ -75,8 +75,15 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck in the chat's Needs-
   await expect(stuck.getByRole("button", { name: "Reassign" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible();
 
+  // Help and about's plain check counts it as the Inbox does, and opens the Inbox.
+  const chat = page.url();
+  await page.goto(`${url}/#/settings/help`);
+  const check = page.getByRole("region", { name: "Check that everything works" });
+  await check.getByRole("button", { name: "Check now" }).click();
+  await expect(check).toContainText("1 thing is stuck. Retry or dismiss it in the Inbox.");
+  await check.getByRole("link", { name: "Open the Inbox" }).click();
+
   // Needs you lists it too, and Retry there starts the work again in the chat.
-  await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
   // It is one row in the list, like every other kind, and opens beside it with its choices.
   const row = page.getByRole("list", { name: "Requests" }).getByRole("link", { name: /Stuck/ });
   await expect(row).toContainText("Stuck after 1 try");
@@ -84,7 +91,7 @@ test("[TC-IN-096] work whose turn is cut off shows as stuck in the chat's Needs-
   await needs.getByRole("button", { name: "Retry" }).click();
   await expect(row).toBeHidden();
   await expect(page.getByText("Nothing needs you")).toBeVisible();
-  await page.goBack();
+  await page.goto(chat);
   await expect(page.getByText("Hobbots wrote this, not the user.").last()).toBeVisible({ timeout: 20_000 });
   await expect(stuck).toBeHidden();
 });

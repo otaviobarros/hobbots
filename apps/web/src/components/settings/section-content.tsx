@@ -11,6 +11,7 @@ import { ConnectionsSection } from "./connections-section.tsx";
 import { GeneralSettings } from "./general-settings.tsx";
 import { messages } from "./messages.ts";
 import { NotificationSettings } from "./notification-settings.tsx";
+import { PlainCheck } from "./plain-check.tsx";
 import { ReduceMotionRow } from "./reduce-motion.tsx";
 import { SafetySection } from "./safety-section.tsx";
 import type { ConnectionsTab, SettingsSection } from "./sections.ts";
@@ -62,13 +63,20 @@ function Devices() {
   );
 }
 
+/** The plain check first, then the version and links; Diagnostics waits behind Technical details. */
 function HelpAndAbout() {
   return (
     <>
-      <SettingsGroup label={diagnosticsMessages.heading}>
-        <DiagnosticsSettings />
-      </SettingsGroup>
+      <PlainCheck />
       <AboutSettings />
+      <details className="group">
+        <summary className="cursor-pointer text-detail text-label hover:text-text-strong">
+          {messages.check.technical}
+        </summary>
+        <SettingsGroup label={diagnosticsMessages.heading} className="pt-3">
+          <DiagnosticsSettings />
+        </SettingsGroup>
+      </details>
     </>
   );
 }

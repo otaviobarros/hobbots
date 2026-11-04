@@ -1,12 +1,15 @@
 import { RUNTIME_NAMES, type RuntimeHealth, type RuntimeKind } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
+import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
-import { runtimesQuery } from "../../api/queries.ts";
+import { Link } from "@tanstack/react-router";
+import { agentsQuery, runtimesQuery } from "../../api/queries.ts";
 import { PROVIDER_MARKS } from "../../lib/providers.ts";
 import { EnforcementList } from "../hob-profile/enforcement.tsx";
 import { messages as sharedMessages } from "../messages.ts";
 import { ProviderFixActions, providerFix } from "../providers/provider-fix.tsx";
 import { messages } from "./messages.ts";
+import { accountLine, hobsLine } from "./provider-lines.ts";
 
 const copy = messages.providers;
 
@@ -33,16 +36,19 @@ function ProviderFacts({ health }: { health: RuntimeHealth }) {
 }
 
 /**
- * One provider's health in Settings › AI providers, with how to fix it when it cannot think.
+ * One provider's health in Settings › AI providers: how it is signed in and on which plan, how many
+ * hobs think with it, a quiet way to its plan usage, and how to fix it when it cannot think.
  * Detail is never shown: it can carry account names.
  */
 export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
   const runtimes = useQuery(runtimesQuery);
+  const hobs = useQuery(agentsQuery);
   const health = runtimes.data?.find((entry) => entry.runtime === runtime);
   const name = RUNTIME_NAMES[runtime];
   const look = PROVIDER_MARKS[runtime];
   const hint = providerFix(runtime, health);
   const availability = health?.availability ?? "unavailable";
+  const account = accountLine(health);
 
   return (
     <section aria-label={name} className="flex flex-col gap-2.5 rounded-card bg-card p-4">
@@ -53,14 +59,25 @@ export function ProviderCard({ runtime }: { runtime: RuntimeKind }) {
         >
           {look.mark}
         </span>
-        <span className="flex-1 font-semibold text-text-strong">{name}</span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="font-semibold text-text-strong">{name}</span>
+          {account !== null && <span className="text-detail text-text-secondary">{account}</span>}
+        </span>
         <Badge variant={availability === "ready" ? "working" : "waiting"}>
           {runtimes.isPending ? copy.checking : copy.availability[availability]}
         </Badge>
       </div>
+      {hobs.data && <p className="m-0 text-sm text-text">{hobsLine(runtime, name, hobs.data)}</p>}
       {hint && <p className="m-0 text-sm text-lantern">{hint}</p>}
       {hint && <ProviderFixActions runtime={runtime} notFound={health?.version === null} className="mt-0" />}
       {billsElsewhere(health) && <p className="m-0 text-sm text-lantern">{copy["claude-code"].billingWarning}</p>}
+      {availability === "ready" && (
+        <div className="flex">
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/usage">{copy.planUsage}</Link>
+          </Button>
+        </div>
+      )}
       {health && (
         <details className="group">
           <summary className="cursor-pointer text-detail text-label hover:text-text-strong">{copy.technical}</summary>

@@ -1,24 +1,30 @@
 import { describe, expect, it, vi } from "vitest";
 import { readStored, writeStored } from "./storage.ts";
 import {
+  choiceOf,
   createThemeStore,
   FIRST_RUN_THEME,
   lookOf,
+  lookOfChoice,
+  modeChoiceOf,
   modeOf,
   NEW_DEVICE_THEME,
+  resolveTheme,
   THEMES,
   type Theme,
+  type ThemeChoice,
   type ThemeEnvironment,
   themeOf,
 } from "./theme.ts";
 
 const environment = (overrides: Partial<ThemeEnvironment> = {}) => {
   const marks: Theme[] = [];
-  const writes: Theme[] = [];
+  const writes: ThemeChoice[] = [];
   const env: ThemeEnvironment = {
     read: () => null,
-    write: (theme) => void writes.push(theme),
+    write: (choice) => void writes.push(choice),
     mark: (theme) => void marks.push(theme),
+    systemDark: () => true,
     ...overrides,
   };
   return { env, marks, writes };
@@ -144,6 +150,59 @@ describe("the theme store", () => {
     // Setup is done, so first run never finishes again here: nothing saved still means Workshop Night.
     const { env } = environment({ read: () => null });
     expect(createThemeStore(env).theme()).toBe("workshop-night");
+  });
+});
+
+describe("Automatic", () => {
+  it("shows the look's dark or light theme as the system asks, and follows it when it changes", () => {
+    let dark = false;
+    const { env, marks, writes } = environment({ systemDark: () => dark });
+    const store = createThemeStore(env);
+    store.set("lamplight-auto");
+    expect(writes).toEqual(["lamplight-auto"]);
+    expect(store.choice()).toBe("lamplight-auto");
+    expect(store.theme()).toBe("lamplight-paper");
+    dark = true;
+    store.systemChanged();
+    expect(store.theme()).toBe("lamplight-dusk");
+    expect(marks).toEqual(["workshop-night", "lamplight-paper", "lamplight-dusk"]);
+  });
+
+  it("starts from a saved Automatic", () => {
+    const { env, marks } = environment({ read: () => "workshop-auto", systemDark: () => false });
+    expect(createThemeStore(env).theme()).toBe("workshop-daylight");
+    expect(marks).toEqual(["workshop-daylight"]);
+  });
+
+  it("keeps Workshop Night on a first run screen when the system changes, and shows the new theme after", () => {
+    let dark = true;
+    const { env, marks } = environment({ read: () => "lamplight-auto", systemDark: () => dark });
+    const store = createThemeStore(env);
+    const release = store.holdFirstRun();
+    dark = false;
+    store.systemChanged();
+    expect(marks.at(-1)).toBe("workshop-night");
+    release();
+    expect(marks.at(-1)).toBe("lamplight-paper");
+  });
+
+  it("leaves a picked Light or Dark alone when the system changes", () => {
+    let dark = true;
+    const { env } = environment({ read: () => "lamplight-paper", systemDark: () => dark });
+    const store = createThemeStore(env);
+    dark = false;
+    store.systemChanged();
+    expect(store.theme()).toBe("lamplight-paper");
+  });
+
+  it("names a choice's look and mode, and finds the choice again from them", () => {
+    expect(choiceOf("workshop", "auto")).toBe("workshop-auto");
+    expect(choiceOf("lamplight", "dark")).toBe("lamplight-dusk");
+    expect(modeChoiceOf("lamplight-auto")).toBe("auto");
+    expect(modeChoiceOf("workshop-daylight")).toBe("light");
+    expect(lookOfChoice("workshop-auto")).toBe("workshop");
+    expect(resolveTheme("workshop-auto", true)).toBe("workshop-night");
+    expect(resolveTheme("lamplight-paper", true)).toBe("lamplight-paper");
   });
 });
 

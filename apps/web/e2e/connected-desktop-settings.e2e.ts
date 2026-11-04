@@ -75,7 +75,7 @@ test("[TC-DP-217] a connected desktop's Settings › Devices shows its hub in pl
   await expect(devices.getByText("Use HTTPS through Tailscale")).toHaveCount(0);
   await expect(devices.getByLabel("Port")).toHaveCount(0);
 
-  // The allowed devices stay: the hub's window by the hub's name, and this Mac marked, with no Revoke.
+  // The allowed devices stay: the hub's window by the hub's name, and this Mac marked, with no Remove.
   const allowed = devices.getByRole("list", { name: "Allowed devices" });
   await expect(allowed.getByText("The Hobbots window on Studio")).toBeVisible();
   const own = allowed.locator("li").filter({ hasText: "this Mac ·" });
@@ -137,8 +137,8 @@ test("[TC-DP-220] an older desktop app without Disconnect sees its hub, no Disco
   await expect(
     devices.getByText("Update Hobbots on this Mac to disconnect from here.", { exact: false }),
   ).toBeVisible();
-  // It names no device of its own, so no row is marked as this Mac's and the others keep Revoke.
+  // It names no device of its own, so no row is marked as this Mac's and the others keep Remove.
   const allowed = devices.getByRole("list", { name: "Allowed devices" });
   await expect(allowed.locator("li").filter({ hasText: "this Mac ·" })).toHaveCount(0);
-  await expect(allowed.getByRole("button", { name: "Revoke Playwright" })).toBeVisible();
+  await expect(allowed.getByRole("button", { name: "Remove Playwright" })).toBeVisible();
 });

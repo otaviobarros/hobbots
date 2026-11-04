@@ -96,6 +96,7 @@ describe("the Settings overview", () => {
     expect(card(overviewOf(input({ theme: "workshop-daylight" })), "appearance")?.state).toBe("Workshop · Light");
     expect(card(overviewOf(input({ theme: "workshop-night" })), "appearance")?.state).toBe("Workshop · Dark");
     expect(card(overviewOf(input({ theme: "lamplight-paper" })), "appearance")?.state).toBe("Lamplight · Light");
+    expect(card(overviewOf(input({ theme: "lamplight-auto" })), "appearance")?.state).toBe("Lamplight · Automatic");
   });
 
   it("shows the hub's GitHub account and a connected desktop's hub", () => {

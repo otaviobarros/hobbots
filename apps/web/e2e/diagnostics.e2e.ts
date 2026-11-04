@@ -23,9 +23,12 @@ test("[TC-OP-053] follows a Quest that delegated to two hobs from Settings › D
   });
 
   await page.goto(`${url}/#/settings/help`);
+  await page.getByText("Technical details").click();
   const diagnostics = page.getByRole("region", { name: "Diagnostics" });
   await expect(diagnostics.getByRole("list", { name: "AI providers" })).toContainText("Claude Code");
-  await expect(diagnostics.getByRole("list", { name: "Stalled work" })).toContainText("No work is stuck.");
+  await expect(diagnostics.getByRole("list", { name: "Stalled work" })).toContainText(
+    "No delivery or task has stalled.",
+  );
 
   // The Quest's tree across Aldric, Quill and Ada, with who gave each Task to whom and each try.
   const picker = diagnostics.getByLabel("Quest to follow");

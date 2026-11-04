@@ -123,7 +123,7 @@ test("[TC-UX-088] the first run opens in Workshop Night, and a saved theme survi
 });
 
 // covers UX-003
-test("[TC-UX-124] This app picks the look, Dark or Light and the text size by hand, and keeps them on this device", async ({
+test("[TC-UX-124] This app picks the look, Light, Dark or Automatic and the text size, and keeps them on this device", async ({
   page,
 }) => {
   await openSettings(page);
@@ -139,6 +139,14 @@ test("[TC-UX-124] This app picks the look, Dark or Light and the text size by ha
   expect((await looks(page)).background).toBe(rgb("ground", "lamplight-paper"));
   await appearance.getByText("Workshop", { exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-daylight");
+
+  // Automatic follows the system's light or dark, and changes with it.
+  await page.emulateMedia({ colorScheme: "dark" });
+  await appearance.getByRole("radio", { name: "Automatic" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-night");
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-daylight");
+  await expect(appearance.getByRole("radio", { name: "Automatic" })).toHaveAttribute("aria-checked", "true");
 
   // Larger scales the whole app, which still fits the window.
   await appearance.getByRole("radio", { name: "Larger" }).click();

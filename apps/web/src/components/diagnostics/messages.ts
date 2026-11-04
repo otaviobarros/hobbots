@@ -8,7 +8,7 @@ export const messages = {
     heading: "Right now",
     providers: "AI providers",
     stalled: "Stalled work",
-    noStalled: "No work is stuck.",
+    noStalled: "No delivery or task has stalled.",
     recovery: "Last start",
     recovered: ({ when }: { when: string }) => `Hobbots started ${when} and recovered everything it found.`,
     held: "Work is held after a restore. Nothing that was waiting runs until you resume it.",

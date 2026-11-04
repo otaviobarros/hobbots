@@ -141,7 +141,7 @@ export const messages = {
       state: ({ look, mode }: { look: string; mode: string }) => `${look} · ${mode}`,
       hint: "How Hobbots looks, starts and notifies you.",
       looks: { lamplight: "Lamplight", workshop: "Workshop" },
-      modes: { dark: "Dark", light: "Light" },
+      modes: { dark: "Dark", light: "Light", auto: "Automatic" },
     },
   },
   safety: {
@@ -192,7 +192,7 @@ export const messages = {
       workshop: { label: "Workshop", hint: "Pixel art, more playful" },
     },
     mode: "Light or dark",
-    modes: { dark: "Dark", light: "Light" },
+    modes: { light: "Light", dark: "Dark", auto: "Automatic" },
     textSize: "Text size",
     sizes: { standard: "Standard", larger: "Larger" },
   },
@@ -240,6 +240,39 @@ export const messages = {
         { keys: ["Esc"], does: "Close a dialog, menu or question" },
       ] as const,
   },
+  check: {
+    title: "Check that everything works",
+    intro:
+      "Hobbots checks your AI, the sandbox, folders, GitHub, remote access and stuck work, and tells you what to fix in plain words.",
+    run: "Check now",
+    again: "Check again",
+    checking: "Checking…",
+    save: "Save a report for support",
+    saving: "Making the report…",
+    saveFailed: "Hobbots could not make the report. Try again in a moment.",
+    openInbox: "Open the Inbox",
+    technical: "Technical details",
+    lines: {
+      noAi: "No AI is connected, so your hobs can't think. Connect one in Connections.",
+      answers: ({ name }: { name: string }) => `${name} answers`,
+      cannotThink: ({ name, state }: { name: string; state: string }) =>
+        `${name}: ${state}. Connections says how to fix it.`,
+      sandbox: "The sandbox starts",
+      noSandbox: "The sandbox is not verified on this hub yet, so commands, Git and the web stay blocked.",
+      oneFolder: "Your folder opens",
+      folders: ({ count }: { count: string }) => `Your ${count} folders open`,
+      noFolders: "No folders yet. Add one in Safety so hobs can work on your files.",
+      github: "GitHub is connected",
+      noGithub: "GitHub is not connected (optional)",
+      remoteOn: "Your other devices can reach this hub",
+      remoteOff: "Other devices are off (optional)",
+      remotePaused: "Remote access is paused. Resume it in Devices.",
+      remoteUnreachable: "Remote access is on, but your other devices can't reach this hub. Devices says why.",
+      nothingStuck: "Nothing is stuck",
+      oneStuck: "1 thing is stuck. Retry or dismiss it in the Inbox.",
+      stuck: ({ count }: { count: string }) => `${count} things are stuck. Retry or dismiss them in the Inbox.`,
+    },
+  },
   about: {
     heading: "Help and about",
     failed: "Hobbots could not read the hub's details. Try again in a moment.",
@@ -260,6 +293,19 @@ export const messages = {
   providers: {
     heading: "AI providers",
     technical: "Technical details",
+    planUsage: "See plan usage",
+    lines: {
+      plan: ({ plan }: { plan: string }) => `Signed in · ${plan} plan`,
+      subscription: "Signed in with your subscription",
+      apiKey: "Signed in with an API key",
+      onlyHob: ({ name }: { name: string }) =>
+        `Your hob thinks with ${name}. You can pick how hard it thinks in its profile.`,
+      allHobs: ({ count, name }: { count: string; name: string }) =>
+        `All ${count} hobs think with ${name}. You can pick how hard each one thinks in its profile.`,
+      someHobs: ({ count, total, name }: { count: string; total: string; name: string }) =>
+        `${count} of ${total} hobs think with ${name}. You can pick how hard each one thinks in its profile.`,
+      noHobs: ({ name }: { name: string }) => `No hob thinks with ${name} yet. Pick it in a hob's profile.`,
+    },
     billing: "Billing",
     version: "Version",
     checking: "Checking",
