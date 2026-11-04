@@ -63,15 +63,18 @@ describe("isHobFilter", () => {
 describe("cardLine", () => {
   const chat = (updatedAt: string, lastLine: string | null) => ({ updatedAt, lastLine });
   it("says what the hob is doing first", () => {
-    expect(cardLine({ kind: "live", text: "Writing “Plan”" }, [chat("2026-11-01", "Done.")])).toBe("Writing “Plan”");
+    expect(cardLine({ kind: "live", text: "Writing “Plan”" }, [chat("2026-11-01", "Done.")], false)).toBe(
+      "Writing “Plan”",
+    );
   });
   it("then the last line of its latest chat", () => {
-    expect(cardLine(null, [chat("2026-11-01", "Older"), chat("2026-11-03", "Sent the report.")])).toBe(
+    expect(cardLine(null, [chat("2026-11-01", "Older"), chat("2026-11-03", "Sent the report.")], false)).toBe(
       "Sent the report.",
     );
   });
-  it("says it just arrived with no chats, and rests when its latest chat has no line yet", () => {
-    expect(cardLine(null, [])).toBe("Just arrived");
-    expect(cardLine(null, [chat("2026-11-03", null)])).toBe("Resting");
+  it("says a new hob just arrived, and rests when it has no line yet or only did Quest work", () => {
+    expect(cardLine(null, [], true)).toBe("Just arrived");
+    expect(cardLine(null, [], false)).toBe("Resting");
+    expect(cardLine(null, [chat("2026-11-03", null)], false)).toBe("Resting");
   });
 });

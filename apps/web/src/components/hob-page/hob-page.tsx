@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useActivity } from "../../api/activity.ts";
+import { useIsNewHob } from "../../api/history.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
@@ -60,6 +61,7 @@ function Page({ hob, tab, show }: { hob: Agent; tab: HobPageTab; show: HistoryFi
   const navigate = useNavigate();
   const list = threads.data ?? [];
   const state = withRequests(hobState(hob, list, activity), waiting);
+  const fresh = useIsNewHob(hob.id, threads.isSuccess ? list.length : undefined);
 
   // The tab and the History filter live in the URL; Chats and Everything are the defaults and stay out of it.
   const go = (next: HobPageTab, filter: HistoryFilter = "all") =>
@@ -97,7 +99,7 @@ function Page({ hob, tab, show }: { hob: Agent; tab: HobPageTab; show: HistoryFi
         state={state}
         stats={statsLine(hob, list.length)}
         doing={doingOf(state, list, activity)}
-        fresh={threads.isSuccess && list.length === 0}
+        fresh={fresh}
       />
       <div className="grid items-start gap-7 min-[1120px]:grid-cols-[minmax(0,1fr)_300px]">
         <Tabs value={tab} onValueChange={pick} className="min-w-0 gap-4">
