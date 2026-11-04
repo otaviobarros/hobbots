@@ -1,3 +1,4 @@
+import { cva, type VariantProps } from "class-variance-authority";
 import { ContextMenu as ContextMenuPrimitive, DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import type * as React from "react";
 import { cn } from "../lib/utils.ts";
@@ -42,8 +43,24 @@ function DropdownMenuContent({
   );
 }
 
-function DropdownMenuItem({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Item>) {
-  return <DropdownMenuPrimitive.Item data-slot="dropdown-menu-item" className={cn(itemClass, className)} {...props} />;
+// `deny` marks the item that takes something away, such as Cancel quest…, in rose.
+const dropdownItemVariants = cva(itemClass, {
+  variants: { variant: { default: "", deny: "text-rose" } },
+  defaultVariants: { variant: "default" },
+});
+
+function DropdownMenuItem({
+  className,
+  variant = "default",
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & VariantProps<typeof dropdownItemVariants>) {
+  return (
+    <DropdownMenuPrimitive.Item
+      data-slot="dropdown-menu-item"
+      className={cn(dropdownItemVariants({ variant }), className)}
+      {...props}
+    />
+  );
 }
 
 /** A hairline between groups of items, such as before the one that takes something away. */

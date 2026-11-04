@@ -1,11 +1,10 @@
 import { type Attempt, type AttemptId, isLiveAttempt, policySandbox, type Task, type TaskTree } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
-import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode, RefObject } from "react";
+import type { RefObject } from "react";
 import { agentsQuery, runtimesQuery } from "../../api/queries.ts";
 import { formatCount } from "../../lib/format.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
@@ -31,9 +30,9 @@ const useSandbox = (runtime: Attempt["runtime"], read: ActivityRead): Sandbox | 
 };
 
 /**
- * The Workbench header (ADR 023), one row: Back, the owner's tile, the Task's title with who owns
+ * The Workbench header (ADR 023), one row: the owner's tile, the Task's title with who owns
  * it, who asked, the brain it thinks with and where it runs, then an Attempt switcher once it was
- * retried, one Live or History tag for the Attempt shown, and whatever the Workbench adds at the end.
+ * retried, one Live or History tag for the Attempt shown.
  */
 export function WorkbenchHeader({
   tree,
@@ -43,9 +42,7 @@ export function WorkbenchHeader({
   read,
   hobs,
   headingRef,
-  back,
   onAttempt,
-  end,
 }: {
   tree: TaskTree;
   task: Task;
@@ -54,17 +51,12 @@ export function WorkbenchHeader({
   read: ActivityRead;
   hobs: HobLookup;
   headingRef: RefObject<HTMLHeadingElement | null>;
-  /** Back to where the Workbench was opened from. */
-  back: ReactNode;
   onAttempt: (attemptId: AttemptId) => void;
-  /** What sits at the row's end, such as the chat toggle. */
-  end?: ReactNode;
 }) {
   const owner = hobs(task.ownerId);
   const running = attempt !== null && isLiveAttempt(attempt.state);
   return (
-    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-6 py-3">
-      {back}
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pb-2.5">
       <HobTile hob={owner} tile="lg" state={running ? "working" : "idle"} />
       <span className="flex min-w-[12rem] flex-1 flex-col">
         <h2
@@ -80,7 +72,6 @@ export function WorkbenchHeader({
         <AttemptPicker attempts={attempts} chosen={attempt.id} onAttempt={onAttempt} />
       )}
       {attempt !== null && <AttemptTag running={running} />}
-      {end}
     </header>
   );
 }
@@ -114,15 +105,6 @@ function Byline({
       {runtime !== null && <Where runtime={runtime} read={read} />}
       <Folders folders={memberFolders(tree, task)} />
     </span>
-  );
-}
-
-/** The Back button the header leads with, named for where it returns. */
-export function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <Button variant="ghost" size="sm" onClick={onClick}>
-      ← {label}
-    </Button>
   );
 }
 

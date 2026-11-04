@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
+import { dock, questRoom } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Where focus lands when a screen takes away the element that had it: always on a visible,
@@ -47,7 +48,9 @@ const inView = (locator: Locator) =>
   });
 
 // covers UX-002, UX-006
-test("[TC-UX-160] leaving the Workbench by Back or Escape puts focus back on what opened it", async ({ page }) => {
+test("[TC-UX-160] the Workbench opened from the card takes focus in the room, and Close room puts it back in the chat", async ({
+  page,
+}) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/new`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -64,23 +67,18 @@ test("[TC-UX-160] leaving the Workbench by Back or Escape puts focus back on wha
   await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
-  // Back, by keyboard: focus goes back to the button that opened the Workbench.
-  const open = card.getByRole("button", { name: "Open in Workbench" });
-  await open.focus();
+  // By keyboard: the card's button opens the room with its Workbench on Summary, and focus moves into the room.
+  await card.getByRole("button", { name: "Open in Workbench" }).focus();
   await page.keyboard.press("Enter");
-  const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
-  await expect(bench.getByRole("heading", { name: "Tidy the notes" })).toBeFocused();
-  await bench.getByRole("button", { name: /^← Back to/ }).focus();
-  await page.keyboard.press("Enter");
-  await expect(bench).toBeHidden();
-  await expect(open).toBeFocused();
+  const room = questRoom(page, "Tidy the notes");
+  await expect(room.locator(":focus")).toHaveCount(1);
+  await expect(dock(page).getByRole("tab", { name: /^Summary/ })).toHaveAttribute("aria-selected", "true");
 
-  // Escape does the same.
+  // Close room, by keyboard, puts focus back in the chat's message box.
+  await room.getByRole("button", { name: "Close room" }).focus();
   await page.keyboard.press("Enter");
-  await expect(bench.getByRole("heading", { name: "Tidy the notes" })).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(bench).toBeHidden();
-  await expect(open).toBeFocused();
+  await expect(room).toBeHidden();
+  await expect(composer).toBeFocused();
   expect(await focusOnPage(page)).toBe(false);
 });
 

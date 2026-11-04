@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openQuest } from "./work-sheet.ts";
+import { laneHead, openRoom, taskDetails } from "./quest-room.ts";
 
 // Issue #566 in the browser: Rook, running alongside Quill, asks Aldric for Quill's core.py. Aldric,
 // on Quill's result, hands it off and answers, and Rook's Task finishes with core.py under Handed to
@@ -105,14 +105,10 @@ test("[TC-OR-219] Aldric hands Quill's core.py to Rook, who asked for it while r
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
 
-  const tasks = await openQuest(page, "Build the app");
-  const frontend = tasks.getByRole("button", { name: /Rook · Write the frontend/ });
+  await openRoom(page, "Build the app");
   // Rook finishes only after several paced fake replies, each echoing the prompt and briefing it was given.
-  await expect(frontend).toContainText("Done", { timeout: 45_000 });
-  await frontend.click();
-  const drawer = page.getByRole("dialog", { name: "Write the frontend, task details" });
-  await expect(drawer).toBeVisible();
-  await drawer.getByText("Everything in this task").click();
+  await expect(laneHead(page, "Rook")).toContainText("Done", { timeout: 45_000 });
+  const drawer = await taskDetails(page, "Write the frontend");
   await expect(drawer.getByRole("heading", { name: "Handed to it" })).toBeVisible();
   await expect(drawer).toContainText("core.py");
   await expect(drawer).toContainText("/project/core.py");

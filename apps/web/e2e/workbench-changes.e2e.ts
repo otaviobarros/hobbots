@@ -161,7 +161,6 @@ test("[TC-UX-036] Changes are Live while the turn runs, showing each file as the
   await expect(notes).toContainText("So far: this turn is still running, so this file may change again.");
 
   // Stopped, the turn ends: the end-of-turn compare settles the change and the tab reads History.
-  await bench.getByRole("button", { name: "← Back to chat" }).click();
   await page.getByRole("button", { name: "■ Stop" }).click();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
   await openChanges(page, "Draft the notes");
@@ -238,11 +237,10 @@ test("[TC-UX-038] past the retention window a Task's Changes keep their list and
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-148] with the task chat open beside the tabs, Changes and Files swap their lists for a picker", async ({
+test("[TC-UX-148] in the room at 1024, with the chat column beside it, Changes and Files swap their lists for a picker", async ({
   page,
 }) => {
-  // Wide enough that the chat sits beside the tabs, and narrow enough that it leaves them under 720px
-  // beside the collapsed sidebar.
+  // At 1024 the chat column beside the room leaves the docked Workbench under 720px.
   await page.setViewportSize({ width: 1024, height: 800 });
   const { url, aldric } = await aldricHub({ "a.txt": "one\n", "b.txt": "two\n" });
   await page.goto(`${url}/#/hobs/${aldric}/new`);
@@ -253,7 +251,6 @@ test("[TC-UX-148] with the task chat open beside the tabs, Changes and Files swa
     script("complete_task", { key: "done", summary: "Touched." }),
   ]);
   const { bench, panel } = await openChanges(page, "Touch two files");
-  await bench.getByRole("button", { name: "Task chat" }).click();
 
   // The list gives way to one line: previous, the file shown with "1 of 3", and next.
   await expect(panel.getByRole("navigation", { name: "Changed files" })).toBeHidden();

@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openQuest } from "./work-sheet.ts";
+import { laneHead, openRoom, roomMenu } from "./quest-room.ts";
 
 // Issue #565 in the browser: a chain of dependent Tasks runs to the end from one message. Each
 // Task starts once the ones it comes after are done, with what they returned, so nobody has to hand
@@ -106,11 +106,13 @@ test("[TC-OR-209] a three-member Quest with a dependency chain runs to finished 
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/hobs/${aldric.id}/threads/`));
 
-  // The quest sheet follows every Task to Done, and the Quest ends: no Cancel quest is left.
-  const tasks = await openQuest(page, "Build and review the app");
-  for (const row of [/Quill · Write the backend/, /Rook · Write the frontend/, /Pip · Review the backend/]) {
-    await expect(tasks.getByRole("button", { name: row })).toContainText("Done", { timeout: 30_000 });
+  // The room follows every Task to Done, and the Quest ends: no Cancel quest is left.
+  await openRoom(page, "Build and review the app");
+  for (const name of ["Quill", "Rook", "Pip"]) {
+    await expect(laneHead(page, name)).toContainText("Done", { timeout: 30_000 });
   }
-  await expect(page.getByRole("button", { name: "Cancel quest" })).toHaveCount(0, { timeout: 30_000 });
+  await roomMenu(page, "Build and review the app");
+  await expect(page.getByRole("menuitem", { name: "Cancel quest…" })).toHaveCount(0, { timeout: 30_000 });
+  await page.keyboard.press("Escape");
   await expect(page.getByText("The app is built and reviewed.").first()).toBeVisible();
 });

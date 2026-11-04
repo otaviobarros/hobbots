@@ -1,85 +1,69 @@
-import type { AgentId, TaskId, ThreadId } from "@hobbots/domain";
-import { cn } from "@hobbots/ui/lib/utils";
+import type { AgentId, ThreadId } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
 import { threadsQuery } from "../../api/queries.ts";
 import { ThreadMain, type WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
-import { useNoteDrafts } from "../quest/note-box.tsx";
 import { usePins } from "../quest/use-work.ts";
-import { WorkSheet } from "../work-sheet/work-sheet.tsx";
-import type { WorkbenchView } from "../workbench/use-workbench.ts";
-import { Workbench } from "../workbench/workbench.tsx";
+import { ChatColumn, FoldButton } from "../quest-room/chat-column.tsx";
+import { QuestRoom } from "../quest-room/quest-room.tsx";
+import type { RoomView } from "../quest-room/room-search.ts";
+import { useChatFold, useRoomWidth } from "../quest-room/use-chat-fold.ts";
 
 interface WorkspaceProps {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
   /** A message to scroll to and mark, such as a search match. */
   focusMessageId?: string | undefined;
-  /** A Task to show in the work sheet over the chat. */
-  taskId?: TaskId | undefined;
-  /** A request's Quest, by its top Task, to show in the work sheet. */
-  questId?: TaskId | undefined;
   main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
-  /** A Task's Workbench to show in the chat's place (ADR 023). */
-  workbench?: WorkbenchView | undefined;
+  /** The Quest room to open beside the chat (ADR 027). */
+  room?: RoomView | undefined;
   /** What sits at the end, such as a hob page's side column. */
   aside?: ReactNode | null;
 }
 
 /**
- * The chat workspace, where the work sheet and the Workbench open over the chat. The middle is the
- * thread's chat unless the route fills it with `main`, such as the hob's archived threads. Threads
- * are archived from their menus or with ⌃⌘A, with Undo in a toast that the app shell holds, so it
- * stays when archiving the last chat opens the hob's fresh page.
+ * The chat workspace, where the Quest room opens beside the chat. The middle is the thread's chat
+ * unless the route fills it with `main`, such as the hob's archived threads. Threads are archived
+ * from their menus or with ⌃⌘A, with Undo in a toast that the app shell holds, so it stays when
+ * archiving the last chat opens the hob's fresh page.
  */
 export function HobsLayout({
   hobId,
   threadId,
   focusMessageId,
-  taskId,
-  questId,
   main = (props) => <ThreadMain {...props} />,
-  workbench,
+  room,
   aside,
 }: WorkspaceProps) {
-  // Pinned Quests show in every thread's header and open in its sheet.
+  // Pinned Quests show in every thread's header and open in its room.
   const pins = usePins();
-  // The drawer and the Workbench show the same unsent note for a Task, and both outlive each other.
-  const drafts = useNoteDrafts();
   useThreadKeys(hobId, threadId);
-  const benchOpen = threadId !== undefined && workbench !== undefined;
-  const sheetOpen = threadId !== undefined && !benchOpen && (taskId ?? questId) !== undefined;
+  const width = useRoomWidth();
+  const fold = useChatFold(width);
+  const open = threadId !== undefined && room !== undefined;
 
   return (
     <div className="flex min-w-0 flex-1">
-      {/* The chat reads data-sheet to keep its transcript clear of the open work sheet. */}
-      <div className="group/work relative flex min-w-0 flex-1" data-sheet={sheetOpen ? "open" : undefined}>
-        {/* The Workbench covers the chat without unmounting it, so going back finds the same scroll
-            position and unsent message; meanwhile the chat is hidden from sight and focus. */}
-        <div className={cn("flex min-w-0 flex-1", benchOpen && "invisible")} inert={benchOpen}>
+      {/* The chat reads data-room to give up its minimum width in the room's column. */}
+      <div className="group/room relative flex min-w-0 flex-1" data-room={open ? "open" : undefined}>
+        {open && <QuestRoom hobId={hobId} threadId={threadId} view={room} pins={pins} width={width} />}
+        <ChatColumn
+          hobId={hobId}
+          threadId={threadId}
+          room={open}
+          folded={fold.folded}
+          width={width}
+          onFold={fold.setFolded}
+        >
           {main({
             hobId,
             threadId,
             focusMessageId,
             pins,
+            headerEnd: open ? <FoldButton onFold={() => fold.setFolded(true)} /> : undefined,
           })}
-        </div>
-        {/* The sheet closes while the Workbench covers the chat; Back to the task opens it again. */}
-        {threadId !== undefined && !benchOpen && (
-          <WorkSheet
-            key={threadId}
-            hobId={hobId}
-            threadId={threadId}
-            questId={questId}
-            taskId={taskId}
-            pins={pins}
-            drafts={drafts}
-          />
-        )}
-        {threadId !== undefined && workbench !== undefined && (
-          <Workbench hobId={hobId} threadId={threadId} view={workbench} pinned={pins.pinned} drafts={drafts} />
-        )}
+        </ChatColumn>
       </div>
       {aside}
     </div>

@@ -1,6 +1,5 @@
 import type { Agent, AgentId, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { agentsQuery } from "../../api/queries.ts";
@@ -26,24 +25,6 @@ const unknownHob = { name: messages.someHob, lookSeed: 0, lookColor: "violet" } 
 export const useHobLookup = (): HobLookup => {
   const hobs = useQuery(agentsQuery).data ?? [];
   return (id) => hobs.find((hob) => hob.id === id) ?? unknownHob;
-};
-
-/** Opens a Task in the work sheet over the chat, or closes the sheet, through the address. */
-export const useOpenTask = (hobId: AgentId, threadId: ThreadId) => {
-  const navigate = useNavigate();
-  return (taskId: TaskId | undefined) =>
-    void navigate({
-      to: "/hobs/$hobId/threads/$threadId",
-      params: { hobId, threadId },
-      search: taskId === undefined ? {} : { task: taskId },
-    });
-};
-
-/** Opens a request's Quest, by its top Task, in the work sheet over the chat, through the address. */
-export const useOpenQuest = (hobId: AgentId, threadId: ThreadId) => {
-  const navigate = useNavigate();
-  return (topId: TaskId) =>
-    void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId }, search: { quest: topId } });
 };
 
 const PINS_KEY = "quest.pinned";

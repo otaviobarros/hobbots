@@ -254,7 +254,7 @@ describe("summaryOf", () => {
     expect(summary.open.questions.map((each) => each.text)).toEqual(["Which tone?"]);
     expect(summary.open.approvals.map((each) => each.taskId)).toEqual([null, BUILD]);
 
-    // The question the task chat holds for you shows there, not again under Still open.
+    // The question its lane holds for you shows there, not again under Still open.
     const asked = tree({
       ...withQuestions,
       questions: [question(CAMPAIGN, ALDRIC, "Short headings?", { recipientId: null })],

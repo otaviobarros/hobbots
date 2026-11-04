@@ -12,6 +12,7 @@ import type { HobState } from "../../lib/hob-state.ts";
 import { doingOf, stateTag } from "../hob-page/hob-page-model.ts";
 import { HobSprite, stateLabel } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
+import { roomSearch } from "../quest-room/room-search.ts";
 import { peekBench, peekThread } from "./home-model.ts";
 
 const copy = messages.home;
@@ -138,7 +139,7 @@ function WorkbenchLink({
       <Link
         to="/hobs/$hobId/threads/$threadId"
         params={{ hobId: bench.hobId, threadId: bench.threadId }}
-        search={{ bench: bench.taskId }}
+        search={roomSearch(bench.taskId, { tab: "summary" })}
       >
         {copy.openWorkbench}
       </Link>

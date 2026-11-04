@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openQuest } from "./work-sheet.ts";
+import { laneHead, laneTask } from "./quest-room.ts";
 
 // Issue #273 in the browser: a party member's request reaches you in the Inbox, under its lead's
 // thread, and never its lead. The hub-level side is apps/server/test/quests.test.ts.
@@ -167,24 +167,16 @@ test("[TC-PE-445] a party member's request shows in the chat's tray and on the q
     .getByRole("region", { name: "Nettle asks permission" });
   await expect(inTray.getByText(`rm ${shared}/tmp-notes.txt`, { exact: true })).toBeVisible();
 
-  // The Task's sheet says it needs you, and Review in chat goes back to the tray.
+  // The card's row opens the room on Nettle's lane, which says it needs you and what it waits on,
+  // while the chat's tray beside it holds the request; Allow once there decides it.
   await row.click();
-  const drawer = page.getByRole("dialog", { name: "Remove the notes, task details" });
-  await expect(drawer).toContainText("Needs you");
-  await drawer.getByRole("button", { name: "Review in chat" }).click();
-  await expect(drawer).toBeHidden();
-
-  // The quest sheet shows the Task waiting on you, and Allow once in the tray decides the request.
-  const room = await openQuest(page, "Tidy the scratch folder");
-  await expect(room.getByRole("button", { name: /Nettle · Remove the notes/ })).toContainText("waiting on you");
-  await page.keyboard.press("Escape");
+  await expect(laneHead(page, "Nettle")).toHaveAttribute("aria-pressed", "true");
+  await expect(laneHead(page, "Nettle")).toContainText("Needs you");
+  await expect(laneTask(page, "Remove the notes")).toContainText("waiting on you");
   await inTray.getByRole("button", { name: "Allow once" }).click();
 
   // Nettle goes on and finishes. Nothing waits on you any more, and the card says how it ended.
-  await openQuest(page, "Tidy the scratch folder");
-  await expect(room.getByRole("button", { name: /Nettle · Remove the notes/ })).toContainText("Done", {
-    timeout: 20_000,
-  });
+  await expect(laneHead(page, "Nettle")).toContainText("Done", { timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Allow once" })).toHaveCount(0);
   await expect(inTray).toBeHidden();
   const approvals = await api<ReadonlyArray<{ readonly state: string; readonly decidedVia: string | null }>>(

@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openQuest, taskSheet } from "./work-sheet.ts";
+import { laneHead, openRoom } from "./quest-room.ts";
 
 // Issue #573 in the browser: a lead that waits on a member's Task reads the member's question in
 // what wait_for answers, and the question reaches the lead as soon as its turn ends instead of
@@ -96,14 +96,10 @@ test("[TC-OR-245] a question from a Task the lead waits for reaches the lead and
   await expect(page.getByText("A question from them waits for you").first()).toBeVisible({ timeout: 20_000 });
 
   // On Frodo's Task, Quill's question was carried into his turn and handled there, not held.
-  const tasks = await openQuest(page, "Ship the release");
-  await tasks.getByRole("button", { name: /^Frodo · Ship the release/ }).click();
+  await openRoom(page, "Ship the release");
   const room = page.getByRole("region", { name: "Backpack for Ship the release" });
   const question = room.getByRole("button", { name: /Quill asks: Playful or formal\?/ });
   await expect(question).toContainText("Consumed", { timeout: 20_000 });
   await expect(question).not.toContainText("Waiting");
-  await taskSheet(page, "Ship the release").getByRole("button", { name: "Back to Ship the release" }).click();
-  await expect(tasks.getByRole("button", { name: /^Quill · Draft the release notes/ })).toContainText("Done", {
-    timeout: 20_000,
-  });
+  await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 20_000 });
 });

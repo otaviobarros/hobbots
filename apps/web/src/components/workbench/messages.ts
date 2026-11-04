@@ -5,12 +5,6 @@ import type { UnavailableReason, WorkbenchTab } from "./workbench-model.ts";
 
 /** Copy for the Workbench: one Task's full view (ADR 023, STD-I18N-001). */
 export const messages = {
-  label: ({ title }: { title: string }) => `Workbench for ${title}`,
-  backToChat: "Back to chat",
-  backToTask: "Back to the task",
-  open: "Open in Workbench",
-  openTask: ({ title }: { title: string }) => `Open ${title} in Workbench`,
-  notFound: "This task is no longer on this hub.",
   askedBy: ({ chain }: { chain: ReadonlyArray<string> }) => `asked by ${chain.join(" → ")}`,
   you: "You",
   owner: ({ name }: { name: string }) => `Owner: ${name}`,
@@ -28,7 +22,6 @@ export const messages = {
   attempts: "Attempts",
   attemptWord: "Attempt",
   attempt: ({ number }: { number: number }) => `Attempt ${formatCount(number)}`,
-  noAttempt: "Not started yet",
   tabs: "Workbench views",
   tab: {
     summary: "Summary",
@@ -125,7 +118,7 @@ export const messages = {
   summary: {
     line: {
       notStarted: ({ name }: { name: string }) => `${name} has not started yet.`,
-      asks: ({ name }: { name: string }) => `${name} is waiting on your answer in the task chat.`,
+      asks: ({ name }: { name: string }) => `${name} is waiting on your answer in the lane above.`,
       working: ({ name, number }: { name: string; number: number }) => `${name} is on attempt ${formatCount(number)}.`,
       waiting: ({ name, number }: { name: string; number: number }) =>
         `${name} is on attempt ${formatCount(number)} and is waiting before going on.`,
@@ -214,24 +207,5 @@ export const messages = {
     seeFiles: ({ count }: { count: number }) =>
       plural(count, { one: `See the ${formatCount(count)} file`, other: `See the ${formatCount(count)} files` }),
     seeTerminal: "See what ran in Terminal",
-  },
-  chat: {
-    toggle: "Task chat",
-    label: ({ title }: { title: string }) => `Talk about ${title}`,
-    heading: "Task chat",
-    notesGo: ({ name }: { name: string }) => `Notes go to ${name}. They don't answer questions.`,
-    waiting: ({ name }: { name: string }) => `${name} is waiting on your answer.`,
-    asks: ({ name }: { name: string }) => `${name} asks you`,
-    noteInstead: ({ name }: { name: string }) => `Send a note to ${name} instead`,
-    answerInstead: ({ name }: { name: string }) => `Answer ${name} instead`,
-    noteNotAnswerHint: ({ lead, asker }: { lead: string; asker: string }) =>
-      `This goes to ${lead} as a note. It does not answer ${asker}.`,
-    notes: "Your notes on this task",
-    empty: ({ name }: { name: string }) => `Nothing sent about this task yet. ${name} reads what you send here.`,
-    hintOwner: ({ name }: { name: string }) => `Goes to ${name} as a note on this task.`,
-    hintLead: ({ lead, owner }: { lead: string; owner: string }) =>
-      `Goes to ${lead}, who leads this work and passes it on to ${owner}.`,
-    // Each nudge is a note sent with one tap. The set is copy, not a decision (ADR 023).
-    nudges: ["Looks good", "Explain what you did", "Keep going"],
   },
 };

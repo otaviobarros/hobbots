@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { openQuest, taskSheet } from "./work-sheet.ts";
+import { laneHead, openRoom, showInWorkbench } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -18,13 +18,9 @@ test("[TC-OR-288] a Task that completed with uncommitted changes shows them unde
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  const room = await openQuest(page, "Make the shop badge");
-  const badge = room.getByRole("button", { name: /Quill · Make the shop badge/ });
-  await expect(badge).toContainText("Done", { timeout: 15_000 });
-  await badge.click();
-  await taskSheet(page, "Make the shop badge").getByRole("button", { name: "Open Workbench" }).click();
-
-  const bench = page.getByRole("region", { name: "Workbench for Make the shop badge" });
+  await openRoom(page, "Make the shop badge");
+  await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 15_000 });
+  const bench = await showInWorkbench(page, "Make the shop badge", "Quill");
   const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
   await expect(open).toContainText("Uncommitted changes");
   await expect(open).toContainText("Left 1 file uncommitted since the last commit: web/badge.png in /fake/shop.");
@@ -44,13 +40,11 @@ test("[TC-OR-462] a Quest whose lead left a file uncommitted shows it under Stil
   await composer.fill("Wrap up the spec for the shop");
   await composer.press("Enter");
 
-  // Aldric brings nobody in, so Details on his card opens his own Task.
+  // Aldric brings nobody in, so his card opens a room with his lane alone.
   const card = page.getByRole("region", { name: "Aldric's work on Wrap up the spec" });
   await expect(card).toContainText("Aldric finished this", { timeout: 15_000 });
-  await card.getByRole("button", { name: "Open the task" }).click();
-  await taskSheet(page, "Wrap up the spec").getByRole("button", { name: "Open Workbench" }).click();
-
-  const bench = page.getByRole("region", { name: "Workbench for Wrap up the spec" });
+  await openRoom(page, "Wrap up the spec");
+  const bench = await showInWorkbench(page, "Wrap up the spec");
   const open = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "Still open" });
   await expect(open).toContainText("Uncommitted changes");
   await expect(open).toContainText("Left 1 file uncommitted since the last commit: docs/SPEC.md in /fake/shop.");

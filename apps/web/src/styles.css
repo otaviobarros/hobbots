@@ -121,7 +121,11 @@
   --spacing-sidebar: 72px;
   --spacing-sidebar-open: 256px;
   --spacing-sheet: 340px;
-  --spacing-workbench-chat: 300px;
+  --spacing-room-chat: 360px;
+  --spacing-room-chat-narrow: 300px;
+  --spacing-room-rail: 52px;
+  --spacing-lane-min: 220px;
+  --spacing-dock: 340px;
   --spacing-chat-min: 360px;
   --spacing-measure: 70ch;
   --spacing-bubble-max: 460px;

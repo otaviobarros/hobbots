@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openQuest } from "./work-sheet.ts";
+import { laneHead, laneTask, openRoom } from "./quest-room.ts";
 
 // Issue #564 in the browser: a Task delegated with depends_on waits, and shows whom it waits on in
 // the quest sheet, until the Task it depends on is done; only then does it run. The hub-level checks
@@ -102,9 +102,9 @@ test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill
   await expect(page.getByRole("link", { name: "Inbox, 1 waiting on you" })).toBeVisible({ timeout: 20_000 });
 
   // While Quill's Task waits on your push, Rook's waits on Quill's and has not run.
-  const tasks = await openQuest(page, "Build the app");
-  const frontend = tasks.getByRole("button", { name: /Rook · Write the frontend/ });
-  await expect(frontend).toContainText("waiting on Quill");
+  await openRoom(page, "Build the app");
+  const frontend = laneHead(page, "Rook");
+  await expect(laneTask(page, "Write the frontend")).toContainText("waiting on Quill");
   await expect(frontend).toContainText("Waiting");
   await expect(frontend).not.toContainText("Running");
 
@@ -118,10 +118,8 @@ test("[TC-OR-204] the quest sheet shows Rook's Task waiting on Quill while Quill
   await request.getByRole("button", { name: "Allow once" }).click();
   await expect(request.getByRole("status")).toHaveText("✓ Allowed once. Quill carries on.");
   await page.goto(thread);
-  await openQuest(page, "Build the app");
-  await expect(tasks.getByRole("button", { name: /Quill · Write the backend/ })).toContainText("Done", {
-    timeout: 20_000,
-  });
+  await openRoom(page, "Build the app");
+  await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 20_000 });
   await expect(frontend).toContainText("Done", { timeout: 20_000 });
-  await expect(frontend).not.toContainText("waiting on Quill");
+  await expect(laneTask(page, "Write the frontend")).not.toContainText("waiting on Quill");
 });

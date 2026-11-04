@@ -1,9 +1,9 @@
 import type { TaskId, TaskTree } from "@hobbots/domain";
-import { roomRows, roomTone } from "./control-room.ts";
+import { progressStrip } from "./control-room.ts";
 import { FlagIcon } from "./flag-icon.tsx";
 import { messages } from "./messages.ts";
 import { StatusStrip } from "./status-strip.tsx";
-import { taskTitle, workCard, workCounts } from "./work-model.ts";
+import { taskTitle, workCard } from "./work-model.ts";
 
 const copy = messages.strip;
 
@@ -26,10 +26,7 @@ export function QuestButtons({ trees, onOpen }: { trees: ReadonlyArray<TaskTree>
 function QuestButton({ tree, onOpen }: { tree: TaskTree; onOpen: (taskId: TaskId) => void }) {
   const card = workCard(tree);
   if (card === null) return null;
-  const rows = roomRows(tree);
-  // One segment per Task under the lead's; a Task working alone is its own one segment.
-  const segments = (rows.length > 1 ? rows.slice(1) : rows).map((row) => roomTone(row.status));
-  const needs = workCounts(tree)["needs-you"];
+  const { segments, needs } = progressStrip(tree);
   const { done, total } = card.progress;
   return (
     <button
