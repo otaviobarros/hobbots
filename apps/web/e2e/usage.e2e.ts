@@ -67,8 +67,10 @@ test("[TC-OP-073] the Usage screen shows each plan's potion and each hob's share
 
   await page.goto(`${current.url}/#/`);
   // Home's plan line reads the same plan, in the same words, as the Usage screen.
-  await expect(page.getByText(/^Claude Code plan · 62% left · This session · refills \d/)).toBeVisible();
-  await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Usage" }).click();
+  const planLine = page.getByRole("main").getByRole("link", { name: /^Claude Code plan/ });
+  await expect(planLine).toContainText(/62% left · This session · refills \d/);
+  await planLine.click();
+  await expect(page).toHaveURL(/#\/usage$/);
   await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
 
   // The fake Claude Code reports a session window 38% used and a weekly one 12% used.
