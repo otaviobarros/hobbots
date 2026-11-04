@@ -127,7 +127,7 @@ test("[TC-OP-046] a thread's menu and a hob's profile export just that thread or
   mkdirSync(fromHob);
 
   await page.goto(`${hub.url}/#/hobs/${pip}/threads/${thread}`);
-  await page.getByRole("button", { name: "More for this thread" }).click();
+  await page.getByRole("button", { name: "More for this chat" }).click();
   await page.getByRole("menuitem", { name: "Export thread…" }).click();
   const dialog = page.getByRole("dialog", { name: /^Export “Tagline ideas/ });
   await dialog.getByRole("textbox", { name: "Save in" }).fill(fromThread);

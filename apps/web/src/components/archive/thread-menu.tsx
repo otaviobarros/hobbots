@@ -26,7 +26,7 @@ type MenuItem = ComponentType<{
 }>;
 
 /**
- * Archive thread, as a menu item. While the thread cannot be archived it stays in the menu,
+ * Archive chat, as a menu item. While the thread cannot be archived it stays in the menu,
  * disabled, and reads its reason. `current` shows the shortcut, which acts on the open thread.
  */
 export function ArchiveItem({

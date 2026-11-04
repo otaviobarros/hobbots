@@ -191,7 +191,7 @@ test("[TC-CH-163] an archived thread opened by its address shows no composer whi
   await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${archived.id}`);
 
   const chat = page.getByRole("main", { name: "Chat" });
-  await expect(chat.getByRole("status")).toHaveText("Opening the thread…");
+  await expect(chat.getByRole("status")).toHaveText("Opening the chat…");
   await expect(chat.getByRole("textbox")).toHaveCount(0);
 
   release();
@@ -207,7 +207,7 @@ test("[TC-CH-164] an archived thread whose lookup fails stays without a composer
 
   const chat = page.getByRole("main", { name: "Chat" });
   // The client asks again a few times before it gives up.
-  await expect(chat.getByRole("alert")).toContainText("could not tell whether this thread is archived", {
+  await expect(chat.getByRole("alert")).toContainText("could not tell whether this chat is archived", {
     timeout: 20_000,
   });
   await expect(chat.getByRole("textbox")).toHaveCount(0);

@@ -88,8 +88,8 @@ test("[TC-CH-150] archiving the open thread opens the next one, and Undo brings 
   await expect(threadLink(other, "Support triage")).toBeVisible();
 
   await page.goto(`${hub.url}/#/hobs/${pip}/threads/${triage}`);
-  await page.getByRole("button", { name: "More for this thread" }).click();
-  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  await page.getByRole("button", { name: "More for this chat" }).click();
+  await page.getByRole("menuitem", { name: /Archive chat/ }).click();
 
   // The thread below opens and the archived one leaves both windows' lists.
   await expect(page).toHaveURL(new RegExp(`threads/${threads[0]}$`));
@@ -117,7 +117,7 @@ test("[TC-CH-151] a chat row's menu on the hob's page archives it by keyboard, a
   await chats.getByRole("button", { name: "More for “Tagline ideas”" }).focus();
   await page.keyboard.press("Enter");
   await page.keyboard.press("End");
-  await expect(page.getByRole("menuitem", { name: /Archive thread/ })).toBeFocused();
+  await expect(page.getByRole("menuitem", { name: /Archive chat/ })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(row).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`hobs/${pip}$`));
@@ -136,8 +136,8 @@ test("[TC-CH-275] archiving a hob's only chat opens its fresh page and keeps the
   const { pip, threads } = await pipWithThreads(hub, ["Tagline ideas"]);
 
   await page.goto(`${hub.url}/#/hobs/${pip}/threads/${threads[0]}`);
-  await page.getByRole("button", { name: "More for this thread" }).click();
-  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  await page.getByRole("button", { name: "More for this chat" }).click();
+  await page.getByRole("menuitem", { name: /Archive chat/ }).click();
 
   // Nothing is left to open, so the fresh page opens, and the toast survives the move.
   await expect(page).toHaveURL(new RegExp(`hobs/${pip}/new$`));
@@ -159,8 +159,8 @@ test("[TC-CH-152] a thread cannot be archived while its reply runs, by menu or b
   await composer.press("Enter");
   await expect(page.getByText(/Echo: word0 word1/)).toBeVisible();
 
-  await page.getByRole("button", { name: "More for this thread" }).click();
-  const item = page.getByRole("menuitem", { name: /Archive thread/ });
+  await page.getByRole("button", { name: "More for this chat" }).click();
+  const item = page.getByRole("menuitem", { name: /Archive chat/ });
   await expect(item).toHaveAttribute("aria-disabled", "true");
   await expect(item).toContainText("Pip is still replying. Archive it once the reply ends.");
   await page.keyboard.press("Escape");
@@ -216,8 +216,8 @@ test("[TC-CH-153] an archive that fails after the user moved on leaves them wher
 
   await page.goto(`${current.url}/#/hobs/${pip}/threads/${triage}`);
   const archiveCall = await holdRequests(page, /\/api\/threads\/[^/]+\/archive$/);
-  await page.getByRole("button", { name: "More for this thread" }).click();
-  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  await page.getByRole("button", { name: "More for this chat" }).click();
+  await page.getByRole("menuitem", { name: /Archive chat/ }).click();
   // The next thread opens at once; the user then opens another before the hub answers.
   await expect(page).toHaveURL(new RegExp(`threads/${tagline}$`));
   await expect.poll(archiveCall.waiting).toBe(1);
@@ -251,8 +251,8 @@ test("[TC-CH-154] a refusal that arrives late puts the thread back and reopens i
   await page.goto(`${hub.url}/#/hobs/${pip}/threads/${triage}`);
   // As if a reply started on another device after the menu opened.
   const archiveCall = await holdRequests(page, /\/api\/threads\/[^/]+\/archive$/);
-  await page.getByRole("button", { name: "More for this thread" }).click();
-  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  await page.getByRole("button", { name: "More for this chat" }).click();
+  await page.getByRole("menuitem", { name: /Archive chat/ }).click();
   await expect(page).toHaveURL(new RegExp(`threads/${tagline}$`));
   await expect.poll(archiveCall.waiting).toBe(1);
   await archiveCall.release({
@@ -278,7 +278,7 @@ test("[TC-CH-155] an Undo that fails offers Try again, which brings the thread b
   const chats = page.getByRole("main", { name: "Pip's page" });
   const row = chats.getByRole("link", { name: "Open Tagline ideas" });
   await chats.getByRole("button", { name: "More for “Tagline ideas”" }).click();
-  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  await page.getByRole("menuitem", { name: /Archive chat/ }).click();
   await expect(row).toHaveCount(0);
 
   const restoreCall = await holdRequests(page, /\/api\/threads\/[^/]+\/restore$/);
@@ -312,8 +312,8 @@ test("[TC-CH-156] a thread waiting for approval cannot be archived, and Show req
     const card = page.getByRole("region", { name: "Pip asks permission" });
     await expect(card).toBeVisible();
 
-    await page.getByRole("button", { name: "More for this thread" }).click();
-    const item = page.getByRole("menuitem", { name: /Archive thread/ });
+    await page.getByRole("button", { name: "More for this chat" }).click();
+    const item = page.getByRole("menuitem", { name: /Archive chat/ });
     await expect(item).toHaveAttribute("aria-disabled", "true");
     await expect(item).toContainText("Pip is waiting for your approval here. Answer it first.");
     await page.keyboard.press("Escape");

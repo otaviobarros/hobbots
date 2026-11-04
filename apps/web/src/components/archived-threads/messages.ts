@@ -20,10 +20,10 @@ export const messages = {
   draftKept: "Your unsent message is kept and comes back when you restore it.",
   footer: "Read-only until you restore it",
   backToArchived: "‹ Back to the Archive",
-  loadMessagesFailed: "Hobbots could not read this thread. Try again.",
+  loadMessagesFailed: "Hobbots could not read this chat. Try again.",
   loadingMessages: "Loading messages…",
   editHob: "Edit hob",
   chat: "Chat",
-  lookingUp: "Opening the thread…",
-  lookupFailed: "Hobbots could not tell whether this thread is archived. Try again in a moment.",
+  lookingUp: "Opening the chat…",
+  lookupFailed: "Hobbots could not tell whether this chat is archived. Try again in a moment.",
 };
