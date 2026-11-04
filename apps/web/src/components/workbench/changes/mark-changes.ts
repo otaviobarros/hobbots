@@ -11,7 +11,11 @@ interface MdNode {
 /** Blocks that render nothing where they stand, so marking them would show an empty highlight. */
 const UNSEEN = new Set(["definition", "footnoteDefinition"]);
 
-const tone: Record<BlockMark, string> = { added: "bg-mint/12", removed: "bg-rose/14" };
+// Removed text is struck through in rose; new text sits on a mint wash.
+const tone: Record<BlockMark, string> = {
+  added: "bg-mint/16 no-underline",
+  removed: "bg-rose/16 line-through decoration-rose/70",
+};
 
 /**
  * Wraps a changed top-level block in `<ins>` or `<del>`, filled with its mark's tone, with a
@@ -22,7 +26,7 @@ const wrap = (node: MdNode, mark: BlockMark, label: string): MdNode => ({
   type: "changedBlock",
   data: {
     hName: mark === "added" ? "ins" : "del",
-    hProperties: { className: ["block", "px-2", "py-1", "no-underline", tone[mark]] },
+    hProperties: { className: ["block", "rounded-sm", "px-1.5", "py-0.5", "-mx-1.5", ...tone[mark].split(" ")] },
   },
   children: [
     {
