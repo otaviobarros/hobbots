@@ -693,28 +693,92 @@ const SETS_VARIABLES = new Set(["export", "declare", "typeset", "readonly", "loc
 /** Shells whose `-c` runs a command line of its own. */
 const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
 
-/**
- * `git commit` options that take the author from elsewhere: `--author`, and `-C`, `-c`,
- * `--reuse-message` and `--reedit-message`, which copy another commit's, as any prefix Git accepts.
- */
-const AUTHOR_OPTION = /^(--au(t(h(o(r)?)?)?)?(=|$)|-[Cc]|--re(u|e))/;
+/** `git commit`'s long options that take a value, so the word after one is never read as an option. */
+const COMMIT_VALUE_OPTIONS = [
+  "message",
+  "file",
+  "reuse-message",
+  "reedit-message",
+  "author",
+  "date",
+  "template",
+  "cleanup",
+  "fixup",
+  "squash",
+  "trailer",
+  "pathspec-from-file",
+];
 
-/** `git commit --reset-author`, as any prefix Git accepts, which makes the commit the hob's own again. */
-const RESET_AUTHOR = /^--res(e(t(-(a(u(t(h(o(r)?)?)?)?)?)?)?)?)?$/;
+/** `git commit`'s short options that take a value: the rest of their word, or the next word. */
+const COMMIT_VALUE_LETTERS = "mFCct";
+
+/** Whether `long`, a long option's name without its dashes, is a prefix Git accepts for `full`. */
+const prefixOf = (long: string, full: string, shortest: number) => long.length >= shortest && full.startsWith(long);
+
+/**
+ * Whether `git commit`'s arguments take the author from elsewhere: `--author`, or `-C`, `-c`,
+ * `--reuse-message` or `--reedit-message`, which copy another commit's, without `--reset-author`.
+ * Each option's value is skipped, so a message such as `-m --reset-author` is never read as one.
+ */
+const commitTakesAuthor = (args: ReadonlyArray<string>): boolean => {
+  let takes = false;
+  let resets = false;
+  for (let i = 0; i < args.length && args[i] !== "--"; i++) {
+    const option = commitOption(args[i] as string);
+    takes ||= option.takes;
+    resets ||= option.resets;
+    if (option.valueNext) i++;
+  }
+  return takes && !resets;
+};
+
+/** One `git commit` argument: whether it takes or resets the author, and whether the next word is its value. */
+const commitOption = (arg: string): { takes: boolean; resets: boolean; valueNext: boolean } => {
+  if (arg.startsWith("--")) {
+    const equals = arg.indexOf("=");
+    const long = arg.slice(2, equals === -1 ? undefined : equals);
+    return {
+      takes: prefixOf(long, "author", 2) || prefixOf(long, "reuse-message", 3) || prefixOf(long, "reedit-message", 3),
+      resets: prefixOf(long, "reset-author", 3),
+      valueNext: equals === -1 && long !== "" && COMMIT_VALUE_OPTIONS.some((full) => full.startsWith(long)),
+    };
+  }
+  if (!arg.startsWith("-")) return { takes: false, resets: false, valueNext: false };
+  // A cluster such as `-aC abc` ends at its first letter that takes a value.
+  const letters = arg.slice(1);
+  const valued = [...letters].findIndex((letter) => COMMIT_VALUE_LETTERS.includes(letter));
+  const options = valued === -1 ? letters : letters.slice(0, valued + 1);
+  return {
+    takes: options.includes("C") || options.includes("c"),
+    resets: false,
+    valueNext: valued === letters.length - 1,
+  };
+};
 
 /** `git config` words that write a setting, besides a value after its key. */
 const CONFIG_WRITES = /^(set|unset|--add|--replace-all|--unset|--unset-all)$/;
 
 /** `env` options that drop the environment, or part of it, that the hub sets. */
-const DROPS_ENVIRONMENT = /^(-|--ignore-environment|--unset(=.*)?|-[A-Za-z]*[iu][A-Za-z]*)$/;
+const DROPS_ENVIRONMENT = /^(-|--ignore-environment|--unset|-[A-Za-z]*[iu][A-Za-z]*)$/;
 
-/** Whether an `env` among a simple command's raw words drops what the hub sets. */
-const dropsEnvironment = (raw: ReadonlyArray<string>) =>
+const ENV = WRAPPERS.get("env") as Wrapper;
+
+/**
+ * Whether an `env` among a simple command's raw words drops what the hub sets. Its options are read
+ * with their values, as `unwrap` reads them, so `env -C . -i` is read to its end, and the words a
+ * `-S` splits are read too.
+ */
+const dropsEnvironment = (raw: ReadonlyArray<string>): boolean =>
   raw.some((word, i) => {
     if (basename(word) !== "env") return false;
-    const options = raw.slice(i + 1);
-    const end = options.findIndex((option) => !option.startsWith("-") || option === "--");
-    return (end === -1 ? options : options.slice(0, end)).some((option) => DROPS_ENVIRONMENT.test(option));
+    for (let j = i + 1; j < raw.length && (raw[j] as string).startsWith("-") && raw[j] !== "--"; ) {
+      const option = readOption(raw, j, ENV.takesValue);
+      if (DROPS_ENVIRONMENT.test(option.name)) return true;
+      if (ENV.split?.has(option.name) && dropsEnvironment(["env", ...simpleCommands(option.value ?? "").flat()]))
+        return true;
+      j += option.used;
+    }
+    return false;
   });
 
 /** Whether a Git command sets the commit identity: with `-c`, `git config` or `git commit`'s options. */
@@ -727,10 +791,7 @@ const gitSetsIdentity = (args: ReadonlyArray<string>, folder: string): boolean =
     const key = rest.findIndex((word) => IDENTITY_SETTING.test(word));
     return key !== -1 && (rest[key + 1] !== undefined || rest.some((word) => CONFIG_WRITES.test(word)));
   }
-  if (args[sub] !== "commit") return false;
-  const end = rest.indexOf("--");
-  const options = end === -1 ? rest : rest.slice(0, end);
-  return options.some((arg) => AUTHOR_OPTION.test(arg)) && !options.some((arg) => RESET_AUTHOR.test(arg));
+  return args[sub] === "commit" && commitTakesAuthor(rest);
 };
 
 /** Whether one simple command, its wrappers taken off, sets the commit identity itself. */

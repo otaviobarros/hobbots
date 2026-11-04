@@ -50,7 +50,7 @@ import {
   TaskToolCallsLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
-import { FakeRuntimeLayer } from "@hobbots/runtimes";
+import { FakeRuntimeLayer, userCommits } from "@hobbots/runtimes";
 import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/workbench";
 import { Effect, Layer, Schedule } from "effect";
 import { HttpRouter } from "effect/http";
@@ -440,5 +440,24 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     expect(committed.steps.find((step) => step.kind === "tool" && step.label.includes("git commit"))).toMatchObject({
       state: "done",
     });
+
+    // The fake runs no command, so each one runs here as the hub runs a command of a hob on the
+    // user's account (#586): the refused one would commit as Frodo's bot, and the retried one
+    // commits as the user.
+    const home = join(temp, "pip-home");
+    const ledger = join(temp, "ledger");
+    mkdirSync(home);
+    writeFileSync(join(home, ".gitconfig"), "[user]\n\tname = Otavio\n\temail = otavio@example.com\n");
+    const env = userCommits({}, home).env({ PATH: process.env.PATH, HOME: home, GIT_CONFIG_NOSYSTEM: "1" });
+    const run = (command: string) => execFileSync("sh", ["-c", command], { cwd: ledger, env, encoding: "utf8" });
+    const author = () => run("git log -1 --format='%an <%ae>|%cn <%ce>'").trim();
+    execFileSync("git", ["init", "--quiet", ledger], { env });
+    run("git commit --quiet --allow-empty -m 'chore: start'");
+    run(`${asFrodo.replace(" commit ", " commit --quiet --allow-empty ")}`);
+    expect(author()).toBe(
+      `${bot} <351716127+${bot}@users.noreply.github.com>|${bot} <351716127+${bot}@users.noreply.github.com>`,
+    );
+    run("git commit --quiet --allow-empty -m 'chore: pocket ledger v0.1'");
+    expect(author()).toBe("Otavio <otavio@example.com>|Otavio <otavio@example.com>");
   });
 });

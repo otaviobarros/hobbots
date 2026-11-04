@@ -54,6 +54,9 @@ describe("commit identity overrides", () => {
       "env -i PATH=/usr/bin git commit -m x",
       "env -u GIT_CONFIG_COUNT git commit -m x",
       "env --unset=EMAIL git commit -m x",
+      "env -C . -i git commit -m x",
+      "env -C sub -u GIT_CONFIG_COUNT git commit -m x",
+      "env -S '-i git commit -m x'",
       // Writing the identity to a config, or taking another commit's author.
       `git config user.name ${BOT} && git commit -m x`,
       "git config --global user.email frodo@example.com",
@@ -61,6 +64,10 @@ describe("commit identity overrides", () => {
       "git commit -C abc123 --allow-empty",
       "git commit --reuse-message=abc123",
       "git commit -c abc123",
+      "git commit -aC abc123",
+      // A value that only looks like an option is never read as one.
+      "git commit --author='Frodo <frodo@example.com>' -m '--reset-author'",
+      "git commit -m --reset-author --author=Frodo",
       // Another shell's command line, `eval`, and a key only the shell settles.
       'bash -c "git -c user.name=Frodo commit -m x"',
       "sh -ec 'GIT_AUTHOR_NAME=Frodo git commit -m x'",
@@ -83,6 +90,10 @@ describe("commit identity overrides", () => {
       "GIT_CONFIG_GLOBAL=/dev/null git status",
       "git config --get user.email",
       "git commit -C abc123 --reset-author",
+      "git commit -m '--author=Frodo'",
+      "git commit -am --author=Frodo",
+      "git commit --message --reuse-message=abc",
+      "git commit -F msg.txt -- --author",
       "env -C sub git commit -m x",
       "bash -c 'git commit -m x'",
       "unset NODE_OPTIONS; npm test",
