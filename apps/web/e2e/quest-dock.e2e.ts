@@ -98,15 +98,12 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
 test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and every other Task's latest that did work", async ({
   page,
 }) => {
-  // Quill writes the copy and fails; retried, she changes nothing and finishes with a result.
+  // Quill writes the copy and fails; on her second try she changes nothing and finishes with a result.
   await startParty(page, ["Draft the copy", 'fake:once fake:write copy.md "# Copy\\n\\nHello.\\n"', "fake:fail"]);
+  // A member's failed turn is handed to her again as a second try, which no longer carries the
+  // brief's once-only write or its failure.
   const sheet = laneTask(page, "Draft the copy");
-  await expect(sheet).toContainText("Failed", { timeout: 30_000 });
-  await sheet
-    .getByRole("region", { name: "Controls for Draft the copy" })
-    .getByRole("button", { name: "Retry" })
-    .click();
-  await expect(sheet).toContainText("attempt 2", { timeout: 15_000 });
+  await expect(sheet).toContainText("attempt 2", { timeout: 30_000 });
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
   const { bench, changes } = lists(page);
 
@@ -156,6 +153,14 @@ test("[TC-UX-282] a file two hobs changed opens the hob's own record when Files 
   ]);
   await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
   const { bench, changes, files } = lists(page);
+
+  // Both hobs changed the notes, and each change is listed with its hob.
+  await bench.getByRole("tab", { name: /^Changes/ }).click();
+  await expect(changes.getByRole("button")).toHaveText([
+    /^notes\.md, by Aldric/,
+    /^copy\.md, by Quill/,
+    /^notes\.md, by Quill/,
+  ]);
 
   // Quill's notes in Files open Quill's change to them, not Aldric's.
   await bench.getByRole("tab", { name: /^Files/ }).click();
