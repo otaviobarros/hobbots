@@ -74,49 +74,84 @@ export function ProviderChoices<D extends BrainChoice>({
               </Choice>
             );
           }
-          const state = STATES[health.availability];
           return (
-            <label
+            <UnavailableProvider
               key={health.runtime}
+              health={health}
+              name="hob-provider"
               className={cn(
                 "cut flex cursor-not-allowed items-center gap-2 border-2 border-dashed border-line-2 px-3 py-[7px] text-sm text-label",
                 chipClassName,
               )}
             >
-              <input
-                type="radio"
-                name="hob-provider"
-                disabled
-                checked={false}
-                onChange={() => {}}
-                aria-label={copy.unavailable({ provider: name, state })}
-                className="sr-only"
-              />
               <ProviderMark runtime={health.runtime} className={cn("opacity-60", markClassName)} />
               {name}
-              <span className="text-xs text-lantern">{state}</span>
-            </label>
+              <span className="text-xs text-lantern">{STATES[health.availability]}</span>
+            </UnavailableProvider>
           );
         })}
       </fieldset>
-      {blocked.map((health) => (
-        <div
-          key={health.runtime}
-          role="status"
-          aria-label={`${PROVIDER_NAMES[health.runtime]}: ${STATES[health.availability]}`}
-          className="flex flex-col text-[13px] leading-snug text-lantern"
-        >
-          <span>
-            <b>{PROVIDER_NAMES[health.runtime]}</b> · {whyNot(health)}
-          </span>
-          <ProviderFixActions
-            runtime={health.runtime}
-            notFound={health.availability === "unavailable" && health.version === null}
-            size="xs"
-            className="mt-1"
-          />
-        </div>
-      ))}
+      <BlockedProviders blocked={blocked} className="text-lantern" />
     </div>
   );
+}
+
+/**
+ * A provider that cannot think now, as an option of the provider group: disabled, so it cannot be
+ * picked, and named with its state for screen readers.
+ */
+export function UnavailableProvider({
+  health,
+  name,
+  className,
+  children,
+}: {
+  health: RuntimeHealth;
+  name: string;
+  className: string;
+  children: React.ReactNode;
+}) {
+  const state = STATES[health.availability];
+  return (
+    <label className={className}>
+      <input
+        type="radio"
+        name={name}
+        disabled
+        checked={false}
+        onChange={() => {}}
+        aria-label={copy.unavailable({ provider: PROVIDER_NAMES[health.runtime], state })}
+        className="sr-only"
+      />
+      {children}
+    </label>
+  );
+}
+
+/** Why each provider that cannot think now cannot, with how to fix it and Check again. */
+export function BlockedProviders({
+  blocked,
+  className,
+}: {
+  blocked: ReadonlyArray<RuntimeHealth>;
+  className?: string | undefined;
+}) {
+  return blocked.map((health) => (
+    <div
+      key={health.runtime}
+      role="status"
+      aria-label={`${PROVIDER_NAMES[health.runtime]}: ${STATES[health.availability]}`}
+      className={cn("flex flex-col text-[13px] leading-snug", className)}
+    >
+      <span>
+        <b>{PROVIDER_NAMES[health.runtime]}</b> · {whyNot(health)}
+      </span>
+      <ProviderFixActions
+        runtime={health.runtime}
+        notFound={health.availability === "unavailable" && health.version === null}
+        size="xs"
+        className="mt-1"
+      />
+    </div>
+  ));
 }

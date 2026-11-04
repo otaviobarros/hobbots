@@ -24,62 +24,52 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   expect(setup.ok).toBe(true);
 
   await page.goto(`${current.url}/#/summon`);
-  await expect(page.getByRole("heading", { name: "Summon a hob" })).toBeVisible();
-  await page.getByRole("textbox", { name: "Hob name" }).fill("Fern");
+  await expect(page.getByRole("heading", { name: "What should your new hob help you with?" })).toBeVisible();
 
-  // One radio group runs through the roles, so arrow keys move from one to the next.
+  // One radio group runs through the eight common roles, so arrow keys move from one to the next.
   const roles = page.getByRole("group", { name: "Role" });
-  const hat = page.getByRole("combobox", { name: "Hat" });
-  const tool = page.getByRole("combobox", { name: "Tool" });
-  const chores = page.getByRole("textbox", { name: "What should this hob do?" });
+  const chores = page.getByRole("textbox", { name: "What it should do, in your words" });
   await roles.getByRole("radio", { name: /^Assistant/ }).focus();
   await page.keyboard.press("ArrowRight");
   await expect(roles.getByRole("radio", { name: /^Researcher/ })).toBeChecked();
-  await expect(hat).toHaveValue("hood");
-  await expect(tool).toHaveValue("lantern");
   await expect(chores).toHaveValue(/Link every source you used/);
 
-  // "More roles" opens the families; the first family's roles follow the first eight.
-  await roles.getByRole("button", { name: /^More roles/ }).press("Enter");
-  await expect(roles.getByRole("group", { name: "Leadership" })).toBeVisible();
-  await roles.getByRole("radio", { name: /^Researcher/ }).focus();
-  // Past the first eight comes Everyday helpers' first other role, the Editor.
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
-  await page.keyboard.press("ArrowRight");
+  // Every role is one click further, in the role sheet; a role from there stays in view, checked.
+  await page.getByRole("button", { name: "See all 54 roles" }).press("Enter");
+  const allRoles = page.getByRole("dialog", { name: "Choose Pip's role" });
+  await allRoles.getByText("Editor", { exact: true }).click();
+  await allRoles.getByRole("button", { name: "Use Editor" }).click();
+  await expect(allRoles).toBeHidden();
   await expect(roles.getByRole("radio", { name: /^Editor/ })).toBeChecked();
-  await expect(hat).toHaveValue("wizard");
 
-  // Back past the first role wraps to "Your own", which asks for a title right away.
-  await roles.getByRole("radio", { name: /^Assistant/ }).focus();
-  await page.keyboard.press("ArrowLeft");
-  await expect(roles.getByRole("radio", { name: /^Your own/ })).toBeChecked();
+  // A title of your own replaces the role and asks for a sigil, picked by keyboard alone.
   const title = page.getByRole("textbox", { name: "Your own role title" });
-  await expect(title).toBeFocused();
+  await title.focus();
   await page.keyboard.type("Frontend wizard");
-  await expect(hat).toHaveValue("");
-
-  // The sigils are their own radio group; Tab enters it on the one picked.
+  await expect(roles.getByRole("radio", { checked: true })).toHaveCount(0);
   await page.keyboard.press("Tab");
   await expect(page.getByRole("radio", { name: "Assistant's sigil", exact: true })).toBeFocused();
   for (let i = 0; i < 16; i++) await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("radio", { name: "Frontend engineer's sigil" })).toBeChecked();
 
-  // The hat and tool stay changeable next to the look.
-  await hat.focus();
-  await hat.selectOption("crown");
-  await tool.selectOption("wand");
-  await expect(page.getByText("Look #").first()).toContainText("tiny crown, a wand");
-
   const suggest = page.getByRole("link", { name: "Missing a role? Suggest one" });
   const href = new URL((await suggest.getAttribute("href")) ?? "");
   expect(href.searchParams.get("template")).toBe("5-role-request.yml");
   expect(href.searchParams.get("role-title")).toBe("Frontend wizard");
+  await page.getByRole("button", { name: "Next: name and look" }).click();
 
+  // The name, hat and tool are on the second step; a title of your own leaves the gear to the look.
+  await expect(page).toHaveURL(/step=look/);
+  await page.getByRole("textbox", { name: "Hob name" }).fill("Fern");
+  const hat = page.getByRole("group", { name: "Hat" });
+  const tool = page.getByRole("group", { name: "Tool" });
+  await expect(hat.getByRole("radio", { name: "From the look" })).toBeChecked();
+  await hat.getByRole("radio", { name: "Tiny crown" }).check({ force: true });
+  await tool.getByRole("radio", { name: "Wand" }).check({ force: true });
+  await page.getByRole("button", { name: "Next: check and summon" }).click();
+
+  await expect(page.getByRole("heading", { name: "Ready to summon Fern?" })).toBeVisible();
+  await expect(page.getByRole("definition").filter({ hasText: "Frontend wizard" })).toBeVisible();
   await page.getByRole("button", { name: "Summon Fern" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/#\/hobs\/[^/]+\/new/);

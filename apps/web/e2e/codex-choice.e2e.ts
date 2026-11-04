@@ -117,8 +117,10 @@ test("[TC-UX-081] Summon shows a missing, signed-out or outdated Codex as unavai
   page,
 }) => {
   hub = await finishedHub({ HOBBOTS_RUNTIME: "claude", HOBBOTS_CLAUDE_EXECUTABLE: signedInClaudeCode(dataDir) });
-  await page.goto(`${hub.url}/#/summon`);
-  await expect(page.getByRole("heading", { name: "Summon a hob" })).toBeVisible();
+  await page.goto(`${hub.url}/#/summon?step=look`);
+  await page.getByRole("textbox", { name: "Hob name" }).fill("Tinker");
+  await page.getByRole("button", { name: "Next: check and summon" }).click();
+  await expect(page.getByRole("heading", { name: "Ready to summon Tinker?" })).toBeVisible();
 
   const providers = page.getByRole("group", { name: "Provider" });
   const status = page.getByRole("status", { name: /^Codex:/ });
@@ -144,12 +146,14 @@ test("[TC-UX-081] Summon shows a missing, signed-out or outdated Codex as unavai
   fakeCodexAt(dataDir, "ready");
   await status.getByRole("button", { name: "Check again" }).click();
   await expect(status).toBeHidden();
+  // The model and effort open one click further.
   await providers.getByRole("radio", { name: "Codex", exact: true }).check({ force: true });
+  await page.getByRole("button", { name: /^Model and effort: Codex · GPT-5\.5/ }).click();
   await expect(page.getByRole("radio", { name: /GPT-5\.5/ })).toBeChecked();
   await page.getByRole("radio", { name: "High" }).check({ force: true });
-  await expect(page.getByText("Codex · GPT-5.5 · high effort")).toBeVisible();
+  await page.getByRole("button", { name: "Fewer options" }).click();
+  await expect(page.getByRole("button", { name: "Model and effort: Codex · GPT-5.5 · high effort" })).toBeVisible();
 
-  await page.getByRole("textbox", { name: "Hob name" }).fill("Tinker");
   await page.getByRole("button", { name: "Summon Tinker" }).click();
   await expect(page).toHaveURL(/#\/hobs\/[^/]+\/new$/);
   expect(await hobNamed(hub, "Tinker")).toMatchObject({ runtime: "codex", model: "gpt-5.5", effort: "high" });
