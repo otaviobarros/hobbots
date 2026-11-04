@@ -1,4 +1,4 @@
-import type { BackpackItem, Question, Task, ThreadId } from "@hobbots/domain";
+import { type BackpackItem, CONTINUATION_HEADER, type Question, type Task, type ThreadId } from "@hobbots/domain";
 import { heldUnder } from "./dispatcher.ts";
 
 /**
@@ -150,7 +150,7 @@ export const arrivalsText = (items: ReadonlyArray<BackpackItem>, as: "prompt" | 
   const progress = items.filter((item) => !item.actionable);
   return [
     as === "prompt"
-      ? "Hobbots wrote this, not the user. Work arrived for you while you were not running:"
+      ? `${CONTINUATION_HEADER} Work arrived for you while you were not running:`
       : work.length === 0
         ? "Hobbots adds this, not the user."
         : "Hobbots adds this, not the user. Work also arrived for you since your last turn:",
@@ -159,7 +159,7 @@ export const arrivalsText = (items: ReadonlyArray<BackpackItem>, as: "prompt" | 
     ...digestSection(progress, work.length === 0),
     "",
     as === "prompt"
-      ? "Act on it now. When the Task you work on in this conversation is done, return its result with complete_task. Tell the user briefly what changed."
+      ? "Act on it now. When the Task you work on in this conversation is done, return its result with complete_task, and tell the user in one short summary what was made, where it is and who did what. Otherwise write to the user only for a question no lead can answer: end your turn without a message, even after you act."
       : work.length === 0
         ? "Answer the user's message. Use this progress only as context."
         : "Answer the user's message first, then act on this work.",

@@ -36,6 +36,7 @@ import {
 } from "../../api/queries.ts";
 import { runtimeProblem } from "../../api/runtime-health.ts";
 import { brainSwitches, lastReplyBrain } from "../../lib/brains.ts";
+import { isQuietReply } from "../../lib/quiet-replies.ts";
 import { sendErrorText } from "../../lib/send-error.ts";
 import { ReplyApprovals } from "../approvals/reply-approvals.tsx";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
@@ -467,14 +468,17 @@ function Transcript({
   return (
     <>
       {work.before}
-      {transcript.map((message) => (
+      {transcript.map((message, index) => (
         <Fragment key={message.id}>
           {switches.has(message.id) && message.runtime !== null && (
             <BrainSwitchNote brain={{ runtime: message.runtime, model: message.model }} />
           )}
-          <MessageRow message={message} hob={hob} focused={message.id === focusMessageId} resume={resume(message)}>
-            <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
-          </MessageRow>
+          {/* A lead that acted on arrived work and wrote nothing leaves no row; its work still shows. */}
+          {!isQuietReply(message, transcript[index - 1]) && (
+            <MessageRow message={message} hob={hob} focused={message.id === focusMessageId} resume={resume(message)}>
+              <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
+            </MessageRow>
+          )}
           {work.after(message.id)}
         </Fragment>
       ))}

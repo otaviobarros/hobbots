@@ -9,6 +9,7 @@ import {
   BackpackItemId,
   type BackpackItemKind,
   type BackpackPayload,
+  CONTINUATION_HEADER,
   HandOff,
   MessageId,
   Question,
@@ -227,6 +228,16 @@ describe("which thread a backpack item continues", () => {
     expect(arrivalsText([result], "prompt")).toContain("Hobbots wrote this, not the user.");
     expect(arrivalsText([result], "prompt")).toContain("Task pass (Brief for pass) finished. Its result: pass done.");
     expect(arrivalsText([result], "context")).toContain("Answer the user's message first");
+  });
+
+  it("asks the woken lead to stay quiet in the chat unless a question needs the user, or the Task is done (#901)", () => {
+    const result = item(FRODO, "pass", "result", { _tag: "result", task: step, artifacts: [] });
+    const prompt = arrivalsText([result], "prompt");
+    expect(prompt.startsWith(CONTINUATION_HEADER)).toBe(true);
+    expect(prompt).toContain("write to the user only for a question no lead can answer");
+    expect(prompt).toContain("end your turn without a message, even after you act");
+    expect(prompt).toContain("one short summary what was made, where it is and who did what");
+    expect(prompt).not.toContain("Tell the user briefly what changed");
   });
 
   // covers IN-004

@@ -161,7 +161,16 @@ export class Checkpoint extends Schema.Class<Checkpoint>("Checkpoint")({
   kind: CheckpointKind,
   /** The milestone a `milestone` checkpoint reached. */
   milestoneId: Schema.NullOr(MilestoneId),
+  /** Where the Task stands, in a few words: the beat a lane shows. */
   summary: Schema.String,
+  /**
+   * More about it, when its owner had more to say: the Workbench shows it, a lane never does (#901).
+   * Null when there is none, and for every checkpoint journaled before migration 0051.
+   */
+  detail: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /**
    * Another Task the checkpoint is also about, or null: for a finding the hub made because two
    * Tasks changed the same file, the Task that changed it first, so both Tasks show it. Checkpoints

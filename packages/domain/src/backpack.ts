@@ -11,6 +11,12 @@ import { AttemptId, Task, TaskId } from "./task.ts";
  * outbox: it is committed with the change that caused it, before anything delivers it.
  */
 
+/**
+ * How the prompt of a turn that only carries backpack items starts (ADR 019), so the hob never takes
+ * it for a message from you, and a fake brain can tell such a turn from one you started.
+ */
+export const CONTINUATION_HEADER = "Hobbots wrote this, not the user.";
+
 export const BackpackItemId = Schema.String.pipe(Schema.brand("BackpackItemId"));
 export type BackpackItemId = typeof BackpackItemId.Type;
 

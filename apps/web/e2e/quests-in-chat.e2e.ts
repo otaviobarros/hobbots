@@ -4,7 +4,7 @@ import { openQuest, taskSheet } from "./work-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
-// covers OR-001, OR-004, CH-005, UX-001
+// covers OR-001, OR-004, CH-005, UX-001, UX-002
 test("[TC-OR-013] the Black Friday Quest can be followed end to end from the chat with its lead", async ({ page }) => {
   const { url, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/new`);
@@ -33,6 +33,7 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(drawer.getByRole("heading", { name: "Build the campaign" })).toBeFocused();
   await expect(drawer).toContainText("Aldric gave it");
   await expect(drawer).toContainText("Keyword research done");
+  await expect(drawer).toContainText("Doorbuster and early access lead what shoppers search for.");
   await expect(drawer).toContainText("Black Friday: 20% off everything, this weekend only.");
   await page.keyboard.press("Escape");
   await expect(drawer).toBeHidden();
@@ -65,6 +66,13 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(card).toContainText("Aldric finished this", { timeout: 30_000 });
   await expect(strip).toBeHidden();
   await expect(page.getByText("The Black Friday campaign is ready.")).toBeVisible();
+  // The lead's chat holds only the plan, the question no lead could answer and the finish (#901):
+  // its turns on each member's result wrote nothing, and leave no row.
+  const replies = page.getByRole("article");
+  await expect(replies).toHaveCount(3);
+  await expect(replies.nth(0)).toContainText("Plan a Black Friday campaign for the shop");
+  await expect(replies.nth(1)).toContainText("Ada has one question for you about the international cutoff.");
+  await expect(replies.nth(2)).toContainText("Quill wrote the copy and Ada scheduled the email");
 
   // Once it ends, the card still opens the quest, and the lead's own Task shows its output.
   await card.getByRole("button", { name: "Open the quest" }).click();

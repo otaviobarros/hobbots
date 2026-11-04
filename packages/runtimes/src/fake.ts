@@ -9,6 +9,7 @@ import {
   UNRECORDED_TOOL_CALL,
 } from "@hobbots/agents";
 import {
+  CONTINUATION_HEADER,
   type PlanUsage,
   type ReplyUsage,
   RUNTIME_NAMES,
@@ -80,6 +81,12 @@ export interface FakeRuntimeOptions {
   readonly sandbox?: "on" | "unavailable";
   /** Decides scripted tool calls; without it a turn has no tools. */
   readonly engine?: PolicyEngine["Service"];
+  /**
+   * Writes nothing in a turn that only carries work that arrived, as a lead told to stay quiet in
+   * the chat between the plan and the finish does (#901). Off by default, so tests can read what
+   * such a turn was told in its echo.
+   */
+  readonly quietContinuations?: boolean;
 }
 
 /** What the fake runtime claims to enforce. Nothing is run, so its claims are about decisions only. */
@@ -564,14 +571,15 @@ export const makeFakeRuntime = (options: FakeRuntimeOptions = {}) => {
     // A briefing is echoed ahead of the prompt, so a test can see what the session was told.
     const told = request.briefing ? `${request.briefing}\n\n${request.prompt}` : request.prompt;
     const echo = request.prompt === fakeInstructionsPrompt ? followed : `Echo: ${told}`;
+    const quiet = options.quietContinuations === true && request.prompt.startsWith(CONTINUATION_HEADER);
     // The turn's own prompt decides first, so a line kept from before never hides its directive.
     const own = fakeEnding(request.prompt);
     const ending = own === "complete" ? fakeEnding(scripted) : own;
     const answers: Array<string> = [];
     // The reply ends with what the hub answered its scripted calls, known once they are made.
     const written = Stream.suspend(() => {
-      const reply = answers.length === 0 ? echo : [echo, ...answers].join("\n\n");
-      const words = reply.split(/(?<= )/);
+      const reply = quiet ? "" : answers.length === 0 ? echo : [echo, ...answers].join("\n\n");
+      const words = reply === "" ? [] : reply.split(/(?<= )/);
       return Stream.fromIterable<RuntimeEvent>([
         ...(ending === "complete" ? words : words.slice(0, 2)).map(
           (text): RuntimeEvent => ({ _tag: "TextDelta", text }),

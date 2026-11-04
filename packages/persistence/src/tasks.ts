@@ -134,6 +134,7 @@ export const TaskRepositoryLive = Layer.effect(
         kind: checkpoint.kind,
         milestone_id: checkpoint.milestoneId,
         summary: checkpoint.summary,
+        detail: checkpoint.detail,
         about_task_id: checkpoint.aboutTaskId,
         created_at: checkpoint.createdAt,
         revision: checkpoint.revision,
@@ -771,6 +772,7 @@ export const TaskRepositoryLive = Layer.effect(
           const milestone = yield* reach(input);
           const checkpoint = new Checkpoint({
             ...input,
+            detail: input.detail ?? null,
             aboutTaskId: input.aboutTaskId ?? null,
             attemptId: task.currentAttemptId,
             revision,

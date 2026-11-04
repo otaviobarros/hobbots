@@ -167,7 +167,13 @@ const ServerLive = Layer.unwrap(
     // One policy engine for the hub, so its index of the folders' Git repositories is built once.
     // The fake answers for Claude Code and Codex, so a thread can switch brains (ADR 017). Its
     // sandbox and web tools never reach the hub's own tailnet names (ADR 021).
-    const fake = { delay: "40 millis", stopDelay: "600 millis", sandbox: config.fakeSandbox } as const;
+    // Playing a scripted Quest, the fake lead stays quiet between the plan and the finish (#901).
+    const fake = {
+      delay: "40 millis",
+      stopDelay: "600 millis",
+      sandbox: config.fakeSandbox,
+      quietContinuations: config.fakeQuest !== "off",
+    } as const;
     const Runtime = (
       config.runtime === "fake"
         ? Layer.mergeAll(
