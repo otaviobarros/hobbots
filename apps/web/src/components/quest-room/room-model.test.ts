@@ -14,7 +14,7 @@ import {
   tree,
 } from "../../test/quests.ts";
 import { laneOf, laneTask, litTask, roomLanes } from "./room-model.ts";
-import { parseFold } from "./use-chat-fold.ts";
+import { hasUnread, nextSeen, parseFold } from "./use-chat-fold.ts";
 
 const ROOK = AgentId.make("rook");
 const RESEARCH = TaskId.make("research");
@@ -111,5 +111,24 @@ describe("parseFold", () => {
     expect(parseFold(true)).toBe(false);
     expect(parseFold({ v: 2, folded: true })).toBe(false);
     expect(parseFold(null)).toBe(false);
+  });
+});
+
+describe("the folded chat's unread mark", () => {
+  it("marks a reply that came while folded, and clears once the chat is back in view", () => {
+    const read = nextSeen(undefined, "a", 10, false);
+    expect(hasUnread(nextSeen(read, "a", 11, true), "a", 11)).toBe(true);
+    const back = nextSeen(nextSeen(read, "a", 11, true), "a", 11, false);
+    expect(hasUnread(back, "a", 11)).toBe(false);
+  });
+
+  it("starts another thread from its own count, so its first new reply is marked", () => {
+    const longA = nextSeen(undefined, "a", 10, false);
+    const openB = nextSeen(longA, "b", 2, true);
+    expect(openB).toEqual({ thread: "b", count: 2 });
+    expect(hasUnread(openB, "b", 2)).toBe(false);
+    expect(hasUnread(nextSeen(openB, "b", 3, true), "b", 3)).toBe(true);
+    // A thread longer than the last one's count is not marked just for being longer.
+    expect(hasUnread(nextSeen(openB, "c", 40, true), "c", 40)).toBe(false);
   });
 });

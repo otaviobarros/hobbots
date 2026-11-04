@@ -53,9 +53,11 @@ export const useOpenRoom = (hobId: AgentId, threadId: ThreadId) => {
 
 /**
  * Moves inside the open room. Lighting a lane, a tab and a try replace the address, so the browser's
- * Back leaves the room rather than stepping through them. Close room is the only way out.
+ * Back leaves the room rather than stepping through them. Close room is the only way out. A lane
+ * move puts the Quest's `top` Task in `room`, so a link that opened the room on a member's Task
+ * lights that lane only until another lane, or none, is picked.
  */
-export const useRoomMoves = (hobId: AgentId, threadId: ThreadId) => {
+export const useRoomMoves = (hobId: AgentId, threadId: ThreadId, top: TaskId | undefined) => {
   const navigate = useNavigate();
   const to = "/hobs/$hobId/threads/$threadId" as const;
   const params = { hobId, threadId };
@@ -66,7 +68,7 @@ export const useRoomMoves = (hobId: AgentId, threadId: ThreadId) => {
         from: to,
         to,
         params,
-        search: (prev) => ({ room: prev.room, lane: taskId, tab: prev.tab }),
+        search: (prev) => ({ room: top ?? prev.room, lane: taskId, tab: prev.tab }),
         replace: true,
       }),
     /** Lights a lane and opens the dock on its work. */
@@ -75,7 +77,7 @@ export const useRoomMoves = (hobId: AgentId, threadId: ThreadId) => {
         from: to,
         to,
         params,
-        search: (prev) => ({ room: prev.room, lane: taskId, tab }),
+        search: (prev) => ({ room: top ?? prev.room, lane: taskId, tab }),
         replace: true,
       }),
     /** Opens the dock on a tab, with a file to show first, or folds it. */

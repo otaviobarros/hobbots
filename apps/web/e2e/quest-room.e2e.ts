@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { dock, lane, openRoom, questRoom } from "./quest-room.ts";
+import { dock, lane, laneHead, openRoom, questRoom } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -72,6 +72,18 @@ test("[TC-UX-201] the card, the header's quest button and the Inbox each open th
   await expect(questRoom(page, TITLE)).toBeVisible();
   await expect(room.getByRole("button", { name: "Go to Ada's lane" })).toHaveAttribute("aria-pressed", "true");
   await expect(lane(page, "Ada").getByRole("region", { name: "Ada asks you" })).toBeVisible();
+
+  // The lane the link lit lets go like any other: picking another lane, then none, leaves Ada's dark.
+  const adaPick = room.getByRole("button", { name: "Go to Ada's lane" });
+  await laneHead(page, "Ada").click();
+  await expect(adaPick).toHaveAttribute("aria-pressed", "false");
+  expect(new URL(page.url()).hash).not.toContain("lane=");
+  await laneHead(page, "Quill").click();
+  await expect(room.getByRole("button", { name: "Go to Quill's lane" })).toHaveAttribute("aria-pressed", "true");
+  await laneHead(page, "Quill").click();
+  await expect(room.getByRole("button", { name: "Go to Quill's lane" })).toHaveAttribute("aria-pressed", "false");
+  await expect(adaPick).toHaveAttribute("aria-pressed", "false");
+  expect(new URL(page.url()).hash).not.toContain("lane=");
 });
 
 // covers UX-002, UX-006
@@ -82,10 +94,18 @@ test("[TC-UX-202] the chat column folds to a rail that marks a new message from 
   const composer = await startQuest(page, url, aldric);
   await openRoom(page, TITLE);
 
-  await chat(page).getByRole("button", { name: "Fold the chat" }).click();
+  // Folded from the keyboard, focus lands on the rail's way back; opened again, on the fold button.
+  await chat(page).getByRole("button", { name: "Fold the chat" }).focus();
+  await page.keyboard.press("Enter");
   const rail = page.getByRole("complementary", { name: "Chat, folded" });
   await expect(rail).toBeVisible();
   await expect(chat(page)).toBeHidden();
+  const reopen = rail.getByRole("button", { name: /^Open the chat/ });
+  await expect(reopen).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(chat(page).getByRole("button", { name: "Fold the chat" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(reopen).toBeFocused();
 
   // Aldric writes again while the chat is folded: the rail marks it.
   await expect(rail.getByRole("button", { name: "Open the chat, new from Aldric" })).toBeVisible({ timeout: 30_000 });
@@ -143,10 +163,12 @@ test("[TC-UX-205] at 960 px the chat starts folded and opens over the lanes, and
   const box = await chat(page).boundingBox();
   const roomBox = await room.boundingBox();
   expect((box?.x ?? 0) + (box?.width ?? 0)).toBeGreaterThan((roomBox?.x ?? 0) + (roomBox?.width ?? 0) - 400);
+  await expect(chat(page).getByRole("button", { name: "Fold the chat" })).toBeFocused();
   await chat(page).getByRole("button", { name: "Fold the chat" }).click();
   await expect(rail).toBeVisible();
+  await expect(rail.getByRole("button", { name: "Open the chat", exact: true })).toBeFocused();
 
-  // Tabbing through the room keeps focus on a control, never on the page itself.
+  // Tabbing through the room from its title keeps focus on a control, never on the page itself.
   await room.getByRole("heading", { name: TITLE }).focus();
   for (let step = 0; step < 12; step++) {
     await page.keyboard.press("Tab");

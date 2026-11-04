@@ -51,3 +51,30 @@ export const useChatFold = (width: RoomWidth) => {
   };
   return { folded, narrow, setFolded };
 };
+
+/** How many of a thread's replies the chat held while it was last in view. */
+export interface SeenReplies {
+  readonly thread: string | undefined;
+  readonly count: number;
+}
+
+/**
+ * The replies the chat has seen, after a read of `replies` in `thread`: a new thread starts from its
+ * own count, and while the chat is in view it keeps up; folded, it stays where it was, so a reply
+ * after the fold counts as new. Returns `seen` itself when nothing changed.
+ */
+export const nextSeen = (
+  seen: SeenReplies | undefined,
+  thread: string | undefined,
+  replies: number | undefined,
+  hidden: boolean,
+): SeenReplies | undefined => {
+  if (replies === undefined) return seen;
+  if (seen === undefined || seen.thread !== thread || (!hidden && seen.count !== replies))
+    return { thread, count: replies };
+  return seen;
+};
+
+/** Whether `thread` has a reply the chat has not shown since it was folded. */
+export const hasUnread = (seen: SeenReplies | undefined, thread: string | undefined, replies: number | undefined) =>
+  replies !== undefined && seen !== undefined && seen.thread === thread && replies > seen.count;

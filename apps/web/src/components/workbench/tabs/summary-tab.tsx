@@ -64,7 +64,7 @@ export function SummaryTab({ tree, task, attempt, activity, hobs, onTab }: Workb
   const route = useParams({ strict: false });
   const hobId = AgentId.make(route.hobId ?? "");
   const threadId = ThreadId.make(route.threadId ?? "");
-  const room = useRoomMoves(hobId, threadId);
+  const room = useRoomMoves(hobId, threadId, tree.tasks[0]?.id);
   const toChat = useTaskChat(tree, hobId, threadId);
   const reads = useOpenReads(task.threadId);
   const summary = summaryOf(tree, task, attempt, activity, reads.approvals);

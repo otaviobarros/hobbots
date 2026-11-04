@@ -38,9 +38,9 @@ export function QuestRoom({
   const read = useQuery(threadTasksQuery(threadId));
   const found = findTask([...followed.thread, ...followed.elsewhere], view.taskId);
   const hobs = useHobLookup();
-  const moves = useRoomMoves(hobId, threadId);
-  const heading = useRef<HTMLHeadingElement>(null);
   const opened = found?.tree.tasks[0]?.id;
+  const moves = useRoomMoves(hobId, threadId, opened);
+  const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (opened !== undefined && heading.current !== null) focusElement(heading.current);
   }, [opened]);
