@@ -96,9 +96,7 @@ function FileRow({
       onClick={onPick}
       className={cn(
         "flex w-full cursor-pointer items-center gap-2 rounded-control border-0 px-2 py-[7px] text-start text-text transition-colors duration-150",
-        on
-          ? "bg-[color-mix(in_srgb,var(--color-lantern)_14%,var(--color-card))] shadow-[inset_3px_0_0_var(--color-lantern)]"
-          : "bg-transparent hover:bg-hover",
+        on ? "bg-line" : "bg-transparent hover:bg-hover",
       )}
     >
       <span className="flex min-w-0 flex-1 flex-col">
