@@ -44,7 +44,9 @@ export function SidebarHobs({ expanded }: { expanded: boolean }) {
         {copy.hobs}
       </Link>
       {agents.isError && <p className="sidebar-label px-3 text-detail text-rose">{copy.hobsLoadFailed}</p>}
-      <div className="-mx-3 flex min-h-0 flex-col gap-0.5 overflow-x-hidden overflow-y-auto px-3">
+      {/* The list keeps a 10px scrollbar gutter (styles.css), so its end padding is 2px, not 12px:
+          the gutter sits in the sidebar's padding and the rows stay as wide as the sections'. */}
+      <div className="-mx-3 flex min-h-0 flex-col gap-0.5 overflow-x-hidden overflow-y-auto ps-3 pe-0.5">
         {agents.data?.map((hob) => (
           <SidebarHob
             key={hob.id}
