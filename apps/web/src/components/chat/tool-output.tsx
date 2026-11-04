@@ -7,7 +7,7 @@ import { messages } from "../messages.ts";
 const copy = messages.steps;
 
 /** Monospace output on the deep ground, each part scrolling past 240px. */
-export const OUTPUT_TEXT =
+const OUTPUT_TEXT =
   "m-0 max-h-60 overflow-auto px-2.5 py-2 font-mono text-meta leading-normal whitespace-pre-wrap break-all";
 
 /**

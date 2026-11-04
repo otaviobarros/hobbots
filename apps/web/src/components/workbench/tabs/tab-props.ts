@@ -22,6 +22,8 @@ export interface WorkbenchTabProps {
    * a file Artifact reference's value), as Summary's links ask; undefined for none.
    */
   readonly focus: string | undefined;
+  /** Whether this tab's panel is the one showing, so a tab can wait to load what only it uses. */
+  readonly shown: boolean;
   /** Shows another tab, as Summary's buttons to the tabs the Task used do, with a file to show first. */
   readonly onTab: (tab: WorkbenchTab, focus?: string) => void;
 }

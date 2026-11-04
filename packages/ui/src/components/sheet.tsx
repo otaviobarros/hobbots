@@ -25,6 +25,7 @@ function SheetClose(props: React.ComponentProps<typeof SheetPrimitive.Close>) {
 function SheetContent({
   className,
   children,
+  onOpenAutoFocus,
   onCloseAutoFocus,
   container,
   ...props
@@ -32,7 +33,7 @@ function SheetContent({
   /** Where the sheet mounts, such as the chat's column; it covers the whole window when left out. */
   container?: HTMLElement | null | undefined;
 }) {
-  const closeAutoFocus = useRestoreFocus(onCloseAutoFocus);
+  const autoFocus = useRestoreFocus({ onOpenAutoFocus, onCloseAutoFocus });
   return (
     <SheetPrimitive.Portal container={container}>
       {/* No dimming: the chat stays readable beside the sheet. The overlay only catches the click that closes it. */}
@@ -46,7 +47,8 @@ function SheetContent({
           className,
         )}
         {...props}
-        onCloseAutoFocus={closeAutoFocus}
+        onOpenAutoFocus={autoFocus.onOpenAutoFocus}
+        onCloseAutoFocus={autoFocus.onCloseAutoFocus}
       >
         {children}
       </SheetPrimitive.Content>
