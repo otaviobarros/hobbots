@@ -3,7 +3,7 @@ import { type ApprovalRequest, type BackpackItem, openBlocker, type ThreadId } f
 import { approvalEntry, entryThread, type InboxEntry, questionEntry, stuckEntry } from "../inbox/inbox-entries.ts";
 
 /** One thing the tray asks about: a request to approve, work that is stuck, or a question for you. */
-export type TrayEntry = Exclude<InboxEntry, { kind: "device" }>;
+export type TrayEntry = Exclude<InboxEntry, { kind: "device" } | { kind: "failed" }>;
 
 /**
  * What the tray holds, in the order it asks: pending approvals, then stuck work, then questions,

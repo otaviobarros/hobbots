@@ -44,10 +44,34 @@ export class Thread extends Schema.Class<Thread>("Thread")({
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
+  /**
+   * Whether the hob wrote in the thread since the last message you read on any device (ADR 027): a
+   * reply that ended after it. Worked out when the thread is read from the read marker the hub
+   * keeps, never sent by a client; false for threads from before it was kept.
+   */
+  unread: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(false)),
+    Schema.withConstructorDefault(Effect.succeed(false)),
+  ),
   createdAt: Schema.String,
   updatedAt: Schema.String,
   revision: Revision,
 }) {}
+
+/**
+ * Whether a reply makes its thread unread once it lands, as the hub works it out: it ended, and it
+ * says something or failed. A reply under way waits until it ends.
+ */
+export const leavesUnread = (message: {
+  readonly role: string;
+  readonly status: string;
+  readonly content: string;
+}): boolean =>
+  message.role === "assistant" &&
+  message.status !== "queued" &&
+  message.status !== "streaming" &&
+  message.status !== "stopping" &&
+  (message.content.trim() !== "" || message.status === "failed");
 
 /** How long a thread's last line runs before it is cut. */
 export const PREVIEW_LENGTH = 140;

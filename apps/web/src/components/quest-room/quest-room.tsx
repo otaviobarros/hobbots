@@ -11,6 +11,7 @@ import { pickedTries, useLaneRoom } from "../lanes/use-lane-room.ts";
 import { HubWait } from "../loading/hub-wait.tsx";
 import { type HobLookup, type Pins, useFollowedTrees, useHobLookup } from "../quest/use-work.ts";
 import { findTask, taskTitle } from "../quest/work-model.ts";
+import { LaneNotes } from "../steer-receipt/lane-notes.tsx";
 import { WorkbenchDock } from "../workbench/workbench-dock.tsx";
 import { LaneCards } from "./lane-task.tsx";
 import { messages } from "./messages.ts";
@@ -149,13 +150,16 @@ function OpenRoom({
         reads={reads}
         slots={(lane) => ({
           cards: (
-            <LaneCards
-              tree={tree}
-              lane={lane}
-              hobs={hobs}
-              onOpen={(taskId) => moves.lane(taskId)}
-              onWorkbench={(taskId) => moves.show(taskId, "summary")}
-            />
+            <>
+              <LaneCards
+                tree={tree}
+                lane={lane}
+                hobs={hobs}
+                onOpen={(taskId) => moves.lane(taskId)}
+                onWorkbench={(taskId) => moves.show(taskId, "summary")}
+              />
+              <LaneNotes tree={tree} ownerId={lane.hobId} hobs={hobs} />
+            </>
           ),
         })}
       />

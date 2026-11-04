@@ -76,17 +76,21 @@ const configColumns = (agent: Agent) => ({
   runtime: agent.runtime,
 });
 // A thread's sessions and own brain are JSON text columns (migration 0020).
+// `read_revision` stays on the hub: a read shows only whether the thread is `unread` (migration 0053).
 export const threadRows = (
   rows: ReadonlyArray<{
     readonly revision?: unknown;
     readonly sessions?: unknown;
     readonly brain?: unknown;
     readonly lastContent?: unknown;
+    readonly readRevision?: unknown;
+    readonly unread?: unknown;
   }>,
 ) =>
-  rows.map(({ lastContent, ...row }) => ({
+  rows.map(({ lastContent, readRevision: _readRevision, unread, ...row }) => ({
     ...row,
     lastLine: typeof lastContent === "string" ? previewLine(lastContent) : null,
+    unread: Number(unread ?? 0) === 1,
     revision: Number(row.revision),
     sessions: JSON.parse(String(row.sessions ?? "[]")),
     brain: row.brain == null ? null : JSON.parse(String(row.brain)),
@@ -100,6 +104,17 @@ const lastContent = (sql: SqlClient.SqlClient) =>
   sql`(SELECT substr(m.content, 1, 600) FROM messages m
     WHERE m.thread_id = threads.id AND m.status <> 'queued' AND trim(m.content) <> ''
     ORDER BY m.seq DESC LIMIT 1) AS last_content`;
+/**
+ * Whether the hob wrote in the thread since you last read it, as `unread`: a reply that ended with
+ * text, or that failed, written after `read_revision` (ADR 027). That counts a reply continued in
+ * place after you read it, since its message takes a new revision. A reply still under way waits
+ * until it ends, and your own messages never count.
+ */
+const unreadColumn = (sql: SqlClient.SqlClient) =>
+  sql`(CASE WHEN EXISTS (SELECT 1 FROM messages u
+    WHERE u.thread_id = threads.id AND u.role = 'assistant' AND u.revision > COALESCE(threads.read_revision, 0)
+      AND u.status NOT IN ('queued', 'streaming', 'stopping')
+      AND (trim(u.content) <> '' OR u.status = 'failed')) THEN 1 ELSE 0 END) AS unread`;
 const checkpointRows = (rows: ReadonlyArray<{ readonly lines?: unknown; readonly omitted?: unknown }>) =>
   rows.map((row) => ({ ...row, lines: JSON.parse(String(row.lines)), omitted: Number(row.omitted) }));
 // A reply's usage is one column per field (migration 0037), read as numbers: PostgreSQL reads
@@ -184,21 +199,23 @@ export const HobbotsRepositoryLive = Layer.effect(
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT threads.*, ${lastContent(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NULL
+        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NULL
           ORDER BY updated_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
     });
     const listArchivedThreads = SqlSchema.findAll({
       Request: Schema.String,
       Result: Thread,
       execute: (agentId) =>
-        sql`SELECT threads.*, ${lastContent(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NOT NULL
+        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)} FROM threads WHERE agent_id = ${agentId} AND archived_at IS NOT NULL
           ORDER BY archived_at DESC, ${byId}`.pipe(Effect.map(threadRows)),
     });
     const findThread = SqlSchema.findOneOption({
       Request: Schema.String,
       Result: Thread,
       execute: (id) =>
-        sql`SELECT threads.*, ${lastContent(sql)} FROM threads WHERE id = ${id}`.pipe(Effect.map(threadRows)),
+        sql`SELECT threads.*, ${lastContent(sql)}, ${unreadColumn(sql)} FROM threads WHERE id = ${id}`.pipe(
+          Effect.map(threadRows),
+        ),
     });
     const findCheckpoint = SqlSchema.findOneOption({
       Request: Schema.String,
@@ -320,10 +337,30 @@ export const HobbotsRepositoryLive = Layer.effect(
           const [read] = threadRows(
             yield* sql<{
               readonly lastContent: unknown;
-            }>`SELECT ${lastContent(sql)} FROM threads WHERE id = ${thread.id}`,
+              readonly unread: unknown;
+            }>`SELECT ${lastContent(sql)}, ${unreadColumn(sql)} FROM threads WHERE id = ${thread.id}`,
           );
-          const shown = new Thread({ ...thread, lastLine: read?.lastLine ?? null });
+          const shown = new Thread({ ...thread, lastLine: read?.lastLine ?? null, unread: read?.unread ?? false });
           return { value: shown, events: [{ _tag: "ThreadUpserted", thread: shown }] };
+        }),
+      );
+
+    // Moves the read marker forward to the newest revision of the messages up to this one, capped at
+    // the revision you saw, so a reply continued since stays unread, never back, and announces the
+    // thread with its new revision, so every device clears its unread dot (ADR 027).
+    const markThreadRead = (threadId: ThreadId, messageId: MessageId, seenRevision: number) =>
+      journaled(1, (revision) =>
+        Effect.gen(function* () {
+          const seen = sql`(SELECT MAX(m.revision) FROM messages m
+            WHERE m.thread_id = ${threadId} AND m.revision <= ${seenRevision}
+              AND m.seq <= (SELECT seq FROM messages WHERE id = ${messageId} AND thread_id = ${threadId}))`;
+          const moved = yield* sql`UPDATE threads SET read_revision = ${seen}, revision = ${revision}
+            WHERE id = ${threadId} AND ${seen} > COALESCE(read_revision, 0)
+            RETURNING id`;
+          if (moved.length === 0) return null;
+          const [thread] = yield* findThread(threadId).pipe(Effect.orDie, Effect.map(Option.toArray));
+          if (thread === undefined) return null;
+          return { value: thread, events: [{ _tag: "ThreadUpserted", thread }] };
         }),
       );
 
@@ -425,6 +462,7 @@ export const HobbotsRepositoryLive = Layer.effect(
       listArchivedThreads: (agentId) => listArchivedThreads(agentId).pipe(Effect.orDie),
       findThread: (id) => findThread(id).pipe(Effect.orDie),
       upsertThread: (thread) => always(upsertThread(thread)),
+      markThreadRead,
       listMessages: (threadId) => listMessages(threadId).pipe(Effect.orDie),
       upsertMessage: (message) => always(upsertMessage(message)),
       checkpointMessage: (message) =>

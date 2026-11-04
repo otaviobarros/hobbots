@@ -8,7 +8,7 @@ import { useActivity } from "../../api/activity.ts";
 import { agentsQuery, threadsQuery } from "../../api/queries.ts";
 import { hobState, withRequests } from "../../lib/hob-state.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
-import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
+import { useLeadsNeedingYou } from "../inbox/use-waiting-count.ts";
 import { HobCard } from "./hob-card.tsx";
 import { type SidebarState, sidebarState } from "./hob-mark.ts";
 import { messages as copy } from "./messages.ts";
@@ -24,13 +24,15 @@ const MARK: Partial<Record<SidebarState, string>> = { "needs-you": "bg-lantern",
 const openHobOf = (pathname: string): string | undefined => /^\/hobs\/([^/]+)/.exec(pathname)?.[1];
 
 /**
- * Every hob, each with a still state mark: lantern when it needs you, mint while it works. A hob's
- * tile opens its card. The hob whose page or chat is open lists its recent threads under its name
+ * Every hob, each with a still state mark: lantern when it needs you, mint while it works, and a
+ * lantern dot at the top when it wrote in a chat you have not read (ADR 027). Only the lead whose
+ * chat something waits in is marked as needing you, since you talk only to the lead. A hob's tile
+ * opens its card. The hob whose page or chat is open lists its recent threads under its name
  * while the sidebar is expanded. Only the list scrolls: its heading and "Summon a hob" stay put.
  */
 export function SidebarHobs({ expanded }: { expanded: boolean }) {
   const agents = useQuery(agentsQuery);
-  const waiting = useWaitingHobs();
+  const waiting = useLeadsNeedingYou();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const open = openHobOf(pathname);
 
@@ -90,23 +92,30 @@ function SidebarHob({
   const state = sidebarState(full);
   const word = copy.state[state];
   const mark = MARK[state];
+  const unread = threads.data?.some((thread) => thread.unread) ?? false;
   const showThreads = expanded && open;
   const [cardOpen, setCardOpen] = useCardOpen();
 
   return (
     <div className="flex flex-none flex-col">
       <Popover open={cardOpen} onOpenChange={setCardOpen}>
-        <SidebarTip label={copy.hobTip({ name: hob.name, state: word })} expanded={expanded}>
+        <SidebarTip label={copy.hobTip({ name: hob.name, state: word, unread })} expanded={expanded}>
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label={copy.hob({ name: hob.name, state: word })}
+              aria-label={copy.hob({ name: hob.name, state: word, unread })}
               aria-current={pathname === `/hobs/${hob.id}` ? "page" : undefined}
               className={cn(sidebarItem, "cursor-pointer")}
             >
               <span className={sidebarIcon}>
                 <span className="relative inline-flex size-hob-tile items-center justify-center rounded-tile bg-tile">
                   <HobSprite hob={hob} size={28} />
+                  {unread && (
+                    <span
+                      aria-hidden
+                      className="absolute -end-[3px] -top-[3px] size-2.5 rounded-dot border-(length:--edge) border-panel bg-lantern"
+                    />
+                  )}
                   {mark && (
                     <span
                       aria-hidden
@@ -146,12 +155,15 @@ function RecentThreads({ hobId, pathname }: { hobId: AgentId; pathname: string }
             to="/hobs/$hobId/threads/$threadId"
             params={{ hobId, threadId: thread.id }}
             aria-current={current ? "page" : undefined}
+            // The link keeps the chat's title as its name, so the dot is told as its description.
+            aria-description={thread.unread ? copy.unreadThread : undefined}
             className={cn(
               sidebarItem,
               "animate-hb-in ps-14 pe-2 text-text-secondary hover:text-text-strong aria-[current=page]:text-text-strong",
             )}
           >
             <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+            {thread.unread && <span aria-hidden className="size-2 flex-none rounded-dot bg-lantern" />}
           </Link>
         );
       })}

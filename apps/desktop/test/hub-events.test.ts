@@ -167,6 +167,10 @@ describe("the event stream model", () => {
     });
     expect(frameChange({ event: "delta", data: "{}" })).toBeNull();
     expect(message(JSON.stringify({ type: "ApprovalResolved" }))).toEqual({ _tag: "Approvals" });
+    expect(message(JSON.stringify({ type: "QuestionEscalated" }))).toEqual({ _tag: "Questions" });
+    expect(message(JSON.stringify({ type: "TaskStateChanged" }))).toEqual({ _tag: "Tasks" });
+    // A Quest that ended any other way than completing, or a nested one, is no finish to announce.
+    expect(message(JSON.stringify({ type: "QuestCompleted", payload: { quest: { state: "failed" } } }))).toBeNull();
     expect(frameChange({ event: "turn", data: "{}" })).toEqual({ _tag: "Activity" });
     expect(message(JSON.stringify({ type: "MessageUpserted", payload: reply("assistant") }))).toBeNull();
     expect(message("not json")).toBeNull();

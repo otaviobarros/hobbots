@@ -46,6 +46,7 @@ export const messages = {
     open: ({ title }: { title: string }) => `Open ${title}`,
     working: "Working",
     pinned: "Pinned",
+    unread: "New messages",
     quest: ({ goal, done, total }: { goal: string; done: number; total: number }) =>
       `${goal} · ${formatCount(done)} of ${formatCount(total)}`,
     groups: { pinned: "Pinned", today: "Today", week: "Earlier this week", older: "Older", matches: "Matches" },
