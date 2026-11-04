@@ -23,6 +23,7 @@ export const messages = {
   },
   plan: {
     title: "Claude Code plan",
+    asking: "Asking Claude Code for your plan…",
     notReported: "Its limits show here once Claude Code reports them.",
     usage: "Usage",
   },

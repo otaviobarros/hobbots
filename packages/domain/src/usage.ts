@@ -119,8 +119,9 @@ export const unreportedPlan = (runtime: RuntimeKind, checkedAt: string | null = 
 });
 
 /**
- * What the hub's hobs used from `since` until `until`, and every runtime's plan. A client that names
- * `since`, such as the start of its own first day, gets exactly that period.
+ * What the hub's hobs used from `since` until `until`. A client that names `since`, such as the start
+ * of its own first day, gets exactly that period. The runtimes' plans come on their own request, since
+ * asking a runtime for its plan can take seconds and the hub's own numbers should not wait for it.
  */
 export const UsageReport = Schema.Struct({
   since: Schema.String,
@@ -128,7 +129,6 @@ export const UsageReport = Schema.Struct({
   hobs: Schema.Array(HobUsage),
   quests: Schema.Array(QuestUsage),
   minutes: Schema.Array(MinuteUsage),
-  plans: Schema.Array(PlanUsage),
 });
 export type UsageReport = typeof UsageReport.Type;
 

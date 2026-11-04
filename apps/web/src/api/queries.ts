@@ -17,7 +17,7 @@ import type {
   UsagePeriod,
 } from "@hobbots/domain";
 import { messagePreview, Thread } from "@hobbots/domain";
-import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { periodStart } from "../lib/usage.ts";
 import { ApiError, call } from "./client.ts";
 import { runtimeRefetchOnFocus } from "./runtime-health.ts";
@@ -33,6 +33,7 @@ export const queryKeys = {
   models: (runtime: RuntimeKind) => ["runtimes", runtime, "models"] as const,
   permissions: (agentId: AgentId) => ["agents", agentId, "permissions"] as const,
   usage: (days: UsagePeriod, today: string) => ["usage", days, today] as const,
+  plans: ["plans"] as const,
 };
 
 /**
@@ -105,16 +106,29 @@ export const runtimesQuery = queryOptions({
 
 /**
  * What each hob's replies used over the reader's last 7 or 30 days, from the start of their own first
- * day, and each runtime's plan (OP-002). Asking a runtime for its plan starts it, so the report is
- * read again at most every half minute. `today` keys the report to the reader's day.
+ * day (OP-002). `today` keys the report to the reader's day. Switching the period keeps the last
+ * numbers on screen until the new ones arrive, so each report carries the period it counts.
  */
 export const usageQuery = (days: UsagePeriod, today: string) =>
   queryOptions({
     queryKey: queryKeys.usage(days, today),
     queryFn: () =>
-      call((c) => c.usage.usage({ query: { days, since: periodStart(new Date(), Number(days)).toISOString() } })),
+      call((c) => c.usage.usage({ query: { days, since: periodStart(new Date(), Number(days)).toISOString() } })).then(
+        (report) => ({ ...report, days }),
+      ),
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
+
+/**
+ * Each runtime's plan, as it reports it (OP-002). Asking a runtime for its plan starts it and can
+ * take seconds, so it is its own request, read again at most every half minute.
+ */
+export const plansQuery = queryOptions({
+  queryKey: queryKeys.plans,
+  queryFn: () => call((c) => c.usage.plans()),
+  staleTime: 30_000,
+});
 
 /** The models a runtime offers a hob's brain. */
 export const modelsQuery = (runtime: RuntimeKind) =>

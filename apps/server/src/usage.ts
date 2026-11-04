@@ -6,7 +6,7 @@ import { DateTime, Duration, Effect, Layer } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 
 // The Usage screen's report (OP-002): every hob's replies over the period from the usage they
-// recorded, and every runtime's plan as its adapter reports it. A runtime that reports no plan, or
+// recorded, and, on its own request, every runtime's plan as its adapter reports it. A runtime that reports no plan, or
 // that this hub has no adapter for, is listed as unreported, never estimated.
 /**
  * Where the period starts: the client's `since`, the start of its own first day, when it is not after
@@ -37,9 +37,10 @@ export const UsageHandlers = HttpApiBuilder.group(HobbotsApi, "usage", (handlers
           const now = yield* DateTime.now;
           const until = DateTime.formatIso(now);
           const since = DateTime.formatIso(periodStart(now, Number(query.days), query.since));
-          const [used, reported] = yield* Effect.all([ledger.usage(since, until), plans], { concurrency: 2 });
-          return { since, until, hobs: used.hobs, quests: used.quests, minutes: used.minutes, plans: reported };
+          const used = yield* ledger.usage(since, until);
+          return { since, until, hobs: used.hobs, quests: used.quests, minutes: used.minutes };
         }),
+      plans: () => plans,
     });
   }),
 ).pipe(Layer.provide(UsageLedger.layer));
