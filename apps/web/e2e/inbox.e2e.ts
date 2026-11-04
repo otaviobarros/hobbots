@@ -98,13 +98,15 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
 
   const list = page.getByRole("list", { name: "Requests" });
   await list.getByRole("link", { name: /Push your work/ }).click();
-  await expect(list).toContainText("Pip · ");
+  // Its group is Pip's chat, named by the short label with the thread as its detail.
+  await expect(list.locator('[title^="Pip · "]')).toHaveCount(1);
   await expect(list.getByRole("link", { name: /Push your work/ })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("tablist", { name: "Inbox filters" })).toContainText("Needs you1");
   const detail = page.getByRole("article", { name: "Request from Pip: Push your work" });
   await expect(detail).toContainText("expires in 23 hours");
   const card = detail.getByRole("region", { name: "Pip asks permission" });
-  await expect(card.getByText("git push origin feature", { exact: true })).toBeVisible();
+  // The exact action shows once, above the facts, and the decision under them.
+  await expect(detail.getByText("git push origin feature", { exact: true })).toHaveCount(1);
 
   // At a 960px window the list and the request hold side by side, with nothing cut off.
   await page.setViewportSize({ width: 960, height: 800 });

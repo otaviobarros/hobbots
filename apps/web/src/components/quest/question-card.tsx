@@ -64,15 +64,21 @@ export function QuestionCard({
   );
 }
 
-/** The answer box, wherever a question waits for you; `via` names that place, which your answer records (#671). */
+/**
+ * The answer box, wherever a question waits for you; `via` names that place, which your answer
+ * records (#671). With `hint`, it is one composer card: the box, then the hint on where the answer
+ * goes beside Send answer, as in the Inbox.
+ */
 export function AnswerForm({
   question,
   askerName,
   via,
+  hint,
 }: {
   question: Question;
   askerName: string;
   via: QuestionSurface;
+  hint?: string;
 }) {
   const [answer, setAnswer] = useState("");
   const send = useAnswerQuestion(via);
@@ -82,9 +88,13 @@ export function AnswerForm({
     send.mutate({ questionId: question.id, answer: text });
   };
   const closed = send.error instanceof ApiError && send.error.tag === "QuestionClosed";
+  const composer = hint !== undefined;
   return (
     <form
-      className="flex flex-col gap-2"
+      className={cn(
+        "flex flex-col",
+        composer ? "gap-2.5 rounded-card border-(length:--edge) border-control bg-card p-3" : "gap-2",
+      )}
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -92,21 +102,23 @@ export function AnswerForm({
     >
       <Textarea
         aria-label={copy.answerLabel({ name: askerName })}
-        placeholder={copy.answerPlaceholder}
+        placeholder={composer ? copy.answerTo({ name: askerName }) : copy.answerPlaceholder}
         value={answer}
         onChange={(event) => setAnswer(event.target.value)}
         onKeyDown={enterSends(submit)}
-        className="min-h-10 rounded-control border-2 border-control bg-deep text-text-strong"
+        variant={composer ? "bare" : "deep"}
+        className={composer ? "min-h-14" : "min-h-10"}
       />
-      <span className="flex items-center gap-2">
-        <Button type="submit" size="sm" disabled={text === "" || send.isPending}>
-          {send.isPending ? copy.sending : copy.send}
-        </Button>
+      <span className="flex flex-wrap items-center gap-2">
+        {composer && <span className="min-w-0 flex-1 text-meta text-label">{hint}</span>}
         {send.isError && (
-          <span role="alert" className="text-ui text-rose">
+          <span role="alert" className={cn("text-ui text-rose", !composer && "order-last")}>
             {closed ? copy.closed : copy.failed}
           </span>
         )}
+        <Button type="submit" size={composer ? "default" : "sm"} disabled={text === "" || send.isPending}>
+          {send.isPending ? copy.sending : copy.send}
+        </Button>
       </span>
     </form>
   );

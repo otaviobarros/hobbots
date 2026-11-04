@@ -1,25 +1,43 @@
 import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
 import type { ApprovalRequest, BackpackItem, Quest, TaskId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@hobbots/ui/components/empty";
-import { cn } from "@hobbots/ui/lib/utils";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@hobbots/ui/components/empty";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockersQuery } from "../../api/blockers.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
+import { agentsQuery } from "../../api/queries.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
 import { readStored, writeStored } from "../../lib/storage.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
-import { Stars } from "../scene/scene.tsx";
+import { ChiefMark } from "../chief/chief-mark.tsx";
+import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { PageHeader } from "../shell/pages.tsx";
 import { EntryDetail } from "./inbox-detail.tsx";
-import { entryAsker, type InboxEntry, namesRequest, needsEntries, selectedEntry } from "./inbox-entries.ts";
+import {
+  entryAsker,
+  type InboxEntry,
+  namesRequest,
+  needsEntries,
+  type SoonestExpiry,
+  selectedEntry,
+  soonestExpiry,
+} from "./inbox-entries.ts";
 import { InboxHistory } from "./inbox-history.tsx";
-import { type InboxTab, type InboxView, isInboxView, pendingCount, tabRequests } from "./inbox-items.ts";
+import { expiryText, type InboxTab, type InboxView, isInboxView, pendingCount, tabRequests } from "./inbox-items.ts";
 import { InboxKeyHints } from "./inbox-key-hints.tsx";
 import { shownOrder } from "./inbox-keys.ts";
-import { InboxList, InboxTabs, InboxViewPicker } from "./inbox-list.tsx";
+import { InboxList, InboxViewPicker } from "./inbox-list.tsx";
+import { InboxPanel, InboxTabList, InboxTabs } from "./inbox-tabs.tsx";
 import { messages } from "./messages.ts";
 import { type ShownHold, useWithShown } from "./shown-request.ts";
 import { type InboxDirectory, useEntryQuests, useInboxDirectory } from "./use-inbox-directory.ts";
@@ -37,6 +55,7 @@ const NO_QUESTIONS: ReadonlyArray<WaitingQuestion> = [];
 
 type BlockersRead = ReturnType<typeof useBlockersQuery>;
 type QuestionsRead = ReturnType<typeof useWaitingQuestionsQuery>;
+type InboxRead = ReturnType<typeof useQuery<ReadonlyArray<ApprovalRequest>>>;
 
 /** How many things wait for you: pending requests, questions for you and stuck work. */
 const waitingCount = (approvals: ReadonlyArray<ApprovalRequest>, blockers: BlockersRead, questions: QuestionsRead) =>
@@ -108,61 +127,129 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
   // The entry shown goes into the address as soon as it shows, so it stays in view while it is
   // decided here or elsewhere, and a click never lands on an entry that took its place.
   const shownKey = selected?.key;
-  const list = useRef<HTMLUListElement>(null);
-  useListKeys(shownOrder(entries, view, questOf), shownKey, list);
+  const listRef = useRef<HTMLUListElement>(null);
+  useListKeys(shownOrder(entries, view, questOf), shownKey, listRef);
   useEffect(() => {
     if (shownKey !== undefined && shownKey !== requestId) {
       void navigate({ to: "/inbox", search: { tab, request: shownKey }, replace: true });
     }
   }, [navigate, tab, shownKey, requestId]);
 
+  const soonest = soonestExpiry(entries, directory.hobName, now);
+  const needs = tab === "needs";
+  const list = needs && empty === undefined;
+
   return (
-    <div className="flex min-h-0 min-w-0 flex-1">
-      <aside aria-label={copy.title} className="flex w-95 flex-none flex-col border-e-4 border-line bg-panel">
-        <InboxHeader waiting={waiting} />
-        <InboxTabs tab={tab} waiting={waiting}>
-          {inbox.isPending && <p className="px-3 py-4 text-ui text-label">{copy.loading}</p>}
-          {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
-          {tab === "needs" && (
-            <ReadState read={questions} loading={copy.question.loading} failed={copy.question.loadFailed} />
-          )}
-          {tab === "needs" && (
-            <ReadState read={blockers} loading={blockerCopy.loading} failed={blockerCopy.loadFailed} />
-          )}
-          {tab === "needs" && entries.length > 0 && <InboxViewPicker view={view} onChange={setView} />}
-          {tab !== "history" && (
-            <InboxList
-              tab={tab}
-              view={view}
-              entries={entries}
-              questOf={questOf}
-              selectedKey={selected?.key}
-              directory={directory}
-              now={now}
-              listRef={list}
-            />
-          )}
-        </InboxTabs>
-        {tab === "needs" && entries.length > 0 && <InboxKeyHints />}
-      </aside>
-      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        {tab === "history" ? (
-          inbox.isSuccess && <InboxHistory requests={requests} directory={directory} />
-        ) : empty !== undefined ? (
-          <AllClear />
-        ) : (
-          <Selected
-            entry={selected}
-            hold={shown.hold}
-            onRetry={shown.retry}
-            directory={directory}
+    <InboxTabs tab={tab}>
+      <PageHeader
+        size="bar"
+        icon="Inbox"
+        title={copy.title}
+        intro={headLine(waiting, soonest, now)}
+        introClassName={soonest?.urgent === true ? "text-lantern" : undefined}
+        actions={<InboxTabList tab={tab} waiting={waiting} />}
+      />
+      <InboxPanel tab={tab}>
+        {list && (
+          <NeedsList
+            inbox={inbox}
+            questions={questions}
+            blockers={blockers}
+            entries={entries}
+            view={view}
+            onView={setView}
             questOf={questOf}
-            ready={inbox.isSuccess}
+            selectedKey={selected?.key}
+            directory={directory}
             now={now}
+            listRef={listRef}
           />
         )}
-      </main>
-    </div>
+        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+          {needs ? (
+            empty !== undefined ? (
+              <AllClear />
+            ) : (
+              <Selected
+                entry={selected}
+                hold={shown.hold}
+                onRetry={shown.retry}
+                directory={directory}
+                questOf={questOf}
+                ready={inbox.isSuccess}
+                now={now}
+              />
+            )
+          ) : (
+            <>
+              {inbox.isPending && <p className="m-0 px-8 py-6 text-ui text-label">{copy.loading}</p>}
+              {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
+              {inbox.isSuccess && <InboxHistory requests={requests} directory={directory} />}
+            </>
+          )}
+        </main>
+      </InboxPanel>
+    </InboxTabs>
+  );
+}
+
+/** The line under the title: how many wait, with whose answer is due first, or that nothing waits. */
+const headLine = (waiting: number, soonest: SoonestExpiry | undefined, now: Date): string => {
+  if (waiting === 0) return copy.nothingWaiting;
+  if (soonest === undefined) return copy.waiting({ count: waiting });
+  return copy.waitingSoon({ count: waiting, expiry: expiryText(soonest.expiresAt, now), name: soonest.name });
+};
+
+/**
+ * Needs you's list column: what is still being read or failed to read, By quest or By urgency, the
+ * entries, and the keys it answers to under them.
+ */
+function NeedsList({
+  inbox,
+  questions,
+  blockers,
+  entries,
+  view,
+  onView,
+  questOf,
+  selectedKey,
+  directory,
+  now,
+  listRef,
+}: {
+  inbox: InboxRead;
+  questions: QuestionsRead;
+  blockers: BlockersRead;
+  entries: ReadonlyArray<InboxEntry>;
+  view: InboxView;
+  onView: (view: InboxView) => void;
+  questOf: (taskId: TaskId) => Quest | undefined;
+  selectedKey: string | undefined;
+  directory: InboxDirectory;
+  now: Date;
+  listRef: RefObject<HTMLUListElement | null>;
+}) {
+  return (
+    <aside aria-label={copy.title} className="flex w-95 flex-none flex-col border-e border-line bg-panel">
+      <div className="min-h-0 flex-1 overflow-y-auto pb-3">
+        {inbox.isPending && <p className="px-3 py-4 text-ui text-label">{copy.loading}</p>}
+        {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
+        <ReadState read={questions} loading={copy.question.loading} failed={copy.question.loadFailed} />
+        <ReadState read={blockers} loading={blockerCopy.loading} failed={blockerCopy.loadFailed} />
+        {entries.length > 0 && <InboxViewPicker view={view} onChange={onView} />}
+        <InboxList
+          tab="needs"
+          view={view}
+          entries={entries}
+          questOf={questOf}
+          selectedKey={selectedKey}
+          directory={directory}
+          now={now}
+          listRef={listRef}
+        />
+      </div>
+      {entries.length > 0 && <InboxKeyHints />}
+    </aside>
   );
 }
 
@@ -238,34 +325,28 @@ function ReadState({ read, loading, failed }: { read: BlockersRead | QuestionsRe
   return read.isError ? <LoadFailed message={failed} onRetry={() => void read.refetch()} /> : null;
 }
 
-/** The mailbox at the top of the list; its flag goes up and pulses while requests wait. */
-function InboxHeader({ waiting }: { waiting: number }) {
-  return (
-    <div className="relative h-23 flex-none overflow-hidden border-b-2 border-line bg-deep">
-      <Stars count={8} height={40} />
-      <span aria-hidden className="absolute inset-x-5.5 bottom-0 h-2.5 bg-line" />
-      <span aria-hidden className="absolute bottom-2.5 start-42.5 h-7.5 w-10 bg-wood" />
-      <span aria-hidden className="absolute bottom-7.5 start-44 h-1 w-7 bg-ground" />
-      <span aria-hidden className="absolute bottom-0 start-46.5 h-2.5 w-2 bg-wood" />
-      <span
-        aria-hidden
-        className={cn(
-          "absolute bottom-7.5 start-52.5 h-4.5 w-1 origin-bottom bg-rose",
-          waiting > 0 ? "animate-hb-blink" : "rotate-90",
-        )}
-      />
-      <h1 className="absolute top-2.5 start-4 m-0 font-heading text-xl font-bold text-moonlight">{copy.title}</h1>
-      <p className="absolute top-9 start-4 m-0 text-meta text-text-secondary">
-        {waiting > 0 ? copy.waiting({ count: waiting }) : copy.intro}
-      </p>
-    </div>
-  );
-}
-
-/** Needs you with nothing waiting: says so, with History and Home one click away. */
+/**
+ * Needs you with nothing waiting, across the whole page: a hob resting on its ground with a word
+ * bubble, then the title and the way to History and Home. The chief stands in before any hob exists.
+ */
 function AllClear() {
+  const hob = useQuery(agentsQuery).data?.[0];
   return (
     <Empty size="page" className="animate-hb-in">
+      <EmptyMedia>
+        <div
+          aria-hidden
+          className="relative flex h-37.5 w-110 max-w-full items-end justify-center overflow-hidden rounded-card bg-panel"
+        >
+          <span className="absolute inset-x-0 bottom-0 h-3 border-t-2 border-line-2 bg-line" />
+          <span className="relative mb-3">
+            {hob === undefined ? <ChiefMark size={72} /> : <HobSprite hob={hob} size={72} />}
+          </span>
+          <span className="absolute start-[calc(50%+44px)] top-6.5 rounded-[12px_12px_12px_2px] bg-card px-3 py-1.75 text-ui whitespace-nowrap text-text-strong shadow-menu">
+            {copy.allQuiet}
+          </span>
+        </div>
+      </EmptyMedia>
       <EmptyHeader>
         <EmptyTitle>{copy.allClear}</EmptyTitle>
         <EmptyDescription>{copy.allClearHint}</EmptyDescription>

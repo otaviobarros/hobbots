@@ -26,6 +26,7 @@ import {
   needsEntries,
   questionEntry,
   selectedEntry,
+  soonestExpiry,
   stuckEntry,
   topQuests,
 } from "./inbox-entries.ts";
@@ -178,5 +179,24 @@ describe("entries", () => {
     expect(selectedEntry(entries, "stuck:b1")?.kind).toBe("stuck");
     expect(selectedEntry(entries, "gone")?.kind).toBe("device");
     expect(selectedEntry([], "ap-copy")).toBeUndefined();
+  });
+});
+
+describe("soonestExpiry", () => {
+  it("names the pending request or device due first, loud under an hour, and none when nothing expires", () => {
+    const late = approvalEntry(request("2026-11-01T13:00:00.000Z"));
+    const pairing = deviceEntry(device("2026-11-01T10:20:00.000Z"));
+    expect(soonestExpiry([late, pairing], names, now)).toEqual({
+      expiresAt: "2026-11-01T10:20:00.000Z",
+      name: "MacBook Air",
+      urgent: true,
+    });
+    expect(soonestExpiry([late], names, now)).toEqual({
+      expiresAt: "2026-11-01T13:00:00.000Z",
+      name: "Quill",
+      urgent: false,
+    });
+    const decided = approvalEntry(request("2026-11-01T10:05:00.000Z", "approved"));
+    expect(soonestExpiry([decided, approvalEntry(request(null)), questionEntry(asked)], names, now)).toBeUndefined();
   });
 });

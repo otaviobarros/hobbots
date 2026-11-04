@@ -94,20 +94,21 @@ test("[TC-IN-062] a party member's request waits in the Inbox under its lead's t
   await page.getByRole("link", { name: "Inbox, 1 waiting on you" }).click();
   // It waits under Aldric's quest, as asked by Quill through Aldric.
   const requests = page.getByRole("list", { name: "Requests" });
-  await expect(requests).toContainText("Aldric's quest · ");
+  const questGroup = requests.locator(`[title^="Aldric's quest · "]`);
+  await expect(questGroup).toHaveCount(1);
   await expect(requests).toContainText("You → Aldric → Quill");
   // By urgency lists it on its own, naming its quest, and the choice stays after a reload.
   await page.getByRole("radio", { name: "By urgency" }).click();
-  await expect(requests).not.toContainText("Aldric's quest · ");
+  await expect(questGroup).toHaveCount(0);
   await expect(requests.getByRole("link", { name: /Push your work/ })).toContainText("· Aldric's quest");
   await page.reload();
   await expect(page.getByRole("radio", { name: "By urgency" })).toHaveAttribute("aria-checked", "true");
   await page.getByRole("radio", { name: "By quest" }).click();
-  await expect(requests).toContainText("Aldric's quest · ");
+  await expect(questGroup).toHaveCount(1);
   await requests.getByRole("link", { name: /Push your work/ }).click();
   const detail = page.getByRole("article", { name: "Request from Quill: Push your work" });
   const card = detail.getByRole("region", { name: "Quill asks permission" });
-  await expect(card.getByText("git push origin feature", { exact: true })).toBeVisible();
+  await expect(detail.getByText("git push origin feature", { exact: true })).toBeVisible();
 
   await card.getByRole("button", { name: "Allow once" }).click();
   await expect(card.getByRole("status")).toHaveText("✓ Allowed once. Quill carries on.");
