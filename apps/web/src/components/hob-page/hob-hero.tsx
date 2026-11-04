@@ -42,7 +42,6 @@ export function HobHero({
   stats: string;
   doing: Doing | null;
 }) {
-  const tag = stateTag(state);
   return (
     <section aria-label={hob.name} className="cut relative overflow-hidden px-6 pt-6" style={heroStyle(hob)}>
       <div className="relative flex flex-wrap items-end gap-5">
@@ -61,12 +60,7 @@ export function HobHero({
             >
               {hob.name}
             </h1>
-            <Badge variant={tag.variant}>
-              <span aria-hidden data-slot="badge-glyph">
-                {tag.glyph}
-              </span>
-              {tag.word}
-            </Badge>
+            <HobStateTag state={state} />
           </span>
           <span title={`${hob.roleTitle} · ${stats}`} className="truncate text-[15px] text-text-secondary">
             {hob.roleTitle}
@@ -90,6 +84,19 @@ export function HobHero({
       </div>
       <div aria-hidden className="relative -mx-6 h-2.5" style={groundStyle} />
     </section>
+  );
+}
+
+/** A hob's state as a tag: the family's glyph, so it reads without color, and its word. */
+export function HobStateTag({ state }: { state: HobState }) {
+  const tag = stateTag(state);
+  return (
+    <Badge variant={tag.variant}>
+      <span aria-hidden data-slot="badge-glyph">
+        {tag.glyph}
+      </span>
+      {tag.word}
+    </Badge>
   );
 }
 

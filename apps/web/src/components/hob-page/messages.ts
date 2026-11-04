@@ -3,6 +3,8 @@ import { formatCount, formatDay, plural } from "../../lib/format.ts";
 /** User-facing copy for a hob's page (STD-I18N-001). */
 export const messages = {
   page: ({ name }: { name: string }) => `${name}'s page`,
+  crumbs: "Breadcrumb",
+  yourHobs: "Your hobs",
   loading: "Loading this hob…",
   missing: "This hob is not here. It may have been retired.",
   tags: {

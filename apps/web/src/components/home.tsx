@@ -1,5 +1,6 @@
 import { MOON, MOON_PALETTE } from "@hobbots/art/moon";
 import type { Agent, Thread } from "@hobbots/domain";
+import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery } from "@tanstack/react-query";
@@ -24,6 +25,9 @@ import { questsInProgress } from "../lib/quest-work.ts";
 import { formatWhen, greeting } from "../lib/time.ts";
 import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { HobSprite, type HobState, hobState, stateLabel } from "./hob-sprite.tsx";
+import type { HobFilter } from "./hobs-page/hobs-page-model.ts";
+import { activeFilter, inFilter, sceneChips } from "./home/home-model.ts";
+import { StageHob } from "./home/stage-hob.tsx";
 import { messages as inboxCopy } from "./inbox/messages.ts";
 import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
 import { WaitingRequests } from "./inbox/waiting-requests.tsx";
@@ -42,6 +46,7 @@ export function Home() {
   const waitingHobs = useWaitingHobs();
   const [folded, setFolded] = useState<Partial<Record<CrewGroup, boolean>>>({});
   const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<HobFilter>("all");
   const filterRef = useRef<HTMLInputElement>(null);
 
   const crew = sceneOrder(
@@ -60,27 +65,13 @@ export function Home() {
     .sort((a, b) => b.thread.updatedAt.localeCompare(a.thread.updatedAt));
   const live = recent.filter(({ thread }) => activity[thread.id]);
 
-  // A count chip clears the filter, unfolds its group and, once drawn, moves focus to its header,
-  // which scrolls it into view.
-  const jumpTo = (group: CrewGroup) => {
-    setQuery("");
-    setFolded((current) => ({ ...current, [group]: false }));
-    requestAnimationFrame(() => document.getElementById(groupHeaderId(group))?.focus());
-  };
   // The door opens the hall: every group unfolds and the filter is ready to find anyone.
   const openHall = () => {
     setFolded(Object.fromEntries(groupOrder.map((group) => [group, false])));
     filterRef.current?.focus();
   };
-  const chip = (group: CrewGroup, text: string, className: string) =>
-    many && count(group) > 0 ? (
-      <button type="button" onClick={() => jumpTo(group)} className={cn(chipClass, "hover:bg-line", className)}>
-        {text}
-      </button>
-    ) : (
-      <span className={cn(chipClass, className)}>{text}</span>
-    );
-
+  const chips = sceneChips(crew.map((c) => c.state));
+  const filter = activeFilter(picked, chips);
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <section
@@ -119,12 +110,18 @@ export function Home() {
           <p className={cn("m-0 leading-normal", many ? "text-text-secondary" : "text-[17px]")}>
             {summary(crew.length, busy, paused, hall, crew[0]?.hob)}
           </p>
-          <div className="flex flex-wrap gap-2 pt-1">
-            {chip("working", `${busy} working`, busy > 0 ? "text-mint" : "")}
-            {chip("needs-you", `${count("needs-you")} need you`, "text-lantern")}
-            {count("waiting") > 0 && chip("waiting", `${count("waiting")} waiting`, "text-label")}
-            {chip("resting", `${count("resting")} resting`, "text-text-secondary")}
-            {paused > 0 && chip("paused", `${paused} paused`, "text-text-secondary")}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <FilterChips
+              aria-label={messages.home.chips.label}
+              value={filter}
+              onValueChange={(value) => setPicked(value as HobFilter)}
+            >
+              {chips.map(({ value, count }) => (
+                <FilterChip key={value} value={value} count={count}>
+                  {messages.home.chips[value]}
+                </FilterChip>
+              ))}
+            </FilterChips>
             {!many && <SummonLink />}
           </div>
         </div>
@@ -135,32 +132,16 @@ export function Home() {
             many ? "right-[210px] gap-[22px]" : "right-[150px] gap-11",
           )}
         >
-          {stage.map(({ hob, state }) => (
-            <Link
+          {stage.map(({ hob, state, threads }) => (
+            <StageHob
               key={hob.id}
-              to="/hobs/$hobId"
-              params={{ hobId: hob.id }}
-              aria-label={openPageLabel(hob, state)}
-              className="hop-on-hover flex flex-col items-center gap-1.5 text-ground no-underline"
-            >
-              <span
-                className={cn(
-                  "flex flex-col items-center bg-text-strong whitespace-nowrap",
-                  many ? "px-1.5 py-0.5 text-xs" : "px-2 py-[3px] text-xs",
-                )}
-              >
-                <span>{many ? hob.name : sceneTag(hob, state)}</span>
-                <span className="font-bold">{hob.roleTitle}</span>
-              </span>
-              {!many && (
-                <span aria-hidden className="block h-1.5 w-16 bg-line-2">
-                  {(state === "working" || state === "thinking") && (
-                    <span className="block h-full w-full animate-hb-tick bg-mint" />
-                  )}
-                </span>
-              )}
-              <HobSprite hob={hob} size={many ? 52 : 64} state={state} badge />
-            </Link>
+              hob={hob}
+              state={state}
+              threads={threads}
+              activity={activity}
+              size={many ? 48 : 56}
+              dimmed={!inFilter(state, filter)}
+            />
           ))}
         </div>
 
@@ -171,10 +152,11 @@ export function Home() {
       {many ? (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_300px] gap-4 px-[22px] py-4">
           <AllHobs
-            crew={crew}
+            crew={crew.filter((c) => inFilter(c.state, filter))}
             folded={folded}
             onFold={(group, fold) => setFolded((current) => ({ ...current, [group]: fold }))}
             query={query}
+            narrowed={filter !== "all"}
             onQuery={setQuery}
             filterRef={filterRef}
           />
@@ -235,8 +217,6 @@ function SummonLink() {
     </Link>
   );
 }
-
-const chipClass = "bg-deep px-2.5 py-1 text-[13px] text-text-strong";
 
 function LiveDot() {
   return (
@@ -312,8 +292,11 @@ function AllHobs({
   query,
   onQuery,
   filterRef,
+  narrowed,
 }: {
   crew: ReadonlyArray<{ hob: Agent; state: HobState }>;
+  /** A count chip narrowed the list to one family, so its groups open. */
+  narrowed: boolean;
   folded: Partial<Record<CrewGroup, boolean>>;
   onFold: (group: CrewGroup, fold: boolean) => void;
   query: string;
@@ -345,7 +328,7 @@ function AllHobs({
         {groups.length === 0 && <p className="m-0 text-sm text-text-secondary">No hob matches “{query.trim()}”.</p>}
         {groups.map(({ group, members }) => {
           // A filter opens every group, so a match is never hidden.
-          const open = filtering || !(folded[group] ?? foldsByDefault(group, crew.length));
+          const open = filtering || narrowed || !(folded[group] ?? foldsByDefault(group, crew.length));
           const info = groupInfo[group];
           return (
             <div key={group} className="flex flex-col gap-1.5">
@@ -415,15 +398,6 @@ const summary = (count: number, busy: number, paused: number, hall: number, firs
   if (paused > 0) return `${working}, and ${paused} ${paused === 1 ? "is" : "are"} paused.`;
   return busy > 0 ? `${working} right now.` : `Your ${count} hobs are ready when you are.`;
 };
-
-const sceneTagWords: Partial<Record<HobState, string>> = {
-  working: "writing…",
-  thinking: "thinking…",
-  idle: "resting",
-  paused: "paused",
-};
-
-const sceneTag = (hob: Agent, state: HobState) => `${hob.name} · ${sceneTagWords[state] ?? stateLabel[state]}`;
 
 function Card({
   label,

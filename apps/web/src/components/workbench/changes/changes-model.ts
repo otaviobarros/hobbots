@@ -87,16 +87,24 @@ export const sharedHobs = (change: FileChange, activity: AttemptActivity): Reado
   return [...hobs];
 };
 
+/** One line of a diff. */
+export interface DiffLine {
+  readonly kind: "same" | "added" | "removed";
+  /** The line's number before and after; null on the side it is not on. */
+  readonly before: number | null;
+  readonly after: number | null;
+  readonly text: string;
+}
+
 /** One line of a diff, or a run of unchanged lines folded away. */
 export type DiffRow =
+  | DiffLine
   | {
-      readonly kind: "same" | "added" | "removed";
-      /** The line's number before and after; null on the side it is not on. */
-      readonly before: number | null;
-      readonly after: number | null;
-      readonly text: string;
-    }
-  | { readonly kind: "folded"; readonly lines: number };
+      readonly kind: "folded";
+      readonly lines: number;
+      /** The unchanged lines it folds away, to show when it is opened. */
+      readonly hidden: ReadonlyArray<DiffLine>;
+    };
 
 export interface CodeDiff extends LineCounts {
   readonly rows: ReadonlyArray<DiffRow>;
@@ -114,12 +122,12 @@ const linesOf = (text: string): ReadonlyArray<string> => {
 const DIFF_TIMEOUT_MS = 1_000;
 
 /** Each line of `before` and `after` as one row, numbered on each side. */
-const lineRows = (before: string, after: string): ReadonlyArray<DiffRow & { kind: "same" | "added" | "removed" }> => {
+const lineRows = (before: string, after: string): ReadonlyArray<DiffLine> => {
   const parts = diffLines(before, after, { timeout: DIFF_TIMEOUT_MS }) ?? [
     { value: before, added: false, removed: true, count: 0 },
     { value: after, added: true, removed: false, count: 0 },
   ];
-  const rows: Array<DiffRow & { kind: "same" | "added" | "removed" }> = [];
+  const rows: Array<DiffLine> = [];
   let was = 0;
   let now = 0;
   for (const part of parts) {
@@ -177,20 +185,23 @@ export const lineCounts = (before: string | null, after: string | null): LineCou
   countRows(lineRows(before ?? "", after ?? ""));
 
 /** A diff's lines with each unchanged run more than `context` lines from a change folded into one row. */
-export const foldLines = (lines: ReadonlyArray<DiffRow>, context: number): ReadonlyArray<DiffRow> => {
+export const foldLines = (lines: ReadonlyArray<DiffLine>, context: number): ReadonlyArray<DiffRow> => {
   const near = nearChanges(lines, context);
   const rows: Array<DiffRow> = [];
-  let folded = 0;
+  let hidden: Array<DiffLine> = [];
+  const fold = () => {
+    if (hidden.length > 0) rows.push({ kind: "folded", lines: hidden.length, hidden });
+    hidden = [];
+  };
   for (const [index, row] of lines.entries()) {
     if (row.kind === "same" && !near[index]) {
-      folded += 1;
+      hidden.push(row);
       continue;
     }
-    if (folded > 0) rows.push({ kind: "folded", lines: folded });
-    folded = 0;
+    fold();
     rows.push(row);
   }
-  if (folded > 0) rows.push({ kind: "folded", lines: folded });
+  fold();
   return rows;
 };
 
