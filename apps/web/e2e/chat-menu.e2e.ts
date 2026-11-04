@@ -24,7 +24,7 @@ test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searche
   }
   const chat = page.url();
   const header = page.getByRole("main", { name: "Chat" }).locator("header").first();
-  const menu = header.getByRole("button", { name: "More for this thread" });
+  const menu = header.getByRole("button", { name: "More for this chat" });
   const item = (name: string | RegExp) => page.getByRole("menuitem", { name });
 
   // Rename turns the title into a field; Escape keeps the old title, Enter saves the new one.
@@ -68,7 +68,7 @@ test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searche
   // Archive, in rose, leaves a toast whose one action is Undo, which brings the chat back.
   await page.goto(chat);
   await menu.click();
-  await item(/^Archive thread/).click();
+  await item(/^Archive chat/).click();
   const toast = page.getByRole("status").filter({ hasText: "Archived “Spring banner”." });
   await expect(toast).toBeVisible();
   await expect(page.getByRole("button", { name: /Open Archive/ })).toHaveCount(0);

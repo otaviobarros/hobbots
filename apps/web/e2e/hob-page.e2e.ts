@@ -136,7 +136,7 @@ test("[TC-UX-130] a hob's chats are grouped, searched inside messages, renamed, 
 
   // Archive, then Undo; Archived chats links to the Archive.
   await main.getByRole("button", { name: "More for “Plan the spring launch”" }).click();
-  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  await page.getByRole("menuitem", { name: /Archive chat/ }).click();
   await expect(page.getByRole("status").filter({ hasText: "Archived “Plan the spring launch”." })).toBeVisible();
   await expect(today.getByRole("link", { name: /^Open / })).toHaveCount(1);
   await expect(main.getByRole("link", { name: /^Archived chats · 1/ })).toBeVisible();

@@ -75,7 +75,7 @@ test("[TC-CH-157] a thread archived from its menu is found in the Archive and in
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   const chats = page.getByRole("main", { name: "Pip's page" });
   await chats.getByRole("button", { name: "More for “Rename the newsletter”" }).click();
-  await page.getByRole("menuitem", { name: /Archive thread/ }).click();
+  await page.getByRole("menuitem", { name: /Archive chat/ }).click();
   await expect(page.getByRole("status").filter({ hasText: "Archived “Rename the newsletter”." })).toBeVisible();
   await expect(chats.getByRole("link", { name: "Open Rename the newsletter" })).toHaveCount(0);
   await expect(threadLink(page, "Rename the newsletter")).toHaveCount(0);

@@ -1,4 +1,4 @@
-/** User-facing copy for archiving a thread (STD-I18N-001). */
+/** User-facing copy for archiving a chat (STD-I18N-001); the design calls a thread a chat. */
 
 interface Named {
   readonly name: string;
@@ -9,13 +9,13 @@ interface Titled {
 }
 
 export const messages = {
-  headerMenu: "More for this thread",
+  headerMenu: "More for this chat",
   rename: "Rename",
   pin: "Pin to the top",
   unpin: "Unpin",
   pinned: "Pinned to the top",
   hobPage: ({ name }: Named) => `${name}'s page`,
-  archive: "Archive thread",
+  archive: "Archive chat",
   archiveShortcut: ({ mac }: { mac: boolean }) => (mac ? "⌃⌘A" : "Ctrl+Alt+A"),
   undoShortcut: ({ mac }: { mac: boolean }) => (mac ? "⌘Z" : "Ctrl+Z"),
   /** The disabled menu item's reason. */
@@ -23,7 +23,7 @@ export const messages = {
     "reply-running": ({ name }: Named) => `${name} is still replying. Archive it once the reply ends.`,
     "approval-pending": ({ name }: Named) => `${name} is waiting for your approval here. Answer it first.`,
   },
-  /** The toast when the shortcut meets a thread that cannot be archived yet. */
+  /** The toast when the shortcut meets a chat that cannot be archived yet. */
   cantYet: {
     "reply-running": ({ name }: Named) => `Can't archive yet: ${name} is still replying here.`,
     "approval-pending": ({ name }: Named) => `Can't archive yet: ${name} is waiting for your approval.`,
