@@ -25,6 +25,7 @@ import {
 } from "../../lib/usage.ts";
 import { RuntimeTile } from "../brain-picker.tsx";
 import { messages } from "./messages.ts";
+import { leftText, refillSentence, windowName } from "./plan-summary.ts";
 
 const copy = messages.plans;
 
@@ -69,25 +70,15 @@ interface PlanView {
   readonly state: PlanState | null;
 }
 
-const meterLabel = (meter: PlanMeter): string => {
-  if (meter.kind === "session") return copy.meter.session;
-  if (meter.kind === "weekly_all") return copy.meter.weekly_all;
-  if (meter.kind === "weekly_scoped" && meter.scope !== null) return copy.meter.weekly_scoped({ scope: meter.scope });
-  return copy.meter.other({ name: meter.scope ?? meter.group });
-};
-
-const leftText = (meter: PlanMeter): string =>
-  meter.percent >= 100 ? copy.empty : copy.left({ percent: Math.round(leftOf(meter) * 100) });
-
 const windowOf =
   (now: Date) =>
   (meter: PlanMeter): PlanWindow => ({
     key: `${meter.kind}-${meter.scope ?? ""}`,
-    label: meterLabel(meter),
+    label: windowName(meter),
     used: Math.min(100, Math.max(0, meter.percent)),
     level: meterLevel(meter),
     left: leftText(meter),
-    refill: refillLine(meter, now),
+    refill: refillSentence(meter.resetsAt, now),
   });
 
 const creditsOf = (plan: PlanUsage): string | null => {
@@ -107,15 +98,12 @@ const unreportedDetail = (health: RuntimeHealth, name: string): string => {
   return copy.unknownUnreported({ name });
 };
 
-const refillLine = (meter: PlanMeter, now: Date): string =>
-  meter.resetsAt === null ? copy.noRefill : copy.refill(refillOf(meter.resetsAt, now), meter.resetsAt);
-
 /** The plan's tag, and a banner when it is low or out, from the window that sets its level. */
 const stateOf = (plan: PlanUsage, name: string, now: Date): PlanState | null => {
   const worst = planLevel(plan);
   if (worst === undefined) return null;
   const { level, meter } = worst;
-  const window = meterLabel(meter);
+  const window = windowName(meter);
   if (level === "ok") return { level, tag: copy.state.ok, banner: null };
   if (level === "low") {
     return {
@@ -123,7 +111,7 @@ const stateOf = (plan: PlanUsage, name: string, now: Date): PlanState | null => 
       tag: copy.state.low,
       banner: {
         title: copy.banner.low({ name, window }),
-        line: copy.banner.lowLine({ left: leftText(meter), refill: refillLine(meter, now) }),
+        line: copy.banner.lowLine({ left: leftText(meter), refill: refillSentence(meter.resetsAt, now) }),
       },
     };
   }
@@ -131,7 +119,10 @@ const stateOf = (plan: PlanUsage, name: string, now: Date): PlanState | null => 
   return {
     level,
     tag: copy.state.out(refill, meter.resetsAt),
-    banner: { title: copy.banner.out, line: copy.banner.outLine({ name, window, refill: refillLine(meter, now) }) },
+    banner: {
+      title: copy.banner.out,
+      line: copy.banner.outLine({ name, window, refill: refillSentence(meter.resetsAt, now) }),
+    },
   };
 };
 
@@ -167,7 +158,7 @@ const planView = (health: RuntimeHealth, plan: PlanUsage, now: Date): PlanView =
     ...base,
     level: leftOf(meter),
     palette: POTION_COLORS[health.runtime],
-    caption: meterLabel(meter),
+    caption: windowName(meter),
     headline: leftText(meter),
     summary:
       meter.resetsAt === null ? kind : `${kind} · ${copy.refillShort(refillOf(meter.resetsAt, now), meter.resetsAt)}`,
