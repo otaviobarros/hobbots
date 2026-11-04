@@ -4,6 +4,7 @@ import { setupBridge } from "./components/connect/connect-model.ts";
 import { LocalSetup } from "./components/connect/local-setup.tsx";
 import { messages } from "./components/connect/messages.ts";
 import { followMotionChoice } from "./lib/motion.ts";
+import { followThemeChoice } from "./lib/theme.ts";
 import "./styles.css";
 
 /**
@@ -11,6 +12,7 @@ import "./styles.css";
  * is not a hub yet, so they call no API and talk only to the app's setup bridge.
  */
 followMotionChoice();
+followThemeChoice();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
