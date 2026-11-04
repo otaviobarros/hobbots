@@ -162,7 +162,7 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
       {!connected && (
         <span className="ps-[54px] text-[13px] text-text-secondary">
           {copy.notConnected}{" "}
-          <Link to="/settings" hash="charms" className="text-lantern">
+          <Link to="/settings/$section" params={{ section: "connections" }} className="text-lantern">
             {copy.connectInSettings}
           </Link>
         </span>

@@ -184,7 +184,7 @@ export function PlanShelf({
 /** The Usage screen's link to Settings, where providers are connected and fixed. */
 export function ManageProviders() {
   return (
-    <Link to="/settings" className="text-[13px]">
+    <Link to="/settings/$section" params={{ section: "connections" }} className="text-[13px]">
       {copy.manage}
     </Link>
   );

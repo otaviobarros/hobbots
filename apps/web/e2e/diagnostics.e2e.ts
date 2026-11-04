@@ -22,7 +22,7 @@ test("[TC-OP-053] follows a Quest that delegated to two hobs from Settings › D
     timeout: 15_000,
   });
 
-  await page.goto(`${url}/#/settings`);
+  await page.goto(`${url}/#/settings/help`);
   const diagnostics = page.getByRole("region", { name: "Diagnostics" });
   await expect(diagnostics.getByRole("list", { name: "AI providers" })).toContainText("Claude Code");
   await expect(diagnostics.getByRole("list", { name: "Stalled work" })).toContainText("No work is stuck.");

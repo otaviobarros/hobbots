@@ -70,7 +70,7 @@ test("[TC-DP-155] turns on remote access, allows a tailnet browser on the hub, a
 
   // On the hub: turn remote access on in Settings.
   await page.addInitScript(asDesktop);
-  await page.goto(`${current.url}/#/settings`);
+  await page.goto(`${current.url}/#/settings/devices`);
   const devices = page.getByRole("region", { name: "Devices" });
   const remote = devices.getByRole("switch", { name: "Use Hobbots from my other devices" });
   await remote.click();

@@ -87,6 +87,6 @@ test("[TC-AG-061] a retired hob's threads open read-only from Settings › Archi
 test("[TC-AG-062] Archived hobs says so when no hob has retired", async ({ page }) => {
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
-  await page.goto(`${hub.url}/#/settings`);
+  await page.goto(`${hub.url}/#/settings/data`);
   await expect(page.getByRole("region", { name: "Archived hobs" })).toContainText("No retired hobs.");
 });
