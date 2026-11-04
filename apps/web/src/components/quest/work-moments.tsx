@@ -1,4 +1,5 @@
 import type { TaskId } from "@hobbots/domain";
+import type { WorkbenchTab } from "../workbench/workbench-model.ts";
 import { QuestCard } from "./quest-card.tsx";
 import { LeadAnsweredLine, QuestionCard } from "./question-card.tsx";
 import type { HobLookup } from "./use-work.ts";
@@ -13,27 +14,15 @@ export function WorkMoments({
   moments,
   hobs,
   onOpen,
-  onQuest,
-  onWorkbench,
 }: {
   moments: ReadonlyArray<Moment>;
   hobs: HobLookup;
-  onOpen: (taskId: TaskId) => void;
-  /** Opens the request's Quest in the work sheet, by its top Task. */
-  onQuest: (topId: TaskId) => void;
-  /** Opens a Task's Workbench in the chat's place. */
-  onWorkbench: (taskId: TaskId) => void;
+  /** Opens the Quest room on a Task, its lane lit, with the Workbench open on a tab if one is named. */
+  onOpen: (taskId: TaskId, options?: { readonly tab?: WorkbenchTab }) => void;
 }) {
   return moments.map((moment) =>
     moment.kind === "card" ? (
-      <QuestCard
-        key={`card-${moment.tree.tasks[0]?.id}`}
-        tree={moment.tree}
-        hobs={hobs}
-        onOpen={onOpen}
-        onQuest={onQuest}
-        onWorkbench={onWorkbench}
-      />
+      <QuestCard key={`card-${moment.tree.tasks[0]?.id}`} tree={moment.tree} hobs={hobs} onOpen={onOpen} />
     ) : moment.kind === "question" ? (
       moment.question.state === "open" ? null : (
         <QuestionCard

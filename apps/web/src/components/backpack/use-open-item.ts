@@ -3,9 +3,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
 import { taskTreeQuery } from "../../api/tasks.ts";
+import { roomSearch } from "../quest-room/room-search.ts";
 
 /**
- * Opens the Task an item is about in the drawer beside the chat its work started in: the thread of
+ * Opens the Task an item is about in the Quest room beside the chat its work started in, its lane lit: the thread of
  * its tree's top Task, whose owner leads it. An item about no Task, or one the hub no longer has,
  * opens nothing, and only the last item asked for opens, however the reads arrive.
  */
@@ -27,7 +28,7 @@ export const useOpenItem = () => {
     void navigate({
       to: "/hobs/$hobId/threads/$threadId",
       params: { hobId: top.ownerId, threadId: top.threadId },
-      search: { task: item.taskId },
+      search: roomSearch(item.taskId),
     });
   };
 };

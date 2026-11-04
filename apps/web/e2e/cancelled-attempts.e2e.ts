@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openQuest, taskSheet } from "./work-sheet.ts";
+import { laneHead, laneTask, openRoom, showInWorkbench } from "./quest-room.ts";
 
 // Issues #669 and #674 in the browser: a member's Task and a step cancelled while their turns run
 // each end with a cancelled Attempt, and their Workbench says so. The decision is tested in
@@ -80,17 +80,15 @@ test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in the Workb
   );
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await composer.press("Enter");
-  const room = await openQuest(page, "Build the project");
+  await openRoom(page, "Build the project");
 
-  for (const [row, title] of [
-    [/^Frodo · Run the long job/, "Run the long job"],
-    [/^Pip · Check the build/, "Check the build"],
+  for (const [name, title] of [
+    ["Frodo", "Run the long job"],
+    ["Pip", "Check the build"],
   ] as const) {
-    // You cancel it from its task sheet while its turn runs.
-    const task = room.getByRole("button", { name: row });
-    await expect(task).toContainText("Running", { timeout: 30_000 });
-    await task.click();
-    const sheet = taskSheet(page, title);
+    // You cancel it from its lane while its turn runs.
+    const sheet = laneTask(page, title);
+    await expect(name === "Pip" ? laneHead(page, name) : sheet).toContainText("Running", { timeout: 30_000 });
     const controls = sheet.getByRole("region", { name: `Controls for ${title}` });
     await controls.getByRole("button", { name: "Cancel task" }).click();
     await controls.getByRole("button", { name: "Yes, cancel" }).click();
@@ -99,13 +97,9 @@ test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in the Workb
     });
 
     // Its Workbench says the attempt stopped, and why, never that it finished.
-    await sheet.getByRole("button", { name: "Open Workbench" }).click();
-    const bench = page.getByRole("region", { name: `Workbench for ${title}` });
+    const bench = await showInWorkbench(page, title);
     const summary = bench.getByRole("tabpanel", { name: /^Summary/ });
     await expect(summary).toContainText("This attempt stopped before it finished.");
     await expect(summary).toContainText("Why: You cancelled this Task.");
-    // Back goes to the task sheet it came from, and on to the quest.
-    await bench.getByRole("button", { name: "← Back to the task" }).click();
-    await sheet.getByRole("button", { name: "Back to Build the project" }).click();
   }
 });

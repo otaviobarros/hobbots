@@ -169,7 +169,6 @@ test("[TC-UX-046] while a turn runs the Terminal is Live: a running command coun
   await expect.poll(async () => sleeping.textContent(), { timeout: 5_000 }).not.toBe(first);
 
   // Stopped, the turn ends with the command still running: whether it finished is not known.
-  await bench.getByRole("button", { name: "← Back to chat" }).click();
   await page.getByRole("button", { name: "■ Stop" }).click();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
   await openTerminal(page, "Watch the build");

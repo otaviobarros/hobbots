@@ -76,8 +76,12 @@ Every size in `size` is a `--spacing-*` token in `styles.css`, so Tailwind reads
 | `title-strip` | 30px | The title strip with the window controls |
 | `sidebar` | 72px | The sidebar, collapsed |
 | `sidebar-open` | 256px | The sidebar, expanded |
-| `sheet` | 340px | The work sheet that opens over the chat |
-| `workbench-chat` | 300px | The Task chat panel beside the Workbench's tabs |
+| `sheet` | 340px | A side sheet from the shared Sheet component |
+| `room-chat` | 360px | The chat column beside the Quest room at 1280 and wider |
+| `room-chat-narrow` | 300px | The chat column beside the Quest room at 1024 |
+| `room-rail` | 52px | The folded chat's rail in the Quest room |
+| `lane-min` | 220px | The narrowest a lane in the Quest room gets |
+| `dock` | 340px | The Workbench docked under the lanes, while open |
 | `chat-min` | 360px | The narrowest the chat gets |
 | `measure` | 70ch | The longest line of reply prose, the tray and the composer |
 | `bubble-max` | 460px | Your own message bubble and what waits beside it; the hob profile dialog |

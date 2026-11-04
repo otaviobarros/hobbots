@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { openQuest, taskSheet } from "./work-sheet.ts";
+import { lane, openRoom, taskDetails } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -17,25 +17,23 @@ test("[TC-OR-283] two members changing the same file show the hub's finding on b
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  // On the quest sheet, each member's row says whose Task changed the same file.
-  const tasks = await openQuest(page, "Make the shop badge");
-  const badge = tasks.getByRole("button", { name: /Quill · Make the shop badge/ });
-  const review = tasks.getByRole("button", { name: /Ada · Review the shop/ });
+  // In the Quest room, each member's lane says whose Task changed the same file.
+  await openRoom(page, "Make the shop badge");
+  const badge = lane(page, "Quill");
+  const review = lane(page, "Ada");
   await expect(review).toContainText("Same file as Quill", { timeout: 15_000 });
   await expect(badge).toContainText("Same file as Ada");
-  await expect(tasks.getByRole("button", { name: /Aldric · Make the shop badge/ })).not.toContainText("Same file");
+  await expect(lane(page, "Aldric")).not.toContainText("Same file");
 
-  // Each Task's drawer shows the finding, which names the file and the other Task.
-  for (const [row, title] of [
-    [review, "Review the shop"],
-    [badge, "Make the shop badge"],
+  // Each Task's details show the finding, which names the file and the other Task.
+  for (const [owner, title] of [
+    ["Ada", "Review the shop"],
+    ["Quill", "Make the shop badge"],
   ] as const) {
-    await row.click();
-    const drawer = taskSheet(page, title);
+    const drawer = await taskDetails(page, title, owner);
     await expect(drawer).toContainText("Finding");
     await expect(drawer).toContainText("Ada changed web/badge.png");
     await expect(drawer).toContainText("Quill's Task");
-    await drawer.getByRole("button", { name: "Back to Make the shop badge" }).click();
   }
 });
 
@@ -48,13 +46,13 @@ test("[TC-OR-411] the lead's change from before it delegated shows no Same file 
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeVisible();
 
-  const tasks = await openQuest(page, "Make the shop badge");
+  await openRoom(page, "Make the shop badge");
   // Quill and Ada wrote the badge while both were at work: each names only the other.
-  const review = tasks.getByRole("button", { name: /Ada · Review the shop/ });
-  const badge = tasks.getByRole("button", { name: /Quill · Make the shop badge/ });
+  const review = lane(page, "Ada");
+  const badge = lane(page, "Quill");
   await expect(review).toContainText("Same file as Quill", { timeout: 15_000 });
   await expect(badge).toContainText("Same file as Ada");
   for (const row of [review, badge]) await expect(row).not.toContainText(/Same file as (\w+, )*Aldric/);
   // Aldric cleared it before either started, so nothing pairs his Task with theirs.
-  await expect(tasks.getByRole("button", { name: /Aldric · Make the shop badge/ })).not.toContainText("Same file");
+  await expect(lane(page, "Aldric")).not.toContainText("Same file");
 });

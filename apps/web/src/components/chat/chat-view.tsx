@@ -11,10 +11,9 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { useActivity } from "../../api/activity.ts";
 import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../../api/drafts.ts";
 import { useConnection } from "../../api/live.ts";
@@ -73,14 +72,6 @@ const stayAtEnd = (view: HTMLDivElement | null) => {
   return () => observer.disconnect();
 };
 
-/**
- * While the work sheet is open and the chat has room beside it, the chat's column moves out from
- * under the sheet, so no card in it hides its end there (#874). It slides as the sheet does.
- * Narrower, the sheet stays over the end of the chat.
- */
-const besideSheet =
-  "transition-[padding] duration-(--dur-sheet) ease-(--ease-ui) @min-[840px]/chat:group-data-[sheet=open]/work:pe-[calc(var(--spacing-sheet)+--spacing(9))]";
-
 const copy = messages.chat;
 const brainCopy = messages.brain;
 
@@ -91,12 +82,15 @@ export function ChatView({
   threadId,
   focusMessageId,
   pins,
+  headerEnd,
 }: {
   hobId: AgentId;
   threadId?: ThreadId | undefined;
   focusMessageId?: string | undefined;
   /** The Quests pinned to every thread's header. */
   pins: Pins;
+  /** What the header ends with, such as the fold button while the Quest room is open. */
+  headerEnd?: ReactNode;
 }) {
   const hob = useQuery({ ...agentsQuery, select: (agents) => agents.find((a) => a.id === hobId) });
   const thread = useQuery({
@@ -231,11 +225,20 @@ export function ChatView({
   const empty = threadId === undefined || messages.data?.length === 0;
 
   return (
-    <main aria-label={copy.landmark} className="@container/chat flex min-w-chat-min flex-1 flex-col">
+    <main
+      aria-label={copy.landmark}
+      className="@container/chat flex min-w-chat-min flex-1 flex-col group-data-[room=open]/room:min-w-0"
+    >
       {/* The tile, then the chat's title over who leads it and what they are doing (A2-02). */}
       <header className="@container/header flex items-center gap-3 border-b-(length:--edge) border-line px-6 pt-3.5 pb-3">
         {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
-        <Link to="/hobs/$hobId" params={{ hobId }} tabIndex={-1} aria-hidden className="shrink-0 no-underline">
+        <Link
+          to="/hobs/$hobId"
+          params={{ hobId }}
+          tabIndex={-1}
+          aria-hidden
+          className="shrink-0 no-underline @max-[340px]/header:hidden"
+        >
           <HobSprite hob={current} size={40} state={state} badge />
         </Link>
         {/* The title keeps its room when the quest button crowds the header. */}
@@ -253,7 +256,8 @@ export function ChatView({
             {copy.leadLine({ doing: stateLabel[state] })}
           </span>
         </div>
-        {threadId && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
+        {/* Beside the open room, whose header is the Quest's, the column keeps its width for the chat. */}
+        {threadId && headerEnd === undefined && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
         {thread.data && <ChatSearchButton open={finding} onToggle={() => setFinding(!finding)} />}
         <HeaderMenu
           hob={current}
@@ -261,6 +265,7 @@ export function ChatView({
           onRename={() => setRenaming(true)}
           onSearch={() => setFinding(true)}
         />
+        {headerEnd}
       </header>
       <ReconnectingCard className="mx-6 mt-2.5" />
       {threadId && finding && (
@@ -279,7 +284,7 @@ export function ChatView({
           if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
         }}
         ref={stayAtEnd}
-        className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px]", besideSheet)}
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px]"
       >
         {/* The transcript, the tray and the composer share one centered column (A2-01). Long words
             and paths wrap inside it, so nothing in it is wider than the column (#874). */}
@@ -362,7 +367,7 @@ export function ChatView({
       </div>
 
       <ArchiveToastViewport />
-      <div className={cn("flex-none px-6 pt-2 pb-5", besideSheet)}>
+      <div className="flex-none px-6 pt-2 pb-5">
         <div className="mx-auto flex w-full max-w-measure flex-col gap-2.5">
           {brainProblem !== null && (
             <section

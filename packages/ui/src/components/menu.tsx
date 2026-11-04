@@ -42,8 +42,19 @@ function DropdownMenuContent({
   );
 }
 
-function DropdownMenuItem({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Item>) {
-  return <DropdownMenuPrimitive.Item data-slot="dropdown-menu-item" className={cn(itemClass, className)} {...props} />;
+// `deny` marks the item that takes something away, such as Cancel quest…, in rose.
+function DropdownMenuItem({
+  className,
+  variant = "default",
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & { variant?: "default" | "deny" }) {
+  return (
+    <DropdownMenuPrimitive.Item
+      data-slot="dropdown-menu-item"
+      className={cn(itemClass, variant === "deny" && "text-rose", className)}
+      {...props}
+    />
+  );
 }
 
 /** A hairline between groups of items, such as before the one that takes something away. */

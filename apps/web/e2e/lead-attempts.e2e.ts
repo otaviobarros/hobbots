@@ -54,7 +54,7 @@ test("[TC-OR-315] the lead's later turns on its Task stay in Attempt 1, and its 
   // Its Workbench offers no Attempt to pick, and shows what both turns changed.
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
-  await expect(bench.getByRole("heading", { name: "Tidy the notes" })).toBeFocused();
+  await expect(bench.getByRole("heading", { name: "Tidy the notes" })).toBeVisible();
   await expect(bench.getByRole("radiogroup", { name: "Attempts" })).toHaveCount(0);
   const made = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "What it made" });
   await expect(made.getByRole("button", { name: /^See the change to / })).toHaveText([

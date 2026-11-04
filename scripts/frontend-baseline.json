@@ -28,10 +28,8 @@
     "apps/web/src/components/summon/arrived.tsx": 1,
     "apps/web/src/components/summon/summon.tsx": 2,
     "apps/web/src/components/usage/plan-card.tsx": 1,
-    "apps/web/src/components/work-sheet/quest-view.tsx": 1,
     "apps/web/src/components/workbench/tabs/files-tab.tsx": 1,
     "apps/web/src/components/workbench/tabs/summary-tab.tsx": 1,
-    "apps/web/src/components/workbench/workbench.tsx": 1,
     "apps/web/src/router.tsx": 1
   },
   "STD-UI-010": {
@@ -67,7 +65,6 @@
     "apps/web/src/components/providers/provider-fix.tsx": 1,
     "apps/web/src/components/quest-work/quest-link.tsx": 1,
     "apps/web/src/components/quest/flag-icon.tsx": 1,
-    "apps/web/src/components/quest/note-box.tsx": 1,
     "apps/web/src/components/quest/status-dot.tsx": 1,
     "apps/web/src/components/quest/status-strip.tsx": 1,
     "apps/web/src/components/roles/role-sheet.tsx": 2,
@@ -86,13 +83,9 @@
     "apps/web/src/components/summon/summon-preview.tsx": 1,
     "apps/web/src/components/summon/summon.tsx": 2,
     "apps/web/src/components/summon/summoning.tsx": 1,
-    "apps/web/src/components/work-sheet/quest-view.tsx": 2,
-    "apps/web/src/components/work-sheet/task-view.tsx": 3,
     "apps/web/src/components/workbench/file-picker.tsx": 4,
     "apps/web/src/components/workbench/tabs/terminal-tab.tsx": 3,
-    "apps/web/src/components/workbench/workbench-chat.tsx": 1,
     "apps/web/src/components/workbench/workbench-header.tsx": 1,
-    "apps/web/src/components/workbench/workbench-tabs.tsx": 2,
-    "apps/web/src/components/workbench/workbench.tsx": 2
+    "apps/web/src/components/workbench/workbench-tabs.tsx": 2
   }
 }

@@ -33,6 +33,7 @@ import { OnboardingReady } from "./components/onboarding/onboarding-summon.tsx";
 import { Welcome } from "./components/onboarding/welcome.tsx";
 import { WhereHobbotsRuns } from "./components/onboarding/where-hobbots-runs.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
+import { RoomSearch } from "./components/quest-room/room-search.ts";
 import { SetupRemoteAccess } from "./components/remote-access/setup-remote-access.tsx";
 import { AppError, PageError, ScreenError } from "./components/route-error/route-error.tsx";
 import { ConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
@@ -42,7 +43,6 @@ import { ArrivedPage, ArrivedWaiting } from "./components/summon/arrived.tsx";
 import { Summon } from "./components/summon/summon.tsx";
 import { SummonStep } from "./components/summon/summon-model.ts";
 import { UsagePage } from "./components/usage/usage-page.tsx";
-import { WorkbenchSearch } from "./components/workbench/use-workbench.ts";
 import { SearchText, searchParam } from "./lib/search-params.ts";
 import { UsageDays, UsageSplit } from "./lib/usage.ts";
 
@@ -227,9 +227,9 @@ const archivedThreadsRoute = createRoute({
   },
 });
 
-// `?message=` names a message to scroll to, as a search result does; `?quest=` a request's Quest,
-// by its top Task, to open in the work sheet over the chat, and `?task=` a Task to open there; `?bench=` a Task whose Workbench shows in the chat's place, with its
-// `tab`, `attempt`, the `file` a tab shows first and `chat` when its chat drawer is open (ADR 023).
+// `?message=` names a message to scroll to, as a search result does. `?room=` opens the Quest room
+// beside the chat on a Task of its Quest, with the lit `lane`, the Workbench `tab` while its dock is
+// open, the `attempt` it shows and the `file` a tab shows first (ADR 027).
 const threadRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
@@ -237,31 +237,26 @@ const threadRoute = createRoute({
   validateSearch: Schema.toStandardSchemaV1(
     Schema.Struct({
       message: searchParam(Schema.String),
-      quest: searchParam(Schema.String),
-      task: searchParam(Schema.String),
-      ...WorkbenchSearch,
+      ...RoomSearch,
     }),
   ),
   component: function ThreadPage() {
     const params = threadRoute.useParams();
-    const { message, quest, task, bench, tab, attempt, file, chat } = threadRoute.useSearch();
+    const { message, room, lane, tab, attempt, file } = threadRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
         threadId={ThreadId.make(params.threadId)}
         focusMessageId={message}
-        taskId={task === undefined ? undefined : TaskId.make(task)}
-        questId={quest === undefined ? undefined : TaskId.make(quest)}
-        workbench={
-          bench === undefined
+        room={
+          room === undefined
             ? undefined
             : {
-                taskId: TaskId.make(bench),
-                tab: tab ?? "summary",
+                taskId: TaskId.make(room),
+                lane: lane === undefined ? undefined : TaskId.make(lane),
+                tab,
                 attemptId: attempt === undefined ? undefined : AttemptId.make(attempt),
                 file,
-                from: task === bench ? "drawer" : "chat",
-                chatOpen: chat === "open",
               }
         }
       />

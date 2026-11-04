@@ -1,5 +1,5 @@
 import { expect, test } from "./hub.ts";
-import { openQuest, taskSheet } from "./work-sheet.ts";
+import { laneTask, openRoom, showInWorkbench } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #892 in the browser: a planned step's turn runs outside any chat, so its Workbench Summary
@@ -28,13 +28,10 @@ test("[TC-UX-165] a step's Summary shows its tool calls live, a refused one with
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await composer.press("Enter");
 
-  const room = await openQuest(page, "Tidy the notes");
-  const row = room.getByRole("button", { name: new RegExp(`^Aldric · ${TITLE}`) });
-  await expect(row).toContainText("Running", { timeout: 30_000 });
-  await row.click();
-  const sheet = taskSheet(page, TITLE);
-  await sheet.getByRole("button", { name: "Open Workbench" }).click();
-  const bench = page.getByRole("region", { name: `Workbench for ${TITLE}` });
+  await openRoom(page, "Tidy the notes");
+  const sheet = laneTask(page, TITLE);
+  await expect(sheet).toContainText("Running", { timeout: 30_000 });
+  const bench = await showInWorkbench(page, TITLE);
   const happened = bench.getByRole("tabpanel", { name: /^Summary/ }).getByRole("region", { name: "What happened" });
   const tools = happened.locator('[data-slot="tool-step"]');
 
@@ -49,14 +46,13 @@ test("[TC-UX-165] a step's Summary shows its tool calls live, a refused one with
   );
 
   // Cancelled, the job it cut off is marked as unresolved, never as done.
-  await bench.getByRole("button", { name: "← Back to the task" }).click();
   const controls = sheet.getByRole("region", { name: `Controls for ${TITLE}` });
   await controls.getByRole("button", { name: "Cancel task" }).click();
   await controls.getByRole("button", { name: "Yes, cancel" }).click();
   await expect(controls.getByRole("status")).toHaveText("Cancelled: the task confirmed it stopped.", {
     timeout: 30_000,
   });
-  await sheet.getByRole("button", { name: "Open Workbench" }).click();
+  await sheet.getByRole("button", { name: "Show in the Workbench" }).click();
   const ended = [
     /^✓DoneWriting notes\.md$/,
     /^✕FailedWriting hobbots-e2e\.txt\s*Why: \/etc\/hobbots-e2e\.txt is outside this hob's folders\.$/,

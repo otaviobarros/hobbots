@@ -1,13 +1,5 @@
 import type { WaitingQuestion } from "@hobbots/api";
-import {
-  isTerminalTask,
-  type NoteId,
-  type Question,
-  type QuestionId,
-  type QuestionSurface,
-  type Task,
-  type TaskId,
-} from "@hobbots/domain";
+import { isTerminalTask, type Question, type QuestionId, type QuestionSurface, type Task } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
@@ -95,18 +87,5 @@ export const useAnswerQuestion = (via: QuestionSurface) => {
       applyTaskEvent(queryClient, { _tag: "QuestionAnswered", question });
       void questionChanged(queryClient, question);
     },
-  });
-};
-
-/**
- * Leaves your note on a Task for its nearest lead (ADR 018). Each note is sent under a key of its
- * own, so sending it again after a lost reply never leaves it twice; the drawer shows it at once.
- */
-export const useLeaveNote = (taskId: TaskId) => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ key, text }: { key: NoteId; text: string }) =>
-      call((c) => c.questions.leaveNote({ params: { taskId }, payload: { key, text } })),
-    onSuccess: (note) => applyTaskEvent(queryClient, { _tag: "NoteLeft", note }),
   });
 };

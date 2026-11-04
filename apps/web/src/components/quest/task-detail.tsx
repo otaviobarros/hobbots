@@ -7,7 +7,7 @@ import { roomStatus, roomStatusLabel, roomTone } from "./control-room.ts";
 import { messages } from "./messages.ts";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import type { HobLookup } from "./use-work.ts";
-import { noteRecipient, questionForYou, taskDetail, taskTitle } from "./work-model.ts";
+import { taskDetail, taskTitle } from "./work-model.ts";
 import { yourAnswer } from "./your-answer.ts";
 
 const copy = messages.drawer;
@@ -192,20 +192,6 @@ function OpenQuestion({ question, hobs }: { question: Question; hobs: HobLookup 
   if (question.recipientId === null) return <span className="text-lantern">{copy.waitsForYou}</span>;
   return <span className="text-label">{copy.waitingOn({ name: hobs(question.recipientId).name })}</span>;
 }
-
-/**
- * While a question on the Task waits for you, the note box says it sends a note to the lead and
- * points at the answer box, so nobody types an answer into it.
- */
-export const notAnAnswer = (tree: TaskTree, task: Task, hobs: HobLookup) => {
-  const waiting = questionForYou(tree, task);
-  if (waiting === null) return {};
-  const lead = hobs(noteRecipient(tree, task)).name;
-  return {
-    label: copy.noteNotAnswer({ name: lead }),
-    hint: copy.noteNotAnswerHint({ lead, asker: hobs(waiting.askerId).name }),
-  };
-};
 
 function Artifacts({ artifacts }: { artifacts: ReturnType<typeof taskDetail>["output"] }) {
   return (

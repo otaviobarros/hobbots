@@ -1,6 +1,7 @@
 import type { Locator } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
+import { lane, laneHead } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -33,7 +34,7 @@ const lines = (element: Locator) =>
   element.evaluate((each) => Math.round(each.clientHeight / Number.parseFloat(getComputedStyle(each).lineHeight)));
 
 // covers UX-001
-test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the chat, its cards and the task sheet", async ({
+test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the chat, its cards and the Quest room", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -47,38 +48,27 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   const strip = page.getByRole("region", { name: "Work in progress" });
   expect(await lines(strip.getByText(/^Run the Black Friday campaign/))).toBe(1);
 
-  // The task sheet's heading stops at three lines, and neither it nor the sheet runs past the edge.
+  // The room's heading keeps to one line inside the room, and Ada's lane holds the long brief
+  // without running past its edge.
   const tray = page.getByRole("region", { name: /^Needs you/ });
   await expect(tray.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 15_000 });
   const card = page.getByRole("region", { name: /^Aldric's work on Run the Black Friday campaign/ });
   const adasRow = card.getByRole("button", { name: /^Look inside Build the campaign for the shop in/ });
   await adasRow.click();
-  const sheet = page.getByRole("dialog", { name: /^Build the campaign for the shop in .*, task details$/ });
-  const heading = sheet.getByRole("heading", { name: /^Build the campaign for the shop in/ });
+  const room = page.getByRole("region", { name: /^Run the Black Friday campaign .*, Quest room$/ });
+  const heading = room.getByRole("heading", { name: /^Run the Black Friday campaign/ }).first();
   await expect(heading).toBeFocused();
-  expect(await lines(heading)).toBeLessThanOrEqual(3);
-  await expectInside(heading, sheet);
-  await expectInside(sheet.getByRole("button", { name: /^Back to Run the Black Friday campaign/ }), sheet);
-  await sheet.getByText("Everything in this task").click();
-  await expect(sheet).toContainText("hobbots_manual_tests/black_friday_campaign_full_run");
-  await expectNoSideScroll(sheet);
-
-  // Back shows the quest in the same sheet, never closing it on the way (#894), and the quest's
-  // heading stops at three lines too.
-  const panel = page.locator('[data-slot="sheet-content"]');
-  await panel.evaluate((each) => Object.assign(each, { stayedOpen: true }));
-  await sheet.getByRole("button", { name: /^Back to Run the Black Friday campaign/ }).click();
-  const quest = page.getByRole("dialog", { name: /^Run the Black Friday campaign .*, quest$/ });
-  const questHeading = quest.getByRole("heading", { name: /^Run the Black Friday campaign/ });
-  await expect(questHeading).toBeFocused();
-  await expect(panel).toHaveJSProperty("stayedOpen", true);
-  expect(await lines(questHeading)).toBeLessThanOrEqual(3);
-  await expectInside(questHeading, quest);
-  await quest.getByRole("button", { name: /^Ada · Build the campaign for the shop in/ }).click();
-  await expect(heading).toBeFocused();
-  await expect(panel).toHaveJSProperty("stayedOpen", true);
-  await page.keyboard.press("Escape");
-  await expect(sheet).toBeHidden();
+  expect(await lines(heading)).toBe(1);
+  await expectInside(heading, room);
+  const ada = lane(page, "Ada");
+  await expect(laneHead(page, "Ada")).toHaveAttribute("aria-pressed", "true");
+  await expectInside(laneHead(page, "Ada"), ada);
+  const task = ada.getByRole("region", { name: /^Build the campaign for the shop in/ }).first();
+  await task.locator(":scope > details > summary").click();
+  await expect(task).toContainText("hobbots_manual_tests/black_friday_campaign_full_run");
+  await expectNoSideScroll(ada);
+  await room.getByRole("button", { name: "Close room" }).click();
+  await expect(room).toBeHidden();
 
   // Once answered, the question card in the chat names the Task in at most two lines, inside the card.
   const answer = tray.getByRole("textbox", { name: "Your answer to Ada" });
@@ -94,18 +84,12 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   // Nothing in the chat is wider than its column, so the transcript never scrolls sideways.
   await expectNoSideScroll(chat);
 
-  // With the sheet open, the quest card's count and Open in Workbench stay clear of it, once the
-  // sheet and the column have slid into place.
+  // With the room open beside it, the quest card's count and Open in Workbench stay inside the chat's column.
   await adasRow.click();
-  await expect(sheet).toBeVisible();
+  await expect(room).toBeVisible();
   for (const end of [card.getByText(/of 2 done$/), card.getByRole("button", { name: "Open in Workbench" })]) {
     await expect(end).toBeVisible();
-    await expect
-      .poll(async () => {
-        const [{ x, width }, { x: sheetStart }] = [await box(end), await box(sheet)];
-        return x + width - sheetStart;
-      })
-      .toBeLessThanOrEqual(0);
+    await expectInside(end, chat);
   }
   await expectNoSideScroll(chat);
 });

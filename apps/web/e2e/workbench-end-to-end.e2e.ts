@@ -156,8 +156,8 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
   await views.getByRole("button", { name: "See what ran in Terminal" }).click();
   await expect(tabs.getByRole("tab", { name: /^Terminal/ })).toHaveAttribute("aria-selected", "true");
 
-  // Going back leaves the Workbench for the chat, whose turn has ended.
-  await bench.getByRole("button", { name: "← Back to chat" }).click();
+  // Close room leaves the Workbench for the chat, whose turn has ended.
+  await page.getByRole("button", { name: "Close room" }).click();
   await expect(bench).toBeHidden();
   await expect(page.getByRole("textbox", { name: /^Message Aldric/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden();

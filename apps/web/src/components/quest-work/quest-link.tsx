@@ -1,10 +1,11 @@
 import type { AgentId, Quest, TaskId } from "@hobbots/domain";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { roomSearch } from "../quest-room/room-search.ts";
 
 /**
  * Opens a Quest where it is followed: the chat of the request that started it, with its card,
- * header quest button, with its task sheet open on `taskId`. That thread belongs to `threadAgentId`,
+ * header quest button, with its Quest room open on `taskId`'s lane. That thread belongs to `threadAgentId`,
  * which for a nested Quest is not its lead. A Quest without a thread opens its lead.
  */
 export function QuestLink({
@@ -17,7 +18,7 @@ export function QuestLink({
 }: {
   quest: Quest;
   threadAgentId: AgentId | null;
-  /** The Task the drawer opens on: a member's own Task, or the one the Quest sits on. */
+  /** The Task whose lane the room lights: a member's own Task, or the one the Quest sits on. */
   taskId: TaskId;
   /** Names the link when its content alone would not. */
   label?: string | undefined;
@@ -32,7 +33,7 @@ export function QuestLink({
     <Link
       to="/hobs/$hobId/threads/$threadId"
       params={{ hobId: threadAgentId, threadId: quest.threadId }}
-      search={{ task: taskId }}
+      search={roomSearch(taskId)}
       aria-label={label}
       className={className}
     >

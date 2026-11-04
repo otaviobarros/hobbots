@@ -1,7 +1,7 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openQuest, taskSheet } from "./work-sheet.ts";
+import { laneHead, openRoom, showInWorkbench } from "./quest-room.ts";
 
 // Issue #668 in the browser: Pip leads a nested Quest and is woken several times on his Task. Each
 // wake is a turn of his Task's one Attempt, so his Workbench offers no Attempt to pick. The hub's
@@ -107,8 +107,8 @@ test("[TC-OR-454] a nested lead woken several times on its Task shows Attempt 1 
     }),
     hubCall("wait_for", { key: "wait", tasks: ["$review.task_id"] }),
   ]);
-  const tasks = await openQuest(page, "Review the project");
-  const pip = tasks.getByRole("button", { name: /^Pip · Review the work/ });
+  await openRoom(page, "Review the project");
+  const pip = laneHead(page, "Pip");
   await expect(pip).toContainText("Blocked", { timeout: 30_000 });
 
   for (const [key, text] of [
@@ -142,9 +142,7 @@ test("[TC-OR-454] a nested lead woken several times on its Task shows Attempt 1 
   await expect.poll(pipAttempts, { timeout: 20_000 }).toEqual([{ number: 1, state: "completed" }]);
 
   // His Workbench offers no Attempt to pick.
-  await pip.click();
-  await taskSheet(page, "Review the work").getByRole("button", { name: "Open Workbench" }).click();
-  const bench = page.getByRole("region", { name: "Workbench for Review the work" });
+  const bench = await showInWorkbench(page, "Review the work");
   await expect(bench.getByRole("heading", { name: "Review the work" })).toBeVisible();
   await expect(bench.getByRole("radiogroup", { name: "Attempts" })).toHaveCount(0);
 });

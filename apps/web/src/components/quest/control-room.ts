@@ -13,7 +13,7 @@ import {
 } from "@hobbots/domain";
 import { ApiError } from "../../api/client.ts";
 import { messages } from "./messages.ts";
-import { type RowStatus, rowStatus, waitsOnOf } from "./work-model.ts";
+import { type RowStatus, rowStatus, waitsOnOf, workCounts } from "./work-model.ts";
 
 /**
  * The quest sheet's rows and controls (ADR 018, CH-005): a request's whole Task tree with who owns each
@@ -269,3 +269,15 @@ export const controlError = (error: unknown, names: Names): string => {
 /** Who a row waits on, by name, with you as "you". */
 export const waitingNames = (row: RoomRow, nameOf: (id: AgentId) => string): ReadonlyArray<string> =>
   row.waitingOn.map((each) => (each.kind === "you" ? messages.room.you : nameOf(each.id)));
+
+/**
+ * What a Quest's progress strip shows: a segment per Task under the lead's, or the Task itself when
+ * it works alone, in its tone, and how many Tasks need you.
+ */
+export const progressStrip = (tree: TaskTree) => {
+  const rows = roomRows(tree);
+  return {
+    segments: (rows.length > 1 ? rows.slice(1) : rows).map((row) => roomTone(row.status)),
+    needs: workCounts(tree)["needs-you"],
+  };
+};
