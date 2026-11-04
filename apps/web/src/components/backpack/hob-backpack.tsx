@@ -1,11 +1,6 @@
 import type { Agent } from "@hobbots/domain";
-import { useBackpack } from "../../api/backpack.ts";
-import { useBlockers } from "../../api/blockers.ts";
-import { useNow } from "../inbox/use-now.ts";
-import { useHobLookup } from "../quest/use-work.ts";
-import { waitingCount, waitingView } from "./backpack-model.ts";
 import { messages } from "./messages.ts";
-import { useOpenItem } from "./use-open-item.ts";
+import { useHobWaiting } from "./use-hob-waiting.ts";
 import { WaitingList } from "./waiting-list.tsx";
 
 const copy = messages;
@@ -16,11 +11,7 @@ const copy = messages;
  * awaiting its lead until the lead has handled it.
  */
 export function HobBackpack({ hob, open }: { hob: Agent; open: boolean }) {
-  const now = useNow();
-  const view = waitingView(useBackpack().items, useBlockers(), { kind: "hob", hobId: hob.id }, now);
-  const hobs = useHobLookup();
-  const openItem = useOpenItem();
-  const count = waitingCount(view);
+  const { now, view, hobs, openItem, count } = useHobWaiting(hob);
   const shown = open && count + view.handled.length + view.routine > 0;
   if (!shown && count === 0) return null;
   return (

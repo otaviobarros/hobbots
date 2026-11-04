@@ -3,18 +3,13 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
-import { useBackpack } from "../../api/backpack.ts";
-import { useBlockers } from "../../api/blockers.ts";
 import { agentsQuery } from "../../api/queries.ts";
 import { useQuestWork } from "../../api/quest-work.ts";
 import { type LedQuest, ledQuests } from "../../lib/led-quests.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
-import { waitingCount, waitingView } from "../backpack/backpack-model.ts";
-import { useOpenItem } from "../backpack/use-open-item.ts";
+import { useHobWaiting } from "../backpack/use-hob-waiting.ts";
 import { WaitingList } from "../backpack/waiting-list.tsx";
 import { useHobPermissions } from "../hob-permissions.tsx";
-import { useNow } from "../inbox/use-now.ts";
-import { useHobLookup } from "../quest/use-work.ts";
 import { QuestLink } from "../quest-work/quest-link.tsx";
 import { messages } from "./messages.ts";
 
@@ -138,12 +133,8 @@ function QuestCard({ quest }: { quest: LedQuest }) {
 }
 
 function Backpack({ hob }: { hob: Agent }) {
-  const now = useNow();
-  const view = waitingView(useBackpack().items, useBlockers(), { kind: "hob", hobId: hob.id }, now);
-  const hobs = useHobLookup();
-  const openItem = useOpenItem();
+  const { now, view, hobs, openItem, count } = useHobWaiting(hob);
   const [all, setAll] = useState(false);
-  const count = waitingCount(view);
   const empty = count + view.handled.length + view.routine === 0;
   return (
     <Card label={copy.backpack.label}>
