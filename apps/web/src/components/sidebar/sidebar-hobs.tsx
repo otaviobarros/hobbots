@@ -100,7 +100,7 @@ function SidebarHob({
               className={cn(sidebarItem, "cursor-pointer")}
             >
               <span className={sidebarIcon}>
-                <span className="relative inline-flex size-9 items-center justify-center rounded-tile bg-tile">
+                <span className="relative inline-flex size-hob-tile items-center justify-center rounded-tile bg-tile">
                   <HobSprite hob={hob} size={28} />
                   {mark && (
                     <span

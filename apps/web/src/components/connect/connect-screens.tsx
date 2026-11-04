@@ -119,7 +119,7 @@ export function ConnectWaiting({ waiting, onCancel }: { waiting: WaitingView; on
     >
       <div role="status" className="flex flex-col items-center gap-2.5 pt-6 text-center">
         <h1 className="m-0 font-heading text-[32px] font-bold text-moonlight">{copy.waiting.title({ computer })}</h1>
-        <p className="m-0 max-w-[560px] text-text-secondary">{copy.waiting.intro({ computer })}</p>
+        <p className="m-0 max-w-column-max text-text-secondary">{copy.waiting.intro({ computer })}</p>
         <p className="m-0 text-detail text-label">
           {copy.waiting.who({ computer, owner: waiting.owner })}
           {waiting.hubName !== computer && ` · ${copy.form.calledItself({ name: waiting.hubName })}`}
@@ -137,7 +137,9 @@ export function ConnectWaiting({ waiting, onCancel }: { waiting: WaitingView; on
           </span>
         </span>
         <p className="m-0 text-detail text-label">{copy.waiting.expires({ time: formatTime(waiting.expiresAt) })}</p>
-        <p className="m-0 max-w-[560px] pt-2 text-detail text-text-secondary">{copy.waiting.warning({ computer })}</p>
+        <p className="m-0 max-w-column-max pt-2 text-detail text-text-secondary">
+          {copy.waiting.warning({ computer })}
+        </p>
       </div>
     </SetupStep>
   );
@@ -166,7 +168,7 @@ export function ConnectEnded({
           ✕
         </div>
         <h1 className="m-0 mt-2 font-heading text-[32px] font-bold text-moonlight">{title}</h1>
-        <p role="status" className="m-0 max-w-[560px] text-text-secondary">
+        <p role="status" className="m-0 max-w-column-max text-text-secondary">
           {body}
         </p>
         <div className="flex gap-3 pt-4">
@@ -192,7 +194,7 @@ export function ConnectAllowed({ computer }: { computer: string }) {
           ✓
         </div>
         <h1 className="m-0 mt-2 font-heading text-[32px] font-bold text-moonlight">{copy.allowed.title}</h1>
-        <p className="m-0 max-w-[560px] leading-normal text-text-secondary">{copy.allowed.body({ computer })}</p>
+        <p className="m-0 max-w-column-max leading-normal text-text-secondary">{copy.allowed.body({ computer })}</p>
       </div>
     </SetupStep>
   );

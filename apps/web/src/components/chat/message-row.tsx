@@ -52,7 +52,7 @@ export function MessageRow({
       <div
         id={id}
         className={cn(
-          "max-w-[460px] animate-hb-in self-end bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap",
+          "max-w-bubble-max animate-hb-in self-end bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap",
           focused && focusRing,
         )}
       >
@@ -189,7 +189,7 @@ export function QueuedRow({
   return (
     <section
       aria-label={messages.queued.label}
-      className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end"
+      className="flex max-w-bubble-max animate-hb-in flex-col items-end gap-1.5 self-end"
     >
       <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
       <span className="text-meta text-label">
@@ -231,7 +231,10 @@ export function WaitingRow({
 }) {
   const chat = messages.chat;
   return (
-    <section aria-label={chat.waiting} className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end">
+    <section
+      aria-label={chat.waiting}
+      className="flex max-w-bubble-max animate-hb-in flex-col items-end gap-1.5 self-end"
+    >
       <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-60">{message.content}</div>
       <span className={cn("text-detail leading-[18px]", refused ? "text-rose" : "text-label")}>
         {refused ? chat.waitingRefused : live ? chat.waitingSending : chat.waitingOffline}

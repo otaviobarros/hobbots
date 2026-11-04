@@ -21,7 +21,7 @@ export function EmptyThread({
   onIdea: (idea: string) => void;
 }) {
   return (
-    <div className="mx-auto mt-14 flex w-full max-w-[560px] animate-hb-in flex-col items-center gap-3.5 text-center">
+    <div className="mx-auto mt-14 flex w-full max-w-column-max animate-hb-in flex-col items-center gap-3.5 text-center">
       <div
         className="relative flex h-[150px] w-[440px] max-w-full items-end justify-center overflow-hidden rounded-card bg-[linear-gradient(180deg,color-mix(in_srgb,var(--hob)_22%,var(--color-ground))_0%,color-mix(in_srgb,var(--hob)_8%,var(--color-ground))_100%)]"
         style={{ "--hob": HOB_COLORS[hob.lookColor].hat } as CSSProperties}

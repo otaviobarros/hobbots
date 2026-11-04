@@ -104,7 +104,7 @@ export function SetupRemoteAccess() {
           />
         )}
         {status !== undefined && ready && (
-          <div className="flex max-w-[760px] flex-col gap-3.5">
+          <div className="flex max-w-form-max flex-col gap-3.5">
             <div className="cut flex items-center gap-3.5 border-2 border-mint-deep bg-card px-4 py-3">
               <span aria-hidden className="size-2.5 flex-none bg-mint" />
               <span className="flex flex-col gap-0.5">
@@ -115,6 +115,13 @@ export function SetupRemoteAccess() {
               </span>
             </div>
             <div className="flex items-center gap-4 border-b-2 border-line py-3">
+              <Switch
+                aria-labelledby={labelId}
+                aria-describedby={noteId}
+                checked={on}
+                disabled={change.isPending}
+                onCheckedChange={(enabled) => change.mutate({ enabled })}
+              />
               <span className="flex flex-1 flex-col gap-0.5">
                 <span id={labelId} className="font-bold">
                   {copy.switchLabel}
@@ -123,13 +130,6 @@ export function SetupRemoteAccess() {
                   {copy.switchNote}
                 </span>
               </span>
-              <Switch
-                aria-labelledby={labelId}
-                aria-describedby={noteId}
-                checked={on}
-                disabled={change.isPending}
-                onCheckedChange={(enabled) => change.mutate({ enabled })}
-              />
             </div>
             {status.enabled && <RemoteAccessOn status={status} />}
           </div>

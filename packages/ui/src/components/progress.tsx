@@ -12,7 +12,7 @@ const progressVariants = cva("relative flex w-full items-center overflow-hidden 
       // The Usage plan meter.
       default: "h-2.5",
       // The quest card's progress line.
-      sm: "h-meter",
+      sm: "h-1.5",
     },
   },
   defaultVariants: {

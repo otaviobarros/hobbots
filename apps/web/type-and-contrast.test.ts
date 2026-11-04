@@ -14,6 +14,7 @@ interface ThemeFile {
   readonly font: Readonly<Record<string, string>>;
   readonly fixed: Readonly<Record<string, { readonly value: string }>>;
   readonly skin: Readonly<Record<string, Readonly<Record<string, string | number>>>>;
+  readonly size: Readonly<Record<string, string>>;
 }
 
 const themes: ThemeFile = JSON.parse(readFileSync(new URL("../../docs/design/themes.json", import.meta.url), "utf8"));
@@ -112,6 +113,15 @@ describe("type scale and spacing", () => {
     );
     for (const style of TEXT_STYLES)
       expect(cn(`text-${style}`, "text-text-strong")).toBe(`text-${style} text-text-strong`);
+  });
+
+  it.each(Object.entries(themes.size))("%s is set in @theme", (size, value) => {
+    expect(theme).toContain(`--spacing-${size}: ${value};`);
+  });
+
+  it("sets no size in @theme that themes.json lacks", () => {
+    const sizes = [...theme.matchAll(/--spacing-([\w-]+):/g)].map(([, name]) => name);
+    expect(sizes.filter((name) => name !== undefined && !(name in themes.size))).toEqual([]);
   });
 
   it("lets no theme or look change type, spacing or sizes", () => {

@@ -419,10 +419,15 @@
     "sidebar": "72px",
     "sidebar-open": "256px",
     "sheet": "340px",
+    "workbench-chat": "300px",
     "chat-min": "360px",
     "measure": "70ch",
     "bubble-max": "460px",
     "work-max": "604px",
+    "column-max": "560px",
+    "form-max": "760px",
+    "home-max": "880px",
+    "page-max": "1080px",
     "hob-tile": "36px",
     "row-min": "36px",
     "hit-min": "28px"
@@ -519,6 +524,36 @@
         "on": "rose",
         "floor": 4.5,
         "use": "Text on a rose fill."
+      },
+      {
+        "text": "mint",
+        "on": "line",
+        "floor": 4.5,
+        "use": "Working and Running tags."
+      },
+      {
+        "text": "text-secondary",
+        "on": "line",
+        "floor": 4.5,
+        "use": "Done and quiet tags."
+      },
+      {
+        "text": "text-secondary",
+        "on": "line-2",
+        "floor": 4.5,
+        "use": "Waiting, Resting and Cancelled tags."
+      },
+      {
+        "text": "text-strong",
+        "on": "line-2",
+        "floor": 4.5,
+        "use": "Queued tags."
+      },
+      {
+        "text": "label",
+        "on": "line",
+        "floor": 4.5,
+        "use": "Later tags."
       },
       {
         "text": "control",

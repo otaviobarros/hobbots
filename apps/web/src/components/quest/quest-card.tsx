@@ -124,7 +124,7 @@ const useStuck = (tree: TaskTree): ReadonlyArray<BackpackItem> =>
 
 function Progress({ done, total }: { done: number; total: number }) {
   return (
-    <div aria-hidden className="h-meter bg-deep">
+    <div aria-hidden className="h-1.5 bg-deep">
       <div className="h-full bg-mint" style={{ width: `${Math.round((done / total) * 100)}%` }} />
     </div>
   );

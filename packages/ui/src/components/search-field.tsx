@@ -23,7 +23,7 @@ const frame =
 const input =
   "h-auto py-2 text-ui leading-5 text-text placeholder:text-label md:text-ui [&::-webkit-search-cancel-button]:appearance-none";
 
-const clear = "size-7 rounded-control text-label [clip-path:none] hover:bg-hover hover:text-text-strong";
+const clear = "size-hit-min rounded-control text-label [clip-path:none] hover:bg-hover hover:text-text-strong";
 
 /** A search input with a magnifier and a clear button. Esc clears the text, then calls `onEscape`. */
 function SearchField({

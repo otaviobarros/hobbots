@@ -132,18 +132,18 @@ export function HttpsSettings({ status }: { status: RemoteAccessStatus }) {
   return (
     <>
       <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
-        <div className="flex flex-1 flex-col gap-0.5">
-          <span id={labelId} className="font-bold">
-            {copy.switchLabel}
-          </span>
-          <span className="text-detail text-text-secondary">{copy.note}</span>
-        </div>
         <Switch
           aria-labelledby={labelId}
           checked={on}
           disabled={change.isPending}
           onCheckedChange={(https) => change.mutate({ https })}
         />
+        <div className="flex flex-1 flex-col gap-0.5">
+          <span id={labelId} className="font-bold">
+            {copy.switchLabel}
+          </span>
+          <span className="text-detail text-text-secondary">{copy.note}</span>
+        </div>
       </div>
       {status.https.enabled && status.https.detail !== null && (
         <p className="m-0 flex items-start gap-2 text-ui">

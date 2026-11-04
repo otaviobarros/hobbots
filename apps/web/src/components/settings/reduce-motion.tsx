@@ -16,6 +16,12 @@ export function ReduceMotionRow() {
 
   return (
     <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
+      <Switch
+        aria-labelledby={labelId}
+        aria-describedby={noteId}
+        checked={motion.reduced}
+        onCheckedChange={(on) => setMotionChoice(choiceFor(on, motion.systemReduces))}
+      />
       <div className="flex flex-1 flex-col gap-0.5">
         <span id={labelId} className="font-bold">
           {copy.label}
@@ -29,12 +35,6 @@ export function ReduceMotionRow() {
           {copy.useSystem}
         </Button>
       )}
-      <Switch
-        aria-labelledby={labelId}
-        aria-describedby={noteId}
-        checked={motion.reduced}
-        onCheckedChange={(on) => setMotionChoice(choiceFor(on, motion.systemReduces))}
-      />
     </div>
   );
 }

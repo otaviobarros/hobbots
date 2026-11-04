@@ -190,7 +190,7 @@ function ArchivedThreadView({ thread, ...props }: ChatProps & { thread: Thread }
           onRestore={() => restore.mutate(thread.id)}
         />
       </section>
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-transcript-y">
+      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-4">
         {transcript.isPending && <p className="text-label">{messages.loadingMessages}</p>}
         {transcript.isError && <p className="text-ui text-rose">{messages.loadMessagesFailed}</p>}
         {transcript.data?.map((message) => (

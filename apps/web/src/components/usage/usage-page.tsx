@@ -61,7 +61,7 @@ export function UsagePage({ days }: { days: UsagePeriod }) {
 
   return (
     <Page icon="Usage" title={messages.title} intro={messages.intro} actions={<PeriodPicker days={days} />}>
-      <div className="flex w-full max-w-[880px] flex-col gap-7">
+      <div className="flex w-full max-w-home-max flex-col gap-7">
         {report.isError ? (
           <div className="flex items-center gap-3">
             <p className="m-0 text-rose">{messages.failed}</p>

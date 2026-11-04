@@ -86,15 +86,16 @@ function EmptyMedia({
   );
 }
 
-// The one line. Pass `asChild` to render it as the screen's heading.
+// The one line, in the heading font: Atkinson in Lamplight, Pixelify in Workshop. Pass `asChild`
+// to render it as the screen's heading.
 function EmptyTitle({ className, asChild = false, ...props }: React.ComponentProps<"div"> & { asChild?: boolean }) {
   const Comp = asChild ? Slot.Root : "div";
   return (
     <Comp
       data-slot="empty-title"
       className={cn(
-        "m-0 font-pixel text-lg leading-6 font-semibold text-text-strong [font-variant-ligatures:none]",
-        "group-data-[size=page]/empty:text-[32px] group-data-[size=page]/empty:leading-9 group-data-[size=page]/empty:font-bold",
+        "m-0 font-heading text-lg leading-6 font-(--heading-weight) text-text-strong",
+        "group-data-[size=page]/empty:text-[32px] group-data-[size=page]/empty:leading-9",
         className,
       )}
       {...props}

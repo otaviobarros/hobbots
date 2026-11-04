@@ -109,23 +109,26 @@
   /* The fixed shadows, the same in every theme (`fixed` in themes.json). */
   --shadow-segment: 0 1px 2px rgb(0 0 0 / 0.18);
 
-  /* Measures of the chat workspace. */
-  --spacing-row-y: 7px;
-  --spacing-thread-indent: 34px;
-  --spacing-transcript-y: 18px;
-  --spacing-chat-min: 360px;
-  --spacing-bubble-max: 460px;
-  /* A request's work in the chat: the card and question width, the drawer beside it. */
-  --spacing-tag-x: 7px;
-  --spacing-meter: 5px;
-  --spacing-work-max: 604px;
-  --spacing-drawer: 420px;
-  /* The Task chat drawer beside the Workbench's tabs. */
-  --spacing-workbench-chat: 300px;
-  /* The sidebar on every screen after setup: collapsed, expanded, and its rows. */
+  /*
+   * Sizes, the same in every theme (`size` in themes.json): the window, the sidebar, the chat and
+   * the widths that screens share. A test checks the two lists match.
+   */
+  --spacing-title-strip: 30px;
   --spacing-sidebar: 72px;
   --spacing-sidebar-open: 256px;
+  --spacing-sheet: 340px;
+  --spacing-workbench-chat: 300px;
+  --spacing-chat-min: 360px;
+  --spacing-measure: 70ch;
+  --spacing-bubble-max: 460px;
+  --spacing-work-max: 604px;
+  --spacing-column-max: 560px;
+  --spacing-form-max: 760px;
+  --spacing-home-max: 880px;
+  --spacing-page-max: 1080px;
+  --spacing-hob-tile: 36px;
   --spacing-row-min: 36px;
+  --spacing-hit-min: 28px;
   /* From this width the expanded sidebar pushes the page aside; below it, it opens over the page. */
   --breakpoint-wide: 1100px;
 

@@ -15,7 +15,7 @@ export function DeviceRemoved() {
     <main className="flex min-h-0 flex-1 items-center justify-center bg-ground px-6">
       <section
         aria-labelledby="device-removed-title"
-        className="cut flex w-full max-w-[560px] animate-hb-in flex-col items-center gap-3 border-2 border-control bg-panel px-[30px] py-[26px] text-center"
+        className="cut flex w-full max-w-column-max animate-hb-in flex-col items-center gap-3 border-2 border-control bg-panel px-[30px] py-[26px] text-center"
       >
         <ChiefMark mood="idle" size={56} />
         <h1 id="device-removed-title" className="m-0 font-heading text-2xl font-bold text-moonlight">

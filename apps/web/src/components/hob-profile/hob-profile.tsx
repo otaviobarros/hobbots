@@ -667,7 +667,7 @@ function RetireDialog({
     <Dialog open onOpenChange={(open) => !open && close()}>
       <DialogContent
         aria-describedby={undefined}
-        className="max-w-[460px] animate-hb-in gap-3 rounded-card border-0 bg-ground p-5 shadow-sheet"
+        className="max-w-bubble-max animate-hb-in gap-3 rounded-card border-0 bg-ground p-5 shadow-sheet"
       >
         {retired ? (
           <>
