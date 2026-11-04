@@ -220,11 +220,21 @@ export function ChatView({
             »
           </Button>
         )}
-        <HobSprite hob={current} size={36} state={state} badge />
+        {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
+        <Link to="/hobs/$hobId" params={{ hobId }} tabIndex={-1} aria-hidden className="shrink-0">
+          <HobSprite hob={current} size={36} state={state} badge />
+        </Link>
         {/* The hob's name keeps its room when the quest button and the brain picker crowd the header. */}
         <div className="flex min-w-[120px] flex-1 flex-col overflow-hidden">
           <span className="flex min-w-0 items-baseline gap-2">
-            <span className="font-heading text-xl font-semibold whitespace-nowrap">{current.name}</span>
+            <Link
+              to="/hobs/$hobId"
+              params={{ hobId }}
+              title={copy.openHob({ name: current.name })}
+              className="font-heading text-xl font-semibold whitespace-nowrap text-text-strong no-underline hover:underline"
+            >
+              {current.name}
+            </Link>
             <span className="text-sm font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
             <span className="truncate text-text-secondary">{title}</span>
           </span>
