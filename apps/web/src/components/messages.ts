@@ -515,18 +515,44 @@ export const messages = {
     },
   },
   charms: {
+    intro: ({ name }: { name: string }) =>
+      `Charms connect ${name} to other apps. You connect each app once in Settings, then choose here what ${name} may do with it.`,
+    more: "More Charms show up here as Hobbots adds them. You connect each one once in Settings.",
+    moreLink: "Charms in Settings",
     github: {
       name: "GitHub",
+      card: "GitHub Charm",
+      state: {
+        off: "Off",
+        on: "On",
+        "as-you": "On · as you",
+        "not-ready": "Not ready",
+        "cannot-act": "Can't act",
+      },
+      mayDo: ({ name }: { name: string }) => `What ${name} may do`,
+      rulesNote: "Ask puts the step in your Inbox first. These never go past your safety level.",
+      actions: {
+        "read-github": {
+          label: "Read code",
+          note: "Repository details, issues and pull requests of its folders, read on the hub.",
+        },
+        push: { label: "Push changes", note: "Send its commits to a remote." },
+        "open-pull-request": {
+          label: "Open pull requests",
+          note: "From its pushed branches, in the repository of its folders.",
+        },
+        "comment-github": {
+          label: "Comment and reply",
+          note: "Comments on issues and pull requests in the repository of its folders.",
+        },
+      },
       reads: ({ name }: { name: string }) =>
         `Reads, pushes to, opens pull requests in and comments on the repository of ${name}'s folders, as you. The hub reaches GitHub with the account you connected in Settings, so no key reaches ${name}.`,
       readsAsBot: ({ name, bot }: { name: string; bot: string }) =>
         `Reads, pushes to, opens pull requests in and comments on the repository of ${name}'s folders, as ${bot}. The hub keeps the app's key, so no key reaches ${name}.`,
-      read: "Read",
-      push: "Push",
-      pullRequests: "Pull requests",
-      comment: "Comment",
       grant: ({ name }: { name: string }) => `Let ${name} use GitHub`,
-      off: ({ name }: { name: string }) => `${name} is offered no GitHub action until you turn this on.`,
+      off: ({ name }: { name: string }) =>
+        `${name} can't use GitHub. Turn it back on and its rules and its app are as you left them.`,
       notConnected: "GitHub is not connected on this hub yet, so no hob can use it.",
       connectInSettings: "Connect GitHub in Settings",
       saveFailed: "Hobbots could not save this. Try again.",
@@ -863,12 +889,6 @@ export const messages = {
     },
     status: { verified: "Verified", unverified: "Not verified", unsupported: "Unsupported" },
     needsSandbox: "Needs the sandbox",
-    toolBlocked: {
-      unsupported: "Blocked, because the sandbox cannot start on this hub.",
-      unverified: "Blocked, because the sandbox is not yet verified on this hub.",
-    },
-    toolChecked: ({ labels }: { labels: string }) => `${labels} is checked by Hobbots, not held by the sandbox.`,
-    toolHeld: "Held by the sandbox.",
     sandboxLabel: "Run in the sandbox",
     sandboxOn: ({ name }: { name: string }) =>
       `Commands, Git and the web run inside Hobbots' sandbox, which keeps ${name} in its folders.`,

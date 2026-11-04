@@ -78,7 +78,10 @@ test("[TC-GEN-024] connects GitHub in Settings and grants it per hob on the Char
   await page.getByRole("tab", { name: "Charms" }).click();
   await expect(page.getByText("GitHub is not connected on this hub yet")).toBeHidden();
   await grant.click();
-  await expect(page.getByText("Pip is offered no GitHub action until you turn this on.")).toBeVisible();
+  await expect(
+    page.getByText("Pip can't use GitHub. Turn it back on and its rules and its app are as you left them."),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "GitHub Charm" }).getByText("Off", { exact: true })).toBeVisible();
   await expect
     .poll(() => api<{ policy: object }>(current, "GET", `/api/agents/${pip.id}/permissions`))
     .toMatchObject({ policy: { githubCharm: false } });

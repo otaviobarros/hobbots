@@ -21,13 +21,14 @@ import {
   enforcement,
   folderName,
   offeredAnswer,
+  PERMISSION_RULES,
   pickAnswer,
   presetInfo,
-  RULES,
+  type RuleInfo,
   ruleColor,
 } from "../api/safety.ts";
 import { watchedSetupQuery } from "../api/setup.ts";
-import { NeedsSandbox } from "./enforcement.tsx";
+import { EnforcementList, NeedsSandbox } from "./enforcement.tsx";
 import { messages } from "./messages.ts";
 import { FolderList, LockedSwitch } from "./safety-and-folders.tsx";
 
@@ -135,7 +136,7 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
         From your {presetInfo(data.preset).label} safety. You can make {hob.name} more careful than that. Ask means{" "}
         {hob.name} shows a permission card in chat and waits for you.
       </span>
-      {RULES.map((rule) => (
+      {PERMISSION_RULES.map((rule) => (
         <Rule
           key={rule.operation}
           rule={rule}
@@ -159,6 +160,10 @@ export function PermissionsTab({ hob }: { hob: Agent }) {
               : `Hobbots could not save ${hob.name}'s permissions. Try again in a moment.`}
         </p>
       )}
+
+      <h2 className="lbl m-0 pt-4 text-xs text-label">{messages.enforcement.heading}</h2>
+      <span className="text-[13px] text-text-secondary">{messages.enforcement.intro({ name: hob.name })}</span>
+      <EnforcementList enforcement={data.enforcement} />
     </div>
   );
 }
@@ -218,7 +223,7 @@ function SigningSwitch({
   );
 }
 
-const shownAnswer = (
+export const shownAnswer = (
   permissions: HobPermissions,
   overrides: NonNullable<UpdateHobPermissionsPayload["overrides"]>,
   operation: PolicyOperation,
@@ -286,14 +291,14 @@ function SharedFolders({
 }
 
 /** One rule: Allow, Ask or Never, with the answers wider than the preset left out. */
-function Rule({
+export function Rule({
   rule,
   permissions,
   shown,
   pending,
   onPick,
 }: {
-  rule: (typeof RULES)[number];
+  rule: RuleInfo;
   permissions: HobPermissions;
   /** The answer on its way to the hub. */
   shown: PolicyDecision | undefined;
