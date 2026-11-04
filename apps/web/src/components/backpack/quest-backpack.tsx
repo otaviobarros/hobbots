@@ -20,11 +20,14 @@ export function TaskBackpack({
   task,
   hobs,
   onOpen,
+  waiting,
 }: {
   tree: TaskTree;
   task: Task;
   hobs: HobLookup;
   onOpen: (taskId: TaskId) => void;
+  /** True for the card itself, which shows the backpack while something waits; false for its details, which hold it once nothing does. */
+  waiting: boolean;
 }) {
   const now = useNow();
   const scope = {
@@ -34,7 +37,8 @@ export function TaskBackpack({
     questIds: new Set<string>(tree.quests.map((quest) => quest.id)),
   } as const;
   const view = waitingView(useBackpack().items, useBlockers(), scope, now);
-  if (waitingCount(view) + view.handled.length + view.routine === 0) return null;
+  const count = waitingCount(view);
+  if (waiting ? count === 0 : count > 0 || view.handled.length + view.routine === 0) return null;
   return (
     <section
       aria-label={copy.task.label({ title: taskTitle(task) })}
@@ -42,7 +46,7 @@ export function TaskBackpack({
     >
       <h3 className="m-0 flex items-center justify-between px-2 text-detail font-bold text-label">
         {copy.task.heading}
-        <span className="rounded-dot bg-line px-1.5 text-meta">{waitingCount(view)}</span>
+        <span className="rounded-dot bg-line px-1.5 text-meta">{count}</span>
       </h3>
       <WaitingList
         view={view}

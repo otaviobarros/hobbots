@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, openRoom } from "./quest-room.ts";
+import { laneHead, openRoom, taskDetails } from "./quest-room.ts";
 
 // Issue #573 in the browser: a lead that waits on a member's Task reads the member's question in
 // what wait_for answers, and the question reaches the lead as soon as its turn ends instead of
@@ -97,6 +97,7 @@ test("[TC-OR-245] a question from a Task the lead waits for reaches the lead and
 
   // On Frodo's Task, Quill's question was carried into his turn and handled there, not held.
   await openRoom(page, "Ship the release");
+  await taskDetails(page, "Ship the release");
   const room = page.getByRole("region", { name: "Backpack for Ship the release" });
   const question = room.getByRole("button", { name: /Quill asks: Playful or formal\?/ });
   await expect(question).toContainText("Consumed", { timeout: 20_000 });

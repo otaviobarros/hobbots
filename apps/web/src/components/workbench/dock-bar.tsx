@@ -28,11 +28,8 @@ export function DockBar({
   states: TabStates;
   counts: Readonly<Record<ListTab, number>> | null;
   open: boolean;
-  /**
-   * Whose work the dock narrows to, by the lit lane's hob and the name its chip shows: the hob's,
-   * or the one Task's shown alone. Null while the dock shows everyone.
-   */
-  filter: { readonly hob: Hob; readonly name: string } | null;
+  /** The hob whose work the dock narrows to, by its lit lane, or null while it shows everyone. */
+  filter: Hob | null;
   /** Whether the Quest has more than one lane to pick from. */
   party: boolean;
   onEveryone: () => void;
@@ -51,9 +48,15 @@ export function DockBar({
       </div>
       <span className="ms-auto flex shrink-0 items-center gap-2">
         {filter !== null ? (
-          <Button variant="chip" size="xs" title={messages.dock.showEveryone} onClick={onEveryone}>
-            <HobTile hob={filter.hob} tile="sm" />
-            {messages.dock.only({ name: filter.name })}
+          <Button
+            variant="chip"
+            size="xs"
+            title={messages.dock.showEveryone}
+            onClick={onEveryone}
+            className="max-w-48 min-w-0"
+          >
+            <HobTile hob={filter} tile="sm" />
+            <span className="truncate">{messages.dock.only({ name: filter.name })}</span>
             <span aria-hidden className="text-label">
               ✕
             </span>
