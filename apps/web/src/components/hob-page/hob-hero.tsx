@@ -55,7 +55,7 @@ export function HobHero({
           />
           <HobSprite hob={hob} size={98} state={state} className="z-[1] mb-1.5" />
         </span>
-        <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-1.5 pb-[18px]">
+        <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-1.5 pb-[18px]">
           <span className="flex min-w-0 items-center gap-2.5">
             <h1
               title={hob.name}

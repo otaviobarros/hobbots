@@ -167,3 +167,31 @@ test("[TC-UX-143] a new hob's page says hello and offers three starters, and one
     "Turn my bullet points into a friendly email",
   );
 });
+
+// covers UX-001, UX-005
+test("[TC-UX-144] Your hobs and a hob's page hold at a 1024px window, with nothing cut off or overlapping", async ({
+  page,
+}) => {
+  const { current, pip } = await hubWithPip();
+  hub = current;
+  await page.setViewportSize({ width: 1024, height: 768 });
+  const fits = (name: string) =>
+    page.getByRole("main", { name }).evaluate((main) => main.scrollWidth <= main.clientWidth);
+
+  await page.goto(`${current.url}/#/hobs`);
+  await expect(page.getByRole("link", { name: "Pip, New" })).toBeVisible();
+  expect(await fits("Your hobs")).toBe(true);
+
+  for (const tab of ["", "?tab=history"]) {
+    await page.goto(`${current.url}/#/hobs/${pip.id}${tab}`);
+    const hero = page.getByRole("region", { name: "Pip" });
+    await expect(hero).toBeVisible();
+    expect(await fits("Pip's page")).toBe(true);
+    // The hero's buttons stay inside it, clear of the name and the stats line.
+    const box = await hero.boundingBox();
+    const profile = await hero.getByRole("link", { name: "Profile" }).boundingBox();
+    const stats = await hero.getByText(/with you since/).boundingBox();
+    expect(box && profile && profile.x + profile.width <= box.x + box.width).toBe(true);
+    expect(profile && stats && (profile.y >= stats.y + stats.height || profile.x >= stats.x + stats.width)).toBe(true);
+  }
+});
