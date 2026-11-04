@@ -11,6 +11,7 @@ import {
   type ThreadId,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -69,6 +70,13 @@ const stayAtEnd = (view: HTMLDivElement | null) => {
   observer.observe(view);
   return () => observer.disconnect();
 };
+
+/**
+ * While the work sheet is open and the chat has room beside it, the chat's column moves out from
+ * under the sheet, so no card in it hides its end there (#874). Narrower, the sheet stays over the
+ * end of the chat.
+ */
+const besideSheet = "@min-[840px]/chat:group-data-[sheet=open]/work:pe-[calc(var(--spacing-sheet)+--spacing(9))]";
 
 const copy = messages.chat;
 const brainCopy = messages.brain;
@@ -220,7 +228,7 @@ export function ChatView({
   const empty = threadId === undefined || messages.data?.length === 0;
 
   return (
-    <main aria-label={copy.landmark} className="flex min-w-chat-min flex-1 flex-col">
+    <main aria-label={copy.landmark} className="@container/chat flex min-w-chat-min flex-1 flex-col">
       {/* The tile, then the chat's title over who leads it and what they are doing (A2-02). */}
       <header className="@container/header flex items-center gap-3 border-b-(length:--edge) border-line px-6 pt-3.5 pb-3">
         {/* The tile and the name both open the hob's page; the tile is left out of the tab order. */}
@@ -268,10 +276,11 @@ export function ChatView({
           if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
         }}
         ref={stayAtEnd}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px]"
+        className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px]", besideSheet)}
       >
-        {/* The transcript, the tray and the composer share one centered column (A2-01). */}
-        <div className="mx-auto flex w-full max-w-measure flex-1 flex-col gap-3.5">
+        {/* The transcript, the tray and the composer share one centered column (A2-01). Long words
+            and paths wrap inside it, so nothing in it is wider than the column (#874). */}
+        <div className="mx-auto flex w-full max-w-measure flex-1 flex-col gap-3.5 wrap-anywhere">
           {threadId && messages.isPending && <p className="text-label">{copy.loadingMessages}</p>}
           {empty && !messages.isLoading && (
             <EmptyThread hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
@@ -350,7 +359,7 @@ export function ChatView({
       </div>
 
       <ArchiveToastViewport />
-      <div className="flex-none px-6 pt-2 pb-5">
+      <div className={cn("flex-none px-6 pt-2 pb-5", besideSheet)}>
         <div className="mx-auto flex w-full max-w-measure flex-col gap-2.5">
           {brainProblem !== null && (
             <section

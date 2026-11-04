@@ -56,7 +56,7 @@ export function TaskView({
   return (
     <>
       <SheetHeader>
-        <Button variant="ghost" size="xs" onClick={onQuest} className="min-w-0 text-text-secondary">
+        <Button variant="ghost" size="xs" onClick={onQuest} className="min-w-0 shrink text-text-secondary">
           <span aria-hidden>‹</span>
           <span className="truncate">{copy.back({ title: taskTitle(top) })}</span>
         </Button>
@@ -68,7 +68,9 @@ export function TaskView({
       >
         <HobSprite hob={owner} size={56} state={status === "running" ? "working" : "idle"} />
         <div className="flex min-w-0 flex-col pb-2">
-          <SheetTitle tabIndex={-1} className="text-title">
+          {/* A brief's first line can be a paragraph: the heading stops at three lines, and the
+              whole brief is under Everything in this task (#874). */}
+          <SheetTitle tabIndex={-1} className="line-clamp-3 text-title">
             {taskTitle(task)}
           </SheetTitle>
           <SheetDescription>

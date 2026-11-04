@@ -40,9 +40,16 @@ import { EventBus } from "./event-bus.ts";
  * hub's finding on the two Tasks can be followed (#570), while Aldric's clearing of the badge before
  * he delegated is none (#658); Quill then finishes with the badge left uncommitted (#586). Asking
  * to wrap up the spec has the lead edit the spec itself and complete the Quest leaving it
- * uncommitted on purpose, as its hold on the top Task lets it (#665). Only `HOBBOTS_FAKE_QUEST=black-friday`
- * with the fake runtime turns any of them on.
+ * uncommitted on purpose, as its hold on the top Task lets it (#665). Asking for a long brief plays
+ * the Black Friday Quest with briefs of a paragraph that name a deep folder, as real ones do (#874).
+ * Only `HOBBOTS_FAKE_QUEST=black-friday` with the fake runtime turns any of them on.
  */
+
+/**
+ * A folder deep enough that a brief naming it is wider than any column it shows in (#874), with no
+ * space or hyphen to break at.
+ */
+const LONG_FOLDER = "/Users/someone/Development/projects/hobbots_manual_tests/black_friday_campaign_full_run";
 
 /** The scripted requests, each found by what you ask for. */
 const SCRIPTS = {
@@ -50,6 +57,7 @@ const SCRIPTS = {
   "spring-sale": /spring sale/i,
   "shop-badge": /shop badge/i,
   "spec-wrap": /wrap up the spec/i,
+  "long-brief": /long brief/i,
 } as const;
 type Script = keyof typeof SCRIPTS;
 
@@ -61,6 +69,10 @@ const BRIEFS: Record<Script, { readonly title: string; readonly goal: string }> 
   "spring-sale": { title: "Plan the spring sale", goal: "A spring sale: a banner, an email and window signs" },
   "shop-badge": { title: "Make the shop badge", goal: "A badge on the shop's page, in the agreed colour" },
   "spec-wrap": { title: "Wrap up the spec", goal: "The shop's spec, final and committed" },
+  "long-brief": {
+    title: `Run the Black Friday campaign end to end for the shop in ${LONG_FOLDER}, working only inside that folder: install nothing, use no network, start no web server and never push.`,
+    goal: "A Black Friday campaign: landing copy and a launch email, live by Friday",
+  },
 };
 
 /** The folder the shop badge's play says its files are in. */
@@ -400,7 +412,9 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
     const build = yield* member(
       "build",
       cast.ada,
-      "Build the campaign\nSet up the landing page and schedule the launch email once the copy exists.",
+      script === "long-brief"
+        ? `Build the campaign for the shop in ${LONG_FOLDER}: set up the landing page and schedule the launch email once the copy exists. Work only inside that folder; install nothing, no network, no web server, never push.`
+        : "Build the campaign\nSet up the landing page and schedule the launch email once the copy exists.",
       [],
       [copy.id],
     );
