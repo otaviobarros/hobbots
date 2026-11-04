@@ -84,7 +84,7 @@ test("[TC-UX-088] a hob opens on its own page, with New chat, its chats and a Hi
 });
 
 // covers CH-001, CH-002, CH-006, CH-009
-test("[TC-UX-090] a hob's chats are grouped, searched inside messages, renamed, pinned and archived with Undo", async ({
+test("[TC-UX-130] a hob's chats are grouped, searched inside messages, renamed, pinned and archived with Undo", async ({
   page,
 }) => {
   const { current, pip } = await hubWithPip();

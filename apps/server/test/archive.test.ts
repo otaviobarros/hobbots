@@ -257,7 +257,7 @@ describe("archived threads", () => {
 
 describe("renamed and pinned threads", () => {
   // covers CH-001, CH-002
-  it("[TC-CH-216] renames and pins a thread durably and live, without moving it by last activity", async () => {
+  it("[TC-CH-230] renames and pins a thread durably and live, without moving it by last activity", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -305,7 +305,7 @@ describe("renamed and pinned threads", () => {
   });
 
   // covers CH-009
-  it("[TC-CH-217] refuses to rename or pin an archived thread", async () => {
+  it("[TC-CH-231] refuses to rename or pin an archived thread", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
