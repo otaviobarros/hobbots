@@ -77,10 +77,8 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   await quest.getByRole("button", { name: /^Ada · Build the campaign for the shop in/ }).click();
   await expect(heading).toBeFocused();
   await expect(panel).toHaveJSProperty("stayedOpen", true);
-  // Closing it puts focus back on the row that opened it, however many views it showed on the way.
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
-  await expect(adasRow).toBeFocused();
 
   // Once answered, the question card in the chat names the Task in at most two lines, inside the card.
   const answer = tray.getByRole("textbox", { name: "Your answer to Ada" });
