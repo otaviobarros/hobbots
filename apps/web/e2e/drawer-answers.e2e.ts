@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { laneTask, questRoom } from "./quest-room.ts";
+import { lane, laneTask, questRoom } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -29,13 +29,12 @@ test("[TC-UX-085] a question waiting for you is answered in its lane in the Ques
 }) => {
   const { url, drawer } = await openAdasTask(page);
 
-  // The lane offers the same answer box as the chat, right under the question, saying how the answer travels.
-  await expect(drawer.getByRole("region", { name: "Ada asks you" })).toContainText(
-    "Goes to Aldric, who passes it to Ada.",
-  );
-  const answer = drawer.getByRole("textbox", { name: "Your answer to Ada" });
+  // Ada's lane offers the same answer box as the chat, right under the question, saying how the answer travels.
+  const asks = lane(page, "Ada").getByRole("region", { name: "Ada asks you" });
+  await expect(asks).toContainText("Goes to Aldric, who passes it to Ada.");
+  const answer = asks.getByRole("textbox", { name: "Your answer to Ada" });
   await answer.fill("Yes, Dec 12 for international orders.");
-  await expect(drawer.getByRole("button", { name: "Send answer" })).toBeEnabled();
+  await expect(asks.getByRole("button", { name: "Send answer" })).toBeEnabled();
   await answer.press("Enter");
 
   // The question closes in place, and the chat's card shows the same answer, each saying where you gave it (#671).
