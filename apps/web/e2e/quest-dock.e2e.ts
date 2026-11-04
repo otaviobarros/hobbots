@@ -174,21 +174,24 @@ test("[TC-UX-282] a file two hobs changed opens the hob's own record when Files 
   ]);
 
   // Quill's notes in Files open Quill's change to them, not Aldric's.
-  await files.getByRole("button", { name: /^notes\.md, by Quill/ }).click();
+  await files.getByRole("button", { name: /^notes\.md\s*, by Quill/ }).click();
   await bench
     .getByRole("tabpanel", { name: /^Files/ })
     .getByRole("region", { name: "notes.md" })
     .getByRole("button", { name: "See changes" })
     .click();
   await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
-  await expect(changes.getByRole("button", { name: /^notes\.md, by Quill/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(changes.getByRole("button", { name: /^notes\.md\s*, by Quill/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
   // And Aldric's change opens Aldric's file back in Files.
-  await changes.getByRole("button", { name: /^notes\.md, by Aldric/ }).click();
+  await changes.getByRole("button", { name: /^notes\.md\s*, by Aldric/ }).click();
   await bench
     .getByRole("tabpanel", { name: /^Changes/ })
     .getByRole("article", { name: "notes.md" })
     .getByRole("button", { name: "Open in Files" })
     .click();
-  await expect(files.getByRole("button", { name: /^notes\.md, by Aldric/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(files.getByRole("button", { name: /^notes\.md\s*, by Aldric/ })).toHaveAttribute("aria-pressed", "true");
 });
