@@ -178,19 +178,56 @@ export const messages = {
     saving: "Saving…",
     rejected: ({ reason }: { reason: string }) => `Hobbots could not save: ${reason}.`,
     failed: "Hobbots could not save the changes. Try again.",
-    unsaved: ({ name }: { name: string }) => `Unsaved changes. ${name}'s next reply uses them once saved.`,
-    saved: ({ version, name }: { version: number; name: string }) =>
-      `Saved as version ${version}. ${name}'s next reply uses it.`,
     role: "Role",
-    tone: "Tone",
-    toneNote: ({ name }: { name: string }) => `How ${name} talks. If your instructions describe a voice too, they win.`,
-    instructions: "Instructions",
-    instructionsNote: ({ name }: { name: string }) =>
-      `${name} reads this before every reply, after its name, role and tone. Add anything else it should know.`,
-    brain: "Brain",
-    backToPage: ({ name }: { name: string }) => `Back to ${name}'s page`,
-    discard: "Discard",
+    toneNote: ({ name }: { name: string }) =>
+      `If your instructions describe a voice too, they win over ${name}'s tone.`,
+    openChat: "Open chat",
+    moreActions: ({ name }: { name: string }) => `More actions for ${name}`,
+    talks: ({ name }: { name: string }) => `How ${name} talks`,
+    thinks: ({ name }: { name: string }) => `How ${name} thinks`,
+    connectAnother: "Connect another AI in Settings",
+    changeRole: "Change role",
+    noTitle: "No title yet",
+    ownRole: "A role in your own words.",
+    shouldDo: ({ name }: { name: string }) => `What ${name} should do`,
+    shouldDoNote: ({ name }: { name: string }) =>
+      `${name} reads this before every reply. Write it the way you would brief a person.`,
+    notSaved: ({ count }: { count: number }) =>
+      count === 1 ? "1 change not saved yet" : `${count} changes not saved yet`,
+    nextReply: ({ name }: { name: string }) =>
+      `${name}'s next reply uses the new settings. Replies already running finish the old way.`,
+    savedNow: ({ name }: { name: string }) =>
+      `Saved. ${name}'s next reply uses the new settings. Replies already running finish the old way.`,
+    undo: "Undo",
     save: "Save changes",
+    rest: {
+      heading: "Take a break",
+      pause: ({ name }: { name: string }) => `Pause ${name}`,
+      wake: ({ name }: { name: string }) => `Wake ${name}`,
+      pauseLine: ({ name }: { name: string }) => `Pausing stops ${name} from starting new work. Wake it any time.`,
+      pausedLine: ({ name }: { name: string }) =>
+        `${name} is paused. It starts nothing new until you wake it. Its threads stay where they are.`,
+      pauseFailed: ({ name, paused }: { name: string; paused: boolean }) =>
+        `Hobbots could not ${paused ? "wake" : "pause"} ${name}. Try again.`,
+      retireLine: ({ name }: { name: string }) =>
+        `Retiring puts ${name} to sleep for good. Its threads stay readable in the Archive.`,
+      retire: ({ name }: { name: string }) => `Retire ${name}…`,
+    },
+    retire: {
+      title: ({ name }: { name: string }) => `Retire ${name}?`,
+      busy: ({ name }: { name: string }) => `${name} is writing a reply right now. What should happen to it?`,
+      idle: ({ name }: { name: string }) => `${name} stops working and goes to sleep. Nothing is deleted.`,
+      choices: ({ name }: { name: string }) => `What happens to ${name}'s work`,
+      kept: "Its threads are kept and stay readable. Retiring can't be undone, but you can summon a new hob any time.",
+      failed: ({ name }: { name: string }) => `Hobbots could not retire ${name}. Try again.`,
+      keep: ({ name }: { name: string }) => `Keep ${name}`,
+      confirm: ({ name }: { name: string }) => `Retire ${name}`,
+      retiring: "Retiring…",
+      done: ({ name }: { name: string }) => `${name} is asleep`,
+      find: ({ name }: { name: string }) => `You find ${name} in the Archive, under Retired hobs.`,
+      archived: "Open the Archive",
+      home: "Go to Home",
+    },
     look: {
       heading: "Name and look",
       change: "Change name or look",
@@ -562,20 +599,25 @@ export const messages = {
         retry: "Try again",
         asYou: ({ name }: { name: string }) =>
           `${name} acts as you, with the account connected in Settings. Its commits, pull requests and comments carry your name.`,
+        you: "You",
+        youAs: ({ login }: { login: string }) => `You, @${login}`,
         give: ({ name }: { name: string }) => `Give ${name} its own GitHub app`,
+        makeApp: "Make its app",
         giveNote: ({ name }: { name: string }) =>
           `GitHub opens in your browser, where you name the app and pick its repositories. ${name}'s work then shows on GitHub as its own bot, never as you.`,
         noKeychain: "This hub has no keychain Hobbots can use, so it cannot keep a hob's own GitHub app.",
         finishOnGitHub: ({ name }: { name: string }) =>
-          `Finish on GitHub, in the browser that just opened. This updates once ${name}'s app is made.`,
+          `Finish on GitHub, in the browser that just opened. This updates by itself once ${name}'s app is made.`,
         openAgain: "Open GitHub again",
         restartNote:
           "Each start works once. If GitHub said the app was not kept, or the page stopped working, start again.",
         restart: "Start again",
         expired: "The last start ran out before the app was made. Start again when you're ready.",
         startFailed: "Hobbots could not start making the app. Try again.",
-        actsAs: "Acts as",
-        since: ({ since }: { since: string }) => `Since ${since}.`,
+        ownApp: "its own app",
+        made: ({ since }: { since: string }) => `Made ${since}. Its work never runs as you.`,
+        cannotAct: "Can't act",
+        installTitle: "One more step: install it",
         installedLabel: "Installed on",
         installation: ({ account, all }: { account: string; all: boolean }) =>
           all ? `@${account}: every repository` : `@${account}: the repositories you picked`,
@@ -585,7 +627,7 @@ export const messages = {
         noRepositories: "No repositories yet",
         moreRepositories: ({ count }: { count: number }) => `and ${count} more`,
         notInstalled: ({ name }: { name: string }) =>
-          `Not installed on any repository yet, so ${name} can't act on GitHub. Install it on the repositories ${name} should reach.`,
+          `Not installed on any repository yet, so ${name} can't act on GitHub. Pick the repositories it should reach.`,
         install: "Install on GitHub",
         installationsFailed: "Hobbots could not ask GitHub where the app is installed.",
         reconnectTitle: "Needs a reconnect",
@@ -596,13 +638,16 @@ export const messages = {
         newApp: ({ name }: { name: string }) => `Give ${name} a new app`,
         reinstall: "Reinstall on GitHub",
         disconnect: "Disconnect",
+        disconnectAsk: "Disconnect its app…",
+        keep: "Keep it",
         confirmDisconnect: ({ name }: { name: string }) =>
           `Disconnect ${name}'s app? The hub removes it from your repositories and deletes its key. ${name} then acts as you again.`,
         cancel: "Cancel",
         disconnected: ({ name }: { name: string }) =>
           `Disconnected. ${name} acts as you again. The app itself stays on GitHub until you delete it there.`,
         deleteOnGitHub: "Delete the app on GitHub",
-        leftOver: ({ name }: { name: string }) => `${name}'s old app was not fully removed. It no longer acts.`,
+        leftOverTitle: ({ name }: { name: string }) => `${name}'s old app was not fully removed`,
+        leftOver: "It no longer acts.",
         dismiss: "Dismiss",
         changeFailed: "Hobbots could not change the app. Try again.",
       },
@@ -865,6 +910,33 @@ export const messages = {
     connect: "Connect",
     connecting: "Checking…",
     cancel: "Cancel",
+  },
+  permissions: {
+    intro: ({ name, preset }: { name: string; preset: string }) =>
+      `${name} follows your safety level, ${preset}. Here you can make ${name} more careful than that, never less.`,
+    careful: ({ count, preset }: { count: number; preset: string }) =>
+      count === 0
+        ? `Same as ${preset}`
+        : new Intl.PluralRules("en").select(count) === "one"
+          ? `1 rule is more careful than ${preset}`
+          : `${count} rules are more careful than ${preset}`,
+    changeSafety: "Change safety level",
+    groups: { files: "Files", commands: "Commands", internet: "Internet", outside: "Outside its folders" },
+    checked: "Checked",
+    moreCareful: "More careful",
+    reset: ({ preset, answer }: { preset: string; answer: string }) => `${preset} says ${answer} · reset`,
+    wider: "Wider than your safety level allows. Change it in Settings › Safety.",
+    widens: ({ preset }: { preset: string }) =>
+      `That answer allows more than your ${preset} safety. Pick a narrower one.`,
+    saveFailed: ({ name }: { name: string }) => `Hobbots could not save ${name}'s permissions. Try again in a moment.`,
+    folders: ({ name }: { name: string }) => `Folders ${name} can use`,
+    ownFolders: ({ name }: { name: string }) => `${name}'s own folders`,
+    noOwnFolders: ({ name }: { name: string }) => `None yet. Only ${name} can work in a folder added here.`,
+    sharedNote: "Shared folders are set in Settings › Safety and every hob can use them.",
+    sandbox: "Sandbox",
+    details: "Details: how these rules are kept",
+    detailsNote: ({ name }: { name: string }) =>
+      `Hobbots decides each rule before every step ${name} takes. Commands, Git and the web also run inside its sandbox, which keeps ${name} in its folders. A rule marked Checked is decided by Hobbots, but a command ${name} may run could still do it another way.`,
   },
   signing: {
     label: "Sign commits with my 1Password key",

@@ -85,21 +85,21 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
 
   await page.getByRole("link", { name: "Edit hob" }).click();
   await expect(page.getByRole("heading", { name: "Pip", exact: true })).toBeVisible();
-  const instructions = page.getByRole("textbox", { name: "Instructions" });
+  const instructions = page.getByRole("textbox", { name: "What Pip should do" });
   await expect(instructions).toHaveValue("Write short answers.");
   await instructions.fill("Write long answers.");
-  await expect(page.getByText(/^Unsaved changes/)).toBeVisible();
+  await expect(page.getByText("1 change not saved yet")).toBeVisible();
   // Looking at another tab keeps the unsaved edit. The arrow keys move between the tabs.
   await page.getByRole("tab", { name: "Charms" }).click();
   await page.keyboard.press("ArrowLeft");
   await expect(page.getByRole("tab", { name: "Profile" })).toHaveAttribute("aria-selected", "true");
   await expect(instructions).toHaveValue("Write long answers.");
   await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
+  await expect(page.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
   await expect(page.getByText(/· Version 2$/)).toBeVisible();
 
   // Back in the chat, the same thread's next reply runs on the edited configuration.
-  await page.getByRole("link", { name: "Back to Pip's page" }).click();
+  await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await openOnlyChat(page);
   await expect(page.getByText("Echo: first")).toBeVisible();
   await send(page, "second");
@@ -144,7 +144,7 @@ test("[TC-AG-104] renaming a hob and changing its look in the profile shows them
   await look.getByRole("radio", { name: "Tiny crown" }).click();
   await look.getByRole("radio", { name: "From the look" }).last().click();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText("Saved as version 2. Bramble's next reply uses it.")).toBeVisible();
+  await expect(page.getByText(/^Saved\. Bramble's next reply uses the new settings/)).toBeVisible();
 
   const renamed = page.getByRole("main", { name: "Bramble's profile" });
   await expect(renamed.getByRole("heading", { name: "Bramble", exact: true })).toBeVisible();
@@ -153,7 +153,7 @@ test("[TC-AG-104] renaming a hob and changing its look in the profile shows them
   expect(saved?.lookSeed).not.toBe(4821);
 
   // The chat it had before the rename says its new name.
-  await page.getByRole("link", { name: "Back to Bramble's page" }).click();
+  await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await page
     .getByRole("main", { name: "Bramble's page" })
     .getByRole("link", { name: /^Open / })
@@ -172,31 +172,32 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
   await expect(page.getByRole("heading", { name: "Pip", exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Pause Pip" }).click();
-  await expect(page.getByRole("status").filter({ hasText: /^Paused$/ })).toBeVisible();
-  await page.getByRole("button", { name: "Wake Pip" }).click();
-  await expect(page.getByRole("button", { name: "Pause Pip" })).toBeVisible();
+  const profile = page.getByRole("main", { name: "Pip's profile" });
+  const rest = profile.getByRole("region", { name: "Take a break" });
+  await rest.getByRole("button", { name: "Pause Pip" }).click();
+  await expect(profile.locator("header")).toContainText("Paused");
+  await expect(rest).toContainText("Pip is paused. It starts nothing new until you wake it.");
+  await rest.getByRole("button", { name: "Wake Pip" }).click();
+  await expect(rest.getByRole("button", { name: "Pause Pip" })).toBeVisible();
 
   // Keeping Pip changes nothing.
-  await page.getByRole("button", { name: "More actions for Pip" }).click();
-  await page.getByRole("button", { name: "Retire hob" }).click();
+  await rest.getByRole("button", { name: "Retire Pip…" }).click();
   const dialog = page.getByRole("dialog", { name: "Retire Pip?" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Keep Pip" }).click();
   await expect(dialog).toBeHidden();
 
-  await page.getByRole("button", { name: "More actions for Pip" }).click();
-  await page.getByRole("button", { name: "Retire hob" }).click();
+  await rest.getByRole("button", { name: "Retire Pip…" }).click();
   await dialog.getByText("Stop Pip's work now").click();
   await expect(dialog.getByRole("radio", { name: /Stop Pip's work now/ })).toBeChecked();
-  await dialog.getByRole("button", { name: "Retire Pip" }).click();
-  await expect(page.getByRole("dialog", { name: "Pip is retired" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Retire Pip", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Pip is asleep" })).toBeVisible();
 
   expect(await api<ReadonlyArray<Hob>>(current, "GET", "/api/agents")).toEqual([]);
   expect(await api<ReadonlyArray<Hob>>(current, "GET", "/api/agents?status=retired")).toMatchObject([
     { id: pip.id, status: "retired" },
   ]);
-  await page.getByRole("link", { name: "See archived hobs" }).click();
+  await page.getByRole("link", { name: "Open the Archive" }).click();
   await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
   await expect(
     page.getByRole("list", { name: "Retired hobs" }).getByRole("link", { name: "Read Pip's chats" }),
@@ -236,9 +237,9 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await expect(sheet).toBeHidden();
   await expect(profile.getByText("QA engineer", { exact: true }).first()).toBeVisible();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(profile.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
+  await expect(profile.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
   await expect(chip).toHaveText("QA engineer");
-  await page.getByRole("link", { name: "Back to Pip's page" }).click();
+  await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await expect(list.getByRole("link", { name: /^Pip/ })).toContainText("QA engineer");
   await expect(page.getByRole("region", { name: "Pip", exact: true })).toContainText("QA engineer");
   await page.getByRole("link", { name: "New chat with Pip" }).click();
@@ -251,10 +252,10 @@ test("[TC-AG-075] changing the role in the profile updates the hob list, chat he
   await sheet.getByRole("textbox", { name: "Your own role title" }).fill("Bug hunter");
   await sheet.getByRole("button", { name: "Use your own title" }).click();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(profile.getByText("Saved as version 3. Pip's next reply uses it.")).toBeVisible();
+  await expect(profile.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
   await expect(chip).toHaveText("Bug hunter");
 
-  await page.getByRole("link", { name: "Back to Pip's page" }).click();
+  await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await expect(list.getByRole("link", { name: /^Pip/ })).toContainText("Bug hunter");
   await page.getByRole("link", { name: "New chat with Pip" }).click();
   await expect(header).toContainText("Bug hunter");
@@ -272,7 +273,7 @@ test("[TC-AG-088] picking a voice and a length in the profile saves them as the 
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
   const profile = page.getByRole("main", { name: "Pip's profile" });
-  const tone = profile.getByRole("region", { name: "Tone" });
+  const tone = profile.getByRole("region", { name: "How Pip talks" });
   await expect(tone.getByRole("radio", { name: /^Default/ })).toBeChecked();
   await expect(tone.getByRole("radio", { name: /^Balanced/ })).toBeChecked();
 
@@ -281,9 +282,9 @@ test("[TC-AG-088] picking a voice and a length in the profile saves them as the 
   await tone.getByText("Old wizard", { exact: true }).click();
   await expect(tone).toContainText("Code, commands, links and warnings stay plain");
   await tone.getByText("Brief", { exact: true }).click();
-  await expect(page.getByText(/^Unsaved changes/)).toBeVisible();
+  await expect(page.getByText("2 changes not saved yet")).toBeVisible();
   await profile.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();
+  await expect(page.getByText(/^Saved\. Pip's next reply uses the new settings/)).toBeVisible();
 
   const hobs = await api<Array<Hob & { voice: string; length: string }>>(current, "GET", "/api/agents");
   const saved = hobs.find((h) => h.id === pip.id);
@@ -347,7 +348,7 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
   await expect(
     page.getByRole("radiogroup", { name: "Delete files" }).getByRole("radio", { name: "Allow" }),
   ).toBeDisabled();
-  await expect(page.getByText("Narrowed from Allow.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Balanced says Allow · reset" })).toBeVisible();
 
   const saved = await api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`);
   expect(saved).toMatchObject({
@@ -464,6 +465,7 @@ test("[TC-PE-043] where the sandbox cannot start, the profile and provider healt
 
   // Permissions explains why, marks each blocked rule, and lists how each rule is held.
   await page.getByRole("tab", { name: "Permissions" }).click();
+  await page.getByText("Details: how these rules are kept").click();
   const held = page.getByRole("list", { name: "Enforcement on this hub" });
   await expect(held.getByRole("listitem").filter({ hasText: "Process sandbox" })).toContainText("Unsupported");
   await expect(

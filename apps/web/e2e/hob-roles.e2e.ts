@@ -115,7 +115,7 @@ test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom
   await expect(sheet).toBeHidden();
 
   // The hub tells the hob its role on every turn, so the instructions never name it.
-  await expect(profile.getByRole("textbox", { name: "Instructions" })).not.toHaveValue(/a hob in Hobbots/);
+  await expect(profile.getByRole("textbox", { name: "What Fern should do" })).not.toHaveValue(/a hob in Hobbots/);
   await profile.getByRole("button", { name: "Save changes" }).click();
   await expect
     .poll(async () => {

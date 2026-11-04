@@ -1,10 +1,13 @@
+import { HOB_COLORS } from "@hobbots/art/look";
 import { type Agent, type AgentId, type RetireWork, starterRole } from "@hobbots/domain";
+import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
+import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useId, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
 import { ApiError } from "../api/client.ts";
 import { settleBrain } from "../api/first-hob.ts";
@@ -31,12 +34,13 @@ import {
   useRetireHob,
   useUpdateHob,
 } from "../api/queries.ts";
-import { hobState, stateLabel } from "../lib/hob-state.ts";
+import { type HobState, hobState } from "../lib/hob-state.ts";
 import { ExportDialog } from "./export/export-dialog.tsx";
 import { messages as exportCopy } from "./export/messages.ts";
 import { CharmsTab } from "./hob-charms.tsx";
-import { Choice, ModelsBrain } from "./hob-form.tsx";
+import { ModelsBrain } from "./hob-form.tsx";
 import { NameAndLook } from "./hob-name-look.tsx";
+import { stateTag } from "./hob-page/hob-page-model.ts";
 import { PermissionsTab } from "./hob-permissions.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { messages } from "./messages.ts";
@@ -73,10 +77,12 @@ export function HobProfile({ hobId }: { hobId: AgentId }) {
         ) : (
           <div className="flex flex-col items-center gap-3 text-center">
             <span className="font-heading text-[22px] font-bold text-moonlight">This hob is not here</span>
-            <span className="text-text-secondary">It may have retired. Retired hobs live in Archived hobs.</span>
+            <span className="text-text-secondary">It may have retired. Retired hobs live in the Archive.</span>
             <div className="flex gap-2.5">
               <Button asChild variant="outline">
-                <Link to="/settings/archived">See archived hobs</Link>
+                <Link to="/archive" search={{ tab: "hobs" }}>
+                  {messages.profile.retire.archived}
+                </Link>
               </Button>
               <Button asChild variant="outline">
                 <Link to="/">Go to Home</Link>
@@ -97,7 +103,6 @@ interface Retired {
   readonly busy: boolean;
 }
 
-// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 function Profile({
   hob,
   retired,
@@ -113,110 +118,58 @@ function Profile({
   const activity = useActivity();
   const state = hobState(hob, threads.data, activity);
   const running = (threads.data ?? []).filter((t) => activity[t.id] !== undefined);
-  const pause = usePauseHob(hob.id);
   const [tab, setTab] = useState<Tab>("profile");
   const [retireOpen, setRetireOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [hops, setHops] = useState(0);
-  const paused = hob.status === "paused";
-  const good = goodAt(hob);
-
-  const togglePause = () =>
-    pause.mutate(!paused, {
-      onSuccess: () => setHops((n) => n + 1),
-    });
 
   return (
-    <main aria-label={`${hob.name}'s profile`} className="relative flex min-w-0 flex-1 flex-col">
-      <header className="flex items-center gap-5 border-b-4 border-line bg-panel px-8 pt-[18px] pb-4">
-        <div className="hop-on-hover bg-line p-2">
-          <span key={hops} className={cn("block", hops > 0 && "animate-(--hop)")}>
-            <HobSprite hob={hob} size={64} state={state} badge />
-          </span>
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <Link to="/hobs/$hobId" params={{ hobId: hob.id }} className="text-sm text-lantern hover:text-lantern-hover">
-            <span aria-hidden>← </span>
-            {messages.profile.backToPage({ name: hob.name })}
-          </Link>
-          <div className="flex min-w-0 items-center gap-3">
-            <h1 className="m-0 truncate font-heading text-[30px] font-bold">{hob.name}</h1>
-            <span
-              role="status"
-              className={cn(
-                "flex flex-none items-center gap-1.5 bg-deep px-2.5 py-[3px] text-[13px]",
-                paused ? "text-lantern" : "text-mint",
-              )}
-            >
-              <span aria-hidden className={cn("size-2", paused ? "bg-lantern" : "bg-mint")} />
-              {paused
-                ? "Paused"
-                : state === "idle"
-                  ? "Ready"
-                  : stateLabel[state][0]?.toUpperCase() + stateLabel[state].slice(1)}
-            </span>
-          </div>
-          <p className="m-0 flex min-w-0 items-center gap-2 text-sm text-text-secondary">
-            <span className="flex-none font-bold text-moonlight">{hob.roleTitle}</span>
-            {good && (
-              <>
-                <span aria-hidden>·</span>
-                <span className="truncate">{good}</span>
-              </>
-            )}
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-2.5">
-            <Button
-              variant="outline"
-              onClick={togglePause}
-              disabled={pause.isPending || retired !== null}
-              aria-describedby={pause.isError ? "pause-error" : undefined}
-            >
-              {paused ? `Wake ${hob.name}` : `Pause ${hob.name}`}
-            </Button>
-            <MoreActions
-              name={hob.name}
-              disabled={retired !== null}
-              onExport={() => setExportOpen(true)}
-              onRetire={() => setRetireOpen(true)}
+    <main aria-label={`${hob.name}'s profile`} className="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-[820px] flex-col gap-4.5 px-10 pt-7 pb-6">
+        <ProfileHero
+          hob={hob}
+          state={state}
+          hops={hops}
+          disabled={retired !== null}
+          onExport={() => setExportOpen(true)}
+        />
+        <Tabs
+          value={tab}
+          onValueChange={(next) => {
+            const found = TABS.find(([id]) => id === next);
+            if (found) setTab(found[0]);
+          }}
+          className="flex flex-col gap-4.5"
+        >
+          <TabsList aria-label="Profile">
+            {TABS.map(([id, label]) => (
+              <TabsTrigger key={id} value={id} className="px-[18px]">
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {/* Kept mounted, so looking at another tab never drops unsaved edits. */}
+          <TabsContent value="profile" forceMount className="data-[state=inactive]:hidden">
+            <ProfileTab
+              hob={hob}
+              rest={
+                <TakeABreak
+                  hob={hob}
+                  disabled={retired !== null}
+                  onWoke={() => setHops((n) => n + 1)}
+                  onRetire={() => setRetireOpen(true)}
+                />
+              }
             />
-          </div>
-          {pause.isError && (
-            <span id="pause-error" role="alert" className="text-[13px] text-rose">
-              Hobbots could not {paused ? "wake" : "pause"} {hob.name}. Try again.
-            </span>
-          )}
-        </div>
-      </header>
-
-      <Tabs
-        value={tab}
-        onValueChange={(next) => {
-          const found = TABS.find(([id]) => id === next);
-          if (found) setTab(found[0]);
-        }}
-        className="flex min-h-0 flex-1 flex-col"
-      >
-        <TabsList aria-label="Profile" className="px-6">
-          {TABS.map(([id, label]) => (
-            <TabsTrigger key={id} value={id} className="px-[18px]">
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        {/* Kept mounted, so looking at another tab never drops unsaved edits. */}
-        <TabsContent value="profile" forceMount className="flex min-h-0 flex-1 flex-col data-[state=inactive]:hidden">
-          <ProfileTab hob={hob} />
-        </TabsContent>
-        <TabsContent value="charms" className="relative min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
-          <CharmsTab hob={hob} />
-        </TabsContent>
-        <TabsContent value="permissions" className="relative min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
-          <PermissionsTab hob={hob} />
-        </TabsContent>
-      </Tabs>
+          </TabsContent>
+          <TabsContent value="charms">
+            <CharmsTab hob={hob} />
+          </TabsContent>
+          <TabsContent value="permissions">
+            <PermissionsTab hob={hob} />
+          </TabsContent>
+        </Tabs>
+      </div>
 
       {exportOpen && <ExportDialog target={{ hob }} onClose={() => setExportOpen(false)} />}
       {(retireOpen || retired) && (
@@ -234,11 +187,123 @@ function Profile({
 }
 
 /**
- * The hob's role, instructions and brain on one page, saved together as one new configuration
- * version from the bar at the bottom.
+ * The top of the profile: the hob in its hat color, its name, role and state tag, then Open chat
+ * and the menu of actions kept out of the way.
  */
-// complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
-function ProfileTab({ hob }: { hob: Agent }) {
+function ProfileHero({
+  hob,
+  state,
+  hops,
+  disabled,
+  onExport,
+}: {
+  hob: Agent;
+  state: HobState;
+  hops: number;
+  disabled: boolean;
+  onExport: () => void;
+}) {
+  const tag = stateTag(state);
+  const good = goodAt(hob);
+  return (
+    <header
+      className="flex flex-wrap items-end gap-4 rounded-card px-5 pt-5 pb-6"
+      style={
+        {
+          "--hob": HOB_COLORS[hob.lookColor].hat,
+          backgroundImage:
+            "linear-gradient(180deg, color-mix(in srgb, var(--hob) 26%, var(--color-card)) 0%, var(--color-card) 85%)",
+          boxShadow: "inset 0 -8px 0 color-mix(in srgb, var(--hob) 45%, var(--color-deep))",
+        } as CSSProperties
+      }
+    >
+      <span className="hop-on-hover grid size-22 flex-none place-items-end-center">
+        <span key={hops} className={cn("block", hops > 0 && "animate-(--hop)")}>
+          <HobSprite hob={hob} size={56} state={state} badge />
+        </span>
+      </span>
+      <span className="flex min-w-0 flex-[1_1_240px] flex-col gap-0.5">
+        <h1 className="m-0 truncate font-heading text-[26px] leading-8 font-bold">{hob.name}</h1>
+        <span className="flex min-w-0 items-center gap-2 text-sm text-text-secondary">
+          <span className="flex-none">{hob.roleTitle}</span>
+          <Badge variant={tag.variant}>
+            <span aria-hidden data-slot="badge-glyph">
+              {tag.glyph}
+            </span>
+            {tag.word}
+          </Badge>
+          {good && <span className="truncate">{good}</span>}
+        </span>
+      </span>
+      <span className="flex flex-none items-center gap-2">
+        <Button asChild>
+          <Link to="/hobs/$hobId/new" params={{ hobId: hob.id }}>
+            {messages.profile.openChat}
+          </Link>
+        </Button>
+        <MoreActions name={hob.name} disabled={disabled} onExport={onExport} />
+      </span>
+    </header>
+  );
+}
+
+/** Pause or wake the hob, and the way to retire it. Both act at once, outside the save bar. */
+function TakeABreak({
+  hob,
+  disabled,
+  onWoke,
+  onRetire,
+}: {
+  hob: Agent;
+  disabled: boolean;
+  onWoke: () => void;
+  onRetire: () => void;
+}) {
+  const copy = messages.profile.rest;
+  const pause = usePauseHob(hob.id);
+  const paused = hob.status === "paused";
+  const errorId = useId();
+  const name = hob.name;
+  return (
+    <section
+      aria-label={copy.heading}
+      className="flex flex-col gap-2.5 rounded-card border-(length:--edge) border-line-2 p-4"
+    >
+      <span className="lbl text-label">{copy.heading}</span>
+      <span className="flex items-center gap-3">
+        <span className="flex-1 text-sm text-text-secondary">
+          {paused ? copy.pausedLine({ name }) : copy.pauseLine({ name })}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pause.isPending || disabled}
+          aria-describedby={pause.isError ? errorId : undefined}
+          onClick={() => pause.mutate(!paused, { onSuccess: onWoke })}
+        >
+          {paused ? copy.wake({ name }) : copy.pause({ name })}
+        </Button>
+      </span>
+      {pause.isError && (
+        <span id={errorId} role="alert" className="text-detail text-rose">
+          {copy.pauseFailed({ name, paused })}
+        </span>
+      )}
+      <span className="flex items-center gap-3 border-t border-line pt-2">
+        <span className="flex-1 text-sm text-text-secondary">{copy.retireLine({ name })}</span>
+        <Button type="button" variant="deny" disabled={disabled} onClick={onRetire}>
+          {copy.retire({ name })}
+        </Button>
+      </span>
+    </section>
+  );
+}
+
+/**
+ * The hob's name and look, role and instructions, tone and brain on one page, saved together as
+ * one new configuration version from the bar that floats at the bottom while anything is unsaved.
+ */
+function ProfileTab({ hob, rest }: { hob: Agent; rest: React.ReactNode }) {
   const models = useQuery(modelsQuery(hob.runtime));
   const update = useUpdateHob(hob.id);
   const [base, setBase] = useState(() => profileDraft(hob, models.data));
@@ -294,118 +359,111 @@ function ProfileTab({ hob }: { hob: Agent }) {
   };
 
   const copy = messages.profile;
-  const status = update.isPending
-    ? copy.saving
-    : problem
-      ? problem
-      : rejected
-        ? copy.rejected({ reason: rejected.message })
-        : update.isError
-          ? copy.failed
-          : dirty
-            ? copy.unsaved({ name: hob.name })
-            : saved === hob.configVersion
-              ? copy.saved({ version: saved, name: hob.name })
-              : "";
+  const name = hob.name;
+  const failure = rejected ? copy.rejected({ reason: rejected.message }) : update.isError ? copy.failed : undefined;
 
   return (
-    <form onSubmit={save} className="flex min-h-0 flex-1 flex-col">
-      <div className="relative min-h-0 flex-1 overflow-y-auto px-8 py-[22px]">
-        <div className="flex max-w-[880px] flex-col gap-6">
-          <NameAndLook name={hob.name} draft={draft} disabled={update.isPending} onChange={setDraft} />
+    <form onSubmit={save} className="flex flex-col gap-4.5">
+      <NameAndLook name={name} draft={draft} disabled={update.isPending} onChange={setDraft} />
 
-          <section aria-labelledby="hob-role" className="flex flex-col gap-2">
-            <h2 id="hob-role" className="lbl m-0 text-moonlight">
-              {copy.role}
-            </h2>
-            <RoleCard name={hob.name} draft={draft} disabled={update.isPending} onChange={() => setSheetOpen(true)} />
-          </section>
-
-          <section aria-labelledby="hob-tone" className="flex flex-col gap-3.5">
-            <div className="flex flex-col gap-1">
-              <h2 id="hob-tone" className="lbl m-0 text-moonlight">
-                {copy.tone}
-              </h2>
-              <span className="text-sm text-text-secondary">{copy.toneNote({ name: hob.name })}</span>
-            </div>
-            <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-3.5 border-0 p-0">
-              <TonePicker
-                name={hob.name}
-                voice={draft.voice}
-                length={draft.length}
-                onVoice={(voice) => setDraft((d) => ({ ...d, voice }))}
-                onLength={(length) => setDraft((d) => ({ ...d, length }))}
-              />
-            </fieldset>
-          </section>
-
-          <section className="flex flex-col gap-2">
-            <label htmlFor="hob-instructions" className="lbl text-moonlight">
-              {copy.instructions}
-            </label>
-            <span id="hob-instructions-note" className="text-sm text-text-secondary">
-              {copy.instructionsNote({ name: hob.name })}
-            </span>
-            <textarea
-              id="hob-instructions"
-              aria-describedby="hob-instructions-note"
-              value={draft.instructions}
-              maxLength={INSTRUCTIONS_MAX}
-              onChange={(e) => {
-                const instructions = e.target.value;
-                setDraft((d) => ({ ...d, instructions }));
-              }}
-              className="h-[220px] resize-y border-2 border-control bg-deep px-4 py-3.5 leading-[1.55] text-text-strong"
-            />
-          </section>
-
-          <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-2.5 border-0 p-0">
-            <legend className="lbl mb-2 text-moonlight">{copy.brain}</legend>
-            {runtimes.data && (
-              <ProviderChoices
-                runtimes={runtimes.data}
-                draft={draft}
-                onChange={setDraft}
-                chipClassName="px-2.5 py-[5px]"
-                markClassName="size-[18px] text-xs"
-              />
-            )}
-            {draftReady && <ModelsBrain models={draftModels} draft={draft} onChange={setDraft} />}
-          </fieldset>
-
-          <p className="m-0 text-[13px] text-label">{aboutLine(hob)}</p>
-        </div>
-      </div>
-
-      <div className="flex flex-none items-center gap-3 border-t-4 border-line bg-panel px-8 py-3">
-        <span
-          role={update.isError ? "alert" : "status"}
-          className={cn(
-            "flex-1 text-sm",
-            update.isError ? "text-rose" : dirty ? "text-lantern" : "text-text-secondary",
-          )}
-        >
-          {status}
+      <section aria-labelledby="hob-role" className={CARD}>
+        <span className="flex items-center gap-2">
+          <h2 id="hob-role" className="lbl m-0 flex-1 text-label">
+            {copy.role}
+          </h2>
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            disabled={update.isPending}
+            onClick={() => setSheetOpen(true)}
+            className={QUIET_LINK}
+          >
+            {copy.changeRole}
+          </button>
         </span>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!dirty || update.isPending}
-          onClick={() => {
-            setDraft(base);
-            update.reset();
+        <RoleLine draft={draft} />
+        <label htmlFor="hob-instructions" className="lbl pt-1 text-label">
+          {copy.shouldDo({ name })}
+        </label>
+        <textarea
+          id="hob-instructions"
+          aria-describedby="hob-instructions-note"
+          value={draft.instructions}
+          maxLength={INSTRUCTIONS_MAX}
+          onChange={(e) => {
+            const instructions = e.target.value;
+            setDraft((d) => ({ ...d, instructions }));
           }}
-        >
-          {copy.discard}
-        </Button>
-        <Button type="submit" disabled={!changes || update.isPending}>
-          {copy.save}
-        </Button>
-      </div>
+          className="h-[160px] resize-y rounded-control border-(length:--edge) border-control bg-deep px-2.5 py-2 leading-[1.55] text-text-strong"
+        />
+        <span id="hob-instructions-note" className="text-detail text-label">
+          {copy.shouldDoNote({ name })}
+        </span>
+      </section>
+
+      <section aria-labelledby="hob-tone" className={CARD}>
+        <h2 id="hob-tone" className="lbl m-0 text-label">
+          {copy.talks({ name })}
+        </h2>
+        <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-3.5 border-0 p-0">
+          <TonePicker
+            name={name}
+            voice={draft.voice}
+            length={draft.length}
+            onVoice={(voice) => setDraft((d) => ({ ...d, voice }))}
+            onLength={(length) => setDraft((d) => ({ ...d, length }))}
+          />
+        </fieldset>
+        <span className="text-detail text-label">{copy.toneNote({ name })}</span>
+      </section>
+
+      <section aria-labelledby="hob-brain" className={CARD}>
+        <h2 id="hob-brain" className="lbl m-0 text-label">
+          {copy.thinks({ name })}
+        </h2>
+        <fieldset disabled={update.isPending} className="m-0 flex flex-col gap-2.5 border-0 p-0">
+          {runtimes.data && (
+            <ProviderChoices
+              runtimes={runtimes.data}
+              draft={draft}
+              onChange={setDraft}
+              chipClassName="px-2.5 py-[5px]"
+              markClassName="size-[18px] text-xs"
+            />
+          )}
+          <Link
+            to="/settings/$section"
+            params={{ section: "connections" }}
+            className="self-start text-detail text-link"
+          >
+            {copy.connectAnother}
+          </Link>
+          {draftReady && <ModelsBrain models={draftModels} draft={draft} onChange={setDraft} />}
+        </fieldset>
+      </section>
+
+      {rest}
+
+      <p className="m-0 text-xs text-label">{aboutLine(hob)}</p>
+
+      <SaveBar
+        name={name}
+        dirty={dirty}
+        count={Object.keys(edit).length}
+        pending={update.isPending}
+        problem={problem}
+        failure={failure}
+        saved={saved !== null && saved === hob.configVersion}
+        canSave={changes}
+        onUndo={() => {
+          setDraft(base);
+          update.reset();
+        }}
+      />
 
       {sheetOpen && (
         <RoleSheet
-          name={hob.name}
+          name={name}
           value={{ role: draft.role, ownTitle: draft.roleTitle, ownSigil: draft.sigil }}
           onPick={(role) => setDraft((d) => pickRole(d, role))}
           onOwnTitle={(roleTitle) => setDraft((d) => ({ ...d, roleTitle }))}
@@ -417,58 +475,93 @@ function ProfileTab({ hob }: { hob: Agent }) {
   );
 }
 
-/** The role the draft has: its sigil, title and note, with the button that opens the role sheet. */
-function RoleCard({
-  name,
-  draft,
-  disabled,
-  onChange,
-}: {
-  name: string;
-  draft: ProfileDraft;
-  disabled: boolean;
-  onChange: () => void;
-}) {
+// A section of the Profile tab: a card with its label on top.
+const CARD = "flex flex-col gap-2.5 rounded-card bg-card p-4";
+// A small text button in a card's label row, such as Change role.
+const QUIET_LINK =
+  "cursor-pointer rounded-control border-0 bg-transparent px-1.5 py-0.5 text-detail text-link hover:bg-hover hover:text-text-strong disabled:cursor-default disabled:opacity-50";
+
+/** The role the draft has: its sigil, title and note. */
+function RoleLine({ draft }: { draft: ProfileDraft }) {
+  const copy = messages.profile;
   const title = draft.roleTitle.trim();
   return (
-    <div className="cut flex items-center gap-4 border-2 border-line bg-panel px-4 py-3.5">
-      <span className="grid flex-none place-items-center bg-deep p-2">
-        <RoleSigil sigil={draft.sigil} size={36} />
+    <span className="flex items-center gap-3">
+      <span aria-hidden className="grid size-8 flex-none place-items-center rounded-control bg-deep">
+        <RoleSigil sigil={draft.sigil} size={24} />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className={cn("font-heading text-xl font-bold", title ? "text-text-strong" : "text-label")}>
-          {title || "No title yet"}
-        </span>
-        <span className="text-sm text-text-secondary">
-          {draft.role === null ? "A title in your own words." : starterRole(draft.role).note}
-        </span>
-        <span className="text-[13px] text-label">
-          {name} is told its role before every reply. A role changes how {name} looks and works, never what {name} may
-          do.
+      <span className="flex min-w-0 flex-col">
+        <strong className={title ? "text-text-strong" : "text-label"}>{title || copy.noTitle}</strong>
+        <span className="text-detail text-text-secondary">
+          {draft.role === null ? copy.ownRole : starterRole(draft.role).note}
         </span>
       </span>
-      <Button type="button" variant="outline" disabled={disabled} onClick={onChange}>
-        Change role
+    </span>
+  );
+}
+
+/**
+ * Floats at the bottom of the page while anything is unsaved: how many changes, Undo and Save.
+ * Once saved it says so in mint until the next edit.
+ */
+function SaveBar({
+  name,
+  dirty,
+  count,
+  pending,
+  problem,
+  failure,
+  saved,
+  canSave,
+  onUndo,
+}: {
+  name: string;
+  dirty: boolean;
+  count: number;
+  pending: boolean;
+  problem: string | undefined;
+  failure: string | undefined;
+  saved: boolean;
+  canSave: boolean;
+  onUndo: () => void;
+}) {
+  const copy = messages.profile;
+  const bar =
+    "sticky bottom-4 z-10 flex animate-hb-in items-center gap-3 rounded-card border-s-[3px] bg-card px-4 py-3 shadow-sheet";
+  if (!dirty && !pending && failure === undefined) {
+    return saved ? (
+      <div role="status" className={cn(bar, "border-mint")}>
+        <span aria-hidden className="text-mint">
+          ✓
+        </span>
+        <span className="text-sm">{copy.savedNow({ name })}</span>
+      </div>
+    ) : null;
+  }
+  const headline = problem ?? (pending ? copy.saving : copy.notSaved({ count: Math.max(count, 1) }));
+  return (
+    <div role={failure ? "alert" : "status"} className={cn(bar, failure ? "border-rose" : "border-lantern")}>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <strong>{headline}</strong>
+        <span className={cn("text-detail", failure ? "text-rose" : "text-text-secondary")}>
+          {failure ?? copy.nextReply({ name })}
+        </span>
+      </span>
+      <Button type="button" variant="ghost" disabled={!dirty || pending} onClick={onUndo}>
+        {copy.undo}
+      </Button>
+      <Button type="submit" disabled={!canSave || pending}>
+        {copy.save}
       </Button>
     </div>
   );
 }
 
 /**
- * The actions kept out of the way: Retire, for now. The list closes on Escape, on a click outside
+ * The actions kept out of the way: Export, for now. The list closes on Escape, on a click outside
  * or when focus leaves it.
  */
-function MoreActions({
-  name,
-  disabled,
-  onExport,
-  onRetire,
-}: {
-  name: string;
-  disabled: boolean;
-  onExport: () => void;
-  onRetire: () => void;
-}) {
+function MoreActions({ name, disabled, onExport }: { name: string; disabled: boolean; onExport: () => void }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
@@ -499,7 +592,7 @@ function MoreActions({
       <Button
         ref={toggle}
         variant="outline"
-        aria-label={`More actions for ${name}`}
+        aria-label={messages.profile.moreActions({ name })}
         aria-expanded={open}
         aria-controls={listId}
         disabled={disabled}
@@ -510,7 +603,7 @@ function MoreActions({
       {open && (
         <div
           id={listId}
-          className="cut absolute top-full right-0 z-10 mt-1.5 flex min-w-[180px] animate-hb-in flex-col border-2 border-control bg-panel p-1"
+          className="absolute end-0 top-full z-10 mt-1.5 flex min-w-[180px] animate-hb-in flex-col rounded-card bg-card p-1 shadow-menu"
         >
           <button
             type="button"
@@ -518,19 +611,9 @@ function MoreActions({
               setOpen(false);
               onExport();
             }}
-            className="cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-sm text-text-strong hover:bg-hover"
+            className="cursor-pointer rounded-control border-0 bg-transparent px-3 py-2 text-start text-sm text-text-strong hover:bg-hover"
           >
             {exportCopy.menuHob}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false);
-              onRetire();
-            }}
-            className="cursor-pointer border-0 bg-transparent px-3 py-2 text-left text-sm text-rose hover:bg-hover"
-          >
-            Retire hob
           </button>
         </div>
       )}
@@ -540,7 +623,7 @@ function MoreActions({
 
 /**
  * Asks what happens to the hob's running replies, then retires it. Nothing is deleted; the hob
- * goes to Archived hobs. A native modal dialog keeps focus inside it and closes on Escape.
+ * goes to Archived hobs. Once retired it says the hob is asleep, and closing goes Home.
  */
 function RetireDialog({
   hob,
@@ -557,17 +640,12 @@ function RetireDialog({
   onRetired: (retired: Retired) => void;
   onClose: () => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
   const navigate = useNavigate();
   const retire = useRetireHob(hob.id);
   const [work, setWork] = useState<RetireWork>("finish");
   const busy = running.length > 0;
-
-  useEffect(() => {
-    const element = dialog.current;
-    if (element && !element.open) element.showModal();
-  }, []);
+  const copy = messages.profile.retire;
+  const name = hob.name;
 
   // Once retired the profile has nothing left to show, so closing goes Home.
   const close = () => {
@@ -583,122 +661,96 @@ function RetireDialog({
   };
 
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby={titleId}
-      onCancel={(e) => {
-        e.preventDefault();
-        close();
-      }}
+    <Dialog open onOpenChange={(open) => !open && close()}>
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-w-[460px] animate-hb-in gap-3 rounded-card border-0 bg-ground p-5 shadow-sheet"
+      >
+        {retired ? (
+          <>
+            <DialogTitle className="m-0 font-heading text-xl font-bold">{copy.done({ name })}</DialogTitle>
+            <p role="status" className="m-0 text-sm text-text-secondary">
+              {retiredSummary(name, retired.work, retired.busy)} {copy.find({ name })}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button asChild variant="outline">
+                <Link to="/archive" search={{ tab: "hobs" }}>
+                  {copy.archived}
+                </Link>
+              </Button>
+              <Button onClick={close}>{copy.home}</Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <DialogTitle className="m-0 font-heading text-xl font-bold">{copy.title({ name })}</DialogTitle>
+            <span className="text-sm text-text-secondary">{busy ? copy.busy({ name }) : copy.idle({ name })}</span>
+            {busy && (
+              <ul className="m-0 flex list-none flex-col gap-1 rounded-control bg-deep px-3 py-2 text-sm">
+                {running.map((title, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: two running threads may share a title.
+                  <li key={i} className="truncate">
+                    {title}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <fieldset disabled={retire.isPending} className="m-0 flex flex-col gap-2 border-0 p-0">
+              <legend className="sr-only">{copy.choices({ name })}</legend>
+              {RETIRE_OPTIONS.map((option) => (
+                <RetireChoice
+                  key={option.work}
+                  checked={work === option.work}
+                  title={option.title(name)}
+                  note={option.note(name)}
+                  onPick={() => setWork(option.work)}
+                />
+              ))}
+            </fieldset>
+            <span className="text-detail text-label">{copy.kept}</span>
+            {retire.isError && (
+              <span role="alert" className="text-sm text-rose">
+                {copy.failed({ name })}
+              </span>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={close} disabled={retire.isPending}>
+                {copy.keep({ name })}
+              </Button>
+              <Button variant="deny" onClick={confirm} disabled={retire.isPending}>
+                {retire.isPending ? copy.retiring : copy.confirm({ name })}
+              </Button>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** One way to retire, as a row; the picked one is filled. */
+function RetireChoice({
+  checked,
+  title,
+  note,
+  onPick,
+}: {
+  checked: boolean;
+  title: string;
+  note: string;
+  onPick: () => void;
+}) {
+  return (
+    <label
       className={cn(
-        "cut m-auto w-[600px] max-w-[calc(100vw-32px)] animate-hb-in border-[3px] border-rose bg-card px-[26px] py-[22px] text-text-strong backdrop:bg-deep/80",
+        "flex cursor-pointer flex-col gap-0.5 rounded-control px-3 py-2 transition-colors duration-(--dur-fade) ease-(--ease-ui)",
+        "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-focus-ring",
+        checked ? "bg-line text-text-strong" : "bg-card text-text hover:bg-hover",
       )}
     >
-      {retired ? (
-        <div className="flex flex-col items-center gap-2.5 py-2.5 text-center">
-          <div className="relative grayscale-[.6] brightness-[.8]">
-            <HobSprite hob={hob} size={72} state="asleep" />
-          </div>
-          <h2 id={titleId} className="m-0 font-heading text-[22px] font-bold text-moonlight">
-            {hob.name} is retired
-          </h2>
-          <p role="status" className="m-0 max-w-[440px] text-sm text-text-secondary">
-            {retiredSummary(hob.name, retired.work, retired.busy)}
-          </p>
-          <div className="flex gap-2.5">
-            <Button asChild variant="outline">
-              <Link to="/settings/archived">See archived hobs</Link>
-            </Button>
-            <Button variant="outline" onClick={close}>
-              Go to Home
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3.5">
-            <HobSprite hob={hob} size={48} />
-            <div className="flex flex-col gap-0.5">
-              <h2 id={titleId} className="m-0 font-heading text-2xl font-bold text-moonlight">
-                Retire {hob.name}?
-              </h2>
-              <span className="text-sm text-text-secondary">
-                {hob.name} stops working and goes to sleep. Nothing is deleted.
-              </span>
-            </div>
-          </div>
-
-          {busy && (
-            <div className="cut flex flex-col gap-1.5 bg-panel px-3 py-2.5 text-sm">
-              <span className="lbl text-xs text-label">{hob.name} is busy right now</span>
-              {running.map((title, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: two running threads may share a title.
-                <span key={i}>
-                  <b>{title}</b> <span className="text-mint">· running</span>
-                </span>
-              ))}
-            </div>
-          )}
-
-          <fieldset disabled={retire.isPending} className="m-0 flex flex-col gap-1.5 border-0 p-0">
-            <legend className="sr-only">What happens to {hob.name}'s work</legend>
-            {RETIRE_OPTIONS.map((option) => (
-              <Choice
-                key={option.work}
-                name="retire-work"
-                checked={work === option.work}
-                onPick={() => setWork(option.work)}
-                className={cn(
-                  "items-start gap-2.5 px-3 py-2.5",
-                  work === option.work ? "border-lantern bg-line text-text-strong" : "border-line-2",
-                )}
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    "mt-[3px] size-3.5 flex-none border-2",
-                    work === option.work ? "border-lantern bg-lantern" : "border-line-2",
-                  )}
-                />
-                <span className="flex flex-col gap-0.5">
-                  <span className="text-sm font-bold">{option.title(hob.name)}</span>
-                  <span className="text-[13px] text-text-secondary">{option.note(hob.name)}</span>
-                </span>
-              </Choice>
-            ))}
-            <div className="cut flex items-start gap-2.5 border-2 border-dashed border-line-2 px-3 py-2.5 text-sm">
-              <span className="flex flex-col gap-0.5">
-                <span className="flex items-center gap-2 font-bold">
-                  Hand {hob.name}'s work to another hob
-                  <span className="bg-lantern px-1.5 text-xs text-ground">Later</span>
-                </span>
-                <span className="text-[13px] text-text-secondary">Arrives once hobs can delegate.</span>
-              </span>
-            </div>
-          </fieldset>
-
-          <span className="text-[13px] text-label">
-            Kept: {hob.name}'s threads, instructions and look. Read them any time from Settings › Archived hobs.
-          </span>
-          {retire.isError && (
-            <span role="alert" className="text-sm text-rose">
-              Hobbots could not retire {hob.name}. Try again.
-            </span>
-          )}
-          <div className="flex justify-end gap-2.5">
-            <Button variant="outline" onClick={close} disabled={retire.isPending}>
-              Keep {hob.name}
-            </Button>
-            <Button
-              onClick={confirm}
-              disabled={retire.isPending}
-              className="bg-rose shadow-[0_4px_0_color-mix(in_srgb,var(--color-rose)_65%,black)] hover:bg-rose active:shadow-[0_2px_0_color-mix(in_srgb,var(--color-rose)_65%,black)]"
-            >
-              {retire.isPending ? "Retiring…" : `Retire ${hob.name}`}
-            </Button>
-          </div>
-        </div>
-      )}
-    </dialog>
+      <input type="radio" name="retire-work" checked={checked} onChange={onPick} className="sr-only" />
+      <strong className="text-sm">{title}</strong>
+      <span className="text-detail text-text-secondary">{note}</span>
+    </label>
   );
 }
