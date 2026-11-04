@@ -1,3 +1,4 @@
+import { cva, type VariantProps } from "class-variance-authority";
 import { Tabs as TabsPrimitive } from "radix-ui";
 import type * as React from "react";
 import { cn } from "../lib/utils.ts";
@@ -13,38 +14,62 @@ function Tabs({ className, ...props }: React.ComponentProps<typeof TabsPrimitive
 }
 
 // `line` draws the line the selected tab's bar sits on; `plain` leaves it out, for tabs in a header
-// that already has a rule under it.
+// that already has a rule under it; `chip` is for chip tabs (see the trigger's `chip` variant), such
+// as the docked Workbench's strip, and scrolls without a scrollbar.
+const tabsListVariants = cva("flex shrink-0 gap-1 overflow-x-auto border-0 border-solid border-line", {
+  variants: {
+    variant: {
+      line: "border-b-[length:var(--edge)]",
+      plain: "",
+      chip: "[scrollbar-width:none]",
+    },
+  },
+  defaultVariants: { variant: "line" },
+});
+
 function TabsList({
   className,
-  variant = "line",
+  variant,
   ...props
-}: React.ComponentProps<typeof TabsPrimitive.List> & { variant?: "line" | "plain" }) {
+}: React.ComponentProps<typeof TabsPrimitive.List> & VariantProps<typeof tabsListVariants>) {
   return (
-    <TabsPrimitive.List
-      data-slot="tabs-list"
-      className={cn(
-        "flex shrink-0 gap-1 overflow-x-auto border-0 border-solid border-line",
-        variant === "line" && "border-b-[length:var(--edge)]",
-        className,
-      )}
-      {...props}
-    />
+    <TabsPrimitive.List data-slot="tabs-list" className={cn(tabsListVariants({ variant }), className)} {...props} />
   );
 }
 
-function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+// `bar` is a plain label, the selected one bold with a lantern bar under it on the list's line; `chip`
+// is a small rounded chip, the selected one on a card, with no bar.
+const tabsTriggerVariants = cva(
+  [
+    "relative inline-flex shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent whitespace-nowrap text-text-secondary",
+    "hover:bg-hover hover:text-text-strong data-[state=active]:text-text-strong",
+    "focus-ring focus-inset",
+    "disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  ],
+  {
+    variants: {
+      variant: {
+        bar: [
+          "gap-2 rounded-t-control px-3 pt-2.5 pb-3 text-[15px] leading-[23px] data-[state=active]:font-semibold",
+          // The bar under the selected tab sits on the list's line, inset from the tab's sides.
+          "after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-[calc(-1*var(--edge))] after:h-[3px] after:rounded-control after:bg-lantern after:opacity-0 data-[state=active]:after:opacity-100",
+        ],
+        chip: "gap-1.5 rounded-control px-2.5 py-1.5 text-ui data-[state=active]:bg-card",
+      },
+    },
+    defaultVariants: { variant: "bar" },
+  },
+);
+
+function TabsTrigger({
+  className,
+  variant,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Trigger> & VariantProps<typeof tabsTriggerVariants>) {
   return (
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
-      className={cn(
-        "relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-t-control border-0 bg-transparent px-3 pt-2.5 pb-3 text-[15px] leading-[23px] whitespace-nowrap text-text-secondary",
-        "hover:bg-hover hover:text-text-strong data-[state=active]:font-semibold data-[state=active]:text-text-strong",
-        "focus-ring focus-inset",
-        "disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        // The bar under the selected tab sits on the list's line, inset from the tab's sides.
-        "after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-[calc(-1*var(--edge))] after:h-[3px] after:rounded-control after:bg-lantern after:opacity-0 data-[state=active]:after:opacity-100",
-        className,
-      )}
+      className={cn(tabsTriggerVariants({ variant }), className)}
       {...props}
     />
   );

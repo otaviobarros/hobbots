@@ -2,7 +2,7 @@ import { HOB_COLORS } from "@hobbots/art/look";
 import { type Agent, isInProgress, type Message } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
-import type { CSSProperties, ReactNode } from "react";
+import { type CSSProperties, type ReactNode, useEffect } from "react";
 import { toolLogUrl } from "../../api/client.ts";
 import { formatTime } from "../../lib/time.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
@@ -15,7 +15,15 @@ import { SettleCharmCall } from "./settle-charm-call.tsx";
 const copy = messages.reply;
 
 /** The element id of a message's row, for scrolling to it. */
-export const messageElementId = (id: string) => `message-${id}`;
+const messageElementId = (id: string) => `message-${id}`;
+
+/** Scrolls the message a search opened into the middle of the view once a transcript holds it. */
+export const useScrollToMessage = (messages: ReadonlyArray<{ readonly id: string }> | undefined, id?: string) => {
+  const loaded = messages?.some((message) => message.id === id) ?? false;
+  useEffect(() => {
+    if (loaded && id) document.getElementById(messageElementId(id))?.scrollIntoView({ block: "center" });
+  }, [loaded, id]);
+};
 
 // A message opened from search wears a lantern outline, so the eye finds it.
 const focusRing = "outline-2 outline-offset-4 outline-lantern";

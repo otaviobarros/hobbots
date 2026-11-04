@@ -40,5 +40,7 @@ export const messages = {
     named: ({ title }: { title: string }) => `Workbench for ${title}`,
     open: "Open the Workbench",
     fold: "Fold the Workbench",
+    expand: "Make the Workbench as tall as it goes",
+    shrink: "Bring the Workbench back to its height",
   },
 } as const;

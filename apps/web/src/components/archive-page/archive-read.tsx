@@ -12,7 +12,7 @@ import {
   threadsQuery,
 } from "../../api/queries.ts";
 import { formatDay, formatWhen } from "../../lib/time.ts";
-import { MessageRow } from "../chat/message-row.tsx";
+import { MessageRow, useScrollToMessage } from "../chat/message-row.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { useArchiveActions } from "./archive-notices.tsx";
 import {
@@ -38,7 +38,16 @@ const retiredCrumb: Crumb = { label: copy.tabs.hobs, to: "/archive", search: { t
  * An archived chat, read-only: its title, a note that says when it was archived, the transcript and
  * a bar that stays at the bottom with Restore to the hob's chats. Restoring goes back to the list.
  */
-export function ArchivedChatPage({ hobId, threadId }: { hobId: AgentId; threadId: ThreadId }) {
+export function ArchivedChatPage({
+  hobId,
+  threadId,
+  focusMessageId,
+}: {
+  hobId: AgentId;
+  threadId: ThreadId;
+  /** A search match to open the transcript on, in view and marked. */
+  focusMessageId?: string | undefined;
+}) {
   const navigate = useNavigate();
   const actions = useArchiveActions();
   const hob = useQuery({ ...agentsQuery, select: (hobs) => hobs.find((h) => h.id === hobId) });
@@ -72,7 +81,7 @@ export function ArchivedChatPage({ hobId, threadId }: { hobId: AgentId; threadId
       <Crumbs trail={[archiveCrumb]} current={thread.title} />
       <ReadHeader hob={current} title={thread.title} meta={copy.read.withHob({ name: current.name, day })} />
       <ArchiveNote icon={<BoxIcon />}>{copy.read.banner({ name: current.name, day })}</ArchiveNote>
-      <Transcript hob={current} threadId={thread.id} />
+      <Transcript hob={current} threadId={thread.id} focusMessageId={focusMessageId} />
       <ReadOnlyBar text={copy.read.bar}>
         <Button
           disabled={busy}
@@ -250,12 +259,21 @@ function ReadHeader({ hob, title, meta }: { hob: Agent; title: string; meta: str
   );
 }
 
-/** The chat's messages as they were, with nothing to answer. */
-function Transcript({ hob, threadId }: { hob: Agent; threadId: ThreadId }) {
+/** The chat's messages as they were, with nothing to answer, opened on a search match when there is one. */
+function Transcript({
+  hob,
+  threadId,
+  focusMessageId,
+}: {
+  hob: Agent;
+  threadId: ThreadId;
+  focusMessageId?: string | undefined;
+}) {
   const transcript = useQuery({
     ...messagesQuery(threadId),
     select: (all) => all.filter((m) => m.status !== "queued"),
   });
+  useScrollToMessage(transcript.data, focusMessageId);
   if (transcript.isError) {
     return (
       <p role="alert" className="m-0 text-ui text-rose">
@@ -273,7 +291,7 @@ function Transcript({ hob, threadId }: { hob: Agent; threadId: ThreadId }) {
   return (
     <div className="flex flex-1 flex-col gap-3.5">
       {transcript.data.map((message) => (
-        <MessageRow key={message.id} message={message} hob={hob} />
+        <MessageRow key={message.id} message={message} hob={hob} focused={message.id === focusMessageId} />
       ))}
     </div>
   );

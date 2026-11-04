@@ -1,5 +1,6 @@
 import type { Task, TaskId, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { OverflowTooltip } from "@hobbots/ui/components/overflow-tooltip";
 import { formatWhen } from "../../lib/time.ts";
 import { TaskBackpack } from "../backpack/quest-backpack.tsx";
 import type { PickedTry } from "../lane-actions/lane-actions-model.ts";
@@ -82,7 +83,9 @@ function TaskCard({
     >
       {titled && (
         <span className="flex items-center gap-2">
-          <h3 className="m-0 min-w-0 flex-1 truncate text-detail font-bold text-text-strong">{taskTitle(task)}</h3>
+          <OverflowTooltip text={taskTitle(task)}>
+            <h3 className="m-0 min-w-0 flex-1 truncate text-detail font-bold text-text-strong">{taskTitle(task)}</h3>
+          </OverflowTooltip>
           <StatusTag status={roomTone(row.status)}>{roomStatusLabel(row.status)}</StatusTag>
         </span>
       )}

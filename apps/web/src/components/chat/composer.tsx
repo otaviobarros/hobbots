@@ -1,4 +1,5 @@
 import { Button } from "@hobbots/ui/components/button";
+import { cn } from "@hobbots/ui/lib/utils";
 import { type KeyboardEvent, useEffect, useRef } from "react";
 import { sendable, useDraft, writeDraft } from "../../api/drafts.ts";
 import type { WaitingPlace } from "../../api/outbox.ts";
@@ -109,7 +110,16 @@ export function Composer({
         className="field-sizing-content max-h-40 min-h-12 resize-none overflow-y-auto border-0 bg-transparent py-0.5 [overflow-wrap:anywhere] whitespace-pre-wrap text-text-strong outline-none [tab-size:4] placeholder:text-label disabled:cursor-not-allowed"
       />
       <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 text-end text-meta text-label">{hintFor(busy, stopping, paused)}</span>
+        {/* Beside the Quest room the chat is narrow, so the keys' hint gives way to the message; a
+            hint about a busy or paused hob stays. */}
+        <span
+          className={cn(
+            "min-w-0 flex-1 text-end text-meta text-label",
+            !busy && !paused && "@max-[480px]/chat:invisible",
+          )}
+        >
+          {hintFor(busy, stopping, paused)}
+        </span>
         {busy && (
           <Button variant="deny" size="sm" onClick={onStop} disabled={stopping}>
             {stopping ? copy.stopping : copy.stop}

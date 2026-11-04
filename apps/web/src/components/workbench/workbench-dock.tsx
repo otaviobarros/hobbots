@@ -17,7 +17,7 @@ import { attemptsOf, isWorkbenchTab, WORKBENCH_TABS } from "./workbench-model.ts
 /**
  * One Workbench for the whole Quest, docked under the lanes (ADR 027, ADR 023). Folded, it is a
  * strip of its tabs with how many records each lists; a tab or a lane slides it open, its top edge
- * drags it taller, and the chevron folds it again. Changes, Files and Terminal list every hob's work
+ * drags it taller, Expand makes it as tall as it goes, and the chevron folds it again. Changes, Files and Terminal list every hob's work
  * in one list, or the lit lane's alone, each on the try picked for its Task. It reads the Quest's
  * tree in one call and stays live through the tree's one stream.
  */
@@ -47,7 +47,7 @@ export function WorkbenchDock({
   return (
     <section
       aria-label={roomCopy.dock.named({ title: taskTitle(top) })}
-      className="@container/dock relative flex max-h-3/4 shrink-0 flex-col border-t border-line bg-deep"
+      className="@container/dock relative flex max-h-4/5 shrink-0 flex-col border-t border-line bg-deep"
       style={open ? { height: height.height } : undefined}
     >
       {open && (
@@ -61,8 +61,15 @@ export function WorkbenchDock({
           tabIndex={0}
           onPointerDown={height.onPointerDown}
           onKeyDown={height.onKeyDown}
-          className="absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize touch-none outline-none hover:bg-line-2 focus-visible:bg-focus-ring"
-        />
+          onDoubleClick={(event) => height.toggle(event.currentTarget)}
+          className="group/edge absolute inset-x-0 -top-1.5 z-10 flex h-3 cursor-row-resize touch-none justify-center outline-none"
+        >
+          {/* A grip in the middle of the edge says it drags; the whole edge lights as it is held. */}
+          <span
+            aria-hidden
+            className="mt-1 h-1 w-10 rounded-dot bg-line-2 group-hover/edge:bg-label group-focus-visible/edge:bg-focus-ring group-active/edge:bg-lantern"
+          />
+        </div>
       )}
       <Tabs
         value={view.tab ?? ""}
@@ -84,6 +91,8 @@ export function WorkbenchDock({
           party={party}
           onEveryone={() => moves.lane(undefined)}
           onFold={() => moves.tab(open ? undefined : "changes")}
+          expanded={height.expanded}
+          onExpand={height.toggle}
         />
         {open && (
           <>

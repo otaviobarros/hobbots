@@ -56,7 +56,7 @@ import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
 import { EmptyThread } from "./empty-thread.tsx";
-import { type ContinueReply, MessageRow, messageElementId, QueuedRow, WaitingRow } from "./message-row.tsx";
+import { type ContinueReply, MessageRow, QueuedRow, useScrollToMessage, WaitingRow } from "./message-row.tsx";
 import { TranscriptSkeleton } from "./transcript-skeleton.tsx";
 
 /**
@@ -165,11 +165,7 @@ export function ChatView({
     if (lastContent !== undefined && !holding) bottom.current?.scrollIntoView({ block: "end" });
   }, [lastContent, holding]);
 
-  const focusLoaded = messages.data?.some((m) => m.id === focusMessageId) ?? false;
-  useEffect(() => {
-    if (focusLoaded && focusMessageId)
-      document.getElementById(messageElementId(focusMessageId))?.scrollIntoView({ block: "center" });
-  }, [focusLoaded, focusMessageId]);
+  useScrollToMessage(messages.data, focusMessageId);
 
   // When a waiting message starts this page's thread, the page follows it there with its draft.
   useEffect(() => {
@@ -291,7 +287,7 @@ export function ChatView({
           if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
         }}
         ref={stayAtEnd}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px] @max-[480px]/chat:px-4"
       >
         {/* The transcript, the tray and the composer share one centered column (A2-01). Long words
             and paths wrap inside it, so nothing in it is wider than the column (#874). */}
@@ -374,7 +370,7 @@ export function ChatView({
       </div>
 
       <ArchiveToastViewport />
-      <div className="flex-none px-6 pt-2 pb-5">
+      <div className="flex-none px-6 pt-2 pb-5 @max-[480px]/chat:px-3 @max-[480px]/chat:pb-3">
         <div className="mx-auto flex w-full max-w-measure flex-col gap-2.5">
           {brainProblem !== null && (
             <section
