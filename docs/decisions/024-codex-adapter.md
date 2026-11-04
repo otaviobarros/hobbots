@@ -100,7 +100,7 @@ How a call runs (#440):
 
 ### Usage
 
-`thread/tokenUsage/updated` arrives during each turn with the last request's and the thread's totals: input, cached input, output and reasoning tokens, and the model's context window. Verified with a stand-in model. Usage is recorded per reply, to the brain that ran it (ADR 017). `account/rateLimits/updated` reports the plan's limits for provider health; its contents are **unverified**. Codex reports no cost.
+`thread/tokenUsage/updated` arrives during each turn with the last request's and the thread's totals: input, cached input, output and reasoning tokens, and the model's context window. Verified with a stand-in model. Usage is recorded per reply, to the brain that ran it (ADR 017). The plan's limits are read with `account/rateLimits/read`, which sends no prompt, on the hub's App Server outside the sandbox, and shown on the Usage screen like Claude Code's: each metered limit's windows, the five-hour one as the session and the seven-day one as the week, with what is used and when it refills. `account/rateLimits/updated` reports the same during a turn and is not read yet. Both are typed from Codex 0.166.0's generated protocol; their contents with a real sign-in are **unverified**. Codex reports no cost.
 
 ## Consequences
 

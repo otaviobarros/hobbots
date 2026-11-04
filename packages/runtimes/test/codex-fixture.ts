@@ -22,6 +22,8 @@ export interface FakeCodexOptions {
   readonly token?: string | null;
   /** `model/list`'s pages, in order. */
   readonly pages?: ReadonlyArray<ReadonlyArray<Partial<Model>>>;
+  /** What `account/rateLimits/read` answers; left out, Codex answers it with an error. */
+  readonly rateLimits?: unknown;
   /** `silent` never answers; `exit` exits after `initialize`; `ask` sends the client a request first. */
   readonly behavior?: "answer" | "silent" | "exit" | "ask";
 }
@@ -52,6 +54,7 @@ export const fakeCodex = (folder: string, options: FakeCodexOptions = {}): strin
     workspace: options.workspace ?? null,
     token: options.token ?? null,
     pages: (options.pages ?? [[{}]]).map((page) => page.map(model)),
+    rateLimits: options.rateLimits ?? null,
     behavior: options.behavior ?? "answer",
     log: join(folder, "codex.log"),
   };
@@ -77,6 +80,7 @@ const results = {
     authToken: params.includeToken ? config.token : null,
     requiresOpenaiAuth: true,
   }),
+  "account/rateLimits/read": () => config.rateLimits,
   "model/list": (params) => {
     const index = params.cursor ? Number(params.cursor) : 0;
     return { data: config.pages[index] ?? [], nextCursor: index + 1 < config.pages.length ? String(index + 1) : null };
@@ -96,7 +100,7 @@ process.stdin.on("data", (chunk) => {
       send({ id: "ask-1", method: "item/tool/call", params: { tool: "lookup" } });
       send({ id: "ask-2", method: "unknown/thing", params: {} });
     }
-    const result = results[message.method];
+    const result = message.method === "account/rateLimits/read" && config.rateLimits === null ? undefined : results[message.method];
     if (result === undefined) send({ id: message.id, error: { code: -32601, message: "unknown method" } });
     else send({ id: message.id, result: result(message.params ?? {}) });
     if (config.behavior === "exit" && message.method === "initialize") setTimeout(() => process.exit(3), 50);

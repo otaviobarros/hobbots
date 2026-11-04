@@ -3,12 +3,13 @@ import { policySandbox, type RuntimeEnforcement, RuntimeHealth } from "@hobbots/
 import { PolicyEngine } from "@hobbots/permissions";
 import { type Duration, Effect, Layer } from "effect";
 import { ChildProcessSpawner } from "effect/process";
-import { installedRuntimeChecks, runnableBinary } from "../binary.ts";
+import { installedPlanUsage, installedRuntimeChecks, runnableBinary } from "../binary.ts";
 import { ProcessSandbox, type ProcessSandboxShape } from "../sandbox.ts";
 import { type AppServer, type AppServerCommand, type AppServerOptions, startAppServer } from "./app-server.ts";
 import { billingOf, chatGptTokens, readSignIn } from "./auth.ts";
 import { codexEnv, codexLocator, minimumCodexVersion } from "./locate.ts";
 import { codexFallbackModels, listModels, toCodexModels } from "./models.ts";
+import { planFromRateLimits, readRateLimits } from "./plan.ts";
 import { runCodexTurn } from "./turn.ts";
 
 export interface CodexConfig {
@@ -121,6 +122,13 @@ export const makeCodex = (config: CodexConfig) =>
         ),
     });
 
+    const planUsage = installedPlanUsage({
+      runtime: "codex",
+      locate,
+      read: (binary, checkedAt) =>
+        askAppServer(binary, readRateLimits).pipe(Effect.map((response) => planFromRateLimits(response, checkedAt))),
+    });
+
     const turnConfig = {
       // A turn runs only on a Codex that health would show as ready to start.
       binary: runnableBinary(locate, words),
@@ -143,6 +151,7 @@ export const makeCodex = (config: CodexConfig) =>
       health,
       models,
       enforcement: Effect.succeed(declared),
+      planUsage,
       sendPrompt: (request) => runCodexTurn(turnConfig, request),
     });
   });
