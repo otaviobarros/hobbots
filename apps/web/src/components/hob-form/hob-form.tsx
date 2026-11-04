@@ -727,7 +727,6 @@ function Brain<D extends BrainChoice>({
             aria-label={messages.models.effort}
             value={draft.effort ?? null}
             onValueChange={(effort: Effort) => onChange({ ...draft, effort })}
-            className="flex-wrap"
           >
             {efforts.map((effort: Effort, i) => (
               <SegmentedControlItem key={effort} value={effort}>
