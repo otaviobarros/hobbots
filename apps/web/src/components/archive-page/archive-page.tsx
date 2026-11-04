@@ -336,6 +336,8 @@ function RetiredHobs({ hobs }: { hobs: ReadonlyArray<Agent> }) {
 
 function RetiredCard({ hob }: { hob: Agent }) {
   const threads = useQuery(threadsQuery(hob.id));
+  // What it did: the chat it worked on last, as its list puts the latest first.
+  const last = threads.data?.[0]?.title;
   return (
     <li className="cut relative flex min-w-0 flex-col overflow-hidden bg-card">
       <span aria-hidden className="relative flex h-[104px] items-end justify-center" style={doorStyle}>
@@ -361,6 +363,7 @@ function RetiredCard({ hob }: { hob: Agent }) {
             {hob.roleTitle}
           </span>
         </span>
+        {last && <span className="line-clamp-2 text-ui text-text-secondary">{copy.hobs.lastDid({ title: last })}</span>}
         <span className="flex min-w-0 flex-wrap items-end justify-between gap-x-3 gap-y-2">
           <span className="flex min-w-0 flex-col text-ui">
             <span className="truncate">{threads.data ? copy.hobs.kept({ count: threads.data.length }) : " "}</span>

@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { ChiefMark } from "../chief/chief-mark.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "../messages.ts";
+import { RoleSigil } from "../roles/role-sigil.tsx";
 import { Stars } from "../scene/scene.tsx";
 import { SummoningCircle } from "../summon/summoning.tsx";
 
@@ -83,8 +84,17 @@ export function FirstArrived({ hob, onReplay }: { hob: Agent; onReplay: () => vo
         </span>
         <span className="flex min-w-0 flex-col items-center gap-3">
           <Bubble tail="left">{copy.hobHello({ name: hob.name, role: hob.roleTitle, note })}</Bubble>
-          <span className="hop-on-hover">
-            <HobSprite hob={hob} size={168} badge />
+          {/* The sigil sits on the hob's bottom-left corner, where its feet meet the ground. */}
+          <span className="hop-on-hover relative">
+            <HobSprite hob={hob} size={168} />
+            {hob.sigil && (
+              <span
+                aria-hidden
+                className="absolute -start-1 bottom-1.5 grid size-[34px] place-items-center rounded-tag bg-deep"
+              >
+                <RoleSigil sigil={hob.sigil} size={26} />
+              </span>
+            )}
           </span>
         </span>
       </div>

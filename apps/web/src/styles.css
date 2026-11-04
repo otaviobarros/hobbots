@@ -196,6 +196,7 @@
   /* Waiting on the server: the ring turns an eighth at a time. Kept infinite: it shows only while a
      request is in flight and goes away when the request ends. */
   --animate-hb-spin: hb-spin 1s steps(8) infinite;
+  --animate-hb-bubble: hb-bubble 3s var(--ease-ui) 3 both;
 
   @keyframes hb-chief-sway {
     0%,
@@ -388,6 +389,19 @@
     100% {
       transform: translateY(-28px) scale(1);
       opacity: 0;
+    }
+  }
+  @keyframes hb-bubble {
+    0% {
+      opacity: 0;
+      transform: translateY(0);
+    }
+    20% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-34px);
     }
   }
   @keyframes hb-glow {

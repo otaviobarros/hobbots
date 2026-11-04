@@ -109,7 +109,8 @@ test("[TC-DP-204] Connect lists the hubs found, refuses a local address, waits w
   await page.getByRole("button", { name: "Get started" }).click();
   await expect(page.getByRole("heading", { name: "Where should your hobs live?" })).toBeVisible();
   await expect(page.getByText(/Coming soon/)).toHaveCount(0);
-  await page.getByRole("button", { name: /Connect to Hobbots on another computer/ }).click();
+  await page.getByText("Another computer", { exact: true }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "Connect to your hub" })).toBeVisible();
   // A hub this app cannot use is listed with why, and offers no Connect.
@@ -172,9 +173,10 @@ test("[TC-DP-205] an expired request or an unreachable hub says why, Cancel keep
   await expect(page.getByLabel("Address")).toHaveValue("studio");
 
   await page.getByRole("button", { name: "Back" }).click();
-  await page.getByRole("button", { name: /Run Hobbots on this computer/ }).click();
+  await expect(page.getByRole("radio", { name: /This computer/ })).toBeChecked();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByText("Starting Hobbots…")).toBeVisible();
-  await expect(page.getByRole("button", { name: /Connect to Hobbots on another computer/ })).toBeDisabled();
+  await expect(page.getByRole("radio", { name: /Another computer/ })).toBeDisabled();
   expect(
     await page.evaluate(() => (window as unknown as { connectCalls: { ranHere: boolean } }).connectCalls.ranHere),
   ).toBe(true);
@@ -190,12 +192,12 @@ test("[TC-DP-207] Back while connecting stops the request, and an answer that co
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByRole("button", { name: "Connecting…" })).toBeDisabled();
   await page.getByRole("button", { name: "Back" }).click();
-  await expect(page.getByRole("button", { name: /Run Hobbots on this computer/ })).toBeEnabled();
+  await expect(page.getByRole("radio", { name: /This computer/ })).toBeEnabled();
   expect(
     await page.evaluate(() => (window as unknown as { connectCalls: { cancels: number } }).connectCalls.cancels),
   ).toBe(1);
   // The hub allows the request it no longer has a page for: Where Hobbots runs stays.
   await answer(page, { kind: "allowed", computer: "slow" });
-  await expect(page.getByRole("button", { name: /Run Hobbots on this computer/ })).toBeEnabled();
+  await expect(page.getByRole("radio", { name: /This computer/ })).toBeEnabled();
   await expect(page.getByRole("heading", { name: "You're in!" })).toHaveCount(0);
 });

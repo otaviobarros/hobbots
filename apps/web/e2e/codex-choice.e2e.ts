@@ -56,7 +56,7 @@ const finishedHub = async (env: Record<string, string>) => {
 const openProviders = async (page: Page, current: Hub) => {
   await page.goto(current.url);
   await page.getByRole("link", { name: "Get started" }).click();
-  await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
 };
 
@@ -87,15 +87,9 @@ test("[TC-UX-080] onboarding shows a missing Codex with its fix, and a connected
   await expect(page.getByText("1 provider connected")).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
 
-  // The first hob offers the connected provider, with Codex's own models and efforts.
+  // The first hob thinks with the one connected provider, on Codex's default model and effort.
   await expect(page.getByRole("heading", { name: "Who should help you first?" })).toBeVisible();
-  const providers = page.getByRole("group", { name: "Provider" });
-  await expect(providers.getByRole("radio", { name: "Codex", exact: true })).toBeChecked();
-  await expect(providers.getByRole("radio", { name: /Claude/ })).toHaveCount(0);
-  await expect(page.getByRole("radio", { name: /GPT-5\.5/ })).toBeChecked();
-  await expect(page.getByRole("radio", { name: "Medium" })).toBeChecked();
-  await expect(page.getByText("Codex · GPT-5.5 · medium effort")).toBeVisible();
-  await page.getByRole("textbox", { name: "Name", exact: true }).fill("Tinker");
+  await page.getByRole("textbox", { name: "Hob name" }).fill("Tinker");
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "How careful should your hobs be?" })).toBeVisible();

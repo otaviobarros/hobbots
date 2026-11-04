@@ -1,23 +1,62 @@
-import type { Agent, AgentId, UsagePeriod } from "@hobbots/domain";
+import type { Agent, AgentId, PlanUsage, QuestUsage, RuntimeHealth, UsagePeriod, UsageReport } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useRef } from "react";
 import { agentsQuery, archivedAgentsQuery, runtimesQuery, usageQuery } from "../../api/queries.ts";
-import { dailyUsage, hobShares, localDay } from "../../lib/usage.ts";
+import { dailyUsage, type HobShare, hobShares, localDay, questShares, type UsageSplit } from "../../lib/usage.ts";
 import { Page } from "../shell/pages.tsx";
-import { DailyChart, HobBreakdown } from "./hob-breakdown.tsx";
+import { DailyChart, HobBreakdown, QuestBreakdown } from "./hob-breakdown.tsx";
 import { messages } from "./messages.ts";
-import { ManageProviders, PlanShelf } from "./plan-card.tsx";
+import { alarmOf, ManageProviders, PlanBanner, PlanShelf, planViews } from "./plan-card.tsx";
+import { WaysToSave } from "./ways-to-save.tsx";
 
 const PERIODS = ["7", "30"] as const satisfies ReadonlyArray<UsagePeriod>;
+const SPLITS = ["hob", "quest"] as const satisfies ReadonlyArray<UsageSplit>;
 
-/** A section of the page under a small label, with an optional control at its end. */
-function Section({ label, extra, children }: { label: string; extra?: React.ReactNode; children: React.ReactNode }) {
+/** Each section's line icon, on a 16×16 grid in the label's color. */
+const SECTION_ICONS = {
+  daily: "M2.5 13.5h11M4.5 13.5v-4M8 13.5v-8M11.5 13.5v-6",
+  hobs: "M6 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM1.5 13.5c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4M10.5 2.7a2.5 2.5 0 0 1 0 4.6M12 9.7c1.5.5 2.5 1.8 2.5 3.8",
+  tips: "M6 12.5h4M6.5 14.5h3M8 1.5a4.5 4.5 0 0 0-2.6 8.2c.4.3.6.7.6 1.1v.2h4v-.2c0-.4.2-.8.6-1.1A4.5 4.5 0 0 0 8 1.5z",
+} as const;
+
+/** A section of the page under a small label and its icon, with an optional control at its end. */
+function Section({
+  label,
+  icon,
+  extra,
+  headingRef,
+  children,
+}: {
+  label: string;
+  icon?: keyof typeof SECTION_ICONS;
+  extra?: React.ReactNode;
+  headingRef?: React.Ref<HTMLHeadingElement>;
+  children: React.ReactNode;
+}) {
   return (
     <section aria-label={label} className="flex min-w-0 flex-col gap-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="lbl m-0 text-meta text-label">{label}</h2>
+        <h2 ref={headingRef} tabIndex={-1} className="lbl m-0 flex items-center gap-1.5 text-meta text-label">
+          {icon !== undefined && (
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 16 16"
+              width={14}
+              height={14}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d={SECTION_ICONS[icon]} />
+            </svg>
+          )}
+          {label}
+        </h2>
         {extra}
       </div>
       {children}
@@ -26,14 +65,14 @@ function Section({ label, extra, children }: { label: string; extra?: React.Reac
 }
 
 /** The period picker. The period lives in the URL (STD-REACT-002), so picking one navigates. */
-function PeriodPicker({ days }: { days: UsagePeriod }) {
+function PeriodPicker({ days, by }: { days: UsagePeriod; by: UsageSplit }) {
   const navigate = useNavigate();
   return (
     <SegmentedControl
       aria-label={messages.period.label}
       value={days}
       onValueChange={(period: UsagePeriod) =>
-        void navigate({ to: "/usage", search: { days: period === "30" ? 30 : 7 } })
+        void navigate({ to: "/usage", search: { days: period === "30" ? 30 : 7, by: by === "quest" ? by : undefined } })
       }
     >
       {PERIODS.map((period) => (
@@ -45,58 +84,146 @@ function PeriodPicker({ days }: { days: UsagePeriod }) {
   );
 }
 
+/** By hob or By quest for Who used what. It lives in the URL beside the period. */
+function SplitPicker({ days, by }: { days: UsagePeriod; by: UsageSplit }) {
+  const navigate = useNavigate();
+  return (
+    <SegmentedControl
+      aria-label={messages.split.label}
+      size="sm"
+      value={by}
+      onValueChange={(split: UsageSplit) =>
+        void navigate({
+          to: "/usage",
+          search: { days: days === "30" ? 30 : undefined, by: split === "quest" ? split : undefined },
+        })
+      }
+    >
+      {SPLITS.map((split) => (
+        <SegmentedControlItem key={split} value={split}>
+          {messages.split[split]}
+        </SegmentedControlItem>
+      ))}
+    </SegmentedControl>
+  );
+}
+
+/** Day by day's count of replies, then the key to its lit bar. */
+function DailyLegend({ total }: { total: string | null }) {
+  return (
+    <span className="flex items-center gap-3 text-meta text-label">
+      {total !== null && <span>{total}</span>}
+      <span className="inline-flex items-center gap-1.5">
+        <i aria-hidden className="size-2.5 rounded-[3px] bg-lantern" />
+        {messages.daily.today}
+      </span>
+    </span>
+  );
+}
+
+/** Who used what, by hob or by quest, with what the shares count. */
+function WhoUsedWhat({
+  days,
+  by,
+  hobs,
+  quests,
+  looks,
+}: {
+  days: UsagePeriod;
+  by: UsageSplit;
+  /** Undefined until the report arrives. */
+  hobs: ReadonlyArray<HobShare> | undefined;
+  quests: ReadonlyArray<QuestUsage> | undefined;
+  looks: ReadonlyMap<AgentId, Agent>;
+}) {
+  const period = messages.period.last[days];
+  return (
+    <Section label={messages.hobs.label} icon="hobs" extra={<SplitPicker days={days} by={by} />}>
+      {by === "quest"
+        ? quests && <QuestBreakdown quests={questShares(quests)} period={period} />
+        : hobs && <HobBreakdown hobs={hobs} looks={looks} period={period} />}
+      <p className="m-0 text-meta text-label">{by === "quest" ? messages.quests.note : messages.note}</p>
+    </Section>
+  );
+}
+
+/** The banner when a plan is low or used up, then Your AI with each provider's plan. */
+function YourAi({
+  runtimes,
+  plans,
+  now,
+  onSave,
+}: {
+  runtimes: ReadonlyArray<RuntimeHealth> | undefined;
+  plans: ReadonlyArray<PlanUsage> | undefined;
+  now: Date;
+  onSave: () => void;
+}) {
+  const views = runtimes && planViews(runtimes, plans, now);
+  const alarm = views && alarmOf(views);
+  return (
+    <>
+      {alarm && <PlanBanner state={alarm} onSave={onSave} />}
+      <Section label={messages.plans.label} extra={<ManageProviders />}>
+        {views ? <PlanShelf views={views} /> : <span className="text-text-secondary">{messages.plans.checking}</span>}
+      </Section>
+    </>
+  );
+}
+
+/** Day by day: the period's replies on each of the reader's days. */
+function DayByDay({ report, days }: { report: UsageReport | undefined; days: UsagePeriod }) {
+  const daily = report ? dailyUsage(report.minutes, report.until, Number(days)) : [];
+  const replies = daily.reduce((sum, day) => sum + day.replies, 0);
+  const total = report ? messages.daily.total({ count: replies, period: messages.period.last[days] }) : null;
+  return (
+    <Section label={messages.daily.label} icon="daily" extra={<DailyLegend total={total} />}>
+      {report && <DailyChart days={daily} />}
+    </Section>
+  );
+}
+
 /** Screen 12, Usage: what's left of each AI plan and who used it, over 7 or 30 days (OP-002). */
-export function UsagePage({ days }: { days: UsagePeriod }) {
+export function UsagePage({ days, by }: { days: UsagePeriod; by: UsageSplit }) {
   const report = useQuery(usageQuery(days, localDay(new Date())));
   const runtimes = useQuery(runtimesQuery);
   const active = useQuery(agentsQuery);
   const retired = useQuery(archivedAgentsQuery);
+  const tips = useRef<HTMLHeadingElement>(null);
   const looks = new Map<AgentId, Agent>(
     [...(active.data ?? []), ...(retired.data ?? [])].map((hob) => [hob.id, hob] as const),
   );
-  const period = messages.period.last[days];
-  const now = new Date(report.data?.until ?? Date.now());
-  const daily = report.data ? dailyUsage(report.data.minutes, report.data.until, Number(days)) : [];
-  const replies = daily.reduce((sum, day) => sum + day.replies, 0);
+  const hobs = report.data && hobShares(report.data.hobs);
+  // How to save brings its section into view and puts focus on its heading, so a keyboard follows too.
+  const showTips = () => {
+    tips.current?.scrollIntoView({ block: "start" });
+    tips.current?.focus({ preventScroll: true });
+  };
 
   return (
-    <Page icon="Usage" title={messages.title} intro={messages.intro} actions={<PeriodPicker days={days} />}>
-      <div className="flex w-full max-w-home-max flex-col gap-7">
-        {report.isError ? (
-          <div className="flex items-center gap-3">
-            <p className="m-0 text-rose">{messages.failed}</p>
-            <Button variant="outline" size="xs" onClick={() => void report.refetch()}>
-              {messages.retry}
-            </Button>
-          </div>
-        ) : (
-          <>
-            <Section label={messages.plans.label} extra={<ManageProviders />}>
-              {runtimes.data ? (
-                <PlanShelf runtimes={runtimes.data} plans={report.data?.plans} now={now} />
-              ) : (
-                <span className="text-text-secondary">{messages.plans.checking}</span>
-              )}
-            </Section>
-            <Section
-              label={messages.daily.label}
-              extra={
-                report.data && (
-                  <span className="text-ui text-text-secondary">
-                    {messages.daily.total({ count: replies, period })}
-                  </span>
-                )
-              }
-            >
-              {report.data && <DailyChart days={daily} />}
-            </Section>
-            <Section label={messages.hobs.label}>
-              {report.data && <HobBreakdown hobs={hobShares(report.data.hobs)} looks={looks} period={period} />}
-              <p className="m-0 text-meta text-label">{messages.note}</p>
-            </Section>
-          </>
-        )}
-      </div>
+    <Page icon="Usage" title={messages.title} intro={messages.intro} actions={<PeriodPicker days={days} by={by} />}>
+      {report.isError ? (
+        <div className="flex items-center gap-3">
+          <p className="m-0 text-rose">{messages.failed}</p>
+          <Button variant="outline" size="xs" onClick={() => void report.refetch()}>
+            {messages.retry}
+          </Button>
+        </div>
+      ) : (
+        <>
+          <YourAi
+            runtimes={runtimes.data}
+            plans={report.data?.plans}
+            now={new Date(report.data?.until ?? Date.now())}
+            onSave={showTips}
+          />
+          <DayByDay report={report.data} days={days} />
+          <WhoUsedWhat days={days} by={by} hobs={hobs} quests={report.data?.quests} looks={looks} />
+          <Section label={messages.tips.label} icon="tips" headingRef={tips}>
+            <WaysToSave busiest={hobs?.[0]} />
+          </Section>
+        </>
+      )}
     </Page>
   );
 }

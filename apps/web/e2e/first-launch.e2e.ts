@@ -34,7 +34,7 @@ test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home
   await page.getByRole("link", { name: "Get started" }).click();
 
   await expect(page.getByRole("heading", { name: "Where should your hobs live?" })).toBeVisible();
-  await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
   await page.getByRole("button", { name: "Connect Claude" }).click();
@@ -42,7 +42,7 @@ test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "Who should help you first?" })).toBeVisible();
-  await page.getByRole("textbox", { name: "Name", exact: true }).fill("Pip");
+  await page.getByRole("textbox", { name: "Hob name" }).fill("Pip");
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "How careful should your hobs be?" })).toBeVisible();
@@ -85,7 +85,7 @@ test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home
 const openProviders = async (page: Page, current: Hub) => {
   await openApp(page, current);
   await page.getByRole("link", { name: "Get started" }).click();
-  await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
 };
 
@@ -129,7 +129,14 @@ test("[TC-AG-010] a signed-out Claude Code blocks onboarding and shows how to si
 
   const claude = page.getByRole("region", { name: "Claude" });
   await expect(claude.getByText("Signed out")).toBeVisible();
-  await expect(claude.getByText(/installed but not signed in/)).toBeVisible();
+  // Signed out shows three plain steps to sign in, then Check again.
+  await expect(claude.getByText("Claude Code is on this Mac but not signed in. Three small steps:")).toBeVisible();
+  const steps = claude.getByRole("list");
+  await expect(steps.getByRole("listitem")).toHaveText([
+    "Open the Terminal app.",
+    "Type claude and press Return.",
+    "Sign in when it asks. Then come back here.",
+  ]);
   await expect(claude.getByRole("button", { name: "Check again" })).toBeVisible();
   await expectBlocked(page);
 });
@@ -149,7 +156,7 @@ test("[TC-OP-076] first run shows Workshop Night whatever theme is saved, and th
   await page.getByRole("link", { name: "Get started" }).click();
   await expect(page.getByRole("heading", { name: "Where should your hobs live?" })).toBeVisible();
   expect(await theme()).toBe("workshop-night");
-  await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "Which AI should your hobs think with?" })).toBeVisible();
   expect(await theme()).toBe("workshop-night");
 

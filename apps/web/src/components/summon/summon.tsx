@@ -122,7 +122,7 @@ export function Summon({ step, onStep }: { step: SummonStep; onStep: (step: Summ
           />
         </header>
 
-        <div className="flex items-start gap-8 max-[1120px]:flex-col-reverse">
+        <div className="flex items-start gap-8 max-[1120px]:flex-col">
           <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-[18px] max-[1120px]:w-full">
             {/* The choices are disabled once sent: the hob may already exist with exactly these. */}
             <fieldset

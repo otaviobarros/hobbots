@@ -44,16 +44,19 @@ export function MatchingCode({ device }: { device: WaitingDevice }) {
 
 /**
  * Allow, Deny and, while the request is still prompted, Decide later. `onDecided` runs once the hub
- * took the answer, so a prompt can close.
+ * took the answer, so a prompt can close. At the gate, the hub's prompt, Deny reads Not mine and
+ * Allow is the lantern button.
  */
 export function PairingActions({
   device,
   canDefer,
   onDecided,
+  atGate = false,
 }: {
   device: WaitingDevice;
   canDefer: boolean;
   onDecided?: (decision: PairingDecision) => void;
+  atGate?: boolean;
 }) {
   const decide = useDecidePairing(device.request);
   const answer = (decision: PairingDecision) => decide.mutate(decision, { onSuccess: () => onDecided?.(decision) });
@@ -67,9 +70,9 @@ export function PairingActions({
         )}
         <span className="flex-1" />
         <Button variant="deny" disabled={decide.isPending} onClick={() => answer("deny")}>
-          {copy.deny}
+          {atGate ? copy.notMine : copy.deny}
         </Button>
-        <Button variant="approve" disabled={decide.isPending} onClick={() => answer("allow")}>
+        <Button variant={atGate ? "default" : "approve"} disabled={decide.isPending} onClick={() => answer("allow")}>
           {copy.allow}
         </Button>
       </div>

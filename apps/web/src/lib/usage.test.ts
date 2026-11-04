@@ -1,4 +1,4 @@
-import { AgentId, type HobUsage, type PlanUsage } from "@hobbots/domain";
+import { AgentId, type HobUsage, type PlanUsage, QuestId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   billingOf,
@@ -11,6 +11,8 @@ import {
   meterLevel,
   periodStart,
   planLevel,
+  potionMeter,
+  questShares,
   refillOf,
   reportedCredits,
   wholeShares,
@@ -97,6 +99,10 @@ describe("usage", () => {
     const fullWeek = window("weekly_all", 100, "2026-11-09T09:00:00.000Z");
     expect(planLevel(plan(full, fullWeek))).toEqual({ level: "out", meter: fullWeek });
     expect(planLevel({ ...plan(session), reported: false })).toBeUndefined();
+    // The potion shows the whole week, else the window that sets the level.
+    expect(potionMeter(plan(full, week))).toBe(week);
+    expect(potionMeter(plan(session))).toBe(session);
+    expect(potionMeter({ ...plan(session, week), reported: false })).toBeUndefined();
   });
 
   it("rounds shares so they always add up to 100", () => {
@@ -232,5 +238,24 @@ describe("usage", () => {
     expect(refillOf("2026-11-03T14:20:00.000Z", now)).toEqual({ in: "hour", value: 2 });
     expect(refillOf("2026-11-07T12:00:00.000Z", now)).toEqual({ on: "2026-11-07T12:00:00.000Z" });
     expect(refillOf("2026-11-03T11:00:00.000Z", now)).toEqual({ now: true });
+  });
+
+  it("gives each quest's share of every reply's tokens, most first, and the chats outside a quest last", () => {
+    const quest = (id: string | null, tokens: number) => ({
+      questId: id === null ? null : QuestId.make(id),
+      goal: id,
+      leadName: id === null ? null : "Pip",
+      party: id === null ? 0 : 2,
+      chats: 1,
+      replies: 1,
+      unreported: 0,
+      tokens,
+    });
+    const shares = questShares([quest(null, 500), quest("launch", 300), quest("pricing", 200)]);
+    expect(shares.map(({ questId, share }) => [questId, share])).toEqual([
+      ["launch", 30],
+      ["pricing", 20],
+      [null, 50],
+    ]);
   });
 });

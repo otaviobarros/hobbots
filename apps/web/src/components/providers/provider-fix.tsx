@@ -1,4 +1,4 @@
-import type { RuntimeHealth, RuntimeKind } from "@hobbots/domain";
+import { RUNTIME_NAMES, type RuntimeHealth, type RuntimeKind } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -23,6 +23,26 @@ export function WithCommand({ text, command }: { text: string; command: string }
         </Fragment>
       ))}
     </>
+  );
+}
+
+/**
+ * A signed-out provider's fix as three plain steps: open Terminal, type its sign-in command, sign
+ * in and come back. Setup shows it where a sentence would ask too much at once.
+ */
+export function SignInSteps({ runtime }: { runtime: RuntimeKind }) {
+  const steps = copy.signInSteps;
+  return (
+    <div className="flex flex-col gap-1.5 [&_code]:rounded-tag [&_code]:bg-deep [&_code]:px-1.5 [&_code]:font-mono [&_code]:text-text-strong">
+      <span>{steps.intro({ provider: RUNTIME_NAMES[runtime] })}</span>
+      <ol className="m-0 flex flex-col gap-1 ps-5">
+        <li>{steps.open}</li>
+        <li>
+          <WithCommand text={steps.type} command={copy[runtime].signInCommand} />
+        </li>
+        <li>{steps.signIn}</li>
+      </ol>
+    </div>
   );
 }
 

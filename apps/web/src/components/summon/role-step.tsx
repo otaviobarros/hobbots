@@ -28,11 +28,35 @@ function SigilTile({ sigil }: { sigil: RoleId }) {
  * or a title in the user's own words with a borrowed sigil, then the chores in their words.
  */
 export function RoleStep({ draft, onChange, name }: { draft: FirstHobDraft; onChange: Update; name: string }) {
+  return (
+    <div className="flex flex-col gap-[18px]">
+      <RoleCards draft={draft} onChange={onChange} name={name} />
+
+      <OwnTitle draft={draft} onChange={onChange} />
+
+      <ChoresField draft={draft} onChange={onChange} rows={3} label={copy.chores} className="lbl text-label" />
+      <a
+        href={roleRequestUrl(draft.role === null ? draft.ownTitle : "")}
+        target="_blank"
+        rel="noreferrer"
+        className="self-start text-detail"
+      >
+        {copy.suggest}
+      </a>
+    </div>
+  );
+}
+
+/**
+ * The eight common roles as cards, a role picked from the sheet kept in view as the checked card,
+ * and See all, which opens the role sheet. Summon's first step and First run's First hob share it.
+ */
+export function RoleCards({ draft, onChange, name }: { draft: FirstHobDraft; onChange: Update; name: string }) {
   const radios = useId();
   const [sheetOpen, setSheetOpen] = useState(false);
   const picked = draft.role !== null && !PICKER_FIRST.includes(draft.role) ? draft.role : null;
   return (
-    <div className="flex flex-col gap-[18px]">
+    <>
       <fieldset className="m-0 min-w-0 border-0 p-0">
         <legend className="sr-only">{copy.legend}</legend>
         <div className="grid grid-cols-2 gap-2.5 max-[720px]:grid-cols-1">
@@ -67,19 +91,7 @@ export function RoleStep({ draft, onChange, name }: { draft: FirstHobDraft; onCh
         {copy.seeAll({ count: STARTER_ROLES.length })}
       </Button>
       {sheetOpen && <RoleSheet name={name} {...draftRolePicker(draft, onChange)} onClose={() => setSheetOpen(false)} />}
-
-      <OwnTitle draft={draft} onChange={onChange} />
-
-      <ChoresField draft={draft} onChange={onChange} rows={3} label={copy.chores} className="lbl text-label" />
-      <a
-        href={roleRequestUrl(draft.role === null ? draft.ownTitle : "")}
-        target="_blank"
-        rel="noreferrer"
-        className="self-start text-detail"
-      >
-        {copy.suggest}
-      </a>
-    </div>
+    </>
   );
 }
 

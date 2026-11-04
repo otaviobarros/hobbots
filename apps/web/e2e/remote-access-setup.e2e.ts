@@ -60,11 +60,11 @@ const otherDevices = "Use Hobbots on your phone too?";
 const openRemoteStep = async (page: Page, current: Hub) => {
   await page.goto(`${current.url}/#/welcome`);
   await page.getByRole("link", { name: "Get started" }).click();
-  await page.getByRole("link", { name: /Run Hobbots on this computer/ }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("button", { name: "Connect Claude" }).click();
   await expect(page.getByText("✓ Connected")).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByRole("textbox", { name: "Name", exact: true }).fill("Pip");
+  await page.getByRole("textbox", { name: "Hob name" }).fill("Pip");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "How careful should your hobs be?" })).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();

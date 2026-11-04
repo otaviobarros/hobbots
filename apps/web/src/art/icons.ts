@@ -1,4 +1,3 @@
-import type { RuntimeKind } from "@hobbots/domain";
 import type { PixelPalette, PixelRows } from "@hobbots/ui/components/pixel-art";
 
 /** 12 × 12 sidebar icons from the Hobbots design: "#" is the main color, "o" the accent. */
@@ -119,55 +118,8 @@ export const ARCHIVE_CHEST: PixelRows = [
 
 export const archiveChestPalette: PixelPalette = { a: "#5a3d26", b: "#8a5d3a", c: "#3d2a1a", d: "#e8a54b" };
 
-/** A 12 × 13 potion bottle; `left` (0..1) fills it from the bottom. */
-export const potion = (left: number): PixelRows => {
-  const rows = [
-    "....####....",
-    ".....##.....",
-    "....####....",
-    "....#..#....",
-    "...#....#...",
-    "..#......#..",
-    ".#........#.",
-    ".#........#.",
-    ".#........#.",
-    ".#........#.",
-    ".#........#.",
-    "..#......#..",
-    "...######...",
-  ];
-  const firstFilled = 12 - Math.round(Math.min(1, Math.max(0, left)) * 7);
-  return rows.map((row, y) => {
-    const a = row.indexOf("#");
-    const b = row.lastIndexOf("#");
-    return row
-      .split("")
-      .map((ch, x) => {
-        if (ch === "#") return y <= 2 ? "k" : "g";
-        if (y >= 5 && x > a && x < b) return y >= firstFilled ? (y === firstFilled ? "t" : "f") : "e";
-        return ".";
-      })
-      .join("");
-  });
-};
-
-/** Each provider's potion fill and its lighter top. */
-export const POTION_COLORS: Readonly<Record<RuntimeKind, readonly [fill: string, top: string]>> = {
-  "claude-code": ["#e39a74", "#f3c4a8"],
-  codex: ["#7fd1b9", "#b5ecd9"],
-};
-
-/** A plan that reports nothing shows an empty grey bottle. */
-export const UNREPORTED_POTION = ["#3a3666", "#3a3666"] as const;
-
-// The glass reads the theme's tokens, so the bottle keeps its outline on a light card too.
-export const potionPalette = (fill: string, top: string): PixelPalette => ({
-  k: "#a9774a",
-  g: "var(--color-line-2)",
-  e: "var(--color-deep)",
-  f: fill,
-  t: top,
-});
+/** The Usage potion's cork, the same wood as the archive chest in every theme. */
+export const POTION_CORK = { background: "#8a5d3a", boxShadow: "inset 0 -3px 0 #5a3d26" } as const;
 
 /** The 5 × 5 name and look die. */
 export const DIE: PixelRows = ["owwwo", "wwwww", "wwoww", "wwwww", "owwwo"];

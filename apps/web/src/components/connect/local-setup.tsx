@@ -3,7 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { useEffect, useRef, useState } from "react";
 import { messages as appMessages } from "../messages.ts";
 import { WelcomeVillage, welcomeActionClass } from "../onboarding/welcome-village.tsx";
-import { ConnectChoice, choiceOpenClass, RunHereChoice, WhereLayout } from "../onboarding/where-hobbots-runs.tsx";
+import { WhereChoices, WhereFooter, WhereLayout, type WherePick } from "../onboarding/where-hobbots-runs.tsx";
 import { endedSpeech, type SetupBridge } from "./connect-model.ts";
 import { ConnectAllowed, ConnectEnded, ConnectForm, ConnectWaiting } from "./connect-screens.tsx";
 
@@ -38,34 +38,36 @@ const afterConnect = (address: string, end: ConnectEnd): Screen => {
   }
 };
 
-/** Run here and Connect, the two choices of Where Hobbots runs, on a computer that is not a hub yet. */
-function WhereChoices({
+/** Run here or Connect, the two choices of Where Hobbots runs, on a computer that is not a hub yet. */
+function LocalWhere({
   starting,
   failed,
+  onBack,
   onRunHere,
   onConnect,
 }: {
   starting: boolean;
   failed: boolean;
+  onBack: () => void;
   onRunHere: () => void;
   onConnect: () => void;
 }) {
+  const [pick, setPick] = useState<WherePick>("here");
   return (
     <WhereLayout
-      footer={
-        failed && (
-          <p role="alert" className="m-0 pt-3 text-ui text-rose">
-            {where.startFailed}
-          </p>
-        )
-      }
+      footer={<WhereFooter busy={starting} onBack={onBack} onContinue={pick === "here" ? onRunHere : onConnect} />}
     >
-      <button type="button" className={choiceOpenClass} disabled={starting} onClick={onRunHere}>
-        <RunHereChoice badge={starting ? where.starting : where.here.badge} />
-      </button>
-      <button type="button" className={choiceOpenClass} disabled={starting} onClick={onConnect}>
-        <ConnectChoice />
-      </button>
+      <WhereChoices
+        value={pick}
+        onPick={setPick}
+        disabled={starting}
+        badge={starting ? where.starting : where.here.badge}
+      />
+      {failed && (
+        <p role="alert" className="m-0 text-ui text-rose">
+          {where.startFailed}
+        </p>
+      )}
     </WhereLayout>
   );
 }
@@ -148,9 +150,10 @@ export function LocalSetup({ bridge, start = "welcome" }: { bridge: SetupBridge;
       );
     case "where":
       return (
-        <WhereChoices
+        <LocalWhere
           starting={screen.starting}
           failed={screen.failed}
+          onBack={() => setScreen({ name: "welcome" })}
           onRunHere={() => void runHere()}
           onConnect={() => toConnect()}
         />
