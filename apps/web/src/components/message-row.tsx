@@ -89,7 +89,8 @@ function ReplyRow({
       <HobSprite hob={hob} size={26} state={streaming ? "working" : message.status === "failed" ? "failed" : "idle"} />
       <div className="flex min-w-0 flex-col gap-[3px]">
         <span className="text-xs text-label">
-          <b className="font-heading text-sm text-moonlight">{hob.name}</b> {formatTime(message.createdAt)}
+          <b className="font-heading text-sm text-moonlight">{hob.name}</b>{" "}
+          {writing ? copy.writing : formatTime(message.createdAt)}
         </span>
         <ReplySteps
           steps={message.steps}
@@ -199,6 +200,52 @@ export function QueuedRow({
             {replying ? messages.queued.sendNowAndInterrupt : messages.queued.sendNow}
           </Button>
         )}
+      </span>
+    </section>
+  );
+}
+
+/**
+ * A message waiting in this browser to reach the hub: your bubble, faded, with where it stands.
+ * While Hobbots reconnects it goes out on its own; one the hub refused says so in rose and offers
+ * Try again. Edit takes it back into the composer.
+ */
+export function WaitingRow({
+  message,
+  refused,
+  live,
+  sending,
+  onEdit,
+  onTryAgain,
+}: {
+  message: Pick<Message, "content">;
+  refused: boolean;
+  live: boolean;
+  sending: boolean;
+  onEdit: () => void;
+  onTryAgain: () => void;
+}) {
+  const chat = messages.chat;
+  return (
+    <section aria-label={chat.waiting} className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end">
+      <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-60">{message.content}</div>
+      <span className={cn("text-[13px] leading-[18px]", refused ? "text-rose" : "text-label")}>
+        {refused ? chat.waitingRefused : live ? chat.waitingSending : chat.waitingOffline}
+      </span>
+      <span className="flex items-center gap-2">
+        {refused && (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={onTryAgain}
+            className="text-text-strong underline underline-offset-3"
+          >
+            {chat.tryAgain}
+          </Button>
+        )}
+        <Button variant="outline" size="xs" disabled={sending} onClick={onEdit}>
+          {chat.edit}
+        </Button>
       </span>
     </section>
   );

@@ -42,9 +42,11 @@ import { ThreadHeaderMenu } from "./archive/thread-menu.tsx";
 import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { BrainPicker, BrainSwitchNote, useOtherReadyRuntimes } from "./brain-picker.tsx";
 import { ChatSearch, ChatSearchButton } from "./chat-search/chat-search.tsx";
+import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
+import { EmptyThread } from "./empty-thread.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
-import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
+import { type ContinueReply, MessageRow, messageElementId, QueuedRow, WaitingRow } from "./message-row.tsx";
 import { messages } from "./messages.ts";
 import { NeedsTray } from "./needs-tray/needs-tray.tsx";
 import { useThreadNeeds } from "./needs-tray/use-thread-needs.ts";
@@ -140,6 +142,9 @@ export function ChatView({
   const [findingIn, setFindingIn] = useState<string>();
   const finding = threadId !== undefined && findingIn === threadId;
   const setFinding = (open: boolean) => setFindingIn(open ? threadId : undefined);
+  const [renamingIn, setRenamingIn] = useState<string>();
+  const renaming = threadId !== undefined && renamingIn === threadId;
+  const setRenaming = (open: boolean) => setRenamingIn(open ? threadId : undefined);
   const holding = focusMessageId !== undefined && released !== focusMessageId;
   const follow = () => setReleased(focusMessageId);
 
@@ -232,14 +237,21 @@ export function ChatView({
               {current.name}
             </Link>
             <span className="text-sm font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
-            <span className="truncate text-text-secondary">{title}</span>
+            <ChatTitle thread={thread.data} title={title} renaming={renaming} onDone={() => setRenaming(false)} />
           </span>
           <span className="text-xs text-label">{stateLabel[state]}</span>
         </div>
         {threadId && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
         <BrainPicker hob={current} thread={thread.data} />
         {thread.data && <ChatSearchButton open={finding} onToggle={() => setFinding(!finding)} />}
-        {thread.data && <ThreadHeaderMenu hob={current} thread={thread.data} />}
+        {thread.data && (
+          <ThreadHeaderMenu
+            hob={current}
+            thread={thread.data}
+            onRename={() => setRenaming(true)}
+            onSearch={() => setFinding(true)}
+          />
+        )}
         <Button asChild variant="outline">
           <Link to="/hobs/$hobId/profile" params={{ hobId }}>
             Edit hob
@@ -266,20 +278,7 @@ export function ChatView({
       >
         {threadId && messages.isPending && <p className="text-label">Loading messages…</p>}
         {empty && !messages.isLoading && (
-          <div className="m-auto flex max-w-[420px] animate-hb-in flex-col items-center gap-3 text-center">
-            <HobSprite hob={current} size={72} state="working" />
-            <span className="font-heading text-[22px] font-bold text-moonlight">
-              {newHob ? copy.hello(current) : copy.freshPage}
-            </span>
-            <span className="text-text-secondary">{newHob ? copy.helloBody : copy.freshBody(current)}</span>
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {copy.ideas.map((idea) => (
-                <Button key={idea} variant="chip" onClick={() => writeDraft(place, idea)}>
-                  {idea}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <EmptyThread hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
         )}
         {transcript && (
           <Transcript
@@ -312,39 +311,18 @@ export function ChatView({
           />
         ))}
         {waiting.map((message, index) => (
-          <section
+          <WaitingRow
             key={message.id}
-            aria-label={copy.waiting}
-            className="flex max-w-[460px] animate-hb-in flex-col items-end gap-1.5 self-end"
-          >
-            <div className="bg-line px-3.5 py-2.5 leading-[1.45] whitespace-pre-wrap opacity-80">{message.content}</div>
-            <span className="text-xs text-label">
-              {outbox.refused && index === 0
-                ? copy.waitingRefused
-                : connection === "live"
-                  ? copy.waitingSending
-                  : copy.waitingOffline}
-            </span>
-            <span className="flex gap-2">
-              <Button
-                variant="outline"
-                size="xs"
-                disabled={outbox.sending === message.id}
-                onClick={() => {
-                  const content = takeBack(place, message.id);
-                  if (content === undefined) return;
-                  appendDraft(place, content);
-                }}
-              >
-                {copy.edit}
-              </Button>
-              {outbox.refused && index === 0 && (
-                <Button variant="outline" size="xs" onClick={() => tryAgain(place)}>
-                  {copy.tryAgain}
-                </Button>
-              )}
-            </span>
-          </section>
+            message={message}
+            refused={outbox.refused && index === 0}
+            live={connection === "live"}
+            sending={outbox.sending === message.id}
+            onEdit={() => {
+              const content = takeBack(place, message.id);
+              if (content !== undefined) appendDraft(place, content);
+            }}
+            onTryAgain={() => tryAgain(place)}
+          />
         ))}
         {continueOn.isError && (
           <p role="alert" className="text-sm text-rose">

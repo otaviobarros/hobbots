@@ -319,16 +319,17 @@ export const messages = {
     open: "↵ open",
   },
   chat: {
-    ideas: ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"],
+    ideas: ["Plan a product launch", "Sum up this week's inbox", "Tidy my Downloads folder"],
+    askWhat: "What are we making?",
     newThread: "New thread",
     openHob: ({ name }: { name: string }) => `Open ${name}'s page`,
     hello: ({ name }: { name: string }) => `Hello, I'm ${name}!`,
     freshPage: "A fresh page",
     helloBody: "Tell me my first chore. I keep working even if you switch to another thread.",
     freshBody: ({ name }: { name: string }) =>
-      `Tell ${name} what you need. It keeps working even if you switch to another thread.`,
+      `Tell ${name} what you want done. ${name} plans it, brings in other hobs when it needs them, and asks you before anything risky.`,
     waiting: "Waiting to send",
-    waitingRefused: "◷ Not sent yet. It stays here until you try again or edit it.",
+    waitingRefused: "✗ Not sent yet. It stays here until you try again or edit it.",
     waitingSending: "◷ Sending…",
     waitingOffline: "◷ Waiting to send. It goes out when we reconnect.",
     edit: "Edit",
@@ -365,6 +366,7 @@ export const messages = {
   },
   reply: {
     thinking: ({ name }: { name: string }) => `${name} is thinking`,
+    writing: "writing…",
     stopping: "Stopping this reply…",
     stopped: ({ name }: { name: string }) => `■ You stopped this reply. ${name} kept what it wrote so far.`,
     interrupted: ({ name }: { name: string }) =>
