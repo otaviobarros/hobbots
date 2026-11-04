@@ -251,7 +251,7 @@ test("[TC-UX-140] at 1024 wide with the task chat open, Changes and Files swap t
     script("complete_task", { key: "done", summary: "Touched." }),
   ]);
   const { bench, panel } = await openChanges(page, "Touch two files");
-  await bench.getByRole("button", { name: "Talk to Aldric" }).click();
+  await bench.getByRole("button", { name: "Task chat" }).click();
 
   // The list gives way to one line: previous, the file shown with "1 of 3", and next.
   await expect(panel.getByRole("navigation", { name: "Changed files" })).toBeHidden();

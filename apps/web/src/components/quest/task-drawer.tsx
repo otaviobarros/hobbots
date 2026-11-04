@@ -20,7 +20,7 @@ import { NoteBox, type NoteDrafts } from "./note-box.tsx";
 import { AnswerForm } from "./question-card.tsx";
 import { StatusDot, StatusTag } from "./status-dot.tsx";
 import { type HobLookup, useFollowedTrees, useHobLookup, useOpenTask } from "./use-work.ts";
-import { findTask, noteRecipient, taskDetail, taskTitle } from "./work-model.ts";
+import { findTask, noteRecipient, questionForYou, taskDetail, taskTitle } from "./work-model.ts";
 import { yourAnswer } from "./your-answer.ts";
 
 const copy = messages.drawer;
@@ -300,10 +300,8 @@ function OpenQuestion({ question, hobs }: { question: Question; hobs: HobLookup 
  * points at the answer box, so nobody types an answer into it.
  */
 const notAnAnswer = (tree: TaskTree, task: Task, hobs: HobLookup) => {
-  const waiting = tree.questions.find(
-    (question) => question.taskId === task.id && question.state === "open" && question.recipientId === null,
-  );
-  if (waiting === undefined) return {};
+  const waiting = questionForYou(tree, task);
+  if (waiting === null) return {};
   const lead = hobs(noteRecipient(tree, task)).name;
   return {
     label: copy.noteNotAnswer({ name: lead }),

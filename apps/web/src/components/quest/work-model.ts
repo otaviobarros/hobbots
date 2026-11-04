@@ -306,6 +306,10 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
 /** The hob a note on the Task goes to, as the hub decides it (ADR 018). */
 export const noteRecipient = (tree: TaskTree, task: Task): AgentId => noteRecipientOf(task, tree.tasks);
 
+/** The first question on a Task that waits for you. */
+export const questionForYou = (tree: TaskTree, task: Task): Question | null =>
+  questionsForYou(tree).find((question) => question.taskId === task.id) ?? null;
+
 /** Every Task right under one, done ones included, for Show all. */
 const workRowsAll = (tree: TaskTree, task: Task): ReadonlyArray<WorkRow> =>
   childrenOf(tree, task.id).map((child) => ({
