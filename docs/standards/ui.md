@@ -23,7 +23,7 @@ Build screens from the shadcn and Radix primitives in `packages/ui`. When no pri
 Every interactive element is reachable and usable by keyboard, shows the moonlight focus ring, and has an accessible name. End-to-end tests find elements by role and name, so a missing name fails the test.
 
 - **Why:** Hobbots must work for keyboard and screen-reader users.
-- **Enforced by:** Biome `a11y` rules and Playwright role selectors (STD-TEST-004).
+- **Enforced by:** Biome `a11y` rules, Playwright role selectors (STD-TEST-004), the axe scan of every screen (STD-TEST-007) and the keyboard-only flows (STD-TEST-008).
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-UI-004 Motion is stepped and stops with Reduce motion
@@ -65,3 +65,29 @@ Every status shown to the user comes from a durable server record. Text from a m
 - **Why:** a model can claim success that did not happen.
 - **Enforced by:** review.
 - **Applies to:** `apps/web`, `apps/server`.
+
+### STD-UI-009 Every failure says what went wrong and how to recover
+
+When something fails, tell the user in plain words what went wrong and what they can do next: retry, fix an input, reconnect, or go somewhere else. Never show a dead end, a raw error code or a stack trace. Keep what the user typed. Map each failure the client knows to its own message (STD-I18N-005), and give unknown failures a general message that still offers a way out.
+
+- **Why:** UX is a first-class goal, and a user who knows the next step can recover without help.
+- **Enforced by:** review, and end-to-end tests of each flow's failure paths (STD-TEST-004).
+- **Applies to:** `apps/web`, `packages/ui`.
+
+### STD-UI-010 Only primitives take a className, and only for layout
+
+Feature components in `apps/web` do not accept a `className` prop. The primitives in `packages/ui` accept one, merge it with `cn` and set `data-slot`. A `className` passed to a primitive holds only layout classes: margin, width and height, flex and grid placement, and position. Color, type, padding, border, radius and shadow come from a variant (STD-UI-011).
+
+- ✅ `<Button className="ms-auto" variant="ghost">`
+- ❌ `<Button className="bg-rose px-6 text-[13px]">`
+- **Why:** a screen that cannot restyle a component cannot drift from the design system.
+- **Enforced by:** the frontend check in `pnpm check`, which fails on a feature component with a `className` prop and on a non-layout class passed to a primitive.
+- **Applies to:** `apps/web`, `packages/ui`.
+
+### STD-UI-011 Visual variants come from cva
+
+Give a primitive its visual variations through `cva` variants, named after the design system's variants. Do not switch looks with booleans or with class ternaries. A new look is a new variant in `packages/ui`.
+
+- **Why:** every look the app can take is listed in one place, and the design system can review it.
+- **Enforced by:** review, and STD-UI-010 for looks passed in from outside.
+- **Applies to:** `packages/ui`.
