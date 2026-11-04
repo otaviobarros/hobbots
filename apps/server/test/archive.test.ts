@@ -254,3 +254,71 @@ describe("archived threads", () => {
     expect(result.hits).toEqual([[result.archived.id, result.archived.archivedAt]]);
   });
 });
+
+describe("renamed and pinned threads", () => {
+  // covers CH-001, CH-002
+  it("[TC-CH-216] renames and pins a thread durably and live, without moving it by last activity", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const repo = yield* HobbotsRepository;
+        const older = yield* finishedThread("Plan the kettle repair");
+        const newer = yield* finishedThread("Draft the release notes");
+        const events = yield* recordThreadEvents;
+
+        const renamed = yield* chat.rename(older.id, "Kettle repair");
+        const renamedAgain = yield* chat.rename(older.id, "Kettle repair");
+        const pinned = yield* chat.setPinned(older.id, true);
+        const pinnedAgain = yield* chat.setPinned(older.id, true);
+        const stored = yield* repo.findThread(older.id);
+        const order = (yield* repo.listThreads(HOB_ID)).map((t) => t.id);
+        const unpinned = yield* chat.setPinned(older.id, false);
+        yield* Effect.yieldNow;
+        return {
+          older,
+          newer,
+          renamed,
+          renamedAgain,
+          pinned,
+          pinnedAgain,
+          stored,
+          order,
+          unpinned,
+          events: events.map((t) => [t.title, t.pinnedAt !== null]),
+        };
+      }),
+    );
+    expect(result.renamed.title).toBe("Kettle repair");
+    expect(result.renamed.updatedAt).toBe(result.older.updatedAt);
+    expect(result.renamedAgain).toEqual(result.renamed);
+    expect(result.pinned.pinnedAt).not.toBeNull();
+    expect(result.pinned.updatedAt).toBe(result.older.updatedAt);
+    expect(result.pinnedAgain).toEqual(result.pinned);
+    expect(Option.getOrNull(result.stored)).toEqual(result.pinned);
+    expect(result.order).toEqual([result.newer.id, result.older.id]);
+    expect(result.unpinned.pinnedAt).toBeNull();
+    expect(result.events).toEqual([
+      ["Kettle repair", false],
+      ["Kettle repair", true],
+      ["Kettle repair", false],
+    ]);
+  });
+
+  // covers CH-009
+  it("[TC-CH-217] refuses to rename or pin an archived thread", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const archived = yield* chat.archive((yield* finishedThread()).id);
+        return {
+          archived,
+          rename: refusal(yield* Effect.exit(chat.rename(archived.id, "Kettle repair"))),
+          pin: refusal(yield* Effect.exit(chat.setPinned(archived.id, true))),
+        };
+      }),
+    );
+    const refused = new ThreadArchived({ threadId: result.archived.id, archivedAt: result.archived.archivedAt ?? "" });
+    expect(result.rename).toEqual(refused);
+    expect(result.pin).toEqual(refused);
+  });
+});
