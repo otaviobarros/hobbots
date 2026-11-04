@@ -70,7 +70,7 @@ export function HobProfile({ hobId }: { hobId: AgentId }) {
           <span className="text-label">Loading…</span>
         ) : (
           <div className="flex flex-col items-center gap-3 text-center">
-            <span className="font-pixel text-[22px] font-bold text-moonlight">This hob is not here</span>
+            <span className="font-heading text-[22px] font-bold text-moonlight">This hob is not here</span>
             <span className="text-text-secondary">It may have retired. Retired hobs live in Archived hobs.</span>
             <div className="flex gap-2.5">
               <Button asChild variant="outline">
@@ -128,7 +128,7 @@ function Profile({
     <main aria-label={`${hob.name}'s profile`} className="relative flex min-w-0 flex-1 flex-col">
       <header className="flex items-center gap-5 border-b-4 border-line bg-panel px-8 pt-[18px] pb-4">
         <div className="hop-on-hover bg-line p-2">
-          <span key={hops} className={cn("block", hops > 0 && "animate-hb-hop")}>
+          <span key={hops} className={cn("block", hops > 0 && "animate-(--hop)")}>
             <HobSprite hob={hob} size={64} state={state} badge />
           </span>
         </div>
@@ -137,7 +137,7 @@ function Profile({
             ← Back to chat
           </Link>
           <div className="flex min-w-0 items-center gap-3">
-            <h1 className="m-0 truncate font-pixel text-[30px] font-bold">{hob.name}</h1>
+            <h1 className="m-0 truncate font-heading text-[30px] font-bold">{hob.name}</h1>
             <span
               role="status"
               className={cn(
@@ -469,7 +469,7 @@ function RoleCard({
         <RoleSigil sigil={draft.sigil} size={36} />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className={cn("font-pixel text-xl font-bold", title ? "text-text-strong" : "text-label")}>
+        <span className={cn("font-heading text-xl font-bold", title ? "text-text-strong" : "text-label")}>
           {title || "No title yet"}
         </span>
         <span className="text-sm text-text-secondary">
@@ -632,7 +632,7 @@ function RetireDialog({
           <div className="relative grayscale-[.6] brightness-[.8]">
             <HobSprite hob={hob} size={72} state="asleep" />
           </div>
-          <h2 id={titleId} className="m-0 font-pixel text-[22px] font-bold text-moonlight">
+          <h2 id={titleId} className="m-0 font-heading text-[22px] font-bold text-moonlight">
             {hob.name} is retired
           </h2>
           <p role="status" className="m-0 max-w-[440px] text-sm text-text-secondary">
@@ -652,7 +652,7 @@ function RetireDialog({
           <div className="flex items-center gap-3.5">
             <HobSprite hob={hob} size={48} />
             <div className="flex flex-col gap-0.5">
-              <h2 id={titleId} className="m-0 font-pixel text-2xl font-bold text-moonlight">
+              <h2 id={titleId} className="m-0 font-heading text-2xl font-bold text-moonlight">
                 Retire {hob.name}?
               </h2>
               <span className="text-sm text-text-secondary">

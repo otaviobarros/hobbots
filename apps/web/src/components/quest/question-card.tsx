@@ -96,7 +96,7 @@ export function AnswerForm({
         value={answer}
         onChange={(event) => setAnswer(event.target.value)}
         onKeyDown={enterSends(submit)}
-        className="min-h-10 rounded-none border-2 border-control bg-deep text-text-strong"
+        className="min-h-10 rounded-control border-2 border-control bg-deep text-text-strong"
       />
       <span className="flex items-center gap-2">
         <Button type="submit" size="sm" disabled={text === "" || send.isPending}>

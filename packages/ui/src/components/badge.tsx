@@ -3,9 +3,9 @@ import { cn } from "cn";
 import { Slot } from "radix-ui";
 import type * as React from "react";
 
-// Status tags from the Hobbots component sheet: square, bold, one color per state.
+// Status tags from the Hobbots component sheet: bold, one color per state, on the skin's tag corner.
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center gap-[5px] px-[7px] py-0.5 text-xs font-bold whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "inline-flex w-fit shrink-0 items-center rounded-tag gap-[5px] px-[7px] py-0.5 text-xs font-bold whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {

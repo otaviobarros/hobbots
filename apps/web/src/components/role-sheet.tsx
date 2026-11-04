@@ -53,7 +53,7 @@ export function RoleSheet({
       className="cut m-auto h-[min(720px,calc(100vh-48px))] w-[min(1000px,calc(100vw-32px))] animate-hb-in flex-col border-2 border-control bg-panel p-0 open:flex text-text-strong backdrop:bg-deep/80"
     >
       <div className="flex flex-wrap items-center gap-3.5 border-b-2 border-line px-5 py-4">
-        <h2 id={titleId} className="m-0 flex-1 font-pixel text-[22px] font-bold text-moonlight">
+        <h2 id={titleId} className="m-0 flex-1 font-heading text-[22px] font-bold text-moonlight">
           Choose {name}'s role
         </h2>
         <input

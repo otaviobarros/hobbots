@@ -23,7 +23,7 @@ export function DocumentView({ before, after }: { before: string | null; after: 
 function Version({ title, version }: { title: string; version: MarkedDocument }) {
   return (
     <section aria-label={title} className="cut flex min-w-0 flex-col gap-2 bg-panel px-4 py-3">
-      <h4 className="m-0 font-pixel text-xs font-bold tracking-widest text-label uppercase">{title}</h4>
+      <h4 className="m-0 font-heading text-xs font-bold tracking-widest text-label uppercase">{title}</h4>
       <ReplyMarkdown
         content={version.text}
         streaming={false}

@@ -51,7 +51,7 @@ export function PresetPicker({
                 className="sr-only"
               />
               <span className="flex items-center gap-2">
-                <span className={cn("font-pixel text-[22px] font-bold", on ? "text-moonlight" : "text-text-strong")}>
+                <span className={cn("font-heading text-[22px] font-bold", on ? "text-moonlight" : "text-text-strong")}>
                   {preset.label}
                 </span>
                 {preset.recommended && (

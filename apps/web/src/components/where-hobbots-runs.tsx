@@ -68,7 +68,7 @@ export function RunHereChoice({ badge = copy.here.badge }: { badge?: string }) {
   return (
     <>
       <ChoiceIcon rows={HOUSE} palette={HOUSE_PALETTE} />
-      <span className="font-pixel text-2xl font-bold text-moonlight">{copy.here.title}</span>
+      <span className="font-heading text-2xl font-bold text-moonlight">{copy.here.title}</span>
       <span className="text-text-secondary leading-normal">{copy.here.body}</span>
       <span className="self-start bg-moonlight px-2 py-0.5 text-[13px] font-bold text-ground">{badge}</span>
     </>
@@ -80,7 +80,7 @@ export function ConnectChoice({ muted = false, children }: { muted?: boolean; ch
   return (
     <>
       <ChoiceIcon rows={LINK} palette={LINK_PALETTE} />
-      <span className={`font-pixel text-2xl font-bold ${muted ? "text-label" : "text-moonlight"}`}>
+      <span className={`font-heading text-2xl font-bold ${muted ? "text-label" : "text-moonlight"}`}>
         {copy.connect.title}
       </span>
       <span className="text-text-secondary leading-normal">{copy.connect.body}</span>
@@ -96,7 +96,7 @@ export function WhereLayout({ children, footer }: { children: ReactNode; footer?
       <ElderAside stage={copy.stage} speech={copy.speech} />
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-12 pt-10 pb-6">
         <div className="flex animate-hb-in flex-col gap-2">
-          <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">{copy.title}</h1>
+          <h1 className="m-0 font-heading text-[32px] font-bold text-moonlight">{copy.title}</h1>
           <p className="m-0 mb-[22px] max-w-[640px] text-text-secondary">{copy.intro}</p>
           <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-2">{children}</div>
           {footer}
@@ -144,7 +144,7 @@ export function ElderAside({ stage, speech }: { stage: string; speech: string })
         className="absolute bottom-[150px] left-[106px] cursor-pointer border-0 bg-transparent p-0"
       >
         <span className="block animate-hb-bob">
-          <span key={hops} className={`block ${hops > 0 ? "animate-hb-hop" : ""}`}>
+          <span key={hops} className={`block ${hops > 0 ? "animate-(--hop)" : ""}`}>
             <PixelArt rows={ELDER} palette={ELDER_PALETTE} size={120} />
           </span>
         </span>

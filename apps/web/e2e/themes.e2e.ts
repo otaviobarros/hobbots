@@ -36,15 +36,22 @@ const looks = (page: Page) =>
   page.evaluate(() => {
     const probe = document.createElement("span");
     probe.className = "animate-hb-bob bg-primary text-text-strong";
-    document.body.append(probe);
+    const card = document.createElement("div");
+    card.className = "cut lbl";
+    document.body.append(probe, card);
     const style = getComputedStyle(probe);
+    const shape = getComputedStyle(card);
     const seen = {
       background: getComputedStyle(document.body).backgroundColor,
       primary: style.backgroundColor,
       text: style.color,
       animation: style.animationName,
+      corner: shape.borderTopLeftRadius,
+      clipped: shape.clipPath !== "none",
+      labelCase: shape.textTransform,
     };
     probe.remove();
+    card.remove();
     return seen;
   });
 
@@ -82,6 +89,11 @@ test("[TC-UX-087] switching data-theme restyles the open screen without a reload
     expect(now.primary, id).toBe(rgb("lantern", id));
     expect(now.text, id).toBe(rgb("text-strong", id));
     expect(now.animation, id).toBe("hb-bob");
+    // The skin: Lamplight rounds a card and keeps labels in sentence case; Workshop cuts and capitalizes.
+    const workshop = id.startsWith("workshop-");
+    expect(now.corner, id).toBe(workshop ? "0px" : "16px");
+    expect(now.clipped, id).toBe(workshop);
+    expect(now.labelCase, id).toBe(workshop ? "uppercase" : "none");
   }
   expect(await page.evaluate(() => "hobbotsThemeProbe" in window)).toBe(true);
 

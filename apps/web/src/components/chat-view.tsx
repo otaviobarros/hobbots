@@ -227,7 +227,7 @@ export function ChatView({
         <HobSprite hob={current} size={36} state={state} badge />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-baseline gap-2">
-            <span className="font-pixel text-xl font-semibold whitespace-nowrap">{current.name}</span>
+            <span className="font-heading text-xl font-semibold whitespace-nowrap">{current.name}</span>
             <span className="text-sm font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
             <span className="truncate text-text-secondary">{title}</span>
           </span>
@@ -264,7 +264,7 @@ export function ChatView({
         {empty && !messages.isLoading && (
           <div className="m-auto flex max-w-[420px] animate-hb-in flex-col items-center gap-3 text-center">
             <HobSprite hob={current} size={72} state="working" />
-            <span className="font-pixel text-[22px] font-bold text-moonlight">
+            <span className="font-heading text-[22px] font-bold text-moonlight">
               {newHob ? copy.hello(current) : copy.freshPage}
             </span>
             <span className="text-text-secondary">{newHob ? copy.helloBody : copy.freshBody(current)}</span>
