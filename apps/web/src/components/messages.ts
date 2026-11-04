@@ -340,7 +340,8 @@ export const messages = {
     open: "↵ open",
   },
   chat: {
-    ideas: ["Summarize an article I paste", "Help me plan my week", "Explain a concept simply"],
+    ideas: ["Plan a product launch", "Sum up this week's inbox", "Tidy my Downloads folder"],
+    askWhat: "What are we making?",
     newThread: "New thread",
     showNav: "Show hob list",
     openHob: ({ name }: { name: string }) => `Open ${name}'s page`,
@@ -348,7 +349,7 @@ export const messages = {
     freshPage: "A fresh page",
     helloBody: "Tell me my first chore. I keep working even if you switch to another thread.",
     freshBody: ({ name }: { name: string }) =>
-      `Tell ${name} what you need. It keeps working even if you switch to another thread.`,
+      `Tell ${name} what you want done. ${name} plans it, brings in other hobs when it needs them, and asks you before anything risky.`,
     waiting: "Waiting to send",
     waitingRefused: "◷ Not sent yet. It stays here until you try again or edit it.",
     waitingSending: "◷ Sending…",
