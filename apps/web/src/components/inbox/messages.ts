@@ -132,6 +132,6 @@ export const messages = {
       "Nothing needs you right now. When a hob asks permission or has a question, it waits here and you can open it in the Inbox.",
     open: "Open the Inbox",
   },
-  rail: ({ count }: { count: number }) => `Inbox, ${formatCount(count)} waiting on you`,
+  sidebar: ({ count }: { count: number }) => `Inbox, ${formatCount(count)} waiting on you`,
   count: ({ count }: { count: number }) => formatCount(count),
 } as const;
