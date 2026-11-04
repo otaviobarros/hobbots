@@ -56,6 +56,7 @@ type TaskEvent = Extract<
       | "QuestionEscalated"
       | "QuestionWithdrawn"
       | "NoteLeft"
+      | "NotePickedUp"
       | "HandedOff";
   }
 >;
@@ -73,7 +74,9 @@ const taskCorrelationOf = (event: TaskEvent): RowCorrelation => {
   if ("quest" in event)
     return { ...NONE, agentId: event.quest.leadId, threadId: event.quest.threadId, taskId: event.quest.taskId };
   if ("question" in event) return { ...NONE, agentId: event.question.askerId, taskId: event.question.taskId };
-  if ("note" in event) return { ...NONE, agentId: event.note.recipientId, taskId: event.note.taskId };
+  // A note is correlated with the chat message of yours it traces back to, when there is one (#900).
+  if ("note" in event)
+    return { ...NONE, agentId: event.note.recipientId, messageId: event.note.messageId, taskId: event.note.taskId };
   return { ...NONE, taskId: "checkpoint" in event ? event.checkpoint.taskId : event.handOff.toTaskId };
 };
 
@@ -184,7 +187,9 @@ const makeJournalWriter = (sql: SqlClient.SqlClient) => {
           const thread =
             taskId === null
               ? sql`${threadId}`
-              : sql`COALESCE(${threadId}, (SELECT thread_id FROM tasks WHERE id = ${taskId}))`;
+              : // A note on a member's Task is in the thread of the message of yours it traces back to (#900).
+                sql`COALESCE(${threadId}, (SELECT thread_id FROM messages WHERE id = ${messageId}),
+                  (SELECT thread_id FROM tasks WHERE id = ${taskId}))`;
           const [row] = yield* sql<{
             readonly agentId: string | null;
             readonly threadId: string | null;

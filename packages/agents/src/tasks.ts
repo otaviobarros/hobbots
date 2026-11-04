@@ -6,6 +6,7 @@ import type {
   Attempt,
   AttemptEnd,
   AttemptId,
+  BackpackItemId,
   CarriedItem,
   Checkpoint,
   CheckpointId,
@@ -20,6 +21,7 @@ import type {
   HistoryRecords,
   IllegalTaskTransition,
   MemberWork,
+  MessageId,
   MilestoneId,
   NoteId,
   Quest,
@@ -174,6 +176,13 @@ export interface NewNote {
    * which goes to the Task's nearest lead.
    */
   readonly senderId?: AgentId;
+  /** The chat message of yours whose turn sends a lead's note (#900). */
+  readonly messageId?: MessageId;
+  /**
+   * The backpack items the sending turn carries. A lead's note sent with no message of yours traces
+   * back through the latest note among them that it picked up, as a nested lead passes one on.
+   */
+  readonly carried?: ReadonlyArray<BackpackItemId>;
 }
 
 /** A question that climbed every lead and waits for you, with the Task it asks about. */

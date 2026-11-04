@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
 import { DeviceId } from "./device.ts";
-import { AgentId, ThreadId } from "./ids.ts";
+import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { PolicyOverrides } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { Attempt, AttemptId, isLiveAttempt, isTerminalTask, Task, TaskId } from "./task.ts";
@@ -165,7 +165,7 @@ export class Checkpoint extends Schema.Class<Checkpoint>("Checkpoint")({
   summary: Schema.String,
   /**
    * More about it, when its owner had more to say: the Workbench shows it, a lane never does (#901).
-   * Null when there is none, and for every checkpoint journaled before migration 0051.
+   * Null when there is none, and for every checkpoint journaled before migration 0052.
    */
   detail: Schema.NullOr(Schema.String).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
@@ -270,6 +270,33 @@ export class TaskNote extends Schema.Class<TaskNote>("TaskNote")({
   senderId: Schema.optionalKey(Schema.NullOr(AgentId)),
   text: Schema.String,
   createdAt: Schema.String,
+  /**
+   * The chat message of yours it traces back to (#900): the one whose turn sent it, or, for a nested
+   * lead's note, that of the latest note from its own lead its turn picked up (`fromNoteId`). Null for a note you left on a Task, and for one a lead
+   * sent on its own, or before this was recorded.
+   */
+  messageId: Schema.NullOr(MessageId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /** The note its sender's turn picked up and passed on, when a nested lead sent it; null otherwise. */
+  fromNoteId: Schema.NullOr(NoteId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
+   * The turn of its recipient that picked it up last: a reply's message id or an Attempt's id, once
+   * the backpack put it into that turn and the runtime accepted the turn (ADR 019). Null until a
+   * turn did; see `noteReceipt` for what it waits on.
+   */
+  pickedUpBy: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  pickedUpAt: Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   revision: Revision,
 }) {}
 

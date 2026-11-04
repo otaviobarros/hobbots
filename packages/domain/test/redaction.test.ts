@@ -127,6 +127,14 @@ describe("redactSecrets", () => {
     expect(secretShapeIn(text)).toBeNull();
   });
 
+  it("stays fast on many unclosed markers", () => {
+    const text = `GH_TOKEN=${"[redacted: ".repeat(20_000)}`;
+    const started = performance.now();
+    redactSecrets(`-----BEGIN RSA PRIVATE KEY-----\n${text}`);
+    redactSecrets(text);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it("stays fast on long lines that almost match", () => {
     const started = performance.now();
     redactSecrets(`${"A".repeat(200_000)} ${"a.".repeat(100_000)} ${"-----BEGIN ".repeat(10_000)}`);
@@ -171,5 +179,46 @@ describe("secretsFromEnv", () => {
       { value: "/aB7cD9eF2gH4jK6", kind: "DEPLOY_SECRET" },
       { value: "pg-password-1", kind: "PGPASSWORD" },
     ]);
+  });
+});
+
+describe("redactSecrets on colored output", () => {
+  const GREEN = "\u001b[32m";
+  const BOLD = "\u001b[1m";
+  const RESET = "\u001b[0m";
+  const TOKEN = "ghp_aaaaBBBBccccDDDDeeeeFFFF1234";
+
+  it("finds a secret a color code splits and keeps the codes after its marker", () => {
+    const split = `${GREEN}token: ${TOKEN.slice(0, 10)}${BOLD}${TOKEN.slice(10)}${RESET}\n`;
+    expect(redactSecrets(split)).toBe(`${GREEN}token: [redacted: GitHub token]${BOLD}${RESET}\n`);
+  });
+
+  it("finds a known value a color code splits", () => {
+    const known = [{ value: "s3cr3t-value-42", kind: "DEPLOY_SECRET" }];
+    expect(redactSecrets(`+ DEPLOY=${GREEN}s3cr3t-${RESET}${GREEN}value-42${RESET}`, known)).toBe(
+      `+ DEPLOY=${GREEN}[redacted: DEPLOY_SECRET]${RESET}${GREEN}${RESET}`,
+    );
+  });
+
+  it("redacts an assignment whose value is colored", () => {
+    expect(redactSecrets(`GH_TOKEN=${GREEN}abcdefgh12345678${RESET}`)).toBe(
+      `GH_TOKEN=${GREEN}[redacted: credential]${RESET}`,
+    );
+  });
+
+  it("redacts a secret inside a link's address", () => {
+    const link = "\u001b]8;;https://ada:hunter2hunter2@example.com/\u0007repo\u001b]8;;\u0007";
+    expect(redactSecrets(link)).toBe(
+      "\u001b]8;;https://ada:[redacted: password]@example.com/\u0007repo\u001b]8;;\u0007",
+    );
+  });
+
+  it("leaves colored output without secrets as it is", () => {
+    const text = `${GREEN}✓ built in 2.1s${RESET}\n`;
+    expect(redactSecrets(text)).toBe(text);
+  });
+
+  it("tells a colored secret is there", () => {
+    expect(secretShapeIn(`${TOKEN.slice(0, 6)}${BOLD}${TOKEN.slice(6)}`)).toBe("GitHub token");
   });
 });

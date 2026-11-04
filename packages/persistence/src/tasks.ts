@@ -909,6 +909,21 @@ export const TaskRepositoryLive = Layer.effect(
         : Effect.succeed(task.ownerId);
     };
 
+    /**
+     * The chat message of yours a lead's note traces back to (#900): the one its turn answers, else
+     * that of the latest note the turn carries from its own lead, which it then passes on. A note you
+     * leave traces back to none.
+     */
+    const noteOrigin = (input: NewNote) =>
+      Effect.gen(function* () {
+        if (input.senderId === undefined) return { messageId: null, fromNoteId: null };
+        if (input.messageId !== undefined) return { messageId: input.messageId, fromNoteId: null };
+        const picked = yield* read.carriedNote(input.carried ?? [], input.senderId);
+        return picked === undefined
+          ? { messageId: null, fromNoteId: null }
+          : { messageId: picked.messageId, fromNoteId: picked.id };
+      });
+
     const leaveNote: TaskRepository["Service"]["leaveNote"] = (input) =>
       change((revision) =>
         Effect.gen(function* () {
@@ -925,7 +940,18 @@ export const TaskRepositoryLive = Layer.effect(
           if (isTerminalTask(top.state))
             return yield* refuse("task-ended", `The work Task ${task.id} is part of has ended`);
           const recipientId = yield* noteRecipient(task, input.senderId, yield* read.treeOf(task.rootId));
-          const note = new TaskNote({ ...input, senderId: input.senderId ?? null, recipientId, revision });
+          const { messageId, fromNoteId } = yield* noteOrigin(input);
+          const note = new TaskNote({
+            id: input.id,
+            taskId: input.taskId,
+            text: input.text,
+            createdAt: input.createdAt,
+            senderId: input.senderId ?? null,
+            recipientId,
+            messageId,
+            fromNoteId,
+            revision,
+          });
           yield* sql`INSERT INTO task_notes ${sql.insert({
             id: note.id,
             task_id: note.taskId,
@@ -933,7 +959,10 @@ export const TaskRepositoryLive = Layer.effect(
             recipient_id: note.recipientId,
             text: note.text,
             created_at: note.createdAt,
+            message_id: note.messageId,
+            from_note_id: note.fromNoteId,
             revision,
+            left_revision: revision,
           })}`;
           return { value: note, events: [{ _tag: "NoteLeft", note } as const] };
         }),

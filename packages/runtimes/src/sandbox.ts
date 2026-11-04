@@ -237,7 +237,19 @@ export const decideForLiveTurns = async (
 
 // Variables that pass into the sandbox as they are. Anything else, such as a token the hub was
 // started with or an SSH agent socket, stays out, so commands cannot use the hub's credentials.
-const PASSED_VARIABLES = new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "TERM", "COLORTERM", "TZ"]);
+// `CLAUDE_ENV_FILE` names the script that makes the commands print in color (#902).
+const PASSED_VARIABLES = new Set([
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "LANG",
+  "TERM",
+  "COLORTERM",
+  "TZ",
+  "CLAUDE_ENV_FILE",
+]);
 const PASSED_PREFIXES = ["LC_", "CLAUDE_CODE_", "CLAUDE_AGENT_SDK_"];
 // Claude Code's own settings pass, but never one that looks like a credential, such as a refresh
 // token; the turn's sign-in is added on its own.

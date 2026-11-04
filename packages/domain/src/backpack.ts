@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
 import { AgentId, ThreadId } from "./ids.ts";
-import { ArtifactRef, Checkpoint, Delegation, HandOff, QuestId, Question } from "./quest.ts";
+import { ArtifactRef, Checkpoint, Delegation, HandOff, NoteId, QuestId, Question } from "./quest.ts";
 import { Revision } from "./revision.ts";
 import { AttemptId, Task, TaskId } from "./task.ts";
 
@@ -69,6 +69,8 @@ export const BackpackPayload = Schema.Union([
     senderId: Schema.NullOr(AgentId),
     text: Schema.String,
     aboutTaskId: Schema.optional(TaskId),
+    /** The note it carries, so the turn that picks it up is recorded on the note (#900); absent on older items. */
+    noteId: Schema.optionalKey(NoteId),
   }),
   Schema.TaggedStruct("approval-outcome", { approval: ApprovalRequest }),
   Schema.TaggedStruct("deadline", { taskId: TaskId, dueAt: Schema.String }),

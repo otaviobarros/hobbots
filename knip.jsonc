@@ -10,6 +10,10 @@
       // Passed to electron-builder with --config, so its plugin does not find it.
       "entry": ["electron-builder.config.mjs"]
     },
+    "apps/web": {
+      // The window frame, which app-frame-plugin.ts loads by path to render it into index.html.
+      "entry": ["src/components/shell/app-frame.tsx"]
+    },
     "apps/site": {
       // `cloudflare:workers` is a module of the Workers runtime, not a package.
       "ignoreDependencies": ["cloudflare"]

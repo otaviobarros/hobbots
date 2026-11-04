@@ -186,6 +186,10 @@ export const makeLeading = ({ tasks }: Deps) => ({
             text: input.text,
             createdAt: scope.at,
             senderId: scope.caller.agentId,
+            // Where it came from, for the steer receipt of the message of yours behind it (#900).
+            ...(scope.caller.messageId !== undefined && { messageId: scope.caller.messageId }),
+            // Only what the turn was given under its claims: an item a call only showed it was not picked up.
+            carried: (scope.caller.carried ?? []).flatMap((item) => (item.owner === null ? [] : [item.itemId])),
           }),
         ),
       );

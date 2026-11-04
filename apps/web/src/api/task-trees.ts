@@ -10,6 +10,7 @@ import {
   type Task,
   type TaskControl,
   type TaskId,
+  type TaskNote,
   TaskTree,
   type TaskWait,
   type ThreadId,
@@ -51,6 +52,7 @@ export type TaskEvent =
           | "QuestionEscalated"
           | "QuestionWithdrawn"
           | "NoteLeft"
+          | "NotePickedUp"
           | "HandedOff"
           | "TaskCompleted"
           | "QuestCompleted"
@@ -145,6 +147,9 @@ const questionChange = (
 ): Partial<TaskTree> | null =>
   ids.has(event.question.taskId) ? { questions: upsertNewer(tree.questions, event.question) } : null;
 
+const noteChange = (tree: TaskTree, { note }: { readonly note: TaskNote }, ids: ReadonlySet<TaskId>) =>
+  ids.has(note.taskId) ? { notes: upsertNewer(tree.notes, note) } : null;
+
 const questChange = (
   tree: TaskTree,
   event: { readonly quest: Quest },
@@ -212,7 +217,8 @@ const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
   QuestionAnswered: questionChange,
   QuestionEscalated: questionChange,
   QuestionWithdrawn: questionChange,
-  NoteLeft: (tree, { note }, ids) => (ids.has(note.taskId) ? { notes: upsertNewer(tree.notes, note) } : null),
+  NoteLeft: noteChange,
+  NotePickedUp: noteChange,
   // An older copy changes nothing, so the tree stays the same.
   ApprovalRecorded: (tree, { approval }, ids) => {
     if (approval.taskId === null || !ids.has(approval.taskId)) return null;

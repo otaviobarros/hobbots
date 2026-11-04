@@ -66,6 +66,7 @@ import {
   isExecutable,
   runnableBinary,
 } from "./binary.ts";
+import { COMMAND_ENV_FILE_VARIABLE, commandColorFile, plainBashResponse } from "./command-color.ts";
 import { toolFinished } from "./command-exit.ts";
 import { userCommits } from "./git-config.ts";
 import { hubToolOf, withHubTools } from "./hub-tools.ts";
@@ -879,9 +880,17 @@ export const policyHooks = (
     const kept = keptGitHint(input.tool_name, output, turn.initTool);
     const note = [notes.get(input.tool_use_id), kept].filter((part) => part !== undefined).join(" ") || undefined;
     notes.delete(input.tool_use_id);
-    return note === undefined
-      ? {}
-      : { hookSpecificOutput: { hookEventName: input.hook_event_name, additionalContext: note } };
+    // A command prints in color for the Workbench; the hob reads its output plain (#902).
+    const plain =
+      input.hook_event_name === "PostToolUse" ? plainBashResponse(input.tool_name, input.tool_response) : undefined;
+    if (note === undefined && plain === undefined) return {};
+    return {
+      hookSpecificOutput: {
+        hookEventName: input.hook_event_name,
+        ...(note === undefined ? {} : { additionalContext: note }),
+        ...(plain === undefined ? {} : { updatedToolOutput: plain }),
+      },
+    };
   };
 
   const canUseTool: CanUseTool = async (tool, input, options) => {
@@ -1050,6 +1059,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
             yield* Effect.promise(() => adoptSession(target, [source], sessionId));
           }
           const signingAgent = turnSigningAgent(sandboxed ? tools : null);
+          // A hob's commands print in color (#902).
+          const colorScript = yield* commandColorFile(tools);
           const prepared = sandboxed
             ? yield* Effect.acquireRelease(
                 sandbox.prepare({
@@ -1107,7 +1118,8 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
                             request.redaction,
                             request.recordToolStart,
                           ),
-                          base.env,
+                          // Only Hobbots' script: one the hub was started with never reaches the commands.
+                          { ...base.env, [COMMAND_ENV_FILE_VARIABLE]: colorScript },
                         )
                       : {}),
                     abortController,

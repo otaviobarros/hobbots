@@ -20,6 +20,7 @@ import {
   previewToolOutput,
   type ReplyStep,
   RUNTIME_NAMES,
+  stripEscapes,
   systemInstructions,
   type TaskId,
 } from "@hobbots/domain";
@@ -88,7 +89,7 @@ export const runSessionTurn = (
         const redacted = redactEvent(event, redactor);
         const output =
           redacted._tag === "ToolFinished" && redacted.output !== undefined
-            ? { ...previewToolOutput(redactor.text(redacted.output)), logged: false }
+            ? { ...previewToolOutput(stripEscapes(redactor.text(redacted.output))), logged: false }
             : undefined;
         yield* saveSteps((current) => nextSteps(current, from, redacted, now, output));
       });
