@@ -241,6 +241,13 @@ function SigningSwitch({
   const noteId = useId();
   return (
     <div className="flex items-center gap-4 py-2.5">
+      <Switch
+        aria-labelledby={labelId}
+        aria-describedby={noteId}
+        checked={checked}
+        disabled={pending}
+        onCheckedChange={onChange}
+      />
       <div className="flex flex-1 flex-col gap-0.5">
         <span id={labelId} className="font-bold text-text-strong">
           {messages.signing.label}
@@ -249,13 +256,6 @@ function SigningSwitch({
           {checked ? messages.signing.on({ name }) : messages.signing.off({ name })}
         </span>
       </div>
-      <Switch
-        aria-labelledby={labelId}
-        aria-describedby={noteId}
-        checked={checked}
-        disabled={pending}
-        onCheckedChange={onChange}
-      />
     </div>
   );
 }

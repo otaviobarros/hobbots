@@ -37,18 +37,18 @@ function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) 
   return (
     <>
       <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
-        <div className="flex flex-1 flex-col gap-0.5">
-          <span id={labelId} className="font-bold">
-            {copy.openAtLogin}
-          </span>
-          <span className="text-[13px] text-text-secondary">{copy.openAtLoginNote}</span>
-        </div>
         <Switch
           aria-labelledby={labelId}
           checked={change.isPending ? change.variables : (state.data?.openAtLogin ?? false)}
           disabled={!state.data || state.data.status === "unavailable" || change.isPending}
           onCheckedChange={(on) => change.mutate(on)}
         />
+        <div className="flex flex-1 flex-col gap-0.5">
+          <span id={labelId} className="font-bold">
+            {copy.openAtLogin}
+          </span>
+          <span className="text-[13px] text-text-secondary">{copy.openAtLoginNote}</span>
+        </div>
       </div>
       {notice && (
         <div
@@ -89,18 +89,18 @@ function KeepRunningRow({ keepRunning }: { keepRunning: NonNullable<typeof keepR
   return (
     <>
       <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
-        <div className="flex flex-1 flex-col gap-0.5">
-          <span id={labelId} className="font-bold">
-            {copy.keepRunning}
-          </span>
-          <span className="text-[13px] text-text-secondary">{copy.keepRunningNote}</span>
-        </div>
         <Switch
           aria-labelledby={labelId}
           checked={on}
           disabled={state.data === undefined || change.isPending}
           onCheckedChange={(next) => change.mutate(next)}
         />
+        <div className="flex flex-1 flex-col gap-0.5">
+          <span id={labelId} className="font-bold">
+            {copy.keepRunning}
+          </span>
+          <span className="text-[13px] text-text-secondary">{copy.keepRunningNote}</span>
+        </div>
       </div>
       {state.data !== undefined && !on && (
         <p role="status" className="cut m-0 border-2 border-lantern bg-notice px-3 py-2.5 text-sm leading-[1.45]">
