@@ -242,7 +242,7 @@ const threadRoute = createRoute({
   ),
   component: function ThreadPage() {
     const params = threadRoute.useParams();
-    const { message, room, lane, tab, attempt, file } = threadRoute.useSearch();
+    const { message, room, lane, tab, attempt, file, from, scope } = threadRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
@@ -257,6 +257,8 @@ const threadRoute = createRoute({
                 tab,
                 attemptId: attempt === undefined ? undefined : AttemptId.make(attempt),
                 file,
+                from: from === undefined ? undefined : AttemptId.make(from),
+                taskOnly: scope === "task",
               }
         }
       />

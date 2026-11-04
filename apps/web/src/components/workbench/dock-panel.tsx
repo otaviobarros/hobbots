@@ -1,7 +1,9 @@
+import type { AttemptId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { TabsContent } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import type { ComponentType, ReactNode } from "react";
+import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { type DockSource, type HobTabState, hobStates, type ListTab } from "./dock-model.ts";
 import { messages } from "./messages.ts";
@@ -28,13 +30,18 @@ export function DockPanel({
   state,
   props,
   file,
+  from,
+  labels,
   onRetry,
 }: {
   tab: WorkbenchTab;
   on: boolean;
   state: TabState;
-  props: Omit<WorkbenchTabProps, "state" | "focus" | "shown">;
+  props: Omit<WorkbenchTabProps, "state" | "focus" | "from" | "shown">;
   file: string | undefined;
+  from: AttemptId | undefined;
+  /** Whether to name each hob's label over the panel, as no lit Task's header names one. */
+  labels: boolean;
   onRetry: () => void;
 }) {
   return (
@@ -50,12 +57,39 @@ export function DockPanel({
           </Notices>
         ) : (
           <>
+            {labels && <HobLabels tab={tab} sources={props.sources} hobs={props.hobs} />}
             <HobNotices tab={tab} sources={props.sources} hobs={props.hobs} />
-            <Panel tab={tab} props={{ ...props, state, focus: on ? file : undefined, shown: on }} />
+            <Panel
+              tab={tab}
+              props={{ ...props, state, focus: on ? file : undefined, from: on ? from : undefined, shown: on }}
+            />
           </>
         )}
       </TabsContent>
     </div>
+  );
+}
+
+/**
+ * Each hob's label for the tab (ADR 023), when no lit Task's header names one: Live while its work
+ * may still change, History once it ended, Unavailable or Not used. One hob's work can be live while
+ * another's is history, so each is named apart.
+ */
+function HobLabels({ tab, sources, hobs }: { tab: ListTab; sources: ReadonlyArray<DockSource>; hobs: HobLookup }) {
+  const states = hobStates(sources, tab);
+  if (states.length === 0) return null;
+  return (
+    <ul aria-label={messages.dock.labels} className="m-0 flex list-none flex-wrap gap-x-3 gap-y-1 px-5 pt-3 pb-0">
+      {states.map((each) => {
+        const hob = hobs(each.ownerId);
+        return (
+          <li key={each.ownerId} className="flex items-center gap-1.5 text-meta text-label">
+            <HobTile hob={hob} tile="sm" />
+            <span>{messages.dock.hobState({ name: hob.name, state: messages.dock.state[each.state.kind] })}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

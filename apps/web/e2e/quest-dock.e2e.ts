@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
-import { dock, laneHead, laneTask, openRoom } from "./quest-room.ts";
+import { dock, laneHead, laneTask, openRoom, taskSummary } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #907 in the browser: one Workbench docked under the lanes for the whole Quest. Changes and
@@ -71,6 +71,11 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
     bench.getByRole("tabpanel", { name: /^Changes/ }).getByRole("article", { name: "copy.md" }),
   ).toContainText("Hello.");
 
+  // Each hob's label is named apart over the tab, since no lit Task's header names one.
+  const labels = bench.getByRole("list", { name: "Each hob's work on this tab" });
+  await expect(labels).toContainText("Aldric ·");
+  await expect(labels).toContainText("Quill · History");
+
   // Files does the same across the hobs.
   await bench.getByRole("tab", { name: /^Files/ }).click();
   await expect(files.getByRole("button")).toHaveText([/^notes\.md, by Aldric/, /^copy\.md, by Quill/]);
@@ -128,4 +133,47 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and ev
   await attempts.getByRole("radio", { name: "Attempt 1" }).click();
   await bench.getByRole("tab", { name: /^Changes/ }).click();
   await expect(changes.getByRole("button")).toHaveText([/^copy\.md/]);
+
+  // Her lane's summary opens the copy on the same try, which the address keeps.
+  const picked = new URL(page.url()).hash.match(/attempt=([^&]+)/)?.[1];
+  expect(picked).toBeDefined();
+  await (await taskSummary(page, "Draft the copy"))
+    .getByRole("button", { name: "See the change to copy.md in Changes" })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`attempt=${picked}`));
+  await expect(changes.getByRole("button", { name: /^copy\.md/ })).toHaveAttribute("aria-pressed", "true");
+});
+
+// covers UX-002, UX-006
+test("[TC-UX-282] a file two hobs changed opens the hob's own record when Files and Changes link to each other", async ({
+  page,
+}) => {
+  await startParty(page, [
+    "Draft the copy",
+    'fake:write copy.md "# Copy\\n\\nHello.\\n"',
+    'fake:write notes.md "# Notes\\n\\nLaunch day, with copy.\\n"',
+    script("complete_task", { key: "drafted", summary: "Drafted." }),
+  ]);
+  await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
+  const { bench, changes, files } = lists(page);
+
+  // Quill's notes in Files open Quill's change to them, not Aldric's.
+  await bench.getByRole("tab", { name: /^Files/ }).click();
+  await files.getByRole("button", { name: /^notes\.md, by Quill/ }).click();
+  await bench
+    .getByRole("tabpanel", { name: /^Files/ })
+    .getByRole("region", { name: "notes.md" })
+    .getByRole("button", { name: "See changes" })
+    .click();
+  await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
+  await expect(changes.getByRole("button", { name: /^notes\.md, by Quill/ })).toHaveAttribute("aria-pressed", "true");
+
+  // And Aldric's change opens Aldric's file back in Files.
+  await changes.getByRole("button", { name: /^notes\.md, by Aldric/ }).click();
+  await bench
+    .getByRole("tabpanel", { name: /^Changes/ })
+    .getByRole("article", { name: "notes.md" })
+    .getByRole("button", { name: "Open in Files" })
+    .click();
+  await expect(files.getByRole("button", { name: /^notes\.md, by Aldric/ })).toHaveAttribute("aria-pressed", "true");
 });

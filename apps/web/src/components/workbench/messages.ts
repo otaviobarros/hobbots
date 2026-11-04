@@ -67,6 +67,16 @@ export const messages = {
     readFailed: "Hobbots could not read this quest's Workbench.",
     /** Why one hob's records for a tab cannot be shown, when the dock shows more than one hob. */
     hobUnavailable: ({ name, reason }: { name: string; reason: string }) => `${name}: ${reason}`,
+    labels: "Each hob's work on this tab",
+    /** One hob's label for a tab, as the dock names it apart from the other hobs'. */
+    hobState: ({ name, state }: { name: string; state: string }) => `${name} · ${state}`,
+    state: {
+      live: "Live",
+      history: "History",
+      unavailable: "Unavailable",
+      "not-used": "Not used",
+      "coming-soon": "Coming soon",
+    },
   },
   terminal: {
     tally: ({ total, failed, running }: { total: number; failed: number; running: number }) =>

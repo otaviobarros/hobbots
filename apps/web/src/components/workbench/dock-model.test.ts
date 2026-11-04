@@ -128,9 +128,14 @@ describe("the docked Workbench's sources", () => {
   });
 
   it("filters every tab to the lit lane's hob", () => {
-    const sources = dockSources(quest, read, undefined, QUILL);
+    const sources = dockSources(quest, read, undefined, { ownerId: QUILL });
     expect(sources.map((each) => each.attempt.id)).toEqual([copySecond.id]);
     expect(dockCounts(sources)).toEqual({ changes: 2, files: 1, terminal: 0 });
+  });
+
+  it("narrows to one Task when it alone was shown", () => {
+    const sources = dockSources(quest, read, undefined, { taskId: BUILD });
+    expect(sources.map((each) => each.attempt.id)).toEqual([build.id]);
   });
 
   it("follows an earlier try picked for its Task, and the latest for every other Task", () => {
@@ -157,7 +162,7 @@ describe("the docked Workbench's labels", () => {
   });
 
   it("reads Not used when no hob in view used a tab, and Unavailable when one hob's folder stopped being tracked", () => {
-    const quill = dockSources(quest, read, undefined, QUILL);
+    const quill = dockSources(quest, read, undefined, { ownerId: QUILL });
     expect(dockStates(quill).terminal).toEqual({ kind: "not-used" });
     const stopped = new FolderScan({
       id: FolderScanId.make("s"),

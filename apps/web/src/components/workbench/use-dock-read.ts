@@ -4,7 +4,7 @@ import { workbenchTreeQuery } from "../../api/workbench.ts";
 import { useWorkbenchStream } from "../../api/workbench-stream.ts";
 import { laneOf, type RoomLane } from "../quest-room/room-model.ts";
 import type { RoomView } from "../quest-room/room-search.ts";
-import { dockCounts, dockSources, dockStates, sameStates } from "./dock-model.ts";
+import { type DockFilter, dockCounts, dockSources, dockStates, sameStates } from "./dock-model.ts";
 import type { TabState } from "./workbench-model.ts";
 
 /**
@@ -26,12 +26,16 @@ export const useDockRead = (
   const named = lit ?? (lanes.length === 1 ? top?.id : undefined);
   const litTask = named === undefined ? undefined : tree.tasks.find((each) => each.id === named);
   const data = read.data;
-  const sources = data === undefined ? [] : dockSources(tree, data.activity, view.attemptId, lane?.ownerId);
+  // Show in the Workbench narrows the dock to its one Task; a lit lane, to its hob's.
+  const only: DockFilter | undefined =
+    lit === undefined || lane === undefined ? undefined : view.taskOnly ? { taskId: lit } : { ownerId: lane.ownerId };
+  const sources = data === undefined ? [] : dockSources(tree, data.activity, view.attemptId, only);
   const unread: TabState = read.isError ? { kind: "unavailable", reason: "unread" } : { kind: "history" };
   return {
     top,
     lane,
     litTask,
+    only,
     sources,
     states: data === undefined ? sameStates(unread) : dockStates(sources),
     counts: data === undefined ? null : dockCounts(sources),

@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Page } from "@playwright/test";
 import { expect, startHub, test } from "./hub.ts";
-import { openWorkbench, ticket } from "./quest-room.ts";
+import { openWorkbench, taskSummary, ticket } from "./quest-room.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
@@ -112,13 +112,13 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
   await expect(panel.getByRole("article", { name: "src/new.ts" })).toContainText("export const fresh = true;");
 
   // Switching tabs keeps the file chosen.
-  await bench.getByRole("tab", { name: /^Summary/ }).click();
+  await bench.getByRole("tab", { name: /^Terminal/ }).click();
   await bench.getByRole("tab", { name: /^Changes/ }).click();
   await expect(files.getByRole("button", { name: /^new\.ts/ })).toHaveAttribute("aria-pressed", "true");
 
-  // A changed file Summary links to opens Changes on that file.
-  await bench.getByRole("tab", { name: /^Summary/ }).click();
-  await bench.getByRole("button", { name: "See the change to src/app.ts in Changes" }).click();
+  // A changed file the lane's summary links to opens Changes on that file.
+  const summary = await taskSummary(page, "Tidy the project");
+  await summary.getByRole("button", { name: "See the change to src/app.ts in Changes" }).click();
   await expect(files.getByRole("button", { name: /^app\.ts/ })).toHaveAttribute("aria-pressed", "true");
   await expect(panel.getByRole("article", { name: "src/app.ts" })).toBeVisible();
 

@@ -38,7 +38,7 @@ export function WorkbenchDock({
   hobs: HobLookup;
   moves: RoomMoves;
 }) {
-  const { top, lane, litTask, sources, states, counts, retry } = useDockRead(tree, lanes, lit, view);
+  const { top, lane, litTask, only, sources, states, counts, retry } = useDockRead(tree, lanes, lit, view);
   const height = useDockHeight();
   const heading = useRef<HTMLHeadingElement>(null);
   if (top === undefined) return null;
@@ -73,7 +73,14 @@ export function WorkbenchDock({
           states={states}
           counts={counts}
           open={open}
-          filter={lane === undefined ? null : hobs(lane.ownerId)}
+          filter={
+            lane === undefined || only === undefined
+              ? null
+              : {
+                  hob: hobs(lane.ownerId),
+                  name: "taskId" in only && litTask !== undefined ? taskTitle(litTask) : hobs(lane.ownerId).name,
+                }
+          }
           party={lanes.length > 1}
           onEveryone={() => moves.lane(undefined)}
           onFold={() => moves.tab(open ? undefined : "changes")}
@@ -93,6 +100,8 @@ export function WorkbenchDock({
                   state={states[tab]}
                   props={shared}
                   file={view.file}
+                  from={view.from}
+                  labels={litTask === undefined}
                   onRetry={retry}
                 />
               ))}

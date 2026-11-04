@@ -1,4 +1,4 @@
-import type { AttemptActivity, TaskFile } from "@hobbots/domain";
+import type { AttemptActivity, AttemptId, TaskFile } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useState } from "react";
@@ -30,7 +30,7 @@ const keyOf = (entry: Entry): string => `${entry.source.attempt.id}/${entry.file
  * elsewhere. Only files inside the hob's folders are listed. The tree's one read lists them as they
  * are now, and reads them again when you come back to the app.
  */
-export function FilesTab({ sources, hobs, focus, onTab }: WorkbenchTabProps) {
+export function FilesTab({ sources, hobs, focus, from, onTab }: WorkbenchTabProps) {
   const [picked, setPicked] = useState<string | null>(null);
   // A file another tab asks for wins over the one picked here before.
   const [asked, setAsked] = useState(focus);
@@ -44,7 +44,7 @@ export function FilesTab({ sources, hobs, focus, onTab }: WorkbenchTabProps) {
   const listed = [...made, ...touched];
   const shown =
     listed.find((each) => keyOf(each) === picked) ??
-    (focus === undefined ? undefined : listed.find((each) => each.file.location === focus)) ??
+    (focus === undefined ? undefined : linkedFile(listed, focus, from)) ??
     listed[0];
   if (shown === undefined) return <div data-slot="files" />;
   // Each row shows whose work it is once the list holds more than one hob's.
@@ -92,13 +92,21 @@ export function FilesTab({ sources, hobs, focus, onTab }: WorkbenchTabProps) {
           activity={shown.source.activity}
           file={shown.file}
           onSeeChanges={
-            hasChange(shown.source.activity, shown.file) ? () => onTab("changes", shown.file.location) : null
+            hasChange(shown.source.activity, shown.file)
+              ? () => onTab("changes", shown.file.location, shown.source.attempt.id)
+              : null
           }
         />
       </div>
     </div>
   );
 }
+
+/** The file a link asks for: the one its try recorded, as two Tasks can touch one path, else any. */
+const linkedFile = (listed: ReadonlyArray<Entry>, focus: string, from: AttemptId | undefined): Entry | undefined => {
+  const at = listed.filter((each) => each.file.location === focus);
+  return at.find((each) => each.source.attempt.id === from) ?? at[0];
+};
 
 function FileGroup({
   title,

@@ -44,7 +44,12 @@ export function TaskSummary({ tree, task, hobs }: { tree: TaskTree; task: Task; 
   const summary = summaryOf(tree, task, attempt, activity, reads.approvals);
   const owner = hobs(task.ownerId).name;
   const running = attempt !== null && isLiveAttempt(attempt.state);
-  const onTab = (tab: WorkbenchTab, file?: string) => room.show(task.id, tab, file);
+  // A try picked for the Task stays picked as its summary opens the Workbench on it.
+  const onTab = (tab: WorkbenchTab, file?: string) =>
+    room.show(task.id, tab, {
+      ...(file === undefined ? {} : { file }),
+      ...(picked === undefined ? {} : { attempt: picked }),
+    });
   return (
     <div data-slot="summary" className="flex flex-col gap-4">
       <Line line={summary.line} owner={owner} hobs={hobs} />

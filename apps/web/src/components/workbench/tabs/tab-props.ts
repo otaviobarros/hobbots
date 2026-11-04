@@ -1,4 +1,4 @@
-import type { TaskTree } from "@hobbots/domain";
+import type { AttemptId, TaskTree } from "@hobbots/domain";
 import type { HobLookup } from "../../quest/use-work.ts";
 import type { DockSource } from "../dock-model.ts";
 import type { TabState, WorkbenchTab } from "../workbench-model.ts";
@@ -20,8 +20,10 @@ export interface WorkbenchTabProps {
    * a file Artifact reference's value), as a link to it asks; undefined for none.
    */
   readonly focus: string | undefined;
+  /** The try that recorded `focus`, so it names one record when several Tasks touched the path. */
+  readonly from: AttemptId | undefined;
   /** Whether this tab's panel is the one showing, so a tab can wait to load what only it uses. */
   readonly shown: boolean;
-  /** Shows another tab, with a file to show first, as See changes in Files does. */
-  readonly onTab: (tab: WorkbenchTab, focus?: string) => void;
+  /** Shows another tab, with a file to show first and the try that recorded it, as See changes in Files does. */
+  readonly onTab: (tab: WorkbenchTab, focus?: string, from?: AttemptId) => void;
 }

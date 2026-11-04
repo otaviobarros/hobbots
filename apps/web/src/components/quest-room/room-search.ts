@@ -7,8 +7,10 @@ import { WorkbenchTab } from "../workbench/workbench-model.ts";
 /**
  * Where the Quest room is in a thread's address (ADR 027, STD-REACT-002): `room` names a Task of the
  * Quest to open, `lane` the Task whose lane is lit, `tab` the Workbench tab while the dock is open,
- * `attempt` a try other than the one the Workbench picks and `file` a file the tab shows first. A
- * link that names a Task other than the Quest's top one lights that Task's lane.
+ * `attempt` a try other than the one the Workbench picks and `file` a file the tab shows first, with
+ * `from` the try that recorded it when the dock lists more than one. `scope=task` narrows the dock
+ * to the lit Task alone, as Show in the Workbench on one of a lane's Tasks does. A link that names a
+ * Task other than the Quest's top one lights that Task's lane.
  */
 export const RoomSearch = {
   room: searchParam(Schema.String),
@@ -16,6 +18,8 @@ export const RoomSearch = {
   tab: searchParam(WorkbenchTab),
   attempt: searchParam(Schema.String),
   file: searchParam(Schema.String),
+  from: searchParam(Schema.String),
+  scope: searchParam(Schema.Literal("task")),
 };
 
 /** The room the address asks for. */
@@ -27,6 +31,10 @@ export interface RoomView {
   readonly tab: WorkbenchTab | undefined;
   readonly attemptId: AttemptId | undefined;
   readonly file: string | undefined;
+  /** The try that recorded `file`, so a link names one record when several Tasks touched the path. */
+  readonly from: AttemptId | undefined;
+  /** Whether the dock shows the lit Task alone rather than its whole lane's hob. */
+  readonly taskOnly: boolean;
 }
 
 /** What a link puts in the address to open the room on a Task, with its lane lit and a tab open. */
@@ -75,21 +83,38 @@ export const useRoomMoves = (hobId: AgentId, threadId: ThreadId, top: TaskId | u
           room: top ?? prev.room,
           lane: taskId,
           tab: taskId === undefined ? prev.tab : (prev.tab ?? "changes"),
+          scope: undefined,
         }),
         replace: true,
       }),
-    /** Lights a lane and opens the dock on a tab of its work, with a file to show first. */
-    show: (taskId: TaskId, tab: WorkbenchTab, file?: string) =>
+    /**
+     * Shows one Task's work in the dock on a tab, with a file to show first, keeping the try picked
+     * for it when one was.
+     */
+    show: (taskId: TaskId, tab: WorkbenchTab, options: { readonly file?: string; readonly attempt?: string } = {}) =>
       void navigate({
         from: to,
         to,
         params,
-        search: (prev) => ({ room: top ?? prev.room, lane: taskId, tab, file }),
+        search: (prev) => ({
+          room: top ?? prev.room,
+          lane: taskId,
+          tab,
+          file: options.file,
+          attempt: options.attempt,
+          scope: "task" as const,
+        }),
         replace: true,
       }),
-    /** Opens the dock on a tab, with a file to show first, or folds it. */
-    tab: (tab: WorkbenchTab | undefined, file?: string) =>
-      void navigate({ from: to, to, params, search: (prev) => ({ ...prev, tab, file }), replace: true }),
+    /** Opens the dock on a tab, with a file to show first and the try that recorded it, or folds it. */
+    tab: (tab: WorkbenchTab | undefined, file?: string, recordedBy?: AttemptId) =>
+      void navigate({
+        from: to,
+        to,
+        params,
+        search: (prev) => ({ ...prev, tab, file, from: recordedBy }),
+        replace: true,
+      }),
     /** Lights a lane on one of its Task's tries, so the lane and the Workbench show what it did. */
     pick: (taskId: TaskId, attemptId: AttemptId) =>
       void navigate({

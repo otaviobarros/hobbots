@@ -35,7 +35,7 @@ interface Entry {
  * diff and images sit side by side. While a turn runs the list follows the hub's records as they
  * arrive; afterwards it is the history they kept.
  */
-export function ChangesTab({ sources, state, hobs, focus, onTab }: WorkbenchTabProps) {
+export function ChangesTab({ sources, state, hobs, focus, from, onTab }: WorkbenchTabProps) {
   // The file to show: one picked in the list by its id, or one a link asked for by its path. A link
   // is kept as asked, so it holds while the records load and after another tab shows.
   const [picked, setPicked] = useState<{ readonly id?: string; readonly path?: string }>(
@@ -53,7 +53,13 @@ export function ChangesTab({ sources, state, hobs, focus, onTab }: WorkbenchTabP
   if (changes.length === 0) {
     return state.kind === "live" ? <p className="m-0 px-5 py-4 text-detail text-label">{messages.noneYet}</p> : null;
   }
-  const selected = selectedChange(changes, picked.id ?? null, picked.path);
+  // A link from another tab names the try that recorded its file, as two Tasks can change one path.
+  const recorded = from === undefined ? [] : changes.filter((each) => each.attemptId === from);
+  const selected = selectedChange(
+    recorded.some((each) => changePath(each) === picked.path) ? recorded : changes,
+    picked.id ?? null,
+    picked.path,
+  );
   const shown = entries.find((each) => each.change.id === selected?.id);
   const counts = changeCounts(changes);
   const manyFolders = new Set(changes.map((each) => each.folder)).size > 1;
@@ -106,7 +112,11 @@ export function ChangesTab({ sources, state, hobs, focus, onTab }: WorkbenchTabP
               activity={shown.source.activity}
               live={isLiveAttempt(shown.source.attempt.state)}
               hobs={hobs}
-              onOpenFiles={leavesFile(shown.change) ? () => onTab("files", changePath(shown.change)) : null}
+              onOpenFiles={
+                leavesFile(shown.change)
+                  ? () => onTab("files", changePath(shown.change), shown.source.attempt.id)
+                  : null
+              }
             />
           )}
         </div>

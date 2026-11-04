@@ -5,6 +5,7 @@ import type {
   AttemptId,
   Task,
   TaskFile,
+  TaskId,
   TaskTree,
   TreeActivity,
 } from "@hobbots/domain";
@@ -33,20 +34,27 @@ export interface DockSource {
   readonly files: ReadonlyArray<TaskFile>;
 }
 
+/** Whose work the dock narrows to: a lit lane's hob, or the one Task shown in it. */
+export type DockFilter = { readonly ownerId: AgentId } | { readonly taskId: TaskId };
+
+const inFilter = (only: DockFilter, task: Task): boolean =>
+  "taskId" in only ? task.id === only.taskId : task.ownerId === only.ownerId;
+
 /**
  * The Attempt the dock shows for each Task in the tree, in tree order: the try picked in a lane for
- * its own Task, else the latest that recorded work (#386). With `ownerId`, only that hob's Tasks, as
- * when its lane is lit. A Task with no Attempt yet, or one the read does not hold yet, has none.
+ * its own Task, else the latest that recorded work (#386). Narrowed to a hob's Tasks when its lane is
+ * lit, or to one Task when it alone was shown. A Task with no Attempt yet, or one the read does not
+ * hold yet, has none.
  */
 export const dockSources = (
   tree: TaskTree,
   read: TreeActivity,
   chosen: AttemptId | undefined,
-  ownerId: AgentId | undefined,
+  only: DockFilter | undefined,
 ): ReadonlyArray<DockSource> => {
   const byAttempt = new Map(read.attempts.map((each) => [each.activity.attempt.id, each]));
   return tree.tasks.flatMap((task) => {
-    if (ownerId !== undefined && task.ownerId !== ownerId) return [];
+    if (only !== undefined && !inFilter(only, task)) return [];
     const attempts = attemptsOf(tree, task);
     const shown = chosenAttempt(attempts, chosen, () =>
       openingAttempt(tree, task, attempts, (each) => byAttempt.get(each.id)?.activity ?? "unread"),
