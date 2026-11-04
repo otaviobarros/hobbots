@@ -85,7 +85,7 @@ export function LaneMenu({
           <>
             <DropdownMenuLabel>{messages.cancelWhich}</DropdownMenuLabel>
             {menu.cancel.map((each) => (
-              <DropdownMenuItem key={each.id} variant="deny" className="ps-5" onSelect={() => ask(each)}>
+              <DropdownMenuItem key={each.id} variant="deny" inset onSelect={() => ask(each)}>
                 {taskTitle(each)}
               </DropdownMenuItem>
             ))}
@@ -149,7 +149,7 @@ function ReassignItems({ tree, task, actions }: { tree: TaskTree; task: Task; ac
         <DropdownMenuItem
           key={hob.id}
           disabled={actions.busy}
-          className="flex-row items-center gap-2 ps-5"
+          inset
           onSelect={() => actions.send(task.id, { kind: "reassign", taskId: task.id, agentId: hob.id }, hob)}
         >
           <HobSprite hob={hob} size={16} />
