@@ -13,6 +13,7 @@ export const messages = {
     resting: "Resting",
     paused: "Paused",
     failed: "Had a problem",
+    new: "New",
   },
   stats: {
     chats: ({ count }: { count: number }) =>
@@ -37,7 +38,6 @@ export const messages = {
     history: "History",
   },
   chats: {
-    none: "No chats yet. Start one with New chat.",
     open: ({ title }: { title: string }) => `Open ${title}`,
     working: "Working",
     pinned: "Pinned",
@@ -61,6 +61,82 @@ export const messages = {
     renameLabel: ({ title }: { title: string }) => `New title for “${title}”`,
     pin: "Pin to the top",
     unpin: "Unpin",
+  },
+  newHob: {
+    label: "No chats yet",
+    hello: ({ name, note }: { name: string; note: string | null }) =>
+      note === null ? `Hi! I'm ${name}. Where shall we start?` : `Hi! I'm ${name}. ${note} Where shall we start?`,
+    tryOne: "Try one of these",
+    start: ({ prompt }: { prompt: string }) => `Start a chat: ${prompt}`,
+    /** Three first asks for each everyday helper, then for each family of roles. */
+    starters: {
+      assistant: ["Help me plan my week", "Summarize an article I paste", "Explain a concept simply"],
+      researcher: [
+        "Find three good sources on a topic I name",
+        "Compare two products for me, with links",
+        "Sum up what is known about a question I have",
+      ],
+      writer: [
+        "Turn my bullet points into a friendly email",
+        "Tighten this blog post and keep my voice",
+        "Write three subject lines for an email I paste",
+      ],
+      editor: [
+        "Fix the mistakes in a text I paste",
+        "Make this paragraph shorter and clearer",
+        "Tell me what reads badly in my draft",
+      ],
+      translator: [
+        "Translate a message I paste and keep its tone",
+        "Check my translation for phrases that do not carry over",
+        "Say this politely in another language",
+      ],
+      notetaker: [
+        "Turn my meeting notes into decisions and to-dos",
+        "Sum up a transcript I paste in five lines",
+        "Make a follow-up email from my notes",
+      ],
+      brainstormer: [
+        "Give me five ideas for a name I need",
+        "Help me get unstuck on a problem I describe",
+        "Suggest three different directions for my project",
+      ],
+      organizer: [
+        "Plan how to sort a messy folder before moving anything",
+        "Suggest clear names for a set of files",
+        "Make a checklist for a job I describe",
+      ],
+      leadership: [
+        "Help me pick what matters most this week",
+        "Push back on a plan I paste",
+        "Draft a short update for my team",
+      ],
+      software: [
+        "Explain how a part of my project works",
+        "Find the cause of a bug I describe",
+        "Plan a small change before you make it",
+      ],
+      business: [
+        "Make sense of a spreadsheet I share",
+        "Draft a reply to a customer email I paste",
+        "List what is late and who should unblock it",
+      ],
+      learning: [
+        "Explain a topic as if I were new to it",
+        "Quiz me on something I am learning",
+        "Make a short study plan for this month",
+      ],
+      creative: [
+        "Give me three ideas for my next piece",
+        "Give feedback on a draft I paste",
+        "Help me plan a project from idea to done",
+      ],
+      life: [
+        "Help me plan a week of meals",
+        "Make a checklist for a trip",
+        "Help me set a goal and the first small step",
+      ],
+    },
   },
   history: {
     filters: {

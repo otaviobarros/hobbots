@@ -113,6 +113,7 @@ export const messages = {
     noteTo: ({ name, time }: { name: string; time: string }) => `To ${name} · ${time}`,
     asksYou: ({ name }: { name: string }) => `${name} asks you. Your answer goes straight back to ${name}.`,
     waitingOn: ({ name }: { name: string }) => `Waiting for ${name} to answer.`,
+    waitsForYou: "Waiting for your answer, above.",
     noteNotAnswer: ({ name }: { name: string }) => `Note to ${name}, not an answer`,
     noteNotAnswerHint: ({ lead, asker }: { lead: string; asker: string }) =>
       `This goes to ${lead} as a note. To answer ${asker}, use the answer box above.`,

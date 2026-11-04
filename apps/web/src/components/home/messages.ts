@@ -1,7 +1,14 @@
 import { formatCount, plural } from "../../lib/format.ts";
 
-/** Copy for Home's Pick up where you left off (STD-I18N-001). */
+/** Copy for Home's Needs you and Pick up where you left off (STD-I18N-001). */
 export const messages = {
+  needsYou: {
+    title: "Needs you",
+    openInbox: "Open Inbox",
+    clear: "All clear",
+    clearLine: "Nothing needs you. Your hobs will ask here first when something does.",
+    history: "See history",
+  },
   pickUp: {
     title: "Pick up where you left off",
     yourHobs: "Your hobs",

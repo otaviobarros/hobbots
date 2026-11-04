@@ -85,7 +85,7 @@ test("[TC-OR-223] the Task card and drawer say why Rook's Task is blocked, not a
   await expect(cardRow).toContainText("Its member ended a turn without completing it");
   await expect(cardRow).toContainText("Blocked");
   await frontend.click();
-  const drawer = page.getByRole("complementary", { name: "Write the frontend, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Write the frontend, Task details" });
   await expect(drawer).toContainText('only its own milestones are unreported: "Page live"');
   await expect(drawer).toContainText("It waits on no question, approval or other Task");
 });

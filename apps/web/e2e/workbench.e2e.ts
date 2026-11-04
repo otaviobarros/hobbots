@@ -96,10 +96,10 @@ test("[TC-UX-022] the Workbench opens from the Task drawer and the Quest tab, an
 
   // From the drawer, Back to the task reopens the drawer with its unsent note.
   await card.getByRole("button", { name: "Show details" }).click();
-  const drawer = page.getByRole("complementary", { name: "Tidy the notes, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Tidy the notes, Task details" });
   const note = drawer.getByRole("textbox", { name: "Tell Aldric about this task" });
   await note.fill("Keep the headings short");
-  await drawer.getByRole("button", { name: "Open in Workbench" }).click();
+  await drawer.getByRole("button", { name: "Open Workbench" }).click();
   const bench = page.getByRole("region", { name: "Workbench for Tidy the notes" });
   await expect(bench).toBeVisible();
   await expect(drawer).toBeHidden();

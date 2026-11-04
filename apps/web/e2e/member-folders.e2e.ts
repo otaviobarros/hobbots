@@ -23,7 +23,8 @@ test("[TC-PE-303] the Task drawer and the Workbench header show the folders each
     [/Ada · Review the shop/, "Review the shop", "/fake/shop"],
   ] as const) {
     await tasks.getByRole("button", { name }).click();
-    const drawer = page.getByRole("complementary", { name: `${title}, Task details` });
+    const drawer = page.getByRole("dialog", { name: `${title}, Task details` });
+    await drawer.getByText("Everything in this task").click();
     await expect(drawer.getByRole("list", { name: "Folders" }).getByRole("listitem")).toHaveText([folder]);
   }
   await tasks.getByRole("button", { name: /Quill · Make the shop badge/ }).click();
