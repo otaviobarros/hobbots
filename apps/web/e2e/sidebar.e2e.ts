@@ -83,3 +83,27 @@ test("[TC-UX-140] the sidebar starts collapsed, expands with its chevron or ⌘\
   await page.reload();
   await expect(sidebar(page)).toHaveAttribute("data-open", "false");
 });
+
+// covers UX-001
+test("[TC-UX-141] every hob shows in the sidebar from any page, and the open hob lists its recent threads", async ({
+  page,
+}) => {
+  const { url, ids } = await hubWithHobs();
+  await page.goto(`${url}/#/usage`);
+  const nav = sidebar(page);
+  await expect(nav.getByRole("link", { name: "Aldric, resting" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Ada, resting" })).toBeVisible();
+
+  await nav.getByRole("button", { name: "Expand the sidebar" }).click();
+  await nav.getByRole("link", { name: "Aldric, resting" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Aldric}$`));
+  const thread = nav.getByRole("link", { name: "Plan the spring launch" });
+  await expect(thread).toBeVisible();
+  await expect(nav.getByRole("link", { name: "Draft the release notes" })).toBeVisible();
+
+  await thread.click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids.Aldric}/threads/`));
+  await expect(nav.getByRole("link", { name: "Plan the spring launch" })).toHaveAttribute("aria-current", "page");
+
+  await expect(nav.getByRole("link", { name: "Summon a hob" })).toBeVisible();
+});

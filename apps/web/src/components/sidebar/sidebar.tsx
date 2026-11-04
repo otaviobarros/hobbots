@@ -8,6 +8,7 @@ import { ChiefMark, type ChiefMood } from "../chief-mark.tsx";
 import { chiefLabel, chiefMood } from "../chief-mood.ts";
 import { useWaitingCount } from "../inbox/use-waiting-count.ts";
 import { messages } from "./messages.ts";
+import { SidebarHobs } from "./sidebar-hobs.tsx";
 import { SidebarLink, SidebarTip, sidebarIcon, sidebarItem } from "./sidebar-item.tsx";
 import { useSidebarOpen } from "./use-sidebar-open.ts";
 
@@ -60,6 +61,7 @@ export function Sidebar() {
               badge={item.label === "Inbox" && !isActive(item.to) ? waiting : 0}
             />
           ))}
+          <SidebarHobs expanded={open} />
           <SidebarTip label={copy.expand} expanded={open}>
             <button
               type="button"
