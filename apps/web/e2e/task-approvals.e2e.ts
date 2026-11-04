@@ -95,7 +95,7 @@ test("[TC-IN-152] a request made in a Task offers This task, shows the rule it s
   await expect(card.getByRole("button")).toHaveText(["Allow once", "This task", "Always for this site", "Deny"]);
   await card.getByRole("button", { name: "This task" }).click();
   const form = card.getByRole("form", { name: "This task" });
-  await expect(form).toContainText("Hobbots saves this rule for this Task only.");
+  await expect(form).toContainText("Hobbots saves this rule for this task only.");
   await expect(form.getByRole("list", { name: "The rule to save" })).toHaveText([
     `For this task, let Aldric push ${shared} to feature on origin`,
   ]);
@@ -148,7 +148,7 @@ test("[TC-IN-153] a party member's request in the Inbox offers This quest, and i
   await expect(card.getByRole("button", { name: "This task" })).toHaveCount(0);
   await card.getByRole("button", { name: "This quest" }).click();
   const form = card.getByRole("form", { name: "This quest" });
-  await expect(form).toContainText("Other hobs on the Quest still ask.");
+  await expect(form).toContainText("Other hobs on the quest still ask.");
   await expect(form.getByRole("list", { name: "The rule to save" })).toHaveText([
     `For this quest, let Quill push ${shared} to feature on origin`,
   ]);
