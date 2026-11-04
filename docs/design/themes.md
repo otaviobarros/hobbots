@@ -92,3 +92,7 @@ Workshop Night keeps the palette the app had before the themes. These tokens wer
 | `--color-wood` | Kept as it is. It is scene art, not a theme token. |
 
 The shadcn names in `styles.css`, such as `--color-primary` and `--color-border`, keep pointing at these tokens. That way the components in `packages/ui` follow the theme without changes.
+
+Components never write a color. Scene art keeps the colors the design draws it with in every theme, so `styles.css` names them once beside `wood`: `scene-*` for the village, Home's hall and setup's ground, `desk` and `desk-edge` for the Workbench desk, and `provider-*` for the tile behind each AI provider's letter mark. Pixel art palettes live in `apps/web/src/art`. A test fails on a hex or `rgb()` color in `apps/web/src/components`.
+
+The desktop window's background follows the theme too. The preload script reports `ground` each time `data-theme` changes, and the next window opens with the last one. Before any page reports, it uses Workshop Night's ground, since first run always uses Workshop Night.

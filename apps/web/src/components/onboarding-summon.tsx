@@ -173,7 +173,12 @@ export function OnboardingReady() {
             return (
               <span
                 key={`${rune.left}-${rune.top}`}
-                className={cn("absolute", on ? "bg-moonlight shadow-[0_0_12px_3px_rgba(243,233,181,.6)]" : "bg-line-2")}
+                className={cn(
+                  "absolute",
+                  on
+                    ? "bg-moonlight shadow-[0_0_12px_3px_color-mix(in_srgb,var(--color-moonlight)_60%,transparent)]"
+                    : "bg-line-2",
+                )}
                 style={{ left: rune.left, top: rune.top, width: RUNE, height: RUNE }}
               />
             );

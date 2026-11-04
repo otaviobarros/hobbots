@@ -41,6 +41,8 @@ interface DesktopSettings {
   readonly connection?: HubConnection | undefined;
   /** Set by Disconnect: this computer left a hub and has not chosen again, so it must not become a hub by itself. */
   readonly leftHub?: boolean | undefined;
+  /** The theme's ground the page last reported, which a new window opens with. */
+  readonly windowBackground?: string | undefined;
 }
 
 export interface SettingsStore {
@@ -89,6 +91,7 @@ const parse = (raw: string): DesktopSettings => {
     ),
     ...((record.mode === "hub" || record.mode === "connected") && { mode: record.mode }),
     ...(connection !== undefined && { connection }),
+    ...(typeof record.windowBackground === "string" && { windowBackground: record.windowBackground }),
   };
 };
 

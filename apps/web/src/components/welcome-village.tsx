@@ -95,19 +95,22 @@ export function WelcomeVillage({
         <div
           key={house.left}
           aria-hidden
-          className="absolute bottom-[146px] bg-[#3d2f52]"
+          className="absolute bottom-[146px] bg-scene-wall"
           style={{ left: `${house.left}%`, width: house.width, height: house.height }}
         >
           <div
-            className="absolute -inset-x-4 bg-[#5b3f5e] [clip-path:polygon(50%_0,100%_100%,0_100%)]"
+            className="absolute -inset-x-4 bg-scene-roof [clip-path:polygon(50%_0,100%_100%,0_100%)]"
             style={{ top: -house.roof, height: house.roof }}
           />
-          <div className="absolute right-6 w-5 bg-[#4a3a6a]" style={{ top: -house.chimney, height: house.chimney }} />
+          <div
+            className="absolute right-6 w-5 bg-scene-chimney"
+            style={{ top: -house.chimney, height: house.chimney }}
+          />
           {house.smoke.map((delay, i) => (
             <span
               key={delay}
               className={cn(
-                "absolute animate-hb-smoke bg-[#6a6390] opacity-0",
+                "absolute animate-hb-smoke bg-scene-smoke opacity-0",
                 i === 0 ? "right-7 size-2.5" : "right-[26px] size-2",
               )}
               style={{ top: -house.chimney - 14, animationDelay: `${delay}s` }}
@@ -124,7 +127,7 @@ export function WelcomeVillage({
               style={introDelay(delay)}
             />
           ))}
-          <span className="absolute bottom-0 left-1/2 -ml-[18px] h-[52px] w-9 bg-[#241c33]" />
+          <span className="absolute bottom-0 left-1/2 -ml-[18px] h-[52px] w-9 bg-scene-door" />
         </div>
       ))}
 

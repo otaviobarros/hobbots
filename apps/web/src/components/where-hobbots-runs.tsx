@@ -1,6 +1,7 @@
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
+import { ELDER, ELDER_PALETTE, iconPalette } from "../art/icons.ts";
 import { messages } from "./messages.ts";
 import { Stars } from "./scene.tsx";
 
@@ -18,7 +19,7 @@ const HOUSE = [
   ".###..###.",
   ".###..###.",
 ];
-const HOUSE_PALETTE = { "#": "#f3e9b5", o: "#f2a541" };
+const HOUSE_PALETTE = iconPalette(true);
 
 const LINK = [
   "..........",
@@ -33,21 +34,6 @@ const LINK = [
   "..........",
 ];
 const LINK_PALETTE = HOUSE_PALETTE;
-
-/** The Elder Hob, who guides setup. */
-const ELDER = [
-  "...hhhh...",
-  "..hhhhhh..",
-  ".hhhhhhhh.",
-  "s.ssssss.s",
-  "ssksssskss",
-  ".swwwwwws.",
-  "..wwwwww..",
-  "..cwwwwc..",
-  ".cccwwccc.",
-  "..bb..bb..",
-];
-const ELDER_PALETTE = { h: "#4a3a6a", s: "#e8b98f", k: "#141228", w: "#ece8ff", c: "#6b5aa8", b: "#2a1f18" };
 
 const FIREFLIES = [0, 1, 2, 3, 4, 5].map((i) => ({ x: 30 + i * 64, bottom: 206 - (i % 3) * 30, delay: i * 0.7 }));
 
@@ -113,14 +99,14 @@ export function ElderAside({ stage, speech }: { stage: string; speech: string })
   return (
     <aside className="relative w-[420px] flex-none overflow-hidden border-line border-r-4 bg-panel max-md:hidden">
       <Stars count={22} height={260} />
-      <div aria-hidden className="absolute inset-x-0 bottom-0 h-[150px] bg-[#221d44]" />
+      <div aria-hidden className="absolute inset-x-0 bottom-0 h-[150px] bg-scene-ground" />
       <div aria-hidden className="absolute inset-x-0 bottom-[150px] h-2 bg-line" />
       <div className="absolute top-7 left-7 flex items-center gap-2.5">
         <span className="font-pixel text-[22px] font-bold text-moonlight">Hobbots</span>
         <span className="text-[13px] text-label">{stage}</span>
       </div>
       <div className="cut absolute inset-x-7 top-[84px] min-h-[150px] bg-text-strong px-5 py-[18px] text-[17px] text-ground leading-normal">
-        <span className="lbl mb-1.5 block text-[#5b4f9a] text-[13px]">{copy.elder}</span>
+        <span className="lbl mb-1.5 block text-ground/70 text-[13px]">{copy.elder}</span>
         <span key={speech} aria-live="polite" className="block animate-hb-in">
           {speech}
         </span>
@@ -152,7 +138,7 @@ export function ElderAside({ stage, speech }: { stage: string; speech: string })
       <div aria-hidden className="absolute bottom-[150px] left-[238px] h-28 w-2 bg-wood" />
       <div
         aria-hidden
-        className="absolute bottom-[256px] left-[230px] h-[22px] w-6 animate-hb-flicker bg-lantern shadow-[0_0_22px_6px_rgba(242,165,65,0.45)]"
+        className="absolute bottom-[256px] left-[230px] h-[22px] w-6 animate-hb-flicker bg-lantern shadow-[0_0_22px_6px_color-mix(in_srgb,var(--color-lantern)_45%,transparent)]"
       />
     </aside>
   );

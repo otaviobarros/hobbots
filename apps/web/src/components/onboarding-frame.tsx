@@ -28,7 +28,7 @@ export function OnboardingFrame({
     <div className="flex min-h-0 flex-1">
       <aside className="relative w-[420px] flex-none overflow-hidden border-r-4 border-line bg-panel">
         <Stars count={22} height={420} />
-        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[150px] bg-[#221d44]" />
+        <div aria-hidden className="absolute inset-x-0 bottom-0 h-[150px] bg-scene-ground" />
         <div aria-hidden className="absolute inset-x-0 bottom-[150px] h-2 bg-line" />
 
         <div className="absolute top-7 left-7 flex items-center gap-2.5">
@@ -51,7 +51,7 @@ export function OnboardingFrame({
           aria-live="polite"
           className="cut absolute inset-x-7 top-[118px] min-h-[150px] animate-hb-in bg-text-strong px-5 py-[18px] text-[17px] leading-normal text-ground"
         >
-          <span className="mb-1.5 block font-pixel text-sm font-bold tracking-[.08em] text-[#5b4f9a] uppercase">
+          <span className="mb-1.5 block font-pixel text-sm font-bold tracking-[.08em] text-ground/70 uppercase">
             Elder Hob
           </span>
           {guide}

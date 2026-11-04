@@ -98,7 +98,7 @@ function Workshop({ hobId, threadId }: { hobId: string; threadId?: ThreadId | un
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-[50px] border-t-[5px] border-line-2 bg-line" />
         <div className="absolute bottom-[30px] left-[60px] flex items-end gap-2">
           <HobSprite hob={current} size={64} state={now ? "working" : "idle"} />
-          <div aria-hidden className="h-[42px] w-[84px] border-t-8 border-[#8a6240] bg-[#6b4a2f]" />
+          <div aria-hidden className="h-[42px] w-[84px] border-t-8 border-desk-edge bg-desk" />
         </div>
         <span className="absolute top-[54px] left-[110px] max-w-[200px] bg-text-strong px-2.5 py-1.5 text-[13px] text-ground">
           {doing(current, now)}

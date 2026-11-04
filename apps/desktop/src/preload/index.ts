@@ -8,6 +8,8 @@ import { notificationChannels } from "../main/notification-choices.ts";
 import { openRequestChannel } from "../main/open-request.ts";
 import { setupChannels } from "../main/setup-ipc.ts";
 import { showFileChannel } from "../main/show-file.ts";
+import { windowBackgroundChannel } from "../main/window-background.ts";
+import { followTheme, type ThemedPage } from "./follow-theme.ts";
 
 // A request whose notification was clicked, kept until the page listens: a window opened by the
 // click loads before the Inbox can show it.
@@ -108,3 +110,13 @@ const bridge = () => {
 };
 
 contextBridge.exposeInMainWorld("hobbots", bridge());
+
+// The window behind the page follows the theme. Setup's pages always use Workshop Night, which the
+// window opens with, so they report nothing.
+if (!process.argv.includes(SETUP_MODE_ARGUMENT) && "document" in globalThis) {
+  followTheme(
+    globalThis as unknown as ThemedPage,
+    // A window that cannot take it keeps the background it opened with.
+    (ground) => void ipcRenderer.invoke(windowBackgroundChannel, ground).catch(() => undefined),
+  );
+}

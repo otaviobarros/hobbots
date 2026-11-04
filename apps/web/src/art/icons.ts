@@ -1,3 +1,4 @@
+import type { RuntimeKind } from "@hobbots/domain";
 import type { PixelPalette, PixelRows } from "@hobbots/ui/components/pixel-art";
 
 /** 12 × 12 rail icons from the Hobbots design: "#" is the main color, "o" the accent. */
@@ -125,6 +126,15 @@ export const potion = (left: number): PixelRows => {
   });
 };
 
+/** Each provider's potion fill and its lighter top. */
+export const POTION_COLORS: Readonly<Record<RuntimeKind, readonly [fill: string, top: string]>> = {
+  "claude-code": ["#e39a74", "#f3c4a8"],
+  codex: ["#7fd1b9", "#b5ecd9"],
+};
+
+/** A plan that reports nothing shows an empty grey bottle. */
+export const UNREPORTED_POTION = ["#3a3666", "#3a3666"] as const;
+
 export const potionPalette = (fill: string, top: string): PixelPalette => ({
   k: "#a9774a",
   g: "#ece8ff",
@@ -132,3 +142,29 @@ export const potionPalette = (fill: string, top: string): PixelPalette => ({
   f: fill,
   t: top,
 });
+
+/** The 5 × 5 name and look die. */
+export const DIE: PixelRows = ["owwwo", "wwwww", "wwoww", "wwwww", "owwwo"];
+export const DIE_PALETTE: PixelPalette = { o: "#141228", w: "#ece8ff" };
+
+/** The Elder Hob, who guides setup. */
+export const ELDER: PixelRows = [
+  "...hhhh...",
+  "..hhhhhh..",
+  ".hhhhhhhh.",
+  "s.ssssss.s",
+  "ssksssskss",
+  ".swwwwwws.",
+  "..wwwwww..",
+  "..cwwwwc..",
+  ".cccwwccc.",
+  "..bb..bb..",
+];
+export const ELDER_PALETTE: PixelPalette = {
+  h: "#4a3a6a",
+  s: "#e8b98f",
+  k: "#141228",
+  w: "#ece8ff",
+  c: "#6b5aa8",
+  b: "#2a1f18",
+};
