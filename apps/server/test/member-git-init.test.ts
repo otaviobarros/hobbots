@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { PromptRequest } from "@hobbots/agents";
-import { GIT_INIT_TOOL, type Task, type TaskTree } from "@hobbots/domain";
-import { Effect } from "effect";
+import { CharmTools, type PromptRequest } from "@hobbots/agents";
+import { GIT_INIT_TOOL, GITHUB_PUSH_TOOL, type Task, type TaskTree } from "@hobbots/domain";
+import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
 import {
   hub,
@@ -122,6 +122,55 @@ describe("member and step sessions offer git_init", () => {
         reason: "charm-refused",
         message: expect.stringContaining("is already a Git repository"),
       }),
+    ]);
+  }, 30_000);
+
+  // covers PE-005, ADR 020
+  it("[TC-OR-497] a member is offered the GitHub Charm's reads but not its writes, which have no reply to be settled on", async () => {
+    const called: Array<string> = [];
+    const tool = (name: string) => ({ name, description: name, inputSchema: { type: "object" }, label: name });
+    const charms = Layer.succeed(
+      CharmTools,
+      CharmTools.of({
+        forTurn: () =>
+          Effect.succeed({
+            tools: [tool("github_item"), tool(GITHUB_PUSH_TOOL)],
+            call: (name) =>
+              Effect.sync(() => {
+                called.push(name);
+                return { text: "Done.", refused: false };
+              }),
+          }),
+      }),
+    );
+    const { run, requests } = await startHub(await sharedDatabase(), [], charms);
+    await run(
+      send([
+        "Publish the app",
+        hub("delegate_task", {
+          key: "push",
+          hob: "Rook",
+          brief: [
+            "Push the app",
+            hub(GITHUB_PUSH_TOOL, { key: "push-it", folder: project }),
+            hub("complete_task", { key: "push-done", summary: "Could not push" }),
+          ].join("\n"),
+          authority: OPENS,
+        }),
+      ]),
+    );
+    const tree = await run(treeWhen((each) => memberTask(each, ROOK)?.state === "completed"));
+    const rook = taskOf(tree, ROOK);
+
+    const offeredToRook = offered(await run(firstPrompt(requests, rook)));
+    expect(offeredToRook).toContain("github_item");
+    expect(offeredToRook).not.toContain(GITHUB_PUSH_TOOL);
+    // The lead's chat turn, whose reply a lost answer is settled on, still offers it.
+    expect(offered(requests[0] as PromptRequest)).toContain(GITHUB_PUSH_TOOL);
+    // Rook's push never reached the Charm, and its refusal is on Rook's Task.
+    expect(called).toEqual([]);
+    expect(tree.refusals).toEqual([
+      expect.objectContaining({ agentId: ROOK, taskId: rook.id, tool: GITHUB_PUSH_TOOL, reason: "unknown-tool" }),
     ]);
   }, 30_000);
 });

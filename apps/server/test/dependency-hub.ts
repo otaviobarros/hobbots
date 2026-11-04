@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import {
   ApprovalService,
+  type CharmTools,
   ChatService,
   HobAdmission,
   HobbotsRepository,
@@ -214,7 +215,10 @@ const party = Effect.gen(function* () {
 
 type Database = Layer.Layer<Layer.Success<typeof TestDatabase>>;
 
-const makeHub = (database: Database, script: Script) =>
+/** Charms a test offers its hobs, beside the local Git tools; none by default. */
+type Charms = Layer.Layer<CharmTools> | typeof Layer.empty;
+
+const makeHub = (database: Database, script: Script, charms: Charms) =>
   Layer.mergeAll(WakeOnArrival, HobLifecycle.layer, TaskControls.layer).pipe(
     Layer.provideMerge(ChatService.layer),
     Layer.provideMerge(ContinuationsLive),
@@ -239,6 +243,7 @@ const makeHub = (database: Database, script: Script) =>
         NodeFolderChecks,
         ProjectTools,
         LocalGit,
+        charms,
         HobAdmission.layer,
         scripted(script),
         Layer.succeed(UserSession, {
@@ -279,7 +284,11 @@ export const sharedDatabase = async (): Promise<Database> => {
 };
 
 /** Starts a hub over `database`, its hobs reacting as `reactions` say. */
-export const startHub = async (database: Database, reactions: ReadonlyArray<Reaction> = []) => {
+export const startHub = async (
+  database: Database,
+  reactions: ReadonlyArray<Reaction> = [],
+  charms: Charms = Layer.empty,
+) => {
   const script: Script = {
     requests: [],
     answers: new Map(),
@@ -287,7 +296,7 @@ export const startHub = async (database: Database, reactions: ReadonlyArray<Reac
     reactions: [...reactions],
     stopped: false,
   };
-  const runtime = ManagedRuntime.make(makeHub(database, script));
+  const runtime = ManagedRuntime.make(makeHub(database, script, charms));
   open.push(runtime);
   scripts.push(script);
   await runtime.runPromise(Effect.void);
