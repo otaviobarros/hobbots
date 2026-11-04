@@ -6,6 +6,7 @@ import { formatAgo } from "../../lib/format.ts";
 import { operationLabel } from "../../lib/reply-steps.ts";
 import { blockersOn } from "../blockers/blocker-model.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
+import type { WorkbenchTab } from "../workbench/workbench-model.ts";
 import { FlagIcon } from "./flag-icon.tsx";
 import { messages } from "./messages.ts";
 import { StatusTag } from "./status-dot.tsx";
@@ -30,22 +31,17 @@ const eyebrow = (card: WorkCard, name: string) =>
 /**
  * The compact card under the request that started a Task: the Task card, and the Quest card once a
  * party joins (ADR 018). Who leads it, a strip with one segment per Task, every Task as a row by what
- * needs you first, and Open the quest. It wears no ring: only the Needs-you tray asks for you.
+ * needs you first, and Open room, which opens the Quest room beside the chat (ADR 027). It wears no ring: only the Needs-you tray asks for you.
  */
 export function QuestCard({
   tree,
   hobs,
   onOpen,
-  onQuest,
-  onWorkbench,
 }: {
   tree: TaskTree;
   hobs: HobLookup;
-  onOpen: (taskId: TaskId) => void;
-  /** Opens the request's Quest in the work sheet, by its top Task. */
-  onQuest: (topId: TaskId) => void;
-  /** Opens the Task's Workbench: what it ran, changed and made (ADR 023). */
-  onWorkbench: (taskId: TaskId) => void;
+  /** Opens the Quest room on a Task, its lane lit, with the Workbench open on a tab if one is named. */
+  onOpen: (taskId: TaskId, options?: { readonly tab?: WorkbenchTab }) => void;
 }) {
   const card = workCard(tree);
   const stuck = useStuck(tree);
@@ -87,17 +83,12 @@ export function QuestCard({
         </>
       )}
       <div className="flex flex-wrap items-center gap-2 border-t border-line bg-[color-mix(in_srgb,var(--color-deep)_45%,transparent)] px-4 py-2.5">
-        {/* With no Task under it there is no quest to open: the button opens the Task itself. */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => (tree.tasks.length === 1 ? onOpen(card.top.id) : onQuest(card.top.id))}
-        >
-          {tree.tasks.length === 1 ? copy.openTask : copy.openQuest}
+        <Button variant="outline" size="sm" onClick={() => onOpen(card.top.id)}>
+          {copy.openRoom}
           <span aria-hidden>→</span>
         </Button>
         <span className="text-detail text-label">{copy.started({ ago: formatAgo(card.top.createdAt) })}</span>
-        <Button variant="text" size="xs" className="ms-auto" onClick={() => onWorkbench(card.top.id)}>
+        <Button variant="text" size="xs" className="ms-auto" onClick={() => onOpen(card.top.id, { tab: "summary" })}>
           {copy.workbench}
         </Button>
       </div>

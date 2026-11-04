@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openQuest } from "./work-sheet.ts";
+import { laneHead, openRoom } from "./quest-room.ts";
 
 // Issue #574 in the browser: a member is stuck on something outside Hobbots; once it clears, you
 // tell its lead, who messages the member, and the member finishes with nothing cancelled. The hub's
@@ -92,8 +92,8 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: /Stop/ })).toBeVisible();
-  const tasks = await openQuest(page, "Commit the project");
-  const pip = tasks.getByRole("button", { name: /^Pip · Make the commit/ });
+  const tasks = await openRoom(page, "Commit the project");
+  const pip = laneHead(page, "Pip");
   await expect(pip).toContainText("Blocked", { timeout: 20_000 });
 
   // You ran git init yourself and tell Frodo, who reads the work and messages Pip.
@@ -114,7 +114,6 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
   await expect(pip).toContainText("Done", { timeout: 20_000 });
   await expect(tasks).not.toContainText("Cancelled");
   // Pip's Task holds the message in its backpack.
-  await pip.click();
   const room = page.getByRole("region", { name: "Backpack for Make the commit" });
   await expect(room.getByRole("button", { name: /git init is done\. Commit now\./ })).toContainText("Consumed", {
     timeout: 20_000,
@@ -161,8 +160,8 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
   await expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 45_000 });
 
   // Frodo messages Pip meanwhile; his result says it is held and why.
-  const tasks = await openQuest(page, "Ship the copy");
-  const pip = tasks.getByRole("button", { name: /^Pip · Push the copy/ });
+  await openRoom(page, "Ship the copy");
+  const pip = laneHead(page, "Pip");
   await expect(pip).toBeVisible();
   const approvals = await request<ReadonlyArray<{ readonly taskId: string | null }>>(current, "GET", "/api/approvals");
   const asked = approvals.find((each) => each.taskId !== null);
@@ -180,7 +179,6 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
   });
 
   // On Pip's Task, the message waits for a turn to carry it, while Pip's request waits for you.
-  await pip.click();
   const room = page.getByRole("region", { name: "Backpack for Push the copy" });
   const note = room.getByRole("button", { name: /The product is now Hobbots\./ });
   await expect(note).toContainText("Waiting");
@@ -197,8 +195,7 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
   await card.getByRole("button", { name: "Allow once" }).click();
   await expect(card.getByRole("status")).toHaveText("✓ Allowed once. Pip carries on.");
   await page.getByRole("link", { name: "Open in the chat" }).click();
-  await openQuest(page, "Ship the copy");
+  await openRoom(page, "Ship the copy");
   await expect(pip).toContainText("Done", { timeout: 30_000 });
-  await pip.click();
   await expect(note).toContainText("Consumed", { timeout: 20_000 });
 });

@@ -32,6 +32,7 @@ import { controlError } from "../quest/control-room.ts";
 import { AnswerForm } from "../quest/question-card.tsx";
 import { useHobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
+import { roomSearch } from "../quest-room/room-search.ts";
 import { EntryPortrait } from "./entry-portrait.tsx";
 import { entryRow, entryThread, type InboxEntry, type InboxRow } from "./inbox-entries.ts";
 import { InboxIcon } from "./inbox-icons.tsx";
@@ -95,7 +96,11 @@ function ApprovalDetail({
       row={row}
       why={request.reason}
       foot={footText(request, hob.name)}
-      chat={hob.status === "retired" ? undefined : chatLink(chatHob, request.threadId, request.messageId)}
+      chat={
+        hob.status === "retired"
+          ? undefined
+          : chatLink(chatHob, request.threadId, request.messageId === null ? null : { messageId: request.messageId })
+      }
     >
       <ActionBlock action={exactAction(request)} command={COMMANDS.has(request.operation)} />
       <Facts
@@ -172,7 +177,7 @@ function QuestionDetail({
           ? copy.question.passedBy({ names: question.chain.map(directory.hobName) })
           : copy.question.direct
       }
-      chat={chatLink(chatHob, task.threadId, null, copy.question.openChat({ name: directory.hobName(chatHob) }))}
+      chat={chatLink(chatHob, task.threadId, { taskId: task.id }, copy.detail.openRoom)}
     >
       <div className="flex items-start gap-3">
         <EntryPortrait hob={hob} device={false} waiting={false} />
@@ -218,7 +223,12 @@ function StuckDetail({
       portrait={<EntryPortrait hob={directory.hob(item.recipientId)} device={false} waiting large />}
       row={{ ...row, what: blockerCopy.title({ name: hob.name }) }}
       why={blockerWhy(item, choice.blocker, hob.name)}
-      chat={chatLink(item.recipientId, item.threadId, null)}
+      chat={chatLink(
+        item.recipientId,
+        item.threadId,
+        item.taskId === null ? null : { taskId: item.taskId },
+        item.taskId === null ? copy.detail.openChat : copy.detail.openRoom,
+      )}
     >
       {choice.blocker.diagnostic !== null && (
         <p className="m-0 text-meta break-words text-label">
@@ -437,18 +447,21 @@ function Facts({ rows }: { rows: ReadonlyArray<readonly [string, string | undefi
   );
 }
 
-/** Open in the chat, for an entry whose thread and chat are known. */
+/**
+ * Open in the chat, for an entry whose thread and chat are known. An entry about a Task opens the
+ * Quest room beside that chat instead, with the Task's lane lit (ADR 027).
+ */
 const chatLink = (
   hobId: AgentId | undefined,
   threadId: ThreadId | null,
-  messageId: string | null,
+  at: { readonly messageId: string } | { readonly taskId: string } | null,
   label: string = copy.detail.openChat,
 ): ReactNode =>
   hobId === undefined || threadId === null ? undefined : (
     <Link
       to="/hobs/$hobId/threads/$threadId"
       params={{ hobId, threadId }}
-      search={messageId === null ? {} : { message: messageId }}
+      search={at === null ? {} : "taskId" in at ? roomSearch(at.taskId) : { message: at.messageId }}
       className="-ms-2 inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-link no-underline hover:bg-hover"
     >
       <InboxIcon name="chat" />

@@ -6,7 +6,6 @@ import {
   isTerminalTask,
   type Message,
   type MessageId,
-  noteRecipientOf,
   partyOf,
   pendingApprovals,
   pendingApprovalsOn,
@@ -291,9 +290,6 @@ export const taskDetail = (tree: TaskTree, task: Task) => {
     rows: workRowsAll(tree, task),
   };
 };
-
-/** The hob a note on the Task goes to, as the hub decides it (ADR 018). */
-export const noteRecipient = (tree: TaskTree, task: Task): AgentId => noteRecipientOf(task, tree.tasks);
 
 /** The first question on a Task that waits for you. */
 export const questionForYou = (tree: TaskTree, task: Task): Question | null =>

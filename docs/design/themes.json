@@ -46,7 +46,7 @@
       "workshop-daylight": "#f1e9da"
     },
     "panel": {
-      "use": "The sidebar and the work sheet.",
+      "use": "The sidebar, the Quest room's lanes and its chat column.",
       "lamplight-dusk": "#1c1b26",
       "lamplight-paper": "#efebe4",
       "workshop-night": "#1b1835",
@@ -223,7 +223,7 @@
       "workshop-daylight": "0 4px 0 #cfc4ae"
     },
     "shadow-sheet": {
-      "use": "The work sheet over the chat.",
+      "use": "A panel over the page, such as the chat column over the Quest room's lanes in a narrow window.",
       "lamplight-dusk": "0 16px 48px rgba(0, 0, 0, 0.28)",
       "lamplight-paper": "0 16px 48px rgba(40, 30, 20, 0.14)",
       "workshop-night": "-14px 0 34px rgba(0, 0, 0, 0.5)",
@@ -641,11 +641,16 @@
     "sidebar": "72px",
     "sidebar-open": "256px",
     "sheet": "340px",
-    "workbench-chat": "300px",
+    "room-chat": "360px",
+    "room-chat-narrow": "300px",
+    "room-rail": "52px",
+    "lane-min": "220px",
+    "dock": "340px",
     "chat-min": "360px",
     "measure": "70ch",
     "bubble-max": "460px",
     "work-max": "604px",
+    "lane": "220px",
     "column-max": "560px",
     "form-max": "760px",
     "home-max": "880px",

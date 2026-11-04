@@ -26,7 +26,7 @@ const answered = (fields: Partial<ConstructorParameters<typeof Question>[0]>) =>
 describe("your answer", () => {
   it("[TC-IN-487] says you answered here on the same surface, and names the other surface elsewhere", () => {
     expect(yourAnswer(answered({}), "task")).toBe("You answered here: light");
-    expect(yourAnswer(answered({}), "chat")).toBe("You answered in the task's details: light");
+    expect(yourAnswer(answered({}), "chat")).toBe("You answered in the Quest room: light");
     expect(yourAnswer(answered({ answeredVia: "inbox" }), "task")).toBe("You answered in the Inbox: light");
     expect(yourAnswer(answered({ answeredVia: "chat" }), "task")).toBe("You answered in the chat: light");
   });

@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { openQuest } from "./work-sheet.ts";
+import { openRoom, questRoom } from "./quest-room.ts";
 
 // Issue #297 in the browser: what a hob is waiting on, on the hob's card and on the lead's Task. The read
 // reads themselves are tested in packages/persistence/test/backpack.test.ts.
@@ -120,8 +120,7 @@ test("[TC-IN-150] Aldric's card and his Task's backpack show Quill's result as a
 
   // Aldric's Task says the same in its backpack.
   const lead = async () => {
-    const tasks = await openQuest(page, "Plan the launch");
-    await tasks.getByRole("button", { name: /^Aldric · Plan the launch/ }).click();
+    await openRoom(page, "Plan the launch");
   };
   await lead();
   const room = page.getByRole("region", { name: "Backpack for Plan the launch" });
@@ -129,11 +128,14 @@ test("[TC-IN-150] Aldric's card and his Task's backpack show Quill's result as a
     "Waiting",
   );
 
-  // Opening it from the card opens Quill's Task.
-  await page.keyboard.press("Escape");
+  // Opening it from the card opens the room on Quill's lane.
   await (await card("Aldric")).getByRole("button", { name: quillResult }).click();
-  await expect(page.getByRole("heading", { name: "Draft the landing copy" })).toBeVisible();
-  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/room=/);
+  if (await page.getByRole("dialog", { name: "Aldric" }).isVisible()) await page.keyboard.press("Escape");
+  await expect(questRoom(page, "Plan the launch").getByRole("button", { name: "Go to Quill's lane" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
   // Aldric wakes: his continuation reads the result, which shows as consumed and leaves his count.
   await api(current, "POST", `/api/agents/${aldric.id}/wake`);

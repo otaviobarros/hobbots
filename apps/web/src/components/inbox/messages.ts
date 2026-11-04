@@ -86,6 +86,7 @@ export const messages = {
     copyFailed: "Could not copy",
     decided: "Decided",
     openChat: "Open in the chat",
+    openRoom: "Open in the Quest room",
     deviceWhy: ({ name }: { name: string }) =>
       `Someone opened Hobbots on ${name}, a device this hub does not know. Allow it only if it shows the same code.`,
     deviceFoot: "Deny turns that device away. Decide later keeps it waiting in Settings › Devices.",
@@ -135,7 +136,6 @@ export const messages = {
     title: ({ name }: { name: string }) => `${name} asks you`,
     direct: "No lead could answer it, so it comes to you. Your answer goes straight back.",
     passedBy: ({ names }: { names: ReadonlyArray<string> }) => `Passed up to you by ${formatList(names)}.`,
-    openChat: ({ name }: { name: string }) => `Open ${name}'s chat`,
     goesBack: ({ name }: { name: string }) => `Goes back to ${name}, who passes it to the hob that asked.`,
     goesStraight: ({ name }: { name: string }) => `Goes straight back to ${name}.`,
     loadFailed: "Hobbots could not read the questions for you.",

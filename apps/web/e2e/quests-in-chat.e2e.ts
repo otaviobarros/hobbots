@@ -1,6 +1,6 @@
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { openQuest, taskSheet } from "./work-sheet.ts";
+import { laneHead, laneTask, openRoom, questRoom, taskDetails } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -27,36 +27,19 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(card.getByRole("button", { name: "Look inside Build the campaign" })).toContainText("Needs you");
   await expect(strip).toContainText("1 needs you");
 
-  // The drawer opens a Task beside the chat, by keyboard too, and Escape closes it.
-  await card.getByRole("button", { name: "Look inside Build the campaign" }).click();
-  const drawer = page.getByRole("dialog", { name: "Build the campaign, task details" });
-  await expect(drawer.getByRole("heading", { name: "Build the campaign" })).toBeFocused();
+  // A row on the card opens the room beside the chat on that hob's lane, by keyboard too, and Close room closes it.
+  await card.getByRole("button", { name: "Look inside Build the campaign" }).focus();
+  await page.keyboard.press("Enter");
+  const room = questRoom(page, "Plan the Black Friday campaign");
+  await expect(room.getByRole("heading", { name: "Plan the Black Friday campaign" })).toBeFocused();
+  await expect(laneHead(page, "Ada")).toHaveAttribute("aria-pressed", "true");
+  const drawer = await taskDetails(page, "Build the campaign");
   await expect(drawer).toContainText("Aldric gave it");
   await expect(drawer).toContainText("Keyword research done");
   await expect(drawer).toContainText("Doorbuster and early access lead what shoppers search for.");
   await expect(drawer).toContainText("Black Friday: 20% off everything, this weekend only.");
-  await page.keyboard.press("Escape");
-  await expect(drawer).toBeHidden();
-
-  // A note in the drawer goes to Aldric as a message about that Task, and stays with that Task.
-  await strip.getByRole("button", { name: /^Plan the Black Friday campaign/ }).click();
-  const quest = page.getByRole("dialog", { name: "Plan the Black Friday campaign, quest" });
-  await quest.getByRole("button", { name: /Draft the landing copy/ }).click();
-  const note = page.getByRole("textbox", { name: "Tell Aldric about this task" });
-  await note.fill("Keep the headlines short.");
-  await page.getByRole("button", { name: "Back to Plan the Black Friday campaign" }).click();
-  await expect(quest).toBeVisible();
-  await expect(note).toHaveCount(0);
-  await quest.getByRole("button", { name: /Draft the landing copy/ }).click();
-  await expect(note).toHaveValue("Keep the headlines short.");
-  await note.press("Enter");
-  const copyTask = page.getByRole("dialog", { name: "Draft the landing copy, task details" });
-  await expect(copyTask).toContainText("Sent to Aldric.");
-  await expect(copyTask).toContainText("Your notes");
-  await expect(copyTask).toContainText("Keep the headlines short.");
-  await expect(copyTask).toContainText("To Aldric");
-  await expect(note).toHaveValue("");
-  await page.getByRole("button", { name: "Close" }).click();
+  await room.getByRole("button", { name: "Close room" }).click();
+  await expect(room).toBeHidden();
 
   // Your answer goes back; the Quest finishes and Aldric wraps up in the chat.
   await asks.getByRole("textbox", { name: "Your answer to Ada" }).fill("Yes, Dec 12 for international orders.");
@@ -74,12 +57,9 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(replies.nth(1)).toContainText("Ada has one question for you about the international cutoff.");
   await expect(replies.nth(2)).toContainText("Quill wrote the copy and Ada scheduled the email");
 
-  // Once it ends, the card still opens the quest, and the lead's own Task shows its output.
-  await card.getByRole("button", { name: "Open the quest" }).click();
-  await quest.getByRole("button", { name: /^Aldric · Plan the Black Friday campaign/ }).click();
-  await expect(page.getByRole("dialog", { name: "Plan the Black Friday campaign, task details" })).toContainText(
-    "Black Friday campaign ready",
-  );
+  // Once it ends, the card still opens the room, and the lead's own Task shows its output.
+  await openRoom(page, "Plan the Black Friday campaign");
+  await expect(laneTask(page, "Plan the Black Friday campaign", "Aldric")).toContainText("Black Friday campaign ready");
 });
 
 // covers OR-004, IN-002
@@ -119,7 +99,7 @@ test("[TC-IN-132] a question no lead could answer waits in the Inbox's Needs you
 });
 
 // covers OR-004, OR-006, IN-002
-test("[TC-IN-154] cancelling the work a question waits on withdraws it from the Inbox, the chat and the drawer, and the lead still finishes", async ({
+test("[TC-IN-154] cancelling the work a question waits on withdraws it from the Inbox, the chat and the Quest room, and the lead still finishes", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
@@ -132,10 +112,9 @@ test("[TC-IN-154] cancelling the work a question waits on withdraws it from the 
   await expect(answer).toBeVisible({ timeout: 15_000 });
   const chat = page.url();
 
-  // You cancel Ada's Task from its task sheet before answering her.
-  const room = await openQuest(page, "Plan the Black Friday campaign");
-  await room.getByRole("button", { name: /Ada · Build the campaign/ }).click();
-  const drawer = taskSheet(page, "Build the campaign");
+  // You cancel Ada's Task from her lane before answering her.
+  await openRoom(page, "Plan the Black Friday campaign");
+  const drawer = await taskDetails(page, "Build the campaign");
   const controls = drawer.getByRole("region", { name: "Controls for Build the campaign" });
   await controls.getByRole("button", { name: "Cancel task" }).click();
   await controls.getByRole("button", { name: "Yes, cancel" }).click();
@@ -145,7 +124,8 @@ test("[TC-IN-154] cancelling the work a question waits on withdraws it from the 
 
   // Nobody is left to hear the answer: the card says so instead of asking, and so does the drawer.
   const withdrawn = "Withdrawn: the work it was about ended before anyone answered.";
-  await expect(asks).toContainText(withdrawn);
+  const inChat = page.getByRole("main", { name: "Chat" }).getByRole("region", { name: "Ada asks you" });
+  await expect(inChat).toContainText(withdrawn);
   await expect(answer).toHaveCount(0);
   await expect(drawer).toContainText("Withdrawn when this task ended.");
 

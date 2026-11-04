@@ -14,10 +14,10 @@ import { bothRead, waitingView } from "../../backpack/backpack-model.ts";
 import { WaitingList } from "../../backpack/waiting-list.tsx";
 import { useNow } from "../../inbox/use-now.ts";
 import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../../loading/hub-wait.tsx";
-import { type HobLookup, useOpenTask } from "../../quest/use-work.ts";
+import type { HobLookup } from "../../quest/use-work.ts";
 import { taskTitle } from "../../quest/work-model.ts";
+import { useRoomMoves } from "../../quest-room/room-search.ts";
 import { messages } from "../messages.ts";
-import { useOpenWorkbench, useWorkbenchMoves } from "../use-workbench.ts";
 import type { WorkbenchTab } from "../workbench-model.ts";
 import {
   type HappenedLine,
@@ -58,14 +58,13 @@ const GLYPH_TONE: Readonly<Record<Mark, string>> = {
  * The Summary tab (ADR 023), from the hub's records with no model call: one plain line on where
  * the Task stands, then what happened as a timeline card, then buttons to the views the Task used.
  * What it made and what is still open follow, and what it was asked waits behind Details. A
- * question for you on this Task shows only in the task chat, where you answer it.
+ * question for you on this Task shows only in its lane above, where you answer it.
  */
 export function SummaryTab({ tree, task, attempt, activity, hobs, onTab }: WorkbenchTabProps) {
   const route = useParams({ strict: false });
   const hobId = AgentId.make(route.hobId ?? "");
   const threadId = ThreadId.make(route.threadId ?? "");
-  const openWorkbench = useOpenWorkbench(hobId, threadId);
-  const openTask = useOpenTask(hobId, threadId);
+  const room = useRoomMoves(hobId, threadId, tree.tasks[0]?.id);
   const toChat = useTaskChat(tree, hobId, threadId);
   const reads = useOpenReads(task.threadId);
   const summary = summaryOf(tree, task, attempt, activity, reads.approvals);
@@ -74,7 +73,13 @@ export function SummaryTab({ tree, task, attempt, activity, hobs, onTab }: Workb
   return (
     <div data-slot="summary" className="flex max-w-3xl flex-col gap-4 px-5 py-4">
       <Line line={summary.line} owner={owner} hobs={hobs} />
-      <Timeline summary={summary} owner={owner} running={running} hobs={hobs} onOpen={(id) => openWorkbench(id)} />
+      <Timeline
+        summary={summary}
+        owner={owner}
+        running={running}
+        hobs={hobs}
+        onOpen={(id) => room.show(id, "summary")}
+      />
       <TabButtons used={summary.used} onTab={onTab} />
       <Section title={copy.made}>
         <Made
@@ -93,7 +98,7 @@ export function SummaryTab({ tree, task, attempt, activity, hobs, onTab }: Workb
           hobs={hobs}
           reads={reads}
           onChat={toChat}
-          onTask={openTask}
+          onTask={room.lane}
         />
       </Section>
       <Asked asked={summary.asked} hobs={hobs} />
@@ -465,16 +470,22 @@ const useOpenReads = (threadId: ThreadId | null) => {
 
 /**
  * Where you act on a question or an approval: the chat of the thread the Task's request came from,
- * which may not be the one the Workbench opened over when its Quest is pinned from another thread.
- * Going back to the same thread keeps its place and unsent message; an approval scrolls to its reply.
+ * which may not be the one beside the room when its Quest is pinned from another thread. The chat
+ * beside the room keeps its place and unsent message, and an approval scrolls to its reply there.
  */
 const useTaskChat = (tree: WorkbenchTabProps["tree"], hobId: AgentId, threadId: ThreadId) => {
-  const moves = useWorkbenchMoves(hobId, threadId);
   const navigate = useNavigate();
   const top = tree.tasks[0];
   return (messageId?: string | null) => {
     if (top === undefined || top.threadId === null || (top.threadId === threadId && top.ownerId === hobId)) {
-      moves.back();
+      if (messageId == null) return;
+      void navigate({
+        from: "/hobs/$hobId/threads/$threadId",
+        to: "/hobs/$hobId/threads/$threadId",
+        params: { hobId, threadId },
+        search: (prev) => ({ ...prev, message: messageId }),
+        replace: true,
+      });
       return;
     }
     void navigate({
