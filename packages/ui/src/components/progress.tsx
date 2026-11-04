@@ -13,7 +13,7 @@ const progressVariants = cva(
       size: {
         // The Usage plan meter.
         default: "h-2.5",
-        // The quest card and the quest button's mini bars.
+        // The quest card's progress line.
         sm: "h-meter",
       },
     },
