@@ -193,7 +193,8 @@ interface ScriptedCall {
  * A prompt line `fake:run <JSON>` asks the fake runtime to run a command that really changes the
  * hob's first folder, as a script would: `{"command": "npm run format", "writes": {"a.ts": "…",
  * "old.ts": null}, "output": "…", "exitCode": 0, "live": true}`. Its writes are made, its output is
- * reported (as it comes when `live`), and a non-zero exit code fails it. Nothing else runs.
+ * reported (as it comes when `live`), and a non-zero exit code fails it. Nothing else runs. A
+ * command that starts with `sleep ` prints its `live` output and keeps running until its turn ends.
  */
 export const FAKE_RUN_DIRECTIVE = "fake:run";
 
@@ -238,6 +239,14 @@ const scriptedCall = (line: string, cwd: string): ScriptedCall | undefined => {
   return write === undefined ? undefined : scriptedWrite(write, cwd);
 };
 
+/** A scripted call's output, line by line as it comes, when it is `live`; none otherwise. */
+const liveScripted = (call: ScriptedCall & { readonly id: string }): ReadonlyArray<RuntimeEvent> => {
+  const output = call.effect?.output ?? scriptedOutput(call.tool, call.input);
+  return call.effect?.live === true && output !== undefined
+    ? output.split(/(?<=\n)/).map((text): RuntimeEvent => ({ _tag: "ToolOutput", id: call.id, text }))
+    : [];
+};
+
 /** The events a scripted call that ran ends with: its output as it comes, then its end. */
 const finishScripted = (
   call: ScriptedCall & { readonly id: string },
@@ -246,12 +255,7 @@ const finishScripted = (
   const folder = folders[0];
   if (call.effect?.writes !== undefined && folder !== undefined) applyScriptedWrites(call.effect.writes, folder);
   const output = call.effect?.output ?? scriptedOutput(call.tool, call.input);
-  const exitCode = call.effect?.exitCode;
-  const live =
-    call.effect?.live === true && output !== undefined
-      ? output.split(/(?<=\n)/).map((text): RuntimeEvent => ({ _tag: "ToolOutput", id: call.id, text }))
-      : [];
-  return [...live, toolFinished(call.id, ...hookEnd(call.tool, output, exitCode))];
+  return [...liveScripted(call), toolFinished(call.id, ...hookEnd(call.tool, output, call.effect?.exitCode))];
 };
 
 /**
@@ -333,7 +337,11 @@ export const scriptedToolEvents = (
               ...(command === undefined ? {} : { command }),
             }));
           if (ran) {
-            if (call.tool === "Bash" && String(call.input.command).startsWith("sleep ")) return yield* Effect.never;
+            if (call.tool === "Bash" && String(call.input.command).startsWith("sleep ")) {
+              // A long command prints what it has so far as it comes, then keeps running.
+              yield* Effect.forEach(liveScripted(call), (event) => Queue.offer(queue, event), { discard: true });
+              return yield* Effect.never;
+            }
             yield* Effect.forEach(finishScripted(call, turn.folders), (event) => Queue.offer(queue, event), {
               discard: true,
             });

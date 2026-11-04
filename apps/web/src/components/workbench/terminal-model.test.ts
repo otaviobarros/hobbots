@@ -1,11 +1,24 @@
-import { AttemptId, CommandId, CommandRecord, ContentId, TaskId } from "@hobbots/domain";
+import {
+  AgentId,
+  type Attempt,
+  type AttemptActivity,
+  AttemptId,
+  CommandId,
+  CommandRecord,
+  ContentId,
+  type Task,
+  TaskId,
+  type TaskTree,
+} from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   anyRunning,
   commandDuration,
   commandsInOrder,
-  showsLive,
+  hobTerminals,
   tallyCommands,
+  terminalAttempts,
+  terminalMark,
   wholeOutput,
 } from "./terminal-model.ts";
 
@@ -57,12 +70,6 @@ describe("the Terminal's commands", () => {
     expect(commandDuration(command("c", { state: "uncertain", endedAt: null }), now)).toBeNull();
   });
 
-  it("follows a running command's output only where the brain reports it as it comes", () => {
-    expect(showsLive(command("a", { state: "running", liveOutput: true }))).toBe(true);
-    expect(showsLive(command("b", { state: "running", liveOutput: false }))).toBe(false);
-    expect(showsLive(command("c", { liveOutput: true }))).toBe(false);
-  });
-
   it("opens the whole log only while it is kept, and says why when it is not", () => {
     const log = { contentId: ContentId.make("abc"), totalBytes: 9_000_000, omittedBytes: 4_800_000 };
     expect(wholeOutput(command("a", { log }))).toEqual({ kind: "log", totalBytes: 9_000_000, omittedBytes: 4_800_000 });
@@ -72,5 +79,44 @@ describe("the Terminal's commands", () => {
       reason: "attempt-limit",
     });
     expect(wholeOutput(command("d"))).toEqual({ kind: "not-kept", reason: null });
+  });
+});
+
+describe("the Terminal's hobs", () => {
+  const task = (id: string, ownerId: string, parentId: string | null = null) =>
+    ({ id: TaskId.make(id), ownerId: AgentId.make(ownerId), parentId }) as unknown as Task;
+  const attempt = (id: string, taskId: string, number: number) =>
+    ({ id: AttemptId.make(id), taskId: TaskId.make(taskId), number }) as unknown as Attempt;
+  const lead = task("lead", "aldric");
+  const tree = {
+    tasks: [lead, task("copy", "quill", "lead"), task("build", "ada", "lead"), task("idle", "pip", "lead")],
+    attempts: [attempt("l1", "lead", 1), attempt("c1", "copy", 1), attempt("c2", "copy", 2), attempt("b1", "build", 1)],
+  } as unknown as TaskTree;
+
+  it("replays the shown Attempt for the Task and the latest for every other Task that has one", () => {
+    const shown = tree.attempts[0] ?? null;
+    expect(terminalAttempts(tree, lead, shown).map((each) => each.id)).toEqual(["l1", "c2", "b1"]);
+    expect(terminalAttempts(tree, lead, null).map((each) => each.id)).toEqual(["c2", "b1"]);
+  });
+
+  it("gives each hob that ran a command one terminal, the Task's own hob first", () => {
+    const ran = (taskId: string, id: string, startedAt: string) =>
+      command(id, { taskId: TaskId.make(taskId), startedAt });
+    const activities = [
+      { commands: [ran("build", "b", "2026-11-02T10:00:01.000Z")] },
+      { commands: [ran("copy", "c", "2026-11-02T10:00:02.000Z"), ran("lead", "a", "2026-11-02T10:00:03.000Z")] },
+    ] as unknown as ReadonlyArray<AttemptActivity>;
+    const terminals = hobTerminals(tree, tree.tasks[2] as Task, activities);
+    expect(terminals.map((each) => [each.ownerId, each.commands.map((one) => one.id)])).toEqual([
+      ["ada", ["b"]],
+      ["aldric", ["a"]],
+      ["quill", ["c"]],
+    ]);
+  });
+
+  it("marks a terminal running while a command runs, and failed when its last command failed", () => {
+    expect(terminalMark([command("a"), command("b", { state: "running" })])).toBe("running");
+    expect(terminalMark([command("a", { state: "failed" })])).toBe("failed");
+    expect(terminalMark([command("a", { state: "failed" }), command("b")])).toBe("idle");
   });
 });
