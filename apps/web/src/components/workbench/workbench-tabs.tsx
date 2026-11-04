@@ -1,35 +1,53 @@
 import { TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { messages } from "./messages.ts";
+import { TabIcon } from "./tab-icons.tsx";
 import { type TabState, type TabStates, WORKBENCH_TABS } from "./workbench-model.ts";
 
-const labelTone: Record<TabState["kind"], string> = {
-  live: "bg-mint text-ground",
-  history: "bg-line-2 text-text-secondary",
-  unavailable: "border-2 border-lantern text-lantern",
-  "not-used": "text-label",
-  "coming-soon": "bg-line-2 text-text-secondary",
-};
-
 /**
- * The Workbench's tab list, each tab with its label. A tab the Task did not use is greyed out but
- * still opens. It sits inside the Workbench's `Tabs`, which owns the selected tab.
+ * The Workbench's tab list: an icon and a name per tab. Live and History sit once in the header, so
+ * a tab only marks what sets it apart. A tab the Task did not use stays in place, dimmed, and says
+ * so in its hint; the Browser is marked Soon; an Unavailable tab carries a lantern mark, and its
+ * panel says why. It sits inside the Workbench's `Tabs`, which owns the selected tab.
  */
 export function WorkbenchTabs({ states }: { states: TabStates }) {
   return (
-    <TabsList aria-label={messages.tabs} className="px-4">
+    <TabsList aria-label={messages.tabs} className="px-6">
       {WORKBENCH_TABS.map((each) => {
         const state = states[each];
-        const muted = state.kind === "not-used" || state.kind === "coming-soon";
         return (
-          <TabsTrigger key={each} value={each} className={cn(muted && "text-label")}>
+          <TabsTrigger
+            key={each}
+            value={each}
+            title={hint(each, state)}
+            className={cn(state.kind === "not-used" && "opacity-45")}
+          >
+            <TabIcon tab={each} />
             <span>{messages.tab[each]}</span>
-            <span className={cn("px-1.5 py-px text-xs font-bold whitespace-nowrap", labelTone[state.kind])}>
-              {messages.state[state.kind]}
-            </span>
+            <Mark state={state} />
           </TabsTrigger>
         );
       })}
     </TabsList>
   );
+}
+
+const hint = (tab: (typeof WORKBENCH_TABS)[number], state: TabState): string =>
+  state.kind === "not-used" || state.kind === "unavailable" || state.kind === "coming-soon"
+    ? messages.state[state.kind]
+    : messages.tab[tab];
+
+/** What sets a tab apart, if anything: Soon, Unavailable or Not used. */
+function Mark({ state }: { state: TabState }) {
+  if (state.kind === "coming-soon") return <span className="text-xs font-normal text-label">{messages.soon}</span>;
+  if (state.kind === "unavailable") {
+    return (
+      <span className="flex items-center">
+        <span aria-hidden className="size-1.5 rounded-dot bg-lantern" />
+        <span className="sr-only">{messages.state.unavailable}</span>
+      </span>
+    );
+  }
+  if (state.kind === "not-used") return <span className="sr-only">{messages.state["not-used"]}</span>;
+  return null;
 }

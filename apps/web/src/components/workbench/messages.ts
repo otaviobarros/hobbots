@@ -18,6 +18,7 @@ export const messages = {
   worksIn: ({ names }: { names: ReadonlyArray<string> }) => `Works in ${formatList(names)}`,
   noFolders: "No folders",
   inSandbox: "In the sandbox",
+  inSandboxLower: "in the sandbox",
   unsandboxed: "Unsandboxed",
   sandboxNotReady: "Needs the sandbox",
   sandboxHint: {
@@ -26,6 +27,7 @@ export const messages = {
     unavailable: "The sandbox is not ready on this hub, so commands are blocked.",
   },
   attempts: "Attempts",
+  attemptWord: "Attempt",
   attempt: ({ number }: { number: number }) => `Attempt ${formatCount(number)}`,
   noAttempt: "Not started yet",
   tabs: "Workbench views",
@@ -40,9 +42,10 @@ export const messages = {
     live: "Live",
     history: "History",
     unavailable: "Unavailable",
-    "not-used": "Not used in this Task",
+    "not-used": "Not used in this task",
     "coming-soon": "Coming soon",
   },
+  soon: "Soon",
   unavailable: {
     cleared: "Details were cleared after 30 days.",
     "too-many-files": "This folder is too big to track changes.",

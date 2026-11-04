@@ -1,10 +1,12 @@
-import type { FileChange, FileChangeKind } from "@hobbots/domain";
+import type { AttemptActivity, FileChange, FileChangeKind } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useState } from "react";
+import { formatCount } from "../../../lib/format.ts";
 import { ChangeDetail } from "../changes/change-detail.tsx";
-import { byFolder, changeCounts, selectedChange, splitPath } from "../changes/changes-model.ts";
+import { changeCounts, changeDir, selectedChange, splitPath } from "../changes/changes-model.ts";
 import { KindTag } from "../changes/kind-tag.tsx";
 import { messages } from "../changes/messages.ts";
+import { useLineCounts } from "../changes/use-line-counts.ts";
 import type { WorkbenchTabProps } from "./tab-props.ts";
 
 const KINDS: ReadonlyArray<FileChangeKind> = ["added", "edited", "deleted", "moved", "link"];
@@ -33,7 +35,7 @@ export function ChangesTab({ activity, state, hobs, focus }: WorkbenchTabProps) 
   }
   const selected = selectedChange(changes, picked.id ?? null, picked.path);
   const counts = changeCounts(changes);
-  const folders = byFolder(changes);
+  const manyFolders = new Set(changes.map((each) => each.folder)).size > 1;
   return (
     <div data-slot="changes" className="@container flex flex-col gap-3 px-5 py-4">
       <p className="m-0 text-detail text-text-secondary">
@@ -43,26 +45,19 @@ export function ChangesTab({ activity, state, hobs, focus }: WorkbenchTabProps) 
         })}
       </p>
       <div className="flex min-w-0 flex-col gap-4 @3xl:flex-row @3xl:items-start">
-        <nav aria-label={messages.files} className="cut flex shrink-0 flex-col bg-panel py-1.5 @3xl:w-72">
-          {folders.map(({ folder, changes: inFolder }) => (
-            <div key={folder} className="flex flex-col">
-              {folders.length > 1 && (
-                <span className="truncate px-3 pt-2 pb-1 font-mono text-meta text-label" title={folder}>
-                  {folder}
-                </span>
-              )}
-              <ul className="m-0 flex list-none flex-col p-0">
-                {inFolder.map((change) => (
-                  <li key={change.id}>
-                    <FileRow
-                      change={change}
-                      on={change.id === selected?.id}
-                      onPick={() => setPicked({ id: change.id })}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </div>
+        <nav
+          aria-label={messages.files}
+          className="flex shrink-0 flex-col gap-0.5 rounded-card border border-line bg-card p-1.5 @3xl:sticky @3xl:top-0 @3xl:w-58"
+        >
+          {changes.map((change) => (
+            <FileRow
+              key={change.id}
+              change={change}
+              activity={activity}
+              dir={changeDir(change, manyFolders)}
+              on={change.id === selected?.id}
+              onPick={() => setPicked({ id: change.id })}
+            />
           ))}
         </nav>
         <div className="min-w-0 flex-1">
@@ -75,24 +70,51 @@ export function ChangesTab({ activity, state, hobs, focus }: WorkbenchTabProps) 
   );
 }
 
-/** A changed file in the list: its name first, then its folder inside the hob's, and how it changed. */
-function FileRow({ change, on, onPick }: { change: FileChange; on: boolean; onPick: () => void }) {
-  const { dir, name } = splitPath(change.path);
+/**
+ * A changed file in the list: its name, its folder under it, how it changed and, for text, the
+ * lines it added and removed.
+ */
+function FileRow({
+  change,
+  activity,
+  dir,
+  on,
+  onPick,
+}: {
+  change: FileChange;
+  activity: AttemptActivity;
+  dir: string;
+  on: boolean;
+  onPick: () => void;
+}) {
+  const { name } = splitPath(change.path);
+  const counts = useLineCounts(change, activity);
   return (
     <button
       type="button"
       aria-pressed={on}
       onClick={onPick}
       className={cn(
-        "flex w-full cursor-pointer items-center gap-2 border-0 px-3 py-1.5 text-start",
-        on ? "bg-line text-moonlight" : "bg-transparent text-text-strong hover:bg-hover",
+        "flex w-full cursor-pointer items-center gap-2 rounded-control border-0 px-2 py-[7px] text-start text-text transition-colors duration-150",
+        on ? "bg-line" : "bg-transparent hover:bg-hover",
       )}
     >
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate font-mono text-detail">{name}</span>
-        {dir !== "" && <span className="truncate font-mono text-meta text-label">{dir}</span>}
+        <span className="truncate font-mono text-[13px] leading-[18px] text-text-strong">{name}</span>
+        {dir !== "" && <span className="truncate font-mono text-[11px] leading-[15px] text-label">{dir}</span>}
       </span>
-      <KindTag kind={change.kind} />
+      <span className="flex shrink-0 flex-col items-end gap-[3px]">
+        <KindTag kind={change.kind} />
+        {counts !== null && (
+          <span className="font-mono text-[11px] leading-[14px] whitespace-nowrap">
+            <span aria-hidden>
+              <span className="text-mint">+{formatCount(counts.added)}</span>{" "}
+              <span className="text-rose">−{formatCount(counts.removed)}</span>
+            </span>
+            <span className="sr-only">{messages.lines(counts)}</span>
+          </span>
+        )}
+      </span>
     </button>
   );
 }
