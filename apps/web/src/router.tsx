@@ -28,8 +28,9 @@ import { OnboardingFirstHob } from "./components/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
-import { SettingsPage } from "./components/pages.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
+import { isSettingsSection } from "./components/settings/sections.ts";
+import { SettingsPage } from "./components/settings/settings-page.tsx";
 import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
 import { Summon } from "./components/summon.tsx";
 import { UsagePage } from "./components/usage/usage-page.tsx";
@@ -281,7 +282,24 @@ const usageRoute = createRoute({
     return <UsagePage days={days === 30 ? "30" : "7"} />;
   },
 });
-const settingsRoute = createRoute({ getParentRoute: () => shellRoute, path: "settings", component: SettingsPage });
+// Settings opens on its overview; each section has its own address, such as `/settings/devices`.
+const settingsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "settings",
+  component: () => <SettingsPage section={null} />,
+});
+const settingsSectionRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "settings/$section",
+  // An unknown section opens the overview rather than an empty page.
+  beforeLoad: ({ params }) => {
+    if (!isSettingsSection(params.section)) throw redirect({ to: "/settings" });
+  },
+  component: function SettingsSectionPage() {
+    const { section } = settingsSectionRoute.useParams();
+    return <SettingsPage section={isSettingsSection(section) ? section : null} />;
+  },
+});
 // The Archive: archived chats across every hob and retired hobs (CH-009, AG-006). `?tab=hobs`
 // opens Retired hobs and `?hob=` narrows the archived chats to one hob.
 const archiveRoute = createRoute({
@@ -360,6 +378,7 @@ const routeTree = rootRoute.addChildren([
     inboxRoute,
     usageRoute,
     settingsRoute,
+    settingsSectionRoute,
     archiveRoute,
     archivedRoute,
     archivedHobRoute,
