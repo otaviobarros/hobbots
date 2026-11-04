@@ -46,7 +46,7 @@ function ArchivedHobRow({ hob }: { hob: Agent }) {
     <li className="flex items-center gap-4 border-b-2 border-line py-3.5">
       <HobSprite hob={hob} size={40} state="asleep" className="grayscale-60 brightness-80" />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="font-pixel text-[17px] font-bold">{hob.name}</span>
+        <span className="font-heading text-[17px] font-bold">{hob.name}</span>
         <span className="text-[13px] text-text-secondary">{meta.join(" · ")}</span>
       </div>
       <Button asChild variant="outline" size="xs">
@@ -88,7 +88,7 @@ export function ArchivedHobView({ hobId, threadId }: { hobId: AgentId; threadId?
             <HobSprite hob={hob} size={28} state="asleep" className="grayscale-60 brightness-80" />
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="font-pixel text-base font-semibold">{hob.name}</span>
+            <span className="font-heading text-base font-semibold">{hob.name}</span>
             <span className="text-xs text-label">
               {hob.roleTitle} · {retiredLabel(hob)}
             </span>
@@ -138,7 +138,7 @@ function ArchivedThread({ hob, threadId, title }: { hob: Agent; threadId: Thread
         <HobSprite hob={hob} size={36} state="asleep" className="grayscale-60 brightness-80" />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-baseline gap-2">
-            <span className="font-pixel text-xl font-semibold whitespace-nowrap">{hob.name}</span>
+            <span className="font-heading text-xl font-semibold whitespace-nowrap">{hob.name}</span>
             <span className="truncate text-text-secondary">{title}</span>
           </span>
           <span className="text-xs text-label">

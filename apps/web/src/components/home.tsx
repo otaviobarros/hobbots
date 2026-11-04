@@ -113,7 +113,7 @@ export function Home() {
             many ? "top-5 left-7 max-w-[420px] gap-2" : "top-[34px] left-9 max-w-[470px] gap-2.5",
           )}
         >
-          <h1 className={cn("m-0 font-pixel font-bold text-moonlight", many ? "text-[28px]" : "text-[34px]")}>
+          <h1 className={cn("m-0 font-heading font-bold text-moonlight", many ? "text-[28px]" : "text-[34px]")}>
             {greeting()}
           </h1>
           <p className={cn("m-0 leading-normal", many ? "text-text-secondary" : "text-[17px]")}>
@@ -200,7 +200,7 @@ export function Home() {
                   params={{ hobId: hob.id, threadId: thread.id }}
                   className="flex gap-2.5 text-sm leading-snug text-text-strong no-underline hover:text-moonlight"
                 >
-                  <span className="w-16 flex-none font-pixel font-semibold text-moonlight">{hob.name}</span>
+                  <span className="w-16 flex-none font-heading font-semibold text-moonlight">{hob.name}</span>
                   <span className="min-w-0 flex-1 truncate text-text-secondary">{thread.title}</span>
                   <span className="text-xs text-label">{formatWhen(thread.updatedAt)}</span>
                 </Link>
@@ -241,7 +241,7 @@ const chipClass = "bg-deep px-2.5 py-1 text-[13px] text-text-strong";
 function LiveDot() {
   return (
     <>
-      <span aria-hidden className="size-2 animate-hb-blink bg-rose" />
+      <span aria-hidden className="size-2 animate-hb-blink rounded-dot bg-rose" />
       <span className="text-xs text-text-secondary">live</span>
     </>
   );
@@ -379,11 +379,11 @@ function AllHobs({
                       params={{ hobId: hob.id }}
                       aria-label={openChatLabel(hob, state)}
                       title={`${hob.name} · ${hob.roleTitle} · ${stateLabel[state]}`}
-                      className="cut hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text-strong no-underline hover:bg-line hover:text-text-strong"
+                      className="cut-control hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text-strong no-underline hover:bg-line hover:text-text-strong"
                     >
                       <HobSprite hob={hob} size={28} state={state} badge className="mr-1.5" />
                       <span className="flex min-w-0 flex-col">
-                        <span className="truncate font-pixel text-sm font-semibold">{hob.name}</span>
+                        <span className="truncate font-heading text-sm font-semibold">{hob.name}</span>
                         <span className="truncate text-xs text-text-secondary">
                           {hob.roleTitle} · {stateLabel[state]}
                         </span>

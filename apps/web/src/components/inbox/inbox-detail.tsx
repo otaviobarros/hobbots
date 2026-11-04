@@ -47,7 +47,7 @@ export function InboxDetail({
             {request.state === "expired" ? copy.kind.expired : copy.kind.approval}
           </Badge>
         </span>
-        <h2 className="m-0 font-pixel text-2xl leading-tight font-bold text-moonlight">{title.what}</h2>
+        <h2 className="m-0 font-heading text-2xl leading-tight font-bold text-moonlight">{title.what}</h2>
       </header>
       <dl className="m-0 grid grid-cols-[auto_1fr] text-sm">
         <Fact term={copy.detail.thread}>{threadTitle}</Fact>

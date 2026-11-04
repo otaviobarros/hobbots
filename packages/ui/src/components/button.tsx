@@ -3,16 +3,15 @@ import { cn } from "cn";
 import { Slot } from "radix-ui";
 import type * as React from "react";
 
-// Hobbots buttons (docs/design/ui-ux.md): pixel corners, stepped 2px press, moonlight focus ring.
+// Hobbots buttons (docs/design/ui-ux.md). Corners, focus ring and press come from the theme's skin.
 const buttonVariants = cva(
-  "cut inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 border-0 whitespace-nowrap transition-transform duration-75 ease-[steps(2)] outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "cut-control inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 border-0 whitespace-nowrap transition-transform duration-75 ease-(--ease-press) select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default:
-          "bg-lantern font-bold text-ground shadow-[0_4px_0_var(--color-lantern-press)] hover:bg-lantern-hover active:translate-y-0.5 active:shadow-[0_2px_0_var(--color-lantern-press)]",
-        approve:
-          "bg-mint font-bold text-ground shadow-[0_4px_0_var(--color-mint-deep)] active:translate-y-0.5 active:shadow-[0_2px_0_var(--color-mint-deep)]",
+          "press bg-lantern font-bold text-ground [--press-color:var(--color-lantern-press)] hover:bg-lantern-hover",
+        approve: "press bg-mint font-bold text-ground [--press-color:var(--color-mint-deep)]",
         outline: "border-2 border-solid border-control bg-transparent text-text-strong hover:bg-line",
         deny: "border-2 border-solid border-rose bg-transparent text-rose hover:bg-line",
         chip: "border-2 border-solid border-control bg-transparent text-[13px] text-text-strong hover:bg-line",

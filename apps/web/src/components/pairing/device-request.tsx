@@ -35,7 +35,7 @@ export function MatchingCode({ device }: { device: WaitingDevice }) {
         <span className="lbl text-xs">{copy.matchLabel}</span>
         <span className="text-sm">{copy.matchHint({ name: device.request.name })}</span>
       </div>
-      <span className="font-pixel text-3xl font-bold tracking-[0.12em] whitespace-nowrap">
+      <span className="font-heading text-3xl font-bold tracking-[0.12em] whitespace-nowrap">
         {groupedCode(device.request.code)}
       </span>
     </div>

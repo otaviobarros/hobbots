@@ -22,7 +22,7 @@ The app has four themes, set with `data-theme` on the root element. Their values
 | Mint | `#7fd1b9` (deep `#3f8a75`) | Working, done, approve |
 | Rose | `#ee9292` | Deny, stop, error |
 
-Status tags: Working (mint on ground), Running (mint deep), Waiting and Needs you (lantern), Queued (line 2), Cancelled (line 2 with secondary text), Archived (line 2 with secondary text), Failed (rose). Unsandboxed (rose outline on ground) marks a hob running without the sandbox; Needs the sandbox (line 2 with secondary text) marks an action blocked because the sandbox is unavailable. Workbench view labels: Live (mint), History, Unavailable (with reason), Not used in this Task (the tab greyed out), Coming soon, Later; Screenshot (`#8fb4f0`, with age) arrives with the Browser view (#382). Provider tiles: Claude C `#e39a74`, ChatGPT G `#8fd3a8`, Gemini G `#8fb4f0`, Grok X `#c9c3e8`, Local L `#f3e9b5`, Other + `#b79be8`.
+Status tags: Needs you (on-lantern on lantern), Working (mint on line), Resting (secondary text on line 2, for a hob with nothing to do), Done (secondary text on line, with its check in mint), Failed (on-rose on rose), Running (mint deep), Waiting (lantern), Queued (line 2), Cancelled (line 2 with secondary text), Archived (line 2 with secondary text). Unsandboxed (rose outline on ground) marks a hob running without the sandbox; Needs the sandbox (line 2 with secondary text) marks an action blocked because the sandbox is unavailable. Workbench view labels: Live (mint), History, Unavailable (with reason), Not used in this Task (the tab greyed out), Coming soon, Later; Screenshot (`#8fb4f0`, with age) arrives with the Browser view (#382). Provider tiles: Claude C `#e39a74`, ChatGPT G `#8fd3a8`, Gemini G `#8fb4f0`, Grok X `#c9c3e8`, Local L `#f3e9b5`, Other + `#b79be8`.
 
 All text passes WCAG AA; the lowest pair is 5.6:1. Control borders are at least 3:1.
 
@@ -60,7 +60,7 @@ All text passes WCAG AA; the lowest pair is 5.6:1. Control borders are at least 
 
 ## Components
 
-The component sheet defines: buttons (primary, approve, secondary, deny, quiet, disabled, icon, chip), switch, segmented control, inputs, status tags, Workbench view labels, delivery steps (Sent, Delivered, Read, Answered), the approval card (Allow once, Always for this site, Deny, Details), Task and Quest card, nested task rows, the Quest strip, the Task drawer, provider tiles, potions, hop / sparkles / poof, the streaming caret, the banner, the menu and the toast. Shared primitives live in `packages/ui` (shadcn/ui, restyled to these tokens).
+The component sheet defines: buttons (primary, approve, secondary, deny, quiet, disabled, icon, chip), switch, segmented control, inputs, status tags, Workbench view labels, delivery steps (Sent, Delivered, Read, Answered), the approval card (Allow once, Always for this site, Deny, Details), Task and Quest card, nested task rows, the Quest strip, the Task drawer, the side sheet that holds the quest and the task, provider tiles, potions, hop / sparkles / poof, the streaming caret, the banner, the menu and the toast. Shared primitives live in `packages/ui` (shadcn/ui, restyled to these tokens).
 
 ## Behavior rules
 

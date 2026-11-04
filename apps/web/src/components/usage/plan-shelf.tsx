@@ -166,7 +166,7 @@ export function PlanShelf({
         <span className="text-sm text-text-secondary">
           {current.name} · {current.kind}
         </span>
-        <span className="font-pixel text-[34px] font-bold leading-none">{current.headline}</span>
+        <span className="font-heading text-[34px] font-bold leading-none">{current.headline}</span>
         <span className="text-sm leading-snug text-text-secondary">{current.detail}</span>
         {current.meters.length > 1 && (
           <ul className="m-0 flex list-none flex-col gap-2 p-0">

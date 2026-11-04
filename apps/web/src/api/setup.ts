@@ -1,6 +1,7 @@
 import type { UpdateSetupPayload } from "@hobbots/api";
 import type { InstallationSetup } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
+import { firstRunFinished } from "../lib/theme.ts";
 import { call } from "./client.ts";
 
 export const setupQueryKey = ["setup"] as const;
@@ -50,6 +51,9 @@ export const useUpdateSetup = () => {
   return useMutation({
     mutationKey: updateSetupKey,
     mutationFn: (payload: UpdateSetupPayload) => call((c) => c.setup.update({ payload })),
-    onSuccess: (setup) => queryClient.setQueryData(setupQueryKey, setup),
+    onSuccess: (setup, payload) => {
+      queryClient.setQueryData(setupQueryKey, setup);
+      if (payload.completed === true) firstRunFinished();
+    },
   });
 };

@@ -61,7 +61,7 @@ export function SetupRemoteAccess() {
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-12 pt-10 pb-6">
         <div className="flex min-h-0 flex-1 animate-hb-in flex-col gap-2">
           <span className="lbl text-label">{copy.eyebrow}</span>
-          <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">{copy.title}</h1>
+          <h1 className="m-0 font-heading text-[32px] font-bold text-moonlight">{copy.title}</h1>
           <p className="m-0 mb-3.5 max-w-[660px] text-text-secondary">{copy.intro}</p>
           {tailscale !== null && tailscale.state !== "running" && (
             <TailscaleNotReady

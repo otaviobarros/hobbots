@@ -56,7 +56,7 @@ export function OnboardingSafety() {
       }
     >
       <div className="flex animate-hb-in flex-col gap-1.5">
-        <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{shared.safety.heading({ name })}</h1>
+        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{shared.safety.heading({ name })}</h1>
         <p className="m-0 mb-3.5 text-text-secondary">{shared.safety.intro}</p>
         {setup.data ? (
           <PresetPicker
@@ -105,7 +105,7 @@ export function OnboardingFolders() {
       }
     >
       <div className="flex max-w-[780px] animate-hb-in flex-col gap-1.5">
-        <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{shared.folders.heading}</h1>
+        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{shared.folders.heading}</h1>
         <p className="m-0 mb-2.5 text-text-secondary">{shared.folders.intro}</p>
         {setup.data ? (
           <FolderPicker folders={folders} />

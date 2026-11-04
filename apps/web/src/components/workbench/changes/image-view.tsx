@@ -69,7 +69,7 @@ function Side({
   return (
     <figure className="cut m-0 flex min-w-0 flex-col gap-2 bg-panel px-4 py-3">
       <figcaption className="flex items-baseline gap-2">
-        <span className="font-pixel text-xs font-bold tracking-widest text-label uppercase">{title}</span>
+        <span className="font-heading text-xs font-bold tracking-widest text-label uppercase">{title}</span>
         <span className="text-meta text-label">{formatBytes(version.size)}</span>
       </figcaption>
       {contentId === null ? (

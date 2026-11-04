@@ -83,7 +83,7 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
   await expect(after.getByRole("insertion").getByRole("link", { name: /guide/ })).toBeVisible();
   await expect(after).toContainText("Kept as is.");
   // Its source is one click away, as a diff.
-  await notes.getByRole("button", { name: "Source" }).click();
+  await notes.getByRole("radio", { name: "Source" }).click();
   await expect(notes.getByRole("region", { name: "Changes to notes.md" })).toContainText(
     "Tidy line, as the [guide] says.",
   );

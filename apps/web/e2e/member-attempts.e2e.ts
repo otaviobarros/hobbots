@@ -150,5 +150,5 @@ test("[TC-OR-454] a nested lead woken several times on its Task shows Attempt 1 
     .click();
   const bench = page.getByRole("region", { name: "Workbench for Review the work" });
   await expect(bench.getByRole("heading", { name: "Review the work" })).toBeVisible();
-  await expect(bench.getByRole("group", { name: "Attempts" })).toHaveCount(0);
+  await expect(bench.getByRole("radiogroup", { name: "Attempts" })).toHaveCount(0);
 });

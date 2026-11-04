@@ -82,9 +82,10 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
   await expect(instructions).toHaveValue("Write short answers.");
   await instructions.fill("Write long answers.");
   await expect(page.getByText(/^Unsaved changes/)).toBeVisible();
-  // Looking at another tab keeps the unsaved edit.
+  // Looking at another tab keeps the unsaved edit. The arrow keys move between the tabs.
   await page.getByRole("tab", { name: "Charms" }).click();
-  await page.getByRole("tab", { name: "Profile" }).click();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("tab", { name: "Profile" })).toHaveAttribute("aria-selected", "true");
   await expect(instructions).toHaveValue("Write long answers.");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Saved as version 2. Pip's next reply uses it.")).toBeVisible();

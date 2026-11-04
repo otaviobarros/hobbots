@@ -89,7 +89,7 @@ function ReplyRow({
       <HobSprite hob={hob} size={26} state={streaming ? "working" : message.status === "failed" ? "failed" : "idle"} />
       <div className="flex min-w-0 flex-col gap-[3px]">
         <span className="text-xs text-label">
-          <b className="font-pixel text-sm text-moonlight">{hob.name}</b> {formatTime(message.createdAt)}
+          <b className="font-heading text-sm text-moonlight">{hob.name}</b> {formatTime(message.createdAt)}
         </span>
         <ReplySteps
           steps={message.steps}
@@ -105,7 +105,7 @@ function ReplyRow({
         )}
         {message.status === "stopping" && (
           <span role="status" className="flex items-center gap-2 text-[13px] text-lantern">
-            <span aria-hidden className="size-[5px] animate-hb-blink bg-lantern" />
+            <span aria-hidden className="size-[5px] animate-hb-blink rounded-dot bg-lantern" />
             {copy.stopping}
           </span>
         )}
@@ -144,7 +144,7 @@ const providerName = (message: Message) => (message.runtime === "codex" ? "Codex
 function ResumeControls({ resume, name }: { resume: ContinueReply; name: string }) {
   return resume.pending ? (
     <span role="status" className="flex items-center gap-2 text-[13px] text-text-secondary">
-      <span aria-hidden className="size-[5px] animate-hb-blink bg-mint" />
+      <span aria-hidden className="size-[5px] animate-hb-blink rounded-dot bg-mint" />
       {copy.resuming({ name })}
     </span>
   ) : (
@@ -209,9 +209,9 @@ function Thinking({ name }: { name: string }) {
     <span role="status" className="flex items-center gap-2.5 text-sm text-text-secondary">
       {copy.thinking({ name })}
       <span aria-hidden className="flex gap-1">
-        <span className="size-[5px] animate-hb-blink bg-mint" />
-        <span className="size-[5px] animate-hb-blink bg-mint [animation-delay:.3s]" />
-        <span className="size-[5px] animate-hb-blink bg-mint [animation-delay:.6s]" />
+        <span className="size-[5px] animate-hb-blink rounded-dot bg-mint" />
+        <span className="size-[5px] animate-hb-blink rounded-dot bg-mint [animation-delay:.3s]" />
+        <span className="size-[5px] animate-hb-blink rounded-dot bg-mint [animation-delay:.6s]" />
       </span>
     </span>
   );

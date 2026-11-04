@@ -84,7 +84,7 @@ export function TaskDrawer({
               {copy.back({ title: taskTitle(found.parent) })}
             </Button>
           )}
-          <h2 ref={heading} tabIndex={-1} className="m-0 truncate font-pixel text-title font-semibold outline-none">
+          <h2 ref={heading} tabIndex={-1} className="m-0 truncate font-heading text-title font-semibold outline-none">
             {found === null ? copy.notFound : title}
           </h2>
         </span>

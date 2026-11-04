@@ -136,7 +136,7 @@ function ArchivedHeader({
       <HobSprite hob={hob} size={36} state="idle" badge />
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="flex min-w-0 items-baseline gap-2">
-          <span className="font-pixel text-xl font-semibold whitespace-nowrap">{hob.name}</span>
+          <span className="font-heading text-xl font-semibold whitespace-nowrap">{hob.name}</span>
           <span className="text-sm font-bold whitespace-nowrap text-moonlight">{hob.roleTitle}</span>
           <span className="truncate text-text-secondary">{title}</span>
           {tagged && <Badge variant="archived">{messages.tag}</Badge>}
@@ -214,7 +214,7 @@ function EmptyArchive({ hob }: { hob: Agent }) {
       aria-label={messages.empty}
       className="flex max-w-bubble-max animate-hb-in flex-col gap-2 bg-deep px-4 py-3.5 text-text-secondary"
     >
-      <h2 className="m-0 font-pixel text-base font-semibold text-text-strong">{messages.empty}</h2>
+      <h2 className="m-0 font-heading text-base font-semibold text-text-strong">{messages.empty}</h2>
       <p className="m-0 text-sm">{messages.emptyBody({ name: hob.name })}</p>
       <Link to="/hobs/$hobId" params={{ hobId: hob.id }} className="text-sm text-lantern underline">
         {messages.backToThreads({ name: hob.name })}

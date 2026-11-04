@@ -37,7 +37,7 @@ export function PresetPicker({
             <label
               key={preset.id}
               className={cn(
-                "cut flex cursor-pointer flex-col gap-2 border-2 p-4 transition-transform duration-100 ease-[steps(2)] hover:-translate-y-[3px]",
+                "cut flex cursor-pointer flex-col gap-2 border-2 p-4 transition-transform duration-100 ease-(--ease-press) hover:-translate-y-[3px]",
                 on ? "border-moonlight bg-line" : "border-line-2 bg-card",
                 focusWithin,
               )}
@@ -51,7 +51,7 @@ export function PresetPicker({
                 className="sr-only"
               />
               <span className="flex items-center gap-2">
-                <span className={cn("font-pixel text-[22px] font-bold", on ? "text-moonlight" : "text-text-strong")}>
+                <span className={cn("font-heading text-[22px] font-bold", on ? "text-moonlight" : "text-text-strong")}>
                   {preset.label}
                 </span>
                 {preset.recommended && (
