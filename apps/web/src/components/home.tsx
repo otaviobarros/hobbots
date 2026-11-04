@@ -57,7 +57,7 @@ export function Home() {
   return (
     <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
       <section
-        aria-label="Your hobs right now"
+        aria-label={messages.home.landmark}
         className="@container relative h-[262px] flex-none overflow-hidden border-b-4 border-line bg-panel"
       >
         <Stars count={28} height={190} />
@@ -124,7 +124,7 @@ export function Home() {
 function SummonLink() {
   return (
     <Link to="/summon" className="bg-deep px-2.5 py-1 text-[13px] text-lantern no-underline hover:bg-line">
-      + Summon a hob
+      {messages.home.summon}
     </Link>
   );
 }
@@ -133,7 +133,7 @@ function LiveDot() {
   return (
     <>
       <span aria-hidden className="size-2 animate-hb-blink rounded-dot bg-rose" />
-      <span className="text-xs text-text-secondary">live</span>
+      <span className="text-xs text-text-secondary">{messages.home.live}</span>
     </>
   );
 }
@@ -239,17 +239,26 @@ function HappeningNow({
   live: ReadonlyArray<{ hob: Agent; thread: Thread }>;
   activity: ActivityMap;
 }) {
-  return live.map(({ hob, thread }) => (
-    <Link
-      key={thread.id}
-      to="/hobs/$hobId/threads/$threadId"
-      params={{ hobId: hob.id, threadId: thread.id }}
-      className="flex animate-hb-in items-center gap-2.5 text-text-strong no-underline"
-    >
-      <HobSprite hob={hob} size={26} state={activity[thread.id] ?? "working"} />
-      <span className="min-w-0 flex-1 text-sm leading-snug">
-        <b>{hob.name}</b> is {activity[thread.id] === "thinking" ? "thinking about" : "writing"} “{thread.title}”
-      </span>
-    </Link>
-  ));
+  return live.map(({ hob, thread }) => {
+    const sentence = messages.home.activity[activity[thread.id] === "thinking" ? "thinking" : "writing"];
+    const text = sentence({ title: thread.title });
+    // The name comes first in the message, so a title that holds "{name}" is never split.
+    const at = text.indexOf("{name}");
+    const [before, after] = [text.slice(0, at), text.slice(at + "{name}".length)];
+    return (
+      <Link
+        key={thread.id}
+        to="/hobs/$hobId/threads/$threadId"
+        params={{ hobId: hob.id, threadId: thread.id }}
+        className="flex animate-hb-in items-center gap-2.5 text-text-strong no-underline"
+      >
+        <HobSprite hob={hob} size={26} state={activity[thread.id] ?? "working"} />
+        <span className="min-w-0 flex-1 text-sm leading-snug">
+          {before}
+          <b>{hob.name}</b>
+          {after}
+        </span>
+      </Link>
+    );
+  });
 }

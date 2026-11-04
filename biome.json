@@ -156,7 +156,38 @@
             "noNestedComponentDefinitions": "error"
           },
           "style": {
-            "noDefaultExport": "error"
+            "noDefaultExport": "error",
+            "noJsxLiterals": {
+              "level": "error",
+              "options": {
+                "allowedStrings": [
+                  "Hobbots",
+                  "·",
+                  "•",
+                  "•••",
+                  "●",
+                  "→",
+                  "←",
+                  "›",
+                  "‹",
+                  "▾",
+                  "▶",
+                  "▭",
+                  "+",
+                  "−",
+                  "×",
+                  "✕",
+                  "✓",
+                  "✦",
+                  "⋯",
+                  "—",
+                  "/",
+                  "$",
+                  "!",
+                  "?"
+                ]
+              }
+            }
           },
           "suspicious": {
             "noExplicitAny": "error",
@@ -169,6 +200,10 @@
   "plugins": [
     {
       "path": "./scripts/biome/no-double-cast.grit",
+      "includes": ["apps/web/src/**", "packages/ui/src/**", "!**/*.test.ts", "!**/*.test.tsx"]
+    },
+    {
+      "path": "./scripts/biome/no-literal-a11y-text.grit",
       "includes": ["apps/web/src/**", "packages/ui/src/**", "!**/*.test.ts", "!**/*.test.tsx"]
     }
   ]

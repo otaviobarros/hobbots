@@ -45,6 +45,8 @@ export const messages = {
       `Hobbots could not end a step left open before it stopped (${tag}: ${message}). Open its Quest and cancel or retry the Task.`,
   },
   follow: {
+    idsLine: ({ ids }: { ids: string }) => `IDs: ${ids}`,
+    sequence: ({ n }: { n: number }) => `#${n}`,
     heading: "Follow a Quest",
     pick: "Quest to follow",
     none: "No Quests yet. A Quest appears here once a hob leads one.",
@@ -63,7 +65,6 @@ export const messages = {
     tries: { one: "1 try", other: (count: string) => `${count} tries` },
     events: "Recent events",
     noEvents: "No events kept for this Quest.",
-    ids: "IDs",
     taskId: ({ id }: { id: string }) => `task ${id}`,
     delegationId: ({ id }: { id: string }) => `delegation ${id}`,
     attemptId: ({ id }: { id: string }) => `attempt ${id}`,

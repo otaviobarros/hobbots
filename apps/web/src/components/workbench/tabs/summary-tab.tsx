@@ -154,7 +154,7 @@ function Happened({ line, hobs, onOpen }: { line: HappenedLine; hobs: HobLookup;
       <button
         type="button"
         onClick={() => onOpen(line.task.id)}
-        aria-label={`${text}, ${copy.mark[line.mark]}. ${copy.openStep({ title })}`}
+        aria-label={copy.lineLabel({ line: text, mark: copy.mark[line.mark], title })}
         className={cn(row, "w-full cursor-pointer border-0 bg-card text-start text-text-strong hover:bg-hover")}
       >
         {mark}

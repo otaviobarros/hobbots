@@ -27,7 +27,7 @@ export function TailscaleNotReady({
       <ol className="m-0 flex list-none flex-col gap-1 p-0 text-sm leading-normal">
         {copy.steps.map((step, index) => (
           <li key={step}>
-            <b className="text-lantern">{index + 1}.</b> {step}
+            <b className="text-lantern">{copy.stepNumber({ n: index + 1 })}</b> {step}
           </li>
         ))}
       </ol>

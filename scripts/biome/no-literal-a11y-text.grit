@@ -1,0 +1,22 @@
+language js
+
+// STD-I18N-001: user-facing copy lives in message modules. Biome's noJsxLiterals covers text between
+// tags; this covers the attributes a person reads or hears. An empty alt="" marks a decorative image
+// and passes.
+JsxAttribute(name=$name, initializer=JsxAttributeInitializerClause(value=$value)) where {
+  $name <: or {
+    r"^aria-label$",
+    r"^title$",
+    r"^placeholder$",
+    r"^alt$"
+  },
+  $value <: or {
+    JsxString(),
+    JsxExpressionAttributeValue(expression=or {
+      JsStringLiteralExpression(),
+      JsTemplateExpression()
+    })
+  },
+  not $value <: r"^\{?[\"'`]{2}\}?$",
+  register_diagnostic(span=$value, message="Read this text from the feature's messages.ts module (STD-I18N-001).")
+}

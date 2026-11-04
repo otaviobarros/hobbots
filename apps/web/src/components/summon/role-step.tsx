@@ -114,7 +114,7 @@ function OwnTitle({ draft, onChange }: { draft: FirstHobDraft; onChange: Update 
             onChange((d) => typeOwnTitle(d, title));
           }}
           placeholder={copy.ownPlaceholder}
-          aria-label="Your own role title"
+          aria-label={copy.ownTitle}
           className={FIELD}
         />
       </label>
