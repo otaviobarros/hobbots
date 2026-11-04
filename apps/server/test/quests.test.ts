@@ -432,11 +432,14 @@ describe("leading a party on a Quest", () => {
     const quill = ownedBy(tree, QUILL);
     const blocker = tree.checkpoints.find((each) => each.taskId === quill?.id && each.kind === "blocker");
     expect(blocker?.summary).toContain('only its own milestones are unreported: "Headlines"');
-    // The blocker and the Failure reach Aldric as continuations in your chat.
+    // The Failure reaches Aldric as a continuation in your chat, saying why, and the blocker it
+    // carries is not a second arrival (#683).
     const all = await run(
-      messagesWhen((each) => continuations(each).some((reply) => reply.content.includes("ended as blocked."))),
+      messagesWhen((each) =>
+        continuations(each).some((reply) => reply.content.includes("ended as blocked: Its member ended a turn")),
+      ),
     );
-    expect(continuations(all).some((reply) => reply.content.includes("A blocker was reported on Task"))).toBe(true);
+    expect(continuations(all).some((reply) => reply.content.includes("A blocker was reported on Task"))).toBe(false);
   }, 20_000);
 });
 
@@ -458,7 +461,13 @@ describe("a retired party member", () => {
     const blocker = tree.checkpoints.find((each) => each.taskId === quill?.id && each.kind === "blocker");
     expect(blocker?.summary).toContain("retired");
     expect(tree.attempts.find((each) => each.taskId === quill?.id)?.state).toBe("interrupted");
-    await run(messagesWhen((each) => continuations(each).some((reply) => reply.content.includes("ended as failed."))));
+    await run(
+      messagesWhen((each) =>
+        continuations(each).some((reply) =>
+          reply.content.includes("ended as failed: Its hob was retired before the Task was done."),
+        ),
+      ),
+    );
   }, 20_000);
 });
 

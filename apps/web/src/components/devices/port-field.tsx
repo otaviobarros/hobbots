@@ -59,7 +59,7 @@ export function PortField({ port }: { port: number }) {
             change.reset();
             setDraft(event.target.value.replace(/\D/g, ""));
           }}
-          className="w-20 border-2 border-control bg-deep px-2 py-1 font-mono text-sm text-text outline-none focus-visible:outline-3 focus-visible:outline-moonlight"
+          className="w-20 border-2 border-control bg-deep px-2 py-1 font-mono text-sm text-text-strong outline-none focus-visible:outline-3 focus-visible:outline-moonlight"
         />
         {next !== null && next !== port && (
           <Button type="submit" variant="outline" size="xs" disabled={change.isPending}>

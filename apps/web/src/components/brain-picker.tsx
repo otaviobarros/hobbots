@@ -143,7 +143,7 @@ function ThreadBrainPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={cn(chipClass, "cursor-pointer bg-transparent text-text hover:bg-line")}
+          className={cn(chipClass, "cursor-pointer bg-transparent text-text-strong hover:bg-line")}
           aria-label={copy.trigger({ brain: label, state })}
         >
           {chip}
@@ -275,7 +275,7 @@ function EffortChoices({
               disabled={pending}
               className={cn(
                 "cursor-pointer border-0 px-2 py-1 text-xs whitespace-nowrap",
-                on ? "bg-lantern text-ground" : "bg-transparent text-text hover:bg-line",
+                on ? "bg-lantern text-ground" : "bg-transparent text-text-strong hover:bg-line",
               )}
               // Picking the current effort again changes nothing, unless it is to become the hob's default.
               onClick={() => (on && !makeDefault ? undefined : onPick({ ...current, effort }))}

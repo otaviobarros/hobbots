@@ -517,7 +517,7 @@ export const TaskRepositoryLive = Layer.effect(
     const moveTask: TaskRepository["Service"]["moveTask"] = (taskId, expected, to: TaskTarget, at, options = {}) =>
       change((revision) =>
         Effect.gen(function* () {
-          const { carried = [], cancelledBy } = options;
+          const { carried = [], cancelledBy, reason } = options;
           const before = yield* current(taskId, expected);
           if (to === "failed" || to === "cancelled") yield* endable(before);
           const task = new Task({ ...(yield* orFail(TaskTransitions.moveTo(before, to, at))), revision });
@@ -529,10 +529,23 @@ export const TaskRepositoryLive = Layer.effect(
               ON CONFLICT (task_id) DO UPDATE SET requested_by = ${requestedBy}, requested_at = ${at}`;
           }
           const quest = yield* endQuest(task, at, revision);
-          const events: Array<JournaledEvent> = [
-            { _tag: "TaskStateChanged", task, attempt: null, quest, wait: null },
-            ...(yield* automatic(task, at, revision + 1)),
-          ];
+          const events: Array<JournaledEvent> = [{ _tag: "TaskStateChanged", task, attempt: null, quest, wait: null }];
+          if (reason !== undefined && (to === "blocked" || to === "failed")) {
+            const checkpoint = new Checkpoint({
+              id: CheckpointId.make(crypto.randomUUID()),
+              taskId: task.id,
+              attemptId: task.currentAttemptId,
+              source: "unplanned",
+              kind: "blocker",
+              milestoneId: null,
+              summary: reason,
+              createdAt: at,
+              revision: revision + events.length,
+            });
+            yield* insertCheckpoint(checkpoint);
+            events.push({ _tag: "CheckpointRecorded", checkpoint, milestone: null });
+          }
+          events.push(...(yield* automatic(task, at, revision + events.length)));
           if (to === "blocked" && carried.length > 0 && task.currentAttemptId !== null) {
             const { consumes } = yield* ledger.readFor(task, carried);
             const by = yield* ledger.consumer(task.currentAttemptId);

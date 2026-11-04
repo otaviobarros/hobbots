@@ -19,7 +19,7 @@ function QrCode({
   ...props
 }: Omit<React.ComponentProps<"span">, "children"> & { value: string; label: string; size: number }) {
   return (
-    <span data-slot="qr-code" className={cn("block bg-text text-ground", className)} {...props}>
+    <span data-slot="qr-code" className={cn("block bg-text-strong text-ground", className)} {...props}>
       <PixelArt rows={qrRows(value)} palette={{ "#": "currentColor" }} size={size} label={label} />
     </span>
   );

@@ -57,7 +57,7 @@ export function OnboardingSafety() {
     >
       <div className="flex animate-hb-in flex-col gap-1.5">
         <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{shared.safety.heading({ name })}</h1>
-        <p className="m-0 mb-3.5 text-secondary-text">{shared.safety.intro}</p>
+        <p className="m-0 mb-3.5 text-text-secondary">{shared.safety.intro}</p>
         {setup.data ? (
           <PresetPicker
             label={shared.safety.preset}
@@ -95,7 +95,7 @@ export function OnboardingFolders() {
           <Button variant="outline" onClick={back} disabled={saving}>
             {shared.back}
           </Button>
-          <span className="flex-1 text-right text-sm text-secondary-text">
+          <span className="flex-1 text-right text-sm text-text-secondary">
             {folders.length === 0 ? shared.folders.none : foldersShared(folders.length)}
           </span>
           <Button onClick={() => void navigate({ to: "/setup/ready" })} disabled={!setup.data || saving}>
@@ -106,7 +106,7 @@ export function OnboardingFolders() {
     >
       <div className="flex max-w-[780px] animate-hb-in flex-col gap-1.5">
         <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{shared.folders.heading}</h1>
-        <p className="m-0 mb-2.5 text-secondary-text">{shared.folders.intro}</p>
+        <p className="m-0 mb-2.5 text-text-secondary">{shared.folders.intro}</p>
         {setup.data ? (
           <FolderPicker folders={folders} />
         ) : setup.isError ? (

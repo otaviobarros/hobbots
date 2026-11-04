@@ -90,7 +90,7 @@ const describeArrival = (item: BackpackItem): string => {
     case "result":
       return describeResult(payload.task, payload.artifacts);
     case "failure":
-      return `${about(payload.task)} ended as ${payload.task.state}.`;
+      return `${about(payload.task)} ended as ${payload.task.state}${payload.reason === undefined ? "." : `: ${payload.reason}`}`;
     case "checkpoint":
       return `A ${payload.checkpoint.kind} was reported on Task ${payload.checkpoint.taskId}: ${payload.checkpoint.summary}`;
     case "question":

@@ -16,7 +16,7 @@ function Switch({ className, ...props }: React.ComponentProps<typeof SwitchPrimi
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
-        className="absolute top-0.5 left-0.5 size-4 bg-text transition-[left] duration-150 ease-[steps(3)] motion-reduce:transition-none data-[state=checked]:left-6"
+        className="absolute top-0.5 left-0.5 size-4 bg-text-strong transition-[left] duration-150 ease-[steps(3)] motion-reduce:transition-none data-[state=checked]:left-6"
       />
     </SwitchPrimitive.Root>
   );

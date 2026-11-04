@@ -26,7 +26,7 @@ export function ExportDialog({ target, onClose }: { target: ExportTarget; onClos
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogTitle className="m-0 font-pixel text-2xl font-bold break-words text-moonlight">{title}</DialogTitle>
-        <DialogDescription className="m-0 text-sm text-secondary-text">
+        <DialogDescription className="m-0 text-sm text-text-secondary">
           {intro} {copy.redacted}
         </DialogDescription>
         <ExportForm scope={scope} />

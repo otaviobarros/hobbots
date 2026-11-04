@@ -38,7 +38,7 @@ function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) 
           <span id={labelId} className="font-bold">
             Open Hobbots at login
           </span>
-          <span className="text-[13px] text-secondary-text">
+          <span className="text-[13px] text-text-secondary">
             Starts in the background, without the window, so hobs keep working after a restart.
           </span>
         </div>
@@ -92,7 +92,7 @@ function KeepRunningRow({ keepRunning }: { keepRunning: NonNullable<typeof keepR
           <span id={labelId} className="font-bold">
             Keep running in the menu bar when the window closes
           </span>
-          <span className="text-[13px] text-secondary-text">
+          <span className="text-[13px] text-text-secondary">
             Hobs keep working after you close the window. Reopen it from the menu-bar icon.
           </span>
         </div>
@@ -129,7 +129,7 @@ export function GeneralSettings() {
       {keepRunningBridge && <KeepRunningRow keepRunning={keepRunningBridge} />}
     </>
   ) : (
-    <p className="m-0 text-secondary-text">
+    <p className="m-0 text-text-secondary">
       Open at login and the menu bar are set in the Hobbots app on the Mac that runs your hub.
     </p>
   );

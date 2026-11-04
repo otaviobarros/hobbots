@@ -3,5 +3,5 @@ import { messages } from "./messages.ts";
 
 /** Why one version of a file is not shown, in its place (ADR 023). */
 export function NotKeptNote({ side, reason }: { side: "before" | "after"; reason: NotKept }) {
-  return <p className="m-0 bg-notice px-3 py-2 text-detail text-secondary-text">{messages.notKept[side][reason]}</p>;
+  return <p className="m-0 bg-notice px-3 py-2 text-detail text-text-secondary">{messages.notKept[side][reason]}</p>;
 }

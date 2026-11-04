@@ -69,10 +69,10 @@ export function WorkbenchHeader({
         </h2>
         <StatusTag status={roomTone(status)}>{roomStatusLabel(status)}</StatusTag>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-detail text-secondary-text">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-detail text-text-secondary">
         <span className="flex items-center gap-2">
           <HobSprite hob={owner} size={22} state={running ? "working" : "idle"} />
-          <span className="font-bold text-text">{owner.name}</span>
+          <span className="font-bold text-text-strong">{owner.name}</span>
           <span>{messages.askedBy({ chain })}</span>
         </span>
         {runtime !== null && <Brain runtime={runtime} model={model} />}
@@ -122,7 +122,7 @@ function Where({ runtime, read }: { runtime: Attempt["runtime"]; read: ActivityR
       title={messages.sandboxHint[sandbox]}
       className={cn(
         sandbox === "off" && "border-2 border-rose px-tag-x py-0.5 text-xs font-bold text-rose",
-        sandbox === "unavailable" && "bg-line-2 px-tag-x py-0.5 text-xs font-bold text-secondary-text",
+        sandbox === "unavailable" && "bg-line-2 px-tag-x py-0.5 text-xs font-bold text-text-secondary",
       )}
     >
       {sandboxWords[sandbox]}
@@ -153,7 +153,7 @@ function AttemptPicker({
             "cursor-pointer border-2 px-2.5 py-1 text-detail",
             each.id === chosen
               ? "border-moonlight bg-line text-moonlight"
-              : "border-line-2 bg-transparent text-label hover:bg-hover hover:text-text",
+              : "border-line-2 bg-transparent text-label hover:bg-hover hover:text-text-strong",
           )}
         >
           {messages.attempt({ number: each.number })}

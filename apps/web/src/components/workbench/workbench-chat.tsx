@@ -76,7 +76,9 @@ export function WorkbenchChat({
         ) : (
           notes.map((note) => (
             <li key={note.id} className="flex flex-col items-end gap-1">
-              <span className="cut max-w-[90%] bg-line px-2.5 py-1.5 whitespace-pre-wrap text-text">{note.text}</span>
+              <span className="cut max-w-[90%] bg-line px-2.5 py-1.5 whitespace-pre-wrap text-text-strong">
+                {note.text}
+              </span>
               <span className="text-xs text-label">
                 {questMessages.drawer.noteTo({ name: hobs(note.recipientId).name, time: formatTime(note.createdAt) })}
               </span>
@@ -85,7 +87,7 @@ export function WorkbenchChat({
         )}
       </ol>
       {ended ? (
-        <p className="m-0 border-t-2 border-line px-3.5 py-3 text-detail text-secondary-text">
+        <p className="m-0 border-t-2 border-line px-3.5 py-3 text-detail text-text-secondary">
           {questMessages.drawer.noteRefused({ name: lead.name })}
         </p>
       ) : (

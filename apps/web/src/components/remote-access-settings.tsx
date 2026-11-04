@@ -125,13 +125,13 @@ export function RemoteAccessSettings() {
 
   return (
     <>
-      <p className="m-0 text-secondary-text">{copy.intro}</p>
+      <p className="m-0 text-text-secondary">{copy.intro}</p>
       <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
         <div className="flex flex-1 flex-col gap-0.5">
           <span id={labelId} className="font-bold">
             {copy.switchLabel}
           </span>
-          <span className="text-[13px] text-secondary-text">{on ? copy.onNote : copy.offNote}</span>
+          <span className="text-[13px] text-text-secondary">{on ? copy.onNote : copy.offNote}</span>
         </div>
         <Switch
           aria-labelledby={labelId}

@@ -66,7 +66,7 @@ export function TaskDrawer({
       onKeyDown={(event) => {
         if (event.key === "Escape") open(undefined);
       }}
-      className="absolute inset-y-0 end-0 z-10 flex w-drawer max-w-full animate-hb-in flex-col border-s-4 border-control bg-panel shadow-drawer"
+      className="absolute inset-y-0 end-0 z-10 flex w-drawer max-w-full animate-hb-in flex-col border-s-4 border-control bg-panel shadow-sheet"
     >
       <header className="flex items-center gap-2 border-b-2 border-line px-3.5 py-3">
         <Button variant="icon" size="icon" onClick={() => open(undefined)} aria-label={copy.close} title={copy.close}>
@@ -175,7 +175,7 @@ function Detail({
                 <button
                   type="button"
                   onClick={() => onOpen(row.task.id)}
-                  className="flex w-full cursor-pointer items-center gap-2 border-0 bg-card px-2.5 py-1.5 text-start text-detail text-text hover:bg-hover"
+                  className="flex w-full cursor-pointer items-center gap-2 border-0 bg-card px-2.5 py-1.5 text-start text-detail text-text-strong hover:bg-hover"
                 >
                   <StatusDot status={roomTone(roomStatus(tree, row.task))} />
                   <HobSprite hob={hobs(row.task.ownerId)} size={16} />
@@ -222,7 +222,7 @@ function Detail({
                       : yourAnswer(question, "task")}
                   </span>
                 )}
-                {question.state === "withdrawn" && <span className="text-secondary-text">{copy.withdrawn}</span>}
+                {question.state === "withdrawn" && <span className="text-text-secondary">{copy.withdrawn}</span>}
               </li>
             ))}
           </ul>

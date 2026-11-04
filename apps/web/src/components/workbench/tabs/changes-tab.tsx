@@ -36,7 +36,7 @@ export function ChangesTab({ activity, state, hobs, focus }: WorkbenchTabProps) 
   const folders = byFolder(changes);
   return (
     <div data-slot="changes" className="@container flex flex-col gap-3 px-5 py-4">
-      <p className="m-0 text-detail text-secondary-text">
+      <p className="m-0 text-detail text-text-secondary">
         {messages.summary({
           total: changes.length,
           parts: KINDS.filter((kind) => counts[kind] > 0).map((kind) => messages.count[kind](counts[kind])),
@@ -85,7 +85,7 @@ function FileRow({ change, on, onPick }: { change: FileChange; on: boolean; onPi
       onClick={onPick}
       className={cn(
         "flex w-full cursor-pointer items-center gap-2 border-0 px-3 py-1.5 text-start",
-        on ? "bg-line text-moonlight" : "bg-transparent text-text hover:bg-hover",
+        on ? "bg-line text-moonlight" : "bg-transparent text-text-strong hover:bg-hover",
       )}
     >
       <span className="flex min-w-0 flex-1 flex-col">

@@ -41,7 +41,7 @@ function Progress({ state }: { state: BackupState }) {
     <div className="flex flex-col gap-1">
       <span role="status" className="text-sm">
         {copy.backup.copying[state.step]}{" "}
-        <span className="text-secondary-text">
+        <span className="text-text-secondary">
           {copy.backup.progress({ copied: formatBytes(state.copiedBytes), total: formatBytes(state.totalBytes) })}
         </span>
       </span>
@@ -66,7 +66,7 @@ function Outcome({ state }: { state: BackupState }) {
         <span className="font-bold text-mint">
           {copy.backup.done({ when: formatMoment(state.finishedAt), size: formatBytes(state.size) })}
         </span>
-        <span className="font-mono text-[13px] break-all text-secondary-text">{state.path}</span>
+        <span className="font-mono text-[13px] break-all text-text-secondary">{state.path}</span>
       </div>
     );
   }
@@ -127,7 +127,7 @@ function BackupNow() {
           </Button>
         )}
       </div>
-      <span className="text-[13px] text-secondary-text">{copy.backup.privacy}</span>
+      <span className="text-[13px] text-text-secondary">{copy.backup.privacy}</span>
     </div>
   );
 }
@@ -183,7 +183,7 @@ function SetAside({ path, size }: { path: string; size: number }) {
       <span className="flex flex-wrap items-center gap-2">
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span>{copy.latest.setAside({ size: formatBytes(size) })}</span>
-          <span className="font-mono text-[13px] break-all text-secondary-text">{path}</span>
+          <span className="font-mono text-[13px] break-all text-text-secondary">{path}</span>
         </span>
         {!asking && (
           <Button variant="deny" size="xs" onClick={() => setAsking(true)}>
@@ -230,7 +230,7 @@ function LatestRestore() {
           {latest.workHeld && (
             <div className="flex flex-col gap-1.5">
               <span className="font-bold text-lantern">{copy.latest.held}</span>
-              <span className="text-sm text-secondary-text">{copy.latest.heldNote}</span>
+              <span className="text-sm text-text-secondary">{copy.latest.heldNote}</span>
               <ResumeWorkButton />
             </div>
           )}
@@ -239,7 +239,7 @@ function LatestRestore() {
               <span>{copy.latest.missing}</span>
               <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
                 {latest.missingFolders.map((folder) => (
-                  <li key={folder} className="font-mono text-[13px] break-all text-secondary-text">
+                  <li key={folder} className="font-mono text-[13px] break-all text-text-secondary">
                     {folder}
                   </li>
                 ))}
@@ -258,7 +258,7 @@ export function BackupSettings() {
   const [restoring, setRestoring] = useState(false);
   return (
     <>
-      <p className="m-0 text-secondary-text">{copy.intro}</p>
+      <p className="m-0 text-text-secondary">{copy.intro}</p>
       <LatestRestore />
       <BackupNow />
       <WhatItHolds />
