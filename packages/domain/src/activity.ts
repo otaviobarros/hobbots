@@ -93,6 +93,22 @@ const sequenceAt = (line: string, i: number) => {
 };
 
 /**
+ * The text of the quoted part of a word that opens at `j`, quotes removed, and the index past it.
+ * Inside double quotes a backslash still escapes `$`, a backtick, `"` and `\\`, and joins the next line.
+ */
+const quotedPart = (line: string, j: number) => {
+  const quote = line[j];
+  let text = "";
+  let k = j + 1;
+  while (k < line.length && line[k] !== quote) {
+    const escaped = quote === '"' && line[k] === "\\" && '$`"\\\n'.includes(line[k + 1] ?? "x");
+    text += escaped && line[k + 1] === "\n" ? "" : line[escaped ? k + 1 : k];
+    k += escaped ? 2 : 1;
+  }
+  return { text, next: k + 1 };
+};
+
+/**
  * The delimiter word of the heredoc whose `<<` ends just before `i`, after an optional `-`, with its
  * quotes and backslashes removed as the shell removes them, and the index just past it.
  */
@@ -102,17 +118,13 @@ const heredocWord = (line: string, i: number) => {
   let word = "";
   while (j < line.length && !/[\s;&|<>()]/.test(line[j] as string)) {
     const c = line[j] as string;
-    if (c === "\\") {
-      word += line[j + 1] ?? "";
-      j += 2;
-    } else if (c === "'" || c === '"') {
-      const close = line.indexOf(c, j + 1);
-      const end = close === -1 ? line.length : close;
-      word += line.slice(j + 1, end);
-      j = end + 1;
+    if (c === "'" || c === '"') {
+      const part = quotedPart(line, j);
+      word += part.text;
+      j = part.next;
     } else {
-      word += c;
-      j++;
+      word += c === "\\" ? (line[j + 1] ?? "") : c;
+      j += c === "\\" ? 2 : 1;
     }
   }
   return { word, next: j };

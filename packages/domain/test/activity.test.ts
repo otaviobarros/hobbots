@@ -123,6 +123,12 @@ describe("runsInSequence", () => {
     expect(runsInSequence("cat <<E'OF'\ntext\nEOF\nfalse")).toBe(true);
     expect(runsInSequence('cat <<"E"O\\F > a.md\ntext; more\nEOF\nfalse')).toBe(true);
     expect(runsInSequence("cat <<\\EOF\na; b\nEOF")).toBe(false);
+    // Inside double quotes a backslash still escapes a quote or a backslash, and only those few.
+    expect(runsInSequence('cat <<"E\\"OF"\ntext\nE"OF\nfalse\necho done')).toBe(true);
+    expect(runsInSequence('cat <<"E\\\\OF"\ntext\nE\\OF\nfalse')).toBe(true);
+    expect(runsInSequence('cat <<"E\\OF"\ntext\nE\\OF\nfalse')).toBe(true);
+    expect(runsInSequence("cat <<'E\\OF'\ntext\nE\\OF\nfalse")).toBe(true);
+    expect(runsInSequence('cat <<"E\\"OF"\na; b\nE"OF')).toBe(false);
   });
 
   it("is false for one command, a chain on success or failure, a redirection and a quoted separator", () => {
