@@ -1,6 +1,7 @@
+import { resolve } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { type Plugin, runnerImport } from "vite";
+import { normalizePath, type Plugin, runnerImport } from "vite";
 
 /** Where index.html asks for the frame. */
 const FRAME_SLOT = "<!--app-frame-->";
@@ -14,17 +15,22 @@ const FRAME_MODULE = "./src/components/shell/app-frame.tsx";
  */
 export const appFrame = (): Plugin => {
   let markup: Promise<string> | undefined;
+  let entry = "";
   let files = new Set<string>();
   const render = async () => {
     const { module, dependencies } = await runnerImport<typeof import("./src/components/shell/app-frame.tsx")>(
       FRAME_MODULE,
       { configFile: false, logLevel: "error" },
     );
-    files = new Set(dependencies);
+    // The dependencies leave out the entry itself, which changes most often.
+    files = new Set([entry, ...dependencies]);
     return renderToStaticMarkup(createElement(module.AppFrame));
   };
   return {
     name: "hobbots:app-frame",
+    configResolved({ root }) {
+      entry = normalizePath(resolve(root, FRAME_MODULE));
+    },
     transformIndexHtml: {
       order: "pre",
       handler: async (html, context) => {
