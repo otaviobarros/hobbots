@@ -63,11 +63,11 @@ export function StandingRules() {
   );
 }
 
-/** Settings › Permissions › Standing rules: the same rules, across hobs. */
+/** Settings › Safety › Always allowed: the same rules, across hobs. */
 export function StandingRuleSettings() {
   return (
-    <section aria-label={copy.heading} className="flex flex-col gap-2 pt-2">
-      <span className="lbl text-label">{copy.heading}</span>
+    <section aria-label={copy.settings.heading} className="flex flex-col gap-3">
+      <h3 className="lbl m-0 text-label">{copy.settings.heading}</h3>
       <p className="m-0 text-sm text-text-secondary">{copy.settings.intro}</p>
       <StandingRuleList />
     </section>

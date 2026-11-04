@@ -29,7 +29,7 @@ import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
-import { isSettingsSection } from "./components/settings/sections.ts";
+import { type ConnectionsTab, isConnectionsTab, isSettingsSection } from "./components/settings/sections.ts";
 import { SettingsPage } from "./components/settings/settings-page.tsx";
 import { SetupRemoteAccess } from "./components/setup-remote-access.tsx";
 import { Summon } from "./components/summon.tsx";
@@ -295,9 +295,14 @@ const settingsSectionRoute = createRoute({
   beforeLoad: ({ params }) => {
     if (!isSettingsSection(params.section)) throw redirect({ to: "/settings" });
   },
+  // `?tab=charms` opens Connections on its Charms tab.
+  validateSearch: (search: Record<string, unknown>): { tab?: ConnectionsTab | undefined } => ({
+    tab: isConnectionsTab(search.tab) && search.tab !== "ai" ? search.tab : undefined,
+  }),
   component: function SettingsSectionPage() {
     const { section } = settingsSectionRoute.useParams();
-    return <SettingsPage section={isSettingsSection(section) ? section : null} />;
+    const { tab } = settingsSectionRoute.useSearch();
+    return <SettingsPage section={isSettingsSection(section) ? section : null} tab={tab ?? "ai"} />;
   },
 });
 // The Archive: archived chats across every hob and retired hobs (CH-009, AG-006). `?tab=hobs`

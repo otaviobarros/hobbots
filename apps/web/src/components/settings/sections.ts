@@ -8,6 +8,14 @@ export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 export const isSettingsSection = (value: unknown): value is SettingsSection =>
   SETTINGS_SECTIONS.some((section) => section === value);
 
+/** The tabs of Settings › Connections: the AI hobs think with, and the Charms they use. */
+const CONNECTIONS_TABS = ["ai", "charms"] as const;
+
+export type ConnectionsTab = (typeof CONNECTIONS_TABS)[number];
+
+export const isConnectionsTab = (value: unknown): value is ConnectionsTab =>
+  CONNECTIONS_TABS.some((tab) => tab === value);
+
 /** A section's name, as the section list and its heading say it. */
 export const sectionName = (section: SettingsSection): string => messages.sections[section].name;
 
@@ -16,6 +24,8 @@ interface SettingEntry {
   readonly label: string;
   readonly words: ReadonlyArray<string>;
   readonly section: SettingsSection;
+  /** The Connections tab it sits on, when not the first. */
+  readonly tab?: ConnectionsTab;
 }
 
 const INDEX: ReadonlyArray<SettingEntry> = messages.find.entries;
