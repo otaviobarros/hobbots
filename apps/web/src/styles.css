@@ -109,6 +109,12 @@
   --spacing-drawer: 420px;
   /* The Task chat drawer beside the Workbench's tabs. */
   --spacing-workbench-chat: 330px;
+  /* The sidebar on every screen after setup: collapsed, expanded, and its rows. */
+  --spacing-sidebar: 72px;
+  --spacing-sidebar-open: 256px;
+  --spacing-row-min: 36px;
+  /* From this width the expanded sidebar pushes the page aside; below it, it opens over the page. */
+  --breakpoint-wide: 1100px;
 
   /* UI motion reads --ease-ui from the skin; scene and hob art always step, like pixel art. */
   --default-transition-timing-function: var(--ease-ui);
@@ -417,6 +423,8 @@
   --radius-tag: var(--corner-tag);
   --radius-dot: var(--corner-dot);
   --radius-tile: var(--corner-tile);
+  /* The fill of the selected row: card in Lamplight, line in Workshop. */
+  --color-selected: var(--selected);
 }
 
 :root {
@@ -536,6 +544,7 @@
  * Workshop is the pixel look. Components read these, never a corner, font or easing directly.
  */
 :root {
+  --selected: var(--color-card);
   --corner-control: 8px;
   --corner-card: 16px;
   --corner-tag: 6px;
@@ -561,6 +570,7 @@
 }
 
 :root[data-theme^="workshop-"] {
+  --selected: var(--color-line);
   --corner-control: 0;
   --corner-card: 0;
   --corner-tag: 0;
@@ -729,6 +739,27 @@ body {
   font-size: 14px;
   letter-spacing: var(--label-track);
   text-transform: var(--label-case);
+}
+
+/*
+ * A sidebar label. Expanding, the width moves first and the label fades in once it settles;
+ * collapsing, the label fades out before the width shrinks, then gives up its room.
+ */
+.sidebar-label {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    opacity 100ms var(--ease-ui),
+    max-width 0s linear 220ms;
+}
+[data-open="true"] .sidebar-label {
+  max-width: 200px;
+  opacity: 1;
+  transition:
+    opacity 150ms var(--ease-ui) 120ms,
+    max-width 0s;
 }
 
 /* Hover a hob and it hops, in the looks that hop. */
