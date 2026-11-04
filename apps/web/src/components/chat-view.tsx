@@ -41,6 +41,7 @@ import { ArchiveToastViewport } from "./archive/archive-toast.tsx";
 import { ThreadHeaderMenu } from "./archive/thread-menu.tsx";
 import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { BrainPicker, BrainSwitchNote, useOtherReadyRuntimes } from "./brain-picker.tsx";
+import { ChatSearch, ChatSearchButton } from "./chat-search/chat-search.tsx";
 import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
 import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
@@ -139,6 +140,10 @@ export function ChatView({
   // A search match opens with its message in view and holds it there while a reply streams, until
   // the user scrolls back down to the end or sends a message.
   const [released, setReleased] = useState<string>();
+  // The search box under the header, opened from its magnifier, belongs to the thread it opened in.
+  const [findingIn, setFindingIn] = useState<string>();
+  const finding = threadId !== undefined && findingIn === threadId;
+  const setFinding = (open: boolean) => setFindingIn(open ? threadId : undefined);
   const holding = focusMessageId !== undefined && released !== focusMessageId;
   const follow = () => setReleased(focusMessageId);
 
@@ -242,6 +247,7 @@ export function ChatView({
         </div>
         {threadId && <ThreadQuestButton hobId={hobId} threadId={threadId} pins={pins} />}
         <BrainPicker hob={current} thread={thread.data} />
+        {thread.data && <ChatSearchButton open={finding} onToggle={() => setFinding(!finding)} />}
         {thread.data && <ThreadHeaderMenu hob={current} thread={thread.data} />}
         <Button asChild variant="outline">
           <Link to="/hobs/$hobId/profile" params={{ hobId }}>
@@ -249,6 +255,14 @@ export function ChatView({
           </Link>
         </Button>
       </header>
+      {threadId && finding && (
+        <ChatSearch
+          hob={current}
+          threadId={threadId}
+          transcript={messages.data ?? []}
+          onClose={() => setFinding(false)}
+        />
+      )}
       {threadId && <PinNotes threadId={threadId} pins={pins} />}
 
       <div
