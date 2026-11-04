@@ -10,7 +10,12 @@ test.afterEach(async () => {
 });
 
 /** The sprites on a ticket, one per hob on the Quest up to the most it has room for. */
-const sprites = (on: Locator) => on.locator(":scope > span > span:first-child > span:has(> span[aria-hidden])");
+const sprites = (on: Locator) =>
+  on
+    .locator("span[aria-hidden]")
+    .first()
+    .locator(":scope > span")
+    .filter({ has: on.page().locator("[aria-hidden]") });
 
 /** The ticket's height, which never changes however the work goes. */
 const height = async (on: Locator) => (await on.boundingBox())?.height ?? 0;
