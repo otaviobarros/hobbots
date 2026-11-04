@@ -38,7 +38,7 @@ const SET_ASIDE: ReadonlyArray<{ readonly rule: string; readonly node: RegExp; r
   },
   {
     rule: "color-contrast",
-    node: /<span class="rounded-tag px-tag-x py-0\.5 text-xs font-bold whitespace-nowrap bg-line text-mint">/,
+    node: /<span class="rounded-tag px-(tag-x|1\.5) py-0\.5 text-xs font-bold whitespace-nowrap bg-line text-mint">/,
     why: "#839: mint status tags on the line color reach 4.45:1, less inside dimmed rows.",
   },
   {
