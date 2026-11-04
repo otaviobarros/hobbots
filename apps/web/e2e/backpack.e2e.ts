@@ -129,8 +129,11 @@ test("[TC-IN-150] Aldric's card and his Task's backpack show Quill's result as a
     "Waiting",
   );
 
-  // Opening it from the card opens Quill's Task.
+  // Opening it from the card opens Quill's Task. Escape closes the sheet through the address, and a
+  // card closes when the address changes, so the card opens only once the sheet is gone.
   await page.keyboard.press("Escape");
+  await expect(room).toBeHidden();
+  await expect(page).not.toHaveURL(/[?&](task|quest)=/);
   await (await card("Aldric")).getByRole("button", { name: quillResult }).click();
   await expect(page.getByRole("heading", { name: "Draft the landing copy" })).toBeVisible();
   await page.keyboard.press("Escape");
