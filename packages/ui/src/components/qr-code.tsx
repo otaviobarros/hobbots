@@ -1,6 +1,6 @@
-import { cn } from "cn";
 import type * as React from "react";
 import { encode } from "uqr";
+import { cn } from "../lib/utils.ts";
 import { PixelArt } from "./pixel-art.tsx";
 
 /** The QR code's modules as pixel rows: `#` for a dark module, `.` for a light one, with a quiet zone. */

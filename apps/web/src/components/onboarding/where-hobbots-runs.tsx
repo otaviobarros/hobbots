@@ -38,7 +38,7 @@ const LINK_PALETTE = HOUSE_PALETTE;
 
 /** A choice card's frame; `choiceOpenClass` adds the hover and focus of one that can be chosen. */
 const choiceClass = "flex items-start gap-4 rounded-card bg-card p-5 text-left text-text-strong no-underline";
-export const choiceOpenClass = `${choiceClass} cursor-pointer border-0 transition-colors hover:bg-hover hover:shadow-[inset_0_0_0_2px_var(--color-moonlight)] focus-visible:outline-3 focus-visible:outline-moonlight focus-visible:-outline-offset-3 disabled:cursor-wait`;
+export const choiceOpenClass = `${choiceClass} cursor-pointer border-0 transition-colors hover:bg-hover hover:shadow-[inset_0_0_0_2px_var(--color-moonlight)] focus-ring disabled:cursor-wait`;
 
 function ChoiceIcon({ rows, palette }: { rows: ReadonlyArray<string>; palette: Record<string, string> }) {
   return (

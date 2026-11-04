@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
 import { Toast as ToastPrimitive } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // Hobbots toasts (docs/design/ui-ux.md): a card with a line-2 border above the composer, with one
 // action as a secondary button. Radix announces it politely, keeps it while it is hovered or

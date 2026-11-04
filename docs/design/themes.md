@@ -115,7 +115,7 @@ Gradients in the hob's color are allowed on the hob hero, card doors and the pix
 
 Corners come from the skin's `corner-*` values. Filter chips are the one exception: they are pills (`radius-round`) in every theme, Workshop included. Bubble corners are fixed by design too.
 
-The focus ring is 2px in every theme. Workshop's `--focus-outline` in `styles.css` is still 3px until #801 lands.
+The focus ring is 2px in every theme. Workshop's `--focus-width` in `styles.css` is still 3px until #801 lands. Fields, cards and panels draw it with the `focus-ring` utilities and buttons with `cut-control`, never with their own outline or ring classes.
 
 ## In the code
 
@@ -127,6 +127,7 @@ Components read the skin through a few utilities, so none of them checks the the
 | --- | --- | --- |
 | `cut` | `--cut`, `--corner-card` | Cards, menus, dialogs and toasts |
 | `cut-control` | `--cut`, `--corner-control`, the focus values | Buttons and rows you press |
+| `focus-ring`, `focus-ring-within`, `focus-inset` | `--focus-outline`, `--focus-width`, `--cut-focus-offset` | The focus ring of fields, cards and panels: on the element, or on a label or frame around a focused form control. A `cut` card draws it inside the clip in Workshop; `focus-inset` draws it inside the edge where a scroller would clip it |
 | `rounded-control`, `rounded-tag`, `rounded-dot`, `rounded-tile`, `rounded-card` | `--corner-*` | Fields, tags, state marks, portrait tiles |
 | `font-heading` | `--font-heading` | Headings and hob names. `font-pixel` stays for the wordmark and art marks |
 | `lbl` | `--font-heading`, `--label-case`, `--label-track` | Section labels |

@@ -122,7 +122,7 @@ function AskForm({ hub, failed = false }: { hub: string; failed?: boolean }) {
         value={name}
         maxLength={64}
         onChange={(event) => setName(event.target.value)}
-        className="rounded-control border-2 border-line-2 bg-deep px-3 py-2 text-text-strong focus:border-focus-ring"
+        className="rounded-control border-2 border-line-2 bg-deep px-3 py-2 text-text-strong focus-ring"
       />
       <span id={hintId} className="-mt-2 text-[13px] text-label">
         {copy.ask.nameHint}

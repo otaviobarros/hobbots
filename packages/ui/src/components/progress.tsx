@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
 import { Progress as ProgressPrimitive } from "radix-ui";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 // A meter from the Hobbots component sheet: a track on line-2 and a fill in the tone's color.
 // Corners and easing come from the look's skin, so the bar is round in Lamplight and square in

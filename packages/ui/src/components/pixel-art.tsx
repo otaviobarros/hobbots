@@ -1,6 +1,6 @@
 import { type PixelPalette, type PixelRows, pixelPaths } from "@hobbots/art/pixels";
-import { cn } from "cn";
 import type * as React from "react";
+import { cn } from "../lib/utils.ts";
 
 export type { PixelPalette, PixelRows };
 

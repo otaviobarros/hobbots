@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { THEME_CORNERS, THEME_TEXT_STYLES } from "@hobbots/ui/lib/utils";
 import { describe, expect, it } from "vitest";
 import { THEMES } from "./src/lib/theme.ts";
 
@@ -52,6 +53,15 @@ describe("themes", () => {
     expect(skin(workshop)).toEqual(skin(lamplight));
     expect(workshop.get("--corner-card")).toBe("0");
     expect(lamplight.get("--corner-card")).toBe("16px");
+  });
+
+  it("names every type style and corner to the class merger", () => {
+    const names = (prefix: string) =>
+      [...declarations("@theme").keys(), ...declarations("@theme inline").keys()]
+        .filter((name) => name.startsWith(prefix) && !name.endsWith("--line-height"))
+        .map((name) => name.slice(prefix.length));
+    expect(THEME_TEXT_STYLES).toEqual(names("--text-"));
+    expect(THEME_CORNERS).toEqual(names("--radius-"));
   });
 });
 
