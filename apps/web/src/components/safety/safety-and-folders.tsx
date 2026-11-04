@@ -7,6 +7,9 @@ import { ApiError } from "../../api/client.ts";
 import { addFolder, folderName, PRESETS, removeFolder } from "../../api/safety.ts";
 import { useUpdateSetup } from "../../api/setup.ts";
 import { focusWithin } from "../hob-form/hob-form.tsx";
+import { messages } from "../messages.ts";
+
+const copy = messages.safety;
 
 const chooseFolder = globalThis.window?.hobbots?.chooseFolder;
 
@@ -54,7 +57,7 @@ export function PresetPicker({
               <span className="flex flex-wrap items-center gap-1.5">
                 <strong className="text-[17px]">{preset.label}</strong>
                 {preset.recommended && (
-                  <span className="rounded-tag bg-line-2 px-2 py-0.5 text-[13px] font-bold">Recommended</span>
+                  <span className="rounded-tag bg-line-2 px-2 py-0.5 text-[13px] font-bold">{copy.recommended}</span>
                 )}
               </span>
               <span className="text-sm leading-5">{preset.brief}</span>
@@ -72,12 +75,10 @@ export function PresetPicker({
           later="Off for now. Running without the sandbox arrives in a later update."
         />
       )}
-      <p className="m-0 text-[13px] text-label">
-        You can change this in Settings › Safety, and make any single hob more careful in its profile.
-      </p>
+      <p className="m-0 text-[13px] text-label">{copy.changeLater}</p>
       {update.isError && (
         <p role="alert" className="m-0 text-sm text-rose">
-          Hobbots could not save the safety preset. Try again in a moment.
+          {copy.presetFailed}
         </p>
       )}
     </fieldset>
@@ -115,7 +116,7 @@ function PresetRules({ preset }: { preset: SafetyPreset }) {
   if (!info) return null;
   return (
     <div className="flex flex-col gap-2 rounded-card bg-card p-4">
-      <span className="lbl text-label">With {info.label}, a hob will</span>
+      <span className="lbl text-label">{copy.presetRules({ preset: info.label })}</span>
       <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
         {info.rules.map(([rule, answer]) => (
           <li key={rule} className="flex gap-2.5 text-sm leading-5">
@@ -155,7 +156,7 @@ export function LockedSwitch({
           <span id={labelId} className="font-bold">
             {label}
           </span>
-          <span className="bg-lantern px-1.5 text-xs text-ground">Later</span>
+          <span className="bg-lantern px-1.5 text-xs text-ground">{copy.later}</span>
         </span>
         <span id={noteId} className="text-[13px] text-text-secondary">
           {note} {later}
@@ -271,9 +272,9 @@ export function FolderList({
                 size="xs"
                 disabled={pending}
                 onClick={() => onSave(removeFolder(folders, folder))}
-                aria-label={`Remove ${folder}`}
+                aria-label={copy.removeFolder({ folder })}
               >
-                Remove
+                {copy.remove}
               </Button>
             </li>
           ))}
@@ -283,7 +284,7 @@ export function FolderList({
       {chooseFolder ? (
         <div>
           <Button variant="outline" onClick={() => void pick()} disabled={picking || pending}>
-            + Choose a folder…
+            {copy.chooseFolder}
           </Button>
         </div>
       ) : (
@@ -297,13 +298,13 @@ export function FolderList({
           }}
         >
           <label htmlFor={inputId} className="sr-only">
-            Folder path on the hub
+            {copy.pathLabel}
           </label>
           <input
             id={inputId}
             value={typed}
             onChange={(event) => setTyped(event.target.value)}
-            placeholder="~/Documents or /Users/you/code"
+            placeholder={copy.pathPlaceholder}
             aria-invalid={refused !== undefined}
             aria-describedby={refused ? errorId : undefined}
             spellCheck={false}
@@ -312,11 +313,9 @@ export function FolderList({
             className="min-w-[260px] flex-1 border-2 border-control bg-deep px-[11px] py-[7px] font-mono text-sm text-text-strong placeholder:text-label"
           />
           <Button type="submit" variant="outline" disabled={typed.trim() === "" || pending}>
-            Add folder
+            {copy.addFolder}
           </Button>
-          <span className="w-full text-[13px] text-label">
-            Type the path of a folder on the computer that runs your hub.
-          </span>
+          <span className="w-full text-[13px] text-label">{copy.pathNote}</span>
         </form>
       )}
 
@@ -327,7 +326,7 @@ export function FolderList({
       ) : (
         error && (
           <p role="alert" className="m-0 text-sm text-rose">
-            Hobbots could not save the folders. Try again in a moment.
+            {copy.foldersFailed}
           </p>
         )
       )}

@@ -1,15 +1,7 @@
 // Runs Biome with the repository's biome.json over probe files, to prove the layer import rules (STD-ARCH-001..004).
 
-import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { after, before, test } from "node:test";
-import { fileURLToPath } from "node:url";
-
-const root = fileURLToPath(new URL("../", import.meta.url));
-const biome = join(root, "node_modules/.bin/biome");
+import { before, test } from "node:test";
+import { lintProbes } from "./biome-probes.mjs";
 
 const probes = {
   "packages/domain/src/allowed.ts": 'import { Schema } from "effect";\nimport { id } from "./id.ts";\n',
@@ -25,35 +17,14 @@ const probes = {
   "packages/persistence/src/node.ts": 'import { readFileSync } from "node:fs";\n',
 };
 
-let dir;
-let found;
+let fails;
+let passes;
 
 before(() => {
-  dir = mkdtempSync(join(tmpdir(), "hobbots-import-rules-"));
-  copyFileSync(join(root, "biome.json"), join(dir, "biome.json"));
-  // biome.json loads its GritQL plugins from scripts/biome.
-  cpSync(join(root, "scripts/biome"), join(dir, "scripts/biome"), { recursive: true });
-  for (const [file, source] of Object.entries(probes)) {
-    mkdirSync(dirname(join(dir, file)), { recursive: true });
-    writeFileSync(join(dir, file), `${source}\nexport {};\n`);
-  }
-  let output;
-  try {
-    output = execFileSync(biome, ["lint", "--vcs-enabled=false", "--reporter=json", "--max-diagnostics=none", "."], {
-      cwd: dir,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-  } catch (error) {
-    output = error.stdout;
-  }
-  found = new Set(JSON.parse(output).diagnostics.map(({ location, category }) => `${location.path} ${category}`));
+  ({ fails, passes } = lintProbes(
+    Object.fromEntries(Object.entries(probes).map(([file, source]) => [file, `${source}\nexport {};\n`])),
+  ));
 });
-
-after(() => rmSync(dir, { recursive: true, force: true }));
-
-const fails = (file, category) => assert.ok(found.has(`${file} ${category}`), `${file} should fail ${category}`);
-const passes = (file, category) => assert.ok(!found.has(`${file} ${category}`), `${file} should pass ${category}`);
 
 test("the domain may import effect and its own files", () => {
   passes("packages/domain/src/allowed.ts", "lint/style/noRestrictedImports");

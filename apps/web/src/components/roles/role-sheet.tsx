@@ -18,6 +18,7 @@ const copy = {
   close: "Close",
   pick: ({ role }: { role: string }) => `Pick ${role}`,
   pickOwn: "Use your own title",
+  legend: "Role",
 };
 
 const OPTION =
@@ -111,7 +112,7 @@ export function RoleSheet({
           </nav>
 
           <fieldset className="m-0 flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto border-0 p-5">
-            <legend className="sr-only">Role</legend>
+            <legend className="sr-only">{copy.legend}</legend>
             {groups.map((group) => (
               <section key={group.family} aria-label={group.title} className="flex flex-col gap-2">
                 <h3 className="lbl m-0 text-label">{group.title}</h3>

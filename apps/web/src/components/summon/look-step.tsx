@@ -46,7 +46,7 @@ export function LookStep({ draft, onChange, name }: { draft: FirstHobDraft; onCh
               const value = e.target.value;
               onChange((d) => ({ ...d, name: value, named: true }));
             }}
-            aria-label="Hob name"
+            aria-label={copy.nameLabel}
             className={`min-w-0 flex-1 text-[17px] ${FIELD}`}
           />
           <Button

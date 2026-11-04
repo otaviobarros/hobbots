@@ -6,6 +6,7 @@ import { FIREFLIES, HOUSES, intro, PROVIDERS, SCENE_HOBS, type SceneHob } from "
 import { useFirstRunTheme } from "../../lib/theme.ts";
 import { ChiefMark } from "../chief/chief-mark.tsx";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { messages } from "../messages.ts";
 import { Stars } from "../scene/scene.tsx";
 
 const GREETING_MS = 1400;
@@ -75,7 +76,7 @@ export function WelcomeVillage({
           ))}
         </h1>
         <p className={cn("m-0 text-xl", introClass("animate-hb-rise"))} style={introDelay(intro.tagline)}>
-          Little helpers that work on your computer, with the AI you already use.
+          {messages.welcome.tagline}
         </p>
         <div
           className={cn("flex flex-wrap justify-center gap-3.5 pt-3.5", introClass("animate-hb-rise"))}
@@ -83,7 +84,7 @@ export function WelcomeVillage({
         >
           {actions}
         </div>
-        <span className="text-[13px] text-text-secondary">About 3 minutes. Everything stays on your computer.</span>
+        <span className="text-[13px] text-text-secondary">{messages.welcome.duration}</span>
         {more}
         {alert !== undefined && (
           <span role="alert" className="bg-ground px-2 text-sm text-rose">
@@ -148,7 +149,7 @@ export function WelcomeVillage({
         ))}
         <span className="relative flex flex-col items-center">
           <span className="absolute bottom-full start-[70%] mb-1 w-[230px] rounded-[12px_12px_12px_2px] bg-text-strong/85 px-3 py-2 text-start text-sm leading-5 text-ground">
-            Welcome! I'm the Chief. I'll help you set up your first hob.
+            {messages.welcome.chiefHello}
           </span>
           <ChiefMark size={150} mood="working" />
         </span>
@@ -164,7 +165,9 @@ export function WelcomeVillage({
         )}
         style={introDelay(intro.providers)}
       >
-        <span className="text-[13px] text-text-secondary">Works with {PROVIDERS.join(" · ")}</span>
+        <span className="text-[13px] text-text-secondary">
+          {messages.welcome.worksWith({ providers: PROVIDERS.join(" · ") })}
+        </span>
       </div>
     </main>
   );
@@ -190,7 +193,7 @@ function VillageHob({ hob, walkIn }: { hob: SceneHob; walkIn: boolean }) {
       <button
         type="button"
         onClick={greet}
-        aria-label={`Say hi to ${hob.name}`}
+        aria-label={messages.welcome.sayHi({ name: hob.name })}
         className="hop-on-hover relative block cursor-pointer border-0 bg-transparent p-0"
       >
         {greeted > 0 && (

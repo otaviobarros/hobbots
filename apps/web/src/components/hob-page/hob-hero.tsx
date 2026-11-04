@@ -65,7 +65,10 @@ export function HobHero({
             </h1>
             <HobStateTag state={state} fresh={fresh} />
           </span>
-          <span title={`${hob.roleTitle} · ${stats}`} className="truncate text-[15px] text-text-secondary">
+          <span
+            title={copy.roleStats({ role: hob.roleTitle, stats })}
+            className="truncate text-[15px] text-text-secondary"
+          >
             {hob.roleTitle}
             <span className="text-label"> · {stats}</span>
           </span>

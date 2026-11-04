@@ -45,6 +45,7 @@ export function GitHubSettings() {
   return (
     <div className="flex items-start gap-3.5 border-b-2 border-line py-2.5">
       <span aria-hidden className="cut grid size-[30px] flex-none place-items-center bg-line font-bold text-moonlight">
+        {/* biome-ignore lint/style/noJsxLiterals: a decorative GitHub monogram, hidden from screen readers and never translated. */}
         GH
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-2">

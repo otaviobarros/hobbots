@@ -3,6 +3,9 @@ import { Switch } from "@hobbots/ui/components/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId } from "react";
 import { loginItemNotice } from "../../api/login-item.ts";
+import { messages } from "../messages.ts";
+
+const copy = messages.generalSettings;
 
 const bridge = globalThis.window?.hobbots?.loginItem;
 const loginItemKey = ["desktop", "loginItem"] as const;
@@ -36,11 +39,9 @@ function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) 
       <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
         <div className="flex flex-1 flex-col gap-0.5">
           <span id={labelId} className="font-bold">
-            Open Hobbots at login
+            {copy.openAtLogin}
           </span>
-          <span className="text-[13px] text-text-secondary">
-            Starts in the background, without the window, so hobs keep working after a restart.
-          </span>
+          <span className="text-[13px] text-text-secondary">{copy.openAtLoginNote}</span>
         </div>
         <Switch
           aria-labelledby={labelId}
@@ -59,14 +60,14 @@ function LoginItemRow({ loginItem }: { loginItem: NonNullable<typeof bridge> }) 
           <span className="flex-1">{notice.text}</span>
           {state.data?.status === "requires-approval" && (
             <Button variant="outline" size="sm" onClick={() => openSettings.mutate()}>
-              Open Login Items
+              {copy.openLoginItems}
             </Button>
           )}
         </div>
       )}
       {(state.isError || change.isError) && (
         <p role="alert" className="m-0 text-sm text-rose">
-          Hobbots could not read or change its login item. Try again, or check System Settings › General › Login Items.
+          {copy.loginItemFailed}
         </p>
       )}
     </>
@@ -90,11 +91,9 @@ function KeepRunningRow({ keepRunning }: { keepRunning: NonNullable<typeof keepR
       <div className="flex items-center gap-4 border-b-2 border-line py-2.5">
         <div className="flex flex-1 flex-col gap-0.5">
           <span id={labelId} className="font-bold">
-            Keep running in the menu bar when the window closes
+            {copy.keepRunning}
           </span>
-          <span className="text-[13px] text-text-secondary">
-            Hobs keep working after you close the window. Reopen it from the menu-bar icon.
-          </span>
+          <span className="text-[13px] text-text-secondary">{copy.keepRunningNote}</span>
         </div>
         <Switch
           aria-labelledby={labelId}
@@ -105,18 +104,15 @@ function KeepRunningRow({ keepRunning }: { keepRunning: NonNullable<typeof keepR
       </div>
       {state.data !== undefined && !on && (
         <p role="status" className="cut m-0 border-2 border-lantern bg-notice px-3 py-2.5 text-sm leading-[1.45]">
-          Closing the window will quit Hobbots. Hobs stop what they are doing, and their work is picked up again as
-          interrupted next time. If hobs are busy, Hobbots asks before quitting.
+          {copy.closeQuits}
         </p>
       )}
       {(state.isError || change.isError) && (
         <p role="alert" className="m-0 text-sm text-rose">
-          Hobbots could not read or change this setting. Try again.
+          {copy.keepRunningFailed}
         </p>
       )}
-      <p className="m-0 text-[13px] text-label">
-        Quitting Hobbots from the menu-bar icon or with ⌘Q stops the server it started either way.
-      </p>
+      <p className="m-0 text-[13px] text-label">{copy.quitStopsServer}</p>
     </>
   );
 }
@@ -129,8 +125,6 @@ export function GeneralSettings() {
       {keepRunningBridge && <KeepRunningRow keepRunning={keepRunningBridge} />}
     </>
   ) : (
-    <p className="m-0 text-text-secondary">
-      Open at login and the menu bar are set in the Hobbots app on the Mac that runs your hub.
-    </p>
+    <p className="m-0 text-text-secondary">{copy.desktopOnly}</p>
   );
 }

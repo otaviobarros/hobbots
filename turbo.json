@@ -1,27 +1,48 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "stream",
-  "globalDependencies": ["tsconfig.base.json"],
+  "globalDependencies": ["tsconfig.base.json", ".node-version"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"],
       "outputs": ["dist/**", "out/**"]
     },
     "@hobbots/site#build": {
       "dependsOn": ["^build"],
       "env": ["CLOUDFLARE_ENV", "TURNSTILE_SITE_KEY"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"],
       "outputs": ["dist/**", ".wrangler/deploy/**"]
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"]
+      "dependsOn": ["^typecheck"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"]
     },
     "transit": {
-      "dependsOn": ["^transit"]
+      "dependsOn": ["^transit"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"]
     },
     "test": {
       "dependsOn": ["transit"],
-      "env": ["HOBBOTS_TEST_DB", "HOBBOTS_TEST_DATABASE_URL"]
+      "env": ["HOBBOTS_TEST_DB", "HOBBOTS_TEST_DATABASE_URL"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"]
     },
+    "@hobbots/web#test:e2e": {
+      "description": "Browser tests: the web build against hubs started from the server's code and its packages.",
+      "dependsOn": ["build", "^transit", "@hobbots/server#transit"],
+      "env": ["CI", "HOBBOTS_E2E_SHARD"],
+      "passThroughEnv": ["HOBBOTS_E2E_PORT", "PLAYWRIGHT_BROWSERS_PATH"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"],
+      "outputs": ["playwright-report/**", "test-results/**"]
+    },
+    "//#check:standards": {},
+    "//#lint": {},
+    "//#lint:unused": {},
+    "//#lint:dup": {},
+    "//#lint:layers": {},
+    "//#lint:complexity": {},
+    "//#lint:frontend": {},
+    "//#test:scripts": {},
     "dev": {
       "cache": false,
       "persistent": true,

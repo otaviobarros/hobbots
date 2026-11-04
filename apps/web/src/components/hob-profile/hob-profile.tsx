@@ -73,11 +73,11 @@ export function HobProfile({ hobId }: { hobId: AgentId }) {
     return (
       <main className="grid flex-1 place-items-center">
         {hob.isPending ? (
-          <span className="text-label">Loading…</span>
+          <span className="text-label">{messages.profile.loading}</span>
         ) : (
           <div className="flex flex-col items-center gap-3 text-center">
-            <span className="font-heading text-[22px] font-bold text-moonlight">This hob is not here</span>
-            <span className="text-text-secondary">It may have retired. Retired hobs live in the Archive.</span>
+            <span className="font-heading text-[22px] font-bold text-moonlight">{messages.profile.missing}</span>
+            <span className="text-text-secondary">{messages.profile.missingNote}</span>
             <div className="flex gap-2.5">
               <Button asChild variant="outline">
                 <Link to="/archive" search={{ tab: "hobs" }}>
@@ -85,7 +85,7 @@ export function HobProfile({ hobId }: { hobId: AgentId }) {
                 </Link>
               </Button>
               <Button asChild variant="outline">
-                <Link to="/">Go to Home</Link>
+                <Link to="/">{messages.profile.retire.home}</Link>
               </Button>
             </div>
           </div>
@@ -124,7 +124,10 @@ function Profile({
   const [hops, setHops] = useState(0);
 
   return (
-    <main aria-label={`${hob.name}'s profile`} className="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
+    <main
+      aria-label={messages.profile.landmark({ name: hob.name })}
+      className="relative flex min-w-0 flex-1 flex-col overflow-y-auto"
+    >
       <div className="mx-auto flex w-full max-w-[820px] flex-col gap-4.5 px-10 pt-7 pb-6">
         <ProfileHero
           hob={hob}
@@ -141,7 +144,7 @@ function Profile({
           }}
           className="flex flex-col gap-4.5"
         >
-          <TabsList aria-label="Profile">
+          <TabsList aria-label={messages.profile.tabs}>
             {TABS.map(([id, label]) => (
               <TabsTrigger key={id} value={id} className="px-[18px]">
                 {label}

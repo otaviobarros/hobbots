@@ -196,14 +196,12 @@ function ApprovalBody({
       <Details summary={copy.details.approval}>
         <span className="flex flex-col gap-1">
           <span>
-            {approvalCopy.target}: {request.targets.length === 0 ? approvalCopy.noTarget : request.targets.join(", ")}
+            {approvalCopy.targetLine({
+              target: request.targets.length === 0 ? approvalCopy.noTarget : request.targets.join(", "),
+            })}
           </span>
-          <span>
-            {approvalCopy.askedBy}: {approvalCopy.chain({ name: asker.name })}
-          </span>
-          <span>
-            {approvalCopy.risk}: {approvalCopy.riskOf[request.operation]}
-          </span>
+          <span>{approvalCopy.askedByLine({ chain: approvalCopy.chain({ name: asker.name }) })}</span>
+          <span>{approvalCopy.riskLine({ risk: approvalCopy.riskOf[request.operation] })}</span>
           <span>{expiryText(request)}</span>
         </span>
       </Details>

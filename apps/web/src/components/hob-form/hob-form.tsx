@@ -75,8 +75,8 @@ export function NameDice({
       type="button"
       variant="icon"
       onClick={onRoll}
-      aria-label="Random name"
-      title="Random name"
+      aria-label={messages.hobForm.rollName}
+      title={messages.hobForm.rollName}
       className={cn("cut border-control bg-line hover:bg-line-2", className)}
     >
       <Die size={size} rolls={rolls} />
@@ -182,7 +182,7 @@ export function ChoresField<D extends FirstHobDraft>({
           onChange((d) => ({ ...d, chores, choresEdited: true }));
         }}
         aria-describedby="hob-chores-note"
-        placeholder="Tell it about the chores, like you would tell a friend who is helping out."
+        placeholder={messages.hobForm.choresPlaceholder}
         className={cn("resize-none leading-normal", FIELD)}
       />
       <span id="hob-chores-note" className="text-[13px] text-label">
@@ -300,7 +300,7 @@ export function RolePicker({
         <span aria-hidden className="w-2.5">
           {moreOpen ? "▾" : "▸"}
         </span>
-        More roles
+        {messages.hobForm.moreRoles}
         <span className="text-[13px]">{moreCount}</span>
       </button>
       {moreOpen && (
@@ -331,8 +331,8 @@ export function RolePicker({
         }}
         name={name}
         sigil={own ? draft.ownSigil : null}
-        title="Your own"
-        note="Give it a title in your words and pick a sigil."
+        title={messages.hobForm.ownRole}
+        note={messages.hobForm.ownRoleNote}
         className={cn("self-start", !own && "border-dashed")}
       />
       {own && <OwnRole value={draft} onTitle={onOwnTitle} onSigil={onOwnSigil} autoFocus={ownPicked} />}
@@ -342,7 +342,7 @@ export function RolePicker({
         rel="noreferrer"
         className="self-start text-[13px]"
       >
-        Missing a role? Suggest one
+        {messages.hobForm.suggestRole}
       </a>
     </fieldset>
   );
@@ -383,14 +383,14 @@ export function OwnRole({
         value={value.ownTitle}
         maxLength={LABEL_MAX}
         onChange={(e) => onTitle(e.target.value)}
-        placeholder="Its role, in your words. e.g. Garden planner"
-        aria-label="Your own role title"
+        placeholder={messages.hobForm.ownTitlePlaceholder}
+        aria-label={messages.hobForm.ownTitle}
         className="border-2 border-lantern bg-deep px-[11px] py-[9px] text-[15px] text-text-strong"
       />
       <SigilPicker
         value={value.ownSigil}
         onPick={onSigil}
-        legend={<legend className="mb-1.5 text-[13px] text-text-secondary">Sigil</legend>}
+        legend={<legend className="mb-1.5 text-[13px] text-text-secondary">{messages.hobForm.sigil}</legend>}
         className="flex flex-wrap gap-1"
         tileClassName="size-8 border-2 border-line bg-deep hover:border-control data-on:border-lantern data-on:hover:border-lantern"
       />
@@ -438,7 +438,7 @@ export function SigilPicker({
                 name={name}
                 checked={on}
                 onChange={() => onPick(id)}
-                aria-label={`${starterRole(id).title}'s sigil`}
+                aria-label={messages.hobForm.roleSigil({ role: starterRole(id).title })}
                 className="sr-only"
               />
               <RoleSigil sigil={id} size={20} />
@@ -470,7 +470,7 @@ export function GearPicker<D extends FirstHobDraft>({
   return (
     <div className={cn("flex gap-2", className)}>
       <label className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-label">
-        Hat
+        {messages.hobForm.hat}
         <select
           value={draft.hat ?? ""}
           onChange={(e) => {
@@ -479,7 +479,7 @@ export function GearPicker<D extends FirstHobDraft>({
           }}
           className={select}
         >
-          <option value="">From the look</option>
+          <option value="">{messages.hobForm.fromLook}</option>
           {HATS.map((hat) => (
             <option key={hat} value={hat}>
               {ROLE_HAT_TITLES[hat]}
@@ -488,7 +488,7 @@ export function GearPicker<D extends FirstHobDraft>({
         </select>
       </label>
       <label className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px] text-label">
-        Tool
+        {messages.hobForm.tool}
         <select
           value={draft.tool ?? ""}
           onChange={(e) => {
@@ -497,7 +497,7 @@ export function GearPicker<D extends FirstHobDraft>({
           }}
           className={select}
         >
-          <option value="">From the look</option>
+          <option value="">{messages.hobForm.fromLook}</option>
           {TOOLS.map((tool) => (
             <option key={tool} value={tool}>
               {ROLE_TOOL_TITLES[tool]}
@@ -567,7 +567,7 @@ export function NearbyLooks({
 }) {
   return (
     <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-      <legend className="lbl mb-1.5 text-xs text-label">More like this</legend>
+      <legend className="lbl mb-1.5 text-xs text-label">{messages.hobForm.moreLikeThis}</legend>
       <div className={className}>
         {nearbySeeds(draft.lookBase)
           .slice(0, count)
@@ -586,7 +586,7 @@ export function NearbyLooks({
                 name="hob-look"
                 checked={seed === draft.lookSeed}
                 onChange={() => onPick(seed)}
-                aria-label={`Look ${seed}`}
+                aria-label={messages.hobForm.lookN({ n: seed })}
                 className="sr-only"
               />
               <HobSprite hob={{ lookSeed: seed, lookColor: draft.lookColor, ...gearOf(draft) }} size={tile - 8} />
@@ -667,7 +667,7 @@ function Brain<D extends BrainChoice>({
   return (
     <>
       <fieldset className="m-0 flex flex-wrap gap-2 border-0 p-0">
-        <legend className="sr-only">Model</legend>
+        <legend className="sr-only">{messages.hobForm.model}</legend>
         {main.map((m) => (
           <Choice
             key={m.id}

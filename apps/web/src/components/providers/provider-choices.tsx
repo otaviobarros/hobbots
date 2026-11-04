@@ -144,7 +144,7 @@ export function BlockedProviders({
     <div
       key={health.runtime}
       role="status"
-      aria-label={`${PROVIDER_NAMES[health.runtime]}: ${STATES[health.availability]}`}
+      aria-label={copy.status({ provider: PROVIDER_NAMES[health.runtime], state: STATES[health.availability] })}
       className={cn("flex flex-col text-[13px] leading-snug", className)}
     >
       <span>

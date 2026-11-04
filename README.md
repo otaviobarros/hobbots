@@ -54,7 +54,7 @@ Hobbots keeps its data, including every thread, in `~/Library/Application Suppor
 
 ## Run from source
 
-Requirements: Node.js 26.13 (the current LTS) or later, pnpm, and [Claude Code](https://code.claude.com/docs/en/setup) 2.1.301 or later, installed and signed in. Hobbots runs the host's `claude`; it does not ship its own.
+Requirements: Node.js 26.13 (the current LTS) or later (CI runs the version in `.node-version`), pnpm, and [Claude Code](https://code.claude.com/docs/en/setup) 2.1.301 or later, installed and signed in. Hobbots runs the host's `claude`; it does not ship its own.
 
 ```sh
 pnpm install
@@ -85,7 +85,7 @@ The first-launch flow (Welcome, setup, first hob, Home, and a restart) runs in C
 
 ```sh
 pnpm --filter @hobbots/web exec playwright install chromium
-pnpm test:e2e      # builds the web client, then runs apps/web/e2e in parallel, one port per worker from HOBBOTS_E2E_PORT (default 4380)
+pnpm test:e2e      # builds the web client and the server, then runs apps/web/e2e in parallel, one port per worker from HOBBOTS_E2E_PORT (default 4380)
 ```
 
 ## Repository
