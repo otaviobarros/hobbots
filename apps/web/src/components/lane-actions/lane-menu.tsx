@@ -19,6 +19,8 @@ import { laneMenu } from "./lane-actions-model.ts";
 import { messages } from "./messages.ts";
 import type { LaneActions } from "./use-lane-actions.ts";
 
+type LaneMenuItems = ReturnType<typeof laneMenu>;
+
 const NO_HOBS: ReadonlyArray<Agent> = [];
 
 /** An item that changes the menu's view, so the menu stays open on it. */
@@ -52,8 +54,6 @@ export function LaneMenu({
   const owner = hobs(task.ownerId).name;
   const view = actions.menuOf(task.id);
   const menu = laneMenu(tree, task);
-  // With one Task to cancel, Cancel task… asks about it; with more, the menu lists them.
-  const only = menu.cancel.length === 1 ? menu.cancel[0] : undefined;
   // Cancel… opens its question in the lane, which takes focus, so the menu does not hand it back.
   const asked = useRef(false);
   const ask = (which: Task) => {
@@ -82,58 +82,105 @@ export function LaneMenu({
         {view === "reassign" ? (
           <ReassignItems tree={tree} task={task} actions={actions} />
         ) : view === "cancel" ? (
-          <>
-            <DropdownMenuLabel>{messages.cancelWhich}</DropdownMenuLabel>
-            {menu.cancel.map((each) => (
-              <DropdownMenuItem key={each.id} variant="deny" inset onSelect={() => ask(each)}>
-                {taskTitle(each)}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={stayOpen(() => actions.openMenu(task.id))}>{messages.back}</DropdownMenuItem>
-          </>
+          <CancelItems task={task} cancel={menu.cancel} actions={actions} ask={ask} />
         ) : (
-          <>
-            <DropdownMenuItem onSelect={onWorkbench}>{messages.showInWorkbench}</DropdownMenuItem>
-            {menu.pin && (
-              <DropdownMenuItem onSelect={() => pins.toggle(task.id)}>
-                {pins.pinned.includes(task.id) ? messages.unpin : messages.pin}
-              </DropdownMenuItem>
-            )}
-            {menu.retry && (
-              <DropdownMenuItem
-                disabled={actions.busy}
-                onSelect={() => actions.send(task.id, { kind: "retry", taskId: task.id })}
-              >
-                {messages.retry}
-              </DropdownMenuItem>
-            )}
-            {menu.reassign && (
-              <DropdownMenuItem onSelect={stayOpen(() => actions.openMenu(task.id, "reassign"))}>
-                {messages.reassign}
-              </DropdownMenuItem>
-            )}
-            {(menu.cancel.length > 0 || menu.cancelTop !== null) && <DropdownMenuSeparator />}
-            {menu.cancelTop !== null && (
-              <DropdownMenuItem variant="deny" onSelect={() => ask(task)}>
-                {menu.cancelTop === "quest" ? messages.cancelQuest : messages.cancelTask}
-              </DropdownMenuItem>
-            )}
-            {menu.cancelTop === "quest" && (
-              <DropdownMenuLabel>{messages.cancelKeeps({ name: owner })}</DropdownMenuLabel>
-            )}
-            {menu.cancel.length > 0 && (
-              <DropdownMenuItem
-                variant="deny"
-                onSelect={only !== undefined ? () => ask(only) : stayOpen(() => actions.openMenu(task.id, "cancel"))}
-              >
-                {menu.pin ? messages.cancelStep : messages.cancelTask}
-              </DropdownMenuItem>
-            )}
-          </>
+          <MenuItems
+            task={task}
+            owner={owner}
+            menu={menu}
+            pins={pins}
+            actions={actions}
+            ask={ask}
+            onWorkbench={onWorkbench}
+          />
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** The menu's first view: what the lane's Task can do. */
+function MenuItems({
+  task,
+  owner,
+  menu,
+  pins,
+  actions,
+  ask,
+  onWorkbench,
+}: {
+  task: Task;
+  owner: string;
+  menu: LaneMenuItems;
+  pins: Pins;
+  actions: LaneActions;
+  ask: (which: Task) => void;
+  onWorkbench: () => void;
+}) {
+  // With one Task to cancel, Cancel task… asks about it; with more, the menu lists them.
+  const only = menu.cancel.length === 1 ? menu.cancel[0] : undefined;
+  return (
+    <>
+      <DropdownMenuItem onSelect={onWorkbench}>{messages.showInWorkbench}</DropdownMenuItem>
+      {menu.pin && (
+        <DropdownMenuItem onSelect={() => pins.toggle(task.id)}>
+          {pins.pinned.includes(task.id) ? messages.unpin : messages.pin}
+        </DropdownMenuItem>
+      )}
+      {menu.retry && (
+        <DropdownMenuItem
+          disabled={actions.busy}
+          onSelect={() => actions.send(task.id, { kind: "retry", taskId: task.id })}
+        >
+          {messages.retry}
+        </DropdownMenuItem>
+      )}
+      {menu.reassign && (
+        <DropdownMenuItem onSelect={stayOpen(() => actions.openMenu(task.id, "reassign"))}>
+          {messages.reassign}
+        </DropdownMenuItem>
+      )}
+      {(menu.cancel.length > 0 || menu.cancelTop !== null) && <DropdownMenuSeparator />}
+      {menu.cancelTop !== null && (
+        <DropdownMenuItem variant="deny" onSelect={() => ask(task)}>
+          {menu.cancelTop === "quest" ? messages.cancelQuest : messages.cancelTask}
+        </DropdownMenuItem>
+      )}
+      {menu.cancelTop === "quest" && <DropdownMenuLabel>{messages.cancelKeeps({ name: owner })}</DropdownMenuLabel>}
+      {menu.cancel.length > 0 && (
+        <DropdownMenuItem
+          variant="deny"
+          onSelect={only !== undefined ? () => ask(only) : stayOpen(() => actions.openMenu(task.id, "cancel"))}
+        >
+          {menu.pin ? messages.cancelStep : messages.cancelTask}
+        </DropdownMenuItem>
+      )}
+    </>
+  );
+}
+
+/** Cancel task…'s view when the hob has more than one Task to stop: each of them, then Back. */
+function CancelItems({
+  task,
+  cancel,
+  actions,
+  ask,
+}: {
+  task: Task;
+  cancel: ReadonlyArray<Task>;
+  actions: LaneActions;
+  ask: (which: Task) => void;
+}) {
+  return (
+    <>
+      <DropdownMenuLabel>{messages.cancelWhich}</DropdownMenuLabel>
+      {cancel.map((each) => (
+        <DropdownMenuItem key={each.id} variant="deny" inset onSelect={() => ask(each)}>
+          {taskTitle(each)}
+        </DropdownMenuItem>
+      ))}
+      <BackItem task={task} actions={actions} />
+    </>
   );
 }
 
@@ -156,6 +203,15 @@ function ReassignItems({ tree, task, actions }: { tree: TaskTree; task: Task; ac
           {hob.name}
         </DropdownMenuItem>
       ))}
+      <BackItem task={task} actions={actions} />
+    </>
+  );
+}
+
+/** Back to the menu's first view, after a separator. */
+function BackItem({ task, actions }: { task: Task; actions: LaneActions }) {
+  return (
+    <>
       <DropdownMenuSeparator />
       <DropdownMenuItem onSelect={stayOpen(() => actions.openMenu(task.id))}>{messages.back}</DropdownMenuItem>
     </>
