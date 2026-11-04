@@ -1,26 +1,32 @@
+import type { Quest, TaskId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
+import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { firstLine } from "../../lib/format.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import {
+  byUrgency,
   entryAsker,
+  entryPlace,
   entryRow,
   entryThread,
-  groupByThread,
+  groupByPlace,
   type InboxEntry,
   type InboxGroup,
+  type InboxPlace,
   type RowTone,
 } from "./inbox-entries.ts";
-import { INBOX_TABS, type InboxTab } from "./inbox-items.ts";
+import { INBOX_TABS, INBOX_VIEWS, type InboxTab, type InboxView } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
 import type { InboxDirectory } from "./use-inbox-directory.ts";
 
 const copy = messages;
 
 /**
- * Needs you, All and History, with how many requests need you on the first, above the open tab's
+ * Needs you and History, with how many things need you on the first, above the open tab's
  * panel. The tab is in the address.
  */
 export function InboxTabs({ tab, waiting, children }: { tab: InboxTab; waiting: number; children: ReactNode }) {
@@ -47,52 +53,94 @@ export function InboxTabs({ tab, waiting, children }: { tab: InboxTab; waiting: 
   );
 }
 
-/** The tab's entries, grouped by thread with this hub's devices apart; the selected one is filled. */
+/**
+ * The entries, by quest or by urgency. By quest groups them by quest, or by thread outside a quest,
+ * with this hub's devices apart, the most urgent first in each group and among the groups. By
+ * urgency is one list, the most urgent first, and each row names its quest. The selected one is
+ * filled.
+ */
 export function InboxList({
   tab,
+  view,
   entries,
+  questOf,
   selectedKey,
   directory,
   now,
 }: {
   tab: InboxTab;
+  view: InboxView;
   entries: ReadonlyArray<InboxEntry>;
+  questOf: (taskId: TaskId) => Quest | undefined;
   selectedKey: string | undefined;
   directory: InboxDirectory;
   now: Date;
 }) {
+  const item = (entry: InboxEntry, place?: string) => (
+    <li key={entry.key}>
+      <InboxItem
+        tab={tab}
+        entry={entry}
+        place={place}
+        selected={entry.key === selectedKey}
+        directory={directory}
+        now={now}
+      />
+    </li>
+  );
+  if (view === "urgency") {
+    return (
+      <ul aria-label={copy.listLabel} className="m-0 flex list-none flex-col gap-1 p-0 px-2.5 py-1">
+        {[...entries].sort(byUrgency).map((entry) => item(entry, placeName(entryPlace(entry, questOf), directory)))}
+      </ul>
+    );
+  }
   return (
     <ul aria-label={copy.listLabel} className="m-0 flex list-none flex-col gap-3.5 p-0 px-2.5 py-1">
-      {groupByThread(entries).map((group) => (
-        <li key={group.threadId ?? "hub"} className="flex flex-col gap-1">
-          <span className="lbl px-1.5 py-1 text-xs text-label">{groupLabel(group, directory)}</span>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0">
-            {group.entries.map((entry) => (
-              <li key={entry.key}>
-                <InboxItem
-                  tab={tab}
-                  entry={entry}
-                  selected={entry.key === selectedKey}
-                  directory={directory}
-                  now={now}
-                />
-              </li>
-            ))}
-          </ul>
+      {groupByPlace(entries, questOf).map((group) => (
+        <li key={group.key} className="flex flex-col gap-1">
+          <span className="lbl truncate px-1.5 py-1 text-xs text-label">{groupLabel(group, directory)}</span>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">{group.entries.map((entry) => item(entry))}</ul>
         </li>
       ))}
     </ul>
   );
 }
 
-/** A group's heading: the hob whose chat the thread is, and the thread; or this hub's devices. */
-const groupLabel = (group: InboxGroup, directory: InboxDirectory): string => {
-  if (group.threadId === null) return copy.hubGroup;
-  const first = group.entries[0];
-  const owner = directory.threadHob(group.threadId) ?? (first === undefined ? undefined : entryAsker(first));
+/** By quest or By urgency, above the list in Needs you. */
+export function InboxViewPicker({ view, onChange }: { view: InboxView; onChange: (view: InboxView) => void }) {
+  return (
+    <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5">
+      <span className="flex-1 text-xs text-label">{copy.view.label}</span>
+      <SegmentedControl size="sm" aria-label={copy.view.label} value={view} onValueChange={onChange}>
+        {INBOX_VIEWS.map((name) => (
+          <SegmentedControlItem key={name} value={name}>
+            {copy.view[name]}
+          </SegmentedControlItem>
+        ))}
+      </SegmentedControl>
+    </div>
+  );
+}
+
+/** Where an entry belongs, in a few words, for a row in By urgency: "Aldric's quest". */
+const placeName = (place: InboxPlace, directory: InboxDirectory): string => {
+  if (place.kind === "hub") return copy.hub;
+  if (place.kind === "quest") return copy.questName({ name: directory.hobName(place.quest.leadId) });
+  return directory.threadTitle(place.threadId);
+};
+
+/** A group's heading: the quest and its lead, the thread and whose chat it is, or this hub's devices. */
+const groupLabel = ({ place, entries }: InboxGroup, directory: InboxDirectory): string => {
+  if (place.kind === "hub") return copy.hubGroup;
+  if (place.kind === "quest") {
+    return copy.questGroup({ name: directory.hobName(place.quest.leadId), goal: firstLine(place.quest.goal) });
+  }
+  const first = entries[0];
+  const owner = directory.threadHob(place.threadId) ?? (first === undefined ? undefined : entryAsker(first));
   return copy.group({
     name: owner === undefined ? copy.unknownHob : directory.hobName(owner),
-    thread: directory.threadTitle(group.threadId),
+    thread: directory.threadTitle(place.threadId),
   });
 };
 
@@ -105,12 +153,15 @@ const TONE: Record<RowTone, string> = { urgent: "text-lantern", stuck: "text-ros
 function InboxItem({
   tab,
   entry,
+  place,
   selected,
   directory,
   now,
 }: {
   tab: InboxTab;
   entry: InboxEntry;
+  /** Where it belongs, named in a row of the By urgency list. */
+  place?: string | undefined;
   selected: boolean;
   directory: InboxDirectory;
   now: Date;
@@ -147,7 +198,9 @@ function InboxItem({
           <Badge variant={row.tag}>{row.kind}</Badge>
         </span>
         <span className="text-sm leading-snug font-semibold [overflow-wrap:anywhere]">{row.what}</span>
-        <span className={cn("text-xs", TONE[row.tone])}>{row.when}</span>
+        <span className={cn("text-xs", TONE[row.tone])}>
+          {place === undefined ? row.when : copy.whenIn({ when: row.when, place })}
+        </span>
       </span>
     </Link>
   );

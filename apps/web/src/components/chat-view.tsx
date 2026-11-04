@@ -383,7 +383,7 @@ export function ChatView({
             })}
           </span>
           <Button asChild variant="outline" size="xs">
-            <Link to="/settings" hash="ai-providers">
+            <Link to="/settings/$section" params={{ section: "connections" }}>
               {copy.fixInSettings}
             </Link>
           </Button>

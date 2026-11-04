@@ -202,7 +202,10 @@ export function Summon() {
                   </div>
                 ))}
               <span className="text-[13px] text-text-secondary">
-                {copy.safetyNote} <Link to="/settings">{copy.changeInSettings}</Link>
+                {copy.safetyNote}{" "}
+                <Link to="/settings/$section" params={{ section: "safety" }}>
+                  {copy.changeInSettings}
+                </Link>
               </span>
             </section>
           </fieldset>

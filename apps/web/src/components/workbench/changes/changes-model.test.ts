@@ -5,8 +5,8 @@ import { unified } from "unified";
 import { describe, expect, it } from "vitest";
 import { attempt, CAMPAIGN } from "../../../test/quests.ts";
 import {
-  byFolder,
   changeCounts,
+  changeDir,
   changePath,
   changeShow,
   codeDiff,
@@ -14,6 +14,7 @@ import {
   documentDiff,
   fileKindLabel,
   foldLines,
+  lineCounts,
   selectedChange,
   sharedHobs,
   splitPath,
@@ -72,7 +73,7 @@ describe("how the Changes tab shows a file", () => {
     expect(fileKindLabel("Makefile")).toBeNull();
   });
 
-  it("counts changes by kind and groups them by folder in their order", () => {
+  it("counts changes by kind, and names each one's folders, led by the hob's folder when there are several", () => {
     const changes = [
       change("a.md", { kind: "added", before: null }),
       change("b.md"),
@@ -80,10 +81,10 @@ describe("how the Changes tab shows a file", () => {
       change("d.md", { kind: "deleted", after: null }),
     ];
     expect(changeCounts(changes)).toEqual({ added: 1, edited: 2, deleted: 1, moved: 0, link: 0 });
-    expect(byFolder(changes).map(({ folder, changes: each }) => [folder, each.map((c) => c.path)])).toEqual([
-      ["/work", ["a.md", "b.md", "d.md"]],
-      ["/other", ["c.md"]],
-    ]);
+    expect(changeDir(change("src/lib/app.ts"), false)).toBe("src/lib/");
+    expect(changeDir(change("app.ts"), false)).toBe("");
+    expect(changeDir(change("src/app.ts", { folder: "/home/me/site" }), true)).toBe("site/src/");
+    expect(changeDir(change("app.ts", { folder: "/home/me/site/" }), true)).toBe("site/");
   });
 
   it("shows the change a link asks for by its path, else the one picked, else the first", () => {
@@ -135,6 +136,12 @@ describe("a code diff", () => {
     expect(codeDiff(null, "")).toEqual({ rows: [], added: 0, removed: 0 });
   });
 
+  it("counts the lines a change added and removed, as its diff does", () => {
+    expect(lineCounts("one\ntwo\nthree\n", "one\n2\nthree\nfour\n")).toEqual({ added: 2, removed: 1 });
+    expect(lineCounts(null, "a\nb\n")).toEqual({ added: 2, removed: 0 });
+    expect(lineCounts("a\n", null)).toEqual({ added: 0, removed: 1 });
+  });
+
   it("folds unchanged runs to the lines around each change, and shows them all when asked", () => {
     const lines = (from: number, to: number) =>
       Array.from({ length: to - from + 1 }, (_, i) => `line ${from + i}`).join("\n");
@@ -173,7 +180,7 @@ describe("a code diff", () => {
     const started = performance.now();
     const rows = foldLines([...same, ...added], 3);
     expect(performance.now() - started).toBeLessThan(1_000);
-    expect(rows[0]).toEqual({ kind: "folded", lines: 99_997 });
+    expect(rows[0]).toMatchObject({ kind: "folded", lines: 99_997 });
     expect(rows).toHaveLength(1 + 3 + 100_000);
   });
 });

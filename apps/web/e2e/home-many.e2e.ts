@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
 let hub: Hub | undefined;
+/** A hob on the scene's stage, named "<name>, <role>, <state>". */
+const stageHob = /^(Hob \d+|Wick), /;
 let dataDir = "";
 
 test.afterEach(async () => {
@@ -56,15 +58,15 @@ test("[TC-UX-001] with 20 hobs the scene shows six, the hall holds 14 and the fi
   await page.goto(url);
 
   const scene = page.getByRole("region", { name: "Your hobs right now" });
-  await expect(scene.getByRole("link", { name: /^Open .+'s page,/ })).toHaveCount(6);
+  await expect(scene.getByRole("button", { name: stageHob })).toHaveCount(6);
   await expect(scene.getByRole("button", { name: "Open the hall: 14 more hobs" })).toContainText("14 in the hall");
 
-  // Past 12 hobs, Resting starts folded; its count chip unfolds it.
+  // Past 12 hobs, Resting starts folded; its count chip narrows the list to it, open.
   const all = page.getByRole("region", { name: "All hobs" });
   const tiles = all.getByRole("link", { name: /^Open .+'s page,/ });
   await expect(all.getByRole("button", { name: /^Resting/ })).toHaveAttribute("aria-expanded", "false");
   await expect(tiles).toHaveCount(0);
-  await scene.getByRole("button", { name: "20 resting" }).click();
+  await scene.getByRole("radio", { name: "Resting 20" }).click();
   await expect(all.getByRole("button", { name: /^Resting/ })).toHaveAttribute("aria-expanded", "true");
   await expect(tiles).toHaveCount(20);
 
@@ -78,7 +80,7 @@ test("[TC-UX-004] Home tiles show each hob's sigil and role, and the filter find
   const { url } = await hubWithHobs(20);
   await page.goto(url);
   const all = page.getByRole("region", { name: "All hobs" });
-  await page.getByRole("region", { name: "Your hobs right now" }).getByRole("button", { name: "20 resting" }).click();
+  await page.getByRole("region", { name: "Your hobs right now" }).getByRole("radio", { name: "Resting 20" }).click();
 
   await all.getByRole("searchbox", { name: "Find a hob by name or role" }).fill("QA");
   const tiles = all.getByRole("link", { name: /^Open .+'s page,/ });
@@ -96,13 +98,37 @@ test("[TC-UX-005] with six or fewer hobs the Home scene shows each hob's sigil a
   const { url } = await hubWithHobs(5);
   await page.goto(url);
   const scene = page.getByRole("region", { name: "Your hobs right now" });
-  await expect(scene.getByRole("link", { name: /^Open .+'s page,/ })).toHaveCount(5);
+  await expect(scene.getByRole("button", { name: stageHob })).toHaveCount(5);
   await expect(page.getByRole("region", { name: "All hobs" })).toHaveCount(0);
 
-  const qa = scene.getByRole("link", { name: "Open Hob 5's page, QA engineer, ready" });
-  await expect(qa).toContainText("QA engineer");
+  const qa = scene.getByRole("button", { name: "Hob 5, QA engineer, ready" });
+  await expect(qa).toContainText("Hob 5");
   await expect(qa.locator('[data-slot="sigil-badge"]')).toHaveAttribute("aria-hidden", "true");
-  await expect(scene.getByRole("link", { name: /^Open Hob 1's page,/ })).toContainText("Assistant");
+  await expect(scene.getByRole("button", { name: /^Hob 1, Assistant,/ })).toBeVisible();
+});
+
+// covers UX-001
+test("[TC-UX-089] clicking a hob in the Home scene opens a peek whose Open chat starts its chat", async ({ page }) => {
+  const { url, ids } = await hubWithHobs(3);
+  await page.goto(url);
+  const scene = page.getByRole("region", { name: "Your hobs right now" });
+  const hob = scene.getByRole("button", { name: "Hob 2, Assistant, ready" });
+
+  await hob.click();
+  const peek = page.getByRole("dialog", { name: "Hob 2" });
+  await expect(peek).toContainText("Resting");
+  await expect(peek).toContainText("Assistant");
+  // A resting hob works on no Task, so there is no Workbench to open.
+  await expect(peek.getByRole("link", { name: "Open Workbench" })).toHaveCount(0);
+
+  // Escape closes the peek and returns focus to the hob.
+  await page.keyboard.press("Escape");
+  await expect(peek).toBeHidden();
+  await expect(hob).toBeFocused();
+
+  await hob.click();
+  await page.getByRole("dialog", { name: "Hob 2" }).getByRole("link", { name: "Open chat" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${ids["Hob 2"]}/new$`));
 });
 
 // covers UX-001

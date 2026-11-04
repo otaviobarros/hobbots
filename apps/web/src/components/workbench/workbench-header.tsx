@@ -1,14 +1,16 @@
+import { HOB_COLORS } from "@hobbots/art/look";
 import { type Attempt, type AttemptId, isLiveAttempt, policySandbox, type Task, type TaskTree } from "@hobbots/domain";
+import { Badge } from "@hobbots/ui/components/badge";
+import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import type { RefObject } from "react";
+import type { CSSProperties, ReactNode, RefObject } from "react";
 import { agentsQuery, runtimesQuery } from "../../api/queries.ts";
-import { RuntimeTile, useBrainLabel } from "../brain-picker.tsx";
+import { formatCount } from "../../lib/format.ts";
+import { useBrainLabel } from "../brain-picker.tsx";
 import { HobSprite } from "../hob-sprite.tsx";
-import { roomStatus, roomStatusLabel, roomTone } from "../quest/control-room.ts";
 import { folderName, memberFolders } from "../quest/member-folders.ts";
-import { StatusTag } from "../quest/status-dot.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { taskTitle } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
@@ -27,8 +29,9 @@ const useSandbox = (runtime: Attempt["runtime"], read: ActivityRead): Sandbox | 
 };
 
 /**
- * The Workbench header (ADR 023): the Task's title and status, its owner and who asked, the brain
- * it thinks with, where it runs, and an Attempt picker once it was retried.
+ * The Workbench header (ADR 023), one row: Back, the owner's tile, the Task's title with who owns
+ * it, who asked, the brain it thinks with and where it runs, then an Attempt switcher once it was
+ * retried, one Live or History tag for the Attempt shown, and whatever the Workbench adds at the end.
  */
 export function WorkbenchHeader({
   tree,
@@ -38,7 +41,9 @@ export function WorkbenchHeader({
   read,
   hobs,
   headingRef,
+  back,
   onAttempt,
+  end,
 }: {
   tree: TaskTree;
   task: Task;
@@ -47,43 +52,99 @@ export function WorkbenchHeader({
   read: ActivityRead;
   hobs: HobLookup;
   headingRef: RefObject<HTMLHeadingElement | null>;
+  /** Back to where the Workbench was opened from. */
+  back: ReactNode;
   onAttempt: (attemptId: AttemptId) => void;
+  /** What sits at the row's end, such as the chat toggle. */
+  end?: ReactNode;
 }) {
   const owner = hobs(task.ownerId);
-  const status = roomStatus(tree, task);
-  const chain = [messages.you, ...askedBy(tree, task).map((id) => hobs(id).name)];
   const running = attempt !== null && isLiveAttempt(attempt.state);
+  return (
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-6 py-3">
+      {back}
+      <span
+        aria-hidden
+        className="flex size-9 shrink-0 items-center justify-center rounded-tile bg-[color-mix(in_srgb,var(--hob)_30%,var(--color-card))]"
+        style={{ "--hob": HOB_COLORS[owner.lookColor].hat } as CSSProperties}
+      >
+        <HobSprite hob={owner} size={27} state={running ? "working" : "idle"} />
+      </span>
+      <span className="flex min-w-[12rem] flex-1 flex-col">
+        <h2
+          ref={headingRef}
+          tabIndex={-1}
+          className="m-0 min-w-0 truncate font-heading text-lg leading-6 font-(--heading-weight) text-text-strong outline-none"
+        >
+          {taskTitle(task)}
+        </h2>
+        <Byline tree={tree} task={task} attempt={attempt} read={read} hobs={hobs} />
+      </span>
+      {attempts.length > 1 && attempt !== null && (
+        <AttemptPicker attempts={attempts} chosen={attempt.id} onAttempt={onAttempt} />
+      )}
+      {attempt !== null && <AttemptTag running={running} />}
+      {end}
+    </header>
+  );
+}
+
+/** "<owner> · asked by You → <lead> · <brain> · in the sandbox · Works in <folders>". */
+function Byline({
+  tree,
+  task,
+  attempt,
+  read,
+  hobs,
+}: {
+  tree: TaskTree;
+  task: Task;
+  attempt: Attempt | null;
+  read: ActivityRead;
+  hobs: HobLookup;
+}) {
+  const chain = [messages.you, ...askedBy(tree, task).map((id) => hobs(id).name)];
   const agent = useQuery({ ...agentsQuery, select: (all) => all.find((each) => each.id === task.ownerId) }).data;
   // An Attempt records its runtime; before the first, the owner's is the one it will think with.
   const runtime = attempt?.runtime ?? agent?.runtime ?? null;
   // The model is the owner's while it thinks with that runtime.
   const model = agent?.runtime === runtime ? (agent?.model ?? null) : null;
   return (
-    <header className="flex flex-col gap-2.5 border-b-4 border-line px-5 pt-3 pb-3.5">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <h2
-          ref={headingRef}
-          tabIndex={-1}
-          className="m-0 min-w-0 flex-1 truncate font-heading text-xl font-semibold text-moonlight outline-none"
-        >
-          {taskTitle(task)}
-        </h2>
-        <StatusTag status={roomTone(status)}>{roomStatusLabel(status)}</StatusTag>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-detail text-text-secondary">
-        <span className="flex items-center gap-2">
-          <HobSprite hob={owner} size={22} state={running ? "working" : "idle"} />
-          <span className="font-bold text-text-strong">{owner.name}</span>
-          <span>{messages.askedBy({ chain })}</span>
-        </span>
-        {runtime !== null && <Brain runtime={runtime} model={model} />}
-        {runtime !== null && <Where runtime={runtime} read={read} />}
-        <Folders folders={memberFolders(tree, task)} />
-      </div>
-      {attempts.length > 1 && attempt !== null && (
-        <AttemptPicker attempts={attempts} chosen={attempt.id} onAttempt={onAttempt} />
-      )}
-    </header>
+    <span className="flex min-w-0 flex-wrap items-center gap-x-1 text-detail leading-[18px] text-text-secondary">
+      <span>{hobs(task.ownerId).name}</span>
+      <Dot />
+      <span>{messages.askedBy({ chain })}</span>
+      {runtime !== null && <Brain runtime={runtime} model={model} />}
+      {runtime !== null && <Where runtime={runtime} read={read} />}
+      <Folders folders={memberFolders(tree, task)} />
+    </span>
+  );
+}
+
+/** The Back button the header leads with, named for where it returns. */
+export function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button variant="ghost" size="sm" onClick={onClick}>
+      ← {label}
+    </Button>
+  );
+}
+
+function Dot() {
+  return <span aria-hidden>·</span>;
+}
+
+/** Live while the Attempt shown runs, History once it does not: the one label every tab follows. */
+function AttemptTag({ running }: { running: boolean }) {
+  return running ? (
+    <Badge variant="working">
+      <span aria-hidden data-slot="badge-glyph">
+        ●
+      </span>
+      {messages.state.live}
+    </Badge>
+  ) : (
+    <Badge variant="resting">{messages.state.history}</Badge>
   );
 }
 
@@ -91,20 +152,23 @@ export function WorkbenchHeader({
 function Folders({ folders }: { folders: ReadonlyArray<string> | null }) {
   if (folders === null) return null;
   return (
-    <span title={folders.join("\n")} className="min-w-0 truncate">
-      {folders.length === 0 ? messages.noFolders : messages.worksIn({ names: folders.map(folderName) })}
-    </span>
+    <>
+      <Dot />
+      <span title={folders.join("\n")} className="min-w-0 truncate">
+        {folders.length === 0 ? messages.noFolders : messages.worksIn({ names: folders.map(folderName) })}
+      </span>
+    </>
   );
 }
 
-/** The runtime's tile, runtime and model the Task thinks with. */
+/** The runtime and model the Task thinks with. */
 function Brain({ runtime, model }: { runtime: Attempt["runtime"]; model: string | null }) {
   const label = useBrainLabel({ runtime, model });
   return (
-    <span className="flex items-center gap-2">
-      <RuntimeTile runtime={runtime} />
+    <>
+      <Dot />
       <span>{label}</span>
-    </span>
+    </>
   );
 }
 
@@ -119,19 +183,22 @@ function Where({ runtime, read }: { runtime: Attempt["runtime"]; read: ActivityR
   const sandbox = useSandbox(runtime, read);
   if (sandbox === null) return null;
   return (
-    <span
-      title={messages.sandboxHint[sandbox]}
-      className={cn(
-        sandbox === "off" && "border-2 border-rose px-tag-x py-0.5 text-xs font-bold text-rose",
-        sandbox === "unavailable" && "bg-line-2 px-tag-x py-0.5 text-xs font-bold text-text-secondary",
-      )}
-    >
-      {sandboxWords[sandbox]}
-    </span>
+    <>
+      <Dot />
+      <span
+        title={messages.sandboxHint[sandbox]}
+        className={cn(
+          sandbox === "off" && "rounded-tag border border-rose px-tag-x text-xs font-bold text-rose",
+          sandbox === "unavailable" && "rounded-tag bg-line-2 px-tag-x text-xs font-bold text-text-secondary",
+        )}
+      >
+        {sandbox === "on" ? messages.inSandboxLower : sandboxWords[sandbox]}
+      </span>
+    </>
   );
 }
 
-/** "Attempt 1 · 2 · 3": every tab follows the chosen one. */
+/** "Attempt 1 2 3", compact: every tab follows the chosen one. */
 function AttemptPicker({
   attempts,
   chosen,
@@ -142,12 +209,22 @@ function AttemptPicker({
   onAttempt: (attemptId: AttemptId) => void;
 }) {
   return (
-    <SegmentedControl size="sm" aria-label={messages.attempts} value={chosen} onValueChange={onAttempt}>
-      {attempts.map((each) => (
-        <SegmentedControlItem key={each.id} value={each.id}>
-          {messages.attempt({ number: each.number })}
-        </SegmentedControlItem>
-      ))}
-    </SegmentedControl>
+    <span className="flex items-center gap-1.5">
+      <span aria-hidden className="text-detail text-label">
+        {messages.attemptWord}
+      </span>
+      <SegmentedControl size="sm" aria-label={messages.attempts} value={chosen} onValueChange={onAttempt}>
+        {attempts.map((each) => (
+          <SegmentedControlItem
+            key={each.id}
+            value={each.id}
+            aria-label={messages.attempt({ number: each.number })}
+            className="min-w-7 px-2"
+          >
+            {formatCount(each.number)}
+          </SegmentedControlItem>
+        ))}
+      </SegmentedControl>
+    </span>
   );
 }

@@ -64,7 +64,7 @@ const openSettings = async (page: Page) => {
     body: JSON.stringify({ completed: true }),
   });
   if (!response.ok) throw new Error(`Finishing setup answered ${response.status}`);
-  await page.goto(`${hub.url}/#/settings`);
+  await page.goto(`${hub.url}/#/settings/app`);
 };
 
 // covers UX-003

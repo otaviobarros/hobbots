@@ -22,8 +22,11 @@ export function DocumentView({ before, after }: { before: string | null; after: 
 
 function Version({ title, version }: { title: string; version: MarkedDocument }) {
   return (
-    <section aria-label={title} className="cut flex min-w-0 flex-col gap-2 bg-panel px-4 py-3">
-      <h4 className="m-0 font-heading text-xs font-bold tracking-widest text-label uppercase">{title}</h4>
+    <section
+      aria-label={title}
+      className="flex min-w-0 flex-col gap-2 rounded-card border border-line bg-card px-4 pt-3 pb-3.5"
+    >
+      <h4 className="lbl m-0 text-xs font-bold text-label">{title}</h4>
       <ReplyMarkdown
         content={version.text}
         streaming={false}

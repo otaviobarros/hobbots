@@ -75,21 +75,19 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   const { bench, tabs, open } = tabsOf(page, "Write the release notes");
 
-  // Live: every tab follows the running turn, Summary first, and the Browser is still to come.
-  await expect(tabs.getByRole("tab")).toHaveText([
-    "SummaryLive",
-    "ChangesLive",
-    "FilesLive",
-    "TerminalLive",
-    "BrowserComing soon",
-  ]);
+  // Live: the header says so once, every tab follows the running turn, and the Browser is still to come.
+  await expect(bench.locator("header").first()).toContainText("●Live");
+  await expect(tabs.getByRole("tab")).toHaveText(["Summary", "Changes", "Files", "Terminal", "BrowserSoon"]);
   await expect(tabs.getByRole("tab", { name: /^Summary/ })).toHaveAttribute("aria-selected", "true");
 
   const changes = await open("Changes");
   const changed = changes.getByRole("navigation", { name: "Changed files" });
-  await expect(changed.getByRole("button")).toHaveText(["CHANGELOG.mdAdded", "draft.txtDeleted", "notes.mdEdited"], {
-    timeout: 20_000,
-  });
+  await expect(changed.getByRole("button")).toHaveText(
+    [/^CHANGELOG\.mdAdded\+/, /^draft\.txtDeleted\+0 −/, /^notes\.mdEdited\+/],
+    {
+      timeout: 20_000,
+    },
+  );
   await changed.getByRole("button", { name: /^notes\.md/ }).click();
   const notes = changes.getByRole("article", { name: "notes.md" });
   await expect(notes.getByRole("region", { name: "After" }).getByRole("insertion")).toContainText("Faster search.");
@@ -120,13 +118,15 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
   const browser = await open("Browser");
   await expect(browser).toContainText("Watching a hob use a browser comes in a later update.");
 
-  // History: once the turn ends, every tab says so in place, with nothing it showed lost.
-  await expect(tabs.getByRole("tab")).toHaveText(
-    ["SummaryHistory", "ChangesHistory", "FilesHistory", "TerminalHistory", "BrowserComing soon"],
-    { timeout: 60_000 },
-  );
+  // History: once the turn ends, the header says so, with nothing any tab showed lost.
+  await expect(bench.locator("header").first()).toContainText("History", { timeout: 60_000 });
+  await expect(tabs.getByRole("tab")).toHaveText(["Summary", "Changes", "Files", "Terminal", "BrowserSoon"]);
   await open("Changes");
-  await expect(changed.getByRole("button")).toHaveText(["CHANGELOG.mdAdded", "draft.txtDeleted", "notes.mdEdited"]);
+  await expect(changed.getByRole("button")).toHaveText([
+    /^CHANGELOG\.mdAdded\+/,
+    /^draft\.txtDeleted\+0 −/,
+    /^notes\.mdEdited\+/,
+  ]);
   await expect(notes).not.toContainText("So far");
   await changed.getByRole("button", { name: /^draft\.txt/ }).click();
   await expect(changes.getByRole("article", { name: "draft.txt" })).toContainText("An old draft.");
@@ -160,7 +160,7 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-063] a Task that changed no file and ran no command greys out Changes, Files and Terminal, each saying so, and Browser reads Coming soon", async ({
+test("[TC-UX-063] a Task that changed no file and ran no command greys out Changes, Files and Terminal, each saying so, and Browser reads Soon", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -177,11 +177,11 @@ test("[TC-UX-063] a Task that changed no file and ran no command greys out Chang
   await card.getByRole("button", { name: "Open in Workbench" }).click();
   const { tabs, open } = tabsOf(page, "Suggest a name for the release");
   await expect(tabs.getByRole("tab")).toHaveText([
-    "SummaryHistory",
-    "ChangesNot used in this Task",
-    "FilesNot used in this Task",
-    "TerminalNot used in this Task",
-    "BrowserComing soon",
+    "Summary",
+    "ChangesNot used in this task",
+    "FilesNot used in this task",
+    "TerminalNot used in this task",
+    "BrowserSoon",
   ]);
   const summary = await open("Summary");
   await expect(summary.getByRole("region", { name: "The result" })).toContainText("Call it Lantern.");
