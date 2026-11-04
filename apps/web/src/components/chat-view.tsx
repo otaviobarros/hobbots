@@ -46,7 +46,7 @@ import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./m
 import { messages } from "./messages.ts";
 import { NeedsTray } from "./needs-tray/needs-tray.tsx";
 import { useThreadNeeds } from "./needs-tray/use-thread-needs.ts";
-import { ThreadWorkStrip, useWorkMoments } from "./quest/thread-work.tsx";
+import { ThreadQuestButton, useWorkMoments } from "./quest/thread-work.tsx";
 
 /**
  * Keeps the transcript's end in view while the composer grows or shrinks, so a long draft never
@@ -212,14 +212,15 @@ export function ChatView({
 
   return (
     <main aria-label="Chat" className="flex min-w-[360px] flex-1 flex-col">
-      <header className="flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
+      <header className="@container/header flex items-center gap-2.5 border-b-4 border-line px-4 py-2.5">
         {!navOpen && (
           <Button variant="icon" size="icon" onClick={onShowNav} aria-label={copy.showNav} title={copy.showNav}>
             »
           </Button>
         )}
         <HobSprite hob={current} size={36} state={state} badge />
-        <div className="flex min-w-0 flex-1 flex-col">
+        {/* The hob's name keeps its room when the quest button and the brain picker crowd the header. */}
+        <div className="flex min-w-[120px] flex-1 flex-col overflow-hidden">
           <span className="flex min-w-0 items-baseline gap-2">
             <span className="font-heading text-xl font-semibold whitespace-nowrap">{current.name}</span>
             <span className="text-sm font-bold whitespace-nowrap text-moonlight">{current.roleTitle}</span>
@@ -227,6 +228,7 @@ export function ChatView({
           </span>
           <span className="text-xs text-label">{stateLabel[state]}</span>
         </div>
+        {threadId && <ThreadQuestButton hobId={hobId} threadId={threadId} />}
         <BrainPicker hob={current} thread={thread.data} />
         {thread.data && <ThreadHeaderMenu hob={current} thread={thread.data} />}
         <Button asChild variant="outline">
@@ -244,7 +246,6 @@ export function ChatView({
           {panelOpen ? "»" : "«"}
         </Button>
       </header>
-      {threadId && <ThreadWorkStrip hobId={hobId} threadId={threadId} />}
 
       <div
         onScroll={(event) => {

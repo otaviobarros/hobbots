@@ -37,24 +37,9 @@ export const messages = {
     label: "Work in progress",
     quest: ({ name }: { name: string }) => `${name}'s quest`,
     task: ({ name }: { name: string }) => `${name}'s task`,
-    open: ({ name }: { name: string }) => `Show ${name}'s work`,
-    count: ({ status, count }: { status: RowStatus; count: number }) => {
-      const n = formatCount(count);
-      switch (status) {
-        case "needs-you":
-          return plural(count, { one: "1 needs you", other: `${n} need you` });
-        case "failed":
-          return `${n} failed`;
-        case "blocked":
-          return `${n} blocked`;
-        case "running":
-          return `${n} running`;
-        case "waiting":
-          return `${n} waiting`;
-        case "done":
-          return `${n} done`;
-      }
-    },
+    done: ({ done, total }: { done: number; total: number }) => `${formatCount(done)} of ${formatCount(total)} done`,
+    needYou: ({ count }: { count: number }) =>
+      plural(count, { one: "1 needs you", other: `${formatCount(count)} need you` }),
   },
   question: {
     asks: ({ name }: { name: string }) => `${name} asks you`,
