@@ -27,6 +27,7 @@ import {
   RUNTIME_NAMES,
   type RuntimeKind,
   sameBrain,
+  stripEscapes,
   systemInstructions,
   type TaskId,
   Thread,
@@ -559,7 +560,8 @@ export class ChatService extends Context.Service<
                     event.output === undefined
                       ? undefined
                       : yield* keepToolOutput(
-                          event.output,
+                          // The Workbench keeps a command's colors; the reply's step reads as plain text (#902).
+                          stripEscapes(event.output),
                           { threadId: thread.id, messageId: current.id, stepId },
                           toolLogs,
                         );
@@ -599,6 +601,7 @@ export class ChatService extends Context.Service<
                   agentId: agent.id,
                   threadId: thread.id,
                   messageId: (yield* Ref.get(reply.current)).id,
+                  promptId: (yield* Ref.get(reply.current)).promptId,
                   prompt,
                   runtime: brain.runtime,
                   configVersion: config.version,
@@ -695,6 +698,7 @@ export class ChatService extends Context.Service<
             configVersion: config.version,
             runtime: brain.runtime,
             model: brain.model,
+            promptId: typeof prompt === "string" ? null : prompt.id,
             createdAt: now,
           });
           const saved = yield* saveReply(assistantMessage);

@@ -12,7 +12,8 @@ import { useWaitingHobs } from "../inbox/use-waiting-count.ts";
 import { HobCard } from "./hob-card.tsx";
 import { type SidebarState, sidebarState } from "./hob-mark.ts";
 import { messages as copy } from "./messages.ts";
-import { SidebarTip, sidebarIcon, sidebarItem } from "./sidebar-item.tsx";
+import { sidebarDivider, sidebarIcon, sidebarItem } from "./sidebar-classes.ts";
+import { SidebarTip } from "./sidebar-item.tsx";
 
 /** How many of the open hob's threads show under its name. */
 const RECENT_THREADS = 5;
@@ -35,7 +36,7 @@ export function SidebarHobs({ expanded }: { expanded: boolean }) {
 
   return (
     <>
-      <div aria-hidden className="mx-1.5 my-2 h-px flex-none bg-line" />
+      <div aria-hidden className={sidebarDivider} />
       <Link
         to="/hobs"
         aria-label={copy.allHobs}

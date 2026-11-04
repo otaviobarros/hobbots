@@ -5,9 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:" />
     <title>Hobbots</title>
+    <!--
+      The frame below paints before the app's code loads: first-paint.js gives it this device's theme
+      and sidebar width, and the stylesheet is linked here rather than imported by main.tsx.
+    -->
+    <script src="/first-paint.js"></script>
+    <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- The window frame (src/components/shell/app-frame.tsx), rendered here by the build and replaced by the app's first render. -->
+    <div id="root"><!--app-frame--></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

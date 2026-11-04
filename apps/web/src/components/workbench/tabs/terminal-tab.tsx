@@ -1,4 +1,4 @@
-import { type AttemptId, type CommandRecord, runsInSequence } from "@hobbots/domain";
+import { type AttemptId, type CommandRecord, runsInSequence, stripEscapes } from "@hobbots/domain";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@hobbots/ui/components/collapsible";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -149,7 +149,13 @@ function Printed({ command, live }: { command: CommandRecord; live: LiveOutput |
   if (showsLive(command)) return <LiveOutputBlock live={live} />;
   if (command.state === "running") return <p className="m-0 ps-5.5 text-meta text-label">{copy.atEnd}</p>;
   if (command.output === null) return null;
-  return <OutputBlock output={command.output} className="ms-5.5" whole={<WholeLog command={command} />} />;
+  // Commands print in color (#902); this view shows their text until the terminal renders it.
+  const output = {
+    ...command.output,
+    head: stripEscapes(command.output.head),
+    tail: stripEscapes(command.output.tail),
+  };
+  return <OutputBlock output={output} className="ms-5.5" whole={<WholeLog command={command} />} />;
 }
 
 /** A running command's output as it comes, kept scrolled to its last line. */
@@ -168,7 +174,11 @@ function LiveOutputBlock({ live }: { live: LiveOutput | undefined }) {
       {/* Reversed, so the newest line shows and the rest scrolls up. */}
       <div className="flex max-h-60 flex-col-reverse overflow-auto">
         <pre role="log" aria-live="polite" className={cn(OUTPUT_TEXT, "max-h-none overflow-visible")}>
-          {live === undefined || live.text === "" ? <span className="text-label">{copy.waiting}</span> : live.text}
+          {live === undefined || live.text === "" ? (
+            <span className="text-label">{copy.waiting}</span>
+          ) : (
+            stripEscapes(live.text)
+          )}
         </pre>
       </div>
     </figure>

@@ -1,6 +1,6 @@
 # ADR 023 — The Workbench
 
-Status: **Accepted.** Refines screen 7 of the [screen inventory](../design/screens-and-flows.md), the Workbench rules of the [design specification](../design/ui-ux.md) and UX-002 and UX-006 of the [MVP requirements](../product/mvp-requirements.md) for Slice 12 ([#13](https://github.com/otaviobarros/hobbots/issues/13)). Builds on the Tasks and Attempts of [ADR 018](018-tasks-and-quests.md), the sandbox and redaction of [ADR 014](014-tool-policy-and-enforcement.md) and the event journal of [ADR 013](013-event-journal.md).
+Status: **Accepted.** Amended by [ADR 027](027-quest-room.md): the Workbench is one per Quest, docked in the Quest room under the lanes, its Summary tab and Task chat card go, and the Terminal is drawn with xterm.js. What it records, how it captures changes and how long it keeps them stand. Refines screen 7 of the [screen inventory](../design/screens-and-flows.md), the Workbench rules of the [design specification](../design/ui-ux.md) and UX-002 and UX-006 of the [MVP requirements](../product/mvp-requirements.md) for Slice 12 ([#13](https://github.com/otaviobarros/hobbots/issues/13)). Builds on the Tasks and Attempts of [ADR 018](018-tasks-and-quests.md), the sandbox and redaction of [ADR 014](014-tool-policy-and-enforcement.md) and the event journal of [ADR 013](013-event-journal.md).
 
 ## Context
 
@@ -20,17 +20,15 @@ Browser use is too large for the MVP. It moves to its own post-MVP slice ([#382]
 
 ### What it is
 
-The Workbench is one Task's full view: its header, five tabs and a task chat card. It shows one Attempt at a time. With none chosen it opens on the latest Attempt that recorded work (a command, a changed file, a reference, a report or the result), so a retry that ended before doing anything does not hide the one that did; a running Attempt, or one whose stop was never confirmed, is shown whatever it recorded, and with none that recorded anything it shows the Task's current Attempt.
+The Workbench is the full view of what a Quest's hobs did: four tabs over every Task and Attempt in the Quest. A solo Task is a Quest room with one lane, so it gets the same Workbench ([ADR 027](027-quest-room.md)).
 
-It opens from the Task card, the task sheet and "Open in Workbench" on a tool step. It opens in the chat's place, inside the same window. There is no right panel beside the chat: the quest sheet and the task sheet slide in over the chat column and close when the Workbench opens, so the Workbench takes the chat column's whole width. The hob panel stays where it is, and a pinned Quest stays as a quest button in the chat header. **Back to chat** (or **Back to the task** when it was opened from the task sheet) returns to the same thread, scroll position and unsent message.
+It is docked in the Quest room, under the lanes, beside the chat column. It never opens in the chat's place, and it has no Back. Folded, it is a strip of counts; a count, a lane or a link that names a Task opens it.
+
+A lane filters it to that hob, and the attempt picked in a lane filters it to that try. For a Task with no try picked it shows the latest Attempt that recorded work (a command, a changed file, a reference, a report or the result), so a retry that ended before doing anything does not hide the one that did; a running Attempt, or one whose stop was never confirmed, is shown whatever it recorded, and with none that recorded anything it shows the Task's current Attempt.
 
 ### The header
 
-- The Task's title and its status tag.
-- The owner's sprite and name, and who asked, as a chain: "asked by You → Aldric".
-- The brain: the runtime's tile, runtime and model.
-- Where it runs on the hub: **In the sandbox**, or the **Unsandboxed** tag (ADR 014).
-- An Attempt picker when the Task has more than one Attempt: "Attempt 1 · 2 · 3". Every tab follows the chosen Attempt.
+The Workbench has no header of its own any more. The Quest room's header holds the Quest's title, and each lane's header holds its hob, its brain, where it runs (**In the sandbox**, or the **Unsandboxed** tag of ADR 014) and the attempt picker, "Try 1 ✗ · 2" ([ADR 027](027-quest-room.md)).
 
 ### The tabs
 
@@ -38,13 +36,12 @@ In this order:
 
 | Tab | What it shows | Who it is for |
 |---|---|---|
-| **Summary** | What the hob was asked, what it did, what it made and what is still open | Everyone. It opens first. |
 | **Changes** | Each file the Task added, edited or deleted, with a before and after | Anyone checking the work |
 | **Files** | The files the Task made or touched, with previews | Anyone who wants the result |
 | **Terminal** | The commands the Task ran and what they printed | Developers |
 | **Browser** | "Coming soon": watching a hob use a browser comes in a later update | Nobody yet ([#382](https://github.com/otaviobarros/hobbots/issues/382)) |
 
-Summary is always the tab the Workbench opens on. Changes, Files and Terminal are always reachable, never hidden.
+Summary was the first tab until [ADR 027](027-quest-room.md) made the lanes the summary. Changes, Files and Terminal are always reachable, never hidden. Each row names the hob it belongs to.
 
 ### States
 
@@ -62,16 +59,12 @@ Screenshot moves to #382 with the Browser. Computer control stays Later.
 
 ### Summary
 
-Summary is built from records the hub already keeps. It makes **no model call**, so it costs nothing, is never wrong about what happened and works offline from the runtime.
+Replaced by the lanes of the Quest room ([ADR 027](027-quest-room.md)). The rule it set still holds there: what the work shows is built from records the hub already keeps, with **no model call**, so it costs nothing, is never wrong about what happened and works offline from the runtime. Its parts moved:
 
-- **One line** leads: the result, once the Task has one, or else where the Attempt shown stands, such as waiting on your answer in the task chat.
-- **What happened.** A timeline card of its checkpoints and steps in order, each with a mark: done, failed, waiting or next. Retries show as tries. A hob tool call the hub refused on the Task shows as failed, with what the hob was told ([#575](https://github.com/otaviobarros/hobbots/issues/575)).
-- **Buttons** under it name the tabs the Task used: "See the 4 changed files", "See what ran in Terminal".
-- **What it made.** The Task's Artifact references (files, links and text) and its changed files, each linked into Files or Changes.
-- **Still open.** Its open questions, pending approvals, blockers and unresolved backpack items, each linked to where you act on it. The question for you on this Task is the exception: the task chat holds it, so it shows only there ([#833](https://github.com/otaviobarros/hobbots/issues/833)).
-- **What you asked**, behind Details: the Task's brief, your message or the lead's brief for a member's Task.
-
-Each line links to the tab or the chat that holds the detail.
+- The result, checkpoints, steps, retries and refused tool calls are beats, marks and the result in each hob's lane.
+- What the Task made is in Files and Changes, and the result in the lane links to them.
+- What is still open (questions, approvals, blockers, uncommitted work and backpack items) shows in the lanes, the Needs-you tray and the Inbox.
+- What you asked is the Task's brief, behind its title in the lane.
 
 ### Changes
 
@@ -113,14 +106,15 @@ Contents are stored in the hub's data folder, out of every hob's reach, once per
 
 ### Terminal
 
-The Terminal is a read-only record. You cannot type into it.
+The Terminal is a read-only record. You cannot type into it. [ADR 027](027-quest-room.md) draws it with xterm.js, as one scrollback per hob with a tab each and a split view, dark in every theme. The records below are what it draws.
 
-- **Each command** shows the command line, the folder it ran in, whether it ran in the sandbox, when it started, how long it took and whether it succeeded (its exit code).
+- **Each command** shows the command line as a prompt line and its output as printed. The folder it ran in, whether it ran in the sandbox, when it started and how long it took sit on a dim line or a tooltip, and a failed command ends with its exit code.
 - **Output** passes through the same redaction as tool output before it is stored or shown.
+- **Commands print in color** ([#902](https://github.com/otaviobarros/hobbots/issues/902)). Claude Code runs them without a terminal, so before each command it runs a script from the hob's runtime folder (`CLAUDE_ENV_FILE`) that sets `FORCE_COLOR`, `CLICOLOR_FORCE`, `npm_config_color` and `pnpm_config_color`, and Git's `color.diff` and `color.status` to `always`. Only the hob's commands get it: Claude Code, its hooks and its own commands print as before. The Terminal keeps the escape sequences. Redaction reads output as a terminal shows it, so a secret a color code splits is still found. Hobbots' plain-text uses strip them: the reply's tool step and its log, and the whole log opened in a tab. The hob reads a command that succeeded as plain text, which the PostToolUse hook puts in place of its output. A command that failed reaches the hob as Claude Code returns it, which may hold escape sequences, because the PostToolUseFailure hook cannot replace its output. The script is written to a new file that then replaces the path, so a link a command left there never leads the hub to write outside the sandbox.
 - **Exit codes come from what the runtime reports.** Claude Code has no exit code field: a command that exits non-zero fails its call, and the PostToolUseFailure hook's `error` starts with the line `Exit code N`, which the hub records as the exit code and leaves out of the output. A call that succeeds exited 0, unless the Bash tool's response carries `returnCodeInterpretation` (grep's "No matches found"), where Claude Code read a non-zero code as no error without saying which; that command, and one interrupted or moved to the background, records no exit code. A command whose exit code is not 0 is Failed. The fake runtime reports its commands through the same hook payloads, so tests with it hold for Claude Code.
 - **Live** where the runtime reports output as it comes. Where it reports output only at the end, as Claude Code's hooks do, a running command shows "Running · 12 s" and its output when it ends. Claude Code reports a command's output only when it ends; the fake runtime streams it when a scripted run asks to. Each command record says which (`liveOutput`).
 - **Long output is folded.** A command keeps its first and last 8 KiB on its step, as today. Its whole output is kept up to 4 MiB as a log; past that, the log keeps its first and last 2 MiB and says how much was left out. An Attempt keeps at most 64 MiB of logs; past that, new commands keep only their first and last 8 KiB.
-- **What runs without the Terminal** stays out of it. File reads, edits and searches are steps in Summary, not commands.
+- **What runs without the Terminal** stays out of it. File reads, edits and searches are marks in the hob's lane, not commands.
 
 ### How long history is kept
 
@@ -131,17 +125,13 @@ The Terminal is a read-only record. You cannot type into it.
 
 ### The Task chat
 
-A card beside the views, under the Workbench header, to talk about this Task without leaving it. An icon button in the header shows and hides it.
-
-- What you write goes to the Task as a **note**, the note of ADR 018: it reaches the Task's lead as a message about this Task, through the lead's backpack. For a Task with no party, the lead is its owner.
-- **Quick nudges** are notes with one tap, such as "Looks good", "Explain what you did" and "Keep going". The exact set is copy, not a decision.
-- A note on a Task that has ended is refused, as ADR 018 decides.
+Replaced by the chat column of the Quest room ([ADR 027](027-quest-room.md)). The thread stays beside the Workbench, so what you write goes to the lead as any message does, and a steer receipt shows where it went. A note the lead passes on is still the note of ADR 018. The quick nudges go with the card.
 
 ### Keeping your place
 
 - Switching tabs keeps each tab's place: its scroll, the selected file and folded output.
-- Switching Attempts keeps the tab.
-- The tabs follow the keyboard pattern for tabs: arrow keys move between them, and Escape goes back.
+- Switching Attempts, or the lane the Workbench is filtered to, keeps the tab.
+- The tabs follow the keyboard pattern for tabs: arrow keys move between them, and Escape folds the Workbench.
 - A connected device or a browser on the tailnet gets the same Workbench (ADR 010). It shows the hub's files and commands; it never gives a hob access to that device.
 
 ### What is recorded
@@ -158,7 +148,7 @@ New records are written with their journal events in the same transaction (ADR 0
 
 ## Rationale
 
-Summary first serves the people who are not developers without hiding anything from those who are. Building it from records, not from a model, keeps it fast, free and true: it cannot invent a step.
+Summary first served the people who are not developers without hiding anything from those who are; the lanes of ADR 027 now do that job. Building it from records, not from a model, keeps it fast, free and true: it cannot invent a step.
 
 Comparing the folders before and after the turn is the only way to catch edits a command makes. It also works for any runtime, since it does not depend on what a runtime reports. Reading files instead of running Git keeps repository code from ever running outside the sandbox. Size limits and reused hashes keep the scan cheap on large folders, and the label says when it gave up.
 
@@ -168,7 +158,7 @@ Keeping the small records with the Task and the heavy details for 30 days keeps 
 
 ## Consequences
 
-- Screen 7 and the design specification change to match: tab order, Summary first, the greyed Not used tabs and Browser as Coming soon.
+- Screen 7 and the design specification change to match: tab order, Summary first, the greyed Not used tabs and Browser as Coming soon. [ADR 027](027-quest-room.md) later moves the Workbench into the Quest room and drops Summary and the Task chat card.
 - The Screenshot label leaves the MVP with the Browser view.
 - The hub reads every file in a hob's folders at the start and end of each turn, and hashes again each file that changed since. Very large folders lose change tracking past the limits.
 - The baseline copies small text files and images it has not kept before. They are kept once per hash and dropped at turn end unless a change points at them.
@@ -187,6 +177,7 @@ The scenarios that would show this decision holds. Each names the issue that wil
 - A finished Task's Summary names what it made and links to each file, with no model call. Proven in the browser with the fake runtime: `[TC-UX-030]`, a question waiting for you in the task chat and not again under Still open in `[TC-UX-031]`, the same from a Quest pinned elsewhere in `[TC-UX-032]`, and Still open saying nothing is open only after its reads answered in `[TC-UX-033]`. A retried step's Workbench opens on the Attempt that changed a file, past a retry that recorded nothing, and keeps an Attempt you choose in `[TC-UX-034]`. Summary reads only the records the hub already serves; nothing in it calls a runtime.
 - Selecting a Task that edited files shows its changes, Live during the turn and as History after: documents rendered with their changed parts marked, code as a diff, and each file marked added, edited or deleted. Proven in the browser with the fake runtime: `[TC-UX-035]` and `[TC-UX-036]`.
 - A file the Task made opens as a preview and shows in Finder from the app. Listing and serving only files inside the hob's folders, through no link, with secret files listed but never served, are proven at hub level: `[TC-GEN-140]` to `[TC-GEN-144]`. The Files tab's previews, Download in a browser, a file changed or gone since, a secret file and Show in Finder through the desktop app's bridge are proven in the browser with the fake runtime: `[TC-UX-040]` to `[TC-UX-044]`; the bridge's own checks in the desktop app's unit tests. Finder itself in the packaged app is not verified.
+- A colored command keeps its colors in the Terminal, redacted where a color code splits a secret, while its reply step reads plain: `[TC-GEN-157]`. `git diff` and `git status` print color through a pipe with the script, the hub's own Git settings kept: `[TC-RT-501]`. Claude Code's recorded hook shape gives the hob a successful command's output without escapes while the hub records it colored: `[TC-RT-502]`; a link or hard link planted at the script's path is replaced, never written through: `[TC-RT-504]`; the fake runtime records it as printed: `[TC-RT-503]`. Real Claude Code is not verified yet.
 - A finished Task's terminal shows history, not a live session, with long output folded and redacted, and a running command counts its time and reads Cut off once its turn is stopped. Proven in the browser with the fake runtime: `[TC-UX-045]` and `[TC-UX-046]`. Output streamed as it comes is proven by the unit tests of the web client's live output; the fake streams it too fast for the browser to see it running.
 - A nudge from the Workbench reaches the Task's lead as a note. Proven in the browser with the fake runtime: the lead's next turn reads it in `[TC-UX-050]`, a member's Task talks to its lead with the drawer's unsent note in `[TC-UX-051]`, an ended Task takes no note in `[TC-UX-052]`, and a nudge whose reply was lost goes out once when tapped again, even after the chat closed, in `[TC-UX-053]`.
 - Details past the retention window read Unavailable with why, and the hob's files are untouched. The cleared records and the untouched files are proven at hub level: `[TC-PE-279]`, `[TC-IN-177]` and `[TC-PE-278]`. Changes keeps its list and says why in place of each file's contents: `[TC-UX-038]`. Not shown yet: [#389](https://github.com/otaviobarros/hobbots/issues/389).

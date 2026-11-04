@@ -879,8 +879,15 @@ describe("the process sandbox", () => {
         ANTHROPIC_API_KEY: "secret",
         CLAUDE_CODE_OAUTH_REFRESH_TOKEN: "secret",
         CLAUDE_CODE_MEMORY_API_TOKEN: "secret",
+        CLAUDE_ENV_FILE: "/hob/runtime/command-env.sh",
       }),
-    ).toEqual({ PATH: "/usr/bin", HOME: "/Users/me", LC_ALL: "C", CLAUDE_CODE_OAUTH_TOKEN: "t" });
+    ).toEqual({
+      PATH: "/usr/bin",
+      HOME: "/Users/me",
+      LC_ALL: "C",
+      CLAUDE_CODE_OAUTH_TOKEN: "t",
+      CLAUDE_ENV_FILE: "/hob/runtime/command-env.sh",
+    });
   });
 
   it("reaches a host only when every live turn may reach it", async () => {
