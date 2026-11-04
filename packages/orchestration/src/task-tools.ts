@@ -2,16 +2,21 @@ import {
   type ChatTaskTurn,
   type ChatTurn,
   callScope,
+  charmOffer,
+  combineHubTools,
   EventPublisher,
   FolderChecks,
   HobbotsRepository,
   type HubCallStep,
   type HubTools,
   makeRedactor,
+  type Redactor,
   SecretRedaction,
   TaskRepository,
   TaskToolCalls,
   type TaskToolOutcome,
+  type ToolAccess,
+  type TurnApprovals,
 } from "@hobbots/agents";
 import {
   type AttemptId,
@@ -84,6 +89,13 @@ interface CallSource {
 const withShown = (caller: TaskToolCaller, shown: ReadonlyMap<string, CarriedItem>): TaskToolCaller =>
   shown.size === 0 ? caller : { ...caller, carried: carriedWith(caller.carried ?? [], shown.values()) };
 
+/** What a session's Charm calls run under: the hob's access now, its redactor, and who answers an Ask. */
+export interface SessionCharms {
+  readonly currentAccess: Effect.Effect<ToolAccess | null>;
+  readonly redactor: Redactor;
+  readonly approvals: TurnApprovals | null;
+}
+
 /**
  * The Hobbots tools for Tasks and Quests (ADR 018). Every call is checked by the hub: who may make
  * it, depth, open-Task limits, cycles and authority. A refused call writes nothing and says why;
@@ -104,6 +116,17 @@ export class TaskTools extends Context.Service<
      * `only`. A call to a tool the turn does not offer is refused.
      */
     readonly forTurn: (caller: TaskToolCaller, only?: ReadonlyArray<TaskToolName>) => HubTools;
+    /**
+     * The tools a session working the caller's Task outside any chat offers, a party member's or a
+     * step's: those of `forTurn`, and the local Git and Charm tools its access opens, read at its
+     * start, as a chat turn's are (#699). A Charm call is keyed in the Task's work and recorded on
+     * the Task, under `turn.currentAccess`, which every Delegation above it narrows.
+     */
+    readonly forSession: (
+      caller: TaskToolCaller,
+      turn: SessionCharms,
+      only?: ReadonlyArray<TaskToolName>,
+    ) => Effect.Effect<HubTools>;
     /**
      * The tools a chat turn offers, on the open Task its hob owns in the thread. A call that starts
      * work starts that Task from the turn's prompt when there is none; each turn that starts a Task
@@ -380,7 +403,24 @@ export class TaskTools extends Context.Service<
             } satisfies ChatTaskTurn;
           });
 
-        return TaskTools.of({ call, forTurn, forChat });
+        // Without Charms or local Git tools, a session offers only its Task tools.
+        const charmsFor = yield* charmOffer;
+        const forSession = (caller: TaskToolCaller, turn: SessionCharms, only?: ReadonlyArray<TaskToolName>) =>
+          Effect.gen(function* () {
+            const scope = () => callScope.task(caller.taskId);
+            const charms = yield* charmsFor({
+              ...turn,
+              agentId: caller.agentId,
+              threadId: null,
+              messageId: null,
+              scope,
+            });
+            const recorded = charmRecords({ agentId: caller.agentId, scope, taskOf: () => caller.taskId })(charms);
+            const tools = forTurn(caller, only);
+            return combineHubTools(tools, recorded) ?? tools;
+          });
+
+        return TaskTools.of({ call, forTurn, forSession, forChat });
       }),
     );
 }

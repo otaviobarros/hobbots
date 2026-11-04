@@ -35,6 +35,7 @@ import {
   roleFields,
   type Thread,
 } from "@hobbots/domain";
+import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -55,6 +56,8 @@ import { ActivityStoreLive, FolderScannerLive, HobFilesLive } from "@hobbots/wor
 import { Effect, Layer, Schedule } from "effect";
 import { HttpRouter } from "effect/http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { DispatcherHostLive } from "../src/backpack.ts";
+import { ContinuationsLive, MemberContinuationsLive, WakeOnArrival } from "../src/continuations.ts";
 import { EventBus } from "../src/event-bus.ts";
 import { CanonicalSharedFolders, NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
@@ -74,8 +77,9 @@ const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-local-git-e2e-")))
 const project = join(temp, "nettle-project");
 const frodoProject = join(temp, "frodo-project");
 const earlier = join(temp, "earlier-run");
+const memberProject = join(temp, "thistle-project");
 const dataDir = join(temp, "data");
-for (const folder of [project, frodoProject, earlier, dataDir]) mkdirSync(folder, { recursive: true });
+for (const folder of [project, frodoProject, earlier, memberProject, dataDir]) mkdirSync(folder, { recursive: true });
 
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
@@ -84,14 +88,20 @@ beforeAll(() => {
   const LocalGit = LocalGitToolsLive({ stagingFolder: join(dataDir, "charms", "local-git") }).pipe(
     Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)),
   );
-  const App = HobLifecycle.layer
+  const App = Layer.mergeAll(HobLifecycle.layer, WakeOnArrival)
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))
     .pipe(Layer.provideMerge(ChatService.layer))
+    .pipe(Layer.provideMerge(ContinuationsLive))
     .pipe(
       Layer.provideMerge(
-        StepRunnerLive().pipe(Layer.provideMerge(TaskTools.layer("/")), Layer.provideMerge(TaskSignal.layer)),
+        StepRunnerLive().pipe(
+          Layer.provideMerge(MemberContinuationsLive),
+          Layer.provideMerge(TaskTools.layer("/")),
+          Layer.provideMerge(TaskSignal.layer),
+        ),
       ),
     )
+    .pipe(Layer.provideMerge(Dispatcher.layer().pipe(Layer.provideMerge(DispatcherHostLive))))
     .pipe(
       Layer.provideMerge(
         Layer.merge(ActivityRecorder.layer(), TaskFiles.layer.pipe(Layer.provide(HobFilesLive))).pipe(
@@ -393,5 +403,70 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     expect(tree?.checkpoints.map((checkpoint) => checkpoint.summary)).toContain(
       `git_init: Created an empty Git repository in ${inner}.`,
     );
+  });
+  // covers PE-005, OR-002
+  it("[TC-PE-445] a party member creates a repository with git_init and commits, and its lead never steps in", async () => {
+    await request("PATCH", "/api/setup", {
+      completed: true,
+      safetyPreset: "balanced",
+      approvedFolders: [memberProject],
+    });
+    const create = (name: string, lookSeed: number) =>
+      request<Agent>("POST", "/api/agents", {
+        name,
+        ...roleFields("writer"),
+        lookSeed,
+        lookColor: "moss",
+        runtime: "claude-code",
+        model: null,
+        effort: null,
+        instructions: "",
+      });
+    const lead = (await create("Bramble", 699)).body;
+    const member = (await create("Thistle", 700)).body;
+    const commit = "git add README.md && git commit -m 'First'";
+    const thread = (await request<Thread>("POST", `/api/agents/${lead.id}/threads`)).body;
+    const asked = await exchange(
+      thread,
+      "Start the project",
+      hub("delegate_task", {
+        key: "repo",
+        hob: "Thistle",
+        brief: [
+          "Make the project a repository and commit its README",
+          hub("git_init", { folder: memberProject }),
+          `fake:run ${JSON.stringify({
+            command: commit,
+            writes: { "README.md": "# Thistle's project\n" },
+            output: "[main (root-commit) 1a2b3c4] First\n",
+          })}`,
+          hub("complete_task", { key: "repo-done", summary: "The repository has its first commit" }),
+        ].join("\n"),
+        authority: { decisions: { "local-git": "allow", "edit-files": "allow" } },
+      }),
+      hub("wait_for", { key: "wait", tasks: ["$repo.task_id"] }),
+    );
+    expect(asked.content).toContain("Thistle will have: file reads, file edits, commands, git_init.");
+
+    const tree = await eventually(async () => {
+      const [found] = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body.trees;
+      const done = found?.tasks.find((task) => task.ownerId === member.id && task.state === "completed");
+      // Its Task completes before the turn that completed it has ended.
+      return found?.attempts.some((each) => each.taskId === done?.id && each.state === "completed") ? found : undefined;
+    });
+    const task = tree.tasks.find((each) => each.ownerId === member.id);
+    expect(existsSync(join(memberProject, ".git", "HEAD"))).toBe(true);
+    // The member created it: the record is on its own Task, and nothing it called was refused.
+    expect(
+      tree.checkpoints.filter((checkpoint) => checkpoint.taskId === task?.id).map((each) => each.summary),
+    ).toContain(`git_init: Created an empty Git repository in ${memberProject}.`);
+    expect(tree.refusals).toEqual([]);
+    const attempt = tree.attempts.find((each) => each.taskId === task?.id && each.state === "completed");
+    const { activity } = (await request<AttemptActivityRead>("GET", `/api/attempts/${attempt?.id}/activity`)).body;
+    expect(activity.commands.map(({ command, folder, state }) => ({ command, folder, state }))).toEqual([
+      { command: commit, folder: memberProject, state: "succeeded" },
+    ]);
+    // The lead never stepped in: none of its turns called git_init.
+    expect((await messages(thread)).flatMap((m) => m.steps).some((step) => step.label === GIT_INIT_LABEL)).toBe(false);
   });
 });

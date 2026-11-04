@@ -39,7 +39,7 @@ import { Context, DateTime, Effect, Fiber, FiberMap, Layer, Option, Ref, Semapho
 import { HobAdmission } from "./admission.ts";
 import { ApprovalService } from "./approvals.ts";
 import { buildBriefing } from "./briefing.ts";
-import { CharmTools, type CharmTurn, combineHubTools, LocalGitTools } from "./charms.ts";
+import { type CharmTurn, charmOffer, combineHubTools } from "./charms.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { checkRuntimeBrain } from "./hobs.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
@@ -257,14 +257,8 @@ export class ChatService extends Context.Service<
         });
       // Without Task work, turns offer no Task tools and hobs run no steps.
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
-      // Without Charms, turns offer only the Task tools.
-      const charms = yield* Effect.serviceOption(CharmTools);
-      const charmsFor = (turn: CharmTurn) =>
-        Option.isSome(charms) ? charms.value.forTurn(turn) : Effect.succeed(null);
-      // Without local Git tools, a hob cannot create a repository from its sandbox.
-      const localGit = yield* Effect.serviceOption(LocalGitTools);
-      const localGitFor = (turn: CharmTurn) =>
-        Option.isSome(localGit) ? localGit.value.forTurn(turn) : Effect.succeed(null);
+      // Without Charms or local Git tools, turns offer only the Task tools.
+      const charmsFor = yield* charmOffer;
       // Without a backpack, a thread starts only your queued messages.
       const continuations = yield* Effect.serviceOption(Continuations);
       // After a restore nothing that waited starts on its own until you resume work (ADR 026).
@@ -640,10 +634,7 @@ export class ChatService extends Context.Service<
                   };
                   // A Charm call's refusal is recorded as a Task tool's is, when the turn has Task tools.
                   const recorded = taskTurn?.recordCharms ?? ((charms: HubTools | null) => charms);
-                  return combineHubTools(
-                    taskTurn?.hubTools ?? null,
-                    recorded(combineHubTools(yield* localGitFor(charmTurn), yield* charmsFor(charmTurn))),
-                  );
+                  return combineHubTools(taskTurn?.hubTools ?? null, recorded(yield* charmsFor(charmTurn)));
                 }),
               },
               adapter.sendPrompt,

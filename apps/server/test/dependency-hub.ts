@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import {
   ApprovalService,
   ChatService,
@@ -15,6 +16,7 @@ import {
   TaskRepository,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
+import { LocalGitToolsLive } from "@hobbots/charms";
 import {
   Agent,
   AgentId,
@@ -52,7 +54,7 @@ import { NodeFolderChecks } from "../src/folders.ts";
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
-const project = join(temp, "project");
+export const project = join(temp, "project");
 mkdirSync(project, { recursive: true });
 
 const now = "2026-11-03T00:00:00.000Z";
@@ -101,6 +103,11 @@ const ProjectTools = Layer.succeed(
         runtimeFolder: join(temp, "runtime", agent.id),
       }),
   }),
+);
+
+/** The hub creates a repository for a hob, in its own data folder first, as the hub does (ADR 014). */
+const LocalGit = LocalGitToolsLive({ stagingFolder: join(temp, "data", "charms", "local-git") }).pipe(
+  Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)),
 );
 
 /** Lines a later prompt runs once it carries `on`, as a hob reacts to what reaches it. Each reacts once. */
@@ -231,6 +238,7 @@ const makeHub = (database: Database, script: Script) =>
         EventBus.layer,
         NodeFolderChecks,
         ProjectTools,
+        LocalGit,
         HobAdmission.layer,
         scripted(script),
         Layer.succeed(UserSession, {
