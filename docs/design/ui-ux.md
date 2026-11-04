@@ -62,7 +62,7 @@ All text passes WCAG AA; the lowest pair is 5.6:1. Control borders are at least 
 
 ## Components
 
-The component sheet defines: buttons (primary, approve, secondary, deny, quiet, disabled, icon, chip), switch, segmented control, inputs, status tags, Workbench view labels, delivery steps (Sent, Delivered, Read, Answered), the approval card (Allow once, Always for this site, Deny, Details), Task and Quest card, nested task rows, the Quest strip, the Task drawer, the side sheet that holds the quest and the task, provider tiles, potions, hop / sparkles / poof, the streaming caret, the banner, the menu and the toast. Shared primitives live in `packages/ui` (shadcn/ui, restyled to these tokens).
+The component sheet defines: buttons (primary, approve, secondary, deny, quiet, disabled, icon, chip), switch, segmented control, stepper, inputs, status tags, Workbench view labels, delivery steps (Sent, Delivered, Read, Answered), the approval card (Allow once, Always for this site, Deny, Details), Task and Quest card, nested task rows, the Quest strip, the Task drawer, the side sheet that holds the quest and the task, provider tiles, potions, hop / sparkles / poof, the streaming caret, the banner, the menu and the toast. Shared primitives live in `packages/ui` (shadcn/ui, restyled to these tokens).
 
 ## Behavior rules
 

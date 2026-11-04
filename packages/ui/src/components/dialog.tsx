@@ -43,4 +43,8 @@ function DialogDescription(props: React.ComponentProps<typeof DialogPrimitive.De
   return <DialogPrimitive.Description data-slot="dialog-description" {...props} />;
 }
 
-export { Dialog, DialogContent, DialogDescription, DialogTitle };
+function DialogClose(props: React.ComponentProps<typeof DialogPrimitive.Close>) {
+  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
+}
+
+export { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle };
