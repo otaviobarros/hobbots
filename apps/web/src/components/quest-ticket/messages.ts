@@ -21,4 +21,6 @@ export const messages = {
   /** Work about the request ran out of tries and waits for you in the Inbox (IN-007). */
   stuck: "Stuck",
   openRoom: "Open room",
+  /** The hobs past the sprites the ticket shows; their names are in the room. */
+  more: (count: number) => `+${formatCount(count)}`,
 };

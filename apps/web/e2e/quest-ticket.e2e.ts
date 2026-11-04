@@ -9,8 +9,8 @@ test.afterEach(async () => {
   await stopAldricHub();
 });
 
-/** The sprites on a ticket, one per hob on the Quest. */
-const sprites = (on: Locator) => on.locator(":scope > span").first().locator(":scope > span");
+/** The sprites on a ticket, one per hob on the Quest up to the most it has room for. */
+const sprites = (on: Locator) => on.locator(":scope > span > span:first-child > span:has(> span[aria-hidden])");
 
 /** The ticket's height, which never changes however the work goes. */
 const height = async (on: Locator) => (await on.boundingBox())?.height ?? 0;
@@ -133,4 +133,54 @@ test("[TC-UX-222] a finished Quest's ticket says how it ended, needs nothing fro
   await openRoom(page, "Tidy the notes");
   await expect(lane(page, "Aldric")).toBeVisible();
   await expect(laneTask(page, "Tidy the notes", "Aldric")).toContainText("The notes are tidy.");
+});
+
+/** Fails unless `inner` lies inside `outer`'s left and right edges, and has some width of its own. */
+const expectWithin = async (inner: Locator, outer: Locator) => {
+  const [a, b] = [await inner.boundingBox(), await outer.boundingBox()];
+  if (a === null || b === null) throw new Error("Both elements need a box.");
+  expect(a.width).toBeGreaterThan(0);
+  expect(a.x).toBeGreaterThanOrEqual(b.x - 1);
+  expect(a.x + a.width).toBeLessThanOrEqual(b.x + b.width + 1);
+};
+
+// covers UX-001, UX-002
+test("[TC-UX-223] at 1024 wide, beside the room, a party of five's ticket keeps its title, its state, what needs you and its way in readable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  const { url, aldric } = await questHub({ nested: true });
+  await page.goto(`${url}/#/hobs/${aldric}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
+  await composer.fill("Plan a Black Friday campaign for the shop");
+  await composer.press("Enter");
+  const title = "Plan the Black Friday campaign";
+  const quest = ticket(page, title);
+  await expect(quest).toContainText("1 needs you", { timeout: 15_000 });
+
+  // With the room open, the chat is a 300 px column: the ticket shows two sprites and how many
+  // more, its title, its progress and the needs-you tag, all inside the column.
+  await openRoom(page, title);
+  const chat = page.getByRole("main", { name: "Chat" });
+  await expect(quest).toHaveAccessibleName(/of \d+ done, 1 needs you$/);
+  await expect(sprites(quest).filter({ visible: true })).toHaveCount(2);
+  await expect(quest.getByText("+3", { exact: true })).toBeVisible();
+  for (const part of [
+    quest.getByText(title, { exact: true }),
+    quest.getByText(/of \d+ done$/),
+    quest.getByText("1 needs you", { exact: true }),
+    quest.getByText("→", { exact: true }),
+  ]) {
+    await expect(part).toBeVisible();
+    await expectWithin(part, chat);
+  }
+  expect((await quest.getByText(title, { exact: true }).boundingBox())?.width ?? 0).toBeGreaterThan(80);
+
+  // In the chat's full width it is one line again, with four sprites and Open room in words.
+  await questRoom(page, title).getByRole("button", { name: "Close room" }).click();
+  await expect(quest.getByText("+1", { exact: true })).toBeVisible();
+  await expect(quest.getByText("Open room")).toBeVisible();
+  const line = await quest.getByText(title, { exact: true }).boundingBox();
+  const state = await quest.getByText("1 needs you", { exact: true }).boundingBox();
+  expect(Math.abs((line?.y ?? 0) - (state?.y ?? 100))).toBeLessThan(12);
 });

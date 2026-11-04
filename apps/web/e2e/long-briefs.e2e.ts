@@ -82,12 +82,12 @@ test("[TC-UX-163] a Task whose brief is a paragraph with a deep folder fits the 
   // Nothing in the chat is wider than its column, so the transcript never scrolls sideways.
   await expectNoSideScroll(chat);
 
-  // The ticket keeps to one line inside the chat's column, with the room shut and open beside it.
+  // The ticket's title keeps to one line inside the chat's column, with the room shut and open beside it.
   for (const opened of [false, true]) {
     if (opened) await ticket.click();
     await expect(room).toBeVisible({ visible: opened });
     expect(await lines(ticket.getByText(/^Run the Black Friday campaign/))).toBe(1);
-    for (const end of [ticket.getByText(/(of 2 done|^Finished in .*)$/), ticket.getByText("Open room")]) {
+    for (const end of [ticket.getByText(/(of 2 done|^Finished in .*)$/), ticket.getByText("→", { exact: true })]) {
       await expect(end).toBeVisible();
       await expectInside(end, chat);
     }
