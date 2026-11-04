@@ -142,17 +142,25 @@ test("[TC-RT-036] Settings › AI providers shows a ready, signed-in Codex, and 
 });
 
 // covers UX-005
-test("[TC-UX-025] Help and about shows the version, the hub's data folder and the licenses", async ({ page }) => {
+test("[TC-UX-025] Help and about shows the version and the licenses, and Your data the hub's data folder", async ({
+  page,
+}) => {
   const current = await openSettings(page, "help");
   const about = page.getByRole("region", { name: "Help and about" });
 
   await expect(about.getByText("Development build")).toBeVisible();
-  await expect(about.getByText(realpathSync(current.dataDir), { exact: true })).toBeVisible();
+  await expect(about.getByText(realpathSync(current.dataDir), { exact: true })).toHaveCount(0);
   await expect(about.getByRole("link", { name: "Apache License 2.0" })).toHaveAttribute(
     "href",
     "https://github.com/otaviobarros/hobbots/blob/main/LICENSE",
   );
   await expect(about.getByRole("link", { name: "Open-source libraries" })).toBeVisible();
+
+  // The data folder lives in Your data, with a Copy button.
+  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "Your data" }).click();
+  const folder = page.getByRole("region", { name: "Data folder" });
+  await expect(folder.getByText(realpathSync(current.dataDir), { exact: true })).toBeVisible();
+  await expect(folder.getByRole("button", { name: "Copy" })).toBeVisible();
 
   // A browser shows where notifications are set; the desktop app has the switches.
   await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "This app" }).click();
@@ -239,4 +247,26 @@ test("[TC-UX-122] Safety, Connections and Devices hold what the old panels did, 
   // Devices: remote access and the allowed devices.
   await page.goto(`${current.url}/#/settings/devices`);
   await expect(page.getByRole("switch", { name: "Use Hobbots from my other devices" })).toBeVisible();
+});
+
+// covers UX-005
+test("[TC-UX-123] Your data holds Backups with Restore and Export as files, retired hobs and the data folder", async ({
+  page,
+}) => {
+  await openSettings(page, "data");
+  const backups = page.getByRole("region", { name: "Backups" });
+  await expect(backups).toContainText("Not backed up yet");
+  await expect(backups.getByRole("button", { name: "Back up now" })).toBeVisible();
+
+  // Export as files and Restore open inside the card, one at a time.
+  const exportButton = backups.getByRole("button", { name: "Export as files" });
+  await exportButton.click();
+  await expect(exportButton).toHaveAttribute("aria-expanded", "true");
+  await expect(backups.getByRole("region", { name: "Export" }).getByRole("radio", { name: "Everything" })).toBeChecked();
+  await backups.getByRole("button", { name: "Restore from a backup…" }).click();
+  await expect(backups.getByRole("region", { name: "Export" })).toHaveCount(0);
+  await expect(backups.getByRole("textbox", { name: "Backup folder" })).toBeVisible();
+
+  await expect(page.getByRole("region", { name: "Retired hobs" })).toContainText("No retired hobs.");
+  await expect(page.getByRole("region", { name: "Data folder" }).getByRole("button", { name: "Copy" })).toBeVisible();
 });

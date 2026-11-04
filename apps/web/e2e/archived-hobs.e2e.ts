@@ -78,8 +78,16 @@ test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which
   // The thread list leads back to Retired hobs, and Settings points to the Archive.
   await page.getByRole("link", { name: "‹ Retired hobs" }).click();
   await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
+  // Settings › Your data lists Pip with its role and kept chats, and Read chats opens them.
   await page.goto(`${current.url}/#/settings/data`);
-  await page.getByRole("region", { name: "Retired hobs" }).getByRole("link", { name: "Open the Archive" }).click();
+  const retired = page.getByRole("region", { name: "Retired hobs" });
+  const row = retired.getByRole("list", { name: "Retired hobs" }).getByRole("listitem").filter({ hasText: "Pip" });
+  await expect(row).toContainText("Guide");
+  await expect(row).toContainText("1 chat kept");
+  await row.getByRole("link", { name: "Read Pip's chats" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/settings/archived/${hob.id}/threads/${thread.id}$`));
+  await page.goto(`${current.url}/#/settings/data`);
+  await retired.getByRole("link", { name: "Open the Archive" }).click();
   await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
   expect(await api(current, "GET", "/agents")).toEqual([]);
 

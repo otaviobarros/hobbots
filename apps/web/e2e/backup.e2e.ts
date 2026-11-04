@@ -66,12 +66,12 @@ test("[TC-OP-036] backs up from Settings, and Welcome restores it after the data
   await composer.press("Enter");
   await expect(page.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 20_000 });
 
-  // Settings › Backup & export makes the backup and shows where it went.
+  // Settings › Your data › Backups makes the backup, tags when it finished and shows where it went.
   await page.goto(`${hub.url}/#/settings/data`);
-  const panel = page.getByRole("region", { name: "Backup & export" });
+  const panel = page.getByRole("region", { name: "Backups" });
   await panel.getByRole("textbox", { name: "Save the backup in" }).fill(destination);
   await panel.getByRole("button", { name: "Back up now" }).click();
-  await expect(panel.getByText(/^Backed up /)).toBeVisible({ timeout: 20_000 });
+  await expect(panel.getByText(/Backed up (now|\d+ (second|minute)s? ago)/)).toBeVisible({ timeout: 20_000 });
   const backup = (await panel.getByText(/\.hobbots-backup$/).textContent()) ?? "";
   expect(backup.startsWith(join(destination, "Hobbots backup "))).toBe(true);
 
@@ -119,7 +119,7 @@ test("[TC-OP-036] backs up from Settings, and Welcome restores it after the data
   const held = page.getByRole("region", { name: "Work is held after a restore" });
   await expect(held).toBeVisible({ timeout: 20_000 });
   await page.goto(`${hub.url}/#/settings/data`);
-  const restored = page.getByRole("region", { name: "Backup & export" });
+  const restored = page.getByRole("region", { name: "Backups" });
   await expect(restored).toContainText(/Restored .* from a backup made /);
   await expect(restored).toContainText("The data from before the restore");
   await restored.getByRole("button", { name: "Resume work" }).click();
