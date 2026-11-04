@@ -6,8 +6,9 @@ export const messages = {
     intro: "Each “Always” you gave stays until you remove it. Removing one makes the hob ask again next time.",
   },
   settings: {
+    heading: "Always allowed",
     intro:
-      "Every “Always” rule, for every hob. Each one lets one hob do one thing in one place without asking. Remove a rule and that hob asks again next time.",
+      "Things you told a hob it can always do, in one place. Remove one and that hob asks again next time. Also listed in Inbox › History.",
   },
   empty: "No standing rules",
   emptyHint: "When you pick “Always for this site” on a request, the rule it saves shows here.",
