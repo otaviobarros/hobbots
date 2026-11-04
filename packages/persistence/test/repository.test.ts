@@ -89,6 +89,50 @@ describe("HobbotsRepository", () => {
     expect(result.unfinished.map((m) => m.id)).toEqual(["a", "c"]);
   });
 
+  // covers CH-002, UX-001
+  it("[TC-DP-241] reads each thread's last shown message as one line, skipping queued and empty ones", async () => {
+    const result = await Effect.gen(function* () {
+      const repo = yield* HobbotsRepository;
+      yield* repo.insertAgent(
+        new Agent({
+          id: agentId,
+          name: "Aldric",
+          roleTitle: "Guide",
+          runtime: "claude-code",
+          model: null,
+          effort: null,
+          instructions: "",
+          lookSeed: 1,
+          lookColor: "moss",
+          configVersion: 1,
+          createdAt: now,
+        }),
+      );
+      const upserted = yield* repo.upsertThread(
+        new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }),
+      );
+      const empty = { list: (yield* repo.listThreads(agentId))[0]?.lastLine, upserted: upserted.value.lastLine };
+      yield* repo.upsertMessage(new Message({ ...message("m1"), content: "Done.\n\nThe copy is in\tdocs/launch.md" }));
+      // A reply made only of tool calls has no text, and a queued message is not in the transcript yet.
+      yield* repo.upsertMessage(new Message({ ...message("m2"), content: "  " }));
+      yield* repo.upsertMessage(new Message({ ...message("m3", "queued"), role: "user", configVersion: null }));
+      const shown = (yield* repo.listThreads(agentId))[0]?.lastLine;
+      yield* repo.upsertMessage(new Message({ ...message("m4"), content: "word ".repeat(60) }));
+      const long = Option.getOrThrow(yield* repo.findThread(threadId)).lastLine;
+      const touched = yield* repo.upsertThread(
+        new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }),
+      );
+      return { empty, shown, long, touched: touched.value.lastLine };
+    }).pipe(Effect.provide(TestLayer), Effect.runPromise);
+
+    expect(result.empty).toEqual({ list: null, upserted: null });
+    expect(result.shown).toBe("Done. The copy is in docs/launch.md");
+    expect(result.long).toHaveLength(140);
+    expect(result.long?.endsWith("word…")).toBe(true);
+    // A thread written again carries the line a read shows, so its event does not blank it.
+    expect(result.touched).toBe(result.long);
+  });
+
   // covers CH-009, DP-003
   it("[TC-DP-041] stores when a thread was archived and lists live and archived threads apart", async () => {
     const thread = (id: string, archivedAt: string | null) =>
