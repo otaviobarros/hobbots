@@ -118,6 +118,11 @@ describe("runsInSequence", () => {
     expect(runsInSequence("cat <<A <<B\na; a\nA\nb & b\nB")).toBe(false);
     expect(runsInSequence("grep x <<< 'a; b'; echo done")).toBe(true);
     expect(runsInSequence("grep x <<< 'a; b'")).toBe(false);
+    // The shell removes quotes and backslashes from the whole delimiter word.
+    expect(runsInSequence("cat <<\\EOF\ntext\nEOF\nfalse\necho done")).toBe(true);
+    expect(runsInSequence("cat <<E'OF'\ntext\nEOF\nfalse")).toBe(true);
+    expect(runsInSequence('cat <<"E"O\\F > a.md\ntext; more\nEOF\nfalse')).toBe(true);
+    expect(runsInSequence("cat <<\\EOF\na; b\nEOF")).toBe(false);
   });
 
   it("is false for one command, a chain on success or failure, a redirection and a quoted separator", () => {

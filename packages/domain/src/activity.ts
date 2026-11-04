@@ -93,21 +93,29 @@ const sequenceAt = (line: string, i: number) => {
 };
 
 /**
- * The delimiter word of the heredoc whose `<<` ends just before `i`, quoted or not and after an
- * optional `-`, and the index just past it.
+ * The delimiter word of the heredoc whose `<<` ends just before `i`, after an optional `-`, with its
+ * quotes and backslashes removed as the shell removes them, and the index just past it.
  */
 const heredocWord = (line: string, i: number) => {
   let j = i + (line[i] === "-" ? 1 : 0);
   while (line[j] === " " || line[j] === "\t") j++;
-  const quote = line[j];
-  if (quote === "'" || quote === '"') {
-    const end = line.indexOf(quote, j + 1);
-    const close = end === -1 ? line.length : end;
-    return { word: line.slice(j + 1, close), next: close + 1 };
+  let word = "";
+  while (j < line.length && !/[\s;&|<>()]/.test(line[j] as string)) {
+    const c = line[j] as string;
+    if (c === "\\") {
+      word += line[j + 1] ?? "";
+      j += 2;
+    } else if (c === "'" || c === '"') {
+      const close = line.indexOf(c, j + 1);
+      const end = close === -1 ? line.length : close;
+      word += line.slice(j + 1, end);
+      j = end + 1;
+    } else {
+      word += c;
+      j++;
+    }
   }
-  const start = j;
-  while (j < line.length && !/[\s;&|<>()]/.test(line[j] as string)) j++;
-  return { word: line.slice(start, j), next: j };
+  return { word, next: j };
 };
 
 /**
