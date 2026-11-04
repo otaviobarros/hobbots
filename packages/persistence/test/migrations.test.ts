@@ -19,7 +19,7 @@ import backpackBlockers from "../src/migrations/0029_backpack_blockers.ts";
 import withdrawnQuestions from "../src/migrations/0033_withdrawn_questions.ts";
 import taskGrants from "../src/migrations/0035_task_grants.ts";
 import versionedName from "../src/migrations/0047_versioned_name.ts";
-import threadReads from "../src/migrations/0052_thread_reads.ts";
+import threadReads from "../src/migrations/0053_thread_reads.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -1083,7 +1083,7 @@ describe("0047_versioned_name", () => {
   });
 });
 
-describe("0052_thread_reads", () => {
+describe("0053_thread_reads", () => {
   // covers UX-006, DP-003
   it("[TC-DP-251] counts every thread from before it as read through its last message", async () => {
     const threads = await Effect.gen(function* () {
@@ -1124,7 +1124,7 @@ describe("0052_thread_reads", () => {
       }
       yield* threadReads;
       return yield* sql`SELECT id, read_seq FROM threads ORDER BY id`;
-    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0052"))), Effect.runPromise);
+    }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0053"))), Effect.runPromise);
 
     expect(threads).toEqual([
       { id: "t1", readSeq: 2 },

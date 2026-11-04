@@ -1,4 +1,5 @@
 import { RuntimeError, RuntimeLimitReached } from "@hobbots/agents";
+import { CONTINUATION_HEADER } from "@hobbots/domain";
 import { Effect, Exit, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import {
@@ -29,6 +30,26 @@ describe("fake runtime", () => {
       .flatMap((e) => (e._tag === "TextDelta" ? [e.text] : []))
       .join("");
     expect(text).toBe("Echo: hi there");
+  });
+
+  it("writes nothing in a turn that only carries arrived work when told to stay quiet, and echoes it otherwise", async () => {
+    const reply = async (quietContinuations: boolean, prompt: string) => {
+      const events = Array.from(
+        await makeFakeRuntime({ quietContinuations })
+          .sendPrompt(request(prompt))
+          .pipe(Stream.runCollect, Effect.runPromise),
+      );
+      const completed = events.find((e) => e._tag === "Completed");
+      return {
+        text: completed?._tag === "Completed" ? completed.text : null,
+        deltas: events.filter((e) => e._tag === "TextDelta").length,
+      };
+    };
+    const arrived = `${CONTINUATION_HEADER} Work arrived for you while you were not running:`;
+    expect(await reply(true, arrived)).toEqual({ text: "", deltas: 0 });
+    expect((await reply(false, arrived)).text).toBe(`Echo: ${arrived}`);
+    // A turn you started with a message always gets its reply.
+    expect((await reply(true, "Plan a Black Friday campaign")).text).toBe("Echo: Plan a Black Friday campaign");
   });
 
   it("cuts a reply off after its first words when the prompt asks for it", async () => {

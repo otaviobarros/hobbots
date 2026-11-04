@@ -280,26 +280,42 @@ function Happened({ line, hobs, onOpen }: { line: HappenedLine; hobs: HobLookup;
       </div>
     );
   }
+  const more = moreOf(line);
   return (
     <div className={row}>
       {mark}
       <span className="min-w-0 flex-1 whitespace-pre-wrap">
-        {line.kind === "checkpoint"
-          ? line.checkpoint.summary
-          : line.kind === "milestone"
-            ? copy.milestone({ title: line.milestone.title })
-            : line.mark === "failed"
-              ? copy.endedFailed
-              : line.mark === "unresolved"
-                ? copy.endedUnresolved
-                : copy.endedStopped}
-        {line.kind === "ended" && line.attempt.outcome !== null && (
-          <span className="block text-text-secondary">{copy.endedWhy({ why: line.attempt.outcome })}</span>
-        )}
+        {textOf(line)}
+        {more !== null && <span className="block text-text-secondary">{more}</span>}
       </span>
     </div>
   );
 }
+
+type PlainLine = Extract<HappenedLine, { readonly kind: "checkpoint" | "milestone" | "ended" }>;
+
+/** What a checkpoint, a milestone or an Attempt's end says on its line. */
+const textOf = (line: PlainLine): string =>
+  line.kind === "checkpoint"
+    ? line.checkpoint.summary
+    : line.kind === "milestone"
+      ? copy.milestone({ title: line.milestone.title })
+      : line.mark === "failed"
+        ? copy.endedFailed
+        : line.mark === "unresolved"
+          ? copy.endedUnresolved
+          : copy.endedStopped;
+
+/**
+ * What the line adds under it: what the hob had to say beyond its checkpoint's short beat, which the
+ * Workbench shows and a lane never does (#901), or why an Attempt ended.
+ */
+const moreOf = (line: PlainLine): string | null =>
+  line.kind === "checkpoint"
+    ? line.checkpoint.detail
+    : line.kind === "ended" && line.attempt.outcome !== null
+      ? copy.endedWhy({ why: line.attempt.outcome })
+      : null;
 
 /** A Task tool call the hub refused: the step it was, what the hob was told, and how many times it tried. */
 function Refused({
