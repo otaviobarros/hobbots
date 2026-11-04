@@ -1,6 +1,6 @@
 import { AgentId, ApprovalId, ApprovalRequest, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { archiveBlock, isArchiveKey, isTextField, isUndoKey, nextThread } from "./archive-rules.ts";
+import { archiveBlock, isArchiveKey, isUndoKey, nextThread } from "./archive-rules.ts";
 
 const now = "2026-11-01T12:00:00.000Z";
 const threadId = ThreadId.make("t1");
@@ -108,19 +108,5 @@ describe("shortcuts", () => {
     expect(isUndoKey(key("KeyZ", { ctrlKey: true }))).toBe(true);
     expect(isUndoKey(key("KeyZ", { metaKey: true, shiftKey: true }))).toBe(false);
     expect(isUndoKey(key("KeyZ"))).toBe(false);
-  });
-});
-
-describe("isTextField", () => {
-  const element = (tagName: string, extra: Record<string, unknown> = {}) =>
-    ({ tagName, ...extra }) as unknown as Element;
-
-  it("knows text inputs, text areas and editable content from buttons and links", () => {
-    expect(isTextField(element("TEXTAREA"))).toBe(true);
-    expect(isTextField(element("INPUT", { type: "search" }))).toBe(true);
-    expect(isTextField(element("DIV", { isContentEditable: true }))).toBe(true);
-    expect(isTextField(element("INPUT", { type: "checkbox" }))).toBe(false);
-    expect(isTextField(element("BUTTON"))).toBe(false);
-    expect(isTextField(null)).toBe(false);
   });
 });

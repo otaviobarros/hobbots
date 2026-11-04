@@ -333,3 +333,75 @@ test("[TC-UX-093] Home's tray decides a request where it waits, then says all cl
   const history = page.getByRole("region", { name: "Decision history" });
   await expect(history.locator('[data-state="approved"]')).toContainText("in the Inbox");
 });
+
+// covers IN-001, PE-003, PE-007, UX-005
+test("[TC-IN-492] Needs you works from the keyboard: ↑ ↓ and J K move, A allows once, D denies, and A waits for the high-risk box", async ({
+  page,
+}) => {
+  const { current } = await pipAsksToPush(page);
+  // A second chat asks to push to the default branch, which is high risk and so leads the list.
+  const pipId = page.url().match(/hobs\/([^/?#]+)/)?.[1] ?? "";
+  await page.goto(`${current.url}/#/hobs/${pipId}/new`);
+  const composer = page.getByRole("textbox", { name: /^Message Pip/ });
+  await composer.fill("Ship it\nfake:tool Bash git push origin main");
+  await composer.press("Enter");
+  await expect(
+    page.getByRole("region", { name: "Pip asks permission" }).getByText("High risk · once only"),
+  ).toBeVisible();
+
+  await page.goto(`${current.url}/#/inbox`);
+  const aside = page.getByRole("complementary", { name: "Inbox" });
+  await expect(aside).toContainText("↑↓move");
+  await expect(aside).toContainText("Aallow once");
+  await expect(aside).toContainText("Ddeny");
+  const rows = page.getByRole("list", { name: "Requests" }).getByRole("link");
+  await expect(rows).toHaveCount(2);
+  const detail = page.getByRole("article", { name: "Request from Pip: Push your work" });
+  const risky = rows.nth(0);
+  const plain = rows.nth(1);
+
+  // ↓ and ↑, J and K move the selection, and focus with it, holding at either end of the list.
+  await risky.click();
+  await expect(risky).toHaveAttribute("aria-current", "page");
+  await expect(detail).toContainText("git push origin main");
+  await page.keyboard.press("ArrowDown");
+  await expect(plain).toHaveAttribute("aria-current", "page");
+  await expect(plain).toBeFocused();
+  await expect(detail).toContainText("git push origin feature");
+  await page.keyboard.press("ArrowDown");
+  await expect(plain).toHaveAttribute("aria-current", "page");
+  await page.keyboard.press("k");
+  await expect(risky).toHaveAttribute("aria-current", "page");
+  await expect(risky).toBeFocused();
+  await page.keyboard.press("j");
+  await expect(plain).toHaveAttribute("aria-current", "page");
+  await page.keyboard.press("ArrowUp");
+  await expect(risky).toHaveAttribute("aria-current", "page");
+  // The list is one stop for Tab: only the selected row takes it.
+  await expect(risky).toHaveAttribute("tabindex", "0");
+  await expect(plain).toHaveAttribute("tabindex", "-1");
+
+  // A on a high-risk request allows nothing until its box is ticked; it moves focus to the box.
+  const card = detail.getByRole("region", { name: "Pip asks permission" });
+  const confirm = card.getByRole("checkbox", { name: "I checked this action. Let Pip do it this once." });
+  await page.keyboard.press("a");
+  await expect(confirm).toBeFocused();
+  await expect(confirm).not.toBeChecked();
+  await expect(card.getByRole("button", { name: "Allow once" })).toBeDisabled();
+  await page.keyboard.press("Space");
+  await expect(confirm).toBeChecked();
+  await page.keyboard.press("a");
+  await expect(card.getByRole("status")).toHaveText("✓ Allowed once. Pip carries on.");
+
+  // The decided request goes last, so ↑ reaches the other one, and D opens Deny with its reason box.
+  await page.keyboard.press("ArrowUp");
+  await expect(detail).toContainText("git push origin feature");
+  await page.keyboard.press("d");
+  const reason = card.getByRole("textbox", { name: "Tell Pip why (optional)" });
+  await expect(reason).toBeFocused();
+  // Typed into the reason box, A and D are letters, not shortcuts.
+  await page.keyboard.type("Not today");
+  await expect(reason).toHaveValue("Not today");
+  await page.keyboard.press("Enter");
+  await expect(card.getByRole("status")).toHaveText("✕ Denied: “Not today”. Pip was told why.");
+});

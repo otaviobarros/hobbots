@@ -4,11 +4,10 @@ import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/s
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useNavigate } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { firstLine } from "../../lib/format.ts";
 import { EntryPortrait } from "./entry-portrait.tsx";
 import {
-  byUrgency,
   entryAsker,
   entryPlace,
   entryRow,
@@ -20,6 +19,7 @@ import {
   type RowTone,
 } from "./inbox-entries.ts";
 import { INBOX_TABS, INBOX_VIEWS, type InboxTab, type InboxView } from "./inbox-items.ts";
+import { shownOrder } from "./inbox-keys.ts";
 import { messages } from "./messages.ts";
 import type { InboxDirectory } from "./use-inbox-directory.ts";
 
@@ -57,7 +57,7 @@ export function InboxTabs({ tab, waiting, children }: { tab: InboxTab; waiting: 
  * The entries, by quest or by urgency. By quest groups them by quest, or by thread outside a quest,
  * with this hub's devices apart, the most urgent first in each group and among the groups. By
  * urgency is one list, the most urgent first, and each row names its quest. The selected one is
- * filled.
+ * filled, and it is the list's one stop for Tab: ↑ and ↓ move from there (`useListKeys`).
  */
 export function InboxList({
   tab,
@@ -67,6 +67,7 @@ export function InboxList({
   selectedKey,
   directory,
   now,
+  listRef,
 }: {
   tab: InboxTab;
   view: InboxView;
@@ -75,7 +76,10 @@ export function InboxList({
   selectedKey: string | undefined;
   directory: InboxDirectory;
   now: Date;
+  listRef: RefObject<HTMLUListElement | null>;
 }) {
+  const order = shownOrder(entries, view, questOf);
+  const tabStop = order.some((entry) => entry.key === selectedKey) ? selectedKey : order[0]?.key;
   const item = (entry: InboxEntry, place?: string) => (
     <li key={entry.key}>
       <InboxItem
@@ -83,6 +87,7 @@ export function InboxList({
         entry={entry}
         place={place}
         selected={entry.key === selectedKey}
+        tabStop={entry.key === tabStop}
         directory={directory}
         now={now}
       />
@@ -90,13 +95,13 @@ export function InboxList({
   );
   if (view === "urgency") {
     return (
-      <ul aria-label={copy.listLabel} className="m-0 flex list-none flex-col gap-1 p-0 px-2.5 py-1">
-        {[...entries].sort(byUrgency).map((entry) => item(entry, placeName(entryPlace(entry, questOf), directory)))}
+      <ul ref={listRef} aria-label={copy.listLabel} className="m-0 flex list-none flex-col gap-1 p-0 px-2.5 py-1">
+        {order.map((entry) => item(entry, placeName(entryPlace(entry, questOf), directory)))}
       </ul>
     );
   }
   return (
-    <ul aria-label={copy.listLabel} className="m-0 flex list-none flex-col gap-3.5 p-0 px-2.5 py-1">
+    <ul ref={listRef} aria-label={copy.listLabel} className="m-0 flex list-none flex-col gap-3.5 p-0 px-2.5 py-1">
       {groupByPlace(entries, questOf).map((group) => {
         const label = groupLabel(group, directory);
         return (
@@ -160,6 +165,7 @@ function InboxItem({
   entry,
   place,
   selected,
+  tabStop,
   directory,
   now,
 }: {
@@ -168,6 +174,8 @@ function InboxItem({
   /** Where it belongs, named in a row of the By urgency list. */
   place?: string | undefined;
   selected: boolean;
+  /** Whether Tab stops on this row: the selected one, or the first while none is. */
+  tabStop: boolean;
   directory: InboxDirectory;
   now: Date;
 }) {
@@ -181,6 +189,8 @@ function InboxItem({
       to="/inbox"
       search={{ tab, request: entry.key }}
       aria-current={selected ? "page" : undefined}
+      tabIndex={tabStop ? 0 : -1}
+      data-entry={entry.key}
       activeOptions={{ exact: true, includeSearch: true }}
       data-kind={entry.kind}
       data-state={entry.kind === "approval" ? entry.request.state : undefined}
