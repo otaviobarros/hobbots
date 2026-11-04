@@ -2,8 +2,8 @@
 export const messages = {
   heading: "Standing rules",
   history: {
-    title: "What hobs may do without asking",
-    intro: "Each “Always” you gave stays until you remove it. Removing one makes the hob ask again next time.",
+    title: "Always allowed",
+    intro: "Rules you saved with “Always”. The hob does these without asking. Remove one and it asks again next time.",
   },
   settings: {
     intro:

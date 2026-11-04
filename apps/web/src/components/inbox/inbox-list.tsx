@@ -6,7 +6,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { firstLine } from "../../lib/format.ts";
-import { HobSprite } from "../hob-sprite.tsx";
+import { EntryPortrait } from "./entry-portrait.tsx";
 import {
   byUrgency,
   entryAsker,
@@ -185,16 +185,12 @@ function InboxItem({
         closed && "opacity-70",
       )}
     >
-      <span className="mt-0.5 flex size-7.5 shrink-0 items-center justify-center rounded-tile bg-line text-text-secondary">
-        {hob !== undefined ? (
-          <HobSprite hob={hob} size={22} state={closed ? "idle" : "needs-you"} />
-        ) : (
-          entry.kind === "device" && <DeviceGlyph />
-        )}
-      </span>
+      <EntryPortrait hob={hob} device={entry.kind === "device"} waiting={!closed} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-detail text-text-secondary">{row.who}</span>
+          <span className="min-w-0 flex-1 truncate text-detail text-text-secondary">
+            {row.chain.join(copy.row.arrow)}
+          </span>
           <Badge variant={row.tag}>{row.kind}</Badge>
         </span>
         <span className="text-sm leading-snug font-semibold [overflow-wrap:anywhere]">{row.what}</span>
@@ -203,21 +199,5 @@ function InboxItem({
         </span>
       </span>
     </Link>
-  );
-}
-
-/** A screen on a stand, for a device asking to join. */
-function DeviceGlyph() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 20 20"
-      className="size-4.5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-    >
-      <path d="M3.5 5.5h13v8h-13zM1.5 15.5h17" strokeLinecap="round" />
-    </svg>
   );
 }
