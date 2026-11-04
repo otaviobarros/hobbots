@@ -88,6 +88,7 @@ test("[TC-OP-045] Settings › Export saves a hob's export as a folder that open
   mkdirSync(out);
 
   await page.goto(`${hub.url}/#/settings/data`);
+  await page.getByRole("region", { name: "Backups" }).getByRole("button", { name: "Export as files" }).click();
   const section = page.getByRole("region", { name: "Export" });
   await section.getByRole("radio", { name: "One hob" }).check();
   await expect(section.getByRole("combobox", { name: "Hob" })).toHaveValue(/.+/);
