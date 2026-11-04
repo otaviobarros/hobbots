@@ -1,5 +1,7 @@
-/** Twinkling pixel stars across the full width and the top `height` pixels. */
-export function Stars({ count, height }: { count: number; height: number }) {
+const TONES = { star: "bg-star", moonlight: "bg-moonlight" } as const;
+
+/** Twinkling pixel stars across the full width and the top `height` pixels, in `star` or in `moonlight`. */
+export function Stars({ count, height, tone = "star" }: { count: number; height: number; tone?: keyof typeof TONES }) {
   // A fixed seed keeps the sky the same on every render.
   const stars = (() => {
     let a = 7;
@@ -19,7 +21,7 @@ export function Stars({ count, height }: { count: number; height: number }) {
     <span
       key={`${s.x}.${s.y}`}
       aria-hidden
-      className="absolute animate-hb-twinkle bg-star"
+      className={`absolute animate-hb-twinkle ${TONES[tone]}`}
       style={{ left: `${s.x}%`, top: s.y, width: s.z, height: s.z, animationDelay: `${s.d}s` }}
     />
   ));
