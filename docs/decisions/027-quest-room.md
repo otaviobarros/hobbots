@@ -98,7 +98,7 @@ The component is built so that a later live terminal can attach it to a session 
 
 The chat stays your conversation with the lead. It is not a second place to follow the work.
 
-- **A ticket replaces the card.** Under the request that started the Task, a one-line ticket shows the party's sprites, the title, "2 of 3 done", a "1 needs you" tag when something waits on you, and Open room. It updates live and never grows. An ended Quest's ticket says how it ended.
+- **A ticket replaces the card.** Under the request that started the Task, a one-line ticket shows the party's sprites, the title, "2 of 3 done", a "1 needs you" tag when something waits on you, and Open room. It updates live and never grows with the work. An ended Quest's ticket says how it ended. In a narrow chat column, as beside the room at 1024 px, one line has no room for all of that, so the ticket keeps a fixed second line: two sprites and how many more, the title and the arrow on the first, and the state under them.
 - **The quest button** in the chat header stays, and a pinned Quest keeps it in every thread.
 - **The lead says only what keeps you informed:** the plan when the Quest starts, a question no lead can answer, and the finish. The finish is one short summary of what was made, where it is and who did what. Between those the lead stays quiet, and it says more once you write to it ([#901](https://github.com/otaviobarros/hobbots/issues/901)).
 - **Beats, marks and hand-offs** live only in the room.
@@ -157,7 +157,7 @@ One Workbench per Quest matches how you think about the work: one job done by a 
 
 xterm.js is a real terminal engine, so the Terminal looks and behaves like one without imitating it. It is the heaviest choice, which is why it loads only with its tab. It also leaves room for a live terminal, which a styled log could not become.
 
-A one-line ticket and a quiet lead keep the chat a conversation. The steer receipt shows that your message is being acted on without the lead narrating it, and since it comes from records, it cannot claim a hand-off that did not happen.
+A one-line ticket and a quiet lead keep the chat a conversation. The narrow column's second line keeps the title and what needs you readable instead of cutting them to nothing; it is still a fixed size, so the ticket never grows with the work. The steer receipt shows that your message is being acted on without the lead narrating it, and since it comes from records, it cannot claim a hand-off that did not happen.
 
 The needs-you mark goes on the lead's tile because you talk only to the lead. A mark on a member would send you to a hob you cannot message. Keeping the read state on the hub makes the unread dot agree on every device.
 

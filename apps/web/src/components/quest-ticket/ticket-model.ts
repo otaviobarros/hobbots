@@ -22,7 +22,7 @@ interface TicketHob {
 }
 
 /**
- * The one-line ticket under the request that started a Task (ADR 027): the party in lane order, the
+ * The ticket under the request that started a Task (ADR 027): the party in lane order, the
  * title, the progress, and how many things wait on you. It is built from the Task tree alone, so it
  * stays the same size however much work the Quest does.
  */

@@ -29,9 +29,10 @@ const useStuck = (tree: TaskTree): ReadonlyArray<BackpackItem> =>
   blockersOn(useBlockers(), new Set(tree.tasks.map((task) => task.id)));
 
 /**
- * The ticket under the request that started a Task (ADR 027): one line that never grows, with the
- * party's sprites, the title, how far the work is or how it ended, a tag when something waits on
- * you, and Open room. It is one button, named for the Quest and where it stands, and opens the
+ * The ticket under the request that started a Task (ADR 027): one line that never grows with the
+ * work, with the party's sprites, the title, how far the work is or how it ended, a tag when
+ * something waits on you, and Open room. In a narrow chat column it keeps a fixed second line for
+ * the state. It is one button, named for the Quest and where it stands, and opens the
  * Quest room beside the chat. It updates live as the Task tree does.
  */
 export function QuestTicket({
