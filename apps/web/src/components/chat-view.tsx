@@ -44,6 +44,7 @@ import { BrainPicker, BrainSwitchNote, useOtherReadyRuntimes } from "./brain-pic
 import { ChatSearch, ChatSearchButton } from "./chat-search/chat-search.tsx";
 import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
+import { EmptyThread } from "./empty-thread.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
 import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
 import { messages } from "./messages.ts";
@@ -286,20 +287,7 @@ export function ChatView({
       >
         {threadId && messages.isPending && <p className="text-label">Loading messages…</p>}
         {empty && !messages.isLoading && (
-          <div className="m-auto flex max-w-[420px] animate-hb-in flex-col items-center gap-3 text-center">
-            <HobSprite hob={current} size={72} state="working" />
-            <span className="font-heading text-[22px] font-bold text-moonlight">
-              {newHob ? copy.hello(current) : copy.freshPage}
-            </span>
-            <span className="text-text-secondary">{newHob ? copy.helloBody : copy.freshBody(current)}</span>
-            <div className="flex flex-wrap justify-center gap-1.5">
-              {copy.ideas.map((idea) => (
-                <Button key={idea} variant="chip" onClick={() => writeDraft(place, idea)}>
-                  {idea}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <EmptyThread hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
         )}
         {transcript && (
           <Transcript
