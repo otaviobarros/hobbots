@@ -88,7 +88,8 @@ export function Workbench({
           <p className="m-0 px-6 py-6 text-detail text-label">{reading ? messages.loading : messages.notFound}</p>
         </>
       ) : (
-        <div className="flex min-h-0 flex-1">
+        <div className="@container/bench relative flex min-h-0 flex-1">
+          {/* Narrower than 480px the task chat sits over the Workbench instead of squeezing it; its ✕ closes it. */}
           <div className="flex min-w-0 flex-1 flex-col">
             <Bench
               key={found.task.id}

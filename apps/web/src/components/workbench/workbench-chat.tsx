@@ -58,7 +58,7 @@ export function WorkbenchChat({
         event.preventDefault();
         onClose();
       }}
-      className="flex w-workbench-chat max-w-[45%] shrink-0 animate-hb-in flex-col border-s border-line bg-panel"
+      className="flex w-workbench-chat max-w-full shrink-0 animate-hb-in flex-col border-s border-line bg-panel @max-[480px]/bench:absolute @max-[480px]/bench:inset-y-0 @max-[480px]/bench:end-0 @max-[480px]/bench:z-20 @max-[480px]/bench:shadow-menu @min-[480px]/bench:max-w-[45%]"
     >
       <header className="flex items-center gap-2.5 border-b border-line px-3.5 py-3">
         <HobSprite hob={lead} size={26} />
