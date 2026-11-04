@@ -98,7 +98,7 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
 test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and every other Task's latest that did work", async ({
   page,
 }) => {
-  // Quill writes the copy and fails; retried from the same brief, she does nothing and fails again.
+  // Quill writes the copy and fails; retried, she does nothing and finishes.
   await startParty(page, ["Draft the copy", 'fake:once fake:write copy.md "# Copy\\n\\nHello.\\n"', "fake:fail"]);
   const sheet = laneTask(page, "Draft the copy");
   await expect(sheet).toContainText("Failed", { timeout: 30_000 });
@@ -107,7 +107,7 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, and ev
     .getByRole("button", { name: "Retry" })
     .click();
   await expect(sheet).toContainText("attempt 2", { timeout: 15_000 });
-  await expect(sheet).toContainText("Failed", { timeout: 30_000 });
+  await expect(laneHead(page, "Quill")).toContainText("Done", { timeout: 30_000 });
   const { bench, changes } = lists(page);
 
   // With no try picked, Quill's work is the first try's, past the retry that did nothing.
