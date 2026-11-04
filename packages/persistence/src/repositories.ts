@@ -287,6 +287,7 @@ export const HobbotsRepositoryLive = Layer.effect(
             sessions: JSON.stringify(thread.sessions),
             brain: thread.brain === null ? null : JSON.stringify(thread.brain),
             archived_at: thread.archivedAt,
+            pinned_at: thread.pinnedAt,
             created_at: thread.createdAt,
             updated_at: thread.updatedAt,
             revision,
@@ -295,6 +296,7 @@ export const HobbotsRepositoryLive = Layer.effect(
             sessions = excluded.sessions,
             brain = excluded.brain,
             archived_at = excluded.archived_at,
+            pinned_at = excluded.pinned_at,
             updated_at = excluded.updated_at,
             revision = excluded.revision`;
           return { value: thread, events: [{ _tag: "ThreadUpserted", thread }] };

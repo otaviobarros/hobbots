@@ -183,7 +183,7 @@ function DeviceDetail({ device, row, now }: { device: WaitingDevice; row: InboxR
       foot={copy.detail.deviceFoot}
     >
       <MatchingCode device={device} />
-      <div className="rounded-card bg-card px-4 py-1">
+      <div className="rounded-card bg-card px-4 py-1 [&_dl>div:last-child]:border-b-0">
         <DeviceFacts device={device} now={now} />
       </div>
       <PairingActions device={device} canDefer />

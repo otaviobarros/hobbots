@@ -3,7 +3,14 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useState } from "react";
 import { formatCount } from "../../../lib/format.ts";
 import { ChangeDetail } from "../changes/change-detail.tsx";
-import { changeCounts, changeDir, selectedChange, splitPath } from "../changes/changes-model.ts";
+import {
+  changeCounts,
+  changeDir,
+  changePath,
+  leavesFile,
+  selectedChange,
+  splitPath,
+} from "../changes/changes-model.ts";
 import { KindTag } from "../changes/kind-tag.tsx";
 import { messages } from "../changes/messages.ts";
 import { useLineCounts } from "../changes/use-line-counts.ts";
@@ -16,7 +23,7 @@ const KINDS: ReadonlyArray<FileChangeKind> = ["added", "edited", "deleted", "mov
  * after. Documents are rendered, code is a diff and images sit side by side. While a turn runs the
  * list follows the hub's records as they arrive; afterwards it is the history they kept.
  */
-export function ChangesTab({ activity, state, hobs, focus }: WorkbenchTabProps) {
+export function ChangesTab({ activity, state, hobs, focus, onTab }: WorkbenchTabProps) {
   // The file to show: one picked in the list by its id, or one a link asked for by its path. A link
   // is kept as asked, so it holds while the records load and after another tab shows.
   const [picked, setPicked] = useState<{ readonly id?: string; readonly path?: string }>(
@@ -62,7 +69,14 @@ export function ChangesTab({ activity, state, hobs, focus }: WorkbenchTabProps) 
         </nav>
         <div className="min-w-0 flex-1">
           {selected !== null && (
-            <ChangeDetail key={selected.id} change={selected} activity={activity} live={live} hobs={hobs} />
+            <ChangeDetail
+              key={selected.id}
+              change={selected}
+              activity={activity}
+              live={live}
+              hobs={hobs}
+              onOpenFiles={leavesFile(selected) ? () => onTab("files", changePath(selected)) : null}
+            />
           )}
         </div>
       </div>

@@ -14,6 +14,7 @@ import {
   documentDiff,
   fileKindLabel,
   foldLines,
+  leavesFile,
   lineCounts,
   selectedChange,
   sharedHobs,
@@ -85,6 +86,13 @@ describe("how the Changes tab shows a file", () => {
     expect(changeDir(change("app.ts"), false)).toBe("");
     expect(changeDir(change("src/app.ts", { folder: "/home/me/site" }), true)).toBe("site/src/");
     expect(changeDir(change("app.ts", { folder: "/home/me/site/" }), true)).toBe("site/");
+  });
+
+  it("knows which changes left a file for Files to list", () => {
+    expect(leavesFile(change("a.md"))).toBe(true);
+    expect(leavesFile(change("a.md", { kind: "added", before: null }))).toBe(true);
+    expect(leavesFile(change("a.md", { kind: "deleted", after: null }))).toBe(false);
+    expect(leavesFile(change("current", { kind: "link", before: null, after: version("link") }))).toBe(false);
   });
 
   it("shows the change a link asks for by its path, else the one picked, else the first", () => {
