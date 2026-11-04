@@ -386,7 +386,7 @@ describe("the Quest room's lanes", () => {
     expect(shown.at(-1)).toBe("beat Halfway");
   });
 
-  it("folds each run of older marks where it was, so no mark moves past a result or into another Task", () => {
+  it("folds a Task's older marks into one count where the first was, so no mark moves into another Task", () => {
     const mark = (key: string): LaneItem => ({ kind: "read", key, path: key });
     const items: ReadonlyArray<LaneItem> = [
       { kind: "task", key: "task-a", title: "A" },
@@ -403,16 +403,15 @@ describe("the Quest room's lanes", () => {
       "folded 1",
       "completed A done",
       "task B",
-      "folded 1",
+      "folded 2",
       `in Copy ← ${QUILL}`,
-      "folded 1",
       "read r1",
       "read r2",
     ]);
     const opened = foldMarks(items, 2).flatMap(
       (item): ReadonlyArray<LaneItem> => (item.kind === "folded" ? item.marks : [item]),
     );
-    expect(opened).toEqual(items);
+    expect(opened).toEqual([...items.slice(0, 5), items[6], items[5], ...items.slice(7)]);
   });
 
   it("folds a hob's older marks inside the Task they belong to when it has two Tasks", () => {

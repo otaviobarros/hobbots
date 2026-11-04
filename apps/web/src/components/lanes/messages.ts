@@ -37,7 +37,9 @@ export const messages = {
   failed: "failed",
   running: "running",
   uncertain: "unknown",
-  folded: ({ count }: { count: number }) =>
+  /** Older marks folded into one count, as the design draws it; the label says what opening it does. */
+  folded: ({ count }: { count: number }) => `+${formatCount(count)} more`,
+  foldedLabel: ({ count }: { count: number }) =>
     plural(count, { one: "Show 1 earlier step", other: `Show ${formatCount(count)} earlier steps` }),
   handOut: ({ label, name }: { label: string; name: string }) => `${label} → ${name}`,
   handIn: ({ label, name }: { label: string; name: string }) => `← ${label} from ${name}`,

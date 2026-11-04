@@ -121,7 +121,8 @@ test("[TC-UX-212] every control in a lane is reached with the keyboard, and its 
   const { url, aldric } = await questHub();
   await startRoom(page, url, aldric, "Plan a Black Friday campaign for the shop", TITLE);
   const quill = lane(page, "Quill");
-  const show = quill.getByRole("button", { name: "Show in the Workbench" });
+  // The Task's details, where Show in the Workbench now sits, are the lane's last control.
+  const show = quill.getByText("Everything in this task");
   await expect(show).toBeVisible();
 
   // The header lights the lane from the keyboard, and again shows everyone.

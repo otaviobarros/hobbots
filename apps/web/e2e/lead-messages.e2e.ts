@@ -1,6 +1,6 @@
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
-import { laneHead, openRoom } from "./quest-room.ts";
+import { laneHead, openRoom, taskDetails } from "./quest-room.ts";
 
 // Issue #574 in the browser: a member is stuck on something outside Hobbots; once it clears, you
 // tell its lead, who messages the member, and the member finishes with nothing cancelled. The hub's
@@ -113,7 +113,8 @@ test("[TC-OR-251] once the obstacle clears, the lead's message wakes the blocked
   // Pip finishes; nothing on the Quest was cancelled.
   await expect(pip).toContainText("Done", { timeout: 20_000 });
   await expect(tasks).not.toContainText("Cancelled");
-  // Pip's Task holds the message in its backpack.
+  // Pip's Task holds the message in its backpack, in its details once nothing waits.
+  await taskDetails(page, "Make the commit");
   const room = page.getByRole("region", { name: "Backpack for Make the commit" });
   await expect(room.getByRole("button", { name: /git init is done\. Commit now\./ })).toContainText("Consumed", {
     timeout: 20_000,
@@ -197,5 +198,7 @@ test("[TC-OR-489] a lead's message while its member waits for your approval show
   await page.getByRole("link", { name: "Open in the chat" }).click();
   await openRoom(page, "Ship the copy");
   await expect(pip).toContainText("Done", { timeout: 30_000 });
+  // Once nothing waits, the backpack moves into the Task's details.
+  await taskDetails(page, "Push the copy");
   await expect(note).toContainText("Consumed", { timeout: 20_000 });
 });
