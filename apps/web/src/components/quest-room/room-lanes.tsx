@@ -6,6 +6,7 @@ import { messages as questCopy } from "../quest/messages.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { questionForYou, taskTitle } from "../quest/work-model.ts";
+import { LaneNotes } from "../steer-receipt/lane-notes.tsx";
 import { LaneTask } from "./lane-task.tsx";
 import { messages } from "./messages.ts";
 import { laneElementId } from "./room-header.tsx";
@@ -127,6 +128,7 @@ function Lane({
             onWorkbench={(taskId) => moves.show(taskId, "summary")}
           />
         ))}
+        <LaneNotes tree={tree} ownerId={lane.ownerId} hobs={hobs} />
       </div>
     </article>
   );

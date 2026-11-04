@@ -51,6 +51,7 @@ import { PinNotes } from "../quest/pin-notes.tsx";
 import { ThreadQuestButton, useWorkMoments } from "../quest/thread-work.tsx";
 import type { Pins } from "../quest/use-work.ts";
 import { ReconnectingCard } from "../shell/reconnecting.tsx";
+import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { ChatTitle } from "./chat-title.tsx";
 import { Composer } from "./composer.tsx";
 import { EmptyThread } from "./empty-thread.tsx";
@@ -470,6 +471,8 @@ function Transcript({
   const changes = !streaming && last !== null && (last.runtime !== next.runtime || last.model !== next.model);
   // Tasks and Quests show under the request that started them, with only the moments that matter.
   const work = useWorkMoments(hob.id, threadId, transcript);
+  // Under a message you sent while work ran, where it went next (ADR 027).
+  const receipts = useSteerReceipts(hob.id, threadId, transcript);
   return (
     <>
       {work.before}
@@ -484,6 +487,7 @@ function Transcript({
               <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={hob} />
             </MessageRow>
           )}
+          {receipts.of(message)}
           {work.after(message.id)}
         </Fragment>
       ))}
