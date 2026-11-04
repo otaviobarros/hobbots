@@ -59,7 +59,7 @@ test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home
   await page.getByRole("link", { name: "Go to Home" }).click();
 
   await expect(page).toHaveURL(atHome);
-  await expect(page.getByRole("link", { name: /^Open chat with Pip/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Open Pip's page/ })).toBeVisible();
 
   // The hub keeps setup and the hob, so a restarted app in a new window lands on Home.
   await hub.stop();
@@ -69,7 +69,7 @@ test("[TC-OP-015] a new installation goes from Welcome to Home and opens on Home
   await admit(restarted.context(), hub);
   await openApp(restarted, hub);
   await expect(restarted).toHaveURL(atHome);
-  await expect(restarted.getByRole("link", { name: /^Open chat with Pip/ })).toBeVisible();
+  await expect(restarted.getByRole("link", { name: /^Open Pip's page/ })).toBeVisible();
   await restarted.goto(`${hub.url}/#/welcome`);
   await expect(restarted).toHaveURL(atHome);
   await restarted.close();

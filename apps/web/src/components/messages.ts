@@ -184,6 +184,7 @@ export const messages = {
     instructionsNote: ({ name }: { name: string }) =>
       `${name} reads this before every reply, after its name, role and tone. Add anything else it should know.`,
     brain: "Brain",
+    backToPage: ({ name }: { name: string }) => `Back to ${name}'s page`,
     discard: "Discard",
     save: "Save changes",
   },
@@ -230,8 +231,8 @@ export const messages = {
       }),
   },
   home: {
-    openChat: ({ name, role, state }: { name: string; role: string; state: string }) =>
-      `Open chat with ${name}, ${role}, ${state}`,
+    openPage: ({ name, role, state }: { name: string; role: string; state: string }) =>
+      `Open ${name}'s page, ${role}, ${state}`,
     happeningNow: "Happening now",
     allQuiet: "All quiet. No hob is replying right now.",
   },

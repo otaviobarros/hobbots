@@ -112,7 +112,7 @@ test("[TC-CH-161] restoring the last archived thread from the list leaves the em
   const nav = page.getByRole("navigation", { name: "Hobs and threads" });
   await expect(nav.getByRole("link", { name: /Rename the newsletter/ })).toBeVisible();
   await main.getByRole("link", { name: "‹ Back to Pip's threads" }).click();
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${hob.id}/threads/`));
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${hob.id}$`));
 });
 
 // covers CH-006, CH-009

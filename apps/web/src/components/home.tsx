@@ -140,7 +140,7 @@ export function Home() {
               key={hob.id}
               to="/hobs/$hobId"
               params={{ hobId: hob.id }}
-              aria-label={openChatLabel(hob, state)}
+              aria-label={openPageLabel(hob, state)}
               className="hop-on-hover flex flex-col items-center gap-1.5 text-ground no-underline"
             >
               <span
@@ -377,7 +377,7 @@ function AllHobs({
                       key={hob.id}
                       to="/hobs/$hobId"
                       params={{ hobId: hob.id }}
-                      aria-label={openChatLabel(hob, state)}
+                      aria-label={openPageLabel(hob, state)}
                       title={`${hob.name} · ${hob.roleTitle} · ${stateLabel[state]}`}
                       className="cut hop-on-hover flex min-w-0 items-center gap-2 bg-card px-2 py-1.5 text-text-strong no-underline hover:bg-line hover:text-text-strong"
                     >
@@ -453,8 +453,8 @@ function Card({
 }
 
 /** Every reply streaming right now; each opens its thread. */
-const openChatLabel = (hob: Agent, state: HobState) =>
-  messages.home.openChat({ name: hob.name, role: hob.roleTitle, state: stateLabel[state] });
+const openPageLabel = (hob: Agent, state: HobState) =>
+  messages.home.openPage({ name: hob.name, role: hob.roleTitle, state: stateLabel[state] });
 
 function HappeningNowCard({
   live,
