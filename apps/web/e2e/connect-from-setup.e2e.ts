@@ -107,7 +107,7 @@ test("[TC-DP-204] Connect lists the hubs found, refuses a local address, waits w
 }) => {
   await openSetup(page);
   await page.getByRole("button", { name: "Get started" }).click();
-  await expect(page.getByRole("heading", { name: "Where should Hobbots run?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Where should your hobs live?" })).toBeVisible();
   await expect(page.getByText(/Coming soon/)).toHaveCount(0);
   await page.getByRole("button", { name: /Connect to Hobbots on another computer/ }).click();
 

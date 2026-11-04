@@ -39,7 +39,7 @@ export function Welcome() {
               <Link to="/setup/where">{copy.getStarted}</Link>
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={skipSetup}
               disabled={update.isPending}
               className={welcomeActionClass.secondary}

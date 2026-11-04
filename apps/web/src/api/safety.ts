@@ -24,6 +24,10 @@ export interface PresetInfo {
   readonly id: SafetyPreset;
   readonly label: string;
   readonly note: string;
+  /** What the preset does, in one line, on first run's Safety step. */
+  readonly brief: string;
+  /** Who the preset suits, under the brief on first run's Safety step. */
+  readonly who: string;
   /** What the Elder Hob says when the user picks it. */
   readonly guide: string;
   readonly recommended: boolean;
@@ -49,6 +53,8 @@ export const PRESETS: ReadonlyArray<PresetInfo> = [
     id: "careful",
     label: "Careful",
     note: "Reads freely and asks before changing anything. Good for your first week.",
+    brief: "Asks before changing anything.",
+    who: "For trying Hobbots out, or for folders you care a lot about.",
     guide: "Careful it is. Your hobs read your folders on their own and ask before they change, run or fetch anything.",
     recommended: false,
     rules: summary("careful"),
@@ -57,6 +63,8 @@ export const PRESETS: ReadonlyArray<PresetInfo> = [
     id: "balanced",
     label: "Balanced",
     note: "Works freely in your folders. Deleting and pushing wait for you.",
+    brief: "Works on its own in its folders. Asks before deleting or pushing.",
+    who: "Most people pick this.",
     guide:
       "Balanced is what most people pick. Your hobs edit, run and browse in your folders on their own, and ask before deleting or pushing.",
     recommended: true,
@@ -66,6 +74,8 @@ export const PRESETS: ReadonlyArray<PresetInfo> = [
     id: "trusting",
     label: "Trusting",
     note: "Gets on with chores and tells you after. Best for hobs you know well.",
+    brief: "Does almost everything without asking.",
+    who: "For people who check the work afterwards.",
     guide: "Trusting! Your hobs just get on with it, pushes included. They still stay inside your folders.",
     recommended: false,
     rules: summary("trusting"),
@@ -164,10 +174,6 @@ export const enforcement = (
   decisions: Readonly<Record<PolicyOperation, PolicyDecision>>,
   sandbox: SandboxState = "on",
 ) => ruleEnforcement(operation, (other) => decisions[other], sandbox);
-
-/** The badge color for a rule's answer. */
-export const ruleColor = (answer: RuleAnswer) =>
-  answer === "Allow" ? "bg-mint" : answer === "Ask" ? "bg-lantern" : "bg-rose";
 
 /** A folder's last part for its row; the root folder keeps its slash. */
 export const folderName = (folder: string): string => {
