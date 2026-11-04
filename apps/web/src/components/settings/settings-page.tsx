@@ -6,7 +6,7 @@ import { messages } from "./messages.ts";
 import { SettingsOverview, useOverview } from "./overview.tsx";
 import { SectionContent } from "./section-content.tsx";
 import { SectionIcon } from "./section-icons.tsx";
-import { findSettings, SETTINGS_SECTIONS, type SettingsSection, sectionName } from "./sections.ts";
+import { type ConnectionsTab, findSettings, SETTINGS_SECTIONS, type SettingsSection, sectionName } from "./sections.ts";
 
 const copy = messages;
 
@@ -14,7 +14,7 @@ const copy = messages;
  * Settings: a list of its sections beside the open one, Overview first. The section lives in the
  * address, so a link, Back or a reload opens the same one.
  */
-export function SettingsPage({ section }: { section: SettingsSection | null }) {
+export function SettingsPage({ section, tab = "ai" }: { section: SettingsSection | null; tab?: ConnectionsTab }) {
   const titleId = useId();
 
   return (
@@ -28,7 +28,7 @@ export function SettingsPage({ section }: { section: SettingsSection | null }) {
           ) : (
             <>
               <SectionHeader section={section} titleId={titleId} />
-              <SectionContent section={section} />
+              <SectionContent section={section} tab={tab} />
             </>
           )}
         </section>
@@ -89,6 +89,7 @@ function SettingsNav({ current }: { current: SettingsSection | null }) {
               key={hit.label}
               to="/settings/$section"
               params={{ section: hit.section }}
+              search={hit.tab ? { tab: hit.tab } : {}}
               onClick={() => setQuery("")}
               className={cn(rowClass, "flex-col items-start gap-0 py-1.5 text-text-strong")}
             >

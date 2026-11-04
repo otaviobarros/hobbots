@@ -117,6 +117,21 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
   await bench.getByRole("button", { name: "See the change to src/app.ts in Changes" }).click();
   await expect(files.getByRole("button", { name: /^app\.ts/ })).toHaveAttribute("aria-pressed", "true");
   await expect(panel.getByRole("article", { name: "src/app.ts" })).toBeVisible();
+
+  // Open in Files shows the same file in Files, and See changes brings it back. A deleted file
+  // left nothing to open.
+  await panel.getByRole("article", { name: "src/app.ts" }).getByRole("button", { name: "Open in Files" }).click();
+  const filesPanel = bench.getByRole("tabpanel", { name: /^Files/ });
+  await expect(bench.getByRole("tab", { name: /^Files/ })).toHaveAttribute("aria-selected", "true");
+  await expect(filesPanel.getByRole("region", { name: "app.ts" })).toBeVisible();
+  await filesPanel.getByRole("button", { name: /^notes\.md/ }).click();
+  await filesPanel.getByRole("region", { name: "notes.md" }).getByRole("button", { name: "See changes" }).click();
+  await expect(bench.getByRole("tab", { name: /^Changes/ })).toHaveAttribute("aria-selected", "true");
+  await expect(files.getByRole("button", { name: /^notes\.md/ })).toHaveAttribute("aria-pressed", "true");
+  await files.getByRole("button", { name: /^old\.txt/ }).click();
+  await expect(
+    panel.getByRole("article", { name: "old.txt" }).getByRole("button", { name: "Open in Files" }),
+  ).toHaveCount(0);
 });
 
 // covers UX-002, UX-006

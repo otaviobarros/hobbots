@@ -35,6 +35,10 @@ export const changeShow = (change: FileChange): ChangeShow => {
 export const changePath = (change: Pick<FileChange, "folder" | "path">): string =>
   change.folder.endsWith("/") ? `${change.folder}${change.path}` : `${change.folder}/${change.path}`;
 
+/** Whether a change left a file that Files lists: not a deletion, and not a link, which is never followed. */
+export const leavesFile = (change: FileChange): boolean =>
+  change.kind !== "deleted" && change.kind !== "link" && change.after !== null && change.after.kind !== "link";
+
 /** A path split into its folders and its name, so a list can show the name first. */
 export const splitPath = (path: string): { readonly dir: string; readonly name: string } => {
   const slash = path.lastIndexOf("/");

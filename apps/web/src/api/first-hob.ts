@@ -2,10 +2,13 @@ import type { CreateAgentPayload } from "@hobbots/api";
 import {
   type Agent,
   AgentId,
+  DEFAULT_LENGTH,
   DEFAULT_SIGIL,
+  DEFAULT_VOICE,
   type Effort,
   type HobColor,
   PICKER_FIRST,
+  type ReplyLength,
   ROLE_FAMILIES,
   type RoleFamily,
   type RoleHat,
@@ -17,6 +20,7 @@ import {
   roleFields,
   STARTER_ROLES,
   starterRole,
+  type Voice,
 } from "@hobbots/domain";
 import { messages } from "../components/messages.ts";
 import { PROVIDER_NAMES } from "../lib/providers.ts";
@@ -238,6 +242,9 @@ export interface FirstHobDraft extends BrainChoice {
   /** The look "More like this" is drawn from; only a new look moves it, so picking one keeps the set. */
   readonly lookBase: number;
   readonly lookColor: HobColor;
+  /** How the hob talks; onboarding leaves both at Hobbots' defaults. */
+  readonly voice: Voice;
+  readonly length: ReplyLength;
   /**
    * The create request once Continue sent it. From then on the hob may exist, so the choices stay
    * locked and every retry sends this same request; only a rejected request unlocks them.
@@ -265,6 +272,8 @@ export const newDraft = (
     lookSeed,
     lookBase: lookSeed,
     lookColor: "violet",
+    voice: DEFAULT_VOICE,
+    length: DEFAULT_LENGTH,
     runtime: "claude-code",
     model: null,
     effort: null,
@@ -452,6 +461,9 @@ export const firstHobPayload = (draft: FirstHobDraft): CreateAgentPayload => {
     tool: draft.tool,
     lookSeed: draft.lookSeed,
     lookColor: draft.lookColor,
+    // Defaults are left out, so a request matches the one an older client sent for the same hob.
+    ...(draft.voice !== DEFAULT_VOICE && { voice: draft.voice }),
+    ...(draft.length !== DEFAULT_LENGTH && { length: draft.length }),
     runtime: draft.runtime,
     model: draft.model === null || draft.model === "default" ? null : draft.model,
     effort: draft.effort,

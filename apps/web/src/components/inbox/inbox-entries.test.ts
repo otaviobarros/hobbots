@@ -70,7 +70,7 @@ describe("entryRow", () => {
   it("shows a request as who asked from you down, the action, and when it expires, loud under an hour", () => {
     const row = entryRow(approvalEntry(request("2026-11-01T10:20:00.000Z")), names, ALDRIC, now);
     expect(row).toEqual({
-      who: "You → Aldric → Quill",
+      chain: ["You", "Aldric", "Quill"],
       kind: "Approval",
       tag: "needs-you",
       what: "Delete files",
@@ -78,7 +78,7 @@ describe("entryRow", () => {
       tone: "urgent",
     });
     const later = entryRow(approvalEntry(request("2026-11-01T13:00:00.000Z")), names, QUILL, now);
-    expect([later.who, later.when, later.tone]).toEqual(["You → Quill", "Expires in 3 hours", "plain"]);
+    expect([later.chain, later.when, later.tone]).toEqual([["You", "Quill"], "Expires in 3 hours", "plain"]);
   });
 
   it("says how a closed request ended, quietly", () => {
@@ -89,7 +89,7 @@ describe("entryRow", () => {
   it("shows a question as the chain it climbed up to you, with its first line", () => {
     const row = entryRow(questionEntry(asked), names, ALDRIC, now);
     expect(row).toEqual({
-      who: "Ada → Aldric → you",
+      chain: ["Ada", "Aldric", "you"],
       kind: "Question",
       tag: "needs-you",
       what: "Monthly or yearly price?",
@@ -101,7 +101,7 @@ describe("entryRow", () => {
   it("shows stuck work in rose with how many tries it took, or that its hob retired", () => {
     const row = entryRow(stuckEntry(stuck(THREAD)), names, ALDRIC, now);
     expect(row).toEqual({
-      who: "Aldric → Quill",
+      chain: ["Aldric", "Quill"],
       kind: "Stuck",
       tag: "failed",
       what: "Reading a message",
@@ -114,7 +114,7 @@ describe("entryRow", () => {
   it("shows a device asking to join with its name and when the request runs out", () => {
     const row = entryRow(deviceEntry(device("2026-11-01T10:08:00.000Z")), names, undefined, now);
     expect(row).toEqual({
-      who: "MacBook Air → you",
+      chain: ["MacBook Air", "you"],
       kind: "New device",
       tag: "needs-you",
       what: "A new device asks to join",

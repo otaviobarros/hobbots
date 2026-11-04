@@ -2,6 +2,7 @@ import type { Agent, TaskTree, Thread } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@hobbots/ui/components/popover";
+import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ActivityMap } from "../../api/activity.ts";
@@ -26,16 +27,19 @@ export function StageHob({
   threads,
   activity,
   size,
+  dimmed,
 }: {
   hob: Agent;
   state: HobState;
   threads: ReadonlyArray<Thread>;
   activity: ActivityMap;
   size: number;
+  /** A count chip that leaves this hob out dims it. */
+  dimmed: boolean;
 }) {
   const doing = doingOf(state, threads, activity);
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className={cn("flex flex-col items-center gap-1.5 transition-opacity", dimmed && "opacity-35")}>
       {doing?.kind === "live" && (
         <span
           title={doing.text}

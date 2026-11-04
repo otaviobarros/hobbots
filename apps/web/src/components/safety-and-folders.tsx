@@ -130,10 +130,11 @@ export function LockedSwitch({
  * The folders hobs may work in. In the Hobbots app a folder comes from the system folder picker;
  * in a browser the user types its path on the hub. Every change is checked and stored by the hub.
  */
-export function FolderPicker({ folders }: { folders: ReadonlyArray<string> }) {
+export function FolderPicker({ folders, look = "setup" }: { folders: ReadonlyArray<string>; look?: FolderLook }) {
   const update = useUpdateSetup();
   return (
     <FolderList
+      look={look}
       label="Folders hobs may open"
       folders={folders}
       saving={update.isPending ? update.variables.approvedFolders : undefined}
@@ -144,11 +145,23 @@ export function FolderPicker({ folders }: { folders: ReadonlyArray<string> }) {
   );
 }
 
+/** How a folder list looks: setup's mint-ringed cards, or Settings' quiet rows. */
+type FolderLook = "setup" | "settings";
+
+const FOLDER_ROW: Readonly<Record<FolderLook, { readonly list: string; readonly row: string }>> = {
+  setup: {
+    list: "lg:grid-cols-2",
+    row: "cut animate-hb-in gap-3 border-2 border-mint bg-card px-3.5 py-3",
+  },
+  settings: { list: "", row: "gap-3 rounded-control bg-card px-3 py-2.5" },
+};
+
 /**
  * A list of folders with Remove on each and a way to add one: the system folder picker in the
  * Hobbots app, a typed path on the hub in a browser. The caller stores each change.
  */
 export function FolderList({
+  look = "setup",
   label,
   folders,
   saving,
@@ -156,6 +169,7 @@ export function FolderList({
   error,
   onSave,
 }: {
+  look?: FolderLook;
   label: string;
   folders: ReadonlyArray<string>;
   /** The list on its way to the hub, shown until it answers. */
@@ -185,26 +199,35 @@ export function FolderList({
   return (
     <div className="flex flex-col gap-2.5">
       {shown.length > 0 && (
-        <ul aria-label={label} className="m-0 grid list-none grid-cols-1 gap-2.5 p-0 lg:grid-cols-2">
+        <ul aria-label={label} className={cn("m-0 grid list-none grid-cols-1 gap-2.5 p-0", FOLDER_ROW[look].list)}>
           {shown.map((folder) => (
-            <li
-              key={folder}
-              className="cut flex min-w-0 animate-hb-in items-center gap-3 border-2 border-mint bg-card px-3.5 py-3"
-            >
-              <span
-                aria-hidden
-                className="grid size-[22px] flex-none animate-hb-pop place-items-center border-2 border-control bg-mint font-bold text-ground"
-              >
-                ✓
-              </span>
+            <li key={folder} className={cn("flex min-w-0 items-center", FOLDER_ROW[look].row)}>
+              {look === "setup" ? (
+                <span
+                  aria-hidden
+                  className="grid size-[22px] flex-none animate-hb-pop place-items-center border-2 border-control bg-mint font-bold text-ground"
+                >
+                  ✓
+                </span>
+              ) : (
+                <span aria-hidden className="text-text-secondary">
+                  ▭
+                </span>
+              )}
               <span className="flex min-w-0 flex-1 flex-col gap-px">
-                <span className="truncate font-bold">{folderName(folder)}</span>
-                <span className="truncate text-[13px] text-text-secondary" title={folder}>
+                <span className={cn("truncate", look === "setup" && "font-bold")}>{folderName(folder)}</span>
+                <span
+                  className={cn(
+                    "truncate text-text-secondary",
+                    look === "setup" ? "text-[13px]" : "font-mono text-meta text-label",
+                  )}
+                  title={folder}
+                >
                   {folder}
                 </span>
               </span>
               <Button
-                variant="outline"
+                variant={look === "setup" ? "outline" : "ghost"}
                 size="xs"
                 disabled={pending}
                 onClick={() => onSave(removeFolder(folders, folder))}

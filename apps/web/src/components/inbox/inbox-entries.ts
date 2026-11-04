@@ -237,8 +237,8 @@ export type RowTone = "urgent" | "stuck" | "plain";
 
 /** One row of the list, in words: who asked, the kind, what it is about, and when. */
 export interface InboxRow {
-  /** Who asked, as a chain from whoever started it: "You → Aldric → Ada". */
-  readonly who: string;
+  /** Who asked, as a chain from whoever started it: You, Aldric, Ada. */
+  readonly chain: ReadonlyArray<string>;
   readonly kind: string;
   /** The tag's variant: the needs-you amber, stuck rose, or muted once a request is closed. */
   readonly tag: "needs-you" | "failed" | "muted";
@@ -261,7 +261,7 @@ const approvalRow = (request: ApprovalRequest, names: HobName, lead: AgentId | u
   const chain = lead !== undefined && lead !== request.agentId ? [lead, request.agentId] : [request.agentId];
   const expiry = pending ? expiryText(request.expiresAt, now) : "";
   return {
-    who: [copy.row.you, ...chain.map(names)].join(copy.row.arrow),
+    chain: [copy.row.you, ...chain.map(names)],
     kind: request.state === "expired" ? copy.kind.expired : copy.kind.approval,
     tag: pending ? "needs-you" : "muted",
     what: requestTitle(request).what,
@@ -273,7 +273,7 @@ const approvalRow = (request: ApprovalRequest, names: HobName, lead: AgentId | u
 const questionRow = ({ question }: WaitingQuestion, names: HobName): InboxRow => {
   const asker = names(question.askerId);
   return {
-    who: [asker, ...question.chain.map(names), copy.row.youEnd].join(copy.row.arrow),
+    chain: [asker, ...question.chain.map(names), copy.row.youEnd],
     kind: copy.kind.question,
     tag: "needs-you",
     what: firstLine(question.text),
@@ -294,7 +294,7 @@ const stuckRow = (item: BackpackItem, names: HobName, lead: AgentId | undefined)
   const name = names(item.recipientId);
   const chain = lead !== undefined && lead !== item.recipientId ? [lead, item.recipientId] : [item.recipientId];
   return {
-    who: chain.map(names).join(copy.row.arrow),
+    chain: chain.map(names),
     kind: copy.kind.stuck,
     tag: "failed",
     what: blockerWhat(item),
@@ -304,7 +304,7 @@ const stuckRow = (item: BackpackItem, names: HobName, lead: AgentId | undefined)
 };
 
 const deviceRow = ({ request }: WaitingDevice, now: Date): InboxRow => ({
-  who: [request.name, copy.row.youEnd].join(copy.row.arrow),
+  chain: [request.name, copy.row.youEnd],
   kind: copy.kind.device,
   tag: "needs-you",
   what: copy.row.deviceAsks,

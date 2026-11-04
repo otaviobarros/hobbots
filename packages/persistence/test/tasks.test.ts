@@ -1,7 +1,16 @@
-import { HobbotsRepository, type NewAttempt, type NewTask, TaskRepository, TaskToolCalls } from "@hobbots/agents";
+import {
+  ApprovalRepository,
+  HobbotsRepository,
+  type NewAttempt,
+  type NewTask,
+  TaskRepository,
+  TaskToolCalls,
+} from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  ApprovalId,
+  ApprovalRequest,
   ArtifactId,
   AttemptId,
   CheckpointId,
@@ -22,14 +31,28 @@ import {
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "../src/index.ts";
+import {
+  ApprovalRepositoryLive,
+  EventJournal,
+  HobbotsRepositoryLive,
+  TaskRepositoryLive,
+  TaskToolCallsLive,
+} from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
-const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive, EventJournal.layer).pipe(
-  Layer.provideMerge(TestDatabase),
-);
+const TestLayer = Layer.mergeAll(
+  HobbotsRepositoryLive,
+  TaskRepositoryLive,
+  TaskToolCallsLive,
+  ApprovalRepositoryLive,
+  EventJournal.layer,
+).pipe(Layer.provideMerge(TestDatabase));
 const run = <A, E>(
-  effect: Effect.Effect<A, E, HobbotsRepository | TaskRepository | TaskToolCalls | EventJournal | SqlClient.SqlClient>,
+  effect: Effect.Effect<
+    A,
+    E,
+    HobbotsRepository | TaskRepository | TaskToolCalls | ApprovalRepository | EventJournal | SqlClient.SqlClient
+  >,
 ) => effect.pipe(Effect.provide(TestLayer), Effect.runPromise);
 
 /** What the Task's ledger holds in its owner's backpack, as a turn that was shown all of it carries it. */
@@ -1060,6 +1083,101 @@ describe("Task records", () => {
       ["keywords", "q2", ADA, ALDRIC],
     ]);
     expect(result.quill.map((each) => [each.quest.leadId, each.threadAgentId])).toEqual([[ALDRIC, ALDRIC]]);
+  });
+});
+
+/** A request from `agentId`'s turn on `taskId` in the tree under `rootId`, or on no Task. */
+const approval = (id: string, agentId: AgentId, taskId: string | null, rootId = "campaign") =>
+  new ApprovalRequest({
+    id: ApprovalId.make(id),
+    agentId,
+    threadId,
+    messageId: null,
+    taskId: taskId === null ? null : TaskId.make(taskId),
+    rootTaskId: taskId === null ? null : TaskId.make(rootId),
+    stepId: `step-${id}`,
+    tool: "Bash",
+    operation: "run-commands",
+    targets: ["/code"],
+    arguments: { command: "pnpm test" },
+    label: "Running pnpm test",
+    reason: "Commands ask first.",
+    actionDigest: "d".repeat(64),
+    policyVersion: "r1-0123456789abcdef",
+    state: "pending",
+    denyReason: null,
+    createdAt: later,
+    decidedAt: null,
+  });
+
+describe("a hob's History", () => {
+  // covers OR-001, UX-001
+  it("[TC-OR-491] reads a hob's own work and its party's, leaving out steps, other hobs and questions a lead kept", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* campaign;
+        const tasks = yield* TaskRepository;
+        const approvals = yield* ApprovalRepository;
+        yield* tasks.createTask({ task: newTask("research", ALDRIC, "campaign"), delegation: null, milestones: [] });
+        yield* tasks.createTask({ task: newTask("other", PIP, null), delegation: null, milestones: [] });
+        yield* approvals.insert(approval("a-quill", QUILL, "copy"));
+        yield* approvals.insert(approval("a-aldric", ALDRIC, null));
+        yield* approvals.insert(approval("a-pip", PIP, "other", "other"));
+        const ask = (id: string, taskId: string, askerId: AgentId) =>
+          tasks.askQuestion({
+            id: QuestionId.make(id),
+            taskId: TaskId.make(taskId),
+            askerId,
+            text: id,
+            createdAt: now,
+          });
+        // Quill's question stops at Aldric; Ada's climbs to you.
+        yield* ask("q-quill", "copy", QUILL);
+        yield* ask("q-ada", "build", ADA);
+        yield* tasks.escalateQuestion(QuestionId.make("q-ada"), ALDRIC);
+        const copy = yield* latest("copy");
+        yield* tasks.moveTask(copy.id, copy.revision, "failed", later);
+        const ids = (agentId: AgentId) =>
+          tasks.readHistoryRecords(agentId).pipe(
+            Effect.map((records) => ({
+              tasks: records.tasks.map((each) => [each.id, each.state]),
+              delegations: records.delegations.map((each) => each.id),
+              quests: records.quests.map((each) => each.id),
+              approvals: records.approvals.map((each) => each.id),
+              questions: records.questions.map((each) => each.id),
+            })),
+          );
+        return { aldric: yield* ids(ALDRIC), quill: yield* ids(QUILL), pip: yield* ids(PIP) };
+      }),
+    );
+
+    // The lead reads the Task you asked for and its party's Tasks, never its own step.
+    expect(result.aldric).toEqual({
+      tasks: [
+        ["campaign", "queued"],
+        ["copy", "failed"],
+        ["build", "queued"],
+      ],
+      delegations: ["d-copy", "d-build"],
+      quests: ["q1"],
+      approvals: ["a-aldric", "a-quill"],
+      questions: ["q-ada"],
+    });
+    // A member reads only its own Task, with the Quest it serves.
+    expect(result.quill).toEqual({
+      tasks: [["copy", "failed"]],
+      delegations: ["d-copy"],
+      quests: ["q1"],
+      approvals: ["a-quill"],
+      questions: [],
+    });
+    expect(result.pip).toEqual({
+      tasks: [["other", "queued"]],
+      delegations: [],
+      quests: [],
+      approvals: ["a-pip"],
+      questions: [],
+    });
   });
 });
 

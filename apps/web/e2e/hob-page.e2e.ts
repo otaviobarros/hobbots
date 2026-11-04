@@ -45,7 +45,7 @@ const hubWithPip = async () => {
 };
 
 // covers UX-001, UX-005
-test("[TC-UX-088] a hob opens on its own page, with New chat, its chats and a History tab", async ({ page }) => {
+test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a History tab", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/new`);

@@ -263,3 +263,40 @@ test("[TC-IN-014] the desktop app opens a request in the Inbox when its notifica
   expect(page.url()).toContain(`request=${asked.id}`);
   expect(page.url()).toContain("tab=needs");
 });
+
+// covers UX-001
+test("[TC-UX-090] the count chips on Home filter the scene to the hobs in that state", async ({ page }) => {
+  const { current } = await pipAsksToPush(page);
+  await api(current, "POST", "/api/agents", {
+    name: "Bram",
+    role: "assistant",
+    roleTitle: "Assistant",
+    sigil: "assistant",
+    hat: "pointed",
+    tool: "none",
+    lookSeed: 1200,
+    lookColor: "moss",
+    runtime: "claude-code",
+    model: null,
+    effort: null,
+    instructions: "",
+  });
+  await page.getByRole("link", { name: "Home", exact: true }).click();
+  const scene = page.getByRole("region", { name: "Your hobs right now" });
+  const chips = scene.getByRole("radiogroup", { name: "Show hobs" });
+  await expect(chips.getByRole("radio")).toHaveText(["All2", "Need you1", "Resting1"]);
+  await expect(chips.getByRole("radio", { name: "All 2" })).toBeChecked();
+  // A hob's stage spot holds its bubble, sprite and name; a chip that leaves it out dims it.
+  const spot = (name: RegExp) => scene.getByRole("button", { name }).locator("..");
+
+  await chips.getByRole("radio", { name: "Need you 1" }).click();
+  await expect(spot(/^Pip, /)).toHaveCSS("opacity", "1");
+  await expect(spot(/^Bram, /)).toHaveCSS("opacity", "0.35");
+
+  await chips.getByRole("radio", { name: "Resting 1" }).click();
+  await expect(spot(/^Pip, /)).toHaveCSS("opacity", "0.35");
+  await expect(spot(/^Bram, /)).toHaveCSS("opacity", "1");
+
+  await chips.getByRole("radio", { name: "All 2" }).click();
+  await expect(spot(/^Pip, /)).toHaveCSS("opacity", "1");
+});
