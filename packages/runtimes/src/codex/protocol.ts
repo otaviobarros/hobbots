@@ -131,6 +131,36 @@ export interface ModelListResponse {
   readonly nextCursor: string | null;
 }
 
+/** One window of a plan's limit. */
+export interface RateLimitWindow {
+  /** How much of the window is used, 0 to 100. */
+  readonly usedPercent: number;
+  readonly windowDurationMins: number | null;
+  /** When the window refills, in seconds since the epoch. */
+  readonly resetsAt: number | null;
+}
+
+/** One of the plan's metered limits, such as `codex`, with its two windows. */
+export interface RateLimitSnapshot {
+  readonly limitId: string | null;
+  readonly limitName: string | null;
+  readonly primary: RateLimitWindow | null;
+  readonly secondary: RateLimitWindow | null;
+  readonly rateLimitReachedType: string | null;
+}
+
+interface GetAccountRateLimitsParams {
+  /** Skips the reset-credit details, which Hobbots does not show. */
+  readonly excludeResetCreditDetails?: boolean;
+}
+
+export interface GetAccountRateLimitsResponse {
+  /** The single-limit view, kept for older clients. */
+  readonly rateLimits: RateLimitSnapshot;
+  /** Every metered limit by its `limitId`, when Codex reports more than one. */
+  readonly rateLimitsByLimitId: Readonly<Record<string, RateLimitSnapshot | undefined>> | null;
+}
+
 /**
  * The client requests Hobbots sends, by method, with their parameters and results. A request's
  * types come from here, so a method missing from this map cannot be sent.
@@ -140,6 +170,10 @@ export interface ClientRequests {
   readonly "account/read": { readonly params: GetAccountParams; readonly result: GetAccountResponse };
   readonly getAuthStatus: { readonly params: GetAuthStatusParams; readonly result: GetAuthStatusResponse };
   readonly "model/list": { readonly params: ModelListParams; readonly result: ModelListResponse };
+  readonly "account/rateLimits/read": {
+    readonly params: GetAccountRateLimitsParams;
+    readonly result: GetAccountRateLimitsResponse;
+  };
   readonly "account/login/start": { readonly params: ChatgptAuthTokensLogin; readonly result: unknown };
   readonly "thread/start": { readonly params: ThreadStartParams; readonly result: ThreadStartResponse };
   readonly "thread/resume": { readonly params: ThreadResumeParams; readonly result: ThreadResumeResponse };

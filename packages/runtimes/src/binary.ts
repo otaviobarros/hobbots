@@ -3,7 +3,13 @@ import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { RuntimeError } from "@hobbots/agents";
-import type { RuntimeHealth, RuntimeModels } from "@hobbots/domain";
+import {
+  type PlanUsage,
+  type RuntimeHealth,
+  type RuntimeKind,
+  type RuntimeModels,
+  unreportedPlan,
+} from "@hobbots/domain";
 import { Clock, DateTime, Duration, Effect } from "effect";
 
 const execFileAsync = promisify(execFile);
@@ -168,6 +174,32 @@ export const expiringCache = <A>(maxAge: (value: A) => Duration.Duration) => {
       entries.set(key, { value, expiresAt: now + Duration.toMillis(maxAge(value)) });
       return value;
     });
+};
+
+/** How long a runtime's plan is kept before it is asked again. */
+const planMaxAge = Duration.minutes(1);
+
+/**
+ * A runtime's plan from its installed binary, kept a minute per binary and version. A runtime that
+ * is not found, or a read that fails, reports nothing.
+ */
+export const installedPlanUsage = <E>(options: {
+  readonly runtime: RuntimeKind;
+  readonly locate: Effect.Effect<LocatedBinary>;
+  readonly read: (binary: string, checkedAt: string) => Effect.Effect<PlanUsage, E>;
+}): Effect.Effect<PlanUsage> => {
+  const cache = expiringCache<PlanUsage>(() => planMaxAge);
+  return Effect.gen(function* () {
+    const checkedAt = DateTime.formatIso(yield* DateTime.now);
+    const located = yield* options.locate;
+    if (located._tag !== "Found") return unreportedPlan(options.runtime, checkedAt);
+    return yield* cache(
+      `${located.binary}@${located.version}`,
+      options
+        .read(located.binary, checkedAt)
+        .pipe(Effect.orElseSucceed(() => unreportedPlan(options.runtime, checkedAt))),
+    );
+  });
 };
 
 /**

@@ -46,7 +46,7 @@ Codex 0.166.0, probed on 2026-11-03 on Linux with a stand-in model ([ADR 024](..
 | Process sandbox | Hobbots' sandbox around the App Server; Codex's own off (`externalSandbox`) | Verified on macOS; Codex starts inside it on Linux, a whole turn there unverified |
 | Hub tools | Dynamic tools, called back on the App Server channel | Verified |
 | Tool events | `item/started`, `item/completed`, output deltas, reported to the Workbench as Claude Code's are | Verified |
-| Usage | `thread/tokenUsage/updated` per turn; no cost | Verified; rate limits unverified |
+| Usage | `thread/tokenUsage/updated` per turn; the plan's windows from `account/rateLimits/read`, shown on the Usage screen; no cost | Per turn verified; plan windows unverified with a real sign-in |
 | Sign-in for a turn | `chatgptAuthTokens` with refresh requests answered by the hub | Unverified |
 | Commit attribution | Hob instructions; Codex's own trailer request when signed in | Unverified |
 

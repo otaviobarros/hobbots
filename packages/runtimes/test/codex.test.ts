@@ -13,7 +13,8 @@ import { startAppServer } from "../src/codex/app-server.ts";
 import { billingOf, chatGptTokens, signInOf } from "../src/codex/auth.ts";
 import { codexCandidates, codexPath, findCodex, minimumCodexVersion, parseCodexVersion } from "../src/codex/locate.ts";
 import { listModels, toCodexModels } from "../src/codex/models.ts";
-import type { Model } from "../src/codex/protocol.ts";
+import { planFromRateLimits } from "../src/codex/plan.ts";
+import type { Model, RateLimitSnapshot } from "../src/codex/protocol.ts";
 import { ProcessSandbox } from "../src/sandbox.ts";
 import { type FakeCodexOptions, fakeCodex, fakeCodexLog } from "./codex-fixture.ts";
 
@@ -371,5 +372,90 @@ describe("noticing an update", () => {
     const later = new Date(Date.now() + 60_000);
     utimesSync(updated, later, later);
     expect(await Effect.runPromise(locate)).toMatchObject({ _tag: "Found", version: "0.167.0" });
+  });
+});
+
+const snapshot = (fields: Partial<RateLimitSnapshot>): RateLimitSnapshot => ({
+  limitId: "codex",
+  limitName: null,
+  primary: { usedPercent: 12, windowDurationMins: 300, resetsAt: 1_793_800_000 },
+  secondary: { usedPercent: 40, windowDurationMins: 10_080, resetsAt: 1_794_200_000 },
+  rateLimitReachedType: null,
+  ...fields,
+});
+
+describe("Codex's plan usage", () => {
+  const checkedAt = "2026-11-04T15:00:00.000Z";
+
+  it("reports the five-hour and weekly windows as the session and the week", () => {
+    const plan = planFromRateLimits({ rateLimits: snapshot({}), rateLimitsByLimitId: null }, checkedAt);
+    expect(plan).toEqual({
+      runtime: "codex",
+      reported: true,
+      checkedAt,
+      extraUsage: null,
+      meters: [
+        {
+          kind: "session",
+          group: "session",
+          percent: 12,
+          resetsAt: new Date(1_793_800_000 * 1000).toISOString(),
+          scope: null,
+          severity: "normal",
+          active: false,
+        },
+        {
+          kind: "weekly_all",
+          group: "weekly",
+          percent: 40,
+          resetsAt: new Date(1_794_200_000 * 1000).toISOString(),
+          scope: null,
+          severity: "normal",
+          active: false,
+        },
+      ],
+    });
+  });
+
+  it("lists every metered limit, the main one first, and scopes the others by name", () => {
+    const plan = planFromRateLimits(
+      {
+        rateLimits: snapshot({}),
+        rateLimitsByLimitId: {
+          spark: snapshot({ limitId: "spark", limitName: "GPT Spark", secondary: null }),
+          codex: snapshot({ rateLimitReachedType: "rate_limit_reached" }),
+        },
+      },
+      checkedAt,
+    );
+    expect(plan.meters.map(({ kind, scope, severity }) => ({ kind, scope, severity }))).toEqual([
+      { kind: "session", scope: null, severity: "critical" },
+      { kind: "weekly_all", scope: null, severity: "critical" },
+      { kind: "window", scope: "GPT Spark", severity: "normal" },
+    ]);
+  });
+
+  it("reports nothing for an account without windows", () => {
+    const plan = planFromRateLimits(
+      { rateLimits: snapshot({ primary: null, secondary: null }), rateLimitsByLimitId: null },
+      checkedAt,
+    );
+    expect(plan).toEqual({ runtime: "codex", reported: false, meters: [], extraUsage: null, checkedAt });
+  });
+
+  it("asks the App Server for the limits without their reset-credit details", async () => {
+    const { dir, adapter } = codexWith({ rateLimits: { rateLimits: snapshot({}), rateLimitsByLimitId: null } });
+    const plan = await Effect.runPromise((await adapter).planUsage ?? Effect.die("no plan usage"));
+    expect(plan.reported).toBe(true);
+    expect(plan.meters).toHaveLength(2);
+    expect(fakeCodexLog(dir).find((message) => message.method === "account/rateLimits/read")?.params).toEqual({
+      excludeResetCreditDetails: true,
+    });
+  });
+
+  it("reports nothing when Codex cannot read the limits", async () => {
+    const { adapter } = codexWith({});
+    const plan = await Effect.runPromise((await adapter).planUsage ?? Effect.die("no plan usage"));
+    expect(plan).toMatchObject({ runtime: "codex", reported: false, meters: [] });
   });
 });

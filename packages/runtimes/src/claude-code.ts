@@ -48,7 +48,7 @@ import {
   unreportedPlan,
 } from "@hobbots/domain";
 import { type PolicyContext, PolicyEngine, type PolicyVerdict, policyVersion } from "@hobbots/permissions";
-import { DateTime, Duration, Effect, Layer, Queue, Stream } from "effect";
+import { type Duration, Effect, Layer, Queue, Stream } from "effect";
 import {
   type CallDecision,
   decideCall,
@@ -60,8 +60,8 @@ import {
 } from "./approval.ts";
 import {
   binaryLocator,
-  expiringCache,
   findBinary,
+  installedPlanUsage,
   installedRuntimeChecks,
   isExecutable,
   runnableBinary,
@@ -568,9 +568,6 @@ export const planFromReport = (report: SDKUsageReport | undefined, checkedAt: st
       : null,
   };
 };
-
-/** How long the plan's meters are kept before Claude Code is asked again. */
-const planMaxAge = Duration.minutes(1);
 
 /**
  * Maps one turn's SDK messages to runtime events. Stateful, so make one per turn: a thinking block
@@ -1252,18 +1249,10 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
         Effect.scoped,
       );
 
-    const planCache = expiringCache<PlanUsage>(() => planMaxAge);
-    const planUsage = Effect.gen(function* () {
-      const checkedAt = DateTime.formatIso(yield* DateTime.now);
-      const located = yield* locate;
-      if (located._tag !== "Found") return unreportedPlan("claude-code", checkedAt);
-      return yield* planCache(
-        `${located.binary}@${located.version}`,
-        readPlan(located.binary).pipe(
-          Effect.map((report) => planFromReport(report, checkedAt)),
-          Effect.orElseSucceed(() => unreportedPlan("claude-code", checkedAt)),
-        ),
-      );
+    const planUsage = installedPlanUsage({
+      runtime: "claude-code",
+      locate,
+      read: (binary, checkedAt) => readPlan(binary).pipe(Effect.map((report) => planFromReport(report, checkedAt))),
     });
 
     return RuntimeAdapter.of({ health, models, enforcement: Effect.succeed(declared), planUsage, sendPrompt });
