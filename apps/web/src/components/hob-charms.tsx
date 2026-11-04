@@ -1,138 +1,98 @@
-import type { HobPermissions } from "@hobbots/api";
-import type { Agent, PolicyOperation } from "@hobbots/domain";
+import type { HobGitHubAppStatus, HobPermissions, UpdateHobPermissionsPayload } from "@hobbots/api";
+import type { Agent, PolicyOverrides } from "@hobbots/domain";
+import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Switch } from "@hobbots/ui/components/switch";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useId } from "react";
-import { type ToolHolding, toolHolding } from "../api/enforcement.ts";
 import { githubStatusQuery } from "../api/github.ts";
 import { hobGitHubAppQuery } from "../api/hob-github-app.ts";
 import { useUpdatePermissions } from "../api/queries.ts";
-import { ANSWER, offeredAnswer, ruleColor } from "../api/safety.ts";
-import { EnforcementList, NeedsSandbox } from "./enforcement.tsx";
+import { GITHUB_OPERATIONS, pickAnswer, RULES, type RuleInfo } from "../api/safety.ts";
 import { HobGitHubApp } from "./hob-github-app.tsx";
-import { Loading, useHobPermissions } from "./hob-permissions.tsx";
+import { Loading, Rule, shownAnswer, useHobPermissions } from "./hob-permissions.tsx";
 import { messages } from "./messages.ts";
 
-/** The runtime's own tools, grouped as the Charms tab lists them, with the operations each covers. */
-const BUILT_IN: ReadonlyArray<{
-  readonly mark: string;
-  readonly name: string;
-  readonly note: string;
-  readonly operations: ReadonlyArray<readonly [string, PolicyOperation]>;
-}> = [
-  {
-    mark: "F",
-    name: "Files",
-    note: "Reads, creates, edits and deletes files in its folders.",
-    operations: [
-      ["Read", "read-files"],
-      ["Edit", "edit-files"],
-      ["Delete", "delete-files"],
-    ],
-  },
-  {
-    mark: ">",
-    name: "Commands",
-    note: "Runs shell commands, tests and builds.",
-    operations: [["Run", "run-commands"]],
-  },
-  {
-    mark: "G",
-    name: "Local Git",
-    note: "Status, diff, branches and commits, on the hub.",
-    operations: [["Git", "local-git"]],
-  },
-  {
-    mark: "W",
-    name: "The web",
-    note: "Fetches pages and reaches hosts from commands, such as package installs.",
-    operations: [["Web", "use-web"]],
-  },
-];
-
 /**
- * What the hob can do (ADR 014): its runtime's own tools with each answer and how it is held, then
- * its Charms. The answers are changed on the Permissions tab.
+ * The hob's Charms (ADR 014): one card for each app connected in Settings, each with who the hob
+ * acts as there and what it may do. GitHub is the only Charm so far.
  */
-export function CharmsTab({ hob, onPermissions }: { hob: Agent; onPermissions: () => void }) {
+export function CharmsTab({ hob }: { hob: Agent }) {
+  const copy = messages.charms;
   const permissions = useHobPermissions(hob);
   const data = permissions.data;
   if (!data) {
     return <Loading name={hob.name} failed={permissions.isError} retry={() => void permissions.refetch()} />;
   }
   return (
-    <div className="flex max-w-[760px] flex-col gap-2.5">
-      <span className="text-text-secondary">
-        What {hob.name} can do. Its own tools come with its runtime; Charms connect it to other apps.
-      </span>
-
-      <h2 className="lbl m-0 pt-2 text-xs text-label">Built in</h2>
-      <ul aria-label="Built-in tools" className="m-0 flex list-none flex-col gap-2.5 p-0">
-        {BUILT_IN.map((tool) => (
-          <BuiltInTool key={tool.name} tool={tool} permissions={data} />
-        ))}
-      </ul>
-
-      <h2 className="lbl m-0 pt-2 text-xs text-label">Charms</h2>
-      <GitHubCharm hob={hob} permissions={data} />
-      <span className="text-[13px] text-label">
-        Charms connect a hob to apps such as GitHub or Slack, and each action has its own Allow, Ask or Never. Turn one
-        off and {hob.name} is offered none of its actions from its next reply.
-      </span>
-      <h2 className="lbl m-0 pt-2 text-xs text-label">{messages.enforcement.heading}</h2>
-      <span className="text-[13px] text-text-secondary">{messages.enforcement.intro({ name: hob.name })}</span>
-      <EnforcementList enforcement={data.enforcement} />
-      <div className="pt-2">
-        <Button variant="outline" onClick={onPermissions}>
-          Change what {hob.name} may do
+    <div className="flex max-w-[760px] flex-col gap-4">
+      <span className="text-text-secondary">{copy.intro({ name: hob.name })}</span>
+      <GitHubCharm hob={hob} permissions={data} outdated={permissions.outdated} />
+      <div className="flex items-center gap-3 rounded-card border-(length:--edge) border-dashed border-line-2 px-4 py-3.5">
+        <span className="flex-1 text-sm text-text-secondary">{copy.more}</span>
+        <Button asChild variant="outline">
+          <Link to="/settings/$section" params={{ section: "connections" }} search={{ tab: "charms" }}>
+            {copy.moreLink}
+          </Link>
         </Button>
       </div>
     </div>
   );
 }
 
-/** The GitHub Charm's actions as the card lists them, each with its own answer (ADR 020). */
-const GITHUB_ACTIONS = [
-  ["read", "read-github"],
-  ["push", "push"],
-  ["pullRequests", "open-pull-request"],
-  ["comment", "comment-github"],
-] as const satisfies ReadonlyArray<readonly [keyof typeof messages.charms.github, PolicyOperation]>;
+/** Where the GitHub Charm stands, for the tag beside its name. */
+type CharmState = "off" | "on" | "as-you" | "not-ready" | "cannot-act";
+
+const STATE_BADGE = {
+  off: "resting",
+  on: "working",
+  "as-you": "working",
+  "not-ready": "needs-you",
+  "cannot-act": "failed",
+} as const satisfies Record<CharmState, string>;
 
 /**
  * The GitHub Charm (#317, ADR 020): it reads, pushes, opens pull requests and comments in the
- * repository of the hob's folders on the hub, with the GitHub account connected in Settings, so it
- * needs no sandbox and no credential reaches the hob. You grant it per hob here; without the grant, or
- * with no account connected, the hob is offered none of its actions.
+ * repository of the hob's folders on the hub, as you or as the hob's own app (ADR 022), so it needs
+ * no sandbox and no credential reaches the hob. The card turns it on for this hob, says who it acts
+ * as, and sets Allow, Ask or Never for each of its actions. Every change is saved at once.
  */
-function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermissions }) {
+function GitHubCharm({ hob, permissions, outdated }: { hob: Agent; permissions: HobPermissions; outdated: boolean }) {
   const copy = messages.charms.github;
   const update = useUpdatePermissions(hob.id);
   const github = useQuery(githubStatusQuery);
   const switchId = useId();
-  const granted = update.isPending ? update.variables.githubCharm !== false : permissions.policy.githubCharm !== false;
+  const sending = update.isPending ? update.variables : undefined;
+  const granted = sending?.githubCharm !== undefined ? sending.githubCharm : permissions.policy.githubCharm !== false;
   // A hob with its own app acts as its bot, so it needs no account connected in Settings (ADR 022).
   const ownApp = useQuery(hobGitHubAppQuery(hob.id)).data;
   const bot = ownApp?._tag === "Connected" ? ownApp.bot : null;
   const connected =
     bot !== null || github.data === undefined || github.data._tag === "Connected" || github.data._tag === "Environment";
+  const state = charmState(granted, ownApp, connected);
+
   return (
-    <div className="cut flex flex-col gap-2.5 border-2 border-line bg-card px-4 py-3.5">
-      <div className="flex items-center gap-3.5">
+    <section
+      aria-label={copy.card}
+      className={cn("flex flex-col rounded-card bg-card", granted && "shadow-[inset_0_3px_0_var(--color-mint)]")}
+    >
+      <div className="flex items-center gap-3.5 px-4.5 py-4">
         <span
           aria-hidden
-          className="grid size-10 flex-none place-items-center bg-line font-heading text-lg font-bold text-moonlight"
+          className="grid size-9 flex-none place-items-center rounded-control bg-hover font-heading text-base font-bold text-text-strong"
         >
-          GH
+          G
         </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <label htmlFor={switchId} className="font-bold">
-            {copy.name}
-          </label>
-          <span className="text-[13px] text-text-secondary">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="flex flex-wrap items-center gap-2">
+            <label htmlFor={switchId} className="text-[17px] leading-6 font-bold text-text-strong">
+              {copy.name}
+            </label>
+            <Badge variant={STATE_BADGE[state]}>{copy.state[state]}</Badge>
+          </span>
+          <span className="text-detail text-text-secondary">
             {bot === null ? copy.reads({ name: hob.name }) : copy.readsAsBot({ name: hob.name, bot })}
           </span>
         </div>
@@ -144,86 +104,94 @@ function GitHubCharm({ hob, permissions }: { hob: Agent; permissions: HobPermiss
           onCheckedChange={(on) => update.mutate({ githubCharm: on })}
         />
       </div>
+
       {granted ? (
-        <ul aria-label={copy.name} className="m-0 flex list-none flex-wrap gap-3 p-0 ps-[54px]">
-          {GITHUB_ACTIONS.map(([label, operation]) => {
-            const answer = ANSWER[offeredAnswer(operation, permissions.decisions[operation])];
-            return (
-              <li key={operation} className="flex items-center gap-1 text-[13px]">
-                <span className="text-text-secondary">{copy[label]}</span>
-                <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(answer))}>{answer}</span>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="flex animate-hb-in flex-col gap-4.5 ps-16 pe-4.5 pb-4.5">
+          <HobGitHubApp hob={hob} />
+          <GitHubRules
+            name={hob.name}
+            permissions={permissions}
+            sending={sending}
+            pending={update.isPending || outdated}
+            onPick={(overrides) => update.mutate({ overrides })}
+          />
+        </div>
       ) : (
-        <span className="ps-[54px] text-[13px] text-label">{copy.off({ name: hob.name })}</span>
+        <span className="animate-hb-in ps-16 pe-4.5 pb-4 text-sm text-text-secondary">
+          {copy.off({ name: hob.name })}
+        </span>
       )}
       {!connected && (
-        <span className="ps-[54px] text-[13px] text-text-secondary">
+        <span className="ps-16 pe-4.5 pb-4 text-detail text-text-secondary">
           {copy.notConnected}{" "}
           <Link
             to="/settings/$section"
             params={{ section: "connections" }}
             search={{ tab: "charms" }}
-            className="text-lantern"
+            className="text-link underline"
           >
             {copy.connectInSettings}
           </Link>
         </span>
       )}
       {update.isError && (
-        <span role="alert" className="ps-[54px] text-[13px] text-rose">
+        <span role="alert" className="ps-16 pe-4.5 pb-4 text-detail text-rose">
           {copy.saveFailed}
         </span>
       )}
-      <HobGitHubApp hob={hob} />
-    </div>
+    </section>
   );
 }
 
-const holdingLine = (holding: ToolHolding): string => {
-  switch (holding.kind) {
-    case "needs-sandbox":
-      return messages.enforcement.toolBlocked[holding.gap];
-    case "checked":
-      return messages.enforcement.toolChecked({ labels: holding.labels.join(", ") });
-    case "held":
-      return messages.enforcement.toolHeld;
-  }
+/** Where the Charm stands: off, unable to act, acting as its own app or as you, or not ready yet. */
+const charmState = (granted: boolean, ownApp: HobGitHubAppStatus | undefined, connected: boolean): CharmState => {
+  if (!granted) return "off";
+  if (ownApp?._tag === "Connected") return ownApp.needsReconnect === null ? "on" : "cannot-act";
+  return connected ? "as-you" : "not-ready";
 };
 
-/** One of the runtime's own tools: what it does, how it is held here, and each answer. */
-function BuiltInTool({ tool, permissions }: { tool: (typeof BUILT_IN)[number]; permissions: HobPermissions }) {
-  const holding = toolHolding(tool.operations, permissions);
+/** Allow, Ask or Never for each of the Charm's actions, saved at once as the hob's next version. */
+function GitHubRules({
+  name,
+  permissions,
+  sending,
+  pending,
+  onPick,
+}: {
+  name: string;
+  permissions: HobPermissions;
+  /** The change on its way to the hub. */
+  sending: UpdateHobPermissionsPayload | undefined;
+  pending: boolean;
+  onPick: (overrides: PolicyOverrides) => void;
+}) {
+  const copy = messages.charms.github;
+  const headingId = useId();
   return (
-    <li className="cut flex items-center gap-3.5 border-2 border-line bg-card px-4 py-3.5">
-      <span
-        aria-hidden
-        className="grid size-10 flex-none place-items-center bg-line font-heading text-lg font-bold text-moonlight"
-      >
-        {tool.mark}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="font-bold">{tool.name}</span>
-        <span className="text-[13px] text-text-secondary">{tool.note}</span>
-        <span className="text-[13px] text-label">{holdingLine(holding)}</span>
-      </div>
-      <span className="flex flex-none flex-wrap justify-end gap-1.5">
-        {holding.kind === "needs-sandbox" ? (
-          <NeedsSandbox />
-        ) : (
-          tool.operations.map(([label, op]) => {
-            const answer = ANSWER[permissions.decisions[op]];
-            return (
-              <span key={op} className="flex items-center gap-1 text-[13px]">
-                {tool.operations.length > 1 && <span className="text-text-secondary">{label}</span>}
-                <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(answer))}>{answer}</span>
-              </span>
-            );
-          })
-        )}
-      </span>
-    </li>
+    <section aria-labelledby={headingId} className="flex flex-col gap-1.5">
+      <h3 id={headingId} className="lbl m-0 text-label">
+        {copy.mayDo({ name })}
+      </h3>
+      {GITHUB_RULES.map((rule) => (
+        <Rule
+          key={rule.operation}
+          rule={rule}
+          permissions={permissions}
+          shown={sending?.overrides ? shownAnswer(permissions, sending.overrides, rule.operation) : undefined}
+          pending={pending}
+          onPick={(answer) =>
+            onPick(pickAnswer(permissions.policy.overrides, rule.operation, answer, permissions.preset))
+          }
+        />
+      ))}
+      <span className="text-detail text-label">{copy.rulesNote}</span>
+    </section>
   );
 }
+
+/** The GitHub Charm's actions as its card names them, each with the hub's rule for it. */
+const GITHUB_RULES: ReadonlyArray<RuleInfo> = GITHUB_OPERATIONS.map((operation) => {
+  const rule = RULES.find((r) => r.operation === operation);
+  const words = messages.charms.github.actions[operation];
+  return { ...rule, operation, label: words.label, note: words.note };
+});

@@ -117,6 +117,20 @@ export const RULES: ReadonlyArray<RuleInfo> = [
   },
 ];
 
+/** The operations the GitHub Charm card sets, in its order. Permissions lists the others. */
+export const GITHUB_OPERATIONS = [
+  "read-github",
+  "push",
+  "open-pull-request",
+  "comment-github",
+] as const satisfies ReadonlyArray<PolicyOperation>;
+
+const isGitHub = (operation: PolicyOperation) =>
+  (GITHUB_OPERATIONS as ReadonlyArray<PolicyOperation>).includes(operation);
+
+/** The rules the Permissions tab lists: every rule but the GitHub Charm's. */
+export const PERMISSION_RULES: ReadonlyArray<RuleInfo> = RULES.filter((rule) => !isGitHub(rule.operation));
+
 /**
  * The answer the hub gives a rule, among those it offers: an Ask a rule cannot give, as an override
  * saved through the API could hold, refuses every call, so it shows as Never.

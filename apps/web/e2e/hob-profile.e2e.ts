@@ -305,21 +305,25 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
   extraDirs.push(own);
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
 
-  // Charms lists the built-in tools with the Balanced answers.
+  // The GitHub Charm card sets each GitHub action: reads Allow, writes Ask under Balanced.
   await page.getByRole("tab", { name: "Charms" }).click();
-  const files = page.getByRole("listitem").filter({ hasText: "Files" });
-  await expect(files).toContainText("Delete is checked by Hobbots");
-  // The GitHub Charm lists each action with its answer: reads Allow, writes Ask under Balanced.
-  await expect(page.getByText("Reads, pushes to, opens pull requests in and comments on")).toBeVisible();
-  const githubActions = page.getByRole("list", { name: "GitHub" });
-  await expect(githubActions.getByRole("listitem")).toHaveText([
-    "ReadAllow",
-    "PushAsk",
-    "Pull requestsAsk",
-    "CommentAsk",
-  ]);
-  await page.getByRole("button", { name: "Change what Pip may do" }).click();
-  await expect(page.getByRole("tab", { name: "Permissions" })).toHaveAttribute("aria-selected", "true");
+  const card = page.getByRole("region", { name: "GitHub Charm" });
+  await expect(card.getByText("Reads, pushes to, opens pull requests in and comments on")).toBeVisible();
+  // No GitHub account is connected on this hub, so the Charm is not ready yet.
+  await expect(card.getByText("Not ready", { exact: true })).toBeVisible();
+  for (const [name, answer] of [
+    ["Read code", "Allow"],
+    ["Push changes", "Ask"],
+    ["Open pull requests", "Ask"],
+    ["Comment and reply", "Ask"],
+  ] as const) {
+    await expect(card.getByRole("radiogroup", { name }).getByRole("radio", { name: answer })).toBeChecked();
+  }
+  await page.getByRole("tab", { name: "Permissions" }).click();
+  // Permissions no longer lists the GitHub actions.
+  for (const name of ["Read GitHub", "Push your work", "Open pull requests", "Comment on GitHub"]) {
+    await expect(page.getByRole("radiogroup", { name })).toHaveCount(0);
+  }
 
   // An own folder is stored canonical and becomes part of Pip's folders.
   await page.getByRole("textbox", { name: "Folder path on the hub" }).fill(own);
@@ -345,30 +349,26 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
     decisions: { "run-commands": "ask", "delete-files": "ask" },
   });
 
-  // Read GitHub cannot ask, so it offers Allow and Never only.
-  const github = page.getByRole("radiogroup", { name: "Read GitHub" });
-  await expect(github.getByRole("radio")).toHaveCount(2);
-  await expect(github.getByRole("radio", { name: "Allow" })).toBeChecked();
-  await github.getByText("Never", { exact: true }).click();
-  await expect(github.getByRole("radio", { name: "Never" })).toBeChecked();
-  await expect
-    .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
-    .toMatchObject({ decisions: { "read-github": "deny" } });
-  await github.getByText("Allow", { exact: true }).click();
-  await expect(github.getByRole("radio", { name: "Allow" })).toBeChecked();
-
-  // Opening pull requests and commenting are Ask under Balanced, and offer all three answers.
-  for (const name of ["Open pull requests", "Comment on GitHub"]) {
-    const rule = page.getByRole("radiogroup", { name });
-    await expect(rule.getByRole("radio")).toHaveCount(3);
-    await expect(rule.getByRole("radio", { name: "Ask" })).toBeChecked();
-  }
-
   // Picking the preset's answer again drops the override; removing the folder empties the list.
   await commands.getByText("Allow", { exact: true }).click();
   await expect(commands.getByRole("radio", { name: "Allow" })).toBeChecked();
   await ownList.getByRole("button", { name: `Remove ${realpathSync(own)}` }).click();
   await expect(page.getByText("None yet. Only Pip can work in a folder added here.")).toBeVisible();
+
+  // Read code cannot ask, so it offers Allow and Never only. A rule set on the card is saved.
+  await page.getByRole("tab", { name: "Charms" }).click();
+  const read = card.getByRole("radiogroup", { name: "Read code" });
+  await expect(read.getByRole("radio")).toHaveCount(2);
+  await read.getByText("Never", { exact: true }).click();
+  await expect(read.getByRole("radio", { name: "Never" })).toBeChecked();
+  await expect
+    .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
+    .toMatchObject({ decisions: { "read-github": "deny" } });
+  await read.getByText("Allow", { exact: true }).click();
+  await expect(read.getByRole("radio", { name: "Allow" })).toBeChecked();
+  for (const name of ["Push changes", "Open pull requests", "Comment and reply"]) {
+    await expect(card.getByRole("radiogroup", { name }).getByRole("radio")).toHaveCount(3);
+  }
   await expect
     .poll(() => api<Permissions>(current, "GET", `/api/agents/${pip.id}/permissions`))
     .toMatchObject({ configVersion: 7, folders: [], policy: { ownFolders: [], overrides: {} } });
@@ -454,24 +454,10 @@ test("[TC-PE-043] where the sandbox cannot start, the profile and provider healt
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
 
-  // Charms shows commands, Git and the web as needing the sandbox, never as allowed and held.
-  await page.getByRole("tab", { name: "Charms" }).click();
-  for (const name of ["Commands", "Local Git", "The web"]) {
-    const tool = page
-      .getByRole("list", { name: "Built-in tools" })
-      .getByRole("listitem")
-      .filter({ has: page.getByText(name, { exact: true }) });
-    await expect(tool).toContainText("Needs the sandbox");
-    await expect(tool).toContainText("Blocked, because the sandbox cannot start on this hub.");
-    await expect(tool.getByText("Allow", { exact: true })).toHaveCount(0);
-  }
-  // File tools still work through the policy hook.
-  await expect(page.getByRole("listitem").filter({ hasText: "Files" })).not.toContainText("Needs the sandbox");
+  // Permissions explains why, marks each blocked rule, and lists how each rule is held.
+  await page.getByRole("tab", { name: "Permissions" }).click();
   const held = page.getByRole("list", { name: "Enforcement on this hub" });
   await expect(held.getByRole("listitem").filter({ hasText: "Process sandbox" })).toContainText("Unsupported");
-
-  // Permissions explains why, and marks each blocked rule.
-  await page.getByRole("tab", { name: "Permissions" }).click();
   await expect(
     page.getByText("The sandbox cannot start on this hub, so Pip's commands, local Git and the web are blocked."),
   ).toBeVisible();
