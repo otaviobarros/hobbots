@@ -1,16 +1,15 @@
 import type { AgentId, Message, MessageId, ThreadId } from "@hobbots/domain";
 import { useOpenWorkbench } from "../workbench/use-workbench.ts";
-import { QuestStrip } from "./quest-strip.tsx";
+import { QuestButtons } from "./quest-button.tsx";
 import { useHobLookup, useOpenQuest, useOpenTask, useThreadTrees } from "./use-work.ts";
 import { BEFORE_ALL, placeMoments } from "./work-model.ts";
 import { WorkMoments } from "./work-moments.tsx";
 
-/** The strip under a thread's chat header while its work runs. */
-export function ThreadWorkStrip({ hobId, threadId }: { hobId: AgentId; threadId: ThreadId }) {
+/** The quest button in a thread's chat header while its work runs. */
+export function ThreadQuestButton({ hobId, threadId }: { hobId: AgentId; threadId: ThreadId }) {
   const trees = useThreadTrees(threadId);
-  const hobs = useHobLookup();
   const open = useOpenQuest(hobId, threadId);
-  return <QuestStrip trees={trees} hobs={hobs} onOpen={open} />;
+  return <QuestButtons trees={trees} onOpen={open} />;
 }
 
 /**

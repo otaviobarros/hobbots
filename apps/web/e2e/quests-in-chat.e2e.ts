@@ -17,9 +17,9 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(card).toContainText("Aldric's party: Quill and Ada");
   await expect(card.getByRole("button", { name: "Look inside Build the campaign" })).toContainText("waiting on Quill");
 
-  // The strip keeps it in view; a lead's answer shows as one line; a question for you asks.
+  // The quest button in the header keeps it in view; a lead's answer shows as one line; a question for you asks.
   const strip = page.getByRole("region", { name: "Work in progress" });
-  await expect(strip.getByRole("button", { name: "Show Aldric's work" })).toContainText("Aldric's quest");
+  await expect(strip.getByRole("button", { name: /^Plan the Black Friday campaign/ })).toContainText("of 2 done");
   await expect(page.getByText("Aldric answered Quill for you")).toBeVisible();
   const asks = page.getByRole("region", { name: "Ada asks you" });
   await expect(asks).toContainText("Should international orders get an earlier cutoff");
@@ -37,7 +37,7 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(drawer).toBeHidden();
 
   // A note in the drawer goes to Aldric as a message about that Task, and stays with that Task.
-  await strip.getByRole("button", { name: "Show Aldric's work" }).click();
+  await strip.getByRole("button", { name: /^Plan the Black Friday campaign/ }).click();
   const quest = page.getByRole("dialog", { name: "Plan the Black Friday campaign, quest" });
   await quest.getByRole("button", { name: /Draft the landing copy/ }).click();
   const note = page.getByRole("textbox", { name: "Tell Aldric about this task" });

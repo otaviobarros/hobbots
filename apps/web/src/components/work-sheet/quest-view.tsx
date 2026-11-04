@@ -6,6 +6,7 @@ import { useState } from "react";
 import { formatWhen } from "../../lib/time.ts";
 import { HobSprite } from "../hob-sprite.tsx";
 import { type RoomRow, roomRows, roomStatusLabel, roomTone, topCancel, waitingNames } from "../quest/control-room.ts";
+import { FlagIcon } from "../quest/flag-icon.tsx";
 import { messages as questCopy } from "../quest/messages.ts";
 import { TopControls } from "../quest/room-controls.tsx";
 import { StatusTag } from "../quest/status-dot.tsx";
@@ -179,14 +180,6 @@ function TaskRow({
 
 function Tile({ children }: { children: React.ReactNode }) {
   return <span className="flex size-7 shrink-0 items-center justify-center rounded-tile bg-tile">{children}</span>;
-}
-
-function FlagIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <path d="M4 14V2.5M4 3h7.5l-1.5 3 1.5 3H4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 }
 
 /** Pin keeps the quest in view in every thread; pressed, it reads Pinned. */
