@@ -95,8 +95,8 @@ export function HobGitHubApp({ hob }: { hob: Agent }) {
     });
 
   return (
-    <section aria-label={copy.label} className="flex flex-col gap-2 border-t-2 border-line pt-2.5 ps-[54px]">
-      <h3 className="lbl m-0 text-xs text-label">{copy.label}</h3>
+    <section aria-label={copy.label} className="flex flex-col gap-2">
+      <h3 className="lbl m-0 text-label">{copy.label}</h3>
       {status.isError && (
         <p role="alert" className="m-0 flex flex-wrap items-center gap-3 text-[13px] text-rose">
           {copy.failed}
