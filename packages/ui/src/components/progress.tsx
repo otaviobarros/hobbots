@@ -5,26 +5,23 @@ import type * as React from "react";
 
 // A meter from the Hobbots component sheet: a track on line-2 and a fill in the tone's color.
 // Corners and easing come from the look's skin, so the bar is round in Lamplight and square in
-// Workshop. Until the skin variables land, the fallbacks keep today's square, stepped bar.
-const progressVariants = cva(
-  "relative flex w-full items-center overflow-hidden rounded-[var(--corner-dot,0)] bg-line-2",
-  {
-    variants: {
-      size: {
-        // The Usage plan meter.
-        default: "h-2.5",
-        // The quest card's progress line.
-        sm: "h-meter",
-      },
-    },
-    defaultVariants: {
-      size: "default",
+// Workshop.
+const progressVariants = cva("relative flex w-full items-center overflow-hidden rounded-(--corner-dot) bg-line-2", {
+  variants: {
+    size: {
+      // The Usage plan meter.
+      default: "h-2.5",
+      // The quest card's progress line.
+      sm: "h-meter",
     },
   },
-);
+  defaultVariants: {
+    size: "default",
+  },
+});
 
 const indicatorVariants = cva(
-  "size-full flex-1 rounded-[var(--corner-dot,0)] transition-transform duration-200 ease-[var(--ease-ui,steps(4))] motion-reduce:transition-none",
+  "size-full flex-1 rounded-(--corner-dot) transition-transform duration-200 ease-(--ease-ui) motion-reduce:transition-none",
   {
     variants: {
       tone: {
