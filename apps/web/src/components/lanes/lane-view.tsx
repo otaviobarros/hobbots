@@ -1,14 +1,17 @@
 import type { AgentId } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import type { ReactNode } from "react";
 import type { HobState } from "../../lib/hob-state.ts";
 import { HobSprite } from "../hob-sprite/hob-sprite.tsx";
+import { HubWait } from "../loading/hub-wait.tsx";
 import { type RoomStatus, roomStatusLabel, roomTone } from "../quest/control-room.ts";
 import { StatusTag } from "../quest/status-dot.tsx";
 import type { HobLookup } from "../quest/use-work.ts";
 import { LaneItemRow } from "./lane-items.tsx";
 import { type Lane, type LaneRole, laneDomId } from "./lane-model.ts";
 import { messages } from "./messages.ts";
+import type { LaneReads } from "./use-lane-room.ts";
 
 /** How the hob's sprite moves for where its Task stands: working hops, waiting dozes. */
 const MOOD: Readonly<Record<RoomStatus, HobState>> = {
@@ -65,6 +68,7 @@ export function LaneView({
   onPick,
   onFlashed,
   slots = {},
+  reads,
 }: {
   lane: Lane;
   hobs: HobLookup;
@@ -74,6 +78,8 @@ export function LaneView({
   onPick: (hobId: AgentId | null) => void;
   onFlashed: () => void;
   slots?: LaneSlots;
+  /** Where the reads of the hob's records stand; with none, the lane shows only the tree. */
+  reads?: LaneReads | undefined;
 }) {
   const hob = hobs(lane.hobId);
   const role = roleText(lane.role, hobs);
@@ -117,8 +123,22 @@ export function LaneView({
             <LaneItemRow key={item.key} item={item} hobs={hobs} />
           ))}
         </ol>
+        {reads !== undefined && <ReadState name={hob.name} reads={reads} />}
         {slots.cards}
       </div>
     </section>
+  );
+}
+
+/** That more of what the hob did is on its way, or could not be read, with Try again. */
+function ReadState({ name, reads }: { name: string; reads: LaneReads }) {
+  if (!reads.failed) return <HubWait pending={reads.pending} onRetry={reads.retry} />;
+  return (
+    <p role="alert" className="m-0 flex flex-wrap items-center gap-x-2 text-detail text-rose">
+      {messages.unread({ name })}
+      <Button variant="ghost" size="xs" onClick={reads.retry}>
+        {messages.tryAgain}
+      </Button>
+    </p>
   );
 }

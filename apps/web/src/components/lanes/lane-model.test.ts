@@ -315,7 +315,7 @@ describe("the Quest room's lanes", () => {
     const two = (fields: Partial<ConstructorParameters<typeof TaskTree>[0]>) =>
       tree({
         ...base,
-        tasks: [...base.tasks, task(SIGNS, { ownerId: QUILL, brief: "Make the signs", second: 6 })],
+        tasks: [...base.tasks, task(SIGNS, { ownerId: QUILL, brief: "Make the signs", state: "waiting", second: 6 })],
         delegations: [...base.delegations, delegation(QUILL, SIGNS, "Make the signs")],
         ...fields,
       });
@@ -472,6 +472,23 @@ describe("the Quest room's lanes", () => {
     );
     expect(room.order.map((lane) => lane.hobId)).toEqual([ALDRIC, QUILL, ADA]);
     expect(lines(laneOf(room, QUILL))).toEqual(["beat Outline done"]);
+  });
+
+  it("says who each of a hob's unfinished Tasks waits on, in that Task's part of the lane", () => {
+    const SIGNS = TaskId.make("signs");
+    const base = blackFriday();
+    const room = laneRoom(
+      tree({
+        ...base,
+        tasks: [...base.tasks, task(SIGNS, { ownerId: QUILL, brief: "Make the signs", state: "waiting", second: 6 })],
+        delegations: [...base.delegations, delegation(QUILL, SIGNS, "Make the signs")],
+        waits: [new TaskWait({ taskId: SIGNS, on: [BUILD], mode: "all", createdAt: AT(7) })],
+      }),
+      [],
+    );
+    const lane = laneOf(room, QUILL);
+    expect(lane.title).toBe("Draft the landing copy");
+    expect(lines(lane)).toEqual(["task Draft the landing copy", "task Make the signs", `wait ${ADA}`]);
   });
 
   it("keeps one lane for a hob with two Tasks on the Quest, with its Tasks in order", () => {

@@ -50,4 +50,7 @@ export const messages = {
     cancelled: "Cancelled",
   },
   stoppedWhy: "It stopped before it finished.",
+  /** A lane whose Workbench records could not all be read shows what it has and says so. */
+  unread: ({ name }: { name: string }) => `Some of what ${name} did could not be read.`,
+  tryAgain: "Try again",
 };

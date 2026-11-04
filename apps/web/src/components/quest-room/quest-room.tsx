@@ -120,7 +120,7 @@ function OpenRoom({
 }) {
   const top = tree.tasks[0] ?? named;
   const lit = litTask(tree, named, view.lane);
-  const room = useLaneRoom(tree, pickedTries(tree, view.attemptId));
+  const { room, reads } = useLaneRoom(tree, pickedTries(tree, view.attemptId));
   const picked = tree.tasks.find((each) => each.id === lit)?.ownerId ?? null;
   const pick = (hobId: AgentId | null) =>
     moves.lane(hobId === null ? undefined : room.order.find((lane) => lane.hobId === hobId)?.task.id);
@@ -146,6 +146,7 @@ function OpenRoom({
         onPick={pick}
         flashing={lanes.flashing}
         onFlashed={lanes.flashed}
+        reads={reads}
         slots={(lane) => ({
           cards: (
             <LaneCards

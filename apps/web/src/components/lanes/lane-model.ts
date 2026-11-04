@@ -341,27 +341,33 @@ const laneStatus = (tree: TaskTree, unit: ReadonlyArray<Task>, task: Task): Room
   return task.state === "waiting" ? "waiting" : "running";
 };
 
+/** Who a Task that has not ended waits on, or null when it waits on nobody. */
+const waitItem = (task: Task, rows: ReturnType<typeof roomRows>): LaneItem | null => {
+  if (isTerminalTask(task.state)) return null;
+  const on = rows.find((row) => row.task.id === task.id)?.waitingOn ?? [];
+  return on.length === 0 ? null : { kind: "wait", key: `wait-${task.id}`, on };
+};
+
 /** A hob's Tasks on the Quest, in the order they were created: it has at least one. */
 type Owned = readonly [Task, ...Array<Task>];
 
 /** One hob's lane, from its Tasks in the order they were created. */
 const laneOf = (tree: TaskTree, hobId: AgentId, tasks: Owned, role: LaneRole, read: Reads): Lane => {
   const task = tasks.find((each) => !isTerminalTask(each.state)) ?? tasks[tasks.length - 1] ?? tasks[0];
+  const rows = roomRows(tree);
   const sections = tasks.map((each) => ({ task: each, ...sectionOf(tree, each, read) }));
-  const items = sections.flatMap((section) =>
-    tasks.length > 1
-      ? [{ kind: "task", key: `task-${section.task.id}`, title: taskTitle(section.task) } as const, ...section.items]
-      : section.items,
-  );
+  const items = sections.flatMap((section) => {
+    // Each Task that has not ended says who it waits on, at the end of its own part of the lane.
+    const wait = waitItem(section.task, rows);
+    const body = wait === null ? section.items : [...section.items, wait];
+    return tasks.length > 1
+      ? [{ kind: "task", key: `task-${section.task.id}`, title: taskTitle(section.task) } as const, ...body]
+      : body;
+  });
   const current = sections.find((section) => section.task.id === task.id)?.unit ?? [task];
   // Every Task the lane holds, with their steps: a question or approval on any of them lights it.
   const owned = sections.flatMap((section) => section.unit);
-  const waitingOn = roomRows(tree).find((row) => row.task.id === task.id)?.waitingOn ?? [];
-  const tail: Array<LaneItem> = [];
-  if (!isTerminalTask(task.state) && waitingOn.length > 0)
-    tail.push({ kind: "wait", key: `wait-${task.id}`, on: waitingOn });
   const now = nowItem(tree, current, read);
-  if (now !== null) tail.push(now);
   return {
     hobId,
     role,
@@ -369,7 +375,7 @@ const laneOf = (tree: TaskTree, hobId: AgentId, tasks: Owned, role: LaneRole, re
     tasks,
     title: taskTitle(task),
     status: laneStatus(tree, owned, task),
-    items: [...foldMarks(items), ...tail],
+    items: now === null ? foldMarks(items) : [...foldMarks(items), now],
   };
 };
 

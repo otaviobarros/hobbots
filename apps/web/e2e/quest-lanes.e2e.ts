@@ -156,3 +156,27 @@ test("[TC-UX-213] with Reduce motion the sprites stop hopping and the lineup's j
   await expect(laneHead(page, "Ada")).toHaveAttribute("aria-pressed", "true");
   await expect(lane(page, "Ada")).not.toHaveClass(/animate-hb-flash/);
 });
+
+// covers UX-002, OR-001
+test("[TC-UX-214] a lane whose records could not be read says so and reads them again with Try again", async ({
+  page,
+}) => {
+  const { url, aldric } = await questHub();
+  const activity = "**/api/attempts/*/activity";
+  await page.route(activity, (route) => route.fulfill({ status: 500, body: "" }));
+  await startRoom(page, url, aldric, "Make the shop badge in our green", "Make the shop badge");
+
+  // The lane keeps what the tree says and says the rest is missing.
+  const quill = lane(page, "Quill");
+  const alert = quill.getByRole("alert");
+  await expect(alert).toContainText("Some of what Quill did could not be read.", { timeout: 30_000 });
+  await expect(laneHead(page, "Quill")).toContainText("Make the shop badge");
+
+  // Once the hub answers again, Try again brings the marks in and the alert goes.
+  await page.unroute(activity);
+  await alert.getByRole("button", { name: "Try again" }).click();
+  await expect(quill.getByRole("list", { name: "What Quill did" })).toContainText("web/badge.png", {
+    timeout: 20_000,
+  });
+  await expect(alert).toBeHidden();
+});
