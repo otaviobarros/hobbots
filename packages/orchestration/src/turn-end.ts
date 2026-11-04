@@ -16,13 +16,12 @@ import {
   turnEnded,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
+import { cut, RESULT_LIMIT } from "./briefs.ts";
 
 export interface TurnEndDeps {
   readonly tasks: TaskRepository["Service"];
   /** A change the records may refuse, as when the Task moved on meanwhile: announced, or logged and never fatal. */
   readonly attempt: <A, E>(change: Effect.Effect<Committed<A>, E>, what: string) => Effect.Effect<Option.Option<A>>;
-  /** Records why a Task cannot go on as a blocker on it. */
-  readonly explain: (taskId: TaskId, reason: string, at: string) => Effect.Effect<unknown>;
 }
 
 export interface TurnOnTask {
@@ -40,8 +39,9 @@ export interface TurnOnTask {
 }
 
 /**
- * Makes the Task's move once its Attempt has ended. A blocked move records why first. Ending the
- * Attempt gives the Task's version; a blocker, or an Attempt already ended, needs it read again.
+ * Makes the Task's move once its Attempt has ended. A move with a reason records it as a blocker in
+ * the same change, so its lead hears of it once (#683). Ending the Attempt gives the Task's version;
+ * an Attempt already ended needs it read again.
  */
 const moveAfter = (
   deps: TurnEndDeps,
@@ -51,16 +51,54 @@ const moveAfter = (
   { at, carried }: TurnOnTask,
 ) =>
   Effect.gen(function* () {
-    if (move.reason !== undefined) yield* deps.explain(taskId, move.reason, at);
-    const now =
-      Option.isSome(after) && move.reason === undefined
-        ? Option.some(after.value.task)
-        : Option.flatMap(yield* deps.tasks.readTree(taskId), (tree) => Option.fromNullishOr(tree.tasks[0]));
+    const now = Option.isSome(after)
+      ? Option.some(after.value.task)
+      : Option.flatMap(yield* deps.tasks.readTree(taskId), (tree) => Option.fromNullishOr(tree.tasks[0]));
     if (Option.isSome(now) && !isTerminalTask(now.value.state))
       yield* deps.attempt(
-        deps.tasks.moveTask(now.value.id, now.value.revision, move.to, at, { carried }),
+        deps.tasks.moveTask(now.value.id, now.value.revision, move.to, at, {
+          carried,
+          ...(move.reason === undefined ? {} : { reason: move.reason }),
+        }),
         `move a Task to ${move.to}`,
       );
+  });
+
+/**
+ * Completes the Task with its turn's reply, or, when the records refuse, gives the move it makes
+ * instead. A runner that asks to explain the refusal gets it as that move's reason, so the lead
+ * reads what was left open with the move (#683).
+ */
+const completeWith = (
+  deps: TurnEndDeps,
+  task: Task,
+  move: Extract<TaskMove, { _tag: "Complete" }>,
+  turn: TurnOnTask,
+): Effect.Effect<true | TaskMove> =>
+  Effect.gen(function* () {
+    let refusal: string | undefined;
+    const done = yield* deps.attempt(
+      deps.tasks
+        .completeTask(task.id, task.revision, {
+          summary: move.summary,
+          attemptId: turn.attemptId,
+          artifacts: [],
+          at: turn.at,
+          carried: turn.carried,
+        })
+        .pipe(
+          Effect.tapError((error) =>
+            Effect.sync(() => {
+              if (error._tag === "TaskRefused") refusal = error.message;
+            }),
+          ),
+        ),
+      "complete a Task with its turn's reply",
+    );
+    if (Option.isSome(done)) return true;
+    return move.explainRefusal && refusal !== undefined && move.otherwise._tag === "Move"
+      ? { ...move.otherwise, reason: cut(refusal, RESULT_LIMIT) }
+      : move.otherwise;
   });
 
 /**
@@ -112,31 +150,12 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
     const decided = turnEnded(input);
     let move = decided.task;
     if (move._tag === "Complete") {
-      const explainRefusal = move.explainRefusal;
-      const done = yield* attempt(
-        tasks
-          .completeTask(task.id, task.revision, {
-            summary: move.summary,
-            attemptId: turn.attemptId,
-            artifacts: [],
-            at: turn.at,
-            carried: turn.carried,
-          })
-          .pipe(
-            // A reply that cannot complete its Task says what was left open, when its runner asks.
-            Effect.tapError((error) =>
-              explainRefusal && error._tag === "TaskRefused"
-                ? deps.explain(task.id, error.message, turn.at)
-                : Effect.void,
-            ),
-          ),
-        "complete a Task with its turn's reply",
-      );
-      if (Option.isSome(done)) {
+      const completed = yield* completeWith(deps, task, move, turn);
+      if (completed === true) {
         yield* ended(decided.cause);
         return { decided, completed: true };
       }
-      move = move.otherwise;
+      move = completed;
     }
     const after = yield* ended(decided.cause);
     // A Task that changed while its turn ended, as one whose cancel arrived meanwhile, moves as it now is.

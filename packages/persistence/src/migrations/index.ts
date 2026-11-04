@@ -45,6 +45,7 @@ import leadMessages from "./0042_lead_messages.ts";
 import cancelRequests from "./0043_cancel_requests.ts";
 import questionAnswerers from "./0044_question_answerers.ts";
 import callKeyScopes from "./0045_call_key_scopes.ts";
+import stateChecks from "./0046_state_checks.ts";
 
 /**
  * Every migration, keyed `<id>_<name>`. Effect's Migrator records applied ids and runs only
@@ -97,4 +98,5 @@ export const migrations: Record<string, Effect.Effect<void, unknown, SqlClient.S
   "0043_cancel_requests": cancelRequests,
   "0044_question_answerers": questionAnswerers,
   "0045_call_key_scopes": callKeyScopes,
+  "0046_state_checks": stateChecks,
 };

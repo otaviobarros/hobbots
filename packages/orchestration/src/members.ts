@@ -65,8 +65,6 @@ export interface MemberDeps {
   /** A change the records may refuse: logged, never fatal. */
   readonly attempt: <A, E>(change: Effect.Effect<Committed<A>, E>, what: string) => Effect.Effect<Option.Option<A>>;
   readonly recordToolStart: (task: Task) => (event: ToolStartedEvent) => Effect.Effect<boolean>;
-  /** Records why a Task cannot go on as a blocker on it. */
-  readonly explain: (taskId: TaskId, reason: string, at: string) => Effect.Effect<unknown>;
   /** Confirms every cancel asked for that nothing runs in any more. */
   readonly settleCancels: Effect.Effect<void>;
   readonly notify: Effect.Effect<void>;
@@ -233,11 +231,13 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         yield* deps.attempt(tasks.moveTask(task.id, task.revision, "cancelled", at), "confirm a member's cancel");
         return;
       }
-      yield* deps.explain(taskId, "Its hob was retired before the Task was done.", at);
-      const latest = yield* read(taskId);
-      if (Option.isNone(latest) || isTerminalTask(latest.value.task.state)) return;
-      const task = latest.value.task;
-      yield* deps.attempt(tasks.moveTask(task.id, task.revision, "failed", at), "fail a retired member's Task");
+      const task = found.value.task;
+      yield* deps.attempt(
+        tasks.moveTask(task.id, task.revision, "failed", at, {
+          reason: "Its hob was retired before the Task was done.",
+        }),
+        "fail a retired member's Task",
+      );
     });
 
   /**
