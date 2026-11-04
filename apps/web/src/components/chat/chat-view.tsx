@@ -236,7 +236,7 @@ export function ChatView({
       {/* Back to the hob's chats, the tile, then the chat's title over who leads it and what they are doing (A2-02). */}
       <header className="@container/header flex items-center gap-3 border-b-(length:--edge) border-line px-6 pt-3.5 pb-3">
         {/* The way back to the chat list: the hob's page, which opens on its Chats tab. */}
-        <Button asChild variant="ghost" size="icon" className="-ms-2 -me-1 text-text-secondary hover:text-text-strong">
+        <Button asChild variant="quiet" size="icon" className="-ms-2 -me-1">
           <Link
             to="/hobs/$hobId"
             params={{ hobId }}
