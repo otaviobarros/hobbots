@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { readStored, writeStored } from "./storage.ts";
-import { createThemeStore, FIRST_RUN_THEME, NEW_DEVICE_THEME, type Theme, type ThemeEnvironment } from "./theme.ts";
+import {
+  createThemeStore,
+  FIRST_RUN_THEME,
+  lookOf,
+  modeOf,
+  NEW_DEVICE_THEME,
+  THEMES,
+  type Theme,
+  type ThemeEnvironment,
+  themeOf,
+} from "./theme.ts";
 
 const environment = (overrides: Partial<ThemeEnvironment> = {}) => {
   const marks: Theme[] = [];
@@ -123,5 +133,15 @@ describe("the theme store", () => {
     // Setup is done, so first run never finishes again here: nothing saved still means Workshop Night.
     const { env } = environment({ read: () => null });
     expect(createThemeStore(env).theme()).toBe("workshop-night");
+  });
+});
+
+describe("looks and modes", () => {
+  it("names each theme's look and mode, and finds the theme again from them", () => {
+    for (const theme of THEMES) expect(themeOf(lookOf(theme), modeOf(theme))).toBe(theme);
+    expect(themeOf("lamplight", "light")).toBe("lamplight-paper");
+    expect(themeOf("workshop", "dark")).toBe("workshop-night");
+    expect(lookOf("workshop-daylight")).toBe("workshop");
+    expect(modeOf("lamplight-dusk")).toBe("dark");
   });
 });

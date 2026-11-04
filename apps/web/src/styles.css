@@ -71,6 +71,13 @@
   --color-provider-grok: #c9c3e8;
   --color-provider-local: #f3e9b5;
   --color-provider-other: #b79be8;
+  /* The look previews in Settings › This app: each look's dark ground, bar and mark, in every theme. */
+  --color-look-lamplight-ground: #17161f;
+  --color-look-lamplight-bar: #3d3b4a;
+  --color-look-lamplight-mark: #e8a54b;
+  --color-look-workshop-ground: #141228;
+  --color-look-workshop-bar: #3a3666;
+  --color-look-workshop-mark: #f3e9b5;
 
   --font-sans: "Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif;
   --font-pixel: "Pixelify Sans Variable", "Pixelify Sans", system-ui, sans-serif;
@@ -645,6 +652,20 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/*
+ * Larger text (Settings › This app): the whole app scales up by an eighth, spacing with the type, so
+ * every screen keeps its proportions. Under zoom 100vh measures an eighth more than the window, so
+ * a frame sized to the screen is divided back.
+ */
+:root[data-text-size="larger"] {
+  --text-zoom: 1.125;
+  zoom: var(--text-zoom);
+}
+
+:root[data-text-size="larger"] .h-screen {
+  height: calc(100vh / var(--text-zoom));
 }
 
 body {
