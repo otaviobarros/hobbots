@@ -105,3 +105,31 @@ test("[TC-UX-092] the Inbox holds its header still while its rows are read", asy
   await expect(decisions.locator("[aria-busy=true]")).toHaveCount(0);
   expect(await box(title)).toEqual(before);
 });
+
+// covers UX-001
+test("[TC-UX-183] the window paints its frame in this device's theme before the app's code loads, and the app takes its place", async ({
+  page,
+}) => {
+  const { current } = await hubWithPipAndAChat();
+  hub = current;
+  await page.addInitScript(() => {
+    localStorage.setItem("hobbots.theme", JSON.stringify("lamplight-paper"));
+    localStorage.setItem("sidebar.open", "true");
+  });
+  // The app's code waits, as on a slow first load.
+  const release = await holdReads(page, "**/assets/main-*.js");
+  // The page never finishes loading while its code waits, so the test goes on once it arrives.
+  await page.goto(`${current.url}/`, { waitUntil: "commit" });
+
+  const frame = page.locator("#root > [aria-busy=true]");
+  await expect(frame).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "lamplight-paper");
+  const framed = await box(frame.locator("> div > div").first());
+  expect(framed.width).toBe(256);
+
+  release();
+  const sidebar = page.getByRole("navigation", { name: "Sections" });
+  await expect(sidebar).toBeVisible();
+  await expect(frame).toHaveCount(0);
+  expect((await box(sidebar)).width).toBe(framed.width);
+});
