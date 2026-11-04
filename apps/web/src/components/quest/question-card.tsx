@@ -54,7 +54,7 @@ export function QuestionCard({
       {open ? (
         <AnswerForm question={question} askerName={asker.name} via="chat" />
       ) : question.state === "withdrawn" ? (
-        <p className="m-0 animate-hb-in text-sm text-secondary-text">{copy.withdrawn}</p>
+        <p className="m-0 animate-hb-in text-sm text-text-secondary">{copy.withdrawn}</p>
       ) : (
         question.answer !== null && (
           <p className="m-0 animate-hb-in text-sm text-mint">{yourAnswer(question, "chat")}</p>
@@ -96,7 +96,7 @@ export function AnswerForm({
         value={answer}
         onChange={(event) => setAnswer(event.target.value)}
         onKeyDown={enterSends(submit)}
-        className="min-h-10 rounded-none border-2 border-control bg-deep text-text"
+        className="min-h-10 rounded-none border-2 border-control bg-deep text-text-strong"
       />
       <span className="flex items-center gap-2">
         <Button type="submit" size="sm" disabled={text === "" || send.isPending}>
@@ -118,10 +118,10 @@ export function LeadAnsweredLine({ question, hobs }: { question: Question; hobs:
   const lead = hobs(question.answeredBy.agentId);
   const asker = hobs(question.askerId);
   return (
-    <p className="ms-9 my-0 flex max-w-work-max animate-hb-in items-start gap-2 text-detail text-secondary-text">
+    <p className="ms-9 my-0 flex max-w-work-max animate-hb-in items-start gap-2 text-detail text-text-secondary">
       <HobSprite hob={lead} size={16} />
       <span className="flex flex-col gap-0.5">
-        <span className="font-bold text-text">{copy.leadAnswered({ lead: lead.name, asker: asker.name })}</span>
+        <span className="font-bold text-text-strong">{copy.leadAnswered({ lead: lead.name, asker: asker.name })}</span>
         <span>{question.text}</span>
         <span className="text-mint">{question.answer}</span>
       </span>

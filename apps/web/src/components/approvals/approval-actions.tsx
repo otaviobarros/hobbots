@@ -259,7 +259,7 @@ function DenyForm({
           value={reason}
           maxLength={2000}
           onChange={(event) => onReason(event.target.value)}
-          className="min-w-[200px] flex-1 border-2 border-control bg-deep px-3 py-1.5 text-text"
+          className="min-w-[200px] flex-1 border-2 border-control bg-deep px-3 py-1.5 text-text-strong"
         />
         <Button type="submit" variant="deny">
           {copy.confirmDeny}

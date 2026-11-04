@@ -191,6 +191,41 @@ describe("backpackItemsFor", () => {
     expect(items({ _tag: "CheckpointRecorded", checkpoint: own, milestone: null })).toEqual([]);
   });
 
+  // covers IN-004, OR-005
+  it("[TC-IN-490] sends one Failure with its reason when the hub moves a member's Task for one, and keeps a lone blocker a Checkpoint", () => {
+    const blocker = (taskId: TaskId, summary: string) =>
+      new Checkpoint({ ...checkpoint("blocker", taskId), source: "unplanned", summary });
+    const moved = (state: TaskState, of = copy) => ({
+      _tag: "TaskStateChanged" as const,
+      task: task(of.id, of.ownerId, of.parentId, state, 5),
+      attempt: null,
+      quest: null,
+      wait: null,
+    });
+    const reported = (taskId: TaskId, summary: string) => ({
+      _tag: "CheckpointRecorded" as const,
+      checkpoint: blocker(taskId, summary),
+      milestone: null,
+    });
+    for (const state of ["blocked", "failed"] as const) {
+      const made = backpackItemsFor([moved(state), reported(copy.id, "Only its milestones are open.")], context);
+      expect(made.map((item) => ({ to: item.recipientId, payload: item.payload }))).toMatchObject([
+        { to: ALDRIC, payload: { _tag: "failure", reason: "Only its milestones are open." } },
+      ]);
+    }
+    // A blocker its hob reports, with no move in the same change, still reaches its lead as a Checkpoint.
+    expect(items(reported(copy.id, "The API is down."))).toMatchObject([{ to: ALDRIC, kind: "checkpoint" }]);
+    // A step's failure goes to its owner, and its reason still reaches the lead above as a Checkpoint.
+    const step = backpackItemsFor(
+      [moved("failed", outline), reported(outline.id, "Its reply left work open.")],
+      context,
+    );
+    expect(step.map((item) => ({ to: item.recipientId, kind: item.payload._tag }))).toEqual([
+      { to: QUILL, kind: "failure" },
+      { to: ALDRIC, kind: "checkpoint" },
+    ]);
+  });
+
   it("sends a question to the lead it is with, an answer to the asker, and leaves one with no lead to your Inbox", () => {
     expect(items({ _tag: "QuestionAsked", question: question(ALDRIC) })).toMatchObject([
       { to: ALDRIC, kind: "question", key: "question:q-quill:v9:question" },

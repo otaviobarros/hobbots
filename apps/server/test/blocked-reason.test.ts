@@ -1,6 +1,18 @@
 import { Effect } from "effect";
+import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { hub, memberTask, ROOK, retry, send, sharedDatabase, startHub, taskOf, treeWhen } from "./dependency-hub.ts";
+import {
+  ALDRIC,
+  hub,
+  memberTask,
+  ROOK,
+  retry,
+  send,
+  sharedDatabase,
+  startHub,
+  taskOf,
+  treeWhen,
+} from "./dependency-hub.ts";
 
 // Issue #571: a member whose Task was only waiting was shown Blocked, its lead guessed "most likely
 // an approval" and delegated the same work again. A member that waits on something reads waiting;
@@ -60,6 +72,30 @@ describe("blocked says why, and waiting is not blocked", () => {
     const briefing = `${lead.briefing ?? ""}\n${lead.prompt}`;
     expect(briefing).toContain(`Task ${rook.id}, blocked: Write the frontend.`);
     expect(briefing).toContain("Latest: blocker, Its member ended a turn without completing it");
+  }, 30_000);
+
+  // covers OR-005, IN-004
+  it("[TC-OR-486] Rook's blocked Task gives Aldric one item, which says why (#683)", async () => {
+    const { run } = await startHub(await sharedDatabase());
+    await run(
+      send([
+        "Build the app",
+        hub("delegate_task", { key: "frontend", hob: "Rook", brief: "Write the frontend", milestones: ["Page live"] }),
+      ]),
+    );
+    const tree = await run(treeWhen((each) => memberTask(each, ROOK)?.state === "blocked"));
+    const rook = taskOf(tree, ROOK);
+    const items = await run(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        return yield* sql<{ readonly kind: string; readonly payload: string }>`SELECT kind, payload FROM backpack_items
+          WHERE recipient_id = ${ALDRIC} AND task_id = ${rook.id} AND kind IN ('checkpoint', 'failure')`;
+      }),
+    );
+    expect(items.map((each) => each.kind)).toEqual(["failure"]);
+    expect(JSON.parse(items[0]?.payload ?? "{}").reason).toContain(
+      'only its own milestones are unreported: "Page live"',
+    );
   }, 30_000);
 
   // covers OR-005

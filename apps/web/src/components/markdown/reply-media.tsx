@@ -54,7 +54,7 @@ export function ReplyLink({
  */
 export function ReplyImage({ src, alt }: { src: string | undefined; alt: string | undefined }) {
   const [shown, setShown] = useState(false);
-  if (!src?.startsWith("https:")) return alt ? <span className="text-secondary-text">{alt}</span> : null;
+  if (!src?.startsWith("https:")) return alt ? <span className="text-text-secondary">{alt}</span> : null;
   if (shown) return <img src={src} alt={alt ?? ""} referrerPolicy="no-referrer" className="max-w-full" />;
   const host = urlHost(src);
   return (

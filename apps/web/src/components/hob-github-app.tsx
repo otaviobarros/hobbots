@@ -163,7 +163,7 @@ function Outcome({
   return (
     <>
       {disconnected !== null && (
-        <span role="status" className="text-[13px] text-secondary-text">
+        <span role="status" className="text-[13px] text-text-secondary">
           {copy.disconnected({ name: hob.name })}
           {disconnected.deleteUrl !== null && (
             <>
@@ -212,7 +212,7 @@ function Finishing({
       <a href={started.url} target="_blank" rel="noreferrer" className="text-[13px] text-lantern">
         {copy.openAgain}
       </a>
-      <span className="text-[13px] text-secondary-text">{copy.restartNote}</span>
+      <span className="text-[13px] text-text-secondary">{copy.restartNote}</span>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" disabled={pending} onClick={onRestart}>
           {copy.restart}
@@ -244,7 +244,7 @@ function NoApp({
 }) {
   return (
     <>
-      <span className="text-[13px] text-secondary-text">{copy.asYou({ name: hob.name })}</span>
+      <span className="text-[13px] text-text-secondary">{copy.asYou({ name: hob.name })}</span>
       {cannotCreate === "no-keychain" && <span className="text-[13px] text-label">{copy.noKeychain}</span>}
       {cannotCreate === null && hob.status !== "retired" && started === null && (
         <div className="flex flex-col items-start gap-1.5">
@@ -283,7 +283,7 @@ function ConnectedApp({
   const { app, needsReconnect } = status;
   return (
     <>
-      <span className="text-[13px] text-secondary-text">
+      <span className="text-[13px] text-text-secondary">
         {copy.actsAs}{" "}
         <a href={app.htmlUrl} target="_blank" rel="noreferrer" className="font-bold text-moonlight">
           {hobAppBot(app)}
@@ -365,7 +365,7 @@ function Installations({
   if (listed.length === 0) {
     return (
       <div className="flex flex-col items-start gap-1.5">
-        <span className="text-[13px] text-secondary-text">{copy.notInstalled({ name: hob.name })}</span>
+        <span className="text-[13px] text-text-secondary">{copy.notInstalled({ name: hob.name })}</span>
         <Button asChild size="sm">
           <a href={status.installUrl} target="_blank" rel="noreferrer" onClick={onWatch}>
             {copy.install}
@@ -409,13 +409,13 @@ const NAMED_REPOSITORIES = 8;
 /** The repositories one installation reaches, by name, without the account when it is the installation's. */
 function Repositories({ account, names }: { account: string; names: ReadonlyArray<string> }) {
   if (names.length === 0) {
-    return <span className="basis-full text-xs text-secondary-text">{copy.noRepositories}</span>;
+    return <span className="basis-full text-xs text-text-secondary">{copy.noRepositories}</span>;
   }
   const shown = names.slice(0, NAMED_REPOSITORIES);
   return (
     <ul
       aria-label={copy.reaches({ account })}
-      className="m-0 flex basis-full list-none flex-wrap gap-x-2.5 gap-y-1 p-0 font-mono text-xs text-secondary-text"
+      className="m-0 flex basis-full list-none flex-wrap gap-x-2.5 gap-y-1 p-0 font-mono text-xs text-text-secondary"
     >
       {shown.map((name) => (
         <li key={name}>{name.startsWith(`${account}/`) ? name.slice(account.length + 1) : name}</li>

@@ -6,7 +6,7 @@ Hobbots is a modern AI chat app with a pixel-folklore character: small hobs that
 
 ## Style tokens
 
-These are the tokens the app ships today. The redesign (#462) replaces them with four themes; their values are in [themes.md](themes.md) and [themes.json](themes.json).
+The app has four themes, set with `data-theme` on the root element. Their values and rules are in [themes.md](themes.md) and [themes.json](themes.json). The app opens in Workshop Night, the night palette below, until a saved choice lands (#480). The table names today's uses; the redesign (#462) moves the screens onto the full set.
 
 | Token | Value | Use |
 |---|---|---|
@@ -16,7 +16,7 @@ These are the tokens the app ships today. The redesign (#462) replaces them with
 | Hover | `#25224a` | Row and button hover |
 | Line / Line 2 | `#2c2a5a` / `#3a3666` | Dividers, selected fill / selected thread, quiet borders |
 | Control | `#7770c4` | Input and secondary-button borders (3:1+) |
-| Text / Secondary / Label | `#ece8ff` / `#c9c3e8` / `#a9a2e0` | Reading text / supporting text / labels and timestamps |
+| Text strong / Text secondary / Label | `#ece8ff` / `#c9c3e8` / `#a9a2e0` | Reading text / supporting text / labels and timestamps |
 | Moonlight | `#f3e9b5` | Selected item, hob names, focus ring |
 | Lantern | `#f2a541` (hover `#ffb75c`, press edge `#9a5f16`, link hover `#ffc477`) | Primary action, links, "needs you" |
 | Mint | `#7fd1b9` (deep `#3f8a75`) | Working, done, approve |

@@ -75,7 +75,7 @@ function Side({
       {contentId === null ? (
         <NotKeptNote side={side} reason={version.contentId === null ? (version.notKept ?? "unreadable") : "cleared"} />
       ) : failed ? (
-        <p className="m-0 text-detail text-secondary-text">{messages.image.failed}</p>
+        <p className="m-0 text-detail text-text-secondary">{messages.image.failed}</p>
       ) : (
         <img
           src={attemptContentUrl(attemptId, contentId)}

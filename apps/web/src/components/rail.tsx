@@ -82,7 +82,7 @@ function RailLink({
       aria-label={badge > 0 ? inboxCopy.rail({ count: badge }) : undefined}
       className={cn(
         "cut relative flex w-[62px] flex-col items-center gap-[5px] pt-2 pb-[7px] text-xs no-underline",
-        active ? "bg-line text-moonlight hover:text-moonlight" : "text-label hover:bg-hover hover:text-text",
+        active ? "bg-line text-moonlight hover:text-moonlight" : "text-label hover:bg-hover hover:text-text-strong",
         className,
       )}
     >

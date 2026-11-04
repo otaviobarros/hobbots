@@ -27,7 +27,7 @@ function RemoteAccessOn({ status }: { status: RemoteAccessStatus }) {
   return (
     <div className="animate-hb-in">
       <RemoteAddress address={address} label={copy.address}>
-        <span className="text-[13px] leading-normal text-secondary-text">{copy.addressNote}</span>
+        <span className="text-[13px] leading-normal text-text-secondary">{copy.addressNote}</span>
         <span className="text-[13px] text-label">{copy.portNote}</span>
       </RemoteAddress>
     </div>
@@ -62,7 +62,7 @@ export function SetupRemoteAccess() {
         <div className="flex min-h-0 flex-1 animate-hb-in flex-col gap-2">
           <span className="lbl text-label">{copy.eyebrow}</span>
           <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">{copy.title}</h1>
-          <p className="m-0 mb-3.5 max-w-[660px] text-secondary-text">{copy.intro}</p>
+          <p className="m-0 mb-3.5 max-w-[660px] text-text-secondary">{copy.intro}</p>
           {tailscale !== null && tailscale.state !== "running" && (
             <TailscaleNotReady
               state={tailscale.state}
@@ -76,7 +76,7 @@ export function SetupRemoteAccess() {
                 <span aria-hidden className="size-2.5 flex-none bg-mint" />
                 <span className="flex flex-col gap-0.5">
                   <span className="font-bold">{copy.connected}</span>
-                  <span className="text-[13px] text-secondary-text">
+                  <span className="text-[13px] text-text-secondary">
                     {copy.thisComputer({ name: tailnetName(status) })}
                   </span>
                 </span>
@@ -86,7 +86,7 @@ export function SetupRemoteAccess() {
                   <span id={labelId} className="font-bold">
                     {copy.switchLabel}
                   </span>
-                  <span id={noteId} className="text-[13px] text-secondary-text">
+                  <span id={noteId} className="text-[13px] text-text-secondary">
                     {copy.switchNote}
                   </span>
                 </span>
@@ -111,7 +111,7 @@ export function SetupRemoteAccess() {
           <Button asChild variant="outline">
             <Link to="/setup/where">{copy.back}</Link>
           </Button>
-          <span className="flex-1 text-end text-sm text-secondary-text">{on ? copy.hintOn : copy.hintOff}</span>
+          <span className="flex-1 text-end text-sm text-text-secondary">{on ? copy.hintOn : copy.hintOff}</span>
           <Button variant="outline" disabled={change.isPending} onClick={skip}>
             {copy.skip}
           </Button>

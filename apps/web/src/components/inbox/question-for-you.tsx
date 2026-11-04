@@ -30,7 +30,7 @@ export function QuestionForYou({ waiting, hobs }: { waiting: WaitingQuestion; ho
         <HobSprite hob={asker} size={20} state="needs-you" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="text-sm font-bold">{copy.title({ name: asker.name })}</span>
-          <span className="truncate text-detail text-secondary-text">
+          <span className="truncate text-detail text-text-secondary">
             {copy.about({ title: taskTitle(task), when: formatWhen(question.createdAt) })}
           </span>
         </span>

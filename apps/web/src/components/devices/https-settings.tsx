@@ -136,7 +136,7 @@ export function HttpsSettings({ status }: { status: RemoteAccessStatus }) {
           <span id={labelId} className="font-bold">
             {copy.switchLabel}
           </span>
-          <span className="text-[13px] text-secondary-text">{copy.note}</span>
+          <span className="text-[13px] text-text-secondary">{copy.note}</span>
         </div>
         <Switch
           aria-labelledby={labelId}

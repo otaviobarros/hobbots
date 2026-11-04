@@ -25,7 +25,7 @@ export function ExportSettings() {
 
   return (
     <>
-      <p className="m-0 text-secondary-text">{copy.intro}</p>
+      <p className="m-0 text-text-secondary">{copy.intro}</p>
       <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
         <legend className="lbl mb-1.5 p-0 text-xs text-label">{copy.what}</legend>
         <label className={radio}>
@@ -59,7 +59,7 @@ export function ExportSettings() {
                 id={selectId}
                 value={hobId ?? ""}
                 onChange={(event) => setPicked(event.target.value as AgentId)}
-                className="min-w-0 border-2 border-control bg-deep px-2 py-1 text-[13px] text-text"
+                className="min-w-0 border-2 border-control bg-deep px-2 py-1 text-[13px] text-text-strong"
               >
                 {(hobs.data ?? []).map((hob) => (
                   <option key={hob.id} value={hob.id}>

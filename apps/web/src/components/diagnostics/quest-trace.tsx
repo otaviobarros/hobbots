@@ -53,11 +53,11 @@ function TaskRow({ row, hobName }: { row: TraceRow; hobName: HobName }) {
         <Badge variant={badgeFor(task.state)}>{messages.taskStates[task.state]}</Badge>
       </span>
       {delegation && (
-        <span className="text-sm text-secondary-text">
+        <span className="text-sm text-text-secondary">
           {copy.delegated({ lead: hobName(delegation.leadId), member: hobName(delegation.memberId) })}
         </span>
       )}
-      {row.attempts.length === 0 && <span className="text-sm text-secondary-text">{copy.noAttempts}</span>}
+      {row.attempts.length === 0 && <span className="text-sm text-text-secondary">{copy.noAttempts}</span>}
       {row.attempts.map((attempt) => (
         <span key={attempt.id} className="flex flex-col text-sm">
           <span>
@@ -66,7 +66,7 @@ function TaskRow({ row, hobName }: { row: TraceRow; hobName: HobName }) {
               state: messages.attemptStates[attempt.state],
               runtime: RUNTIME_NAMES[attempt.runtime],
             })}
-            {attempt.outcome !== null && <span className="text-secondary-text"> · {attempt.outcome}</span>}
+            {attempt.outcome !== null && <span className="text-text-secondary"> · {attempt.outcome}</span>}
           </span>
           <span className="font-mono text-xs break-all text-label">
             {copy.attemptId({ id: attempt.id })}
@@ -96,7 +96,7 @@ function EventRow({ entry, hobName }: { entry: TraceEntry; hobName: HobName }) {
         {formatTime(entry.occurredAt)}
       </time>
       <span className="min-w-0 flex-1">{eventLabel(entry.type)}</span>
-      <span className="text-secondary-text">{entry.agentId === null ? "" : hobName(entry.agentId)}</span>
+      <span className="text-text-secondary">{entry.agentId === null ? "" : hobName(entry.agentId)}</span>
       <span className="font-mono text-xs text-label">#{entry.sequence}</span>
     </li>
   );
@@ -108,7 +108,7 @@ export function QuestTraceView({ trace, hobName }: { trace: QuestTrace; hobName:
   return (
     <div className="flex flex-col gap-2">
       <span className="flex items-center gap-2 text-sm">
-        <span className="flex-1 text-secondary-text">
+        <span className="flex-1 text-text-secondary">
           {hobName(trace.quest.leadId)} · {formatWhen(trace.quest.createdAt)}
         </span>
         <Badge variant={trace.quest.state === "active" ? "working" : "muted"}>
@@ -122,7 +122,7 @@ export function QuestTraceView({ trace, hobName }: { trace: QuestTrace; hobName:
       </ul>
       <span className="lbl pt-1 text-xs text-label">{copy.events}</span>
       <ol aria-label={copy.events} className="m-0 flex list-none flex-col p-0">
-        {trace.journal.length === 0 && <li className="text-sm text-secondary-text">{copy.noEvents}</li>}
+        {trace.journal.length === 0 && <li className="text-sm text-text-secondary">{copy.noEvents}</li>}
         {trace.journal.map((entry) => (
           <EventRow key={entry.sequence} entry={entry} hobName={hobName} />
         ))}

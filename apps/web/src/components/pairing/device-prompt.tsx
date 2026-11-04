@@ -106,7 +106,7 @@ function AskingPrompt({
       </div>
       <DeviceFacts device={device} now={now} />
       <MatchingCode device={device} />
-      <p className="m-0 text-[13px] leading-normal text-secondary-text">{copy.grants}</p>
+      <p className="m-0 text-[13px] leading-normal text-text-secondary">{copy.grants}</p>
       <PairingActions device={device} canDefer onDecided={onDecided} />
     </>
   );
@@ -120,7 +120,7 @@ function AnsweredPrompt({ answered, onDone }: { answered: Answered; onDone: () =
       <DialogTitle className="m-0 font-pixel text-2xl font-bold break-words text-moonlight">
         {allowed ? copy.allowedTitle({ name }) : copy.deniedTitle({ name })}
       </DialogTitle>
-      <p className="m-0 text-secondary-text">{allowed ? copy.allowedIntro : copy.deniedIntro}</p>
+      <p className="m-0 text-text-secondary">{allowed ? copy.allowedIntro : copy.deniedIntro}</p>
       <Button variant="outline" className="mt-1.5" autoFocus onClick={onDone}>
         {copy.done}
       </Button>

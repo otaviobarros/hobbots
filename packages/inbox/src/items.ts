@@ -58,6 +58,11 @@ const ENDING: ReadonlyArray<CheckpointKind> = ["done", "failed", "cancelled"];
 interface Trees {
   readonly byId: ReadonlyMap<TaskId, Task>;
   readonly all: ReadonlyArray<Task>;
+  /**
+   * The blockers the change recorded with a Task's move to a Failure state, by Task: the reason the
+   * hub moved it for, which its Failure item carries instead of a Checkpoint item of its own (#683).
+   */
+  readonly movedFor: ReadonlyMap<TaskId, string>;
 }
 
 const parentOf = (task: Task, trees: Trees) => (task.parentId === null ? undefined : trees.byId.get(task.parentId));
@@ -110,12 +115,13 @@ const taskStateChanged: Rule<"TaskStateChanged"> = ({ task, attempt, control }, 
   const parent = parentOf(task, trees);
   // An Attempt moving on repeats the Task's state; only a move of the Task itself is news.
   if (parent === undefined || attempt !== null || !FAILURE_STATES.includes(task.state)) return [];
+  const reason = trees.movedFor.get(task.id);
   return [
     {
       recipientId: parent.ownerId,
       task,
       attemptId: task.currentAttemptId,
-      payload: { _tag: "failure", task },
+      payload: { _tag: "failure", task, ...(reason === undefined ? {} : { reason }) },
       record: `task:${task.id}`,
       version: task.revision,
     },
@@ -127,6 +133,9 @@ const checkpointRecorded: Rule<"CheckpointRecorded"> = ({ checkpoint }, trees) =
   const task = trees.byId.get(checkpoint.taskId);
   const lead = task === undefined ? undefined : leadsAbove(task, trees.all)[0];
   if (task === undefined || lead === undefined || ENDING.includes(checkpoint.kind)) return [];
+  // The reason for a move to a Failure state comes with the Failure item, when that goes to the same lead.
+  const withFailure = trees.movedFor.get(task.id) === checkpoint.summary && checkpoint.kind === "blocker";
+  if (withFailure && parentOf(task, trees)?.ownerId === lead) return [];
   const routine = PROGRESS.includes(checkpoint.kind);
   return [
     {
@@ -295,6 +304,27 @@ const approvalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolC
   });
 
 /**
+ * The blocker a change recorded with each Task it moved to a Failure state: the reason it moved
+ * for, as `moveTask` records it in the same change (#683).
+ */
+const movedFor = (events: ReadonlyArray<JournaledEvent>): ReadonlyMap<TaskId, string> => {
+  const moved = new Set(
+    events.flatMap((event) =>
+      event._tag === "TaskStateChanged" && event.attempt === null && FAILURE_STATES.includes(event.task.state)
+        ? [event.task.id]
+        : [],
+    ),
+  );
+  return new Map(
+    events.flatMap((event) =>
+      event._tag === "CheckpointRecorded" && event.checkpoint.kind === "blocker" && moved.has(event.checkpoint.taskId)
+        ? [[event.checkpoint.taskId, event.checkpoint.summary] as const]
+        : [],
+    ),
+  );
+};
+
+/**
  * The backpack items a change's journal events call for (ADR 019). Pure: the repository writes
  * the result in the same transaction as the change and its events, so an item exists exactly when
  * the change committed. Routine progress is recorded too; it simply never wakes its hob.
@@ -303,7 +333,11 @@ export const backpackItemsFor = (
   events: ReadonlyArray<JournaledEvent>,
   context: BackpackContext,
 ): ReadonlyArray<NewBackpackItem> => {
-  const trees: Trees = { byId: new Map(context.tasks.map((task) => [task.id, task])), all: context.tasks };
+  const trees: Trees = {
+    byId: new Map(context.tasks.map((task) => [task.id, task])),
+    all: context.tasks,
+    movedFor: movedFor(events),
+  };
   const outcomes = context.approvalOutcomes === true ? approvalOutcomes(events, context.toolCall) : [];
   const fromTasks = events.flatMap((event) =>
     drafts(event, trees).map((draft) => ({

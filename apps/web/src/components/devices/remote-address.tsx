@@ -27,7 +27,7 @@ export function RemoteAddress({ address, label, children }: { address: string; l
         </div>
         {children}
       </div>
-      <figure className="cut m-0 flex flex-none flex-col items-center gap-1.5 bg-text p-2.5 text-ground">
+      <figure className="cut m-0 flex flex-none flex-col items-center gap-1.5 bg-text-strong p-2.5 text-ground">
         <QrCode value={address} label={copy.qrLabel({ address })} size={116} />
         <figcaption className="text-xs font-bold">{copy.scan}</figcaption>
       </figure>

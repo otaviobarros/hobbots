@@ -48,7 +48,7 @@ export function QuestTab({
       <>
         <WorkHeldNotice className="mx-[18px] mt-3" />
         {gone}
-        <div className="flex animate-hb-in flex-col gap-2 px-[18px] py-[22px] leading-normal text-secondary-text">
+        <div className="flex animate-hb-in flex-col gap-2 px-[18px] py-[22px] leading-normal text-text-secondary">
           <span className="font-pixel text-lg text-moonlight">{copy.emptyTitle}</span>
           <span>{copy.empty}</span>
         </div>

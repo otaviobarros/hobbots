@@ -40,7 +40,10 @@ export type TaskMove =
       readonly otherwise: TaskMove;
       readonly explainRefusal: boolean;
     }
-  /** With a `reason` when it moves to blocked, for the blocker its lead reads (#571). */
+  /**
+   * With a `reason` when it moves to blocked or failed, which its lead reads with the move (#571):
+   * the move records it as a blocker in the same change, so the lead hears of it once (#683).
+   */
   | { readonly _tag: "Move"; readonly to: TaskTarget; readonly reason?: string };
 
 export interface TurnEnd {
