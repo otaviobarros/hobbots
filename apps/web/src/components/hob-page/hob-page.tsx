@@ -15,6 +15,7 @@ import { HobHero } from "./hob-hero.tsx";
 import { HobHistory } from "./hob-history.tsx";
 import { doingOf, type HobPageTab, isHobPageTab, statsLine } from "./hob-page-model.ts";
 import { messages } from "./messages.ts";
+import { NewHob } from "./new-hob.tsx";
 
 const copy = messages;
 
@@ -91,7 +92,13 @@ function Page({ hob, tab, show }: { hob: Agent; tab: HobPageTab; show: HistoryFi
           {hob.name}
         </span>
       </nav>
-      <HobHero hob={hob} state={state} stats={statsLine(hob, list.length)} doing={doingOf(state, list, activity)} />
+      <HobHero
+        hob={hob}
+        state={state}
+        stats={statsLine(hob, list.length)}
+        doing={doingOf(state, list, activity)}
+        fresh={threads.isSuccess && list.length === 0}
+      />
       <div className="grid items-start gap-7 min-[1120px]:grid-cols-[minmax(0,1fr)_300px]">
         <Tabs value={tab} onValueChange={pick} className="min-w-0 gap-4">
           <TabsList aria-label={copy.tabs.label({ name: hob.name })}>
@@ -104,8 +111,8 @@ function Page({ hob, tab, show }: { hob: Agent; tab: HobPageTab; show: HistoryFi
             <TabsTrigger value="history">{copy.tabs.history}</TabsTrigger>
           </TabsList>
           <TabsContent value="chats">
-            {list.length === 0 ? (
-              <p className="m-0 text-sm text-text-secondary">{copy.chats.none}</p>
+            {threads.isPending ? null : list.length === 0 ? (
+              <NewHob hob={hob} />
             ) : (
               <HobChats hob={hob} threads={list} activity={activity} />
             )}
