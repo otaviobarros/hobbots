@@ -134,8 +134,6 @@ export const messages = {
       guide: "Everything is ready. Light the circle and your first hob will appear.",
       doneGuide: "There it is! Say hello. I will be in the corner of Home if you need me.",
       heading: "Ready to summon",
-      arrived: ({ name }: { name: string }) => `${name} has arrived!`,
-      waiting: ({ name }: { name: string }) => `${name} is waiting in Hobs, ready for a first chore.`,
       thinksWith: ({ hob, provider, model }: { hob: string; provider: string; model: string }) =>
         `${hob} · thinks with ${provider} ${model}`,
       rejected: ({ name, reason }: { name: string; reason: string }) =>
@@ -143,9 +141,15 @@ export const messages = {
       failed: ({ name }: { name: string }) => `Hobbots could not finish summoning ${name}. Try again in a moment.`,
       tryAgain: "Try again",
       summon: ({ name }: { name: string }) => `Summon ${name}`,
-      gathering: "Gathering moonlight",
-      sayHi: ({ name }: { name: string }) => `Say hi to ${name}`,
+      calling: ({ name }: { name: string }) => `The Chief is calling ${name}…`,
+      here: ({ name }: { name: string }) => `${name} is here!`,
+      chiefWelcome: ({ name }: { name: string }) => `Welcome, ${name}! I'll be in the corner of Home if you need me.`,
+      hobHello: ({ name, role, note }: { name: string; role: string; note: string }) =>
+        `“Hi! I'm ${name}, your ${role.toLowerCase()}.${note === "" ? "" : ` ${note}`}”`,
+      sayHello: ({ name }: { name: string }) => `Say hello to ${name}`,
       home: "Go to Home",
+      replay: "Replay",
+      replayLabel: "Replay the summoning",
     },
   },
   models: {

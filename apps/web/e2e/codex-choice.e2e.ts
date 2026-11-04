@@ -107,7 +107,7 @@ test("[TC-UX-080] onboarding shows a missing Codex with its fix, and a connected
   // The last step names the provider the hob thinks with.
   await expect(page.getByText(/^Tinker .* · thinks with Codex GPT-5\.5$/)).toBeVisible();
   await page.getByRole("button", { name: "Summon Tinker" }).click();
-  await expect(page.getByRole("heading", { name: "Tinker has arrived!" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tinker is here!" })).toBeVisible();
 
   expect(await hobNamed(hub, "Tinker")).toMatchObject({ runtime: "codex", model: "gpt-5.5", effort: "medium" });
 });
@@ -155,7 +155,8 @@ test("[TC-UX-081] Summon shows a missing, signed-out or outdated Codex as unavai
   await expect(page.getByRole("button", { name: "Model and effort: Codex · GPT-5.5 · high effort" })).toBeVisible();
 
   await page.getByRole("button", { name: "Summon Tinker" }).click();
-  await expect(page).toHaveURL(/#\/hobs\/[^/]+\/new$/);
+  await expect(page).toHaveURL(/#\/hobs\/[^/]+\/arrived$/);
+  await expect(page.getByRole("heading", { name: "Tinker is here!" })).toBeVisible();
   expect(await hobNamed(hub, "Tinker")).toMatchObject({ runtime: "codex", model: "gpt-5.5", effort: "high" });
 });
 

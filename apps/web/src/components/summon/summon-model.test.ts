@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { firstHobPayload, newDraft, pickRole } from "../../api/first-hob.ts";
-import { gearHint, lookChoices, parseStep, roleProblem, stepAt, typeOwnTitle } from "./summon-model.ts";
+import { messages } from "./messages.ts";
+import {
+  gearHint,
+  lookChoices,
+  parseStep,
+  roleProblem,
+  startersFor,
+  stepAt,
+  summoningLeft,
+  typeOwnTitle,
+} from "./summon-model.ts";
 
 const draft = () =>
   newDraft(
@@ -68,5 +78,20 @@ describe("how a summoned hob talks", () => {
       voice: "friendly",
       length: "brief",
     });
+  });
+});
+
+describe("the Arrived screen", () => {
+  it("offers a role's own first questions, then its family's, then a general set", () => {
+    expect(startersFor("writer")[0]).toBe("Turn these bullet points into a friendly email");
+    expect(startersFor("frontend")).toEqual(messages.arrived.starters.software);
+    expect(startersFor(null)).toEqual(messages.arrived.starters.own);
+    expect(startersFor("chef")).toHaveLength(3);
+  });
+
+  it("plays the summoning out, and skips it under Reduce motion", () => {
+    expect(summoningLeft(1000, 1500, 2600, false)).toBe(2100);
+    expect(summoningLeft(1000, 5000, 2600, false)).toBe(0);
+    expect(summoningLeft(1000, 1500, 2600, true)).toBe(0);
   });
 });
