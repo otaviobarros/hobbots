@@ -213,6 +213,7 @@ const noteLeft: Rule<"NoteLeft"> = ({ note }, trees) => {
         senderId: note.senderId ?? null,
         text: note.text,
         ...(task === subject ? {} : { aboutTaskId: note.taskId }),
+        noteId: note.id,
       },
       record: `note:${note.id}`,
       version: null,

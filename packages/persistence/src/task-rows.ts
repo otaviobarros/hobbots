@@ -58,7 +58,8 @@ const fromRow = {
   }),
   artifact: (row: Row) => row,
   handOff: (row: Row) => row,
-  note: (row: Row) => ({ ...row, revision: int(row.revision) }),
+  // `left_revision` only orders the notes (migration 0051).
+  note: ({ leftRevision: _, ...row }: Row) => ({ ...row, revision: int(row.revision) }),
   wait: (row: Row) => ({ taskId: row.taskId, on: json(row.waitsOn), mode: row.mode, createdAt: row.createdAt }),
   refusal: (row: Row) => ({
     id: row.id,
@@ -162,6 +163,25 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     );
   const note = (id: string) =>
     sql<Row>`SELECT * FROM task_notes WHERE id = ${id}`.pipe(Effect.flatMap(decodeRows("note")));
+  /**
+   * The latest note to `recipientId` among the backpack items `itemIds` (#900): what a turn that
+   * carries them picked up from its own lead, and passes on with any note it sends.
+   */
+  const carriedNote = (itemIds: ReadonlyArray<string>, recipientId: string) =>
+    Effect.gen(function* () {
+      if (itemIds.length === 0) return undefined;
+      const rows = yield* sql<{ readonly payload: string }>`SELECT payload FROM backpack_items
+        WHERE ${sql.in("id", itemIds)} AND kind = 'message' AND recipient_id = ${recipientId}`;
+      const noteIds = rows.flatMap((row) => {
+        const payload: { readonly noteId?: unknown } = JSON.parse(row.payload);
+        return typeof payload.noteId === "string" ? [payload.noteId] : [];
+      });
+      if (noteIds.length === 0) return undefined;
+      const [latest] = yield* sql<Row>`SELECT * FROM task_notes
+        WHERE ${sql.in("id", noteIds)} AND recipient_id = ${recipientId}
+        ORDER BY left_revision DESC LIMIT 1`.pipe(Effect.flatMap(decodeRows("note")));
+      return latest;
+    });
   /** The questions that climbed every lead and wait for you, oldest first, each with the Task it asks about. */
   const waitingQuestions = Effect.gen(function* () {
     const questions = yield* sql<Row>`SELECT * FROM questions WHERE recipient_id IS NULL AND state = 'open'
@@ -229,7 +249,8 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
           ORDER BY ${orderBy(sql, ["created_at", "artifact_id", "to_task_id"])}`.pipe(
           Effect.flatMap(decodeRows("handOff")),
         ),
-        notes: yield* sql<Row>`SELECT * FROM task_notes WHERE ${inTree("task_id")} ORDER BY revision`.pipe(
+        // In the order they were left: a pick-up changes a note's revision (#900).
+        notes: yield* sql<Row>`SELECT * FROM task_notes WHERE ${inTree("task_id")} ORDER BY left_revision`.pipe(
           Effect.flatMap(decodeRows("note")),
         ),
         waits: yield* sql<Row>`SELECT * FROM task_waits WHERE ${inTree("task_id")}
@@ -377,6 +398,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     attempt,
     question,
     note,
+    carriedNote,
     waitingQuestions,
     openQuestionsOn,
     artifact,

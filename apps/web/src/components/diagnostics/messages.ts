@@ -138,6 +138,7 @@ export const messages = {
     QuestionEscalated: "Question passed up",
     QuestionWithdrawn: "Question withdrawn",
     NoteLeft: "Note left",
+    NotePickedUp: "Note picked up",
     HandedOff: "Handed off",
     BackpackItemRecorded: "Backpack item added",
     BackpackItemChanged: "Backpack item moved",

@@ -181,6 +181,9 @@ export const makeLeading = ({ tasks }: Deps) => ({
             text: input.text,
             createdAt: scope.at,
             senderId: scope.caller.agentId,
+            // Where it came from, for the steer receipt of the message of yours behind it (#900).
+            ...(scope.caller.messageId !== undefined && { messageId: scope.caller.messageId }),
+            carried: (scope.caller.carried ?? []).map((item) => item.itemId),
           }),
         ),
       );

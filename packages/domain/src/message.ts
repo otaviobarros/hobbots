@@ -150,6 +150,15 @@ export class Message extends Schema.Class<Message>("Message")({
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
+  /**
+   * For an assistant message, the message of yours its turn answers (#900), so a steer receipt knows
+   * which turn read it. Null for the user's, for a continuation, which answers work that arrived
+   * instead (ADR 019), and for replies from before this was recorded.
+   */
+  promptId: Schema.NullOr(MessageId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
   /** For an assistant message, its steps in order. Saved with the reply, so they replay and outlast it. */
   steps: Schema.Array(ReplyStep).pipe(
     Schema.withDecodingDefaultKey(Effect.succeed([])),
