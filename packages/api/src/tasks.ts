@@ -1,5 +1,7 @@
 import {
   AgentId,
+  HistoryFilter,
+  HistoryPage,
   MemberWork,
   NoteId,
   Quest,
@@ -61,6 +63,23 @@ export type LedgerRead = typeof LedgerRead.Type;
 export const MemberWorkRead = Schema.Struct({ cursor: Schema.String, work: Schema.Array(MemberWork) });
 export type MemberWorkRead = typeof MemberWorkRead.Type;
 
+/** One page of a hob's History, with the cursor as above: a client reads it again on the events after it. */
+export const HistoryRead = Schema.Struct({ cursor: Schema.String, page: HistoryPage });
+export type HistoryRead = typeof HistoryRead.Type;
+
+/**
+ * Which page of a hob's History to read. `timeZone` is the reader's IANA zone, which decides where
+ * each day starts; `before` is the previous page's `before`; `days` is how many days the page holds.
+ */
+export const HistoryQuery = {
+  timeZone: Schema.TimeZoneNamedFromString,
+  filter: Schema.optionalKey(HistoryFilter),
+  before: Schema.optionalKey(Schema.DateTimeUtcFromString),
+  days: Schema.optionalKey(
+    Schema.NumberFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 31 })),
+  ),
+};
+
 /** Tasks and Quests (ADR 018): reads only. Hobs change them through their tools; the user through `TaskControlsGroup`. */
 export class TasksGroup extends HttpApiGroup.make("tasks")
   .add(
@@ -91,6 +110,13 @@ export class TasksGroup extends HttpApiGroup.make("tasks")
     HttpApiEndpoint.get("questWork", "/agents/:agentId/quest-work", {
       params: { agentId: AgentId },
       success: MemberWorkRead,
+      error: AgentNotFound,
+    }),
+    // What a hob did across all its chats, and its party's work when it leads, a page of days at a time.
+    HttpApiEndpoint.get("history", "/agents/:agentId/history", {
+      params: { agentId: AgentId },
+      query: HistoryQuery,
+      success: HistoryRead,
       error: AgentNotFound,
     }),
   )

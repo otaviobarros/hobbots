@@ -38,7 +38,7 @@ export function StandingRuleRow({ grant, hob }: { grant: Grant; hob: Agent | und
   return (
     <li
       data-grant={grant.id}
-      className="flex flex-col gap-2 border-b-2 border-line py-2.75 last:border-b-0"
+      className="flex flex-col gap-2 border-b border-line py-3 last:border-b-0"
       onKeyDown={(event) => {
         if (confirming && event.key === "Escape" && !revoke.isPending) {
           event.stopPropagation();

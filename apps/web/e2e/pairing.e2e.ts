@@ -46,7 +46,7 @@ test("[TC-DP-115] a browser waits with a code, and after Allow on an approved de
 
   // An approved device sees it first in Needs you, with the same code, and allows it.
   await page.goto(`${current.url}/#/inbox`);
-  const asking = page.getByRole("region", { name: "Kitchen laptop asks to use Hobbots" });
+  const asking = page.getByRole("article", { name: "Kitchen laptop asks to use Hobbots" });
   await expect(asking).toBeVisible();
   await expect(asking.getByText(code, { exact: true })).toBeVisible();
   await expect(asking.getByText("From this computer")).toBeVisible();
@@ -83,7 +83,7 @@ test("[TC-DP-116] a denied browser is told so and can ask again later", async ({
   await newcomer.getByRole("button", { name: "Ask for access" }).click();
   await expect(newcomer.getByRole("heading", { name: "Too many requests" })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("region", { name: /asks to use Hobbots$/ })).toHaveCount(0);
+  await expect(page.getByRole("article", { name: /asks to use Hobbots$/ })).toHaveCount(0);
   await stranger.close();
 });
 

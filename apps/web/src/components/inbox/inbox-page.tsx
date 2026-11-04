@@ -1,9 +1,10 @@
 import type { WaitingDevice, WaitingQuestion } from "@hobbots/api";
-import type { ApprovalRequest, BackpackItem } from "@hobbots/domain";
+import type { ApprovalRequest, BackpackItem, Quest, TaskId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@hobbots/ui/components/empty";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockersQuery } from "../../api/blockers.ts";
@@ -12,9 +13,9 @@ import { useWaitingQuestionsQuery } from "../../api/questions.ts";
 import { readStored, writeStored } from "../../lib/storage.ts";
 import { messages as blockerCopy } from "../blockers/messages.ts";
 import { Stars } from "../scene.tsx";
-import { EntryDetail, InboxDetail } from "./inbox-detail.tsx";
-import { type InboxEntry, namesRequest, needsEntries, selectedEntry } from "./inbox-entries.ts";
-import { Empty, InboxHistory } from "./inbox-history.tsx";
+import { EntryDetail } from "./inbox-detail.tsx";
+import { entryAsker, type InboxEntry, namesRequest, needsEntries, selectedEntry } from "./inbox-entries.ts";
+import { InboxHistory } from "./inbox-history.tsx";
 import { type InboxTab, type InboxView, isInboxView, pendingCount, tabRequests } from "./inbox-items.ts";
 import { InboxList, InboxTabs, InboxViewPicker } from "./inbox-list.tsx";
 import { messages } from "./messages.ts";
@@ -123,7 +124,6 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
           {tab === "needs" && (
             <ReadState read={blockers} loading={blockerCopy.loading} failed={blockerCopy.loadFailed} />
           )}
-          {empty !== undefined && <Empty {...empty} />}
           {tab === "needs" && entries.length > 0 && <InboxViewPicker view={view} onChange={setView} />}
           {tab !== "history" && (
             <InboxList
@@ -141,12 +141,15 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {tab === "history" ? (
           inbox.isSuccess && <InboxHistory requests={requests} directory={directory} />
+        ) : empty !== undefined ? (
+          <AllClear />
         ) : (
           <Selected
             entry={selected}
             hold={shown.hold}
             onRetry={shown.retry}
             directory={directory}
+            questOf={questOf}
             ready={inbox.isSuccess}
             now={now}
           />
@@ -187,10 +190,12 @@ function Selected({
   hold,
   onRetry,
   directory,
+  questOf,
   ready,
   now,
 }: {
   entry: InboxEntry | undefined;
+  questOf: (taskId: TaskId) => Quest | undefined;
   hold: ShownHold | undefined;
   onRetry: () => void;
   directory: InboxDirectory;
@@ -208,19 +213,13 @@ function Selected({
   if (entry === undefined) {
     return ready ? <p className="m-0 px-7 py-6 text-text-secondary">{copy.pickOne}</p> : null;
   }
-  if (entry.kind !== "approval") return <EntryDetail entry={entry} now={now} />;
-  const request = entry.request;
-  const hob = directory.hob(request.agentId);
-  if (hob === undefined) return <p className="m-0 px-7 py-6 text-label">{copy.loadingRequest}</p>;
-  return (
-    <InboxDetail
-      request={request}
-      hob={hob}
-      threadTitle={directory.threadTitle(request.threadId)}
-      threadHob={directory.threadHob(request.threadId)}
-      now={now}
-    />
-  );
+  const asker = entryAsker(entry);
+  const hob = asker === undefined ? undefined : directory.hob(asker);
+  // A request shows once the hob that asked is read, retired hobs included.
+  if (entry.kind === "approval" && hob === undefined) {
+    return <p className="m-0 px-7 py-6 text-label">{copy.loadingRequest}</p>;
+  }
+  return <EntryDetail entry={entry} hob={hob} directory={directory} questOf={questOf} now={now} />;
 }
 
 /**
@@ -253,6 +252,28 @@ function InboxHeader({ waiting }: { waiting: number }) {
         {waiting > 0 ? copy.waiting({ count: waiting }) : copy.intro}
       </p>
     </div>
+  );
+}
+
+/** Needs you with nothing waiting: says so, with History and Home one click away. */
+function AllClear() {
+  return (
+    <Empty size="page" className="animate-hb-in">
+      <EmptyHeader>
+        <EmptyTitle>{copy.allClear}</EmptyTitle>
+        <EmptyDescription>{copy.allClearHint}</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent className="flex-row justify-center">
+        <Button asChild variant="outline">
+          <Link to="/inbox" search={{ tab: "history" }}>
+            {copy.seeDecided}
+          </Link>
+        </Button>
+        <Button asChild variant="ghost">
+          <Link to="/">{copy.backHome}</Link>
+        </Button>
+      </EmptyContent>
+    </Empty>
   );
 }
 

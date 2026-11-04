@@ -134,18 +134,18 @@ test("[TC-IN-098] Needs you never says nothing needs you while stuck work is sti
   const list = page.getByRole("complementary", { name: "Inbox" });
   // Approvals are read, stuck work is not yet: no all-clear.
   await expect(list.getByText("Reading stuck work…")).toBeVisible();
-  await expect(list.getByText("Nothing needs you")).toHaveCount(0);
+  await expect(page.getByText("Nothing needs you")).toHaveCount(0);
 
   // The read fails: it says so, with a way to read again, and still no all-clear.
   release();
   // The client asks again a few times before it gives up.
   const failed = list.getByRole("alert");
   await expect(failed).toContainText("could not read stuck work", { timeout: 20_000 });
-  await expect(list.getByText("Nothing needs you")).toHaveCount(0);
+  await expect(page.getByText("Nothing needs you")).toHaveCount(0);
 
   failing = false;
   await failed.getByRole("button", { name: "Try again" }).click();
-  await expect(list.getByText("Nothing needs you")).toBeVisible();
+  await expect(page.getByText("Nothing needs you")).toBeVisible();
   await expect(list.getByRole("alert")).toHaveCount(0);
 });
 

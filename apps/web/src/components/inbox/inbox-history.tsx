@@ -25,59 +25,65 @@ export function InboxHistory({
   directory: InboxDirectory;
 }) {
   return (
-    <div className="flex max-w-215 flex-col gap-7 px-7 py-5.5">
+    <div className="flex max-w-205 flex-col gap-7 px-8 pt-6 pb-8">
       <StandingRules />
-      <section aria-label={copy.history.heading} className="flex flex-col gap-3">
-        <span className="lbl text-xs text-label">{copy.history.heading}</span>
-        <h2 className="m-0 font-heading text-2xl font-bold text-moonlight">{copy.history.title}</h2>
+      <section aria-label={copy.history.heading} className="flex flex-col gap-2.5">
+        <h2 className="m-0 flex items-center gap-2 text-sm font-semibold text-text-strong">
+          {copy.history.title}
+          <span className="text-xs font-normal text-label">{copy.count({ count: requests.length })}</span>
+        </h2>
         <p className="m-0 text-sm text-text-secondary">{copy.history.intro}</p>
         {requests.length === 0 ? (
           <Empty title={copy.emptyHistory} hint={copy.emptyHistoryHint} />
         ) : (
-          <ul className="cut m-0 flex list-none flex-col bg-panel px-4 py-1">
-            {requests.map((request) => {
-              const hob = directory.hob(request.agentId);
-              const title = requestTitle(request);
-              const decider = deciderText(request, directory.deviceName);
-              return (
-                <li
-                  key={request.id}
-                  data-state={request.state}
-                  className="flex items-center gap-3 border-b-2 border-line py-2.75 last:border-b-0"
-                >
-                  <Badge variant={VERDICT[request.state]} className="w-21.5 justify-center">
-                    {verdictText(request)}
-                  </Badge>
-                  {hob && <HobSprite hob={hob} size={22} />}
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="text-sm">
-                      {copy.history.action({ name: directory.hobName(request.agentId), action: title.what })}
-                    </span>
-                    <code className="truncate font-mono text-xs text-moonlight">{title.exact}</code>
-                    <span className="text-xs text-label">
-                      {copy.history.meta({
-                        when: formatWhen(request.decidedAt ?? request.createdAt),
-                        thread: directory.threadTitle(request.threadId),
-                      })}
-                    </span>
-                    {decider !== null && (
-                      <span data-testid="decider" className="text-xs text-text-secondary">
-                        {decider}
-                      </span>
-                    )}
-                  </span>
-                </li>
-              );
-            })}
+          <ul className="m-0 flex list-none flex-col overflow-hidden rounded-card bg-card p-0">
+            {requests.map((request) => (
+              <HistoryRow key={request.id} request={request} directory={directory} />
+            ))}
           </ul>
         )}
+        <p className="m-0 text-detail text-label">{copy.history.expiredNote}</p>
       </section>
     </div>
   );
 }
 
+/** One decision: the verdict, who asked and what, when and where, who decided, and the exact action. */
+function HistoryRow({ request, directory }: { request: ApprovalRequest; directory: InboxDirectory }) {
+  const hob = directory.hob(request.agentId);
+  const title = requestTitle(request);
+  const decider = deciderText(request, directory.deviceName);
+  return (
+    <li data-state={request.state} className="flex items-center gap-3 border-b border-line px-3.5 py-3 last:border-b-0">
+      <Badge variant={VERDICT[request.state]} className="w-18 justify-center">
+        {verdictText(request)}
+      </Badge>
+      {hob && <HobSprite hob={hob} size={22} />}
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-sm text-text-strong">
+          {copy.history.action({ name: directory.hobName(request.agentId), action: title.what })}
+        </span>
+        <span className="truncate text-xs text-label">
+          {copy.history.meta({
+            when: formatWhen(request.decidedAt ?? request.createdAt),
+            thread: directory.threadTitle(request.threadId),
+          })}
+        </span>
+        {decider !== null && (
+          <span data-testid="decider" className="text-xs text-text-secondary">
+            {decider}
+          </span>
+        )}
+      </span>
+      <code className="max-w-60 shrink truncate rounded-tag bg-deep px-1.5 py-0.5 font-mono text-detail text-moonlight">
+        {title.exact}
+      </code>
+    </li>
+  );
+}
+
 /** What an empty tab says. */
-export function Empty({ title, hint }: { title: string; hint: string }) {
+function Empty({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
       <span className="font-heading text-lg font-bold text-moonlight">{title}</span>

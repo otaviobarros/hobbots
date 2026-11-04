@@ -77,7 +77,6 @@ export const messages = {
   },
   settings: {
     heading: "Waiting to be allowed",
-    none: "No device is waiting.",
     deferred: "Decided later",
     expires: ({ time }: { time: string }) => `Waits until ${time}`,
   },
