@@ -19,18 +19,21 @@ type Mode = "choose" | "deny" | "always" | "work";
  * (`onceOnly`) offers once only and needs the confirmation box ticked first; the hub checks both too
  * (PE-007). This Task and Always open the exact rule they save, narrowable where the hub allows,
  * before anything is sent. This Task is offered for a request made in a Task, and reads This Quest
- * once a party joins that Task.
+ * once a party joins that Task. The `tray` look is the Needs-you tray's: Allow once is the primary
+ * button, Deny a secondary one, and a high-risk request's box sits in a rose block.
  */
 export function ApprovalActions({
   approval,
   hob,
   pending,
   onDecide,
+  look = "card",
 }: {
   approval: ApprovalRequest;
-  hob: Agent;
+  hob: Pick<Agent, "name">;
   pending: boolean;
   onDecide: (decision: Decision) => void;
+  look?: "card" | "tray";
 }) {
   const [mode, setMode] = useState<Mode>("choose");
   const [confirmed, setConfirmed] = useState(false);
@@ -77,12 +80,13 @@ export function ApprovalActions({
   const always = offersAlways(approval);
   // A high-risk request explains itself through its check box; any other says why it offers no rule.
   const noRule = !onceOnly && !always;
+  const tray = look === "tray";
   return (
     <div className="flex flex-col gap-2">
-      {onceOnly && <ConfirmBox name={hob.name} checked={confirmed} onChange={setConfirmed} />}
+      {onceOnly && <ConfirmBox name={hob.name} checked={confirmed} onChange={setConfirmed} tray={tray} />}
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          variant="approve"
+          variant={tray ? "default" : "approve"}
           disabled={onceOnly && !confirmed}
           aria-disabled={pending}
           onClick={() => send({ decision: "approve", confirmed: onceOnly ? confirmed : undefined })}
@@ -99,7 +103,7 @@ export function ApprovalActions({
             {copy.always}
           </Button>
         )}
-        <Button ref={denyButton} variant="deny" aria-disabled={pending} onClick={open("deny")}>
+        <Button ref={denyButton} variant={tray ? "outline" : "deny"} aria-disabled={pending} onClick={open("deny")}>
           {copy.deny}
         </Button>
       </div>
@@ -113,12 +117,14 @@ function ConfirmBox({
   name,
   checked,
   onChange,
+  tray,
 }: {
   name: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  tray: boolean;
 }) {
-  return (
+  const box = (
     <label className="flex cursor-pointer items-center gap-2 text-sm">
       <input
         type="checkbox"
@@ -128,6 +134,13 @@ function ConfirmBox({
       />
       {copy.confirm({ name })}
     </label>
+  );
+  if (!tray) return box;
+  return (
+    <div className="flex flex-col gap-2 rounded-control bg-rose/15 px-3 py-2.5">
+      <span className="text-detail font-bold text-rose">{copy.highRiskUndone}</span>
+      {box}
+    </div>
   );
 }
 

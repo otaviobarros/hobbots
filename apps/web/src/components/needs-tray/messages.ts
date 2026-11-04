@@ -1,0 +1,17 @@
+import { formatCount } from "../../lib/format.ts";
+
+/** User-facing copy for the Needs-you tray above the composer (STD-I18N-001). */
+export const messages = {
+  label: ({ index, count }: { index: number; count: number }) =>
+    `Needs you, ${formatCount(index)} of ${formatCount(count)}`,
+  eyebrow: { needs: "Needs you", risk: "Needs you · high risk", stuck: "Stuck" },
+  position: ({ index, count }: { index: number; count: number }) => `${formatCount(index)} of ${formatCount(count)}`,
+  next: "Next",
+  seeAll: "See all in Inbox",
+  approvalTitle: ({ name, action }: { name: string; action: string }) => `${name} asks to ${action}`,
+  questionTitle: ({ name }: { name: string }) => `${name} asks you`,
+  stuckTitle: ({ name }: { name: string }) => `${name}'s work is stuck`,
+  passedUp: ({ names, task, when }: { names: ReadonlyArray<string>; task: string; when: string }) =>
+    `${[...names, "you"].join(" → ")} · about ${task} · asked ${when}`,
+  details: { approval: "Why, risk and who asked", question: "Who asked", stuck: "Tries and the error" },
+} as const;

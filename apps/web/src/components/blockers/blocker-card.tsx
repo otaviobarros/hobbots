@@ -11,10 +11,9 @@ const copy = messages;
 
 /**
  * Work that failed as a blocker (IN-007): what it was, why it stopped, the next action, and Retry,
- * Reassign and Dismiss. Reassign stays disabled until a Task can change owners. `inChat` leaves
- * out the link to the chat, for a card already shown there.
+ * Reassign and Dismiss. Reassign stays disabled until a Task can change owners.
  */
-export function BlockerCard({ item, hobs, inChat = false }: { item: BackpackItem; hobs: HobLookup; inChat?: boolean }) {
+export function BlockerCard({ item, hobs }: { item: BackpackItem; hobs: HobLookup }) {
   const hob = hobs(item.recipientId);
   const choice = blockerChoice(item, hob);
   if (choice === null) return null;
@@ -40,7 +39,7 @@ export function BlockerCard({ item, hobs, inChat = false }: { item: BackpackItem
       )}
       <p className="m-0 text-detail font-bold text-lantern">{copy.next[choice.next]}</p>
       <BlockerChoices item={item} hob={hob}>
-        {!inChat && item.threadId !== null && (
+        {item.threadId !== null && (
           <Link
             to="/hobs/$hobId/threads/$threadId"
             params={{ hobId: item.recipientId, threadId: item.threadId }}

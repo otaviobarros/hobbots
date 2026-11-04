@@ -15,7 +15,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useActivity } from "../api/activity.ts";
-import { approvalsQuery } from "../api/approvals.ts";
 import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../api/drafts.ts";
 import { useConnection } from "../api/live.ts";
 import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../api/outbox.ts";
@@ -45,6 +44,8 @@ import { Composer } from "./composer.tsx";
 import { HobSprite, stateLabel, threadState } from "./hob-sprite.tsx";
 import { type ContinueReply, MessageRow, messageElementId, QueuedRow } from "./message-row.tsx";
 import { messages } from "./messages.ts";
+import { NeedsTray } from "./needs-tray/needs-tray.tsx";
+import { useThreadNeeds } from "./needs-tray/use-thread-needs.ts";
 import { ThreadWorkStrip, useWorkMoments } from "./quest/thread-work.tsx";
 
 /**
@@ -91,14 +92,8 @@ export function ChatView({
   });
   const threadCount = useQuery({ ...threadsQuery(hobId), select: (threads) => threads.length });
   const messages = useQuery({ ...messagesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
-  // A new request for approval scrolls into view like new text, so a paused reply never waits unseen.
-  const asking = useQuery({
-    ...approvalsQuery(threadId ?? ("" as ThreadId)),
-    enabled: threadId !== undefined,
-    // A party member's request is answered in the Inbox, not under a reply, so it never scrolls the chat.
-    select: (approvals) =>
-      approvals.filter((approval) => approval.state === "pending" && approval.messageId !== null).length,
-  });
+  // What waits on you in this chat shows in the tray above the composer.
+  const needs = useThreadNeeds(threadId);
   const activity = useActivity();
   const navigate = useNavigate();
   // Messages sent while the hub is out of reach wait in the outbox, which sends them when it is back.
@@ -145,10 +140,9 @@ export function ChatView({
   const holding = focusMessageId !== undefined && released !== focusMessageId;
   const follow = () => setReleased(focusMessageId);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new pending approval scrolls like new text.
   useEffect(() => {
     if (lastContent !== undefined && !holding) bottom.current?.scrollIntoView({ block: "end" });
-  }, [lastContent, asking.data, holding]);
+  }, [lastContent, holding]);
 
   const focusLoaded = messages.data?.some((m) => m.id === focusMessageId) ?? false;
   useEffect(() => {
@@ -390,6 +384,7 @@ export function ChatView({
         </section>
       )}
       <ArchiveToastViewport />
+      <NeedsTray entries={needs} className="mx-6 mb-2" />
       <Composer
         placeholder={copy.placeholder({ name: current.name, title })}
         place={place}

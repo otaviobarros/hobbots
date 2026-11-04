@@ -80,22 +80,22 @@ test("[TC-PE-074] the card shows the exact action and why, and Allow once by key
   page,
 }) => {
   const { card } = await pipAsksToPush(page);
-  await expect(card).toContainText("Push your work");
+  await expect(card).toContainText("Pip asks to push your work");
   await expect(card.getByText("git push origin feature", { exact: true })).toBeVisible();
   await expect(card.getByRole("checkbox")).toHaveCount(0);
   await expect(card).toContainText("You → Pip");
   await expect(card).toContainText("Sends commits to a remote");
   await expect(page.getByRole("list", { name: "Reply steps" })).toContainText("Waiting for your approval.");
 
-  await expect(card).toContainText("Why now");
-  await expect(card).toContainText(/asks|waits/);
+  await expect(card).toContainText("The safety preset asks before pushing.");
 
-  // By keyboard; focus stays in the card once the buttons give way to the outcome.
+  // By keyboard; once the tray gives way, focus moves to the outcome line in the transcript.
   await card.getByRole("button", { name: "Allow once" }).focus();
   await page.keyboard.press("Enter");
 
   await expect(card.getByRole("status")).toHaveText("✓ Allowed once. Pip carries on.");
   await expect(card.getByRole("status")).toBeFocused();
+  await expect(page.getByRole("region", { name: /^Needs you/ })).toBeHidden();
   await expect(card.getByRole("button", { name: "Allow once" })).toBeHidden();
   await expect(page.locator('[data-state="done"]', { hasText: "git push" })).toBeVisible();
   await expect(page.getByText(/^Echo: Ship it/)).toBeVisible();

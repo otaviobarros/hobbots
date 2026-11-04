@@ -480,6 +480,7 @@ export const messages = {
         `${command} runs what this folder's ${file} says. If ${name} changes that file, the rule runs the new version.`,
     },
     highRisk: "High risk · once only",
+    highRiskUndone: "High risk · once only · it cannot be undone",
     confirm: ({ name }: { name: string }) => `I checked this action. Let ${name} do it this once.`,
     notConfirmed: "Tick the box to confirm this action first.",
     deny: "Deny",
