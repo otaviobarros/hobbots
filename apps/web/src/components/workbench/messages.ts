@@ -49,7 +49,7 @@ export const messages = {
   picker: {
     previous: "Previous file",
     next: "Next file",
-    open: ({ label }: { label: string }) => `${label}: pick a file`,
+    open: ({ label }: { label: string }) => `${label}: pick a file,`,
     of: ({ index, total }: { index: number; total: number }) => `${formatCount(index)} of ${formatCount(total)}`,
   },
   unavailable: {

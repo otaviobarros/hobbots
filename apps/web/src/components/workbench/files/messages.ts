@@ -26,7 +26,7 @@ export const messages = {
     gone: "No longer there",
   } satisfies Record<TaskFileNow, string | null>,
   showInFinder: "Show in Finder",
-  showInFinderFor: ({ name }: { name: string }) => `Show ${name} in Finder`,
+  showInFinderFor: ({ name }: { name: string }) => `Show in Finder: ${name}`,
   notShown: "Finder could not find this file. It may have moved since.",
   download: "Download",
   seeChanges: "See changes",

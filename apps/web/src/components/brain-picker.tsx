@@ -30,12 +30,13 @@ const copy = messages.brain;
 export const RuntimeTile = ({ runtime }: { runtime: RuntimeKind }) => (
   <span
     aria-hidden
+    data-mark={PROVIDER_MARKS[runtime].mark}
     className={cn(
-      "grid size-5 flex-none place-items-center text-xs font-bold text-provider-ink",
+      "grid size-5 flex-none place-items-center text-xs font-bold text-provider-ink before:content-[attr(data-mark)]",
       PROVIDER_MARKS[runtime].tile,
     )}
   >
-    {PROVIDER_MARKS[runtime].mark}
+    {/* Drawn from an attribute, not text, so a chip's name holds only the words it shows (WCAG 2.5.3). */}
   </span>
 );
 
@@ -78,8 +79,7 @@ export function BrainPicker({ hob, thread }: { hob: Agent; thread: Thread | unde
   const state = runtimes.isPending ? "checking" : health ? STATE_WORDS[health.availability] : "unknown";
   const chip = (
     <>
-      <RuntimeTile runtime={brain.runtime} />
-      <span className="font-bold">{label}</span>
+      <RuntimeTile runtime={brain.runtime} /> <span className="font-bold">{label}</span>{" "}
       <span className={health?.availability === "ready" ? "text-mint" : "text-lantern"}>{state}</span>
     </>
   );

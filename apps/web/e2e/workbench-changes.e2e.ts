@@ -258,7 +258,7 @@ test("[TC-UX-148] with the task chat open beside the tabs, Changes and Files swa
   // The list gives way to one line: previous, the file shown with "1 of 3", and next.
   await expect(panel.getByRole("navigation", { name: "Changed files" })).toBeHidden();
   const picker = panel.getByRole("button", { name: "Changed files: pick a file" });
-  await expect(picker).toContainText("a.txtEdited1 of 3");
+  await expect(picker).toContainText("a.txtEdited 1 of 3");
   await panel.getByRole("button", { name: "Next file" }).click();
   await expect(picker).toContainText("2 of 3");
   await expect(panel.getByRole("article", { name: "b.txt" })).toBeVisible();

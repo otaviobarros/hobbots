@@ -22,7 +22,7 @@ export const messages = {
     rowDetail: ({ name, detail }: { name: string; detail: string }) => `${name} · ${detail}`,
     showAll: "Show all",
     details: "Show details",
-    open: ({ title }: { title: string }) => `Look inside ${title}`,
+    openLead: "Look inside ",
     workbench: "Open in Workbench",
   },
   status: {
@@ -129,6 +129,8 @@ export const messages = {
     unpinHint: "Unpin: show it only in its own thread",
     tree: ({ title }: { title: string }) => `Tasks of ${title}`,
     row: ({ name, title }: { name: string; title: string }) => `${name} · ${title}`,
+    /** Read before a row's own text, so its name starts with who owns it and still holds what it shows. */
+    rowLead: ({ name }: { name: string }) => `${name} · `,
     you: "you",
     leads: "Leads a quest",
     /** A member that brought in hobs of its own: the party it leads under the Quest. */

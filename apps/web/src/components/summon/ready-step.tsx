@@ -109,7 +109,8 @@ function Row({
         </strong>
         {note && <span className="line-clamp-2 text-detail text-text-secondary">{note}</span>}
       </dd>
-      {action}
+      {/* A dl holds only dt and dd groups, so the row's action is a description of its own. */}
+      {action && <dd className="m-0 flex-none">{action}</dd>}
     </div>
   );
 }

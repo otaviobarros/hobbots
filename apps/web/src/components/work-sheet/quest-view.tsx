@@ -88,14 +88,15 @@ export function QuestView({
       <button
         type="button"
         onClick={() => onOpen(top.id)}
-        aria-label={room.row({ name: lead.name, title: taskTitle(top) })}
         className="flex cursor-pointer items-center gap-2.5 rounded-card border-0 bg-card px-3 py-2.5 text-start text-text-strong hover:bg-hover"
       >
+        {/* The name holds the row's visible text (WCAG 2.5.3), after its owner. */}
+        <span className="sr-only">{room.rowLead({ name: lead.name })}</span>
         <Tile>
           <HobSprite hob={lead} size={22} />
         </Tile>
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate font-bold">{taskTitle(top)}</span>
+          <span className="truncate font-bold">{taskTitle(top)}</span>{" "}
           <span className="truncate text-detail text-text-secondary">
             {copy.leads({ name: lead.name })}
             {rows[0] !== undefined && ` · ${leadNote(tree, rows[0])}`}
@@ -160,22 +161,23 @@ function TaskRow({
     <button
       type="button"
       onClick={() => onOpen(row.task.id)}
-      aria-label={questCopy.room.row({ name: owner.name, title })}
       className={cn(
         "flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3 py-2.5 text-start text-text-strong hover:bg-hover",
         INDENT[Math.min(row.depth - 1, INDENT.length - 1)],
       )}
     >
+      {/* The name holds the row's visible text (WCAG 2.5.3), after its owner. */}
+      <span className="sr-only">{room.rowLead({ name: owner.name })}</span>
       <Tile>
         <HobSprite hob={owner} size={22} state={row.status === "running" ? "working" : "idle"} />
       </Tile>
       <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate font-bold">{title}</span>
+        <span className="truncate font-bold">{title}</span>{" "}
         <span className={cn("truncate text-detail", color)}>
           {note === null ? owner.name : `${owner.name} · ${note}`}
         </span>
         <RowFlags row={row} hobs={hobs} />
-      </span>
+      </span>{" "}
       <StatusTag status={tone}>{roomStatusLabel(row.status)}</StatusTag>
     </button>
   );

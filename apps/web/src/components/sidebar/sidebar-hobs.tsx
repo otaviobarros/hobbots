@@ -111,7 +111,7 @@ function SidebarHob({
                 </span>
               </span>
               <span className="sidebar-label flex min-w-0 flex-1 flex-col">
-                <span className="truncate font-heading font-semibold">{hob.name}</span>
+                <span className="truncate font-heading font-semibold">{hob.name}</span>{" "}
                 <span className={cn("text-detail", state === "needs-you" ? "text-lantern" : "text-text-secondary")}>
                   {word}
                 </span>

@@ -284,7 +284,7 @@ function SharedFolders({
     return (
       <span className="text-sm text-text-secondary">
         No shared folders yet.{" "}
-        <Link to="/settings/$section" params={{ section: "safety" }}>
+        <Link to="/settings/$section" params={{ section: "safety" }} className="text-link underline">
           Add them in Settings
         </Link>
       </span>

@@ -35,11 +35,10 @@ export function FilePicker<Item>({
         ‹
       </Step>
       <DropdownMenu>
-        <DropdownMenuTrigger
-          aria-label={messages.picker.open({ label })}
-          className="flex h-[34px] min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-control border border-line-2 bg-card px-3 text-start text-text hover:border-lantern data-[state=open]:border-lantern"
-        >
-          <span className="flex min-w-0 flex-1 items-center gap-2">{current}</span>
+        <DropdownMenuTrigger className="flex h-[34px] min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-control border border-line-2 bg-card px-3 text-start text-text hover:border-lantern data-[state=open]:border-lantern">
+          {/* The name says what the button does, then holds the file it shows (WCAG 2.5.3). */}
+          <span className="sr-only">{messages.picker.open({ label })}</span>{" "}
+          <span className="flex min-w-0 flex-1 items-center gap-2">{current}</span>{" "}
           <span className="hidden shrink-0 text-xs whitespace-nowrap text-label @min-[300px]/picker:inline">
             {messages.picker.of({ index: shown + 1, total: items.length })}
           </span>

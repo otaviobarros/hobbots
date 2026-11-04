@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, 
 import { createConnection, createServer, type Socket } from "node:net";
 import { join, resolve } from "node:path";
 import { type BrowserContext, test as base, type Page } from "@playwright/test";
+import { AccessibilityWatch, report } from "./a11y.ts";
 
 const web = resolve(import.meta.dirname, "..");
 const server = resolve(web, "../server");
@@ -140,13 +141,26 @@ export const admit = async (context: BrowserContext, hub: Hub) => {
 // The context of the test running on this worker; a hub started during the test admits it.
 let activeContext: BrowserContext | undefined;
 
-/** Playwright's `test`, whose browser context gets a device on each hub the test starts. */
-export const test = base.extend<{ readonly hubDevice: undefined }>({
+/**
+ * Playwright's `test`, whose browser context gets a device on each hub the test starts, and whose
+ * pages pass the accessibility scan on every screen they visit (STD-TEST-007).
+ */
+export const test = base.extend<{ readonly hubDevice: undefined; readonly accessibilityScan: undefined }>({
   hubDevice: [
     async ({ context }, use) => {
       activeContext = context;
       await use(undefined);
       activeContext = undefined;
+    },
+    { auto: true },
+  ],
+  accessibilityScan: [
+    async ({ context }, use, testInfo) => {
+      const watch = new AccessibilityWatch(context);
+      await use(undefined);
+      const violations = await watch.finish();
+      // A test that already failed reports its own failure, not the screens it stopped on.
+      if (testInfo.status === testInfo.expectedStatus) await report(violations, testInfo);
     },
     { auto: true },
   ],
