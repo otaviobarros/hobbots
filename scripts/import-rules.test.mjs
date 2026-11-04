@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, test } from "node:test";
@@ -31,6 +31,8 @@ let found;
 before(() => {
   dir = mkdtempSync(join(tmpdir(), "hobbots-import-rules-"));
   copyFileSync(join(root, "biome.json"), join(dir, "biome.json"));
+  // biome.json loads its GritQL plugins from scripts/biome.
+  cpSync(join(root, "scripts/biome"), join(dir, "scripts/biome"), { recursive: true });
   for (const [file, source] of Object.entries(probes)) {
     mkdirSync(dirname(join(dir, file)), { recursive: true });
     writeFileSync(join(dir, file), `${source}\nexport {};\n`);

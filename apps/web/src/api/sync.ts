@@ -25,15 +25,25 @@ interface SyncState {
   readonly overlay: Map<string, OverlayEntry>;
 }
 
-type OverlayEntry =
-  | { readonly kind: "agent"; readonly revision: number; readonly value: Agent }
-  | { readonly kind: "thread"; readonly revision: number; readonly value: Thread }
-  | { readonly kind: "message"; readonly revision: number; readonly value: Message }
-  | { readonly kind: "approval"; readonly revision: number; readonly value: ApprovalRequest }
-  | { readonly kind: "backpack"; readonly revision: number; readonly value: BackpackItem }
-  | { readonly kind: "removed"; readonly revision: number };
+interface Values {
+  readonly agent: Agent;
+  readonly thread: Thread;
+  readonly message: Message;
+  readonly approval: ApprovalRequest;
+  readonly backpack: BackpackItem;
+}
 
-type Kind = Exclude<OverlayEntry["kind"], "removed">;
+type Kind = keyof Values;
+type ValueOf<K extends Kind> = Values[K];
+interface Entry<K extends Kind> {
+  readonly kind: K;
+  readonly revision: number;
+  readonly value: ValueOf<K>;
+}
+
+type OverlayEntry = Entry<Kind> | { readonly kind: "removed"; readonly revision: number };
+
+const isEntry = <K extends Kind>(entry: OverlayEntry, kind: K): entry is Entry<K> => entry.kind === kind;
 
 const states = new WeakMap<QueryClient, SyncState>();
 
@@ -121,19 +131,19 @@ export const withNewer = <T extends { readonly id: string; readonly revision: nu
  * missing from the response was created after it was read, so it is added. Everything else missing
  * from the response is gone.
  */
-const reconcile = <T extends { readonly id: string; readonly revision: number }>(
+const reconcile = <K extends Kind>(
   client: QueryClient,
-  rows: ReadonlyArray<T>,
-  kind: Kind,
-  belongs: (value: T) => boolean,
-  upsert: (list: ReadonlyArray<T>, item: T) => Array<T>,
-  cached: ReadonlyArray<T> | undefined,
-): Array<T> => {
+  rows: ReadonlyArray<ValueOf<K>>,
+  kind: K,
+  belongs: (value: ValueOf<K>) => boolean,
+  upsert: (list: ReadonlyArray<ValueOf<K>>, item: ValueOf<K>) => Array<ValueOf<K>>,
+  cached: ReadonlyArray<ValueOf<K>> | undefined,
+): Array<ValueOf<K>> => {
   const overlay = syncState(client).overlay;
   const known = new Map((cached ?? []).map((item) => [item.id, item]));
   // Text a delta already delivered stays, even when the version at hand holds an older checkpoint.
   // Only for the same revision: other cached versions may be from an earlier generation.
-  const withCachedText = (value: T) => {
+  const withCachedText = (value: ValueOf<K>) => {
     const cachedVersion = known.get(value.id);
     return cachedVersion?.revision === value.revision ? newer(cachedVersion, value) : value;
   };
@@ -142,11 +152,11 @@ const reconcile = <T extends { readonly id: string; readonly revision: number }>
     if (!key.startsWith(`${kind}:`)) continue;
     const id = key.slice(kind.length + 1);
     const row = result.find((item) => item.id === id);
-    if (entry.kind === "removed") {
+    if (!isEntry(entry, kind)) {
       if (row !== undefined && entry.revision > row.revision) result = result.filter((item) => item !== row);
       continue;
     }
-    const value = withCachedText(entry.value as unknown as T);
+    const value = withCachedText(entry.value);
     if (row === undefined) result = [...result, value];
     else if (newer(row, value) !== row) result = upsert(result, newer(row, value));
   }
@@ -162,20 +172,22 @@ const replaceById = <T extends { readonly id: string }>(list: ReadonlyArray<T>, 
  * reconciled with the overlay.
  */
 const synced =
-  <T extends { readonly id: string; readonly revision: number }>(
-    fetch: () => Promise<ReadonlyArray<T>>,
-    kind: Kind,
-    belongs: (value: T) => boolean,
-    order: (items: Array<T>) => Array<T> = (items) => items,
-    upsert: (list: ReadonlyArray<T>, item: T) => Array<T> = replaceById,
+  <K extends Kind>(
+    fetch: () => Promise<ReadonlyArray<ValueOf<K>>>,
+    kind: K,
+    belongs: (value: ValueOf<K>) => boolean,
+    order: (items: Array<ValueOf<K>>) => Array<ValueOf<K>> = (items) => items,
+    upsert: (list: ReadonlyArray<ValueOf<K>>, item: ValueOf<K>) => Array<ValueOf<K>> = replaceById,
   ) =>
-  async ({ client, queryKey }: QueryFunctionContext): Promise<ReadonlyArray<T>> => {
+  async ({ client, queryKey }: QueryFunctionContext): Promise<ReadonlyArray<ValueOf<K>>> => {
     const state = syncState(client);
     for (;;) {
       const generation = state.generation;
       const rows = await fetch();
       if (state.generation !== generation) continue;
-      return order(reconcile(client, rows, kind, belongs, upsert, client.getQueryData<ReadonlyArray<T>>(queryKey)));
+      return order(
+        reconcile(client, rows, kind, belongs, upsert, client.getQueryData<ReadonlyArray<ValueOf<K>>>(queryKey)),
+      );
     }
   };
 
@@ -216,7 +228,7 @@ export const syncedApproval =
       const fetched = await fetch();
       if (state.generation !== generation) continue;
       const known = state.overlay.get(`approval:${approvalId}`);
-      return known?.kind === "approval" ? newer(fetched, known.value) : fetched;
+      return known !== undefined && isEntry(known, "approval") ? newer(fetched, known.value) : fetched;
     }
   };
 

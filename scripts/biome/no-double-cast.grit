@@ -1,0 +1,6 @@
+language js
+
+// STD-REACT-019: a double cast turns off type checking. Parse the value with an Effect Schema instead.
+`$value as unknown as $type` where {
+  register_diagnostic(span=$value, message="Do not cast through unknown. Parse the value with an Effect Schema instead (STD-REACT-019).")
+}

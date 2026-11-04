@@ -81,7 +81,7 @@ Feature components in `apps/web` do not accept a `className` prop. The primitive
 - ✅ `<Button className="ms-auto" variant="ghost">`
 - ❌ `<Button className="bg-rose px-6 text-[13px]">`
 - **Why:** a screen that cannot restyle a component cannot drift from the design system.
-- **Enforced by:** the frontend check in `pnpm check`, which fails on a feature component with a `className` prop and on a non-layout class passed to a primitive.
+- **Enforced by:** a GritQL plugin that fails on a non-layout class passed to a primitive, and the frontend check, which fails on a feature component with a `className` prop.
 - **Applies to:** `apps/web`, `packages/ui`.
 
 ### STD-UI-011 Visual variants come from cva
