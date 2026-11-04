@@ -279,6 +279,7 @@ test("[TC-AG-105] Summon's Ready leads with a signed-out Claude and how to sign 
   await expect(blocker.getByText("Needs a fix")).toBeVisible();
   await expect(blocker.getByText(/Everything you picked is kept/)).toBeVisible();
   await expect(blocker.getByText(/installed but not signed in/)).toBeVisible();
+  await expect(blocker.getByRole("button", { name: "Copy claude" })).toBeVisible();
   await expect(blocker.getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", /settings\/connections$/);
   await expect(page.getByRole("button", { name: /^Summon / })).toHaveAttribute("aria-disabled", "true");
 

@@ -5,7 +5,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { runtimesQuery } from "../../api/queries.ts";
 import { PROVIDER_NAMES } from "../../lib/providers.ts";
+import { useCopy } from "../../lib/use-copy.ts";
 import { providerFix } from "../provider-fix.tsx";
+import { messages as settingsMessages } from "../settings/messages.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.ready;
@@ -32,6 +34,7 @@ export function SignedOutCard({ health, name }: { health: RuntimeHealth; name: s
       <p className="m-0 text-detail text-text-secondary [&_code]:font-mono [&_code]:text-text-strong">
         {providerFix(health.runtime, health)}
       </p>
+      <SignInCommand command={settingsMessages.providers[health.runtime].signInCommand} />
       <span className="flex flex-wrap items-center gap-2 pt-1">
         <Button type="button" onClick={() => void runtimes.refetch()} disabled={runtimes.isFetching}>
           {runtimes.isFetching ? copy.checking : copy.checkAgain}
@@ -43,5 +46,27 @@ export function SignedOutCard({ health, name }: { health: RuntimeHealth; name: s
         </Button>
       </span>
     </section>
+  );
+}
+
+const COPY_WORDS = { idle: copy.copy, copied: copy.copied, failed: copy.copyFailed } as const;
+
+/** The sign-in command as code, with Copy beside it, so the step is one paste in a terminal. */
+function SignInCommand({ command }: { command: string }) {
+  const [state, copyText] = useCopy();
+  return (
+    <span className="flex items-center gap-2 self-start rounded-control bg-deep py-1 ps-3 pe-1">
+      <code className="font-mono text-sm text-text-strong">{command}</code>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        aria-label={state === "idle" ? copy.copyLabel({ command }) : undefined}
+        onClick={() => copyText(command)}
+        className="text-text-secondary"
+      >
+        <span aria-live="polite">{COPY_WORDS[state]}</span>
+      </Button>
+    </span>
   );
 }
