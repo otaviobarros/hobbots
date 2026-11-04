@@ -84,11 +84,14 @@ const tree = (tasks: ReadonlyArray<Task>, records: Partial<ConstructorParameters
 const top = task("top", ALDRIC, null);
 
 describe("noteReceipt", () => {
-  it("is sent while its recipient is idle, held while its turn runs, and unread once its work ended", () => {
+  it("is sent while its recipient is idle, held while its turn runs, and unread once its work ended or changed hands", () => {
     expect(noteReceipt(note("n"), tree([top, task("ada", ADA, "top", "blocked")]))).toEqual({ _tag: "Sent" });
     const busy = tree([top, task("ada", ADA, "top", "active", "a1")], { attempts: [running("a1", "ada")] });
     expect(noteReceipt(note("n"), busy)).toEqual({ _tag: "Held", reason: "turn-running" });
     expect(noteReceipt(note("n"), tree([top, task("ada", ADA, "top", "cancelled")]))).toEqual({ _tag: "Unread" });
+    // Reassigned to another hob before a turn of Ada's picked it up: no turn of hers ever will.
+    const moved = tree([top, task("ada", AgentId.make("bob"), "top", "active")]);
+    expect(noteReceipt(note("n"), moved)).toEqual({ _tag: "Unread" });
   });
 
   it("is picked up once a turn did, even while that turn still runs", () => {

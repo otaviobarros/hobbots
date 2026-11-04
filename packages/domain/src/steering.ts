@@ -9,7 +9,7 @@ import { ancestorsOf, isTerminalTask, type Task } from "./task.ts";
  * - `Held`: its recipient's turn runs and reads only what it started with (ADR 019), or waits for
  *   you to decide an approval request (#701), so the note waits for that turn to end.
  * - `Sent`: it waits for its recipient's next turn, which it wakes.
- * - `Unread`: the work it went to ended before any turn picked it up.
+ * - `Unread`: the work it went to ended, or went to another hob, before any turn picked it up.
  */
 export type NoteReceipt =
   | { readonly _tag: "PickedUp"; readonly turnId: string; readonly at: string }
@@ -35,7 +35,9 @@ export const noteReceipt = (note: TaskNote, tree: TaskTree): NoteReceipt => {
   const approval = live.flatMap((each) => pendingApprovalsOn(tree, each.id))[0];
   if (approval !== undefined) return { _tag: "Held", reason: "approval-pending", approvalId: approval.id };
   if (live.length > 0) return { _tag: "Held", reason: "turn-running" };
-  return holders.length > 0 && holders.every((each) => isTerminalTask(each.state))
+  // Its recipient holds nothing it could read the note under, as after a reassignment, which settles
+  // the note's item as late: no turn of theirs will pick it up.
+  return holders.length === 0 || holders.every((each) => isTerminalTask(each.state))
     ? { _tag: "Unread" }
     : { _tag: "Sent" };
 };

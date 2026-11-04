@@ -1,4 +1,4 @@
-import { ApprovalService } from "@hobbots/agents";
+import { ApprovalService, HobLifecycle, TaskControls } from "@hobbots/agents";
 import { type Message, steerReceipt, type TaskNote, type TaskTree } from "@hobbots/domain";
 import { EventJournal } from "@hobbots/persistence";
 import { Effect } from "effect";
@@ -294,5 +294,45 @@ describe("a steer receipt for a message you send the lead", () => {
     );
     const tree = await run(pickedUp(message.id, 1));
     expect(steerReceipt([tree], message.id).map((each) => each.receipt._tag)).toEqual(["PickedUp"]);
+  }, 30_000);
+
+  // covers OR-002, OR-006, IN-001, UX-004
+  it("[TC-OR-545] a note whose member's Task is reassigned before any turn picked it up shows as unread, even once the new owner works", async () => {
+    const hubbed = partyHub();
+    dispose = hubbed.dispose;
+    const { run } = hubbed;
+    await run(
+      send([
+        "Build the site",
+        stuck("pages", "Pip", "Build the pages"),
+        hub("wait_for", { key: "wait", tasks: ["$pages.task_id"] }),
+      ]),
+    );
+    const blocked = await run(treeWhen((tree) => ownedBy(tree, PIP)?.state === "blocked"));
+    const pip = ownedBy(blocked, PIP);
+    if (pip === undefined) throw new Error("no member Task");
+    await run(messagesWhen((all) => all.length >= 2));
+
+    // Pip rests, so the note waits for his next turn, which never comes: his Task goes to Quill.
+    await run(HobLifecycle.use((hobs) => hobs.pause(PIP)));
+    await run(
+      send(["Use the blue theme", hub("message_task", { key: "steer", task_id: pip.id, text: "Use the blue theme." })]),
+    );
+    const { message } = yours(await run(messagesWhen((all) => all.length >= 4)), "Use the blue theme");
+    const waiting = await run(treeWhen((tree) => tree.notes.some((note) => note.messageId === message.id)));
+    expect(steerReceipt([waiting], message.id).map((each) => each.receipt)).toEqual([{ _tag: "Sent" }]);
+
+    await run(TaskControls.use((controls) => controls.reassign(pip.id, QUILL)));
+    // Quill takes the Task and works on it; the note was Pip's, so nobody picks it up.
+    const moved = await run(
+      treeWhen((tree) => {
+        const task = tree.tasks.find((each) => each.id === pip.id);
+        return task?.ownerId === QUILL && task.state === "blocked";
+      }),
+    );
+    const [passed, ...others] = steerReceipt([moved], message.id);
+    expect(others).toEqual([]);
+    expect(passed?.note).toMatchObject({ recipientId: PIP, pickedUpBy: null });
+    expect(passed?.receipt).toEqual({ _tag: "Unread" });
   }, 30_000);
 });
