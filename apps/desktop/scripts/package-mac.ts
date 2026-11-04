@@ -6,6 +6,7 @@
  */
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { checkFuses } from "./check-fuses.ts";
 
 const run = (command: string, args: ReadonlyArray<string>) => {
   const { status, error } = spawnSync(command, args, { stdio: "inherit", cwd: join(import.meta.dirname, "..") });
@@ -21,4 +22,4 @@ run("electron-builder", [
   "never",
   ...process.argv.slice(2),
 ]);
-run(process.execPath, [join(import.meta.dirname, "check-fuses.ts")]);
+if (!(await checkFuses(join(import.meta.dirname, "../release")))) process.exit(1);
