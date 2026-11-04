@@ -238,7 +238,7 @@ test("[TC-UX-038] past the retention window a Task's Changes keep their list and
 });
 
 // covers UX-002, UX-006
-test("[TC-UX-140] with the task chat open beside the tabs, Changes and Files swap their lists for a picker", async ({
+test("[TC-UX-148] with the task chat open beside the tabs, Changes and Files swap their lists for a picker", async ({
   page,
 }) => {
   // Wide enough that the chat sits beside the tabs, and narrow enough that it leaves them under 720px.

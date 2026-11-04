@@ -4,7 +4,7 @@ import { questHub, stopQuestHub } from "./quest-hub.ts";
 test.afterEach(stopQuestHub);
 
 // covers CH-005, UX-001, UX-005
-test("[TC-UX-142] a hob's History lists what it and its party did by day, filters it and opens where it happened", async ({
+test("[TC-UX-150] a hob's History lists what it and its party did by day, filters it and opens where it happened", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
