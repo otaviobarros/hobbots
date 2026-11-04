@@ -5,6 +5,12 @@ const seconds = (count: number) =>
 
 /** User-facing copy for pairing a new device (screen 4, ADR 021) (STD-I18N-001). */
 export const messages = {
+  chief: {
+    ask: "Hello! This device is new to me. Shall I ask your computer?",
+    waiting: "I've knocked. Allow it on your computer if it shows the same code.",
+    allowed: "Welcome in! Opening Hobbots…",
+    ended: "That didn't go through. You can ask again.",
+  },
   /** A browser's suggested name before the user changes it: "Safari on iPhone". */
   suggestedName: ({ browser, platform }: { browser: string | undefined; platform: string | undefined }) => {
     const what = browser ?? "Browser";

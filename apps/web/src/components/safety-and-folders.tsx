@@ -4,7 +4,7 @@ import { Switch } from "@hobbots/ui/components/switch";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useId, useState } from "react";
 import { ApiError } from "../api/client.ts";
-import { addFolder, folderName, PRESETS, removeFolder, ruleColor } from "../api/safety.ts";
+import { addFolder, folderName, PRESETS, removeFolder } from "../api/safety.ts";
 import { useUpdateSetup } from "../api/setup.ts";
 import { focusWithin } from "./hob-form.tsx";
 
@@ -28,17 +28,17 @@ export function PresetPicker({
   const name = useId();
   const shown = update.isPending && update.variables.safetyPreset ? update.variables.safetyPreset : value;
   return (
-    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+    <fieldset className="m-0 flex flex-col gap-4 border-0 p-0">
       <legend className="sr-only">{label}</legend>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3.5">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2.5">
         {PRESETS.map((preset) => {
           const on = preset.id === shown;
           return (
             <label
               key={preset.id}
               className={cn(
-                "cut flex cursor-pointer flex-col gap-2 border-2 p-4 transition-transform duration-100 ease-(--ease-press) hover:-translate-y-[3px]",
-                on ? "border-moonlight bg-line" : "border-line-2 bg-card",
+                "flex cursor-pointer flex-col gap-2 rounded-card bg-card p-4 transition-colors hover:bg-hover",
+                on && "shadow-[inset_0_0_0_2px_var(--color-moonlight)]",
                 focusWithin,
               )}
             >
@@ -50,27 +50,20 @@ export function PresetPicker({
                 onChange={() => update.mutate({ safetyPreset: preset.id }, { onSuccess: () => onPicked?.(preset.id) })}
                 className="sr-only"
               />
-              <span className="flex items-center gap-2">
-                <span className={cn("font-heading text-[22px] font-bold", on ? "text-moonlight" : "text-text-strong")}>
-                  {preset.label}
-                </span>
+              <FenceArt height={fenceHeight(preset.id)} />
+              <span className="flex flex-wrap items-center gap-1.5">
+                <strong className="text-[17px]">{preset.label}</strong>
                 {preset.recommended && (
-                  <span className="bg-moonlight px-[7px] py-0.5 text-xs font-bold text-ground">Most people</span>
+                  <span className="rounded-tag bg-line-2 px-2 py-0.5 text-[13px] font-bold">Recommended</span>
                 )}
               </span>
-              <span className="min-h-[42px] text-sm leading-[1.45] text-text-secondary">{preset.note}</span>
-              <span className="flex flex-col">
-                {preset.rules.map(([rule, answer]) => (
-                  <span key={rule} className="flex items-center gap-2 py-[3px] text-sm">
-                    <span className="flex-1">{rule}</span>
-                    <span className={cn("px-2 py-0.5 text-xs font-bold text-ground", ruleColor(answer))}>{answer}</span>
-                  </span>
-                ))}
-              </span>
+              <span className="text-sm leading-5">{preset.brief}</span>
+              <span className="text-[13px] leading-[18px] text-label">{preset.who}</span>
             </label>
           );
         })}
       </div>
+      <PresetRules preset={shown} />
       {shown === "trusting" && (
         <LockedSwitch
           label="Let new hobs run without the sandbox"
@@ -80,7 +73,7 @@ export function PresetPicker({
         />
       )}
       <p className="m-0 text-[13px] text-label">
-        Every hob stays inside its folders. You can make one hob more careful from its profile.
+        You can change this in Settings › Safety, and make any single hob more careful in its profile.
       </p>
       {update.isError && (
         <p role="alert" className="m-0 text-sm text-rose">
@@ -88,6 +81,53 @@ export function PresetPicker({
         </p>
       )}
     </fieldset>
+  );
+}
+
+/** How high each preset's fence stands in its card, in pixels: Careful highest. */
+const fenceHeight = (preset: SafetyPreset) => ({ careful: 34, balanced: 24, trusting: 12 })[preset];
+
+/** A little night scene with a wooden fence, as high as the preset is careful. */
+function FenceArt({ height }: { height: number }) {
+  return (
+    <span
+      aria-hidden
+      className="relative block h-[46px] overflow-hidden rounded-control bg-[linear-gradient(180deg,var(--color-deep),var(--color-ground))]"
+    >
+      <span className="absolute inset-x-0 bottom-0 h-2 border-t-2 border-scene-chimney bg-scene-ground" />
+      <span
+        className="absolute inset-x-2.5 bottom-2 bg-[repeating-linear-gradient(90deg,var(--color-wood)_0_5px,transparent_5px_11px)] transition-[height] duration-300"
+        style={{ height }}
+      />
+    </span>
+  );
+}
+
+const RULE_GLYPH = {
+  Allow: { g: "✓", c: "text-mint" },
+  Ask: { g: "?", c: "text-lantern" },
+  Never: { g: "✕", c: "text-rose" },
+};
+
+/** What a hob does on its own, asks about and never does under the picked preset. */
+function PresetRules({ preset }: { preset: SafetyPreset }) {
+  const info = PRESETS.find((p) => p.id === preset);
+  if (!info) return null;
+  return (
+    <div className="flex flex-col gap-2 rounded-card bg-card p-4">
+      <span className="lbl text-label">With {info.label}, a hob will</span>
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+        {info.rules.map(([rule, answer]) => (
+          <li key={rule} className="flex gap-2.5 text-sm leading-5">
+            <span aria-hidden className={cn("w-4 font-bold", RULE_GLYPH[answer].c)}>
+              {RULE_GLYPH[answer].g}
+            </span>
+            <span className="flex-1">{rule}</span>
+            <span className="text-[13px] text-text-secondary">{answer}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

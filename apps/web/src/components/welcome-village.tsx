@@ -3,6 +3,8 @@ import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { FIREFLIES, HOUSES, intro, PROVIDERS, SCENE_HOBS, type SceneHob } from "../art/village.ts";
+import { useFirstRunTheme } from "../lib/theme.ts";
+import { ChiefMark } from "./chief-mark.tsx";
 import { HobSprite } from "./hob-sprite.tsx";
 import { Stars } from "./scene.tsx";
 
@@ -14,7 +16,7 @@ let introPlayed = false;
 /** The classes of Welcome's two actions: Get started, and the quieter second one. */
 export const welcomeActionClass = {
   primary: "px-[26px] py-3.5 text-[17px] text-ground no-underline hover:text-ground",
-  secondary: "bg-ground/60 px-[22px] py-3 text-base",
+  secondary: "px-[22px] py-3 text-base text-text-secondary hover:text-text-strong",
 };
 
 /**
@@ -32,6 +34,7 @@ export function WelcomeVillage({
   more?: ReactNode;
   alert?: string | undefined;
 }) {
+  useFirstRunTheme();
   const [playIntro] = useState(() => !introPlayed);
   useEffect(() => {
     introPlayed = true;
@@ -72,7 +75,7 @@ export function WelcomeVillage({
           ))}
         </h1>
         <p className={cn("m-0 text-xl", introClass("animate-hb-rise"))} style={introDelay(intro.tagline)}>
-          Little helpers that do your chores while you sleep.
+          Little helpers that work on your computer, with the AI you already use.
         </p>
         <div
           className={cn("flex flex-wrap justify-center gap-3.5 pt-3.5", introClass("animate-hb-rise"))}
@@ -80,6 +83,7 @@ export function WelcomeVillage({
         >
           {actions}
         </div>
+        <span className="text-[13px] text-text-secondary">About 3 minutes. Everything stays on your computer.</span>
         {more}
         {alert !== undefined && (
           <span role="alert" className="bg-ground px-2 text-sm text-rose">
@@ -140,8 +144,17 @@ export function WelcomeVillage({
         />
       ))}
 
-      <div className="absolute bottom-[132px] left-[40%] flex items-end gap-10">
-        {SCENE_HOBS.map((hob) => (
+      <div className="absolute bottom-[132px] left-1/2 flex -translate-x-1/2 items-end gap-10">
+        {SCENE_HOBS.slice(0, 2).map((hob) => (
+          <VillageHob key={hob.name} hob={hob} walkIn={playIntro} />
+        ))}
+        <span className="relative flex flex-col items-center">
+          <span className="absolute bottom-full left-[70%] mb-1 w-[230px] rounded-[12px_12px_12px_2px] bg-text-strong/85 px-3 py-2 text-left text-sm leading-5 text-ground">
+            Welcome! I'm the Chief. I'll help you set up your first hob.
+          </span>
+          <ChiefMark size={150} mood="working" />
+        </span>
+        {SCENE_HOBS.slice(2).map((hob) => (
           <VillageHob key={hob.name} hob={hob} walkIn={playIntro} />
         ))}
       </div>
@@ -153,14 +166,7 @@ export function WelcomeVillage({
         )}
         style={introDelay(intro.providers)}
       >
-        <span className="text-sm text-text-secondary">Works with the AI you already use</span>
-        <ul className="m-0 flex list-none flex-wrap justify-center gap-2.5 p-0">
-          {PROVIDERS.map((provider) => (
-            <li key={provider} className="border-2 border-line-2 bg-ground px-2.5 py-1 text-[13px]">
-              {provider}
-            </li>
-          ))}
-        </ul>
+        <span className="text-[13px] text-text-secondary">Works with {PROVIDERS.join(" · ")}</span>
       </div>
     </main>
   );

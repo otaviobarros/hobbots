@@ -142,7 +142,7 @@ export function LocalSetup({ bridge, start = "welcome" }: { bridge: SetupBridge;
                 {welcome.getStarted}
               </Button>
               {/* Someone who already uses Hobbots has a hub elsewhere: this computer connects to it. */}
-              <Button variant="outline" className={welcomeActionClass.secondary} onClick={() => toConnect()}>
+              <Button variant="ghost" className={welcomeActionClass.secondary} onClick={() => toConnect()}>
                 {welcome.alreadyUse}
               </Button>
             </>

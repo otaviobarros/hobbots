@@ -9,7 +9,9 @@ import {
   useStartOver,
   type WaitingState,
 } from "../../api/pairing.ts";
+import { useFirstRunTheme } from "../../lib/theme.ts";
 import { formatTime } from "../../lib/time.ts";
+import { ChiefMark } from "../chief-mark.tsx";
 import { Stars } from "../scene.tsx";
 import { groupedCode } from "./device-request-model.ts";
 import { messages } from "./messages.ts";
@@ -32,10 +34,23 @@ export function PairingScreen() {
     if (allowed) openHobbots();
   }, [allowed]);
 
+  useFirstRunTheme();
   return (
-    <main className="relative flex min-h-0 flex-1 items-center justify-center overflow-y-auto bg-ground px-4 py-10">
-      <Stars count={30} height={260} />
-      <div className="cut relative z-10 flex w-full max-w-[480px] flex-col gap-4 border-2 border-control bg-panel px-7 py-6">
+    <main className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto bg-[linear-gradient(180deg,var(--color-deep)_0%,var(--color-ground)_60%,var(--color-scene-ground)_100%)] px-5 py-8">
+      <Stars count={34} height={600} />
+      <span className="relative z-10 flex w-full max-w-[480px] items-end gap-2.5">
+        <span aria-hidden className="flex-none">
+          <ChiefMark size={96} mood="working" />
+        </span>
+        <span
+          key={speechFor(status.data)}
+          aria-live="polite"
+          className="mb-[52px] animate-hb-in rounded-[12px_12px_12px_2px] bg-text-strong px-3 py-2.5 text-sm leading-5 text-ground"
+        >
+          {speechFor(status.data)}
+        </span>
+      </span>
+      <div className="relative z-10 flex w-full max-w-[480px] flex-col gap-4 rounded-card bg-card p-5">
         {status.isPending && <p className="m-0 text-label">{copy.ask.asking}</p>}
         {status.isError && <AskForm hub={hub} failed />}
         {status.data !== undefined && <Screen state={status.data} hub={hub} />}
@@ -43,6 +58,23 @@ export function PairingScreen() {
     </main>
   );
 }
+
+/** What the Chief says over the pairing card: a greeting, then the wait, then how it ended. */
+const speechFor = (state: WaitingState | undefined): string => {
+  switch (state?._tag) {
+    case "Waiting":
+      return copy.chief.waiting;
+    case "Allowed":
+      return copy.chief.allowed;
+    case "Denied":
+    case "Expired":
+    case "Throttled":
+    case "NotYours":
+      return copy.chief.ended;
+    default:
+      return copy.chief.ask;
+  }
+};
 
 function Screen({ state, hub }: { state: WaitingState; hub: string }) {
   switch (state._tag) {
@@ -81,7 +113,7 @@ function AskForm({ hub, failed = false }: { hub: string; failed?: boolean }) {
     <form className="flex flex-col gap-3.5" onSubmit={submit}>
       <h1 className="m-0 font-heading text-2xl font-bold text-moonlight">{copy.ask.title({ hub })}</h1>
       <p className="m-0 text-text-secondary">{copy.ask.intro}</p>
-      <label htmlFor={nameId} className="font-bold">
+      <label htmlFor={nameId} className="lbl text-label">
         {copy.ask.nameLabel}
       </label>
       <input
@@ -90,12 +122,12 @@ function AskForm({ hub, failed = false }: { hub: string; failed?: boolean }) {
         value={name}
         maxLength={64}
         onChange={(event) => setName(event.target.value)}
-        className="cut border-2 border-control bg-ground px-3 py-2 text-text-strong"
+        className="rounded-control border-2 border-line-2 bg-deep px-3 py-2 text-text-strong focus:border-focus-ring"
       />
       <span id={hintId} className="-mt-2 text-[13px] text-label">
         {copy.ask.nameHint}
       </span>
-      <Button type="submit" className="self-start" disabled={ask.isPending || name.trim() === ""}>
+      <Button type="submit" className="w-full" disabled={ask.isPending || name.trim() === ""}>
         {ask.isPending ? copy.ask.asking : copy.ask.submit}
       </Button>
       {(failed || ask.isError) && (
