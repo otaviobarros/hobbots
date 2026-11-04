@@ -1,6 +1,6 @@
 # React standards
 
-Rules for React code in the web client and the UI package. The client uses React 19 with the React Compiler, TanStack Router, TanStack Query, Effect Schema, and shadcn on Radix and Tailwind.
+Rules for React code in the web client and the UI package. The client uses React 19, TanStack Router, TanStack Query, Effect Schema, and shadcn on Radix and Tailwind.
 
 Every rule names the tool that enforces it. A rule says "review" only when it needs judgment that a tool cannot make. Where a rule allows an exception, the exception is a comment in the form of [STD-REACT-020](#std-react-020-every-opt-out-names-its-rule-and-a-reason). The checks for the React, UI, i18n and testing rules land in [#803](https://github.com/otaviobarros/hobbots/issues/803). Until then, review enforces them.
 
