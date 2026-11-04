@@ -120,7 +120,9 @@ test("[TC-AG-070] editing instructions in the profile changes the next reply", a
 });
 
 // covers AG-006
-test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to Archived hobs", async ({ page }) => {
+test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to the Archive's Retired hobs", async ({
+  page,
+}) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
@@ -151,7 +153,10 @@ test("[TC-AG-071] pausing, waking and retiring from the profile moves the hob to
     { id: pip.id, status: "retired" },
   ]);
   await page.getByRole("link", { name: "See archived hobs" }).click();
-  await expect(page).toHaveURL(/#\/settings\/archived$/);
+  await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
+  await expect(
+    page.getByRole("list", { name: "Retired hobs" }).getByRole("link", { name: "Read Pip's chats" }),
+  ).toBeVisible();
 });
 
 // covers AG-002, UX-005

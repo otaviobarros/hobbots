@@ -61,7 +61,7 @@ const chat = async (page: Page, current: Hub, pipId: string, prompt: string) => 
 };
 
 // covers CH-006, CH-009
-test("[TC-CH-157] a thread archived from its menu is found in the Archived list and in search, opens read-only and comes back on Restore", async ({
+test("[TC-CH-157] a thread archived from its menu is found in the Archive and in search, opens read-only and comes back on Restore", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -77,11 +77,12 @@ test("[TC-CH-157] a thread archived from its menu is found in the Archived list 
   await expect(threadLink(page, "Rename the newsletter")).toHaveCount(0);
   await expect(threadLink(page, "Plan my week")).toBeVisible();
 
-  // Found in the hob's Archived list, and it opens read-only.
+  // Found in the Archive, narrowed to the hob, and it opens read-only.
   await threadList(page).getByRole("link", { name: "Archived, 1 thread" }).click();
-  const archived = page.getByRole("list", { name: "Archived threads" });
+  await expect(page).toHaveURL(new RegExp(`#/archive\\?hob=${pip.id}$`));
+  const archived = page.getByRole("list", { name: "Archived chats" });
   await expect(archived.getByRole("listitem")).toHaveCount(1);
-  await archived.getByRole("link", { name: /Rename the newsletter/ }).click();
+  await archived.getByRole("link", { name: "Read Rename the newsletter" }).click();
   const main = page.getByRole("main", { name: "Chat" });
   await expect(main.getByRole("region", { name: "Archived" })).toContainText("Pip takes no new messages here");
   await expect(main.getByText("Echo: Rename the newsletter", { exact: true })).toBeVisible();
