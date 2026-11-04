@@ -5,7 +5,7 @@ import type { WaitingState } from "./backpack-model.ts";
 export const messages = {
   /** What an item is, in words, with who sent it where the item says. */
   what: {
-    task: ({ title }: { title: string }) => `A new Task: "${title}"`,
+    task: ({ title }: { title: string }) => `A new task: "${title}"`,
     result: ({ name, title }: { name: string; title: string }) => `${name}'s result for "${title}"`,
     failure: ({ name, title }: { name: string; title: string }) => `Why ${name}'s "${title}" ended`,
     checkpoint: ({ summary }: { summary: string }) => `A report: ${summary}`,
@@ -39,7 +39,7 @@ export const messages = {
     processing: "The turn that carries it is reading it now.",
     consumed: "Handled by the turn that carried it.",
     answered: "Answered.",
-    late: "Its Task had already ended or moved on, so it started nothing.",
+    late: "Its task had already ended or moved on, so it started nothing.",
     dismissed: "Dismissed.",
     stuck: "It ran out of tries and waits for your choice.",
   } satisfies Record<WaitingState, string>,

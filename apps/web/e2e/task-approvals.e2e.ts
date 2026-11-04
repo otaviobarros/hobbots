@@ -2,7 +2,7 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { emptyDataDir, expect, type Hub, removeDataDir, startHub, test } from "./hub.ts";
 
-// Issue #352 in the browser: an approval for This Task, which the card calls This Quest once a party
+// Issue #352 in the browser: an approval for This task, which the card calls This quest once a party
 // joins the Task. The hub-level side is apps/server/test/task-grants.test.ts.
 
 let hub: Hub | undefined;
@@ -71,7 +71,7 @@ const PUSH = "fake:tool Bash git push origin feature";
 type Grants = ReadonlyArray<{ readonly agentId: string; readonly lifetime: string; readonly taskId: string | null }>;
 
 // covers PE-007, OR-001
-test("[TC-IN-152] a request made in a Task offers This Task, shows the rule it saves, and the next push runs without asking", async ({
+test("[TC-IN-152] a request made in a Task offers This task, shows the rule it saves, and the next push runs without asking", async ({
   page,
 }) => {
   const { current, composer } = await aldricsChat(page);
@@ -87,25 +87,25 @@ test("[TC-IN-152] a request made in a Task offers This Task, shows the rule it s
   await expect(stop).toBeVisible();
   await expect(stop).toBeHidden();
 
-  // His push in that Task asks, and the card offers This Task between Allow once and Always.
+  // His push in that Task asks, and the card offers This task between Allow once and Always.
   await composer.fill(["Push the branch", PUSH].join("\n"));
   await composer.press("Enter");
   const card = page.getByRole("region", { name: "Aldric asks permission" });
   await expect(card).toBeVisible();
-  await expect(card.getByRole("button")).toHaveText(["Allow once", "This Task", "Always for this site", "Deny"]);
-  await card.getByRole("button", { name: "This Task" }).click();
-  const form = card.getByRole("form", { name: "This Task" });
+  await expect(card.getByRole("button")).toHaveText(["Allow once", "This task", "Always for this site", "Deny"]);
+  await card.getByRole("button", { name: "This task" }).click();
+  const form = card.getByRole("form", { name: "This task" });
   await expect(form).toContainText("Hobbots saves this rule for this Task only.");
   await expect(form.getByRole("list", { name: "The rule to save" })).toHaveText([
-    `For this Task, let Aldric push ${shared} to feature on origin`,
+    `For this task, let Aldric push ${shared} to feature on origin`,
   ]);
-  // Escape goes back to the choices, with focus on This Task.
+  // Escape goes back to the choices, with focus on This task.
   await page.keyboard.press("Escape");
-  await expect(card.getByRole("button", { name: "This Task" })).toBeFocused();
-  await card.getByRole("button", { name: "This Task" }).click();
-  await form.getByRole("button", { name: "Save for this Task and allow" }).click();
+  await expect(card.getByRole("button", { name: "This task" })).toBeFocused();
+  await card.getByRole("button", { name: "This task" }).click();
+  await form.getByRole("button", { name: "Save for this task and allow" }).click();
   await expect(card.getByRole("status")).toHaveText(
-    "✓ Allowed for the rest of this Task. Aldric carries on, and asks again once the Task ends.",
+    "✓ Allowed for the rest of this task. Aldric carries on, and asks again once the task ends.",
   );
   await expect(stop).toBeHidden();
 
@@ -122,7 +122,7 @@ test("[TC-IN-152] a request made in a Task offers This Task, shows the rule it s
 });
 
 // covers PE-004, PE-006, PE-007
-test("[TC-IN-153] a party member's request in the Inbox offers This Quest, and its grant answers only that member", async ({
+test("[TC-IN-153] a party member's request in the Inbox offers This quest, and its grant answers only that member", async ({
   page,
 }) => {
   const { current, composer } = await aldricsChat(page);
@@ -143,18 +143,18 @@ test("[TC-IN-153] a party member's request in the Inbox offers This Quest, and i
   const detail = page.getByRole("article", { name: "Request from Quill: Push your work" });
   const card = detail.getByRole("region", { name: "Quill asks permission" });
 
-  // A party joined the Task, so the same lifetime reads This Quest.
-  await expect(card.getByRole("button", { name: "This Quest" })).toBeVisible();
-  await expect(card.getByRole("button", { name: "This Task" })).toHaveCount(0);
-  await card.getByRole("button", { name: "This Quest" }).click();
-  const form = card.getByRole("form", { name: "This Quest" });
+  // A party joined the Task, so the same lifetime reads This quest.
+  await expect(card.getByRole("button", { name: "This quest" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "This task" })).toHaveCount(0);
+  await card.getByRole("button", { name: "This quest" }).click();
+  const form = card.getByRole("form", { name: "This quest" });
   await expect(form).toContainText("Other hobs on the Quest still ask.");
   await expect(form.getByRole("list", { name: "The rule to save" })).toHaveText([
-    `For this Quest, let Quill push ${shared} to feature on origin`,
+    `For this quest, let Quill push ${shared} to feature on origin`,
   ]);
-  await form.getByRole("button", { name: "Save for this Quest and allow" }).click();
+  await form.getByRole("button", { name: "Save for this quest and allow" }).click();
   await expect(card.getByRole("status")).toHaveText(
-    "✓ Allowed for the rest of this Task. Quill carries on, and asks again once the Task ends.",
+    "✓ Allowed for the rest of this task. Quill carries on, and asks again once the task ends.",
   );
 
   // Quill's second push runs on his grant, so nothing else waits on you.

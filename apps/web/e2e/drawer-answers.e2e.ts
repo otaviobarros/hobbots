@@ -17,7 +17,7 @@ const openAdasTask = async (page: Page) => {
   await expect(page.getByRole("region", { name: "Ada asks you" })).toBeVisible({ timeout: 15_000 });
   const card = page.getByRole("region", { name: "Aldric's work on Plan the Black Friday campaign" });
   await card.getByRole("button", { name: "Look inside Build the campaign" }).click();
-  const drawer = page.getByRole("dialog", { name: "Build the campaign, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Build the campaign, task details" });
   await expect(drawer).toContainText(QUESTION);
   return { url, drawer };
 };
@@ -43,7 +43,7 @@ test("[TC-UX-085] a question waiting for you is answered in the Task drawer, goe
   await expect(drawer.getByRole("textbox", { name: "Tell Aldric about this task" })).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("region", { name: "Ada asks you" })).toContainText(
-    "You answered in the Task's details: Yes, Dec 12 for international orders.",
+    "You answered in the task's details: Yes, Dec 12 for international orders.",
   );
 
   // Once the question is answered, her part finishes and the Quest wraps up.
@@ -106,6 +106,6 @@ test("[TC-IN-489] an answer given in the Inbox says so in the Task drawer and on
   await expect(asks).toContainText("You answered in the Inbox: Yes, Dec 12.");
   // The Quest may have wrapped up by now, so the drawer opens from the question's own card.
   await asks.getByRole("button", { name: "for Build the campaign" }).click();
-  const drawer = page.getByRole("dialog", { name: "Build the campaign, Task details" });
+  const drawer = page.getByRole("dialog", { name: "Build the campaign, task details" });
   await expect(drawer).toContainText("You answered in the Inbox: Yes, Dec 12.");
 });

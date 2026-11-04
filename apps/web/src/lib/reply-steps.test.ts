@@ -18,6 +18,6 @@ describe("reply steps", () => {
   });
 
   it("names an operation as the Permissions tab does", () => {
-    expect(operationLabel("edit-files")).toBe("Create and edit files");
+    expect(operationLabel("edit-files")).toBe("Change files");
   });
 });

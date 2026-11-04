@@ -5,7 +5,7 @@ export const messages = {
   onQuest: ({ lead }: { lead: string }) => `On ${lead}'s quest`,
   /** The accessible name of a link to the Quest from a member's work. */
   openQuest: ({ name, lead, state }: { name: string; lead: string; state: string }) =>
-    `${name} is on ${lead}'s quest, ${state}. Open the Quest`,
+    `${name} is on ${lead}'s quest, ${state}. Open the quest`,
   /** Where a member's Task stands, in words. */
   state: {
     queued: "Not started",

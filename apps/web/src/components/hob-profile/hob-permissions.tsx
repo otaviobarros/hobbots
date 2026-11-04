@@ -31,7 +31,7 @@ import {
 import { watchedSetupQuery } from "../../api/setup.ts";
 import { messages } from "../messages.ts";
 import { FolderList, LockedSwitch } from "../safety/safety-and-folders.tsx";
-import { EnforcementList, NeedsSandbox } from "./enforcement.tsx";
+import { CheckedTag, EnforcementList, NeedsSandbox } from "./enforcement.tsx";
 
 /**
  * The hob's permissions as the hub works them out. They change with the hob's configuration
@@ -386,7 +386,7 @@ export function Rule({
           <span id={labelId} className="text-text-strong">
             {rule.label}
           </span>
-          {checked && <Badge variant="muted">{copy.checked}</Badge>}
+          {checked && <CheckedTag />}
           {blocked && <NeedsSandbox />}
           {narrowed && (
             <>

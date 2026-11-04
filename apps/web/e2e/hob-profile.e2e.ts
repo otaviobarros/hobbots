@@ -348,8 +348,8 @@ test("[TC-PE-030] the Permissions tab adds a hob's own folder and narrows a rule
   const ownList = page.getByRole("list", { name: "Pip's own folders" });
   await expect(ownList.getByText(realpathSync(own))).toBeVisible();
 
-  // Run commands is Allow under Balanced; Never is offered, a wider answer than Ask on Delete is not.
-  const commands = page.getByRole("radiogroup", { name: "Run commands" });
+  // Run commands and tests is Allow under Balanced; Never is offered, a wider answer than Ask on Delete is not.
+  const commands = page.getByRole("radiogroup", { name: "Run commands and tests" });
   await expect(commands.getByRole("radio", { name: "Allow" })).toBeChecked();
   await commands.getByText("Ask", { exact: true }).click();
   await expect(commands.getByRole("radio", { name: "Ask" })).toBeChecked();
@@ -452,7 +452,7 @@ test("[TC-PE-033] an open Permissions tab follows a safety change made in anothe
   extraDirs.push(shared);
   await page.goto(`${current.url}/#/hobs/${pip.id}/profile`);
   await page.getByRole("tab", { name: "Permissions" }).click();
-  const commands = page.getByRole("radiogroup", { name: "Run commands" });
+  const commands = page.getByRole("radiogroup", { name: "Run commands and tests" });
   await expect(commands.getByRole("radio", { name: "Allow" })).toBeChecked();
 
   // Another window picks Careful and shares a folder; nothing tells this hob about it.
@@ -506,7 +506,7 @@ test("[TC-UX-006] a profile or settings page taller than the window scrolls only
   expect(await pageScrolls()).toBe(false);
 
   await page.getByRole("tab", { name: "Permissions" }).click();
-  await expect(page.getByRole("radiogroup", { name: "Run commands" })).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "Run commands and tests" })).toBeVisible();
   expect(await pageScrolls()).toBe(false);
 
   await page.goto(`${current.url}/#/settings/connections`);

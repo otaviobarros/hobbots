@@ -70,7 +70,7 @@ export const messages = {
     matchLabel: "Matching code",
     matchHint: ({ name }: { name: string }) => `Check that ${name} shows the same code.`,
     grants:
-      "An allowed device gets all of Hobbots: chat, Quests, approvals and the Workbench. Hobs keep working only on this computer.",
+      "An allowed device gets all of Hobbots: chat, quests, approvals and the Workbench. Hobs keep working only on this computer.",
     allow: "Allow",
     deny: "Deny",
     later: "Decide later",
