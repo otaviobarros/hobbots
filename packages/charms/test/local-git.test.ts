@@ -85,19 +85,28 @@ const layer = LocalGitToolsLive({ stagingFolder: staging }).pipe(
   Layer.provide(Layer.mergeAll(PolicyEngine.node, NodeServices.layer)),
 );
 
-/** One call of the tool on a turn with `access`, with a step when the user can be asked. */
-const callInit = (
+/**
+ * One call of the tool under `access`, with a step when the user can be asked, on a turn that
+ * started under `offeredUnder`: a policy narrowed since the turn started applies to its next call (PE-008).
+ */
+const callInitIn = (
+  offeredUnder: ToolAccess | null,
   access: ToolAccess | null,
   input: unknown,
   user?: { readonly asked: Array<ApprovalAction>; readonly answer: "approve" | "deny" },
 ) =>
   Effect.gen(function* () {
+    let started = false;
     const tools = yield* (yield* LocalGitTools).forTurn({
       agentId: AgentId.make("hob"),
       threadId: null,
       messageId: null,
       scope: () => "",
-      currentAccess: Effect.succeed(access),
+      currentAccess: Effect.sync(() => {
+        if (started) return access;
+        started = true;
+        return offeredUnder;
+      }),
       redactor: makeRedactor(),
       approvals: user && access ? userApprovals(access, user.asked, user.answer) : null,
     });
@@ -106,6 +115,16 @@ const callInit = (
     const answer = yield* tools.call(GIT_INIT_TOOL, input, { id: "step-1", report: (event) => events.push(event) });
     return { offered: true, names: tools.tools.map((tool) => tool.name), answer, events };
   }).pipe(Effect.provide(layer), Effect.runPromise);
+
+/** One call of the tool on a turn with `access`, with a step when the user can be asked. */
+const callInit = (
+  access: ToolAccess | null,
+  input: unknown,
+  user?: { readonly asked: Array<ApprovalAction>; readonly answer: "approve" | "deny" },
+) => callInitIn(access, access, input, user);
+
+/** One call under `access` on a turn that started under the project's whole access, before its policy narrowed. */
+const callAfterNarrowing = (access: ToolAccess | null, input: unknown) => callInitIn(accessFor(project), access, input);
 
 /** Runs `PUBLISH_SCRIPT` with `args`, as the tool does, and answers how it ended. */
 const runPublish = (args: ReadonlyArray<unknown>) => {
@@ -184,7 +203,10 @@ describe("creating a repository for a hob", () => {
 
   // covers PE-001, PE-003
   it("[TC-PE-326] decides the call as Local Git under the hob's policy: Never refuses, and Careful asks first", async () => {
-    const never = await callInit(accessFor(project, "balanced", { "local-git": "deny" }), { folder: project });
+    // Never: not offered, and a call after the policy narrowed mid-turn is refused.
+    const gitDenied = accessFor(project, "balanced", { "local-git": "deny" });
+    expect(await callInit(gitDenied, { folder: project })).toMatchObject({ offered: false });
+    const never = await callAfterNarrowing(gitDenied, { folder: project });
     expect(never.answer).toMatchObject({ refused: true });
     expect(fs.existsSync(path.join(project, ".git"))).toBe(false);
 
@@ -204,11 +226,16 @@ describe("creating a repository for a hob", () => {
   // covers PE-001, PE-003
   it("[TC-PE-328] decides Edit files on the new .git too: Never refuses though Local Git allows, and Ask asks", async () => {
     // Balanced allows Local Git; Edit files set to Never still refuses, and writes nothing.
-    const never = await callInit(accessFor(project, "balanced", { "edit-files": "deny" }), { folder: project });
+    // Neither is offered; each is refused when the policy narrowed after the turn started.
+    const editDenied = accessFor(project, "balanced", { "edit-files": "deny" });
+    expect(await callInit(editDenied, { folder: project })).toMatchObject({ offered: false });
+    const never = await callAfterNarrowing(editDenied, { folder: project });
     expect(never.answer).toMatchObject({ refused: true });
     expect(fs.existsSync(path.join(project, ".git"))).toBe(false);
     // Local Git set to Never refuses though Edit files allows.
-    const gitNever = await callInit(accessFor(project, "balanced", { "local-git": "deny" }), { folder: project });
+    const gitDenied = accessFor(project, "balanced", { "local-git": "deny" });
+    expect(await callInit(gitDenied, { folder: project })).toMatchObject({ offered: false });
+    const gitNever = await callAfterNarrowing(gitDenied, { folder: project });
     expect(gitNever.answer).toMatchObject({ refused: true });
     expect(fs.existsSync(path.join(project, ".git"))).toBe(false);
 
@@ -295,7 +322,7 @@ describe("replacing what a deleted repository leaves", () => {
     const other = path.join(project, "other");
     fs.mkdirSync(other);
     leaveStub(other);
-    const never = await callInit(accessFor(project, "balanced", { "edit-files": "deny" }), { folder: other });
+    const never = await callAfterNarrowing(accessFor(project, "balanced", { "edit-files": "deny" }), { folder: other });
     expect(never.answer).toMatchObject({ refused: true });
     expect(fs.readdirSync(path.join(other, ".git")).sort()).toEqual(["config", "hooks"]);
 

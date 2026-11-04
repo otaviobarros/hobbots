@@ -37,7 +37,8 @@ export interface SessionTurn {
   /** Asks you about calls the policy answers Ask for; null, those calls are refused. */
   readonly approvals: TurnApprovals | null;
   readonly recordToolStart: (event: ToolStartedEvent) => Effect.Effect<boolean>;
-  readonly hubTools: HubTools;
+  /** The hub tools the turn offers, read at its start. */
+  readonly hubTools: Effect.Effect<HubTools>;
   /** Records the runtime's evidence that it took the turn: its session. */
   readonly started: (sessionId: string) => Effect.Effect<void>;
 }
@@ -78,7 +79,7 @@ export const runSessionTurn = (
           approvals: turn.approvals,
           redaction: redactor,
           recordToolStart: turn.recordToolStart,
-          hubTools: turn.hubTools,
+          hubTools: yield* turn.hubTools,
         },
         adapter.sendPrompt,
       )
@@ -128,3 +129,7 @@ export interface Running {
   readonly accessNow?: Effect.Effect<ToolAccess | null>;
   stop: StopReason | null;
 }
+
+/** What the session's hob may do on its Task now: read again for every Charm call (PE-008). */
+export const currentAccessOf = (run: Running): Effect.Effect<ToolAccess | null> =>
+  run.accessNow ?? Effect.succeed(run.access);

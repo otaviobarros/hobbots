@@ -37,7 +37,7 @@ import { type PathSeparator, sharedFolders } from "./authority.ts";
 import { memberPrompt, memberReminder } from "./briefs.ts";
 import { newId } from "./call-scope.ts";
 import { emptyQuestFinding } from "./empty-quests.ts";
-import { type Ending, type Running, runSessionTurn, STOPPED } from "./session.ts";
+import { currentAccessOf, type Ending, type Running, runSessionTurn, STOPPED } from "./session.ts";
 import type { TaskTools } from "./task-tools.ts";
 import { endTurn } from "./turn-end.ts";
 
@@ -306,7 +306,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
             : yield* deps.approvals.value.forTurn(
                 // The member's requests reach you in the Inbox under its lead's thread, as its own (PE-006).
                 { agentId: agent.id, threadId: task.threadId, messageId: null, taskId: task.id },
-                run.accessNow ?? Effect.succeed(run.access),
+                currentAccessOf(run),
                 // A member's This Task binds to the top of its lead's tree, so it ends with the Quest (ADR 018).
                 Effect.succeed(task.rootId),
               );
@@ -325,7 +325,10 @@ export const makeMemberRunner = (deps: MemberDeps) => {
             access: run.access,
             approvals: handle?.approvals ?? null,
             recordToolStart: deps.recordToolStart(task),
-            hubTools: deps.tools.forTurn({ agentId: agent.id, taskId: task.id, carried: work.holding }),
+            hubTools: deps.tools.forSession(
+              { agentId: agent.id, taskId: task.id, carried: work.holding },
+              { currentAccess: currentAccessOf(run), redactor: deps.redactor, approvals: handle?.approvals ?? null },
+            ),
             started: (sessionId) =>
               work.accepted(sessionId).pipe(
                 Effect.andThen(nowIso),
