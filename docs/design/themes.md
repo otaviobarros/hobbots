@@ -19,9 +19,10 @@ Lamplight is smooth: rounded corners, eased motion and Atkinson headings. Worksh
 
 - **color**: 26 color tokens, each with a value for every theme and a line on where it is used.
 - **shadow**: `shadow-menu` and `shadow-sheet` for every theme.
-- **fixed**: values that stay the same in every theme. The switch knob is `#fdf9ef` when the switch is on. The letter on an AI provider's tile is `provider-ink`, `#141228`, because the tiles keep their light colors in every theme.
-- **skin**: the values each look sets once. Components read them and never use a corner, font or easing directly.
-- **font**, **type**, **space**, **radius**, **size** and **duration**: the same in every theme.
+- **fixed**: values that stay the same in every theme. The switch knob is `#fdf9ef` when the switch is on. The letter on an AI provider's tile is `provider-ink`, `#141228`, because the tiles keep their light colors in every theme. The two fixed shadows are here too (see Shadows and gradients).
+- **skin**: every value each look sets once, with the same names `styles.css` uses: corners, the heading font and weight, label case and tracking, easing, edge, button weight, hop, the selected fill, which icon set shows, the cut, the focus values and the press values. Components read them and never use a corner, font or easing directly.
+- **font**, **type**, **space**, **space-inset**, **radius**, **size** and **duration**: the same in every theme.
+- **motion**, **gradient** and **shape**: rules that hold in every theme, described below.
 - **contrast**: the floors every theme meets, as pairs of a text color and the color behind it.
 
 ## Rules
@@ -56,7 +57,40 @@ The 12:1 floor for `text` is measured on `ground` only. Reading text means hob r
 
 ## Type and spacing
 
-The type scale, the spacing grid and every size are the same in all four themes. `apps/web/src/styles.css` sets each style of `type` as a Tailwind text size with its own line height: `text-display`, `text-heading`, `text-title`, `text-reading`, `text-body`, `text-detail`, `text-meta` and `text-code`. The `label` style is the `lbl` utility, because `text-label` is the label color. No text goes below `meta`, 12px. Spacing uses Tailwind's 4px step, and every `space` value sits on it. No theme or look sets a size, a line height or a spacing value. The same test checks all of this.
+The type scale, the spacing grid and every size are the same in all four themes. `apps/web/src/styles.css` sets each style of `type` as a Tailwind text size with its own line height: `text-display`, `text-heading`, `text-title`, `text-reading`, `text-body`, `text-ui`, `text-detail`, `text-meta` and `text-code`. The `label` style is the `lbl` utility, because `text-label` is the label color.
+
+- `body` (15px/23px) is the UI text of fields, cards and buttons. `ui` (14px/20px) is for denser UI text beside it: rows, menus, search fields and tabs.
+- No text goes below `meta`, 12px, anywhere. That includes key hints, tags and counts.
+- Spacing uses Tailwind's 4px step, and every `space` value sits on it. Layout gaps and page padding use only these steps.
+- Padding inside a control or a row may also use a 2px half step: 6, 10 or 14px (`space-inset`, Tailwind's `1.5`, `2.5` and `3.5`).
+- No theme or look sets a size, a line height or a spacing value.
+
+The same test checks all of this.
+
+## Motion
+
+Durations come from `duration`. `styles.css` sets each one in `@theme` as `--dur-press`, `--dur-fade`, `--dur-enter`, `--dur-sheet`, `--dur-shake`, `--dur-hop` and `--dur-loop-cap`, and a test checks them against themes.json. A transition reads them as `duration-(--dur-fade)`.
+
+Nothing loops past `dur-loop-cap` (10s) or 3 cycles without new input, in any theme. A loop starts again only on a change, such as a new reply or a hob starting work. A state that just needs to show uses a still frame, so a working hob shows a still mint mark. Scenes settle to a still frame after 30 seconds without input. Every animation stops with Reduce motion (STD-UI-004).
+
+## Shadows and gradients
+
+`shadow-menu` and `shadow-sheet` change with the theme. Besides them, only these fixed shadows are allowed, each named once in `fixed`:
+
+| Shadow | Value | Used for |
+| --- | --- | --- |
+| `shadow-segment` | `0 1px 2px rgb(0 0 0 / 0.18)` | The lift under the picked segment of a segmented control |
+| `stand-shadow` | `rgb(0 0 0 / 0.28)` | The soft shadow under a standing hob |
+
+A new fixed shadow is added to that list first.
+
+Gradients in the hob's color are allowed on the hob hero, card doors and the pixel ground strip. Nothing else uses a gradient.
+
+## Shape
+
+Corners come from the skin's `corner-*` values. Filter chips are the one exception: they are pills (`radius-round`) in every theme, Workshop included. Bubble corners are fixed by design too.
+
+The focus ring is 2px in every theme. Workshop's `--focus-outline` in `styles.css` is still 3px until #801 lands.
 
 ## In the code
 
