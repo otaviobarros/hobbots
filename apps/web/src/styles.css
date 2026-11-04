@@ -577,6 +577,9 @@
  */
 :root {
   --selected: var(--color-card);
+  /* Which icon set shows: line icons in Lamplight, the 12×12 pixel icons in Workshop. */
+  --show-line-icon: inline-flex;
+  --show-pixel-icon: none;
   --corner-control: 8px;
   --corner-card: 16px;
   --corner-tag: 6px;
@@ -603,6 +606,8 @@
 
 :root[data-theme^="workshop-"] {
   --selected: var(--color-line);
+  --show-line-icon: none;
+  --show-pixel-icon: inline-flex;
   --corner-control: 0;
   --corner-card: 0;
   --corner-tag: 0;
@@ -771,6 +776,14 @@ body {
   font-size: 14px;
   letter-spacing: var(--label-track);
   text-transform: var(--label-case);
+}
+
+/* An icon drawn in both sets; the skin shows one (STD-UI-001: no component checks the theme). */
+@utility line-icon {
+  display: var(--show-line-icon);
+}
+@utility pixel-icon {
+  display: var(--show-pixel-icon);
 }
 
 /*
