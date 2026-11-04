@@ -9,17 +9,14 @@ import { inboxQuery } from "../../api/approvals.ts";
 import { useBlockersQuery } from "../../api/blockers.ts";
 import { usePromptedDevices } from "../../api/pairing.ts";
 import { useWaitingQuestionsQuery } from "../../api/questions.ts";
-import { BlockerCard } from "../blockers/blocker-card.tsx";
 import { messages as blockerCopy } from "../blockers/messages.ts";
-import { AskingDevices } from "../pairing/asking-devices.tsx";
-import { useHobLookup } from "../quest/use-work.ts";
 import { Stars } from "../scene.tsx";
-import { InboxDetail } from "./inbox-detail.tsx";
+import { EntryDetail, InboxDetail } from "./inbox-detail.tsx";
+import { approvalEntry, type InboxEntry, namesRequest, needsEntries, selectedEntry } from "./inbox-entries.ts";
 import { Empty, InboxHistory } from "./inbox-history.tsx";
-import { type InboxTab, pendingCount, selectedRequest, tabRequests } from "./inbox-items.ts";
+import { type InboxTab, pendingCount, tabRequests } from "./inbox-items.ts";
 import { InboxList, InboxTabs } from "./inbox-list.tsx";
 import { messages } from "./messages.ts";
-import { QuestionForYou } from "./question-for-you.tsx";
 import { type ShownHold, useWithShown } from "./shown-request.ts";
 import { type InboxDirectory, useInboxDirectory } from "./use-inbox-directory.ts";
 import { useNow } from "./use-now.ts";
@@ -48,51 +45,71 @@ const readEmpty = (read: { readonly isSuccess: boolean; readonly data?: Readonly
   read.isSuccess && read.data?.length === 0;
 
 /**
- * What an empty tab says once it lists nothing: no requests, and in Needs you no stuck work and no
- * questions either. Needs you waits for every read: while one loads, or after it failed, it never
- * says nothing waits. History says nothing here.
+ * What an empty tab says once it lists nothing. Needs you waits for every read: while one loads,
+ * or after it failed, it never says nothing waits. History says nothing here.
  */
 const emptyState = (
   tab: InboxTab,
   read: boolean,
-  requests: ReadonlyArray<unknown>,
+  entries: ReadonlyArray<InboxEntry>,
   blockers: BlockersRead,
   questions: QuestionsRead,
-  devices: ReadonlyArray<WaitingDevice>,
 ) => {
-  if (tab === "history" || !read || requests.length > 0) return undefined;
-  if (tab === "needs" && !(readEmpty(blockers) && readEmpty(questions) && devices.length === 0)) return undefined;
+  if (tab === "history" || !read || entries.length > 0) return undefined;
+  if (tab === "needs" && !(readEmpty(blockers) && readEmpty(questions))) return undefined;
   return EMPTY[tab];
 };
 
-/**
- * The Inbox (screen 8): every approval request from every hob in one place, grouped by hob and
- * thread until Quests exist. Needs you, All and History, and beside the list the selected request
- * in full with the chat's own decision controls. It follows the journal, so a request decided in
- * the chat updates here, and the reverse.
- */
-export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string | undefined }) {
+/** Everything the Inbox reads, and what the open tab lists and shows from it. */
+const useInbox = (tab: InboxTab, requestId: string | undefined) => {
   const inbox = useQuery(inboxQuery);
-  const shown = useWithShown(inbox.data ?? NONE, requestId, inbox.isSuccess);
+  const shown = useWithShown(
+    inbox.data ?? NONE,
+    requestId !== undefined && namesRequest(requestId) ? requestId : undefined,
+    inbox.isSuccess,
+  );
   const approvals = shown.approvals;
   const directory = useInboxDirectory(approvals);
   const requests = tabRequests(approvals, tab, requestId);
-  const selected = tab === "history" || shown.hold !== undefined ? undefined : selectedRequest(requests, requestId);
   const blockers = useBlockersQuery();
   const questions = useWaitingQuestionsQuery();
   const devices = usePromptedDevices();
-  const waiting = waitingCount(approvals, blockers, questions) + devices.length;
-  const empty = emptyState(tab, inbox.isSuccess, requests, blockers, questions, devices);
+  const entries = tabEntries(tab, requests, devices, questions.data ?? NO_QUESTIONS, blockers.data ?? NO_ITEMS);
+  return {
+    inbox,
+    shown,
+    directory,
+    requests,
+    blockers,
+    questions,
+    entries,
+    selected: tab === "history" || shown.hold !== undefined ? undefined : selectedEntry(entries, requestId),
+    waiting: waitingCount(approvals, blockers, questions) + devices.length,
+    empty: emptyState(tab, inbox.isSuccess, entries, blockers, questions),
+  };
+};
+
+/**
+ * The Inbox (screen 8): everything that waits on you in one list, every kind as the same row: the
+ * requests from every hob, questions no lead could answer, stuck work and devices asking to pair.
+ * Needs you, All and History, and beside the list the selected entry in full with the controls the
+ * chat has. It follows the journal, so an entry decided in the chat updates here, and the reverse.
+ */
+export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string | undefined }) {
+  const { inbox, shown, directory, requests, blockers, questions, entries, selected, waiting, empty } = useInbox(
+    tab,
+    requestId,
+  );
   const now = useNow();
   const navigate = useNavigate();
-  // The request shown goes into the address as soon as it shows, so it stays in view while it is
-  // decided here or elsewhere, and a click never lands on a request that took its place.
-  const shownId = selected?.id;
+  // The entry shown goes into the address as soon as it shows, so it stays in view while it is
+  // decided here or elsewhere, and a click never lands on an entry that took its place.
+  const shownKey = selected?.key;
   useEffect(() => {
-    if (shownId !== undefined && shownId !== requestId) {
-      void navigate({ to: "/inbox", search: { tab, request: shownId }, replace: true });
+    if (shownKey !== undefined && shownKey !== requestId) {
+      void navigate({ to: "/inbox", search: { tab, request: shownKey }, replace: true });
     }
-  }, [navigate, tab, shownId, requestId]);
+  }, [navigate, tab, shownKey, requestId]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
@@ -101,12 +118,15 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
         <InboxTabs tab={tab} waiting={waiting}>
           {inbox.isPending && <p className="px-3 py-4 text-sm text-label">{copy.loading}</p>}
           {inbox.isError && <LoadFailed message={copy.failed} onRetry={() => void inbox.refetch()} />}
-          {tab === "needs" && <AskingDevices devices={devices} now={now} />}
-          {tab === "needs" && <QuestionsForYou read={questions} />}
-          {tab === "needs" && <StuckWork read={blockers} />}
+          {tab === "needs" && (
+            <ReadState read={questions} loading={copy.question.loading} failed={copy.question.loadFailed} />
+          )}
+          {tab === "needs" && (
+            <ReadState read={blockers} loading={blockerCopy.loading} failed={blockerCopy.loadFailed} />
+          )}
           {empty !== undefined && <Empty {...empty} />}
           {tab !== "history" && (
-            <InboxList tab={tab} requests={requests} selectedId={selected?.id} directory={directory} now={now} />
+            <InboxList tab={tab} entries={entries} selectedKey={selected?.key} directory={directory} now={now} />
           )}
         </InboxTabs>
       </aside>
@@ -115,7 +135,7 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
           inbox.isSuccess && <InboxHistory requests={requests} directory={directory} />
         ) : (
           <Selected
-            request={selected}
+            entry={selected}
             hold={shown.hold}
             onRetry={shown.retry}
             directory={directory}
@@ -128,15 +148,27 @@ export function InboxPage({ tab, requestId }: { tab: InboxTab; requestId: string
   );
 }
 
+/** The tab's entries: everything waiting in Needs you, every request in All, and none in History. */
+const tabEntries = (
+  tab: InboxTab,
+  requests: ReadonlyArray<ApprovalRequest>,
+  devices: ReadonlyArray<WaitingDevice>,
+  questions: ReadonlyArray<WaitingQuestion>,
+  blockers: ReadonlyArray<BackpackItem>,
+): ReadonlyArray<InboxEntry> => {
+  if (tab === "needs") return needsEntries({ devices, questions, blockers, requests });
+  return tab === "all" ? requests.map(approvalEntry) : [];
+};
+
 function Selected({
-  request,
+  entry,
   hold,
   onRetry,
   directory,
   ready,
   now,
 }: {
-  request: ApprovalRequest | undefined;
+  entry: InboxEntry | undefined;
   hold: ShownHold | undefined;
   onRetry: () => void;
   directory: InboxDirectory;
@@ -151,9 +183,11 @@ function Selected({
       </div>
     );
   }
-  if (request === undefined) {
+  if (entry === undefined) {
     return ready ? <p className="m-0 px-7 py-6 text-text-secondary">{copy.pickOne}</p> : null;
   }
+  if (entry.kind !== "approval") return <EntryDetail entry={entry} now={now} />;
+  const request = entry.request;
   const hob = directory.hob(request.agentId);
   if (hob === undefined) return <p className="m-0 px-7 py-6 text-label">{copy.loadingRequest}</p>;
   return (
@@ -168,50 +202,12 @@ function Selected({
 }
 
 /**
- * Work that failed as a blocker (IN-007), above the requests in Needs you, each with its choices.
- * While it is read it says so, and a read that failed says so with a way to read it again.
+ * A read Needs you lists from besides the requests: a line while it is read, and a failure with a
+ * way to read it again. A read again that failed keeps what was read before in the list.
  */
-function StuckWork({ read }: { read: BlockersRead }) {
-  const hobs = useHobLookup();
-  if (read.isPending) return <p className="m-0 px-3 pt-4 text-sm text-label">{blockerCopy.loading}</p>;
-  // A read again that failed keeps what was read before in view, under the failure.
-  const items = read.data ?? NO_ITEMS;
-  return (
-    <>
-      {read.isError && <LoadFailed message={blockerCopy.loadFailed} onRetry={() => void read.refetch()} />}
-      {items.length > 0 && (
-        <section aria-label={blockerCopy.section} className="flex flex-col gap-2 px-2.5 pt-2.5 pb-1">
-          <span className="lbl text-xs text-label">{blockerCopy.count({ count: items.length })}</span>
-          {items.map((item) => (
-            <BlockerCard key={item.id} item={item} hobs={hobs} />
-          ))}
-        </section>
-      )}
-    </>
-  );
-}
-
-/**
- * Questions no lead could answer (ADR 018), first in Needs you, each with its answer box. While they
- * are read it says so, and a read that failed says so with a way to read them again.
- */
-function QuestionsForYou({ read }: { read: QuestionsRead }) {
-  const hobs = useHobLookup();
-  if (read.isPending) return <p className="m-0 px-3 pt-4 text-sm text-label">{copy.question.loading}</p>;
-  const questions = read.data ?? NO_QUESTIONS;
-  return (
-    <>
-      {read.isError && <LoadFailed message={copy.question.loadFailed} onRetry={() => void read.refetch()} />}
-      {questions.length > 0 && (
-        <section aria-label={copy.question.section} className="flex flex-col gap-2 px-2.5 pt-2.5 pb-1">
-          <span className="lbl text-xs text-label">{copy.question.count({ count: questions.length })}</span>
-          {questions.map((waiting) => (
-            <QuestionForYou key={waiting.question.id} waiting={waiting} hobs={hobs} />
-          ))}
-        </section>
-      )}
-    </>
-  );
+function ReadState({ read, loading, failed }: { read: BlockersRead | QuestionsRead; loading: string; failed: string }) {
+  if (read.isPending) return <p className="m-0 px-3 pt-4 text-sm text-label">{loading}</p>;
+  return read.isError ? <LoadFailed message={failed} onRetry={() => void read.refetch()} /> : null;
 }
 
 /** The mailbox at the top of the list; its flag goes up and pulses while requests wait. */
