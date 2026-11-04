@@ -107,6 +107,8 @@ export class Agent extends Schema.Class<Agent>("Agent")({
 export class AgentConfiguration extends Schema.Class<AgentConfiguration>("AgentConfiguration")({
   agentId: AgentId,
   version: ConfigVersion,
+  /** Versioned since a hob can be renamed, so a turn is told the name it started with. */
+  name: Schema.String,
   ...roleSchemaFields,
   ...toneSchemaFields,
   ...policySchemaFields,

@@ -4,9 +4,17 @@ import { Button } from "@hobbots/ui/components/button";
 import { Link } from "@tanstack/react-router";
 import { formatWhen } from "../../lib/time.ts";
 import { ApprovalCard } from "../approvals/approval-card.tsx";
+import { BlockerCard } from "../blockers/blocker-card.tsx";
+import { blockerWhat } from "../blockers/blocker-model.ts";
+import { messages as blockerCopy } from "../blockers/messages.ts";
 import { HobSprite } from "../hob-sprite.tsx";
+import { DeviceRequestCard } from "../pairing/device-request.tsx";
+import { messages as pairingCopy } from "../pairing/messages.ts";
+import { type HobLookup, useHobLookup } from "../quest/use-work.ts";
+import type { InboxEntry } from "./inbox-entries.ts";
 import { expiryText, requestTitle } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
+import { QuestionForYou } from "./question-for-you.tsx";
 
 const copy = messages;
 
@@ -77,6 +85,37 @@ export function InboxDetail({
     </article>
   );
 }
+
+/**
+ * A question, stuck work or a device asking, in full beside the list, with the same controls its
+ * card has wherever else it shows.
+ */
+export function EntryDetail({ entry, now }: { entry: Exclude<InboxEntry, { kind: "approval" }>; now: Date }) {
+  const hobs = useHobLookup();
+  return (
+    <article
+      key={entry.key}
+      aria-label={entryLabel(entry, hobs)}
+      className="flex max-w-170 animate-hb-in flex-col gap-3.5 px-7 py-5"
+    >
+      {entry.kind === "question" && <QuestionForYou waiting={entry.waiting} hobs={hobs} />}
+      {entry.kind === "stuck" && <BlockerCard item={entry.item} hobs={hobs} />}
+      {entry.kind === "device" && <DeviceRequestCard device={entry.device} now={now} canDefer />}
+    </article>
+  );
+}
+
+/** What the detail pane is called for the entry it shows. */
+const entryLabel = (entry: Exclude<InboxEntry, { kind: "approval" }>, hobs: HobLookup): string => {
+  switch (entry.kind) {
+    case "question":
+      return copy.question.label({ name: hobs(entry.waiting.question.askerId).name });
+    case "stuck":
+      return blockerCopy.label({ name: hobs(entry.item.recipientId).name, what: blockerWhat(entry.item) });
+    default:
+      return pairingCopy.prompt.label({ name: entry.device.request.name });
+  }
+};
 
 function Fact({ term, children }: { term: string; children: React.ReactNode }) {
   return (

@@ -1,9 +1,9 @@
 import { Badge } from "@hobbots/ui/components/badge";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { connectionBridge } from "../../api/connected-desktop.ts";
 import { setupQuery } from "../../api/setup.ts";
-import { ArchivedHobs } from "../archived-hobs.tsx";
 import { BackupSettings } from "../backup/backup-settings.tsx";
 import { messages as backupMessages } from "../backup/messages.ts";
 import { ConnectedHubSettings } from "../devices/connected-hub.tsx";
@@ -154,8 +154,11 @@ function YourData() {
       <SettingsGroup label={exportMessages.heading}>
         <ExportSettings />
       </SettingsGroup>
-      <SettingsGroup label={copy.archivedHobs}>
-        <ArchivedHobs />
+      <SettingsGroup label={copy.retiredHobs}>
+        <p className="m-0 text-text-secondary">{copy.retiredHobsBody}</p>
+        <Link to="/archive" search={{ tab: "hobs" }} className="self-start text-sm text-link underline">
+          {copy.openArchive}
+        </Link>
       </SettingsGroup>
     </>
   );

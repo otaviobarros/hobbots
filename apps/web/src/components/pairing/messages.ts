@@ -75,11 +75,6 @@ export const messages = {
     deniedIntro: "It can't see anything. If it asks again, you'll get a new prompt.",
     done: "Done",
   },
-  needsYou: {
-    section: "Devices asking",
-    count: ({ count }: { count: number }) =>
-      plural(count, { one: `${formatCount(count)} device asking`, other: `${formatCount(count)} devices asking` }),
-  },
   settings: {
     heading: "Waiting to be allowed",
     none: "No device is waiting.",

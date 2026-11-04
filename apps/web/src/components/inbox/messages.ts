@@ -11,10 +11,22 @@ export const messages = {
   waiting: ({ count }: { count: number }) => `${formatCount(count)} waiting on you`,
   from: ({ name }: { name: string }) => `${name} → you`,
   group: ({ name, thread }: { name: string; thread: string }) => `${name} · ${thread}`,
+  hubGroup: "This hub · Devices",
   untitledThread: "A thread",
   unknownHob: "A hob",
   unknownDevice: "a device",
-  kind: { approval: "Approval", expired: "Expired" },
+  kind: { approval: "Approval", expired: "Expired", question: "Question", stuck: "Stuck", device: "New device" },
+  /** One row of the list: who asked, as a chain, and when. */
+  row: {
+    arrow: " → ",
+    you: "You",
+    youEnd: "you",
+    waitingOn: ({ name }: { name: string }) => `${name} is waiting on this`,
+    stuckAfter: ({ count }: { count: number }) =>
+      plural(count, { one: `Stuck after ${formatCount(count)} try`, other: `Stuck after ${formatCount(count)} tries` }),
+    retired: ({ name }: { name: string }) => `${name} retired`,
+    deviceAsks: "A new device asks to join",
+  },
   status: {
     pending: ({ expiry }: { expiry: string }) => `Waiting on you · ${expiry}`,
     pendingNoExpiry: "Waiting on you",
@@ -91,12 +103,6 @@ export const messages = {
   },
   /** A question no lead could answer, in Needs you. */
   question: {
-    section: "Questions for you",
-    count: ({ count }: { count: number }) =>
-      plural(count, {
-        one: `${formatCount(count)} question for you`,
-        other: `${formatCount(count)} questions for you`,
-      }),
     label: ({ name }: { name: string }) => `Question from ${name}`,
     title: ({ name }: { name: string }) => `${name} asks you`,
     about: ({ title, when }: { title: string; when: string }) => `For ${title} · ${when}`,

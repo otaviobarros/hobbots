@@ -105,8 +105,9 @@ export class Milestone extends Schema.Class<Milestone>("Milestone")({
 }) {}
 
 /**
- * Planned milestones and unplanned reports come from the Task's owner; automatic states, and the
- * findings the hub notices itself, such as two Tasks changing the same file, from the hub.
+ * Planned milestones and unplanned reports come from the Task's owner; automatic states, the
+ * findings the hub notices itself, such as two Tasks changing the same file, and the reason the hub
+ * gives when it blocks or fails a Task, from the hub.
  */
 export const CheckpointSource = Schema.Literals(["planned", "unplanned", "automatic"]);
 export type CheckpointSource = typeof CheckpointSource.Type;
@@ -130,15 +131,21 @@ export type CheckpointKind = typeof CheckpointKind.Type;
 export const CHECKPOINT_KINDS: Record<CheckpointSource, ReadonlyArray<CheckpointKind>> = {
   planned: ["milestone"],
   unplanned: ["finding", "blocker", "question", "progress"],
-  automatic: ["started", "waiting", "done", "failed", "cancelled", "finding", "uncommitted"],
+  automatic: ["started", "waiting", "done", "failed", "cancelled", "finding", "blocker", "uncommitted"],
 };
 
+type CheckpointOf = { readonly source: CheckpointSource; readonly kind: CheckpointKind };
+
 /**
- * Whether a checkpoint says more than its Task's state: anything its owner reported, a finding the
- * hub made, or the changes it left uncommitted when it completed.
+ * Whether a checkpoint says more than its Task's state: anything its owner reported, a finding or
+ * blocker the hub recorded, or the changes it left uncommitted when it completed.
  */
-export const saysMore = (checkpoint: { readonly source: CheckpointSource; readonly kind: CheckpointKind }) =>
-  checkpoint.source !== "automatic" || checkpoint.kind === "finding" || checkpoint.kind === "uncommitted";
+export const saysMore = (checkpoint: CheckpointOf) =>
+  reportsOn(checkpoint) || checkpoint.kind === "finding" || checkpoint.kind === "uncommitted";
+
+/** Whether a checkpoint reports on its Task: its owner's report, or the reason the hub blocked or failed it. */
+export const reportsOn = (checkpoint: CheckpointOf) =>
+  checkpoint.source !== "automatic" || checkpoint.kind === "blocker";
 
 /** Whether a checkpoint of this kind reaches the lead's context and can wake it; routine progress never does (IN-005). */
 export const wakesLead = (kind: CheckpointKind): boolean =>

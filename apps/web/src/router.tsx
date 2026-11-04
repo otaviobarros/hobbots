@@ -12,8 +12,9 @@ import { needsPairing } from "./api/pairing.ts";
 import { agentsQuery, archivedAgentsQuery, threadsQuery } from "./api/queries.ts";
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { AppShell, AppWindow } from "./components/app-shell.tsx";
+import { type ArchiveTab, isArchiveTab } from "./components/archive-page/archive-model.ts";
+import { ArchivePage } from "./components/archive-page/archive-page.tsx";
 import { ArchivedHobView } from "./components/archived-hobs.tsx";
-import { ArchivedThreadList } from "./components/archived-threads/archived-threads.tsx";
 import { HobPage } from "./components/hob-page/hob-page.tsx";
 import { type HobPageTab, isHobPageTab } from "./components/hob-page/hob-page-model.ts";
 import { HobProfile } from "./components/hob-profile.tsx";
@@ -25,7 +26,6 @@ import { OnboardingFirstHob } from "./components/onboarding-first-hob.tsx";
 import { OnboardingProviders } from "./components/onboarding-providers.tsx";
 import { OnboardingFolders, OnboardingSafety } from "./components/onboarding-safety.tsx";
 import { OnboardingReady } from "./components/onboarding-summon.tsx";
-import { ArchivedHobsPage } from "./components/pages.tsx";
 import { PairingScreen } from "./components/pairing/pairing-screen.tsx";
 import { isSettingsSection } from "./components/settings/sections.ts";
 import { SettingsPage } from "./components/settings/settings-page.tsx";
@@ -189,14 +189,12 @@ const newThreadRoute = createRoute({
   },
 });
 
-// The hob's archived threads, most recently archived first, in place of the chat (CH-009).
+// A hob's archived threads now live in the Archive, narrowed to that hob (CH-009).
 const archivedThreadsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "hobs/$hobId/archived",
-  beforeLoad: ({ params }) => writeStored(lastHobKey, params.hobId),
-  component: function ArchivedThreadsPage() {
-    const params = archivedThreadsRoute.useParams();
-    return <HobsLayout hobId={AgentId.make(params.hobId)} main={(props) => <ArchivedThreadList {...props} />} />;
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/archive", search: { hob: params.hobId }, replace: true });
   },
 });
 
@@ -305,11 +303,28 @@ const settingsSectionRoute = createRoute({
     return <SettingsPage section={isSettingsSection(section) ? section : null} />;
   },
 });
-// Settings › Archived hobs: retired hobs, whose threads open read-only (AG-006).
+// The Archive: archived chats across every hob and retired hobs (CH-009, AG-006). `?tab=hobs`
+// opens Retired hobs and `?hob=` narrows the archived chats to one hob.
+const archiveRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "archive",
+  validateSearch: (search: Record<string, unknown>): { tab?: ArchiveTab | undefined; hob?: string | undefined } => ({
+    tab: isArchiveTab(search.tab) && search.tab !== "chats" ? search.tab : undefined,
+    hob: typeof search.hob === "string" ? search.hob : undefined,
+  }),
+  component: function Archive() {
+    const { tab, hob } = archiveRoute.useSearch();
+    return <ArchivePage tab={tab ?? "chats"} hobId={hob === undefined ? undefined : AgentId.make(hob)} />;
+  },
+});
+
+// Settings › Archived hobs is now the Archive's Retired hobs tab.
 const archivedRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "settings/archived",
-  component: ArchivedHobsPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/archive", search: { tab: "hobs" }, replace: true });
+  },
 });
 
 // A retired hob opens on its most recent thread.
@@ -367,6 +382,7 @@ const routeTree = rootRoute.addChildren([
     usageRoute,
     settingsRoute,
     settingsSectionRoute,
+    archiveRoute,
     archivedRoute,
     archivedHobRoute,
     archivedThreadRoute,

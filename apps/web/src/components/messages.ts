@@ -187,6 +187,20 @@ export const messages = {
     backToPage: ({ name }: { name: string }) => `Back to ${name}'s page`,
     discard: "Discard",
     save: "Save changes",
+    look: {
+      heading: "Name and look",
+      change: "Change name or look",
+      done: "Done",
+      name: "Name",
+      lookGroup: "Look",
+      lookOption: ({ index }: { index: number }) => `Look ${index}`,
+      colorGroup: "Color",
+      hat: "Hat",
+      tool: "Tool",
+      fromLook: "From the look",
+      note: ({ name }: { name: string }) =>
+        `A new name shows everywhere, in past chats too. ${name} hears it from its next reply.`,
+    },
   },
   summon: {
     checkAgain: "Check again",

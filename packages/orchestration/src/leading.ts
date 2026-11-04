@@ -7,6 +7,7 @@ import {
   NoteId,
   pendingApprovalsOn,
   type Question,
+  reportsOn,
   type Task,
   TaskReadiness,
   type TaskToolInput,
@@ -71,7 +72,7 @@ const describeQuestion = (question: Question, caller: string) => ({
 const describeTask = (task: Task, tree: TaskTree, caller: string) => {
   // What its hob and the hub reported, newest first; the hub's own state changes show in `state`.
   const reported = tree.checkpoints
-    .filter((each) => each.taskId === task.id && each.source !== "automatic")
+    .filter((each) => each.taskId === task.id && reportsOn(each))
     .toSorted((a, b) => b.revision - a.revision)
     .slice(0, RECENT_CHECKPOINTS);
   return {

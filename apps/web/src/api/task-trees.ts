@@ -3,6 +3,7 @@ import {
   type ArtifactRef,
   type Attempt,
   type HobbotsEvent,
+  isTerminalTask,
   type Milestone,
   type Quest,
   type Question,
@@ -98,15 +99,20 @@ const withTask = (tree: TaskTree, task: Task, attempt: Attempt | null): Partial<
   };
 };
 
-/** A Task's new wait replaces the one it had, unless the change is older than the Task known. */
+/**
+ * A Task's new wait replaces the one it had, unless the change is older than the Task known. A Task
+ * that ended waits for nothing, as the hub drops its wait (#702).
+ */
 const withWait = (
   tree: TaskTree,
   event: { readonly task: Task; readonly wait: TaskWait | null },
 ): Partial<TaskTree> => {
-  const { wait } = event;
-  const known = tree.tasks.find((each) => each.id === event.task.id);
-  if (wait === null || (known !== undefined && event.task.revision < known.revision)) return {};
-  return { waits: [...tree.waits.filter((each) => each.taskId !== wait.taskId), wait] };
+  const { wait, task } = event;
+  const known = tree.tasks.find((each) => each.id === task.id);
+  if (known !== undefined && task.revision < known.revision) return {};
+  const others = tree.waits.filter((each) => each.taskId !== task.id);
+  if (isTerminalTask(task.state)) return others.length === tree.waits.length ? {} : { waits: others };
+  return wait === null ? {} : { waits: [...others, wait] };
 };
 
 /**
@@ -187,7 +193,11 @@ const CHANGES: { readonly [T in TaskEvent["_tag"]]: Change<T> } = {
       : null,
   TaskCompleted: (tree, event, ids) =>
     ids.has(event.task.id)
-      ? { ...withTask(tree, event.task, null), artifacts: upsertArtifacts(tree.artifacts, event.artifacts, ids) }
+      ? {
+          ...withTask(tree, event.task, null),
+          ...withWait(tree, { task: event.task, wait: null }),
+          artifacts: upsertArtifacts(tree.artifacts, event.artifacts, ids),
+        }
       : null,
   QuestStarted: questChange,
   QuestCompleted: questChange,

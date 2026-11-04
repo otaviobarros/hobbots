@@ -2,6 +2,7 @@ import type { Task, TaskTree } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   ALDRIC,
+  hold,
   hub,
   promptsTo,
   type Reaction,
@@ -9,6 +10,7 @@ import {
   settledTree,
   sharedDatabase,
   startHub,
+  treeWhen,
 } from "./dependency-hub.ts";
 
 // Issue #667: a step that reports a finding or blocker and ends with no result of its own is
@@ -53,7 +55,18 @@ const untilBlocked = async (reactions: ReadonlyArray<Reaction>) => {
   const database = await sharedDatabase();
   const started = await startHub(database, reactions);
   await started.run(send(["Write the docs", plan]));
-  const blocked = await started.run(settledTree((tree) => stepsOf(tree)[0]?.state === "blocked"));
+  // Step 1's own turn has ended; Aldric's, which hears of it, may already be running.
+  const blocked = await started.run(
+    treeWhen((tree) => {
+      const first = stepsOf(tree)[0];
+      return (
+        first?.state === "blocked" &&
+        !tree.attempts.some(
+          (each) => each.taskId === first.id && (each.state === "starting" || each.state === "running"),
+        )
+      );
+    }),
+  );
   return { ...started, database, blocked };
 };
 
@@ -98,6 +111,8 @@ describe("a step that stops on a finding holds the steps after it", () => {
     const replan: Reaction = {
       on: BLOCKED_ARRIVAL,
       lines: [
+        // Aldric plans again only once the test has seen step 1 blocked and step 2 queued.
+        hold("replan"),
         hub("cancel_task", { key: "drop-1", task_id: "$plan.steps.0.task_id" }),
         hub("cancel_task", { key: "drop-2", task_id: "$plan.steps.1.task_id" }),
         hub("plan_steps", {
@@ -108,9 +123,10 @@ describe("a step that stops on a finding holds the steps after it", () => {
         }),
       ],
     };
-    const { run, requests, blocked } = await untilBlocked([replan]);
+    const { run, requests, blocked, release } = await untilBlocked([replan]);
     const second = stepAt(blocked, 1);
     expect(second.state).toBe("queued");
+    await release("replan");
 
     const done = await run(settledTree((tree) => stepsOf(tree)[2]?.state === "completed"));
     expect(stepsOf(done).map((step) => step.state)).toEqual(["cancelled", "cancelled", "completed"]);

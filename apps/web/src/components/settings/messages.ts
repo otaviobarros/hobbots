@@ -141,7 +141,9 @@ export const messages = {
     noFolders: "No folders yet.",
     safetyFailed: "Hobbots could not read your safety settings. Try again in a moment.",
     later: "Later",
-    archivedHobs: "Archived hobs",
+    retiredHobs: "Retired hobs",
+    retiredHobsBody: "Retired hobs and their chats live in the Archive, where you can read them.",
+    openArchive: "Open the Archive",
   },
   thisApp: {
     heading: "This app",

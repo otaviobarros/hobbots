@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { firstHobPayload, newDraft } from "./first-hob.ts";
 import {
   aboutLine,
+  draftProblem,
   goodAt,
   isDirty,
   pickRole,
@@ -41,6 +42,9 @@ const hob = (patch: Partial<Agent> = {}) =>
 describe("hob profile", () => {
   it("starts from the hob's configuration, with no model as the runtime's default", () => {
     expect(profileDraft(hob(), offered)).toEqual({
+      name: "Pip",
+      lookSeed: 4821,
+      lookColor: "violet",
       role: null,
       roleTitle: "Writer",
       sigil: "assistant",
@@ -185,6 +189,23 @@ describe("hob profile", () => {
     expect(rebaseDraft(base, profileDraft(after, offered), { ...base, voice: "pirate" })).toMatchObject({
       voice: "pirate",
       length: "detailed",
+      instructions: "Be brief.",
+    });
+  });
+
+  it("sends a new name, look and color as one edit, trimmed, and keeps them when another window saves", () => {
+    const pip = hob();
+    const base = profileDraft(pip, offered);
+    const draft = { ...base, name: " Bramble ", lookSeed: 12, lookColor: "sky" } as const;
+    expect(isDirty(base, draft)).toBe(true);
+    expect(draftProblem(draft)).toBeUndefined();
+    expect(profileEdit(pip, draft)).toEqual({ name: "Bramble", lookSeed: 12, lookColor: "sky" });
+    expect(draftProblem({ ...base, name: "  " })).toBe("Give the hob a name.");
+    const after = hob({ lookColor: "moss", instructions: "Be brief.", configVersion: 2 });
+    expect(rebaseDraft(base, profileDraft(after, offered), { ...base, name: "Bramble" })).toMatchObject({
+      name: "Bramble",
+      lookSeed: 4821,
+      lookColor: "moss",
       instructions: "Be brief.",
     });
   });

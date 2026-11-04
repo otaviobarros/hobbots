@@ -9,7 +9,7 @@ import { useRestoreThread } from "../../api/archived-threads.ts";
 import { ApiError } from "../../api/client.ts";
 import { readDraft } from "../../api/drafts.ts";
 import { agentsQuery, archivedThreadsQuery, messagesQuery, threadsQuery } from "../../api/queries.ts";
-import { formatDay, formatWhen } from "../../lib/time.ts";
+import { formatDay } from "../../lib/time.ts";
 import { ChatView } from "../chat-view.tsx";
 import { HobSprite } from "../hob-sprite.tsx";
 import { MessageRow, messageElementId } from "../message-row.tsx";
@@ -163,98 +163,11 @@ function ArchivedHeader({
 
 const useHob = (hobId: AgentId) => useQuery({ ...agentsQuery, select: (hobs) => hobs.find((h) => h.id === hobId) });
 
-/** When a thread was archived, in a row: "just now", else its day. */
-const archivedWhen = (iso: string, now: Date = new Date()) =>
-  now.getTime() - new Date(iso).getTime() < 60_000 ? messages.justNow : formatDay(iso, now);
-
 /** Why a restore failed, in words: a retired hob keeps its threads as they are; anything else is worth another try. */
 const restoreError = (error: Error, hob: Agent, thread: Thread) =>
   error instanceof ApiError && error.tag === "ThreadArchiveRefused" && hob.status === "retired"
     ? messages.restoreRetired({ name: hob.name, title: thread.title })
     : messages.restoreFailed({ title: thread.title });
-
-/** The hob's archived threads, which its route puts in the middle of the chat workspace, most recently archived first, each with Restore. */
-export function ArchivedThreadList(props: WorkspaceMainProps) {
-  const hob = useHob(props.hobId);
-  const archived = useQuery(archivedThreadsQuery(props.hobId));
-  const current = hob.data;
-  if (!current) return <main className="flex-1" />;
-  const count = archived.data?.length ?? 0;
-
-  return (
-    <main aria-label={messages.title} className="flex min-w-chat-min flex-1 flex-col">
-      <ArchivedHeader
-        hob={current}
-        props={props}
-        title={messages.title}
-        detail={archived.data ? messages.threadCount({ count }) : ""}
-      />
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-6 py-transcript-y">
-        {archived.isPending && <p className="m-0 text-label">{messages.loading}</p>}
-        {archived.isError && <p className="m-0 text-sm text-rose">{messages.loadFailed}</p>}
-        {archived.data && count === 0 && <EmptyArchive hob={current} />}
-        {archived.data && count > 0 && (
-          <>
-            <p className="m-0 text-text-secondary">{messages.intro({ name: current.name })}</p>
-            <ul aria-label={messages.title} className="m-0 flex list-none flex-col p-0">
-              {archived.data.map((thread) => (
-                <ArchivedRow key={thread.id} hob={current} thread={thread} />
-              ))}
-            </ul>
-          </>
-        )}
-      </div>
-    </main>
-  );
-}
-
-function EmptyArchive({ hob }: { hob: Agent }) {
-  return (
-    <section
-      aria-label={messages.empty}
-      className="flex max-w-bubble-max animate-hb-in flex-col gap-2 bg-deep px-4 py-3.5 text-text-secondary"
-    >
-      <h2 className="m-0 font-heading text-base font-semibold text-text-strong">{messages.empty}</h2>
-      <p className="m-0 text-sm">{messages.emptyBody({ name: hob.name })}</p>
-      <Link to="/hobs/$hobId" params={{ hobId: hob.id }} className="text-sm text-lantern underline">
-        {messages.backToThreads({ name: hob.name })}
-      </Link>
-    </section>
-  );
-}
-
-function ArchivedRow({ hob, thread }: { hob: Agent; thread: Thread }) {
-  const restore = useRestoreThread();
-  return (
-    <li className="flex flex-col gap-1.5 border-b-2 border-line py-3">
-      <div className="flex items-center gap-3">
-        <Link
-          to="/hobs/$hobId/threads/$threadId"
-          params={{ hobId: hob.id, threadId: thread.id }}
-          className="flex min-w-0 flex-1 flex-col gap-0.5 text-text-strong no-underline hover:text-moonlight"
-        >
-          <span className="truncate font-bold">{thread.title}</span>
-          <span className="text-detail text-text-secondary">
-            {messages.rowDetail({
-              archived: thread.archivedAt ? archivedWhen(thread.archivedAt) : messages.justNow,
-              last: formatWhen(thread.updatedAt),
-            })}
-          </span>
-        </Link>
-        <RestoreButton
-          variant="outline"
-          size="sm"
-          pending={restore.isPending}
-          label={messages.restoreThread({ title: thread.title })}
-          onRestore={() => restore.mutate(thread.id)}
-        />
-      </div>
-      {restore.error && (
-        <RestoreError text={restoreError(restore.error, hob, thread)} onRetry={() => restore.mutate(thread.id)} />
-      )}
-    </li>
-  );
-}
 
 function RestoreButton({
   pending,
@@ -342,7 +255,7 @@ function ReadOnlyFooter({ hobId, children }: { hobId: AgentId; children: ReactNo
   return (
     <p role="note" className="m-0 flex-none border-t-4 border-line px-6 py-3.5 text-sm text-text-secondary">
       {children} ·{" "}
-      <Link to="/hobs/$hobId/archived" params={{ hobId }} className="text-lantern underline">
+      <Link to="/archive" search={{ hob: hobId }} className="text-lantern underline">
         {messages.backToArchived}
       </Link>
     </p>

@@ -25,7 +25,9 @@ const api = async <T>(current: Hub, method: string, path: string, body?: unknown
 };
 
 // covers AG-006
-test("[TC-AG-061] a retired hob's threads open read-only from Settings › Archived hobs", async ({ page }) => {
+test("[TC-AG-061] a retired hob's threads open read-only from the Archive, which Settings › Your data leads to", async ({
+  page,
+}) => {
   hub = await startHub(dataDir);
   const current = hub;
   // A finished setup with one hob that chatted once and then retired.
@@ -54,13 +56,17 @@ test("[TC-AG-061] a retired hob's threads open read-only from Settings › Archi
     .toEqual(["complete", "complete"]);
   await api(current, "POST", `/agents/${hob.id}/retire`, { activeWork: "finish" });
 
+  // Settings › Archived hobs leads to the Archive's Retired hobs tab.
   await page.goto(`${current.url}/#/settings/archived`);
-  await expect(page.getByRole("heading", { name: "Archived hobs" })).toBeVisible();
-  const archived = page.getByRole("region", { name: "Archived hobs" });
-  const row = archived.getByRole("listitem").filter({ hasText: "Pip" });
-  await expect(row).toContainText(/Guide · retired .+ · 1 chat kept/);
+  await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
+  const archive = page.getByRole("main", { name: "Archive" });
+  await expect(archive.getByRole("tab", { name: /Retired hobs/ })).toHaveAttribute("aria-selected", "true");
+  const card = archive.getByRole("list", { name: "Retired hobs" }).getByRole("listitem").filter({ hasText: "Pip" });
+  await expect(card).toContainText("Guide");
+  await expect(card).toContainText("1 chat kept");
+  await expect(card).toContainText(/Retired .+/);
 
-  await row.getByRole("link", { name: "Read Pip's chats" }).click();
+  await card.getByRole("link", { name: "Read Pip's chats" }).click();
   await expect(page).toHaveURL(new RegExp(`#/settings/archived/${hob.id}/threads/${thread.id}$`));
   const chat = page.getByRole("main", { name: "Chat" });
   // The thread's title in the header and the user's message both read "Plan my week".
@@ -69,12 +75,12 @@ test("[TC-AG-061] a retired hob's threads open read-only from Settings › Archi
   await expect(chat.getByRole("note")).toHaveText("Pip is retired, so this chat is read-only.");
   await expect(page.getByRole("textbox")).toHaveCount(0);
 
-  // The thread list leads back to Archived hobs.
-  await page.getByRole("link", { name: "‹ Archived hobs" }).click();
-  await expect(page).toHaveURL(/#\/settings\/archived$/);
-  // Settings lists the same hob, and its active hob list no longer does.
-  await page.getByRole("link", { name: "‹ All settings" }).click();
-  await expect(page.getByRole("region", { name: "Archived hobs" }).getByText("Pip", { exact: true })).toBeVisible();
+  // The thread list leads back to Retired hobs, and Settings points to the Archive.
+  await page.getByRole("link", { name: "‹ Retired hobs" }).click();
+  await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
+  await page.goto(`${current.url}/#/settings/data`);
+  await page.getByRole("region", { name: "Retired hobs" }).getByRole("link", { name: "Open the Archive" }).click();
+  await expect(page).toHaveURL(/#\/archive\?tab=hobs$/);
   expect(await api(current, "GET", "/agents")).toEqual([]);
 
   // A link that pairs Pip with a thread Pip never had shows no transcript.
@@ -84,9 +90,11 @@ test("[TC-AG-061] a retired hob's threads open read-only from Settings › Archi
 });
 
 // covers AG-006
-test("[TC-AG-062] Archived hobs says so when no hob has retired", async ({ page }) => {
+test("[TC-AG-062] Retired hobs says so when no hob has retired", async ({ page }) => {
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
-  await page.goto(`${hub.url}/#/settings/data`);
-  await expect(page.getByRole("region", { name: "Archived hobs" })).toContainText("No retired hobs.");
+  await page.goto(`${hub.url}/#/archive?tab=hobs`);
+  const archive = page.getByRole("main", { name: "Archive" });
+  await expect(archive.getByRole("heading", { name: "No retired hobs." })).toBeVisible();
+  await expect(archive.getByRole("tab", { name: /Retired hobs/ })).toContainText("0");
 });

@@ -90,6 +90,7 @@ export type CreateAgentPayload = typeof CreateAgentPayload.Type;
  * something becomes the hob's next configuration version (AG-002).
  */
 export const UpdateAgentPayload = Schema.Struct({
+  name: Schema.optionalKey(Label),
   /** A starter role brings its title unless the edit names one. */
   role: Schema.optionalKey(Schema.NullOr(RoleId)),
   roleTitle: Schema.optionalKey(Label),
