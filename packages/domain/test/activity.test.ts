@@ -7,6 +7,7 @@ import {
   foldLog,
   isSecretFile,
   keepPlan,
+  runsInSequence,
 } from "../src/index.ts";
 
 const file = (hash: string, size = 10) => ({ kind: "file" as const, size, hash });
@@ -101,5 +102,50 @@ describe("foldersOverlap", () => {
     expect(foldersOverlap("/work/site", "/work/site/docs")).toBe(true);
     expect(foldersOverlap("/work/site/docs", "/work/site")).toBe(true);
     expect(foldersOverlap("/work/site", "/work/site-old")).toBe(false);
+  });
+});
+
+describe("runsInSequence", () => {
+  it("is true for a line that runs a command after another whatever its exit", () => {
+    for (const line of ["git rev-parse --git-dir; git init", "make\nmake test", "sleep 1 & echo done"]) {
+      expect(runsInSequence(line)).toBe(true);
+    }
+  });
+
+  it("reads on after a heredoc's delimiter, and never in its body", () => {
+    expect(runsInSequence("cat <<'EOF' > notes.md\nline; two\nEOF\nfalse\necho done")).toBe(true);
+    expect(runsInSequence("cat <<-EOF\n\tbody\n\tEOF\nfalse")).toBe(true);
+    expect(runsInSequence("cat <<A <<B\na; a\nA\nb & b\nB")).toBe(false);
+    expect(runsInSequence("grep x <<< 'a; b'; echo done")).toBe(true);
+    expect(runsInSequence("grep x <<< 'a; b'")).toBe(false);
+    // The shell removes quotes and backslashes from the whole delimiter word.
+    expect(runsInSequence("cat <<\\EOF\ntext\nEOF\nfalse\necho done")).toBe(true);
+    expect(runsInSequence("cat <<E'OF'\ntext\nEOF\nfalse")).toBe(true);
+    expect(runsInSequence('cat <<"E"O\\F > a.md\ntext; more\nEOF\nfalse')).toBe(true);
+    expect(runsInSequence("cat <<\\EOF\na; b\nEOF")).toBe(false);
+    // Inside double quotes a backslash still escapes a quote or a backslash, and only those few.
+    expect(runsInSequence('cat <<"E\\"OF"\ntext\nE"OF\nfalse\necho done')).toBe(true);
+    expect(runsInSequence('cat <<"E\\\\OF"\ntext\nE\\OF\nfalse')).toBe(true);
+    expect(runsInSequence('cat <<"E\\OF"\ntext\nE\\OF\nfalse')).toBe(true);
+    expect(runsInSequence("cat <<'E\\OF'\ntext\nE\\OF\nfalse")).toBe(true);
+    expect(runsInSequence('cat <<"E\\"OF"\na; b\nE"OF')).toBe(false);
+  });
+
+  it("is false for one command, a chain on success or failure, a redirection and a quoted separator", () => {
+    for (const line of [
+      "pytest",
+      "npm ci && npm test",
+      "test -d .git || git init",
+      "make 2>&1 | tee log",
+      "cmd &> log",
+      "echo 'a; b' \"c & d\"",
+      "echo a\\;b",
+      "make |& tee log",
+      "npm test\n",
+      "npm test;",
+      "cat > notes.md <<'EOF'\nline one\nline two; three\nEOF",
+    ]) {
+      expect(runsInSequence(line)).toBe(false);
+    }
   });
 });

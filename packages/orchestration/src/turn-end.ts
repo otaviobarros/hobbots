@@ -31,8 +31,9 @@ export interface TurnOnTask {
   readonly ending: TurnEnding;
   /** The backpack items the turn carried: its completion consumes them, and they keep nothing open. */
   readonly carried: ReadonlyArray<CarriedItem>;
-  /** The session the turn ran in, when its runner learnt it only as it ended. */
+  /** The session the turn ran in, and the policy version its tools ran under, when its runner learnt them only as it ended. */
   readonly sessionId?: string | null;
+  readonly policyVersion?: string | null;
   /** The root's state before the turn. */
   readonly was?: TaskState;
   readonly at: string;
@@ -117,6 +118,7 @@ export const endTurn = (deps: TurnEndDeps, turn: TurnOnTask) =>
           end,
           at: turn.at,
           ...(turn.sessionId == null ? {} : { sessionId: turn.sessionId }),
+          ...(turn.policyVersion == null ? {} : { policyVersion: turn.policyVersion }),
         }),
         "end a turn's Attempt",
       );

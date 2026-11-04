@@ -57,6 +57,8 @@ export type RuntimeEvent =
       readonly _tag: "SessionStarted";
       readonly sessionId: string;
       readonly billing: string | null;
+      /** The policy version the turn's tools run under (ADR 014); absent for a turn without tools. */
+      readonly policyVersion?: string;
     }
   | { readonly _tag: "TextDelta"; readonly text: string }
   /** The runtime began something other than writing, such as thinking. `id` is unique within the turn. */

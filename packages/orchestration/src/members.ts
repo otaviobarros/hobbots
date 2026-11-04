@@ -329,12 +329,12 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               { agentId: agent.id, taskId: task.id, carried: work.holding },
               { currentAccess: currentAccessOf(run), redactor: deps.redactor, approvals: handle?.approvals ?? null },
             ),
-            started: (sessionId) =>
-              work.accepted(sessionId).pipe(
+            started: (session) =>
+              work.accepted(session.sessionId).pipe(
                 Effect.andThen(nowIso),
                 Effect.flatMap((at) =>
                   deps.attempt(
-                    tasks.updateAttempt(attemptId, { _tag: "Running", sessionId, at }),
+                    tasks.updateAttempt(attemptId, { _tag: "Running", ...session, at }),
                     "record a member's session",
                   ),
                 ),

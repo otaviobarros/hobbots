@@ -39,8 +39,8 @@ export interface SessionTurn {
   readonly recordToolStart: (event: ToolStartedEvent) => Effect.Effect<boolean>;
   /** The hub tools the turn offers, read at its start. */
   readonly hubTools: Effect.Effect<HubTools>;
-  /** Records the runtime's evidence that it took the turn: its session. */
-  readonly started: (sessionId: string) => Effect.Effect<void>;
+  /** Records the runtime's evidence that it took the turn: its session, and the policy version its tools run under. */
+  readonly started: (session: { readonly sessionId: string; readonly policyVersion?: string }) => Effect.Effect<void>;
 }
 
 /** Runs one turn of a Task's own session to its end: its final reply, or why it ended without one. */
@@ -85,7 +85,11 @@ export const runSessionTurn = (
       )
       .pipe(
         Stream.runForEach((event) => {
-          if (event._tag === "SessionStarted") return turn.started(event.sessionId);
+          if (event._tag === "SessionStarted")
+            return turn.started({
+              sessionId: event.sessionId,
+              ...(event.policyVersion && { policyVersion: event.policyVersion }),
+            });
           if (event._tag === "Completed") ending = { _tag: "Replied", text: event.text };
           return Effect.void;
         }),

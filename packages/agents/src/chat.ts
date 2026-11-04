@@ -482,8 +482,9 @@ export class ChatService extends Context.Service<
           );
           yield* checkpoint.pipe(Effect.delay("1 second"), Effect.forever, Effect.forkScoped);
           const update = (f: (message: Message) => Message | unknown) => transition(reply, f, saveMessage);
-          // The session the turn ran in, for the Attempt it may start on a Task.
+          // The session the turn ran in, and the policy version its tools ran under, for the Attempt it may start on a Task.
           let turnSession: string | null = null;
+          let turnPolicy: string | null = null;
 
           // Saves a step's change with the reply. A tool call that starts is stamped with when.
           const saveStep = (event: RuntimeEvent) =>
@@ -508,6 +509,7 @@ export class ChatService extends Context.Service<
               case "SessionStarted":
                 return Effect.gen(function* () {
                   turnSession = event.sessionId;
+                  turnPolicy = event.policyVersion ?? null;
                   // The runtime accepted the turn: the work it carries is now being processed.
                   yield* carry.accepted(event.sessionId);
                   const seenThrough = (yield* Ref.get(reply.current)).id;
@@ -598,7 +600,8 @@ export class ChatService extends Context.Service<
                   configVersion: config.version,
                   holding: carry.holding,
                 }),
-                (turn) => Ref.get(reply.current).pipe(Effect.flatMap((m) => turn.end(turnEnding(m), turnSession))),
+                (turn) =>
+                  Ref.get(reply.current).pipe(Effect.flatMap((m) => turn.end(turnEnding(m), turnSession, turnPolicy))),
               )
             : null;
           onTask = taskTurn;
