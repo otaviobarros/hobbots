@@ -4,7 +4,7 @@ import { messages } from "./messages.ts";
 const copy = messages.chief;
 
 /**
- * The chief's mood on the rail: needs-you while any request waits in the Inbox, working while any
+ * The chief's mood in the sidebar: needs-you while any request waits in the Inbox, working while any
  * hob works, idle otherwise. `preview` is the mood a development build was asked to show.
  */
 export const chiefMood = ({
