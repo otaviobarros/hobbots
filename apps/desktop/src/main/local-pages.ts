@@ -1,4 +1,5 @@
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 
 /**
  * The local pages (ADR 025): the screens the app shows before this computer is a hub or a connected
@@ -47,3 +48,20 @@ export const localFile = (root: string, url: string): string | null => {
   const inside = relative(root, file);
   return inside === "" || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside) ? null : file;
 };
+
+/**
+ * Answers a request under the app's scheme with the file it names inside `root`, never with
+ * anything outside it, so the local pages never load from `file://` themselves (STD-DESKTOP-006).
+ * `fetchFile` fetches a `file:` URL, as Electron's `net.fetch` does.
+ */
+export const localPageResponse =
+  (root: string, fetchFile: (url: string) => Promise<Response>) =>
+  async (request: { readonly url: string }): Promise<Response> => {
+    const file = localFile(root, request.url);
+    if (file === null) return new Response("Not found", { status: 404 });
+    try {
+      return await fetchFile(pathToFileURL(file).toString());
+    } catch {
+      return new Response("Not found", { status: 404 });
+    }
+  };
