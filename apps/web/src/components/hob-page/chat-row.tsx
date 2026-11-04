@@ -69,11 +69,7 @@ export function ChatRow({
       )}
       <span className="flex h-[22px] items-center justify-center text-label">
         {live ? (
-          <span
-            role="img"
-            aria-label={copy.working}
-            className="size-2 flex-none animate-hb-blink rounded-dot bg-mint"
-          />
+          <span role="img" aria-label={copy.working} className="size-2 flex-none rounded-dot bg-mint" />
         ) : (
           pinned && <PinIcon label={copy.pinned} />
         )}
