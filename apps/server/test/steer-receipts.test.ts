@@ -50,6 +50,16 @@ const yours = (all: ReadonlyArray<Message>, text: string) => {
   return { message, reply: all.find((each) => each.role === "assistant" && each.promptId === message.id) };
 };
 
+/**
+ * The thread once the lead's turn on your message that starts with `text` has replied. A blocker
+ * can start a turn of the lead's before yours, so a count of messages may end before that reply.
+ */
+const answeredTo = (text: string) =>
+  messagesWhen((all) => {
+    const message = all.find((each) => each.role === "user" && each.content.startsWith(text));
+    return message !== undefined && all.some((each) => each.role === "assistant" && each.promptId === message.id);
+  });
+
 const picked = (note: TaskNote) => note.pickedUpBy !== null;
 
 /** The tree once every note that traces back to `messageId` has been picked up, and there are `count`. */
@@ -103,7 +113,7 @@ describe("a steer receipt for a message you send the lead", () => {
     await run(
       send(["Use the blue theme", hub("message_task", { key: "steer", task_id: pip.id, text: "Use the blue theme." })]),
     );
-    const all = await run(messagesWhen((each) => each.length >= 4));
+    const all = await run(answeredTo("Use the blue theme"));
     const { message, reply } = yours(all, "Use the blue theme");
     // The reply records the message of yours its turn answered; the first one answered yours too.
     expect(reply?.promptId).toBe(message.id);
@@ -163,7 +173,7 @@ describe("a steer receipt for a message you send the lead", () => {
         hub("message_task", { key: "tell-pip", task_id: pip.id, text: "We launch on Friday." }),
       ]),
     );
-    const { message } = yours(await run(messagesWhen((all) => all.length >= 4)), "Launch on Friday");
+    const { message } = yours(await run(answeredTo("Launch on Friday")), "Launch on Friday");
     const tree = await run(pickedUp(message.id, 2));
     const receipt = steerReceipt([tree], message.id);
     expect(receipt.map((each) => each.note.recipientId)).toEqual([QUILL, PIP]);
@@ -190,7 +200,7 @@ describe("a steer receipt for a message you send the lead", () => {
     await run(messagesWhen((all) => all.length >= 2));
 
     await run(send(["How is it going?", hub("read_tasks", { key: "look" })]));
-    const all = await run(messagesWhen((each) => each.length >= 4));
+    const all = await run(answeredTo("How is it going?"));
     const { message, reply } = yours(all, "How is it going?");
     expect(reply?.promptId).toBe(message.id);
     expect(reply?.status).toBe("complete");
@@ -234,7 +244,7 @@ describe("a steer receipt for a message you send the lead", () => {
         hub("message_task", { key: "tell-pip", task_id: pip.id, text: "git init is done. Tell Nettle." }),
       ]),
     );
-    const { message } = yours(await run(messagesWhen((all) => all.length >= 4)), "git init is done");
+    const { message } = yours(await run(answeredTo("git init is done")), "git init is done");
     const tree = await run(pickedUp(message.id, 2));
     const [toPip, ...others] = steerReceipt([tree], message.id);
     expect(others).toEqual([]);
@@ -279,7 +289,7 @@ describe("a steer receipt for a message you send the lead", () => {
         hub("message_task", { key: "rename", task_id: quill.id, text: "The product is now Hobbots." }),
       ]),
     );
-    const { message } = yours(await run(messagesWhen((all) => all.length >= 4)), "Tell Quill");
+    const { message } = yours(await run(answeredTo("Tell Quill")), "Tell Quill");
     const held = steerReceipt([await run(treeWhen(() => true))], message.id);
     expect(held.map((each) => each.receipt)).toEqual([
       { _tag: "Held", reason: "approval-pending", approvalId: pending.id },
@@ -318,7 +328,7 @@ describe("a steer receipt for a message you send the lead", () => {
     await run(
       send(["Use the blue theme", hub("message_task", { key: "steer", task_id: pip.id, text: "Use the blue theme." })]),
     );
-    const { message } = yours(await run(messagesWhen((all) => all.length >= 4)), "Use the blue theme");
+    const { message } = yours(await run(answeredTo("Use the blue theme")), "Use the blue theme");
     const waiting = await run(treeWhen((tree) => tree.notes.some((note) => note.messageId === message.id)));
     expect(steerReceipt([waiting], message.id).map((each) => each.receipt)).toEqual([{ _tag: "Sent" }]);
 
