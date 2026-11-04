@@ -1,15 +1,17 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "stream",
-  "globalDependencies": ["tsconfig.base.json"],
+  "globalDependencies": ["tsconfig.base.json", ".node-version"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"],
       "outputs": ["dist/**", "out/**"]
     },
     "@hobbots/site#build": {
       "dependsOn": ["^build"],
       "env": ["CLOUDFLARE_ENV", "TURNSTILE_SITE_KEY"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"],
       "outputs": ["dist/**", ".wrangler/deploy/**"]
     },
     "typecheck": {

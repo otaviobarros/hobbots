@@ -31,20 +31,23 @@ const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // An empty list matches no test: an empty pattern would match every one.
 const anyOf = (tags: ReadonlyArray<string>) => (tags.length === 0 ? /(?!)/ : new RegExp(tags.map(literal).join("|")));
 
-/** The `grep` options that run one shard: `current` of `total`, counted from 1. */
+/** The config that runs one shard: `grep` options from recorded times, or Playwright's `shard`. */
 export interface ShardFilter {
   readonly grep?: RegExp;
   readonly grepInvert?: RegExp;
+  readonly shard?: { readonly current: number; readonly total: number };
 }
 
 /**
  * Runs the tests planned for shard `current`. The last shard runs every test the others do not,
- * so a test with no recorded duration yet still runs once.
+ * so a test with no recorded duration yet still runs once. With no recorded times at all, it
+ * falls back to Playwright's own sharding by test count.
  */
-export const shardFilter = (durations: Durations, current: number, total: number): ShardFilter => {
+export const shardFilter = (durations: Durations | undefined, current: number, total: number): ShardFilter => {
   if (!Number.isInteger(total) || total < 1 || !Number.isInteger(current) || current < 1 || current > total) {
     throw new Error(`A shard is current/total with 1 <= current <= total, not ${current}/${total}.`);
   }
+  if (durations === undefined || Object.keys(durations).length === 0) return { shard: { current, total } };
   const shards = planShards(durations, total);
   if (current < total) return { grep: anyOf(shards[current - 1] ?? []) };
   const others = shards.slice(0, -1).flat();

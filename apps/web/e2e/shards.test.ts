@@ -44,9 +44,15 @@ describe("shardFilter", () => {
     expect(run(1, 2, ["[TC-A-0010] longer id", "TC-A-001 without brackets"])).toEqual([]);
   });
 
-  it("runs no test in a shard that got none, and every test in a last shard alone", () => {
-    expect(shardFilter({}, 1, 2).grep?.test("[TC-A-001] one")).toBe(false);
-    expect(shardFilter({}, 2, 2)).toEqual({});
+  it("runs no test in a shard that got none", () => {
+    expect(shardFilter({ "[TC-A-001]": 10 }, 1, 2)).toEqual({ grep: /\[TC-A-001\]/ });
+    expect(shardFilter({ "[TC-A-001]": 10 }, 2, 2).grep).toBeUndefined();
+    expect(shardFilter({ "[TC-A-001]": 10, "[TC-A-002]": 5 }, 3, 3).grepInvert?.test("[TC-A-003] new")).toBe(false);
+  });
+
+  it("falls back to Playwright's sharding by count when no times are recorded", () => {
+    expect(shardFilter(undefined, 2, 4)).toEqual({ shard: { current: 2, total: 4 } });
+    expect(shardFilter({}, 3, 4)).toEqual({ shard: { current: 3, total: 4 } });
   });
 
   it("refuses a shard outside 1..total", () => {

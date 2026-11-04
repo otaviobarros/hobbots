@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
 import { type Durations, parseShard, shardFilter } from "./e2e/shards.ts";
 
@@ -6,10 +6,11 @@ import { type Durations, parseShard, shardFilter } from "./e2e/shards.ts";
 // an empty data folder on its worker's port (see e2e/hub.ts), so tests run in parallel.
 //
 // HOBBOTS_E2E_SHARD=2/4 runs one of four shards balanced by the times in e2e/durations.json
-// (see e2e/shards.ts); CI runs each shard on its own runner.
+// (see e2e/shards.ts), or by test count when there are none; CI runs each shard on its own runner.
+const recorded = new URL("e2e/durations.json", import.meta.url);
 const shardOf = (value: string) => {
   const { current, total } = parseShard(value);
-  const durations = JSON.parse(readFileSync(new URL("e2e/durations.json", import.meta.url), "utf8")) as Durations;
+  const durations = existsSync(recorded) ? (JSON.parse(readFileSync(recorded, "utf8")) as Durations) : undefined;
   return shardFilter(durations, current, total);
 };
 const shard = process.env.HOBBOTS_E2E_SHARD;
