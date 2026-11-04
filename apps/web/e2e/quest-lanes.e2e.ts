@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./hub.ts";
 import { questHub, stopQuestHub } from "./quest-hub.ts";
-import { lane, laneHead, openRoom } from "./quest-room.ts";
+import { lane, laneHead, openRoom, ticket } from "./quest-room.ts";
 
 test.afterEach(stopQuestHub);
 
@@ -13,7 +13,7 @@ const startRoom = async (page: Page, url: string, aldric: string, ask: string, t
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill(ask);
   await composer.press("Enter");
-  await expect(page.getByRole("region", { name: `Aldric's work on ${title}` })).toBeVisible();
+  await expect(ticket(page, title)).toBeVisible();
   return openRoom(page, title);
 };
 

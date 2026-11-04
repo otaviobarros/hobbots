@@ -1,7 +1,7 @@
 import { type AgentId, isTerminalTask, type Task, type TaskTree } from "@hobbots/domain";
+import { laneRoom } from "../lanes/lane-model.ts";
 import type { RoomStatus } from "../quest/control-room.ts";
 import { taskTitle, workCard, workCounts } from "../quest/work-model.ts";
-import { laneTask, roomLanes } from "../quest-room/room-model.ts";
 
 /** How a Quest that ended came to its end, as its top Task records it. */
 export type TicketEnd = "completed" | "failed" | "cancelled";
@@ -62,11 +62,7 @@ export const questTicket = (tree: TaskTree): Ticket | null => {
   const card = workCard(tree);
   if (card === null) return null;
   const { top } = card;
-  const party = roomLanes(tree).map((lane) => {
-    const shown = laneTask(lane);
-    const row = lane.rows.find((each) => each.task.id === shown.id) ?? lane.rows[0];
-    return { hobId: lane.ownerId, status: row.status };
-  });
+  const party = laneRoom(tree, []).order.map((lane) => ({ hobId: lane.hobId, status: lane.status }));
   return {
     top,
     title: taskTitle(top),
