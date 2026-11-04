@@ -175,7 +175,7 @@ On every call the server checks:
 - **The Quest tab** is the control room: the full tree with Retry, Reassign, Cancel Task and Cancel Quest.
 - **Party members** show "On Aldric's quest" on Home and in their hob panel, linking to the Quest. A member's work never shows as a separate chat thread.
 - **The chat** only gets the moments that matter: questions that reach you, approvals and the lead's wrap-up.
-- **A hob's History** is read from these records and the approval requests, never from the journal, which keeps only a week. It adds no record of its own. It shows the Tasks you asked the hob for, the Tasks its leads gave it, when each ended, the Quests it led, its approval requests and the questions that reached you. A lead's History adds its party's Tasks and their requests. Steps are left out, since their work shows on the Task they serve. Each event is the record as it is now: a failed Task that is retried leaves History until it ends again. The hub pages it by whole days in the reader's time zone.
+- **A hob's History** is read from these records and the approval requests, never from the journal, which may drop entries older than 7 days once it holds more than the latest 10,000 ([ADR 013](013-event-journal.md)). It adds no record of its own. It shows the Tasks you asked the hob for, the Tasks its leads gave it, when each ended, the Quests it led, its approval requests and the questions that reached you. A lead's History adds its party's Tasks and their requests. Steps are left out, since their work shows on the Task they serve. Each event is the record as it is now: a failed Task that is retried leaves History until it ends again. The hub pages it by whole days in the reader's time zone.
 
 ## Rationale
 

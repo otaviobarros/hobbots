@@ -9,7 +9,8 @@ import { type Attempt, AttemptId, type Task, TaskId } from "./task.ts";
 /**
  * A hob's History: what it did across all its chats, newest first, grouped by day. It is read from
  * the durable records of Tasks, Quests, approvals and questions, never from the event journal, which
- * keeps only a week. A lead's History also holds the work of the hobs it brought into its Quests.
+ * may drop entries older than 7 days once it holds more than the latest 10,000 (ADR 013). A lead's
+ * History also holds the work of the hobs it brought into its Quests.
  */
 
 /** The Quest an event belongs to, for the line under it. */
