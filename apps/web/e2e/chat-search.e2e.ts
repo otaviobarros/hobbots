@@ -2,7 +2,7 @@ import { expect, test } from "./hub.ts";
 import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #509: the magnifier in the chat header searches this chat, marks each match, scrolls the
-// chat to the one you pick and closes on Escape; with nothing found it offers all of the hob's chats.
+// chat to the one you pick and closes on Escape; with nothing found it offers all of the hob's chats, searching for the same words.
 
 test.afterEach(stopAldricHub);
 
@@ -45,13 +45,17 @@ test("[TC-CH-261] Search this chat lists the messages that match, opens the one 
   await toggle.click();
   await box.fill("lighthouse");
   await expect(page.getByText("Nothing in this chat says “lighthouse”.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Search all of Aldric's chats" })).toHaveAttribute(
-    "href",
-    `/#/hobs/${aldric}`,
-  );
+  const everywhere = page.getByRole("link", { name: "Search all of Aldric's chats" });
+  await expect(everywhere).toHaveAttribute("href", `/#/hobs/${aldric}?q=lighthouse`);
 
   // Escape closes it and gives focus back to the magnifier.
   await box.press("Escape");
   await expect(box).toBeHidden();
   await expect(toggle).toBeFocused();
+
+  // The link opens Aldric's Chats already searching for the same words.
+  await toggle.click();
+  await box.fill("lighthouse");
+  await everywhere.click();
+  await expect(page.getByRole("searchbox", { name: "Search Aldric's chats" })).toHaveValue("lighthouse");
 });
