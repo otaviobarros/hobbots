@@ -18,7 +18,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { type Dispatch, type SetStateAction, useEffect, useId, useMemo, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useId, useState } from "react";
 import {
   ALL_ROLES,
   type BrainChoice,
@@ -812,13 +812,10 @@ export function ModelsBrain<D extends BrainChoice>({
   return <Brain models={models.data.models} draft={draft} onChange={onChange} />;
 }
 
-/** The look a draft's seed, color and gear give, worked out again only when one of them changes. */
+/** The look a draft's seed, color and gear give. */
 export const useDraftLook = (draft: FirstHobDraft) => {
   const gear = gearOf(draft);
-  return useMemo(
-    () => hobLook(draft.lookSeed, draft.lookColor, { hat: gear.hat, tool: gear.tool }),
-    [draft.lookSeed, draft.lookColor, gear.hat, gear.tool],
-  );
+  return hobLook(draft.lookSeed, draft.lookColor, { hat: gear.hat, tool: gear.tool });
 };
 
 /** Moves an unsent draft off a model the runtime no longer lists, each time the list arrives. */

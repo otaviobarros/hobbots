@@ -1,5 +1,4 @@
 import type { AttemptActivity, FileChange } from "@hobbots/domain";
-import { useMemo } from "react";
 import { changeShow, type LineCounts, lineCounts } from "./changes-model.ts";
 import { sideText, useTextSide } from "./use-version.ts";
 
@@ -18,5 +17,5 @@ export const useLineCounts = (change: FileChange, activity: AttemptActivity): Li
   const was = sideText(before);
   const now = sideText(after);
   const ready = text && [before, after].every((side) => side.kind === "none" || side.kind === "text");
-  return useMemo(() => (ready ? lineCounts(was, now) : null), [ready, was, now]);
+  return ready ? lineCounts(was, now) : null;
 };

@@ -2,7 +2,6 @@ import { hobLook } from "@hobbots/art/look";
 import type { Agent } from "@hobbots/domain";
 import { PixelArt } from "@hobbots/ui/components/pixel-art";
 import { cn } from "@hobbots/ui/lib/utils";
-import { useMemo } from "react";
 import type { HobState } from "../lib/hob-state.ts";
 import { SigilBadge } from "./role-sigil.tsx";
 
@@ -46,10 +45,7 @@ export function HobSprite({
   badge?: boolean;
   className?: string;
 }) {
-  const look = useMemo(
-    () => hobLook(hob.lookSeed, hob.lookColor, { hat: hob.hat, tool: hob.tool }),
-    [hob.lookSeed, hob.lookColor, hob.hat, hob.tool],
-  );
+  const look = hobLook(hob.lookSeed, hob.lookColor, { hat: hob.hat, tool: hob.tool });
   const mark = marks[state];
   return (
     <span className={cn("relative inline-block shrink-0", className)}>
