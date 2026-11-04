@@ -43,7 +43,7 @@ export function HobJump() {
         // A click on the backdrop lands on the dialog itself; inside it lands on its content.
         if (event.target === event.currentTarget) setOpen(false);
       }}
-      className="cut mx-auto mt-[14vh] w-[440px] max-w-[calc(100vw-32px)] border-2 border-control bg-panel p-0 text-text backdrop:bg-deep/70"
+      className="cut mx-auto mt-[14vh] w-[440px] max-w-[calc(100vw-32px)] border-2 border-control bg-panel p-0 text-text-strong backdrop:bg-deep/70"
     >
       {open && <JumpList onDone={() => setOpen(false)} />}
     </dialog>
@@ -103,7 +103,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
             go(options[current]);
           }
         }}
-        className="border-2 border-control bg-deep px-2.5 py-2 text-[15px] text-text placeholder:text-label"
+        className="border-2 border-control bg-deep px-2.5 py-2 text-[15px] text-text-strong placeholder:text-label"
       />
       <div
         id="hob-jump-list"
@@ -135,7 +135,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
                   <span className="truncate">{option.hit.thread.title}</span>
                   <ArchivedTag result={option} />
                 </span>
-                <span className="truncate text-[13px] text-secondary-text">
+                <span className="truncate text-[13px] text-text-secondary">
                   <ResultDetail result={option} />
                 </span>
               </span>
@@ -144,7 +144,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
           </div>
         ))}
         {query.trim() !== "" && !found.pending && options.length === 0 && (
-          <p className="m-0 px-2 py-1.5 text-sm text-secondary-text">
+          <p className="m-0 px-2 py-1.5 text-sm text-text-secondary">
             {messages.search.nothing({ query: query.trim() })}
           </p>
         )}

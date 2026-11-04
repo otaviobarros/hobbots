@@ -19,7 +19,7 @@ const components: Components = {
   h3: ({ node: _, ...props }) => <h5 className={cn(heading, "text-base")} {...props} />,
   h4: ({ node: _, ...props }) => <h6 className="font-bold" {...props} />,
   h5: ({ node: _, ...props }) => <h6 className="font-bold" {...props} />,
-  h6: ({ node: _, ...props }) => <h6 className="font-bold text-secondary-text" {...props} />,
+  h6: ({ node: _, ...props }) => <h6 className="font-bold text-text-secondary" {...props} />,
   ul: ({ node: _, className, ...props }) => (
     <ul
       className={cn(
@@ -37,7 +37,7 @@ const components: Components = {
     />
   ),
   blockquote: ({ node: _, ...props }) => (
-    <blockquote className="m-0 flex flex-col gap-2 bg-panel px-3 py-2 text-secondary-text" {...props} />
+    <blockquote className="m-0 flex flex-col gap-2 bg-panel px-3 py-2 text-text-secondary" {...props} />
   ),
   hr: () => <hr className="h-0.5 w-full border-0 bg-line" />,
   table: ({ node: _, ...props }) => (

@@ -108,7 +108,7 @@ function InboxItem({
       activeOptions={{ exact: true, includeSearch: true }}
       data-state={request.state}
       className={cn(
-        "hop-on-hover flex w-full items-start gap-2.5 px-2.5 py-2.5 text-start text-text no-underline hover:text-text",
+        "hop-on-hover flex w-full items-start gap-2.5 px-2.5 py-2.5 text-start text-text-strong no-underline hover:text-text-strong",
         selected ? "bg-line" : "hover:bg-hover",
         !pending && "opacity-70",
       )}
@@ -116,7 +116,7 @@ function InboxItem({
       {hob && <HobSprite hob={hob} size={26} state={pending ? "needs-you" : "idle"} className="mt-0.5" />}
       <span className="flex min-w-0 flex-1 flex-col gap-0.75">
         <span className="flex items-center gap-2">
-          <span className="flex-1 text-sm text-secondary-text">
+          <span className="flex-1 text-sm text-text-secondary">
             {copy.from({ name: directory.hobName(request.agentId) })}
           </span>
           <Badge variant={expired ? "muted" : "needs-you"}>{expired ? copy.kind.expired : copy.kind.approval}</Badge>

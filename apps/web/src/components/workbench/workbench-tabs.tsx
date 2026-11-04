@@ -5,10 +5,10 @@ import { type TabState, type TabStates, WORKBENCH_TABS } from "./workbench-model
 
 const labelTone: Record<TabState["kind"], string> = {
   live: "bg-mint text-ground",
-  history: "bg-line-2 text-secondary-text",
+  history: "bg-line-2 text-text-secondary",
   unavailable: "border-2 border-lantern text-lantern",
   "not-used": "text-label",
-  "coming-soon": "bg-line-2 text-secondary-text",
+  "coming-soon": "bg-line-2 text-text-secondary",
 };
 
 /**

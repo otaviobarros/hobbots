@@ -143,7 +143,7 @@ const providerName = (message: Message) => (message.runtime === "codex" ? "Codex
 /** Continue for a reply that ended early, and Continue with each other ready brain. */
 function ResumeControls({ resume, name }: { resume: ContinueReply; name: string }) {
   return resume.pending ? (
-    <span role="status" className="flex items-center gap-2 text-[13px] text-secondary-text">
+    <span role="status" className="flex items-center gap-2 text-[13px] text-text-secondary">
       <span aria-hidden className="size-[5px] animate-hb-blink bg-mint" />
       {copy.resuming({ name })}
     </span>
@@ -206,7 +206,7 @@ export function QueuedRow({
 
 function Thinking({ name }: { name: string }) {
   return (
-    <span role="status" className="flex items-center gap-2.5 text-sm text-secondary-text">
+    <span role="status" className="flex items-center gap-2.5 text-sm text-text-secondary">
       {copy.thinking({ name })}
       <span aria-hidden className="flex gap-1">
         <span className="size-[5px] animate-hb-blink bg-mint" />

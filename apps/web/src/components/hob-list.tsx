@@ -44,7 +44,7 @@ export function HobList({
           onChange={(event) => setQuery(event.target.value)}
           placeholder={copy.search}
           aria-label={copy.searchLabel}
-          className="min-w-0 flex-1 border-2 border-control bg-deep px-[9px] py-[7px] text-sm text-text placeholder:text-label"
+          className="min-w-0 flex-1 border-2 border-control bg-deep px-[9px] py-[7px] text-sm text-text-strong placeholder:text-label"
         />
         <Button variant="icon" size="icon" onClick={onHide} aria-label={copy.hide} title={copy.hide}>
           «
@@ -91,7 +91,7 @@ function HobEntry({ hob, open, threadId }: { hob: Agent; open: boolean; threadId
         params={{ hobId: hob.id }}
         aria-expanded={open}
         className={cn(
-          "hop-on-hover cut flex w-full items-center gap-2.5 px-2 py-[7px] text-text no-underline hover:bg-hover hover:text-text",
+          "hop-on-hover cut flex w-full items-center gap-2.5 px-2 py-[7px] text-text-strong no-underline hover:bg-hover hover:text-text-strong",
           open && "bg-line",
         )}
       >
@@ -146,7 +146,7 @@ function ThreadLink({ hob, thread, current, live }: { hob: Agent; thread: Thread
         params={{ hobId: hob.id, threadId: thread.id }}
         aria-current={current ? "page" : undefined}
         className={cn(
-          "flex w-full animate-hb-in items-center gap-2 py-[7px] pe-2.5 ps-[34px] text-sm text-text no-underline hover:bg-hover hover:text-text",
+          "flex w-full animate-hb-in items-center gap-2 py-[7px] pe-2.5 ps-[34px] text-sm text-text-strong no-underline hover:bg-hover hover:text-text-strong",
           current && "bg-line text-moonlight hover:text-moonlight",
         )}
       >

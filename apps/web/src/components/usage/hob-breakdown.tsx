@@ -36,7 +36,7 @@ function HobRow({ hob, look }: { hob: HobShare; look: Agent | undefined }) {
         />
       </span>
       <span
-        className="flex w-[190px] flex-col items-end text-sm text-secondary-text tabular-nums"
+        className="flex w-[190px] flex-col items-end text-sm text-text-secondary tabular-nums"
         title={copy.tokens({ input: hob.inputTokens, output: hob.outputTokens })}
       >
         <span>{copy.share({ share: hob.share, tokens: hob.tokens })}</span>
@@ -59,7 +59,7 @@ export function HobBreakdown({
   looks: ReadonlyMap<AgentId, Agent>;
   period: string;
 }) {
-  if (hobs.length === 0) return <p className="m-0 text-secondary-text">{copy.empty({ period })}</p>;
+  if (hobs.length === 0) return <p className="m-0 text-text-secondary">{copy.empty({ period })}</p>;
   return (
     <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
       {hobs.map((hob) => (

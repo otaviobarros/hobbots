@@ -52,7 +52,7 @@ const ELDER_PALETTE = { h: "#4a3a6a", s: "#e8b98f", k: "#141228", w: "#ece8ff", 
 const FIREFLIES = [0, 1, 2, 3, 4, 5].map((i) => ({ x: 30 + i * 64, bottom: 206 - (i % 3) * 30, delay: i * 0.7 }));
 
 /** A choice card's frame; `choiceOpenClass` adds the hover and focus of one that can be chosen. */
-const choiceClass = "cut flex flex-col gap-3 border-2 bg-card p-[22px] text-left text-text no-underline";
+const choiceClass = "cut flex flex-col gap-3 border-2 bg-card p-[22px] text-left text-text-strong no-underline";
 export const choiceOpenClass = `${choiceClass} cursor-pointer border-line-2 transition-transform duration-100 ease-[steps(2)] hover:-translate-y-[3px] hover:border-moonlight focus-visible:outline-3 focus-visible:outline-moonlight focus-visible:-outline-offset-3 disabled:cursor-wait disabled:hover:translate-y-0`;
 
 function ChoiceIcon({ rows, palette }: { rows: ReadonlyArray<string>; palette: Record<string, string> }) {
@@ -69,7 +69,7 @@ export function RunHereChoice({ badge = copy.here.badge }: { badge?: string }) {
     <>
       <ChoiceIcon rows={HOUSE} palette={HOUSE_PALETTE} />
       <span className="font-pixel text-2xl font-bold text-moonlight">{copy.here.title}</span>
-      <span className="text-secondary-text leading-normal">{copy.here.body}</span>
+      <span className="text-text-secondary leading-normal">{copy.here.body}</span>
       <span className="self-start bg-moonlight px-2 py-0.5 text-[13px] font-bold text-ground">{badge}</span>
     </>
   );
@@ -83,7 +83,7 @@ export function ConnectChoice({ muted = false, children }: { muted?: boolean; ch
       <span className={`font-pixel text-2xl font-bold ${muted ? "text-label" : "text-moonlight"}`}>
         {copy.connect.title}
       </span>
-      <span className="text-secondary-text leading-normal">{copy.connect.body}</span>
+      <span className="text-text-secondary leading-normal">{copy.connect.body}</span>
       {children}
     </>
   );
@@ -97,7 +97,7 @@ export function WhereLayout({ children, footer }: { children: ReactNode; footer?
       <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-12 pt-10 pb-6">
         <div className="flex animate-hb-in flex-col gap-2">
           <h1 className="m-0 font-pixel text-[32px] font-bold text-moonlight">{copy.title}</h1>
-          <p className="m-0 mb-[22px] max-w-[640px] text-secondary-text">{copy.intro}</p>
+          <p className="m-0 mb-[22px] max-w-[640px] text-text-secondary">{copy.intro}</p>
           <div className="grid grid-cols-1 gap-[18px] lg:grid-cols-2">{children}</div>
           {footer}
         </div>
@@ -119,7 +119,7 @@ export function ElderAside({ stage, speech }: { stage: string; speech: string })
         <span className="font-pixel text-[22px] font-bold text-moonlight">Hobbots</span>
         <span className="text-[13px] text-label">{stage}</span>
       </div>
-      <div className="cut absolute inset-x-7 top-[84px] min-h-[150px] bg-text px-5 py-[18px] text-[17px] text-ground leading-normal">
+      <div className="cut absolute inset-x-7 top-[84px] min-h-[150px] bg-text-strong px-5 py-[18px] text-[17px] text-ground leading-normal">
         <span className="lbl mb-1.5 block text-[#5b4f9a] text-[13px]">{copy.elder}</span>
         <span key={speech} aria-live="polite" className="block animate-hb-in">
           {speech}
@@ -127,7 +127,7 @@ export function ElderAside({ stage, speech }: { stage: string; speech: string })
       </div>
       <div
         aria-hidden
-        className="absolute top-[232px] left-[150px] border-x-[14px] border-x-transparent border-t-[16px] border-t-text"
+        className="absolute top-[232px] left-[150px] border-x-[14px] border-x-transparent border-t-[16px] border-t-text-strong"
       />
       {FIREFLIES.map((f) => (
         <span

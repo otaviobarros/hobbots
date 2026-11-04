@@ -23,7 +23,7 @@ export function TailscaleNotReady({
       className="cut flex max-w-[720px] flex-col gap-2.5 border-2 border-lantern bg-card px-[18px] py-4"
     >
       <span className="font-bold">{copy.missing[state]}</span>
-      <span className="text-sm leading-normal text-secondary-text">{copy.missingBody}</span>
+      <span className="text-sm leading-normal text-text-secondary">{copy.missingBody}</span>
       <ol className="m-0 flex list-none flex-col gap-1 p-0 text-sm leading-normal">
         {copy.steps.map((step, index) => (
           <li key={step}>
