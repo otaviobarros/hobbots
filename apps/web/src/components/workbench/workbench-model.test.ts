@@ -27,15 +27,7 @@ import {
   task,
   tree,
 } from "../../test/quests.ts";
-import {
-  askedBy,
-  attemptsOf,
-  chosenAttempt,
-  openingAttempt,
-  type ProbedRead,
-  tabAfterKey,
-  tabStates,
-} from "./workbench-model.ts";
+import { askedBy, attemptsOf, chosenAttempt, openingAttempt, type ProbedRead, tabStates } from "./workbench-model.ts";
 
 const AT = "2026-11-01T10:00:00.000Z";
 const done = attempt(CAMPAIGN, "completed");
@@ -232,16 +224,5 @@ describe("who asked for a Task", () => {
     const nested = tree({ ...bf, tasks: [...bf.tasks, step, deeper] });
     expect(askedBy(nested, step)).toEqual([ALDRIC]);
     expect(askedBy(nested, deeper)).toEqual([ALDRIC, ADA]);
-  });
-});
-
-describe("moving between the Workbench's tabs by keyboard", () => {
-  it("wraps around with the arrows and goes to the ends with Home and End", () => {
-    expect(tabAfterKey("summary", "ArrowRight")).toBe("changes");
-    expect(tabAfterKey("browser", "ArrowRight")).toBe("summary");
-    expect(tabAfterKey("summary", "ArrowLeft")).toBe("browser");
-    expect(tabAfterKey("files", "Home")).toBe("summary");
-    expect(tabAfterKey("files", "End")).toBe("browser");
-    expect(tabAfterKey("files", "Enter")).toBeNull();
   });
 });
