@@ -18,11 +18,10 @@ import { WorkHeldNotice } from "./backup/work-held-notice.tsx";
 import { HobSprite, hobState } from "./hob-sprite.tsx";
 import type { HobFilter } from "./hobs-page/hobs-page-model.ts";
 import { activeFilter, inFilter, sceneChips } from "./home/home-model.ts";
+import { NeedsYou } from "./home/needs-you.tsx";
 import { PickUp } from "./home/pick-up.tsx";
 import { StageHob } from "./home/stage-hob.tsx";
-import { messages as inboxCopy } from "./inbox/messages.ts";
 import { useWaitingHobs } from "./inbox/use-waiting-count.ts";
-import { WaitingRequests } from "./inbox/waiting-requests.tsx";
 import { messages } from "./messages.ts";
 import { Stars } from "./scene.tsx";
 
@@ -136,18 +135,6 @@ function LiveDot() {
       <span aria-hidden className="size-2 animate-hb-blink rounded-dot bg-rose" />
       <span className="text-xs text-text-secondary">live</span>
     </>
-  );
-}
-
-function NeedsYou() {
-  return (
-    <Card label="Needs you" className="border-[3px] border-lantern" labelClass="text-lantern">
-      <WaitingRequests
-        empty={
-          <p className="m-0 border-t-2 border-line pt-3 leading-normal text-text-secondary">{inboxCopy.home.empty}</p>
-        }
-      />
-    </Card>
   );
 }
 

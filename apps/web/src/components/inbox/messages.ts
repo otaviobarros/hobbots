@@ -126,12 +126,6 @@ export const messages = {
     loading: "Reading the questions for you…",
     loadFailed: "Hobbots could not read the questions for you.",
   },
-  home: {
-    more: ({ count }: { count: number }) => `${formatCount(count)} more in the Inbox`,
-    empty:
-      "Nothing needs you right now. When a hob asks permission or has a question, it waits here and you can open it in the Inbox.",
-    open: "Open the Inbox",
-  },
   sidebar: ({ count }: { count: number }) => `Inbox, ${formatCount(count)} waiting on you`,
   count: ({ count }: { count: number }) => formatCount(count),
 } as const;
