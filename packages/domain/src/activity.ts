@@ -1,5 +1,6 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { AgentId } from "./ids.ts";
+import { ReplyStep } from "./message.ts";
 import { ArtifactRef } from "./quest.ts";
 import { Attempt, AttemptId, TaskId } from "./task.ts";
 import { previewToolOutput, ToolOutput } from "./tool-output.ts";
@@ -285,6 +286,11 @@ export class AttemptActivity extends Schema.Class<AttemptActivity>("AttemptActiv
   scans: Schema.Array(FolderScan),
   /** The Task's Artifact references this Attempt made. */
   artifacts: Schema.Array(ArtifactRef),
+  /**
+   * The steps of the Attempt's turns outside any chat, a step's or a party member's, as a chat reply
+   * keeps them (#892). A chat turn's steps stay on its reply, so its Attempt has none here.
+   */
+  steps: Schema.Array(ReplyStep).pipe(Schema.withConstructorDefault(Effect.succeed([]))),
   /** The hob of each other Attempt a change's `sharedWith` names, so a change can say who else worked there. */
   sharedWithHobs: Schema.Array(Schema.Struct({ attemptId: AttemptId, agentId: AgentId })),
   detailsClearedAt: Schema.NullOr(Schema.String),

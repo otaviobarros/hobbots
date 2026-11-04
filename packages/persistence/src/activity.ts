@@ -10,6 +10,7 @@ import {
   type FileChangeId,
   FileVersion,
   FolderScan,
+  ReplyStep,
   type TaskId,
   ToolOutput,
 } from "@hobbots/domain";
@@ -31,6 +32,8 @@ const decodeCommands = Schema.decodeUnknownEffect(Schema.Array(CommandRecord));
 const decodeChanges = Schema.decodeUnknownEffect(Schema.Array(FileChange));
 const decodeScans = Schema.decodeUnknownEffect(Schema.Array(FolderScan));
 const decodeArtifacts = Schema.decodeUnknownEffect(Schema.Array(ArtifactRef));
+const decodeSteps = Schema.decodeUnknownEffect(Schema.Array(ReplyStep));
+const encodeSteps = Schema.encodeSync(Schema.fromJsonString(Schema.Array(ReplyStep)));
 
 /** Rows the hub wrote decode; one that does not is a defect. */
 const decoded =
@@ -228,6 +231,24 @@ export const ActivityRepositoryLive = Layer.effect(
         }),
       );
 
+    const saveSteps = (attemptId: AttemptId, steps: ReadonlyArray<ReplyStep>, at: string) =>
+      journaled(1, () =>
+        Effect.gen(function* () {
+          const taskId = yield* taskOf(attemptId);
+          if (taskId === null) return null;
+          const row = { attempt_id: attemptId, task_id: taskId, steps: encodeSteps(steps), updated_at: at };
+          yield* sql`INSERT INTO attempt_steps ${sql.insert(row)}
+            ON CONFLICT (attempt_id) DO UPDATE SET steps = ${row.steps}, updated_at = ${at}`;
+          return { value: steps, events: [{ _tag: "AttemptStepsRecorded" as const, attemptId, taskId, steps }] };
+        }),
+      );
+
+    const stepsOf = (attemptId: AttemptId) =>
+      sql<Row>`SELECT steps FROM attempt_steps WHERE attempt_id = ${attemptId}`.pipe(
+        Effect.flatMap(([row]) => decodeSteps(row === undefined ? [] : json(row.steps))),
+        Effect.orDie,
+      );
+
     const read = (attemptId: AttemptId) =>
       Effect.gen(function* () {
         const [attempt] = yield* reads.attempt(attemptId);
@@ -245,6 +266,7 @@ export const ActivityRepositoryLive = Layer.effect(
         );
         const artifacts = yield* sql<Row>`SELECT * FROM artifact_refs WHERE attempt_id = ${attemptId}
           ORDER BY ${oldestFirst(sql)}`.pipe(Effect.flatMap(decoded(decodeArtifacts)));
+        const steps = yield* stepsOf(attemptId);
         const sharing = [...new Set(changes.flatMap((each) => each.sharedWith))];
         const sharedWithHobs =
           sharing.length === 0
@@ -262,6 +284,7 @@ export const ActivityRepositoryLive = Layer.effect(
             changes,
             scans,
             artifacts,
+            steps,
             sharedWithHobs: sharedWithHobs.map(({ attemptId, agentId }) => ({ attemptId, agentId })),
             detailsClearedAt: cleared?.at ?? null,
           }),
@@ -318,6 +341,8 @@ export const ActivityRepositoryLive = Layer.effect(
       saveCommand,
       saveChanges,
       saveScan,
+      saveSteps,
+      readSteps: stepsOf,
       read: (attemptId) => Effect.orDie(read(attemptId)),
       names: (attemptId, contentId) => Effect.orDie(names(attemptId, contentId)),
       findCommand: (attemptId, commandId) => Effect.orDie(findCommand(attemptId, commandId)),

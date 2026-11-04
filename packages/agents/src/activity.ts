@@ -10,6 +10,7 @@ import type {
   FileChangeId,
   FolderListing,
   FolderScan,
+  ReplyStep,
   ScanStop,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option, Schema } from "effect";
@@ -106,7 +107,18 @@ export interface ActivityRepositoryShape {
     >
   >;
   readonly saveScan: (scan: FolderScanDraft) => Effect.Effect<Option.Option<Committed<FolderScan>>>;
+  /**
+   * Stores every step the Attempt's turns outside any chat have now, replacing those stored before,
+   * with its journal event (#892). None when its Attempt is not there.
+   */
+  readonly saveSteps: (
+    attemptId: AttemptId,
+    steps: ReadonlyArray<ReplyStep>,
+    at: string,
+  ) => Effect.Effect<Option.Option<Committed<ReadonlyArray<ReplyStep>>>>;
   readonly read: (attemptId: AttemptId) => Effect.Effect<Option.Option<AttemptActivity>>;
+  /** The steps stored for the Attempt's turns outside any chat; none when there are none. */
+  readonly readSteps: (attemptId: AttemptId) => Effect.Effect<ReadonlyArray<ReplyStep>>;
   /** Whether a record of the Attempt names these contents, and they were not cleared. */
   readonly names: (attemptId: AttemptId, contentId: ContentId) => Effect.Effect<boolean>;
   /** The command, when it is the Attempt's. */

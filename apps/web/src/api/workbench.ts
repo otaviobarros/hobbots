@@ -45,6 +45,8 @@ export const recordedAttempt = (event: HobbotsEvent): AttemptId | null => {
       return event.attemptId;
     case "FolderScanned":
       return event.scan.attemptId;
+    case "AttemptStepsRecorded":
+      return event.attemptId;
     default:
       return null;
   }

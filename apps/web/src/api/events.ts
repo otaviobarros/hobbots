@@ -107,7 +107,14 @@ const applyAgent = (queryClient: QueryClient, hob: Agent) => {
 
 type WorkbenchEvent = Extract<
   HobbotsEvent,
-  { readonly _tag: "CommandRecorded" | "FileChangesRecorded" | "FolderScanned" | "CommandOutput" }
+  {
+    readonly _tag:
+      | "CommandRecorded"
+      | "FileChangesRecorded"
+      | "FolderScanned"
+      | "AttemptStepsRecorded"
+      | "CommandOutput";
+  }
 >;
 const isWorkbenchEvent = (event: HobbotsEvent): event is WorkbenchEvent =>
   event._tag === "CommandOutput" || recordedAttempt(event) !== null;

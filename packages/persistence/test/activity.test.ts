@@ -171,6 +171,42 @@ describe("Workbench records", () => {
   });
 
   // covers UX-002
+  it("keeps an Attempt's steps outside any chat, replacing them whole as they change, and journals each write (#892)", async () => {
+    const searching = {
+      id: "s1",
+      kind: "tool" as const,
+      label: "Searching GitHub",
+      state: "running" as const,
+      call: { tool: "mcp__hobbots__github_search", operation: "read-github" as const, targets: [project] },
+      startedAt: now,
+    };
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const repo = yield* ActivityRepository;
+        const first = yield* repo.saveSteps(attemptId, [searching], now);
+        const second = yield* repo.saveSteps(attemptId, [{ ...searching, state: "done" }], later);
+        const missing = yield* repo.saveSteps(AttemptId.make("missing"), [searching], later);
+        const events = yield* (yield* EventJournal).readAfter(0);
+        return {
+          first,
+          second,
+          missing,
+          stored: yield* repo.readSteps(attemptId),
+          read: Option.map(yield* repo.read(attemptId), (activity) => activity.steps),
+          none: yield* repo.readSteps(AttemptId.make("missing")),
+          journaled: events.filter((event) => event.type === "AttemptStepsRecorded").length,
+        };
+      }),
+    );
+    expect(Option.isSome(result.first) && Option.isSome(result.second)).toBe(true);
+    expect(result.missing).toEqual(Option.none());
+    expect(result.stored).toEqual([{ ...searching, state: "done" }]);
+    expect(result.read).toEqual(Option.some([{ ...searching, state: "done" }]));
+    expect(result.none).toEqual([]);
+    expect(result.journaled).toBe(2);
+  });
+
   it("[TC-IN-175] writes nothing for an Attempt that is not there", async () => {
     const result = await run(
       Effect.gen(function* () {

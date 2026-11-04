@@ -1,7 +1,10 @@
 import {
   type ActivityRecorder,
   type HubTools,
+  nextSteps,
   type Redactor,
+  type RuntimeEvent,
+  redactEvent,
   type runtimeAdapters,
   type ToolAccess,
   type ToolStartedEvent,
@@ -13,11 +16,14 @@ import {
   type AgentConfiguration,
   type AgentId,
   type AttemptId,
+  endedSteps,
+  previewToolOutput,
+  type ReplyStep,
   RUNTIME_NAMES,
   systemInstructions,
   type TaskId,
 } from "@hobbots/domain";
-import { Effect, Option, Stream } from "effect";
+import { DateTime, Effect, Option, Semaphore, Stream } from "effect";
 
 /** How a session's turn ended: with a final reply, or failed with a reason. */
 export type Ending =
@@ -60,6 +66,42 @@ export const runSessionTurn = (
       } as Ending;
     }
     let ending: Ending = { _tag: "Failed", reason: "The runtime ended without a result." };
+    // The turn's steps, kept on its Attempt as a chat reply keeps its own (#892). Saved in order, each
+    // change whole; a turn resumed on the Attempt adds to the steps its earlier turns left.
+    const stepsLock = yield* Semaphore.make(1);
+    let steps: ReadonlyArray<ReplyStep> = [];
+    let from = 0;
+    const saveSteps = (change: (current: ReadonlyArray<ReplyStep>) => ReadonlyArray<ReplyStep> | null) =>
+      Option.isNone(recorder)
+        ? Effect.void
+        : stepsLock.withPermit(
+            Effect.suspend(() => {
+              const next = change(steps);
+              if (next === null) return Effect.void;
+              steps = next;
+              return recorder.value.recordSteps(turn.attemptId, next);
+            }),
+          );
+    const stepOf = (event: RuntimeEvent) =>
+      Effect.gen(function* () {
+        const now = DateTime.formatIso(yield* DateTime.now);
+        const redacted = redactEvent(event, redactor);
+        const output =
+          redacted._tag === "ToolFinished" && redacted.output !== undefined
+            ? { ...previewToolOutput(redactor.text(redacted.output)), logged: false }
+            : undefined;
+        yield* saveSteps((current) => nextSteps(current, from, redacted, now, output));
+      });
+    // A step still under way when the turn ends, however it ends, can never read as active again.
+    const endSteps = saveSteps((current) => {
+      const ended = endedSteps(current);
+      return ended.every((step, i) => step === current[i]) ? null : ended;
+    });
+    if (Option.isSome(recorder)) {
+      const earlier = yield* recorder.value.stepsOf(turn.attemptId);
+      steps = earlier;
+      from = earlier.length;
+    }
     const activity = yield* trackTurn(recorder, {
       folders: turn.access?.folders ?? [],
       attempt: Effect.succeed(turn.attemptId),
@@ -78,7 +120,8 @@ export const runSessionTurn = (
           tools: turn.access,
           approvals: turn.approvals,
           redaction: redactor,
-          recordToolStart: turn.recordToolStart,
+          recordToolStart: (event) =>
+            turn.recordToolStart(event).pipe(Effect.tap((recorded) => (recorded ? stepOf(event) : Effect.void))),
           hubTools: yield* turn.hubTools,
         },
         adapter.sendPrompt,
@@ -91,7 +134,7 @@ export const runSessionTurn = (
               ...(event.policyVersion && { policyVersion: event.policyVersion }),
             });
           if (event._tag === "Completed") ending = { _tag: "Replied", text: event.text };
-          return Effect.void;
+          return stepOf(event);
         }),
         Effect.catchTags({
           RuntimeError: (error) =>
@@ -107,6 +150,7 @@ export const runSessionTurn = (
               };
             }),
         }),
+        Effect.ensuring(endSteps),
       );
     return ending;
   }).pipe(
