@@ -1,5 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
@@ -62,6 +73,30 @@ describe("color in a hob's commands", () => {
     expect(withColor("echo $FORCE_COLOR $CLICOLOR_FORCE $npm_config_color $pnpm_config_color", repo)).toBe(
       "3 1 always always\n",
     );
+  });
+
+  // covers ADR 014, STD-SEC-002
+  it("[TC-RT-504] replaces a link or hard link a command planted at the script's path, never the file it reaches", async () => {
+    const runtime = join(root, "planted-runtime");
+    mkdirSync(runtime);
+    const outside = join(root, "outside.txt");
+    const shared = join(root, "shared.txt");
+    writeFileSync(outside, "the user's file\n");
+    writeFileSync(shared, "another of the user's files\n");
+    const path = join(runtime, "command-env.sh");
+    symlinkSync(outside, path);
+    await writeCommandColorScript(runtime);
+    expect(readFileSync(outside, "utf8")).toBe("the user's file\n");
+    expect(lstatSync(path).isFile()).toBe(true);
+    expect(readFileSync(path, "utf8")).toBe(commandColorScript());
+
+    rmSync(path);
+    linkSync(shared, path);
+    await writeCommandColorScript(runtime);
+    expect(readFileSync(shared, "utf8")).toBe("another of the user's files\n");
+    expect(readFileSync(path, "utf8")).toBe(commandColorScript());
+    // Only the script is left: no staged file stays behind.
+    expect(readdirSync(runtime)).toEqual(["command-env.sh"]);
   });
 
   it("writes the script into the hob's runtime folder", async () => {

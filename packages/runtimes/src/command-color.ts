@@ -1,4 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { mkdir, open, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { hasEscapes, stripEscapes } from "@hobbots/domain";
 import { Effect } from "effect";
@@ -56,12 +58,31 @@ export const COMMAND_ENV_FILE_VARIABLE = "CLAUDE_ENV_FILE";
 /**
  * Writes the color script into the hob's runtime folder, which Claude Code can read inside the
  * sandbox, and returns its path for `CLAUDE_ENV_FILE`. It is written again each turn, so a command
- * that changed it changes no later turn.
+ * that changed it changes no later turn. The folder is the sandbox's to write, so whatever is at the
+ * script's path may be a link a command planted to a file outside it: the script goes to a new file
+ * no link can stand in for (`O_EXCL`, `O_NOFOLLOW`), which then replaces the path's own entry, never
+ * a file it points to or shares with another path.
  */
 export const writeCommandColorScript = async (runtimeFolder: string): Promise<string> => {
   await mkdir(runtimeFolder, { recursive: true });
   const path = join(runtimeFolder, "command-env.sh");
-  await writeFile(path, commandColorScript(), { mode: 0o600 });
+  const staged = join(runtimeFolder, `.command-env-${randomUUID()}.sh`);
+  try {
+    const handle = await open(
+      staged,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600,
+    );
+    try {
+      await handle.writeFile(commandColorScript());
+    } finally {
+      await handle.close();
+    }
+    await rename(staged, path);
+  } catch (error) {
+    await rm(staged, { force: true });
+    throw error;
+  }
   return path;
 };
 
