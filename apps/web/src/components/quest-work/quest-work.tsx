@@ -124,7 +124,7 @@ function MemberLine({ work, hob, lead }: { work: MemberWork; hob: Agent | undefi
   return (
     <span className="flex items-center gap-2 text-[13px] leading-snug">
       {hob && <HobSprite hob={hob} size={18} />}
-      <span className="w-16 flex-none truncate font-pixel font-semibold text-moonlight">{hob?.name}</span>
+      <span className="w-16 flex-none truncate font-heading font-semibold text-moonlight">{hob?.name}</span>
       <span className="min-w-0 flex-1 truncate text-text-secondary">{messages.onQuest({ lead })}</span>
       <span className={cn("whitespace-nowrap text-xs", toneText[workTone[work.task.state]])}>
         {messages.state[work.task.state]}

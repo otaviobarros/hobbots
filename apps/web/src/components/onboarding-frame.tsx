@@ -72,7 +72,7 @@ export function OnboardingFrame({
 
         {sofar.length > 0 && (
           <div className="absolute inset-x-7 bottom-[26px] flex flex-col gap-1.5">
-            <span className="font-pixel text-sm font-bold tracking-[.08em] text-label uppercase">So far</span>
+            <span className="font-heading text-sm font-bold tracking-[.08em] text-label uppercase">So far</span>
             {sofar.map((line) => (
               <span key={line} className="animate-hb-in text-sm text-text-secondary">
                 <span className="font-bold text-mint">✓</span> {line}
@@ -94,7 +94,7 @@ export function OnboardingFrame({
                   className={`flex items-center gap-2 p-1 ${current ? "text-moonlight" : done ? "text-text-strong" : "text-label"}`}
                 >
                   <span
-                    className={`cut grid size-7 place-items-center font-pixel text-[15px] font-bold ${done ? "bg-mint text-ground" : current ? "bg-lantern text-ground" : "bg-line-2 text-text-strong"}`}
+                    className={`cut grid size-7 place-items-center font-heading text-[15px] font-bold ${done ? "bg-mint text-ground" : current ? "bg-lantern text-ground" : "bg-line-2 text-text-strong"}`}
                   >
                     {done ? "✓" : i + 1}
                   </span>

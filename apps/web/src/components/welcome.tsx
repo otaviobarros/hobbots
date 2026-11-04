@@ -56,7 +56,7 @@ export function Welcome() {
       />
       <Dialog open={restoring} onOpenChange={setRestoring}>
         <DialogContent aria-describedby={undefined}>
-          <DialogTitle className="m-0 font-pixel text-2xl font-bold text-moonlight">
+          <DialogTitle className="m-0 font-heading text-2xl font-bold text-moonlight">
             {backupMessages.restore.title}
           </DialogTitle>
           <RestoreFlow onCancel={() => setRestoring(false)} />

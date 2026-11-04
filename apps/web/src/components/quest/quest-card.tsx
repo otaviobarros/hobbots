@@ -70,7 +70,7 @@ export function QuestCard({
       <div className="flex items-center gap-2">
         <HobSprite hob={lead} size={20} state={card.status === "running" ? "working" : "idle"} />
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="font-pixel text-base font-semibold">{heading(card, lead.name)}</span>
+          <span className="font-heading text-base font-semibold">{heading(card, lead.name)}</span>
           <span className="truncate text-detail text-text-secondary">{title}</span>
         </span>
         {total > 0 && (

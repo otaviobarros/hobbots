@@ -157,7 +157,7 @@ export function NoteBox({
             setDraft({ ...emptyNote(), text: event.target.value });
           }}
           onKeyDown={enterSends(submit)}
-          className="min-h-9 flex-1 rounded-none border-2 border-control bg-deep text-sm text-text-strong"
+          className="min-h-9 flex-1 rounded-control border-2 border-control bg-deep text-sm text-text-strong"
         />
         <Button type="submit" size="sm" disabled={text === "" || send.isPending}>
           {copy.send}

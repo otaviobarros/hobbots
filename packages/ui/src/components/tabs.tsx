@@ -30,12 +30,12 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-t-[var(--corner-control)] border-0 bg-transparent px-3 pt-2.5 pb-3 text-[15px] leading-[23px] whitespace-nowrap text-text-secondary",
+        "relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-t-control border-0 bg-transparent px-3 pt-2.5 pb-3 text-[15px] leading-[23px] whitespace-nowrap text-text-secondary",
         "hover:bg-hover hover:text-text-strong data-[state=active]:font-semibold data-[state=active]:text-text-strong",
         "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
         "disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         // The bar under the selected tab sits on the list's line, inset from the tab's sides.
-        "after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-[calc(-1*var(--edge))] after:h-[3px] after:rounded-[var(--corner-control)] after:bg-lantern after:opacity-0 data-[state=active]:after:opacity-100",
+        "after:pointer-events-none after:absolute after:inset-x-2.5 after:bottom-[calc(-1*var(--edge))] after:h-[3px] after:rounded-control after:bg-lantern after:opacity-0 data-[state=active]:after:opacity-100",
         className,
       )}
       {...props}

@@ -62,6 +62,20 @@ The type scale, the spacing grid and every size are the same in all four themes.
 
 `apps/web/src/styles.css` holds the themes. Its `@theme` block and `:root` rule carry Lamplight Dusk, the default when no theme is set, and a `:root[data-theme="…"]` rule per other theme overrides every color and shadow. Two more rules set the skin: Lamplight on `:root`, Workshop on `[data-theme^="workshop-"]`. A unit test checks the file against themes.json. The app opens in Workshop Night on first run: `apps/web/index.html` and `apps/web/local.html` set it. `apps/web/src/lib/theme.ts` then applies the theme saved on this device before the first render, and follows a theme picked in another window. Like Reduce motion, the theme belongs to the device it is picked on, not to the hub. A missing or unknown value means Workshop Night. Finishing setup saves Lamplight Dusk when nothing is saved yet (`firstRunFinished`), and the open window keeps Workshop Night until the next start.
 
+Components read the skin through a few utilities, so none of them checks the theme:
+
+| Utility | Reads | Used for |
+| --- | --- | --- |
+| `cut` | `--cut`, `--corner-card` | Cards, menus, dialogs and toasts |
+| `cut-control` | `--cut`, `--corner-control`, the focus values | Buttons and rows you press |
+| `rounded-control`, `rounded-tag`, `rounded-dot`, `rounded-tile`, `rounded-card` | `--corner-*` | Fields, tags, state marks, portrait tiles |
+| `font-heading` | `--font-heading` | Headings and hob names. `font-pixel` stays for the wordmark and art marks |
+| `lbl` | `--font-heading`, `--label-case`, `--label-track` | Section labels |
+| `press` | `--press-*`, with `--press-color` set by the button | The primary and approve press |
+| `animate-(--hop)` | `--hop` | A hob's hop. It is `none` in Lamplight |
+
+Transitions, `animate-hb-in` and `animate-hb-pop` ease with `--ease-ui`. Scene and hob art always steps. In Workshop the cut clip hides an outside outline, so a focused control draws its ring inset, with a 2px ground gap.
+
 Shadows are plain custom properties with their own `shadow-menu` and `shadow-sheet` utilities, so each theme can change their shape. shadcn's `dark:` variant follows the mode: every theme but Lamplight Paper and Workshop Daylight is dark.
 
 Workshop Night keeps the palette the app had before the themes. These tokens were renamed or added:

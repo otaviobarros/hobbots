@@ -203,7 +203,7 @@ function Connecting({
   return (
     <div className="cut flex flex-col gap-2 border-2 border-lantern bg-notice px-3 py-2.5" role="status">
       <span className="text-sm">{copy.enterCode}</span>
-      <span className="select-all font-pixel text-[28px] font-bold tracking-widest text-moonlight">
+      <span className="select-all font-heading text-[28px] font-bold tracking-widest text-moonlight">
         {status.userCode}
       </span>
       <span className="text-[13px] text-text-secondary">{copy.waiting}</span>

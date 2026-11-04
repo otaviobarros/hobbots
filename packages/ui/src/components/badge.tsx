@@ -6,7 +6,7 @@ import type * as React from "react";
 // Status tags from the Hobbots component sheet: bold, one color per state.
 // Corners come from the theme's tag corner: rounded in Lamplight, square in Workshop.
 const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center gap-[5px] rounded-(--corner-tag) px-[7px] py-0.5 text-xs font-bold whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "inline-flex w-fit shrink-0 items-center gap-[5px] rounded-tag px-[7px] py-0.5 text-xs font-bold whitespace-nowrap [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {

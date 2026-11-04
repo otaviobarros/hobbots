@@ -61,7 +61,7 @@ export function QuestRoom({
     <section aria-label={copy.label({ title })} className="flex flex-col border-b-4 border-line">
       <div className="flex flex-col gap-2 px-3.5 pt-3 pb-2">
         <div className="flex items-center gap-2">
-          <h2 className="m-0 min-w-0 flex-1 truncate font-pixel text-lg font-bold text-moonlight">{title}</h2>
+          <h2 className="m-0 min-w-0 flex-1 truncate font-heading text-lg font-bold text-moonlight">{title}</h2>
           <Button
             variant="chip"
             size="xs"

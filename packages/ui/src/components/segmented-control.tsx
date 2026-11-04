@@ -10,7 +10,7 @@ import * as React from "react";
 // cover its 3px padding (8px gives 11px), so it stays square when the segment is square.
 
 const segmentVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-[var(--corner-control)] border-0 bg-transparent whitespace-nowrap text-text-secondary transition-colors duration-150 outline-none select-none hover:text-text-strong focus-visible:z-10 focus-visible:shadow-[inset_0_0_0_2px_var(--color-ring)] disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-card data-[state=on]:text-text-strong data-[state=on]:shadow-[0_1px_2px_rgb(0_0_0/0.18)] data-[state=on]:focus-visible:shadow-[inset_0_0_0_2px_var(--color-ring)] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-control border-0 bg-transparent whitespace-nowrap text-text-secondary transition-colors duration-150 outline-none select-none hover:text-text-strong focus-visible:z-10 focus-visible:shadow-[inset_0_0_0_2px_var(--color-ring)] disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-card data-[state=on]:text-text-strong data-[state=on]:shadow-[0_1px_2px_rgb(0_0_0/0.18)] data-[state=on]:focus-visible:shadow-[inset_0_0_0_2px_var(--color-ring)] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       size: {

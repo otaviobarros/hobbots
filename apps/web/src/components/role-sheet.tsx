@@ -49,7 +49,7 @@ export function RoleSheet({
         className="h-[min(720px,calc(100vh-48px))] w-[min(1000px,calc(100vw-32px))] max-w-none animate-hb-in gap-0 p-0"
       >
         <div className="flex flex-wrap items-center gap-3.5 border-b-2 border-line px-5 py-4">
-          <DialogTitle className="m-0 flex-1 font-pixel text-[22px] font-bold text-moonlight">
+          <DialogTitle className="m-0 flex-1 font-heading text-[22px] font-bold text-moonlight">
             Choose {name}'s role
           </DialogTitle>
           <input

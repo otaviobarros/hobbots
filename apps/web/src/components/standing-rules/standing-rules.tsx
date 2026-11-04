@@ -50,7 +50,7 @@ export function StandingRules() {
   return (
     <section aria-label={copy.heading} className="flex flex-col gap-3">
       <span className="lbl text-xs text-label">{copy.heading}</span>
-      <h2 className="m-0 font-pixel text-2xl font-bold text-moonlight">{copy.history.title}</h2>
+      <h2 className="m-0 font-heading text-2xl font-bold text-moonlight">{copy.history.title}</h2>
       <p className="m-0 text-sm text-text-secondary">{copy.history.intro}</p>
       <div className="cut bg-panel px-4 py-2">
         <StandingRuleList />

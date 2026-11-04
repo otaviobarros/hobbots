@@ -392,7 +392,7 @@ export function OnboardingProviders() {
       }
     >
       <div className="flex animate-hb-in flex-col gap-1.5">
-        <h1 className="m-0 font-pixel text-[30px] font-bold text-moonlight">{copy.heading}</h1>
+        <h1 className="m-0 font-heading text-[30px] font-bold text-moonlight">{copy.heading}</h1>
         <p className="m-0 mb-3.5 text-text-secondary">{copy.intro}</p>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
           {states.map(([runtime, state]) => (

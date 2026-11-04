@@ -74,7 +74,7 @@ export function SidePanel({
 function Empty({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex animate-hb-in flex-col gap-2 px-[18px] py-[22px] leading-normal text-text-secondary">
-      <span className="font-pixel text-lg text-moonlight">{title}</span>
+      <span className="font-heading text-lg text-moonlight">{title}</span>
       <span>{children}</span>
     </div>
   );

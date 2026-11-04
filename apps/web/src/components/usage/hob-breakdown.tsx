@@ -22,7 +22,7 @@ function HobRow({ hob, look }: { hob: HobShare; look: Agent | undefined }) {
       </span>
       <span className="flex w-[180px] min-w-0 flex-col">
         <span className="flex items-center gap-2">
-          <span className="truncate font-pixel text-base font-semibold">{hob.name}</span>
+          <span className="truncate font-heading text-base font-semibold">{hob.name}</span>
           {hob.status === "retired" && (
             <span className="border-2 border-line-2 px-1 text-[11px] text-label">{copy.retired}</span>
           )}

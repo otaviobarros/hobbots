@@ -144,7 +144,7 @@ export function OnboardingReady() {
       }
     >
       <div className="flex animate-hb-in flex-col items-center gap-2.5 pt-1 text-center">
-        <h1 aria-live="polite" className="m-0 font-pixel text-[30px] font-bold text-moonlight">
+        <h1 aria-live="polite" className="m-0 font-heading text-[30px] font-bold text-moonlight">
           {done ? copy.arrived({ name }) : copy.heading}
         </h1>
         <p className="m-0 text-text-secondary">
