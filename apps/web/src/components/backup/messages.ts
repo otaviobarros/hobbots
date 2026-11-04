@@ -2,11 +2,17 @@ import { formatCount, plural } from "../../lib/format.ts";
 
 /** User-facing copy for backup and restore (STD-I18N-001, ADR 026). */
 export const messages = {
-  heading: "Backup & export",
-  intro: "Your chats, Quests and what hobs made live on the hub. Keep a copy somewhere safe.",
+  heading: "Backups",
+  intro: "Your hobs, chats, Quests and settings. Never your passwords or keys: you sign in again after a restore.",
+  tag: {
+    idle: "Not backed up yet",
+    running: "Backing up…",
+    done: ({ when }: { when: string }) => `Backed up ${when}`,
+    failed: "Did not finish",
+  },
+  exportOpen: "Export as files",
   failedToRead: "Hobbots could not read its backups. Try again in a moment.",
   backup: {
-    title: "Back up now",
     destination: "Save the backup in",
     destinationHint: "A folder on the hub, outside every folder hobs work in.",
     choose: "Choose a folder…",
@@ -25,7 +31,7 @@ export const messages = {
       manifest: "Finishing the backup…",
     },
     progress: ({ copied, total }: { copied: string; total: string }) => `${copied} of ${total}`,
-    done: ({ when, size }: { when: string; size: string }) => `Backed up ${when} · ${size}`,
+    saved: ({ size }: { size: string }) => `${size}, saved in`,
     failed: ({ reason }: { reason: string }) => `The backup did not finish. ${reason}`,
     privacy:
       "A backup keeps your chats exactly as written, including anything you pasted into a message. It is not encrypted, so keep it somewhere private.",

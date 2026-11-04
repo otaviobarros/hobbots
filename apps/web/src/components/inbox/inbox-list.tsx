@@ -97,12 +97,17 @@ export function InboxList({
   }
   return (
     <ul aria-label={copy.listLabel} className="m-0 flex list-none flex-col gap-3.5 p-0 px-2.5 py-1">
-      {groupByPlace(entries, questOf).map((group) => (
-        <li key={group.key} className="flex flex-col gap-1">
-          <span className="lbl truncate px-1.5 py-1 text-xs text-label">{groupLabel(group, directory)}</span>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0">{group.entries.map((entry) => item(entry))}</ul>
-        </li>
-      ))}
+      {groupByPlace(entries, questOf).map((group) => {
+        const label = groupLabel(group, directory);
+        return (
+          <li key={group.key} className="flex flex-col gap-1">
+            <span title={label} className="lbl truncate px-1.5 py-1 text-xs text-label">
+              {label}
+            </span>
+            <ul className="m-0 flex list-none flex-col gap-1 p-0">{group.entries.map((entry) => item(entry))}</ul>
+          </li>
+        );
+      })}
     </ul>
   );
 }

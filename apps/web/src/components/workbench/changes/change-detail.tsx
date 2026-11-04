@@ -23,12 +23,15 @@ export function ChangeDetail({
   activity,
   live,
   hobs,
+  onOpenFiles,
 }: {
   change: FileChange;
   activity: AttemptActivity;
   /** The Attempt is running a turn, so a change not yet settled may change again. */
   live: boolean;
   hobs: HobLookup;
+  /** Opens the same file in Files, for a change that left one there. */
+  onOpenFiles: (() => void) | null;
 }) {
   const [view, setView] = useState<DocumentShow>("rendered");
   const show = changeShow(change);
@@ -53,6 +56,11 @@ export function ChangeDetail({
                 </SegmentedControlItem>
               ))}
             </SegmentedControl>
+          )}
+          {onOpenFiles !== null && (
+            <Button variant="ghost" size="xs" onClick={onOpenFiles}>
+              {messages.openInFiles}
+            </Button>
           )}
         </div>
         {change.movedFrom !== null && (
